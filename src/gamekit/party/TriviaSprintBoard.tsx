@@ -17,6 +17,7 @@ import {
   type SprintBotProfile, type SprintTap,
 } from '../../games/trivia-duel/party/triviaSprint';
 import { Tile, type TileState } from '../../games/trivia-duel/ui/Tile';
+import { genericize } from '../../games/trivia-duel/engine/labels';
 import { C } from '../../games/trivia-duel/art';
 import { CUE, registerDuelAudio, sfx, sfxLadder } from '../../games/trivia-duel/audio';
 import { OutlinedText } from '../../games/trivia-duel/ui/Overlays';
@@ -57,7 +58,9 @@ function TriviaSprintBoard({ seed, userId = 0, goAt, perfNow, onTap, onProgress,
   const result = useCallback(() => resolve(qs, taps.current), [qs]);
   const mine = result();
   const q = qs[qi];
-  const text = questionText(q);
+  // No trademarked names in Trivia UI (rev 7, 19.2): the sim keeps its fact ids, the screen shows generic labels.
+  const raw = questionText(q);
+  const text = { prompt: genericize(raw.prompt), choices: raw.choices.map((c) => { const g = genericize(c); return g ? g[0].toUpperCase() + g.slice(1) : g; }) };
   // order[slot] = canonical choice shown in that slot (display only).
   const orders = useMemo(() => qs.map((x) => tileOrder(seed, x, userId)), [qs, seed, userId]);
   const order = orders[qi];
@@ -177,13 +180,11 @@ function TriviaSprintBoard({ seed, userId = 0, goAt, perfNow, onTap, onProgress,
               onTapUI={onTapUI}
               flipDelay={i * 30}
               heads={[]}
-              bar={-1}
+              share={-1}
               wiggleKey={0}
               reducedMotion={false}
               fontSize={c.length > 24 ? 16 : 19}
               chomped={false}
-              frost={false}
-              rim={streakNow >= 3 ? 3 : 0}
             />
           </View>
         ))}

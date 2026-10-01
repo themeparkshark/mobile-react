@@ -7,14 +7,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { TextInput } from 'react-native';
 import Animated, {
-  Easing, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withRepeat, withSequence,
-  withSpring, withTiming,
+  Easing, runOnJS, useAnimatedProps, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withRepeat, withSequence,
+  withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { ART, C, FIN_POSES, SHARKS, type SharkLook } from '../art';
-import { babble } from '../audio';
+import { babble, type BabbleVoice } from '../audio';
 
 const OUTLINE = { textShadowColor: C.ink, textShadowRadius: 0.01 };
+Animated.addWhitelistedNativeProps({ text: true });
+const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 
 /** Thick cartoon outline for Shark-font text: 8 offset copies under the fill. */
 export function OutlinedText({ text, size, color, stroke = C.ink, width = 3, style }: { text: string; size: number; color: string; stroke?: string; width?: number; style?: object }) {
@@ -85,7 +88,7 @@ export function Stamp({ spec, reducedMotion }: { spec: StampSpec; reducedMotion:
 
 // -- Bark bubble ----------------------------------------------------------------
 
-export function Bark({ text, barkKey, side, onTalk, muted }: { text: string | null; barkKey: number; side: 'left' | 'right'; onTalk: (talking: boolean) => void; muted?: boolean }) {
+export function Bark({ text, barkKey, side, onTalk, muted, voice }: { text: string | null; barkKey: number; side: 'left' | 'right'; onTalk: (talking: boolean) => void; muted?: boolean; voice?: BabbleVoice }) {
   const [shown, setShown] = useState('');
   const s = useSharedValue(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -103,7 +106,7 @@ export function Bark({ text, barkKey, side, onTalk, muted }: { text: string | nu
     timer.current = setInterval(() => {
       i++;
       setShown(text.slice(0, i));
-      if (!muted) babble(i);
+      if (!muted) babble(i, text, voice);
       if (i >= text.length) {
         if (timer.current) clearInterval(timer.current);
         onTalk(false);
@@ -209,57 +212,70 @@ export function Ribbon({ text, holdMs, ribbonKey, reducedMotion }: { text: strin
   );
 }
 
-// -- Wager chips (5.5) -------------------------------------------------------------
+// -- Wager chips (5.5, rev 7) ------------------------------------------------------
 
-export function WagerChips({ stakes, labels, picked, onPick, secondsLeft, category }: {
-  stakes: number[]; labels: readonly string[]; picked: number; onPick: (i: number) => void; secondsLeft: number; category: string;
+/**
+ * Three chips in the tile grid: SAFE / HALF / ALL IN. Each chip shows one
+ * number: your score if you're right with base points. The suggested chip
+ * glows gold with a one-line reason; doing nothing takes it.
+ */
+export function WagerChips({ stakes, labels, picked, suggested, reason, ifRight, onPick, secondsLeft, category, height }: {
+  stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; ifRight: number[];
+  onPick: (i: number) => void; secondsLeft: number; category: string; height: number;
 }) {
   return (
-    <View style={styles.wager}>
-      <Text style={styles.wagerTitle}>{`WAGER ON ${category.toUpperCase()}`}</Text>
-      <Text style={styles.wagerSub}>{`Pick your stake. ${secondsLeft}s`}</Text>
-      <View style={styles.chipGrid}>
+    <View style={[styles.wager, { height }]}>
+      <Text style={styles.wagerTitle} numberOfLines={1}>{`BET ON ${category.toUpperCase()}`}</Text>
+      <View style={styles.chipRow}>
         {stakes.map((s, i) => (
-          <Chip key={i} i={i} label={labels[i]} stake={s} picked={picked === i} onPick={onPick} />
+          <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} onPick={onPick} />
         ))}
       </View>
+      <Text style={styles.reason}>{`${reason}  ${secondsLeft}s`}</Text>
     </View>
   );
 }
 
-function Chip({ i, label, stake, picked, onPick }: { i: number; label: string; stake: number; picked: boolean; onPick: (i: number) => void }) {
+function Chip({ i, label, stake, ifRight, picked, suggested, onPick }: { i: number; label: string; stake: number; ifRight: number; picked: boolean; suggested: boolean; onPick: (i: number) => void }) {
   const s = useSharedValue(0);
+  const glow = useSharedValue(0);
   useEffect(() => {
     s.value = withDelay(40 * i, withSequence(withTiming(1.12, { duration: 120 }), withSpring(1, { damping: 8, stiffness: 300 })));
   }, [s, i]);
   useEffect(() => {
+    glow.value = suggested ? withRepeat(withSequence(withTiming(1, { duration: 420 }), withTiming(0.45, { duration: 420 })), -1, true) : withTiming(0, { duration: 120 });
+  }, [suggested, glow]);
+  useEffect(() => {
     if (picked) s.value = withSequence(withTiming(0.9, { duration: 60 }), withSpring(1.04, { damping: 7, stiffness: 400 }));
   }, [picked, s]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  const colors = [C.cream, '#bfe8ff', '#ffe58a', '#ffc2bb'];
+  const glowSt = useAnimatedStyle(() => ({ opacity: glow.value }));
+  const colors = [C.cream, '#bfe8ff', '#ffe58a'];
   return (
     <Animated.View style={[styles.chipCell, st]}>
-      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={`${label}, stake ${stake}`}>
+      <Animated.View pointerEvents="none" style={[styles.chipGlow, glowSt]} />
+      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={`${label}, stake ${stake}, ${ifRight} if right`}>
         <Text style={styles.chipLabel}>{label}</Text>
-        <Text style={styles.chipStake}>{stake === 0 ? 'No risk' : `${stake} pts`}</Text>
+        <Text style={[styles.chipIfRight, suggested && styles.chipIfRightBig]}>{ifRight}</Text>
+        <Text style={styles.chipStake}>{stake === 0 ? 'no risk' : `bet ${stake}`}</Text>
       </Pressable>
     </Animated.View>
   );
 }
 
-// -- Final category pick (C11) ----------------------------------------------------------
+// -- Final category pick (5.5, rev 7) ---------------------------------------------------
 
-/** Two category cards in the thumb zone. The trailing player picks; the leader watches. */
-export function CategoryPick({ cats, mine, picked, left, oppName, onPick }: {
-  cats: readonly [string, string]; mine: boolean; picked: number; left: number; oppName: string; onPick: (i: number) => void;
+/** Two category cards in the tile grid (2.5s, default left). The trailing player picks; the leader watches. */
+export function CategoryPick({ cats, mine, picked, left, oppName, onPick, height }: {
+  cats: readonly [string, string]; mine: boolean; picked: number; left: number; oppName: string; onPick: (i: number) => void; height: number;
 }) {
   return (
-    <View style={styles.wager}>
-      <Text style={styles.wagerTitle}>{mine ? 'YOU PICK THE FINAL' : `${oppName.toUpperCase()} IS PICKING...`}</Text>
-      <Text style={styles.wagerSub}>{mine ? `You're behind, so you choose. ${left}s` : 'Behind after round 4 picks the category'}</Text>
-      <View style={[styles.chipGrid, { flexWrap: 'nowrap', alignSelf: 'stretch' }]}>
+    <View style={[styles.wager, { height }]}>
+      <Text style={styles.wagerTitle}>{mine ? 'YOU PICK THE FINAL' : `${oppName.toUpperCase()} IS PICKING`}</Text>
+      <View style={[styles.chipRow, { flex: 1 }]}>
         {cats.map((c, i) => <CategoryCard key={i} i={i} label={c} picked={picked === i} out={picked >= 0 && picked !== i} disabled={!mine || picked >= 0} onPick={onPick} />)}
       </View>
+      <Text style={styles.reason}>{mine ? `Behind picks the topic.  ${left}s` : 'Behind picks the topic.'}</Text>
     </View>
   );
 }
@@ -275,7 +291,7 @@ function CategoryCard({ i, label, picked, out, disabled, onPick }: { i: number; 
     if (picked) s.value = withSequence(withTiming(0.9, { duration: 70 }), withSpring(1.1, { damping: 7, stiffness: 380 }));
     if (out) s.value = withTiming(0.82, { duration: 160 });
   }, [picked, out, s]);
-  const st = useAnimatedStyle(() => ({ opacity: out ? 0.45 : 1, transform: [{ perspective: 600 }, { rotateY: `${flip.value}deg` }, { scale: s.value }] }));
+  const st = useAnimatedStyle(() => ({ opacity: out ? 0.45 : 1, transform: [{ scaleX: Math.max(0.02, Math.cos((flip.value * Math.PI) / 180)) }, { scale: s.value }] }));
   return (
     <Animated.View style={[styles.catCell, st]}>
       <Pressable disabled={disabled} onPress={() => onPick(i)} style={[styles.catCard, { backgroundColor: i === 0 ? '#bfe8ff' : '#ffe58a' }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={`Final category ${label}`}>
@@ -286,9 +302,16 @@ function CategoryCard({ i, label, picked, out, disabled, onPick }: { i: number; 
   );
 }
 
-// -- Buzz Bell (11.6) ------------------------------------------------------------------
+// -- Buzz Bell (5.4 / 11.8, rev 7) -------------------------------------------------------
 
-export function BuzzBell({ onBuzz, disabled, pressedKey, reducedMotion, fuse }: { onBuzz: () => void; disabled: boolean; pressedKey: number; reducedMotion: boolean; fuse: number }) {
+/**
+ * The 120pt desk bell, live from unlock. Shows its live stake in gold
+ * ("+{(150 + speed) x m}", the one big number of the bell phase) and the
+ * flat "-100" in coral. Sways +/-4 deg on 1200ms.
+ */
+export function BuzzBell({ onBuzz, disabled, pressedKey, reducedMotion, stake, risk }: {
+  onBuzz: () => void; disabled: boolean; pressedKey: number; reducedMotion: boolean; stake: SharedValue<number>; risk: string;
+}) {
   const sway = useSharedValue(0);
   const sq = useSharedValue(1);
   useEffect(() => {
@@ -300,17 +323,23 @@ export function BuzzBell({ onBuzz, disabled, pressedKey, reducedMotion, fuse }: 
     sq.value = withSequence(withTiming(0.85, { duration: 45 }), withTiming(1.15, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
   }, [pressedKey, sq]);
   const st = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value}deg` }, { scaleX: sq.value }, { scaleY: 2 - sq.value }] }));
+  const stakeText = useAnimatedProps(() => ({ text: `+${Math.round(stake.value)}` } as never));
   const g = Gesture.Tap().maxDuration(800).onBegin(() => {
     'worklet';
     runOnJS(onBuzz)();
   }).enabled(!disabled);
   return (
     <GestureDetector gesture={g}>
-      <Animated.View style={[styles.bell, st]} accessibilityRole="button" accessibilityLabel="Buzz in">
-        <Image source={ART.bell} style={styles.bellImg} />
-        {fuse > 0 ? <View style={[styles.fuse, { width: 120 * fuse }]} /> : null}
-        <OutlinedText text="BUZZ!" size={22} color="#ffffff" width={2} style={styles.bellText} />
-      </Animated.View>
+      <View style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Buzz in">
+        <Animated.View style={[styles.bell, st]}>
+          <Image source={ART.bell} style={styles.bellImg} resizeMode="contain" />
+          <OutlinedText text="BUZZ!" size={24} color="#ffffff" width={2} style={styles.bellText} />
+        </Animated.View>
+        <View style={styles.bellStakes} pointerEvents="none">
+          <AnimatedInput editable={false} underlineColorAndroid="transparent" style={styles.bellStake} animatedProps={stakeText} defaultValue="+250" />
+          <Text style={styles.bellRisk}>{risk}</Text>
+        </View>
+      </View>
     </GestureDetector>
   );
 }
@@ -358,19 +387,18 @@ export function ClosestSlider({ min, max, value, onChange, onLock, disabled, wid
   );
 }
 
-// -- Lifeline button ------------------------------------------------------------------------
+// -- Chomp button (6, rev 7: the only lifeline) ---------------------------------------
 
-export function LifelineButton({ kind, onPress }: { kind: 'chomp' | 'freeze' | 'peek'; onPress: () => void }) {
-  const src = kind === 'chomp' ? ART.chomp : kind === 'freeze' ? ART.stopwatch : ART.magnifier;
-  const label = kind === 'chomp' ? 'CHOMP' : kind === 'freeze' ? 'FREEZE' : 'PEEK';
+/** 56pt Chomp button at the board's bottom-right, only while you hold one. */
+export function LifelineButton({ onPress }: { onPress: () => void }) {
   const s = useSharedValue(0);
   useEffect(() => { s.value = withSpring(1, { damping: 9, stiffness: 260 }); }, [s]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   return (
     <Animated.View style={st}>
-      <Pressable onPress={onPress} style={styles.lifeline} accessibilityRole="button" accessibilityLabel={label}>
-        <Image source={src} style={kind === 'chomp' ? styles.lifeImgWide : styles.lifeImg} resizeMode="contain" />
-        <Text style={styles.lifeText}>{label}</Text>
+      <Pressable onPress={onPress} style={styles.lifeline} accessibilityRole="button" accessibilityLabel="Chomp: clear two wrong answers" hitSlop={8}>
+        <Image source={ART.chomp} style={styles.lifeImg} resizeMode="contain" />
+        <Text style={styles.lifeText}>CHOMP</Text>
       </Pressable>
     </Animated.View>
   );
@@ -395,22 +423,28 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: 0, alignSelf: 'center', width: 300, height: 64, alignItems: 'center', justifyContent: 'center', zIndex: 30 },
   ribbonImg: { position: 'absolute', width: 300, height: 64 },
   ribbonText: { marginTop: -6 },
-  wager: { alignItems: 'center', paddingTop: 4 },
-  wagerTitle: { fontFamily: 'Shark', fontSize: 22, color: C.navy },
-  wagerSub: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, marginBottom: 8 },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
-  chipCell: { width: '47%', margin: '1.5%' },
-  chip: { height: 92, borderRadius: 18, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, alignItems: 'center', justifyContent: 'center' },
-  catCell: { flex: 1, paddingHorizontal: 6, height: 150 },
+  wager: { alignItems: 'center', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 4 },
+  wagerTitle: { fontFamily: 'Shark', fontSize: 20, color: C.navy, opacity: 0.6 },
+  reason: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },
+  chipRow: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between' },
+  chipCell: { flex: 1, marginHorizontal: 4 },
+  chipGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 24, backgroundColor: 'rgba(254,201,14,0.55)' },
+  chip: { height: 118, borderRadius: 18, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, alignItems: 'center', justifyContent: 'center' },
+  chipIfRight: { fontFamily: 'Knockout', fontSize: 24, color: C.navy, opacity: 0.6, marginTop: 2 },
+  chipIfRightBig: { fontSize: 30, opacity: 1 },
+  catCell: { flex: 1, paddingHorizontal: 6 },
   catCard: { flex: 1, borderRadius: 20, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   catLabel: { fontFamily: 'Shark', fontSize: 28, color: C.navy, textAlign: 'center' },
   chipPicked: { borderColor: C.goldDeep, borderWidth: 5, borderBottomWidth: 8 },
-  chipLabel: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
-  chipStake: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },
-  bell: { position: 'absolute', alignSelf: 'center', top: 40, width: 130, height: 140, alignItems: 'center', zIndex: 20 },
-  bellImg: { width: 104, height: 103 },
-  bellText: { marginTop: -8 },
-  fuse: { position: 'absolute', bottom: 34, height: 8, borderRadius: 4, backgroundColor: C.coral, borderWidth: 2, borderColor: C.ink },
+  chipLabel: { fontFamily: 'Shark', fontSize: 24, color: C.navy },
+  chipStake: { fontFamily: 'Knockout', fontSize: 14, color: C.navy, opacity: 0.6 },
+  bellWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
+  bell: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center' },
+  bellImg: { width: 120, height: 120 },
+  bellText: { marginTop: -18 },
+  bellStakes: { position: 'absolute', right: 8, top: 18, alignItems: 'flex-end' },
+  bellStake: { fontFamily: 'Knockout', fontSize: 30, color: C.goldDeep, padding: 0, margin: 0, minWidth: 80, textAlign: 'right', textShadowColor: C.ink, textShadowRadius: 1 },
+  bellRisk: { fontFamily: 'Knockout', fontSize: 18, color: C.coral, opacity: 0.85 },
   slider: { alignItems: 'center', alignSelf: 'center' },
   track: { height: 64, justifyContent: 'center', paddingHorizontal: 18 },
   trackBar: { height: 14, borderRadius: 7, backgroundColor: '#bfe8ff', borderWidth: 3, borderColor: C.ink },
@@ -419,8 +453,7 @@ const styles = StyleSheet.create({
   thumbImg: { width: 36, height: 36 },
   lockBtn: { marginTop: 12, height: 64, width: '100%', borderRadius: 18, backgroundColor: C.gold, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, alignItems: 'center', justifyContent: 'center' },
   lockBtnText: { fontFamily: 'Shark', fontSize: 26, color: C.navy },
-  lifeline: { width: 64, height: 56, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 3, borderColor: C.ink, alignItems: 'center', justifyContent: 'center' },
-  lifeImg: { width: 28, height: 28 },
-  lifeImgWide: { width: 44, height: 26 },
-  lifeText: { fontFamily: 'Knockout', fontSize: 11, color: C.navy },
+  lifeline: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 3, borderColor: C.ink, borderBottomWidth: 5, alignItems: 'center', justifyContent: 'center' },
+  lifeImg: { width: 36, height: 30 },
+  lifeText: { fontFamily: 'Knockout', fontSize: 10, color: C.navy },
 });

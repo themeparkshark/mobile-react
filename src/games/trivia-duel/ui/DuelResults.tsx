@@ -1,11 +1,14 @@
 /**
- * Duel results (design 11.9): the crown drop on a win (Clash 3-beat
- * anticipation), FIN BEATEN / RANK UP / NEW BEST banners, or the near-miss
- * line and gap bar on a loss. Rows, the Fact Cards stack with Read on TPS,
- * and REMATCH (pulses on the beat) / RACE MY RUN / CONTINUE.
+ * Duel results on stage (design 11.9, rev 7). The crown lands on your avatar
+ * up on the stage; this half-height cream card slides up over the bottom 45%
+ * while the stage keeps acting above it. Big result line, the score drums,
+ * FIN BEATEN / RANK UP / NEW BEST banners or the near-miss line with the gap
+ * bar, four 18pt stat rows, the Fin rank bar, the Best Moment polaroid that
+ * drops in for 1.5s then tucks into the corner, one Fact Card row with Read
+ * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
  */
 import React, { useEffect } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -26,6 +29,10 @@ export interface ResultsModel {
   facts: (FactCard & { isNew: boolean })[];
   stars: number;
   practice: boolean;
+  /** Fin rank bar: label and progress toward the next rank (0..1), or null vs a ghost. */
+  rank?: { label: string; progress: number; next: string | null } | null;
+  /** Best Moment: the fastest correct lock. */
+  best?: { label: string } | null;
 }
 
 interface Props {
@@ -35,68 +42,65 @@ interface Props {
   onGhost?: () => void;
   onContinue: () => void;
   reducedMotion: boolean;
+  /** Height of the card (the bottom 45% of the screen). */
+  height: number;
 }
 
-export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, reducedMotion }: Props) {
-  const crownY = useSharedValue(-260);
-  const crownR = useSharedValue(0);
-  const cardS = useSharedValue(0.85);
-  const cardO = useSharedValue(0);
+export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, reducedMotion, height }: Props) {
+  const cardY = useSharedValue(reducedMotion ? 0 : height + 40);
+  const cardO = useSharedValue(reducedMotion ? 0 : 1);
   const pulse = useSharedValue(1);
   const gap = useSharedValue(0);
+  const polY = useSharedValue(-300);
+  const polS = useSharedValue(1);
 
   useEffect(() => {
-    cardO.value = withTiming(1, { duration: 200 });
-    cardS.value = reducedMotion ? 1 : withSpring(1, { damping: 12, stiffness: 220 });
-    if (model.won && !reducedMotion) {
-      const b = beatMs;
-      crownR.value = withDelay(200, withSequence(
-        withTiming(-6, { duration: b / 4 }), withTiming(6, { duration: b / 4 }),
-        withTiming(-12, { duration: b / 4 }), withTiming(12, { duration: b / 4 }),
-        withTiming(0, { duration: b / 2 }),
-      ));
-      crownY.value = withDelay(200 + b * 1.5, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
-    } else crownY.value = 0;
+    if (reducedMotion) cardO.value = withTiming(1, { duration: 300 });
+    else cardY.value = withDelay(beatMs, withSpring(0, { damping: 14, stiffness: 180 }));
     if (!model.won && !reducedMotion) {
       gap.value = withRepeat(withSequence(withTiming(1, { duration: beatMs }), withTiming(0, { duration: beatMs })), -1);
     }
     if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), -1);
+    if (model.best && !reducedMotion) {
+      polY.value = withDelay(beatMs * 2, withSequence(
+        withSpring(0, { damping: 10, stiffness: 220 }),
+        withDelay(1500, withTiming(-112, { duration: 320, easing: Easing.inOut(Easing.cubic) })),
+      ));
+      polS.value = withDelay(beatMs * 2 + 1500, withTiming(0.42, { duration: 320 }));
+    } else {
+      polY.value = -112;
+      polS.value = 0.42;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const crownStyle = useAnimatedStyle(() => ({ transform: [{ translateY: crownY.value }, { rotate: `${crownR.value}deg` }] }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: cardO.value, transform: [{ scale: cardS.value }] }));
+  const cardStyle = useAnimatedStyle(() => ({ opacity: cardO.value, transform: [{ translateY: cardY.value }] }));
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : C.coral }));
+  // Drops in centre for 1.5s, then tucks into the card's top-right corner (clear of the banners).
+  const polStyle = useAnimatedStyle(() => ({ transform: [{ translateY: polY.value }, { translateX: ((1 - polS.value) / 0.58) * 128 }, { scale: polS.value }, { rotate: '-6deg' }] }));
 
   const total = Math.max(1, model.myScore + model.oppScore);
+  const fact = model.facts[0];
+  const title = model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
   return (
-    <View style={styles.root} pointerEvents="box-none">
-      <Animated.View style={[styles.card, cardStyle]}>
-        {model.won ? (
-          <Animated.View style={[styles.crownWrap, crownStyle]}>
-            <Image source={ART.crown} style={styles.crown} />
-          </Animated.View>
-        ) : null}
-        <OutlinedText
-          text={model.practice ? (model.won ? 'PRACTICE WIN!' : 'PRACTICE DONE') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'SO CLOSE!'}
-          size={36}
-          color={model.won ? C.gold : '#ffffff'}
-          width={3}
-          style={{ alignSelf: 'center' }}
-        />
-        <View style={styles.scoreRow}>
-          <Text style={styles.scoreMe}>{model.myScore}</Text>
-          <Text style={styles.scoreVs}>vs</Text>
-          <Text style={styles.scoreOpp}>{model.oppScore}</Text>
+    <View style={[styles.root, { height }]} pointerEvents="box-none">
+      <Animated.View style={[styles.card, { minHeight: height - 8 }, cardStyle]}>
+        <View style={styles.head}>
+          <OutlinedText text={title} size={30} color={model.won ? C.gold : '#ffffff'} width={2.5} />
+          <View style={styles.scoreRow}>
+            <Text style={styles.scoreMe}>{model.myScore}</Text>
+            <Text style={styles.scoreVs}>vs</Text>
+            <Text style={styles.scoreOpp}>{model.oppScore}</Text>
+          </View>
         </View>
-        <View style={styles.gapTrack}>
-          <View style={[styles.gapMe, { flex: model.myScore / total }]} />
-          {!model.won && model.oppScore > model.myScore ? (
+        {!model.won && model.oppScore > model.myScore ? (
+          <View style={styles.gapTrack}>
+            <View style={[styles.gapMe, { flex: model.myScore / total }]} />
             <Animated.View style={[styles.gapSeg, { flex: (model.oppScore - model.myScore) / total }, gapStyle]} />
-          ) : null}
-          <View style={[styles.gapOpp, { flex: Math.min(model.myScore, model.oppScore) / total }]} />
-        </View>
+            <View style={{ flex: model.myScore / total }} />
+          </View>
+        ) : null}
         {model.banners.length ? (
           <View style={styles.banners}>
             {model.banners.map((b, i) => <Banner key={b} text={b} i={i} reducedMotion={reducedMotion} />)}
@@ -111,11 +115,14 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             </View>
           ))}
         </View>
-        {model.facts.length ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.facts} contentContainerStyle={{ paddingHorizontal: 2 }}>
-            {model.facts.map((f) => <FactCardView key={f.id} card={f} />)}
-          </ScrollView>
+        {model.rank ? (
+          <View style={styles.rankRow}>
+            <Text style={styles.rankLabel}>{model.rank.label}</Text>
+            <View style={styles.rankTrack}><View style={[styles.rankFill, { width: `${Math.round(model.rank.progress * 100)}%` }]} /></View>
+            <Text style={styles.rankNext}>{model.rank.next ?? 'TOP'}</Text>
+          </View>
         ) : null}
+        {fact ? <FactRow card={fact} /> : null}
         <View style={styles.buttons}>
           {onRematch ? (
             <Animated.View style={pulseStyle}>
@@ -136,6 +143,15 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           </View>
         </View>
       </Animated.View>
+      {model.best ? (
+        <Animated.View style={[styles.polaroid, polStyle]} pointerEvents="none">
+          <Image source={ART.polaroid} style={styles.polImg} resizeMode="contain" />
+          <View style={styles.polCaption}>
+            <Text style={styles.polTitle}>BEST MOMENT</Text>
+            <Text style={styles.polText}>{model.best.label}</Text>
+          </View>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -154,54 +170,54 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
   );
 }
 
-function FactCardView({ card }: { card: FactCard & { isNew: boolean } }) {
+/** One Fact Card row (15pt) with Read on TPS (in-app browser, UTM tagged). */
+function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
   return (
-    <View style={[styles.fact, card.gold && styles.factGold]}>
-      {card.isNew ? <Text style={styles.factNew}>NEW</Text> : null}
-      <Text style={styles.factText} numberOfLines={4}>{card.fact}</Text>
+    <View style={styles.fact}>
+      <Text style={styles.factText} numberOfLines={2}>{card.fact}</Text>
       {card.tpsArticleUrl ? (
         <Pressable
           onPress={() => { void WebBrowser.openBrowserAsync(`${card.tpsArticleUrl}${card.tpsArticleUrl!.includes('?') ? '&' : '?'}utm_source=app&utm_medium=trivia`); }}
           style={styles.readBtn}
           accessibilityRole="link"
+          hitSlop={8}
         >
           <Text style={styles.readText}>Read on TPS</Text>
         </Pressable>
-      ) : card.source ? <Text style={styles.factSource}>{`Source: ${card.source}`}</Text> : null}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 14 },
-  card: { backgroundColor: C.blue, borderRadius: 24, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, padding: 14, paddingTop: 22 },
-  crownWrap: { position: 'absolute', top: -70, alignSelf: 'center' },
-  crown: { width: 96, height: 91 },
-  scoreRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', marginTop: 2 },
-  scoreMe: { fontFamily: 'Shark', fontSize: 34, color: '#ffffff' },
-  scoreVs: { fontFamily: 'Knockout', fontSize: 16, color: '#dff4ff', marginHorizontal: 10 },
-  scoreOpp: { fontFamily: 'Shark', fontSize: 34, color: C.cream },
-  gapTrack: { flexDirection: 'row', height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#dff4ff', marginVertical: 6 },
+  root: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 },
+  card: { backgroundColor: C.cream, borderRadius: 24, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  scoreRow: { flexDirection: 'row', alignItems: 'baseline' },
+  scoreMe: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
+  scoreVs: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, opacity: 0.6, marginHorizontal: 8 },
+  scoreOpp: { fontFamily: 'Shark', fontSize: 24, color: C.navy, opacity: 0.6 },
+  gapTrack: { flexDirection: 'row', height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, overflow: 'hidden', backgroundColor: '#ffffff', marginTop: 6 },
   gapMe: { backgroundColor: C.gold },
   gapSeg: { backgroundColor: C.coral },
-  gapOpp: { backgroundColor: 'transparent' },
-  banners: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 2 },
+  banners: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
   banner: { backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2, margin: 3 },
-  bannerText: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
-  near: { fontFamily: 'Knockout', fontSize: 17, color: '#ffffff', textAlign: 'center', marginVertical: 4 },
-  rows: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 6 },
-  rowItem: { alignItems: 'center', minWidth: 64 },
-  rowVal: { fontFamily: 'Shark', fontSize: 20, color: '#ffffff' },
-  rowLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#dff4ff' },
-  facts: { maxHeight: 118, marginBottom: 6 },
-  fact: { width: 210, marginRight: 8, backgroundColor: C.cream, borderRadius: 14, borderWidth: 3, borderColor: C.ink, padding: 9 },
-  factGold: { borderColor: C.goldDeep, borderWidth: 4 },
-  factNew: { position: 'absolute', right: 6, top: 4, fontFamily: 'Shark', fontSize: 12, color: C.goldDeep },
-  factText: { fontSize: 14, fontWeight: '700', color: C.navy },
-  factSource: { fontFamily: 'Knockout', fontSize: 11, color: '#5b7896', marginTop: 4 },
-  readBtn: { marginTop: 6, alignSelf: 'flex-start', backgroundColor: C.blue, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 2 },
+  bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
+  near: { fontFamily: 'Knockout', fontSize: 18, color: C.navy, textAlign: 'center', marginTop: 6 },
+  rows: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
+  rowItem: { alignItems: 'center', minWidth: 70 },
+  rowVal: { fontFamily: 'Shark', fontSize: 22, color: C.navy },
+  rowLabel: { fontFamily: 'Knockout', fontSize: 13, color: C.navy, opacity: 0.6 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  rankLabel: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, width: 110 },
+  rankTrack: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2.5, borderColor: C.ink, backgroundColor: '#ffffff', overflow: 'hidden' },
+  rankFill: { height: '100%', backgroundColor: C.blue },
+  rankNext: { fontFamily: 'Knockout', fontSize: 13, color: C.navy, opacity: 0.6, marginLeft: 8, width: 82, textAlign: 'right' },
+  fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
+  factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
+  readBtn: { marginLeft: 8, backgroundColor: C.blue, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 3 },
   readText: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff' },
-  buttons: { marginTop: 2 },
+  buttons: { marginTop: 4 },
   btn: { height: 56, borderRadius: 16, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 6, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   primary: { backgroundColor: C.gold },
   primaryText: { fontFamily: 'Shark', fontSize: 24, color: C.navy },
@@ -210,4 +226,9 @@ const styles = StyleSheet.create({
   btnRow: { flexDirection: 'row', justifyContent: 'space-between' },
   half: { width: '48.5%' },
   full: { width: '100%' },
+  polaroid: { position: 'absolute', alignSelf: 'center', top: 0, alignItems: 'center' },
+  polImg: { width: 200, height: 152 },
+  polCaption: { position: 'absolute', bottom: 18, alignItems: 'center' },
+  polTitle: { fontFamily: 'Shark', fontSize: 14, color: C.navy },
+  polText: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },
 });

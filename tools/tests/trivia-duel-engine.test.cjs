@@ -320,7 +320,9 @@ test('deck: filler dropped, deterministic per seed, formats honour the round tab
 
 test('deck: generated formats are built only from the verified fact table', () => {
   const { OPENING_FACTS } = loadTs('src/games/trivia-duel/engine/facts.ts');
-  const years = new Map(OPENING_FACTS.map((f) => [f.name, f.year]));
+  const { genericize } = loadTs('src/games/trivia-duel/engine/labels.ts');
+  const cap = (x) => x[0].toUpperCase() + x.slice(1);
+  const years = new Map(OPENING_FACTS.map((f) => [cap(genericize(f.name)), f.year]));
   for (let seed = 0; seed < 200; seed++) {
     const p = match.planMatch('queue', seed, POOL, {});
     for (const r of p.rounds) {
@@ -334,7 +336,7 @@ test('deck: generated formats are built only from the verified fact table', () =
         assert.ok(ys.every((y) => y != null));
         assert.equal(Math.min(...ys), ys[q.correctIndex]);
       }
-      if (q.format === 'truetale') assert.ok(q.prompt.length <= 60, q.prompt);
+      if (q.format === 'truetale') assert.ok(q.prompt.length <= 90, q.prompt);
     }
   }
 });

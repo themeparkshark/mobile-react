@@ -10,6 +10,7 @@
 import { createRng, mixSeed, rngFloat, rngInt, rngShuffle, type Rng } from '../../../gamekit/core/rng';
 import { CLOSEST_TOL, TEXT_LIMITS, type Difficulty, type QuestionFormat, type RoundSpec } from './config';
 import { OPENING_FACTS, type OpeningFact } from './facts';
+import { genericize, NAMES_IN_TEXT } from './labels';
 import { priorStats, type QuestionStats } from './finAI';
 
 /** Shape of an authored question (matches services/lineplay TriviaQuestion). */
@@ -49,10 +50,33 @@ export interface DuelQuestion {
   tpsArticleUrl?: string;
   slider?: SliderSpec;
   stats: QuestionStats;
+  /** Verified facts this item uses, computed from the original text before generic labels (9.1). */
+  factKeys?: string[];
+}
+
+/**
+ * Display edge (19.2): every string the player can read goes through the
+ * generic labels; fact keys are kept from the original wording. Pure.
+ */
+export function withGenericLabels(q: DuelQuestion): DuelQuestion {
+  if (NAMES_IN_TEXT) return q;
+  const factKeys = q.factKeys ?? factKeysOf(q);
+  return {
+    ...q,
+    prompt: genericize(q.prompt),
+    choices: q.choices.map((c) => capitalize(genericize(c))),
+    fact: q.fact ? genericize(q.fact) : q.fact,
+    factKeys,
+  };
+}
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
 /** Verified facts a question uses or gives away (no two questions in a match share one). */
 export function factKeysOf(q: DuelQuestion | PoolQuestion): string[] {
+  if ('factKeys' in q && q.factKeys) return q.factKeys;
   const id = q.id;
   if (id.includes('~')) {
     const parts = id.split('~').slice(1);
@@ -235,17 +259,17 @@ export function materializeQuestion(id: string, pool: readonly PoolQuestion[], s
   const parts = id.split('~');
   const fact = (k: string) => FACT_BY_ID.get(k);
   switch (parts[0]) {
-    case 'tt': { const f = fact(parts[1]); return f ? trueTaleFrom(f, Number(parts[2])) : null; }
-    case 'pair': { const a = fact(parts[1]); const b = fact(parts[2]); return a && b ? pairFrom(a, b, parts[3] === '1') : null; }
+    case 'tt': { const f = fact(parts[1]); return f ? withGenericLabels(trueTaleFrom(f, Number(parts[2]))) : null; }
+    case 'pair': { const a = fact(parts[1]); const b = fact(parts[2]); return a && b ? withGenericLabels(pairFrom(a, b, parts[3] === '1')) : null; }
     case 'open3': {
       const fs = [fact(parts[1]), fact(parts[2]), fact(parts[3])];
       if (fs.some((f) => !f)) return null;
-      return openedFrom(fs as OpeningFact[], parts[4].split('').map(Number));
+      return withGenericLabels(openedFrom(fs as OpeningFact[], parts[4].split('').map(Number)));
     }
-    case 'near': { const f = fact(parts[1]); return f ? closestFrom(f, Number(parts[2])) : null; }
+    case 'near': { const f = fact(parts[1]); return f ? withGenericLabels(closestFrom(f, Number(parts[2]))) : null; }
     default: {
       const q = pool.find((p) => p.id === id);
-      return q ? fromPool(seed, q) : null;
+      return q ? withGenericLabels(fromPool(seed, q)) : null;
     }
   }
 }
@@ -331,7 +355,7 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
     if (!q) q = genTrueTale(r, anyFacts());
     used.add(q.id);
     factKeysOf(q).forEach((k) => usedFacts.add(k));
-    out.push(q);
+    out.push(withGenericLabels(q));
   }
   return out;
 }

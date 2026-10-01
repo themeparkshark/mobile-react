@@ -1,67 +1,84 @@
 /**
- * Trivia Duel (Trivia+ merged with Shark Showdown), design studio/design/trivia.md rev 3.
+ * Trivia Duel (Trivia+ merged with Shark Showdown), design
+ * studio/design/trivia.md revision 7.
  *
- * A bright boardwalk game-show duel you play one-thumbed while the line
- * shuffles forward. You race Captain Fin (or a recorded ghost) to the right
- * answer: tiles stay face-down until the unlock, speed is points you watch
- * tick down, the bell is a real gamble, the Final is a wager, and reveals land
- * on the beat of Chris's music.
+ * A bright boardwalk game show you play one-thumbed while the line moves.
+ * Race Captain Fin (or a recorded crew ghost) to the right answer. Answers
+ * stay face-down until unlock, a ring of 24 marquee bulbs burns out as your
+ * points drain, the bell lets you bet you know it before you see the
+ * choices, and the Final is a wager.
+ *
+ * The whole rulebook:
+ *  1. Faster lock, more points. Watch the bulbs.
+ *  2. Right answers in a row multiply your points. Three in a row gives you a Shield.
+ *  3. Chomp clears 2 wrong answers, but caps your speed bonus.
+ *  4. Buzz to see the answers first. Miss and you lose 100, and they get to steal.
+ *  5. In the Final, whoever is behind picks the topic, then everyone bets.
  *
  * Clocks: the question clock lives on the UI thread (useGameClock onFrame):
- * read-lock, unlock, the answer window, Fin's calibrated lock time and the
- * last-3-seconds ticks all fire from sim time, never wall-clock deadlines, so
- * a HOLD stops them exactly. Taps are judged in the gesture worklet against
- * the same elapsed value the ticker shows. FX run on the fx clock (hit-stop).
+ * read-lock, unlock, the window, Fin's calibrated lock and buzz, the fuse
+ * and the last-3-seconds heartbeat all fire from sim time, so a HOLD stops
+ * them exactly. Taps are judged in the gesture worklet against the same
+ * elapsed value the drum shows: locking on any frame scores what that frame
+ * showed. FX run on the fx clock (hit-stop), sprite motion on the 12fps
+ * twos grid.
  *
  * QUEUE REALITY: movement never pauses anything. Only a HOLD (pause button,
- * app background) stops the clock; a HOLD after unlock forfeits that
- * question's speed bonus, and graded modes credit at most 6s per question.
+ * app background, call) stops the clock; the board flips face-down, and on
+ * resume a quick 3-2-1 continues the same question with its remaining time.
+ * A HOLD after unlock forfeits that question's speed bonus; graded modes
+ * credit at most 6s per question. Every flow timer parks during a HOLD.
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Dimensions, Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   Easing, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
-import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
-import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { CAMERA_PRESETS } from '../../gamekit/core/camera';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { useMusicBeat } from '../../gamekit/audio/useMusicBeat';
-import { Haptic } from '../../gamekit/Haptics';
-import { packHex } from '../../gamekit/core/particles';
+import { Haptic, configureHaptics, playHaptic } from '../../gamekit/Haptics';
 import { mixSeed } from '../../gamekit/core/rng';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { AuthContext } from '../../context/AuthProvider';
 import {
-  BUZZ, CEREMONY, FIN_RANKS, FIN_RESOLVE_AFTER_MS, HOLD, PEEK, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
-  type DuelMode, type SpeedTier,
+  BUZZ, CATEGORY_PICK, CEREMONY, FIN_RANKS, FIN_RANK_ORDER, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
+  type DuelMode, type FinRank, type SpeedTier,
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
 import { applyMatchToRank, pickBark, BARKS } from './engine/finAI';
 import {
-  createTally, finalPicker, finCategoryPick, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound, suddenDeathRound,
+  createTally, finalPicker, finBellAnswerMs, finCategoryPick, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound,
+  suddenDeathRound,
   type GhostRecord, type MatchPlan, type MatchTally, type PlannedRound, type RoundResult, type SideInput,
 } from './engine/match';
 import { nearMiss } from './engine/nearMiss';
-import { duelStars, flameTier, peekMode, peekSample, rideStars, rideWon, tickerValue, wagerStakes } from './engine/scoring';
-import { ART, FIN_POSE_ORDER, C, type FinPose, type SharkLook } from './art';
-import { BEDS, CUE, bed, beatMs, msToGrid, registerDuelAudio, resetFreeBeat, sfx, sfxLadder } from './audio';
+import {
+  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
+} from './engine/scoring';
+import { ART, C, FIN_POSE_ORDER, type FinPose, type SharkLook } from './art';
+import {
+  BEDS, CUE, babbleSchedule, babbleSyllable, bed, beatMs, duckForReveal, msToGrid, muffle, registerDuelAudio, resetFreeBeat, setDuelKey, sfx, sfxKey,
+  type BabbleVoice,
+} from './audio';
 import { loadPool } from './pool';
 import {
   activeCarry, addFactCards, currentRank, listGhosts, loadMemory, memorySync, recordCategory, rememberSeen, saveGhost, updateMemory, type FactCard,
 } from './store';
 import { Stage, type StageActors } from './ui/Stage';
 import { Rail, type PipState } from './ui/Rail';
-import { QuestionCard } from './ui/Card';
+import { BOARD_H, QuestionCard, ROPE_H } from './ui/Card';
 import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
-import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Ribbon, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
+import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
-
+import { DeskFront } from './ui/DeskFront';
+import { RideCoinCrate } from './ui/RideCoinCrate';
 
 // -- Question clock (UI thread) ------------------------------------------------------
 
@@ -73,9 +90,13 @@ const PH_LOCKED = 3;
 const PH_SUB = 5;
 const PH_WAIT = 8;
 
+const K_QUICK = 0;
+const K_RIDE = 1;
+const K_BELL = 2;
+
 const EV_UNLOCK = 1;
 const EV_FIN = 2;
-const EV_TICK = 3;
+const EV_BEAT = 3;
 const EV_TIMEOUT = 4;
 const EV_EARLY = 5;
 const EV_LOCK = 6;
@@ -83,11 +104,12 @@ const EV_FIN_BUZZ = 7;
 const EV_BUZZ = 8;
 const EV_SUB_LOCK = 9;
 const EV_SUB_TIMEOUT = 10;
-const EV_FREEZE_END = 11;
-const EV_FIN_LEAN = 12;
-const EV_FIN_RING = 13;
-/** Worklet copy of BUZZ.deadHeatMs (worklets capture module values, not imported bindings). */
-const DEAD_HEAT_W = 200;
+const EV_URGENT = 11;
+
+/** Worklet copies (worklets capture module values, not imported bindings). */
+const W_BELL_G = 400;
+const W_BELL_H = 5000;
+const W_RIDE_SPEED = 150;
 
 interface QClock {
   phase: number;
@@ -98,27 +120,28 @@ interface QClock {
   finFired: number;
   finBuzzMs: number;
   finBuzzFired: number;
-  leanFired: number;
-  frozen: number;
-  freezeLeft: number;
   sub: number;
   subLimit: number;
-  lastSec: number;
   g: number;
   h: number;
-  kind: number; // 0 quick, 1 ride, 2 buzz
+  kind: number;
+  /** Streak multiplier the next right answer would carry (drum value). */
+  mult: number;
   chomp: number;
   forfeit: number;
   removed: number;
   lastSim: number;
+  urgent: number;
+  lastBeat: number;
 }
 
 function freshClock(): QClock {
-  return { phase: PH_IDLE, t: 0, unlockAt: 0, windowMs: 1, finMs: -1, finFired: 0, finBuzzMs: -1, finBuzzFired: 0, leanFired: 0, frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: 400, h: 6000, kind: 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1 };
+  return { phase: PH_IDLE, t: 0, unlockAt: 0, windowMs: 1, finMs: -1, finFired: 0, finBuzzMs: -1, finBuzzFired: 0, sub: 0, subLimit: 1, g: 400, h: 6000, kind: 0, mult: 1, chomp: 0, forfeit: 0, removed: 0, lastSim: -1, urgent: 0, lastBeat: -1 };
 }
 
-type SubMode = 'buzzAnswer' | 'steal' | 'open' | 'deadHeat' | null;
-type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'wager' | 'reveal' | 'between' | 'results';
+type SubMode = 'buzzAnswer' | 'steal' | 'open' | null;
+type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'wager' | 'reveal' | 'between' | 'crate' | 'results';
+type Framing = 'wide' | 'two' | 'singleMe' | 'singleOpp';
 
 export interface TriviaDuelProps {
   visible: boolean;
@@ -129,7 +152,10 @@ export interface TriviaDuelProps {
   rideId?: number;
   parkId?: number;
   chapterId?: string;
+  /** Kept for call-site compatibility; ride names never render in Trivia Duel UI (rev 7, S0-2). */
   rideName?: string;
+  /** The app's coin art for this ride (the same image as the coin counter); fallback Alex's coin. */
+  coinImage?: ImageSourcePropType | string | null;
   /** Pre-loaded authored pool (tests / previews); loaded from LinePlay content otherwise. */
   pool?: PoolQuestion[];
   ghost?: GhostRecord | null;
@@ -141,25 +167,35 @@ export interface TriviaDuelProps {
 const { width: SW } = Dimensions.get('window');
 const AUTOPLAY = __DEV__ && process.env.EXPO_PUBLIC_TRIVIA_AUTOPLAY === '1';
 const TIER_TEXT: Record<SpeedTier, string> = { lightning: 'LIGHTNING!', great: 'GREAT', nice: 'NICE', none: '' };
-const TIER_COLOR: Record<SpeedTier, string> = { lightning: C.lightning, great: C.gold, nice: C.blue, none: C.cream };
-const TIER_STEP: Record<SpeedTier, number> = { lightning: 2, great: 1, nice: 0, none: 0 };
-const TIER_COINS: Record<SpeedTier, number> = { lightning: 18, great: 12, nice: 8, none: 6 };
+const TIER_COLOR: Record<SpeedTier, string> = { lightning: '#fff3b0', great: C.gold, nice: C.blue, none: C.cream };
+/** 11.6 stamp widths (share of screen width): tier stamps 38-45%, event stamps 55-70%. */
+const TIER_WIDTH: Record<SpeedTier, number> = { lightning: 0.45, great: 0.42, nice: 0.38, none: 0.3 };
+const TIER_SPARKS: Record<SpeedTier, number> = { lightning: 14, great: 10, nice: 6, none: 4 };
 const ROUND_NAMES = { quick: 'QUICK DRAW', buzz: 'BUZZ BELL', final: "FIN'S FINAL" } as const;
+const VOICE: Record<FinRank, BabbleVoice> = { deckhand: 'deckhand', firstmate: 'first_mate', captain: 'captain', admiral: 'admiral' };
+const MAX_FLASHES = 2;
+
+/** Stamp font size that makes `text` span `share` of the screen width (Shark font ~0.62em per glyph). */
+function stampSize(text: string, share: number, w: number): number {
+  return Math.max(22, Math.min(64, Math.round((share * w) / (0.62 * Math.max(3, text.length)))));
+}
 
 export function TriviaDuel(props: TriviaDuelProps) {
   const { visible, mode, seed: baseSeed, title, subtitle, rideId, parkId, chapterId, onComplete, onClose, onQuit } = props;
   const reducedMotion = useReducedGameMotion();
   const movement = useContext(LinePlayMovementContext);
-  const rideChallenge = useContext(RideChallengeContext);
   const auth = useContext(AuthContext) as { player?: { username?: string } } | null;
   const myName = (auth?.player?.username ?? 'You').slice(0, 12);
   const isRide = mode === 'ride';
   const shell = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
+  const backFx = useRef<FxStageHandle>(null);
+  const coinSrc: ImageSourcePropType | null = typeof props.coinImage === 'string' ? { uri: props.coinImage } : (props.coinImage ?? null);
 
   registerDuelAudio();
+  useEffect(() => { configureHaptics('trivia'); }, []);
 
-  // -- Layout ---------------------------------------------------------------------
+  // -- Layout (3: 390 x 844 reference; answers in the bottom 45%) ------------------------
   const [field, setField] = useState({ w: SW, h: 700 });
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -168,14 +204,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const W = field.w;
   const H = field.h;
   const RAIL_H = 84;
-  // Thumb zone first: answers sit in the bottom of the screen, the card right
-  // above them, and the stage takes everything between the rail and the card.
-  const ZONE_H = 226;
-  const ZONE_TOP = H - ZONE_H - 20;
-  const CARD_H = 142;
-  const CARD_TOP = ZONE_TOP - CARD_H - 10;
-  const STAGE_H = Math.max(140, CARD_TOP + 22 - (RAIL_H - 4));
-  const scoreAnchor = { x: 70, y: 46 };
+  const ZONE_H = 232;
+  const ZONE_TOP = H - ZONE_H - 12;
+  const DESK_TOP = ZONE_TOP - 30;
+  const BOARD_W = Math.min(W - 20, 380);
+  const BOARD_TOP = DESK_TOP - (BOARD_H + ROPE_H) + 4;
+  const STAGE_TOP = RAIL_H - 6;
+  const STAGE_BAND = Math.max(130, BOARD_TOP + ROPE_H * 0.5 - STAGE_TOP);
+  const STAGE_FULL = H - STAGE_TOP;
+  const RESULTS_H = Math.round(H * 0.5);
+  // Takeover: the scene drops just enough that the podiums sit above the half-height results card.
+  const DROP_PX = Math.max(0, Math.min(STAGE_FULL - STAGE_BAND, (H - RESULTS_H - 28) - (STAGE_TOP + STAGE_BAND * 0.7)));
+  const railScore = { x: 92, y: 46 };
 
   // -- Match state ------------------------------------------------------------------
   const [phase, setPhase] = useState<Phase>('loading');
@@ -184,26 +224,23 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [round, setRound] = useState<PlannedRound | null>(null);
   const [tiles, setTiles] = useState<TileState[]>([]);
   const [heads, setHeads] = useState<SharkLook[][]>([]);
+  const [shares, setShares] = useState<number[] | null>(null);
   const [chomped, setChomped] = useState<number[]>([]);
   const [wiggle, setWiggle] = useState<number[]>([0, 0, 0, 0]);
   const [pips, setPips] = useState<PipState[]>([]);
   const [scores, setScores] = useState({ me: 0, opp: 0 });
   const [streakView, setStreakView] = useState({ streak: 0, shield: false });
-  const [tray, setTray] = useState({ chomp: true, freeze: false, peek: false });
+  const [chompHeld, setChompHeld] = useState(false);
   const [usedThisQ, setUsedThisQ] = useState(false);
   const [locks, setLocks] = useState<{ me: string | null; opp: string | null }>({ me: null, opp: null });
   const [stakes, setStakes] = useState<{ me: string | null; opp: string | null }>({ me: null, opp: null });
   const [stamps, setStamps] = useState<StampSpec[]>([]);
   const [bark, setBark] = useState<{ text: string | null; key: number }>({ text: null, key: 0 });
-  const [ribbon, setRibbon] = useState<{ text: string; key: number; hold: number } | null>(null);
   const [subMode, setSubMode] = useState<SubMode>(null);
   const [bellOn, setBellOn] = useState(false);
   const [bellKey, setBellKey] = useState(0);
   const [chip, setChip] = useState<string | null>(null);
-  const [wager, setWager] = useState<{ stakes: number[]; picked: number; left: number } | null>(null);
-  const [finalCard, setFinalCard] = useState<string | null>(null);
-  /** C11 Final category pick: two cards, who picks, seconds left, the pick. */
-  // C9 Relaxed pace: read-lock x1.5, windows +4s, speed horizon x1.5 (from the next match or question set).
+  const [wager, setWager] = useState<{ stakes: number[]; picked: number; suggested: number; reason: string; ifRight: number[]; left: number } | null>(null);
   const [relaxed, setRelaxed] = useState(false);
   useEffect(() => { void loadMemory().then((m) => setRelaxed(!!m.relaxed)); }, []);
   const toggleRelaxed = useCallback(() => {
@@ -217,18 +254,16 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const catDone = useRef<((i: number) => void) | null>(null);
   const [sliderVal, setSliderVal] = useState(0);
   const [narrow, setNarrow] = useState<[number, number] | null>(null);
-  const [frozen, setFrozen] = useState(false);
   const [held, setHeld] = useState(false);
   const [results, setResults] = useState<ResultsModel | null>(null);
   const [shellResult, setShellResult] = useState<GameResult | null>(null);
+  const [crate, setCrate] = useState<{ stars: number; key: number } | null>(null);
   const [vs, setVs] = useState<{ ms: number } | null>(null);
   const [dropKey, setDropKey] = useState(0);
   const [musicBed, setMusicBed] = useState<string | null>(null);
-  const [flash, setFlash] = useState<{ key: number; text: string } | null>(null);
-  const [polaroid, setPolaroid] = useState(0);
-  const [peekLean, setPeekLean] = useState(-1);
   const [runKey, setRunKey] = useState(0);
   const [ghost, setGhost] = useState<GhostRecord | null>(props.ghost ?? null);
+  const [features, setFeatures] = useState({ chomp: true, bell: true, shield: true, final: true });
 
   // Flow functions are called from timers and UI-thread events: always go through the latest render.
   const F = useRef<Record<string, (...args: any[]) => any>>({});
@@ -252,10 +287,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const barkN = useRef(0);
   const nextTap = useRef<(() => void) | null>(null);
   const factsRef = useRef<FactCard[]>([]);
-  const finalWager = useRef<number>(WAGER.defaultIndex);
+  const finalWager = useRef(0);
   const seedRef = useRef(baseSeed >>> 0);
-  const rankRef = useRef(FIN_RANKS.deckhand.label);
-  const carryRef = useRef({ streak: 0, shield: false });
+  const rankRef = useRef<FinRank>('deckhand');
+  const flashes = useRef(0);
+  const wagerOpen = useRef(false);
+  const lastCut = useRef(0);
+  const decisiveDone = useRef(false);
 
   const opponentLook: SharkLook | 'fin' = ghost ? ((ghost.look as SharkLook) || 'blue') : 'fin';
   const oppName = ghost ? ghost.name : 'Fin';
@@ -311,34 +349,41 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const bulbFast = useSharedValue(0);
   const heat = useSharedValue(0);
   const urgency = useSharedValue(0);
-  // D10: the whole stage reads "on fire" from arm's length at Hot Streak and Blazing.
-  useEffect(() => {
-    const target = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0;
-    heat.value = reducedMotion ? target : withTiming(target, { duration: 300 });
-  }, [streakView.streak, heat, reducedMotion]);
   const spot = useSharedValue(0);
   const push = useSharedValue(1);
   const pushX = useSharedValue(0);
   const stageT = useSharedValue(0);
   const podMe = useSharedValue(0);
   const podOpp = useSharedValue(0);
+  const takeover = useSharedValue(0);
+  const retract = useSharedValue(0);
+  const crown = useSharedValue(0);
+  useEffect(() => {
+    const target = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0;
+    heat.value = reducedMotion ? target : withTiming(target, { duration: 300 });
+  }, [streakView.streak, heat, reducedMotion]);
   const music = useMusicBeat(visible);
   const actors: StageActors = useMemo(() => ({
     finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst,
-    beat: music.beat, bulbFast, spot, push, pushX, t: stageT, podMe, podOpp, heat, urgency,
-  }), [heat, urgency, finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst, music.beat, bulbFast, spot, push, pushX, stageT, podMe, podOpp]);
+    beat: music.beat, bulbFast, spot, push, pushX, t: stageT, podMe, podOpp, heat, urgency, takeover, crown,
+  }), [heat, urgency, finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst, music.beat, bulbFast, spot, push, pushX, stageT, podMe, podOpp, takeover, crown]);
   const baseFinPose = useRef<FinPose>('idle');
   const talking = useRef(false);
 
+  /**
+   * Fin pose change on the twos grid (7.3): anticipation squash 0.94 x 1.06
+   * for one frame, hard cut, overshoot 1.05 x 0.96 for one frame, settle on
+   * a spring. No crossfades.
+   */
   const setFin = useCallback((pose: FinPose, squash = true) => {
     baseFinPose.current = pose;
     const idx = FIN_POSE_ORDER.indexOf(pose);
     if (!squash || reducedMotion) { finPose.value = idx; return; }
-    // Anticipation 0.92 x 1.08 (80ms), swap, overshoot 1.04 x 0.97 (90ms), settle.
-    finSX.value = withSequence(withTiming(0.92, { duration: 80 }), withTiming(1.04, { duration: 90 }), withSpring(1, { damping: 9, stiffness: 320 }));
-    finSY.value = withSequence(withTiming(1.08, { duration: 80 }), withTiming(0.97, { duration: 90 }), withSpring(1, { damping: 9, stiffness: 320 }));
+    const fr = 83;
+    finSX.value = withSequence(withTiming(0.94, { duration: 1 }), withDelay(fr, withTiming(1.05, { duration: 1 })), withDelay(fr, withSpring(1, { damping: 9, stiffness: 320 })));
+    finSY.value = withSequence(withTiming(1.06, { duration: 1 }), withDelay(fr, withTiming(0.96, { duration: 1 })), withDelay(fr, withSpring(1, { damping: 9, stiffness: 320 })));
     hatRot.value = withSequence(withTiming(-7, { duration: 90 }), withSpring(0, { damping: 8, stiffness: 180 }));
-    later(80, () => { finPose.value = idx; });
+    later(fr, () => { finPose.value = idx; });
   }, [finPose, finSX, finSY, hatRot, later, reducedMotion]);
 
   const finHop = useCallback((n = 1, amp = 1) => {
@@ -349,23 +394,28 @@ export function TriviaDuel(props: TriviaDuelProps) {
     hatRot.value = withSequence(withTiming(6, { duration: 140 }), withSpring(0, { damping: 6, stiffness: 180 }));
   }, [finY, hatY, hatRot, reducedMotion]);
 
-  // Blink and talk (idle / think families only).
+  // Blink every 2.5-5s (1 frame) and idle fidgets on a seeded path that never reads his pick or lock time (no tells, 7.3).
   useEffect(() => {
     if (!visible) return undefined;
     let alive = true;
+    let n = 0;
     const blink = () => {
       if (!alive) return;
       const base = baseFinPose.current;
       if ((base === 'idle' || base === 'think') && !talking.current) {
         finPose.value = FIN_POSE_ORDER.indexOf(`${base}_blink` as FinPose);
-        setTimeout(() => { if (alive && !talking.current) finPose.value = FIN_POSE_ORDER.indexOf(baseFinPose.current); }, 90);
+        setTimeout(() => { if (alive && !talking.current) finPose.value = FIN_POSE_ORDER.indexOf(baseFinPose.current); }, 83);
       }
-      setTimeout(blink, 2500 + Math.random() * 2500);
+      n += 1;
+      // Hat tip every few blinks, timed only by its own seeded counter.
+      if (n % 3 === 0 && !reducedMotion && urgency.value === 0) hatRot.value = withSequence(withTiming(-9, { duration: 120 }), withSpring(0, { damping: 6, stiffness: 180 }));
+      setTimeout(blink, 2500 + ((mixSeed(seedRef.current, n) % 2500)));
     };
     const t = setTimeout(blink, 2000);
     return () => { alive = false; clearTimeout(t); };
-  }, [visible, finPose]);
+  }, [visible, finPose, hatRot, urgency, reducedMotion]);
 
+  // Talk cells at 12fps (on twos) while he speaks.
   const talkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const onTalk = useCallback((on: boolean) => {
     talking.current = on;
@@ -380,60 +430,75 @@ export function TriviaDuel(props: TriviaDuelProps) {
     talkTimer.current = setInterval(() => {
       open = !open;
       finPose.value = FIN_POSE_ORDER.indexOf((open ? `${baseFinPose.current}_talk` : baseFinPose.current) as FinPose);
-    }, 100);
+    }, 83);
   }, [finPose]);
 
   const lastBarkAt = useRef(0);
   const say = useCallback((kind: keyof typeof BARKS) => {
     if (ghost) return;
-    // 7.3: event-keyed barks at most every 6s; match-defining beats always speak.
+    // 7.2: event-keyed barks at most one per 6s; match-defining beats always speak.
     const now = Date.now();
-    const urgent = kind === 'deadHeat' || kind === 'steal' || kind === 'finWins' || kind === 'finLoses' || kind === 'categoryPick' || kind === 'categoryFin';
+    const urgent = kind === 'steal' || kind === 'finWins' || kind === 'finLoses' || kind === 'categoryPick' || kind === 'categoryFin';
     if (!urgent && now - lastBarkAt.current < 6000) return;
     lastBarkAt.current = now;
     barkN.current += 1;
-    setBark({ text: pickBark(kind, (seedRef.current + barkN.current) % 97), key: barkN.current });
-  }, [ghost]);
+    setBark({ text: pickBark(kind, (seedRef.current + barkN.current) % 97, myName), key: barkN.current });
+  }, [ghost, myName]);
 
-  const meHop = useCallback((kind: 'lean' | 'hop' | 'shake' | 'fist' | 'thumbs') => {
+  /** Avatar acting (11.5), on the twos grid. */
+  const meAct = useCallback((kind: 'lean' | 'hop' | 'wrong' | 'buzzWin' | 'pratfall') => {
     if (reducedMotion) return;
+    const fr = 83;
     if (kind === 'lean') {
       meRot.value = withSequence(withTiming(0.07, { duration: 120 }), withDelay(300, withSpring(0)));
       meY.value = withSequence(withTiming(-4, { duration: 120 }), withDelay(300, withSpring(0)));
-    } else if (kind === 'hop' || kind === 'fist' || kind === 'thumbs') {
-      meY.value = withSequence(withTiming(kind === 'fist' ? -10 : -14, { duration: 140, easing: Easing.out(Easing.cubic) }), withTiming(0, { duration: 120, easing: Easing.in(Easing.quad) }));
-      meSX.value = withSequence(withDelay(260, withTiming(1.06, { duration: 60 })), withSpring(1, { damping: 8, stiffness: 300 }));
-      meSY.value = withSequence(withDelay(260, withTiming(0.9, { duration: 60 })), withSpring(1, { damping: 8, stiffness: 300 }));
-      if (kind === 'fist') meRot.value = withSequence(withTiming(-0.14, { duration: 80 }), withTiming(0.1, { duration: 90 }), withTiming(0, { duration: 90 }));
-    } else if (kind === 'shake') {
+    } else if (kind === 'hop' || kind === 'buzzWin') {
+      // 3-frame hop on twos: crouch 1.08 x 0.92, air 0.94 x 1.08 at -14pt, land 1.08 x 0.92.
+      meSX.value = withSequence(withTiming(1.08, { duration: 1 }), withDelay(fr, withTiming(0.94, { duration: 1 })), withDelay(fr * 2, withTiming(1.08, { duration: 1 })), withDelay(fr, withSpring(1, { damping: 9, stiffness: 320 })));
+      meSY.value = withSequence(withTiming(0.92, { duration: 1 }), withDelay(fr, withTiming(1.08, { duration: 1 })), withDelay(fr * 2, withTiming(0.92, { duration: 1 })), withDelay(fr, withSpring(1, { damping: 9, stiffness: 320 })));
+      meY.value = withSequence(withDelay(fr, withTiming(-14, { duration: 1 })), withDelay(fr * 2, withTiming(0, { duration: 1 })));
+      if (kind === 'buzzWin') meRot.value = withSequence(withTiming(-0.14, { duration: 80 }), withTiming(0.1, { duration: 90 }), withTiming(0, { duration: 90 }));
+    } else if (kind === 'wrong') {
+      // Recoil 0.96 x 1.04 back 4pt, then a head-shake read and a small slump.
+      meSX.value = withSequence(withTiming(0.96, { duration: 80 }), withDelay(300, withSpring(1)));
+      meSY.value = withSequence(withTiming(1.04, { duration: 80 }), withDelay(300, withTiming(0.96, { duration: 120 })), withDelay(400, withSpring(1)));
       meRot.value = withSequence(
-        withTiming(-0.09, { duration: 50 }), withTiming(0.09, { duration: 50 }), withTiming(-0.09, { duration: 50 }),
-        withTiming(0.09, { duration: 50 }), withTiming(-0.09, { duration: 50 }), withTiming(0, { duration: 50 }),
+        withTiming(-0.1, { duration: 50 }), withTiming(0.1, { duration: 50 }), withTiming(-0.1, { duration: 50 }),
+        withTiming(0.1, { duration: 50 }), withTiming(-0.06, { duration: 50 }), withTiming(0, { duration: 50 }),
       );
-      meSY.value = withDelay(300, withSequence(withTiming(0.96, { duration: 120 }), withDelay(480, withSpring(1))));
-      meY.value = withDelay(300, withSequence(withTiming(4, { duration: 120 }), withDelay(480, withSpring(0))));
+      meY.value = withSequence(withTiming(4, { duration: 80 }), withDelay(700, withSpring(0)));
+    } else if (kind === 'pratfall') {
+      // Fall Guys good-sport loss: tip over, bonk, pop back up into a thumbs-up hop.
+      meRot.value = withSequence(withTiming(0.21, { duration: 160, easing: Easing.in(Easing.quad) }), withDelay(380, withSpring(0, { damping: 7, stiffness: 220 })));
+      meY.value = withSequence(withTiming(6, { duration: 160 }), withDelay(380, withTiming(-12, { duration: 140 })), withTiming(0, { duration: 140 }));
+      later(170, () => sfx(CUE.bonk, { volume: 0.8 }));
     }
-  }, [meRot, meY, meSX, meSY, reducedMotion]);
+  }, [meRot, meY, meSX, meSY, reducedMotion, later]);
 
   // -- Clocks, camera, FX ------------------------------------------------------------------
   const qc = useSharedValue<QClock>(freshClock());
-  const elapsed = useSharedValue(0);
-  const ticker = useSharedValue(200);
+  const drum = useSharedValue(200);
+  const ringSpeed = useSharedValue(-1);
+  const bellStake = useSharedValue(250);
+  const fuse = useSharedValue(-1);
+  const urgentSv = useSharedValue(0);
   const readProg = useSharedValue(0);
-  const remain = useSharedValue(1);
+  const lockFlashAt = useSharedValue(-1000);
+  const hotSv = useSharedValue(0);
+  useEffect(() => { hotSv.value = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0; }, [streakView.streak, hotSv]);
 
   const dispatchRef = useRef<(ev: number, a: number, b: number) => void>(() => undefined);
   const dispatch = useCallback((ev: number, a: number, b: number) => dispatchRef.current(ev, a, b), []);
+  const beatSv = music.beat;
 
   const clock = useGameClock({
-    config: { freezeBudget: 0.05 },
+    config: { freezeBudget: 0.09 },
     onFrame: (_alpha, _fxDt, c) => {
       'worklet';
       stageT.value = c.fxMs;
       const q = qc.value;
       const prev = q.lastSim;
       q.lastSim = c.simMs;
-      if (q.phase !== PH_LIVE && urgency.value !== 0) urgency.value = 0;
       if (prev < 0 || q.phase === PH_IDLE) return;
       let dt = c.simMs - prev;
       if (dt <= 0) return;
@@ -448,77 +513,90 @@ export function TriviaDuel(props: TriviaDuelProps) {
         }
         return;
       }
+      const since = q.t - q.unlockAt;
       if (q.phase === PH_LIVE || q.phase === PH_LOCKED || q.phase === PH_WAIT) {
-        const since = q.t - q.unlockAt;
-        if (q.freezeLeft > 0) {
-          const f = dt < q.freezeLeft ? dt : q.freezeLeft;
-          q.freezeLeft -= f;
-          q.frozen += f;
-          if (q.freezeLeft <= 0) runOnJS(dispatch)(EV_FREEZE_END, 0, 0);
-        }
-        if (q.kind !== 2 && q.finMs >= 0 && q.leanFired === 0 && since >= q.finMs - 300) {
-          q.leanFired = 1;
-          runOnJS(dispatch)(EV_FIN_LEAN, 0, 0);
-        }
-        if (q.finMs >= 0 && q.finFired === 0 && since >= q.finMs) {
+        if (q.kind !== K_BELL && q.finMs >= 0 && q.finFired === 0 && since >= q.finMs) {
           q.finFired = 1;
           runOnJS(dispatch)(EV_FIN, q.finMs, 0);
         }
-        if (q.phase === PH_LIVE) {
-          const my = since - q.frozen;
-          elapsed.value = my;
-          if (q.kind === 2) {
-            ticker.value = 150 + (q.forfeit ? 0 : speedWorklet(my, q.g, q.h, q.chomp));
-            if (q.finBuzzMs >= 0 && q.finBuzzFired === 0 && since >= q.finBuzzMs) {
-              // He rang: the bell stays live for the 200ms DEAD HEAT window.
-              q.finBuzzFired = 1;
-              runOnJS(dispatch)(EV_FIN_RING, q.finBuzzMs, 0);
-            }
-            if (q.finBuzzFired === 1 && since >= q.finBuzzMs + DEAD_HEAT_W) {
-              q.finBuzzFired = 2;
-              q.phase = PH_WAIT;
-              runOnJS(dispatch)(EV_FIN_BUZZ, q.finBuzzMs, 0);
-              return;
-            }
-          } else if (q.kind === 1) {
-            ticker.value = 100 + (q.forfeit ? 0 : rideSpeedWorklet(my, q.g, q.h, q.chomp));
-          } else {
-            ticker.value = tickerValue(my, q.g, q.h, { chomp: q.chomp === 1, holdForfeit: q.forfeit === 1 });
-          }
-          const left = q.windowMs - my;
-          remain.value = left / q.windowMs;
-          urgency.value = left <= 1000 ? 1 : left <= 3000 ? 0.6 : 0;
-          const sec = Math.ceil(left / 1000);
-          if (sec <= 3 && sec > 0 && sec < q.lastSec) {
-            q.lastSec = sec;
-            runOnJS(dispatch)(EV_TICK, sec, 0);
-          }
-          if (left <= 0) {
+      }
+      if (q.phase === PH_LIVE) {
+        const my = since;
+        let speed = 0;
+        if (q.kind === K_BELL) {
+          speed = q.forfeit ? 0 : speedPoints(my, W_BELL_G, W_BELL_H);
+          if (q.chomp && speed > 50) speed = 50;
+          const v = Math.round((150 + speed) * q.mult);
+          drum.value = v;
+          bellStake.value = v;
+          if (q.finBuzzMs >= 0 && q.finBuzzFired === 0 && since >= q.finBuzzMs) {
+            q.finBuzzFired = 1;
             q.phase = PH_WAIT;
-            runOnJS(dispatch)(EV_TIMEOUT, my, 0);
+            runOnJS(dispatch)(EV_FIN_BUZZ, q.finBuzzMs, 0);
+            return;
           }
+        } else if (q.kind === K_RIDE) {
+          const rs = q.forfeit ? 0 : speedPoints(my, q.g, q.h, W_RIDE_SPEED);
+          const capped = q.chomp && rs > 50 ? 50 : rs;
+          speed = Math.round((capped / W_RIDE_SPEED) * 100);
+          drum.value = 100 + capped;
+        } else {
+          speed = q.forfeit ? 0 : speedPoints(my, q.g, q.h);
+          if (q.chomp && speed > 50) speed = 50;
+          drum.value = Math.round((100 + speed) * q.mult);
+        }
+        ringSpeed.value = q.forfeit ? 0 : speed;
+        const hh = q.kind === K_BELL ? W_BELL_H : q.h;
+        fuse.value = my >= hh && q.windowMs > hh ? Math.max(0, (q.windowMs - my) / (q.windowMs - hh)) : -1;
+        const left = q.windowMs - my;
+        if (left <= 3000 && q.urgent === 0) {
+          q.urgent = 1;
+          urgentSv.value = 1;
+          urgency.value = 0.6;
+          runOnJS(dispatch)(EV_URGENT, 1, 0);
+        }
+        if (left <= 1000) urgency.value = 1;
+        if (q.urgent === 1) {
+          const b = Math.floor(beatSv.value);
+          if (b !== q.lastBeat) {
+            q.lastBeat = b;
+            runOnJS(dispatch)(EV_BEAT, b, 0);
+          }
+        }
+        if (left <= 0) {
+          q.phase = PH_WAIT;
+          fuse.value = -1;
+          runOnJS(dispatch)(EV_TIMEOUT, my, 0);
         }
         return;
       }
       if (q.phase === PH_SUB) {
         q.sub += dt;
         const left = q.subLimit - q.sub;
-        remain.value = left / q.subLimit;
-        const sec = Math.ceil(left / 1000);
-        if (sec <= 3 && sec > 0 && sec < q.lastSec) {
-          q.lastSec = sec;
-          runOnJS(dispatch)(EV_TICK, sec, 0);
+        fuse.value = Math.max(0, left / q.subLimit);
+        if (left <= 3000 && q.urgent === 0) {
+          q.urgent = 1;
+          urgentSv.value = 1;
+          runOnJS(dispatch)(EV_URGENT, 1, 0);
+        }
+        if (q.urgent === 1) {
+          const b = Math.floor(beatSv.value);
+          if (b !== q.lastBeat) {
+            q.lastBeat = b;
+            runOnJS(dispatch)(EV_BEAT, b, 0);
+          }
         }
         if (left <= 0) {
           q.phase = PH_WAIT;
+          fuse.value = -1;
           runOnJS(dispatch)(EV_SUB_TIMEOUT, 0, 0);
         }
       }
     },
   });
-  const camera = useCamera({ width: W, height: H, timeScale: clock.fxScale, reducedMotion, walking: !!movement?.moving });
+  const camera = useCamera({ width: W, height: H, config: CAMERA_PRESETS.trivia, timeScale: clock.fxScale, reducedMotion, walking: !!movement?.moving });
 
-  // UI-thread tap gate (tiles).
+  /** UI-thread lock gate (tiles): release, or the Final hold ring closing. */
   const onTapUI = useCallback((i: number) => {
     'worklet';
     const q = qc.value;
@@ -527,14 +605,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
       return;
     }
     if ((q.removed >> i) & 1) return;
-    if (q.phase === PH_LIVE && q.kind !== 2) {
-      const my = q.t - q.unlockAt - q.frozen;
+    if (q.phase === PH_LIVE && q.kind !== K_BELL) {
+      const my = q.t - q.unlockAt;
       if (my < GUARD_MS) {
         runOnJS(dispatch)(EV_EARLY, i, 0);
         return;
       }
       q.phase = PH_LOCKED;
-      elapsed.value = my;
       runOnJS(dispatch)(EV_LOCK, i, my);
       return;
     }
@@ -542,14 +619,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
       q.phase = PH_WAIT;
       runOnJS(dispatch)(EV_SUB_LOCK, i, q.sub);
     }
-  }, [qc, dispatch, elapsed]);
+  }, [qc, dispatch]);
 
   const onBuzzUI = useCallback(() => {
     runOnUI(() => {
       'worklet';
       const q = qc.value;
-      if (q.phase !== PH_LIVE || q.kind !== 2) return;
-      const my = q.t - q.unlockAt - q.frozen;
+      if (q.phase !== PH_LIVE || q.kind !== K_BELL) return;
+      const my = q.t - q.unlockAt;
       if (my < GUARD_MS) return;
       q.phase = PH_WAIT;
       runOnJS(dispatch)(EV_BUZZ, my, 0);
@@ -561,13 +638,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
       'worklet';
       const q = qc.value;
       if (q.phase !== PH_LIVE) return;
-      const my = q.t - q.unlockAt - q.frozen;
+      const my = q.t - q.unlockAt;
       if (my < GUARD_MS) return;
       q.phase = PH_LOCKED;
-      elapsed.value = my;
       runOnJS(dispatch)(EV_LOCK, -1, my);
     })();
-  }, [qc, dispatch, elapsed]);
+  }, [qc, dispatch]);
 
   const setClock = useCallback((patch: Partial<QClock>) => {
     runOnUI((p: Partial<QClock>) => {
@@ -581,38 +657,61 @@ export function TriviaDuel(props: TriviaDuelProps) {
   // -- Music ------------------------------------------------------------------------------
   useGameMusic(visible && musicBed ? bed(musicBed) : null, { at: 'bar' });
 
+  // -- Camera framings (11.2): hard cuts on the half-beat, never a pan, 600ms apart. ----------
+  const frame = useCallback((f: Framing) => {
+    if (reducedMotion) { push.value = 1; pushX.value = 0; return; }
+    const now = Date.now();
+    if (f !== 'wide' && now - lastCut.current < 600) return;
+    lastCut.current = now;
+    const target = f === 'wide' ? { s: 1, x: 0 } : f === 'two' ? { s: 1.2, x: 0 } : f === 'singleMe' ? { s: 1.3, x: W * 0.22 } : { s: 1.3, x: -W * 0.22 };
+    push.value = target.s;
+    pushX.value = target.x;
+  }, [push, pushX, reducedMotion, W]);
+
+  /** Full-frame flash: only the FIN'S FINAL stamp and the win crown, 35% peak, max 2 per match. */
+  const flash = useCallback(() => {
+    if (reducedMotion || flashes.current >= MAX_FLASHES) return;
+    flashes.current += 1;
+    fx.current?.flash({ color: '#ffffff', peak: 0.35, ms: 160 });
+  }, [reducedMotion]);
+
   // -- Setup / rematch -----------------------------------------------------------------------
   const tileGeom = useMemo(() => {
     const n = round?.question.choices.length ?? 4;
     const gap = 12;
-    const zoneW = Math.min(W - 32, 380);
+    const zoneW = Math.min(W - 24, 380);
     if (round?.question.format === 'opened' || n === 3) {
-      return { cols: 1, w: zoneW, h: Math.min(68, (ZONE_H - 2 * gap) / 3), gap, zoneW };
+      return { cols: 1, w: zoneW, h: 62, gap: 10, zoneW };
     }
-    if (n === 2) return { cols: 2, w: (zoneW - gap) / 2, h: Math.min(150, ZONE_H * 0.62), gap, zoneW };
-    return { cols: 2, w: (zoneW - gap) / 2, h: Math.min(104, (ZONE_H - gap - 10) / 2), gap, zoneW };
-  }, [round, W, ZONE_H]);
+    if (n === 2) return { cols: 2, w: (zoneW - gap) / 2, h: 140, gap, zoneW };
+    return { cols: 2, w: (zoneW - gap) / 2, h: 96, gap, zoneW };
+  }, [round, W]);
 
   const tileCenter = useCallback((i: number) => {
     const g = tileGeom;
     const left = (W - g.zoneW) / 2;
     const col = g.cols === 1 ? 0 : i % 2;
     const row = g.cols === 1 ? i : Math.floor(i / 2);
-    return { x: left + col * (g.w + g.gap) + g.w / 2, y: ZONE_TOP + row * (g.h + g.gap) + g.h / 2 };
-  }, [tileGeom, W, ZONE_TOP]);
+    const rows = g.cols === 1 ? (round?.question.choices.length ?? 3) : Math.ceil((round?.question.choices.length ?? 4) / 2);
+    const top = ZONE_TOP + ZONE_H - rows * (g.h + 6 + g.gap);
+    return { x: left + col * (g.w + g.gap) + g.w / 2, y: top + row * (g.h + 6 + g.gap) + g.h / 2 };
+  }, [tileGeom, W, ZONE_TOP, round]);
 
-  const stamp = useCallback((text: string, color: string, size: number, x: number, y: number, sub?: string) => {
+  const stamp = useCallback((text: string, color: string, share: number, x: number, y: number, sub?: string) => {
     stampKey.current += 1;
-    const spec = { key: stampKey.current, text, color, size, x, y, sub };
+    const spec = { key: stampKey.current, text, color, size: stampSize(text, share, W), x, y, sub };
     setStamps((s) => [...s.slice(-2), spec]);
     later(900, () => setStamps((s) => s.filter((k) => k.key !== spec.key)));
-  }, [later]);
+  }, [later, W]);
 
   const beginMatch = useCallback(async (rematch: boolean) => {
     clearTimers();
     setPhase('loading');
     setResults(null);
     setShellResult(null);
+    setCrate(null);
+    retract.value = withTiming(0, { duration: 200 });
+    takeover.value = withTiming(0, { duration: 200 });
     const mem = await loadMemory();
     if (!poolRef.current.length) poolRef.current = props.pool ?? await loadPool({ rideId, parkId, chapterId });
     // Queue and practice vary per play even from a fixed base seed; ride and daily keep the issued seed.
@@ -620,49 +719,58 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const seed = rematch ? mixSeed(seedRef.current, 0x9e37 + playsRef.current) : fresh;
     seedRef.current = seed;
     const rank = mode === 'queue' || mode === 'practice' ? currentRank(mem) : 'firstmate';
-    rankRef.current = FIN_RANKS[rank].label;
+    rankRef.current = rank;
+    // 2.3 unlocks: lifetime queue matches (practice counts) set the template and systems.
+    const matchNo = mode === 'queue' || mode === 'practice' ? (mem.duels ?? 0) + 1 : 3;
     let p: MatchPlan | null = null;
-    if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank, !!mem.relaxed);
-    if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank, relaxed: !!mem.relaxed });
-    if (__DEV__) console.log('[trivia-duel] plan', { seed, seen: mem.seen.length, pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id), alt: p.finalAlt?.question.id ?? null, cats: p.rounds.map((r) => r.question.category) });
-    const carry = mode === 'queue' || mode === 'practice' ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
-    carryRef.current = carry;
-    tally.current = createTally(carry.streak, carry.shield);
+    if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank, !!mem.relaxed, ghost.keys);
+    if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank, relaxed: !!mem.relaxed, matchNo, async: !!ghost });
+    if (__DEV__) console.log('[trivia-duel] plan', { seed, matchNo, keys: p.keys, ids: p.rounds.map((r) => r.question.id), alt: p.finalAlt?.question.id ?? null });
+    const carry = (mode === 'queue' || mode === 'practice') && p.features.shield ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
+    tally.current = createTally(carry.streak, carry.shield, p.features.shield);
     resultsLog.current = [];
     factsRef.current = [];
-    setStreakView({ streak: carry.streak, shield: carry.shield });
+    flashes.current = 0;
+    decisiveDone.current = false;
+    wagerOpen.current = false;
+    setFeatures({ ...p.features });
+    setStreakView({ streak: carry.streak, shield: carry.shield && p.features.shield });
     setScores({ me: 0, opp: 0 });
-    setTray({ chomp: true, freeze: false, peek: false });
+    setChompHeld(p.features.chomp);
     setPips(p.rounds.map((_, i) => (i === 0 ? 'current' : 'pending')));
     setLocks({ me: null, opp: null });
     setStakes({ me: null, opp: null });
     shades.value = withTiming(carry.streak >= 3 ? 1 : 0);
     podMe.value = withTiming(0);
     podOpp.value = withTiming(0);
+    crown.value = 0;
     spot.value = 0;
-    push.value = 1;
+    frame('wide');
+    setDuelKey('e');
     setPlan(p);
     playsRef.current += 1;
     startedAt.current = Date.now();
     resetFreeBeat();
     setMusicBed(BEDS.duel);
     setFin('idle', false);
-    // VS intro: 1400ms first match of the session, 600ms plays 2-3, skipped on REMATCH / ride compress.
-    const vsMs = rematch ? 0 : isRide ? (mem.vsSeen >= CEREMONY.vsCompressAfterPlays ? 0 : 800) : mem.vsSeen === 0 ? CEREMONY.vsFirstMs : mem.vsSeen < CEREMONY.vsCompressAfterPlays ? CEREMONY.vsShortMs : 0;
+    if (mode === 'queue' || mode === 'practice') void updateMemory((m) => { m.duels = (m.duels ?? 0) + 1; });
+    // VS intro: 1400ms takeover on the first match of a session, 600ms after, skipped on REMATCH; ride 800ms on the first 3 plays.
+    const vsMs = rematch ? 0 : isRide ? (mem.vsSeen >= CEREMONY.vsCompressAfterPlays ? 0 : 800) : playsRef.current === 1 ? CEREMONY.vsFirstMs : CEREMONY.vsShortMs;
     void updateMemory((m) => { m.vsSeen += 1; m.plays += 1; });
     if (vsMs > 0) {
       setPhase('intro');
       setVs({ ms: vsMs });
-      if (!reducedMotion) {
-        pushX.value = 60;
-        pushX.value = withTiming(0, { duration: 140 });
+      if (vsMs >= CEREMONY.vsFirstMs && !reducedMotion) {
+        retract.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
+        takeover.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
       }
       later(Math.round(vsMs * 0.29), () => {
         sfx(CUE.vsSlam);
         Haptic.comboHeavy();
-        camera.shake(0.35);
+        camera.shake(0.45);
         clock.hitStop(120, { force: true });
-        fx.current?.burst('sparks', W / 2, H * 0.42, { count: 24 });
+        fx.current?.burst('shards', W / 2, H * 0.42, { count: 24 });
+        fx.current?.ring(W / 2, H * 0.42, { color: C.gold, from: 40, to: 160, ms: 260 });
       });
       later(Math.round(vsMs * 0.8), () => say('intro'));
     } else {
@@ -673,6 +781,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
   const onVsDone = useCallback(() => {
     setVs(null);
+    retract.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.back(1.2)) });
+    takeover.value = withTiming(0, { duration: 260 });
     if (plan && phase === 'intro') F.current.startRound(plan, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, phase]);
@@ -683,16 +793,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (!r) return;
     setRoundIdx(i);
     setRound(r);
+    ringSpeed.value = -1;
+    fuse.value = -1;
     setPips((ps) => ps.map((s, k) => (k === i ? 'current' : s)));
     resolved.current = { me: false, opp: false, revealing: false };
     meIn.current = { ...NO_INPUT };
     setUsedThisQ(false);
     setChomped([]);
     setNarrow(null);
-    setFrozen(false);
-    setPeekLean(-1);
+    setShares(null);
     setSubMode(null);
     setBellOn(false);
+    setChip(null);
     setLocks({ me: null, opp: null });
     setHeads((r.question.choices.length ? r.question.choices : [0]).map(() => []));
     setTiles(r.question.choices.map(() => 'down'));
@@ -704,8 +816,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       if (Math.abs(v - sl.truth) < sl.tol * 1.5) v = v <= sl.truth ? Math.max(sl.min, sl.truth - Math.round(sl.tol * 1.8)) : Math.min(sl.max, sl.truth + Math.round(sl.tol * 1.8));
       setSliderVal(v);
     }
-    // Opponent's input for this round.
-    if (ghost) oppIn.current = ghostInput(ghost, i);
+    // Opponent's input for this round (Fin's is fixed by the seed; his pick stays hidden until the reveal).
+    if (ghost) oppIn.current = ghostInput(ghost, i, tally.current.opp.score);
     else oppIn.current = finInput(p, r, tally.current).input;
     if (r.spec.type === 'final' && !isRide) {
       F.current.runFinalIntro(p, r);
@@ -718,77 +830,85 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const presentQuestion = useCallback((p: MatchPlan, r: PlannedRound) => {
     setPhase('question');
     setDropKey((k) => k + 1);
-    const first = playsRef.current <= 1 && r.index === 0;
-    const label = isRide ? `QUESTION ${r.index + 1} OF ${p.rounds.length}` : `ROUND ${r.index + 1}  ${ROUND_NAMES[r.spec.type]}`;
-    setRibbon({ text: isRide ? `QUESTION ${r.index + 1}` : `ROUND ${r.index + 1}`, key: Date.now(), hold: first ? CEREMONY.ribbonHoldFirstMs : 0 });
-    sfx(CUE.whoosh, { volume: 0.7 });
-    void label;
+    sfx(CUE.whoosh, { volume: 0.6 });
     setFin('idle');
+    frame('wide');
+    if (!reducedMotion) push.value = withTiming(1.02, { duration: r.readLockMs + r.windowMs, easing: Easing.linear });
     readProg.value = 0;
-    remain.value = 1;
-    elapsed.value = 0;
-    ticker.value = isRide ? 250 : r.spec.type === 'buzz' ? 250 : 200;
+    fuse.value = -1;
+    urgentSv.value = 0;
+    urgency.value = 0;
+    ringSpeed.value = -1;
+    const isBell = r.spec.type === 'buzz';
+    const m = isRide ? 1 : streakMult(tally.current.me.streak.streak + 1);
+    drum.value = isRide ? 250 : isBell ? Math.round(250 * m) : Math.round(200 * m);
+    bellStake.value = Math.round(250 * m);
     const o = oppIn.current;
-    const isBuzz = r.spec.type === 'buzz';
     setClock({
       phase: PH_READ, t: 0, unlockAt: r.readLockMs + r.jitterMs, windowMs: r.windowMs,
-      finMs: isBuzz ? -1 : o.lockMs, finFired: 0,
-      finBuzzMs: isBuzz ? (o.buzzMs ?? -1) : -1, finBuzzFired: 0, leanFired: 0,
-      frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: r.graceMs, h: r.horizonMs,
-      kind: isRide ? 1 : isBuzz ? 2 : 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1,
+      finMs: isBell ? -1 : o.lockMs, finFired: 0,
+      finBuzzMs: isBell ? (o.buzzMs ?? -1) : -1, finBuzzFired: 0,
+      sub: 0, subLimit: 1, g: r.graceMs, h: r.horizonMs,
+      kind: isRide ? K_RIDE : isBell ? K_BELL : K_QUICK, mult: m, chomp: 0, forfeit: 0, removed: 0, lastSim: -1, urgent: 0, lastBeat: -1,
     });
-    if (isBuzz && playsRef.current <= 1) say('buzz');
+    // Fin "says" the question as audio over the read-lock (Animal Crossing babble, one voice).
+    if (!ghost) {
+      onTalk(true);
+      const hits = babbleSchedule(r.question.prompt, r.readLockMs);
+      hits.forEach((hb) => later(hb.atMs, () => babbleSyllable(hb.syllable, VOICE[p.rank])));
+      later(r.readLockMs, () => onTalk(false));
+    }
+    if (isBell && (p.matchNo ?? 3) <= 2 && r.index <= 2) say('buzz');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRide, setClock]);
+  }, [isRide, setClock, ghost, frame, reducedMotion]);
 
-  // FIN'S FINAL: interstitial (push-in, spotlights, stamp + full-frame flash 1 of 2), category card, wager.
+  // FIN'S FINAL (5.5): stamp on a half-beat (flash 1 of 2), music lifts to duel_loop_final on the bar,
+  // category pick (2.5s, trailing player, vs Fin only), then the wager (4.0s, 3 chips, suggestion glows).
   const runFinalIntro = useCallback(async (p: MatchPlan, r: PlannedRound) => {
     setPhase('finalIntro');
-    setMusicBed(BEDS.finalClosed);
-    if (!reducedMotion) {
-      push.value = withTiming(1.06, { duration: beatMs(true) * 2, easing: Easing.inOut(Easing.cubic) });
-      spot.value = withTiming(1, { duration: 400 });
-    }
+    setMusicBed(BEDS.final);
+    setDuelKey('f');
+    if (!reducedMotion) spot.value = withTiming(1, { duration: 400 });
     const d = await msToGrid(2);
     const t0 = tally.current;
     const alt = !ghost ? p.finalAlt : undefined;
     later(d, () => {
-      stamp("FIN'S FINAL", C.gold, 52, W / 2, H * 0.36);
+      stamp("FIN'S FINAL", C.gold, 0.66, W / 2, RAIL_H + STAGE_BAND * 0.5);
       sfx(CUE.stamp);
       Haptic.comboHeavy();
-      if (!reducedMotion) fx.current?.flash({ color: '#ffffff', peak: 0.6, ms: 160 });
+      flash();
       setFin(t0.opp.score > t0.me.score ? 'point' : 'nervous');
     });
     const toWager = (fr: PlannedRound) => {
-      setFinalCard(fr.question.category);
-      sfx(CUE.stamp, { volume: 0.7 });
       const t = tally.current;
       say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
-      later(CEREMONY.categoryCardMs, () => {
-        setFinalCard(null);
-        setMusicBed(BEDS.finalOpen);
-        const st = wagerStakes(tally.current.me.score);
-        finalWager.current = WAGER.defaultIndex;
-        setWager({ stakes: st, picked: WAGER.defaultIndex, left: 5 });
-        setPhase('wager');
-        let left = 5;
-        const tick = () => {
-          left -= 1;
-          if (left <= 0) {
-            F.current.lockWager(p, fr);
-            return;
-          }
-          setWager((w) => (w ? { ...w, left } : w));
-          later(1000, tick);
-        };
+      frame('two');
+      const st = wagerStakes(t.me.score);
+      const m = streakMult(t.me.streak.streak + 1);
+      const sug = suggestWager(t.me.score, t.opp.score, m);
+      finalWager.current = sug.index;
+      const ifRight = st.map((s) => t.me.score + Math.round(POINTS.base * m) + s);
+      setWager({ stakes: st, picked: -1, suggested: sug.index, reason: sug.reason, ifRight, left: Math.round(WAGER.pickMs / 1000) });
+      setPhase('wager');
+      sfx(CUE.chip, { volume: 0.7 });
+      wagerOpen.current = true;
+      let left = Math.round(WAGER.pickMs / 1000);
+      const tick = () => {
+        if (!wagerOpen.current) return;
+        left -= 1;
+        if (left <= 0) {
+          F.current.lockWager(p, fr);
+          return;
+        }
+        setWager((w) => (w ? { ...w, left } : w));
         later(1000, tick);
-      });
+      };
+      later(1000, tick);
     };
     if (!alt) {
-      later(d + 500, () => toWager(r));
+      later(d + 600, () => toWager(r));
       return;
     }
-    // C11: whoever trails after round 4 picks the Final's category (3s, default left).
     const picker = finalPicker(tally.current);
     const cats: [string, string] = [r.question.category, alt.question.category];
     let done = false;
@@ -804,47 +924,39 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setCatPick((c) => (c ? { ...c, picked: i } : c));
       sfx(CUE.chip);
       Haptic.hitMedium();
-      later(380, () => { setCatPick(null); toWager(fr); });
+      later(420, () => { setCatPick(null); toWager(fr); });
     };
-    later(d + 500, () => {
+    later(d + 600, () => {
       setPhase('category');
-      setCatPick({ cats, picker, left: 3, picked: -1 });
+      setCatPick({ cats, picker, left: Math.round(CATEGORY_PICK.pickMs / 1000), picked: -1 });
       sfx(CUE.whoosh, { volume: 0.6 });
       say(picker === 'me' ? 'categoryPick' : 'categoryFin');
+      frame(picker === 'opp' ? 'singleOpp' : 'two');
       if (picker === 'me') {
         catDone.current = choose;
-        let left = 3;
-        const tick = () => {
-          if (done) return;
-          left -= 1;
-          if (left <= 0) { choose(0); return; }
-          setCatPick((c) => (c ? { ...c, left } : c));
-          later(1000, tick);
-        };
-        later(1000, tick);
+        later(1000, () => { if (!done) setCatPick((c) => (c ? { ...c, left: 1 } : c)); });
+        later(CATEGORY_PICK.pickMs, () => choose(0));
       } else {
-        // Fin trails: he picks the category where your record is weakest.
-        later(1300, () => choose(finCategoryPick(cats, memorySync().catStats)));
+        // A trailing Fin picks your weakest calibrated category at 0.8s.
+        later(800, () => choose(finCategoryPick(cats, memorySync().catStats)));
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [W, H, reducedMotion]);
+  }, [W, H, reducedMotion, ghost, STAGE_BAND]);
 
-  const wagerLocked = useRef(false);
   const lockWager = useCallback((p: MatchPlan, r: PlannedRound) => {
-    if (wagerLocked.current) return;
-    wagerLocked.current = true;
+    // One lock per Final: the countdown and a tap can both get here; only the first counts.
+    if (!wagerOpen.current) return;
+    wagerOpen.current = false;
     const st = wagerStakes(tally.current.me.score);
-    meIn.current.stake = st[finalWager.current];
+    meIn.current.stake = st[finalWager.current] ?? 0;
     setWager(null);
     setStakes({ me: '?', opp: '?' });
     sfx(CUE.chip);
     Haptic.hitMedium();
-    later(250, () => {
-      wagerLocked.current = false;
-      F.current.presentQuestion(p, r);
-    });
-  }, [presentQuestion, later]);
+    frame('wide');
+    later(250, () => F.current.presentQuestion(p, r));
+  }, [later, frame]);
 
   const pickCategory = useCallback((i: number) => { catDone.current?.(i); }, []);
 
@@ -853,14 +965,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setWager((w) => (w ? { ...w, picked: i } : w));
     sfx(CUE.chip);
     Haptic.tapLight();
-    if (i === 3) say('allIn');
+    if (i === WAGER.percents.length - 1) say('allIn');
     if (plan && round) later(220, () => F.current.lockWager(plan, round));
-  }, [plan, round, lockWager, later]);
+  }, [plan, round, later, say]);
 
   // -- Events from the UI thread ------------------------------------------------------------------
-  const finLockLabel = useCallback((ms: number) => `${oppName} ${(ms / 1000).toFixed(1)}s`, [oppName]);
+  const lockLabel = useCallback((ms: number) => `${(ms / 1000).toFixed(1)}s`, []);
 
-  const resolveOppShown = useCallback(() => {
+  const resolveOppShown = useCallback((ms?: number) => {
     if (resolved.current.opp) return;
     resolved.current.opp = true;
     const o = oppIn.current;
@@ -868,151 +980,139 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setLocks((l) => ({ ...l, opp: 'NO ANSWER' }));
       return;
     }
-    setLocks((l) => ({ ...l, opp: finLockLabel(o.lockMs) }));
+    setLocks((l) => ({ ...l, opp: lockLabel(ms ?? o.lockMs) }));
     sfx(CUE.oppLock, { pan: 0.6 });
     Haptic.tapLight();
-    if (!ghost) {
-      setFin('point');
-      fx.current?.burst('puff', W * 0.8, RAIL_H + STAGE_H * 0.4, { count: 4 });
-    }
-  }, [finLockLabel, ghost, setFin, W, STAGE_H]);
+    if (!ghost) setFin('point');
+  }, [lockLabel, ghost, setFin]);
 
   const maybeReveal = useCallback(() => {
     if (!resolved.current.me || !resolved.current.opp || resolved.current.revealing) return;
     resolved.current.revealing = true;
     void F.current.reveal();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doLockVisuals = useCallback((i: number, t: number) => {
-    setTiles((ts) => ts.map((s, k) => (k === i ? 'locked' : s === 'removed' ? s : 'dim')));
+  const doLockVisuals = useCallback((i: number, t: number, final: boolean) => {
+    setTiles((ts) => ts.map((s, k) => (k === i ? (final ? 'amber' : 'locked') : s === 'removed' ? s : 'dim')));
     sfx(CUE.lockIn);
+    sfxKey('tile', i, { volume: 0.55 });
     later(12, () => Haptic.hitMedium());
-    setLocks((l) => ({ ...l, me: `${(t / 1000).toFixed(1)}s` }));
-    if (!reducedMotion) push.value = withTiming(1.03, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
-    meHop('lean');
-    if (t < 1500 && !ghost && !isRide) {
-      setFin('surprised');
-      say('youFast');
-    }
-  }, [later, reducedMotion, push, meHop, ghost, isRide, setFin, say]);
+    lockFlashAt.value = clock.fxMs.value;
+    setLocks((l) => ({ ...l, me: lockLabel(t) }));
+    meAct('lean');
+    muffle(false);
+    // The drum value peels off and flies to your rail drum.
+    const c = { x: W / 2, y: BOARD_TOP + ROPE_H };
+    fx.current?.flyUp(`+${Math.round(drum.value)}`, c.x, c.y, { size: 'lg', color: C.gold, to: railScore });
+    if (t < 1500 && !ghost && !isRide) say('youFast');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [later, meAct, ghost, isRide, say, W, BOARD_TOP]);
 
-  /**
-   * DEAD HEAT (5.3 / 11.6): both bells inside 200ms. Both pick blind within
-   * 3.5s; correct beats wrong, then the faster pick. Nobody sees the other's pick.
-   */
-  const startDeadHeat = (my: number) => {
-    const r = round;
-    if (!r) return;
+  /** Bell: the side that did not buzz sees its tiles 1.0s later, as the steal pick. */
+  const openStealFor = useCallback((who: 'me' | 'opp', buzzAt: number) => {
     const o = oppIn.current;
-    meIn.current = { ...meIn.current, buzzMs: my };
-    // Ghost rows without a recorded blind pick use their buzz pick at the default time.
-    const oppAnswer = o.answerMs ?? BUZZ.deadHeatDefaultAnswerMs;
-    oppIn.current = { ...o, answerMs: oppAnswer };
-    setBellKey((k) => k + 1);
-    setBellOn(false);
-    setChip(null);
-    sfx(CUE.bell);
-    later(60, () => sfx(CUE.bell, { volume: 0.7, pan: 0.6 }));
-    sfx(CUE.photo);
-    Haptic.comboHeavy();
-    clock.hitStop(BUZZ.hitStopMs, { force: true });
-    setPolaroid((p) => p + 1);
-    if (!reducedMotion) crowdLean.value = withSequence(withTiming(1, { duration: 200 }), withDelay(600, withSpring(0)));
-    fx.current?.ring(W / 2, ZONE_TOP + 70, { color: C.gold, from: 60, to: 180, ms: 260 });
-    meHop('fist');
-    say('deadHeat');
-    setLocks((l) => ({ ...l, me: `${(my / 1000).toFixed(1)}s`, opp: finLockLabel(o.buzzMs ?? my) }));
-    // The polaroid holds 640ms, then both pick blind.
-    later(640, () => {
-      setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
-      setSubMode('deadHeat');
-      setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, lastSec: 99, finFired: 1 });
-      // The opponent's blind pick lands on their clock: badge only, the pick stays hidden.
-      later(Math.min(BUZZ.answerMs, oppAnswer), () => {
-        if (o.choice >= 0) {
-          sfx(CUE.oppLock, { pan: 0.6 });
-          Haptic.tapLight();
-          setLocks((l) => ({ ...l, opp: `${(oppAnswer / 1000).toFixed(1)}s` }));
-        }
-        resolved.current.opp = true;
-        maybeReveal();
+    if (who === 'me') {
+      later(BUZZ.stealFlipMs, () => {
+        setChip(null);
+        setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
+        setSubMode('steal');
+        sfx(CUE.unlock, { volume: 0.6 });
+        Haptic.tickSelection();
+        setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, urgent: 0, lastBeat: -1 });
       });
-    });
-  };
+      // The buzzer's answer badge lands on their clock (the pick stays hidden until the reveal).
+      const ans = ghost ? Math.max(600, Math.min(BUZZ.answerMs - 200, (o.stealMs ?? 1600))) : (plan && round ? finBellAnswerMs(plan, round) : 1600);
+      later(ans, () => resolveOppShown(buzzAt));
+    } else {
+      // Fin/ghost steal pick: tiles flip 1.0s after your buzz, he picks at stealMs from that flip.
+      const sm = o.stealMs ?? -1;
+      if (o.stealChoice != null && o.stealChoice >= 0 && sm >= 0) later(BUZZ.stealFlipMs + sm, () => resolveOppShown(sm));
+      else later(BUZZ.stealFlipMs + BUZZ.answerMs, () => { resolved.current.opp = true; maybeReveal(); });
+      later(BUZZ.stealFlipMs + Math.max(0, sm) + 5, () => maybeReveal());
+    }
+    void buzzAt;
+  }, [later, setClock, ghost, plan, round, resolveOppShown, maybeReveal]);
 
   dispatchRef.current = (ev: number, a: number, b: number) => {
     const r = round;
     if (!r || !plan) return;
     if (AUTOPLAY) autoplayOn(ev, r);
+    if (__DEV__ && (ev === EV_LOCK || ev === EV_SUB_LOCK || ev === EV_BUZZ || ev === EV_FIN_BUZZ)) console.log('[trivia-duel] ev', { ev, a, b, round: r.index, type: r.spec.type, sub: subMode });
     switch (ev) {
       case EV_UNLOCK: {
         if (r.spec.type === 'buzz') {
-          setTiles((ts) => ts.map(() => 'dim'));
+          // Rev 7 bell: the tiles stay face-down for everyone; the bell goes live.
           setBellOn(true);
-        } else setTiles((ts) => ts.map((s) => (s === 'down' ? 'up' : s)));
-        sfx(CUE.unlock);
+          sfx(CUE.glock, { volume: 0.7 });
+        } else {
+          setTiles((ts) => ts.map((s) => (s === 'down' ? 'up' : s)));
+          sfx(CUE.unlock);
+        }
         Haptic.tickSelection();
-        if (!ghost) {
-          setFin('think');
-          sfx(CUE.think, { volume: 0.5, pan: 0.6 });
-        }
-        return;
-      }
-      case EV_FIN_LEAN: {
-        // His only tell (Quick Draw): a 6pt lean, the hat lags on its spring.
-        if (!ghost && !reducedMotion) {
-          finRot.value = withSequence(withTiming(-0.06, { duration: 180 }), withDelay(260, withSpring(0, { damping: 9, stiffness: 200 })));
-          hatRot.value = withSequence(withDelay(40, withTiming(5, { duration: 160 })), withSpring(0, { damping: 6, stiffness: 180 }));
-        }
+        if (!ghost) setFin('think');
         return;
       }
       case EV_EARLY: {
         setWiggle((w) => w.map((v, k) => (k === a ? v + 1 : v)));
         return;
       }
-      case EV_TICK: {
-        sfx(CUE.tickHeavy);
-        // D7: a soft heartbeat under the last 3 seconds (warm, never scary).
-        sfx(CUE.heartbeat, { volume: 0.55 });
-        Haptic.warning();
+      case EV_URGENT: {
+        // Last 3 seconds: the loop goes low-pass and a soft heartbeat plays on the beats.
+        muffle(true);
+        return;
+      }
+      case EV_BEAT: {
+        sfx(CUE.heartbeat, { volume: 0.5 });
+        Haptic.tickSelection();
         return;
       }
       case EV_FIN: {
         if (r.spec.type === 'buzz') return;
+        if (resolved.current.me) {
+          later(FIN_RESOLVE_AFTER_MS, () => { resolveOppShown(); maybeReveal(); });
+          return;
+        }
         resolveOppShown();
         maybeReveal();
         return;
       }
       case EV_LOCK: {
         const t = b;
+        const final = r.spec.type === 'final';
         meIn.current = r.question.format === 'closest'
           ? { ...meIn.current, choice: -1, lockMs: t, guess: sliderValRef.current }
           : { ...meIn.current, choice: a, lockMs: t };
         resolved.current.me = true;
-        if (a >= 0) doLockVisuals(a, t);
+        if (a >= 0) doLockVisuals(a, t, final);
         else {
           sfx(CUE.lockIn);
           Haptic.hitMedium();
-          setLocks((l) => ({ ...l, me: `${(t / 1000).toFixed(1)}s` }));
+          muffle(false);
+          setLocks((l) => ({ ...l, me: lockLabel(t) }));
         }
         if (!resolved.current.opp) {
-          // Solo/ghost: the opponent's lock is already known, so it resolves at +350ms.
+          // If you lock first, his badge resolves at +350ms (his time is already fixed by the seed).
           later(FIN_RESOLVE_AFTER_MS, () => { resolveOppShown(); maybeReveal(); });
         } else maybeReveal();
         return;
       }
       case EV_TIMEOUT: {
+        muffle(false);
         if (r.spec.type === 'buzz') {
-          // Nobody buzzed by 8s: tiles open to everyone for 4s, flat 50.
+          // Nobody buzzed by 6s: tiles open to everyone for 4s, flat 50.
           setBellOn(false);
-          setChip('OPEN TILES!');
+          setChip('OPEN TILES  +50');
           setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
+          sfx(CUE.unlock);
+          Haptic.tickSelection();
           const o = oppIn.current;
-          oppIn.current = { choice: o.choice, lockMs: BUZZ.buzzWindowMs + Math.min(3000, 900 + (o.lockMs % 1500)), buzzMs: -1 };
+          const pick = o.choice >= 0 ? o.choice : o.stealChoice ?? -1;
+          const at = o.lockMs >= 0 && o.lockMs < BUZZ.openPhaseMs ? o.lockMs : 1500;
+          oppIn.current = { choice: pick, lockMs: pick >= 0 ? at : -1, buzzMs: -1 };
           setSubMode('open');
-          setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.openPhaseMs, lastSec: 99 });
-          later(Math.min(3000, 900 + (o.lockMs % 1500)), () => resolveOppShown());
+          setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.openPhaseMs, urgent: 0, lastBeat: -1 });
+          if (pick >= 0) later(at, () => resolveOppShown(at));
+          else resolved.current.opp = true;
           return;
         }
         meIn.current = { ...meIn.current, choice: -1, lockMs: -1 };
@@ -1023,122 +1123,64 @@ export function TriviaDuel(props: TriviaDuelProps) {
         else maybeReveal();
         return;
       }
-      case EV_FIN_RING: {
-        // Opponent rang: you still have 200ms to make it a DEAD HEAT.
-        setChip(`${oppName.toUpperCase()} BUZZED!`);
-        setBellKey((k) => k + 1);
-        Haptic.tapLight();
-        sfx(CUE.bell, { volume: 0.6, pan: 0.6 });
-        if (!ghost) setFin('point');
-        return;
-      }
       case EV_FIN_BUZZ: {
-        // Opponent rang first, cleanly: they answer, you wait for a steal.
+        // The opponent rang first: their tiles flip for them; yours flip 1.0s later as the steal pick.
         setBellOn(false);
-        setChip(`${oppName.toUpperCase()} BUZZED!`);
+        setBellKey((k) => k + 1);
+        setChip(`${oppName.toUpperCase()} BUZZED!  Pick in case they miss`);
+        sfx(CUE.bell, { volume: 0.7, pan: 0.6 });
+        Haptic.tapLight();
         meIn.current = { ...meIn.current, buzzMs: -1 };
-        const o = oppIn.current;
-        later(900, () => {
-          setChip(null);
-          setLocks((l) => ({ ...l, opp: finLockLabel(a) }));
-          if (o.choice === r.question.correctIndex) {
-            resolved.current.me = true;
-            resolved.current.opp = true;
-            maybeReveal();
-          } else {
-            // Wrong buzz: the tile crumbles, you steal.
-            crumble(o.choice);
-            stamp('STEAL!', C.coral, 44, W / 2, ZONE_TOP - 20);
-            sfx(CUE.steal);
-            say('steal');
-            resolved.current.opp = true;
-            setTiles((ts) => ts.map((s, k) => (k === o.choice ? 'removed' : 'up')));
-            setClock({ removed: 1 << Math.max(0, o.choice) });
-            setSubMode('steal');
-            setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, lastSec: 99 });
-          }
-        });
+        if (!ghost) { setFin('point'); finHop(1, 0.5); }
+        if (!reducedMotion) crowdLean.value = withSequence(withTiming(1, { duration: 200 }), withDelay(500, withSpring(0)));
+        openStealFor('me', a);
         return;
       }
       case EV_BUZZ: {
+        // You win the bell: only your tiles flip; 3.5s exclusive to answer.
         const my = a;
-        const o = oppIn.current;
-        if (o.buzzMs != null && o.buzzMs >= 0 && Math.abs(o.buzzMs - my) <= BUZZ.deadHeatMs) {
-          startDeadHeat(my);
-          return;
-        }
-        // You win the bell.
         meIn.current = { ...meIn.current, buzzMs: my };
-        oppIn.current = { ...o, buzzMs: -1 };
+        oppIn.current = { ...oppIn.current, buzzMs: -1 };
         setBellKey((k) => k + 1);
         setBellOn(false);
         sfx(CUE.bell);
         Haptic.comboHeavy();
         camera.shake(0.3);
         clock.hitStop(BUZZ.hitStopMs, { force: true });
-        fx.current?.ring(W / 2, ZONE_TOP + 70, { color: C.gold, from: 60, to: 180, ms: 260 });
-        meHop('fist');
-        setLocks((l) => ({ ...l, me: `${(my / 1000).toFixed(1)}s` }));
+        fx.current?.ring(W / 2, ZONE_TOP + ZONE_H / 2, { color: C.gold, from: 60, to: 180, ms: 260 });
+        frame('singleMe');
+        meAct('buzzWin');
+        setLocks((l) => ({ ...l, me: `BELL ${lockLabel(my)}` }));
         setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
         setSubMode('buzzAnswer');
-        setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, lastSec: 99, finFired: 1 });
+        setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, urgent: 0, lastBeat: -1 });
+        openStealFor('opp', my);
         return;
       }
       case EV_SUB_LOCK:
       case EV_SUB_TIMEOUT: {
         const pick = ev === EV_SUB_LOCK ? a : -1;
         const subT = ev === EV_SUB_LOCK ? b : -1;
+        muffle(false);
         if (pick >= 0) {
           setTiles((ts) => ts.map((s, k) => (k === pick ? 'locked' : s === 'removed' ? s : 'dim')));
           sfx(CUE.lockIn);
+          sfxKey('tile', pick, { volume: 0.55 });
           Haptic.hitMedium();
+          lockFlashAt.value = clock.fxMs.value;
         }
-        if (subMode === 'deadHeat') {
-          meIn.current = { ...meIn.current, choice: pick, lockMs: meIn.current.buzzMs ?? -1, answerMs: pick >= 0 ? subT : undefined };
-          setLocks((l) => ({ ...l, me: pick >= 0 ? `${(subT / 1000).toFixed(1)}s` : 'TIME' }));
-          resolved.current.me = true;
-          maybeReveal();
-        } else if (subMode === 'buzzAnswer') {
+        if (subMode === 'buzzAnswer') {
           meIn.current = { ...meIn.current, choice: pick, lockMs: meIn.current.buzzMs ?? -1 };
-          resolved.current.me = true;
-          if (pick !== r.question.correctIndex) {
-            // Your buzz was wrong: the opponent steals.
-            const steal = ghost
-              ? { stealChoice: ghostStealPick(oppIn.current, pick), stealMs: oppIn.current.stealMs ?? 1500 }
-              : (() => { const f = finInput(plan, r, tally.current, pick).input; return { stealChoice: f.stealChoice, stealMs: f.stealMs }; })();
-            oppIn.current = { ...oppIn.current, ...steal };
-            later(420, () => {
-              if (pick >= 0) crumble(pick);
-              stamp('STEAL!', C.coral, 44, W * 0.7, ZONE_TOP - 20);
-              sfx(CUE.steal);
-              setTiles((ts) => ts.map((s, k) => (k === pick ? 'removed' : s)));
-            });
-            later(420 + Math.min(2400, steal.stealMs ?? 1500), () => {
-              setLocks((l) => ({ ...l, opp: finLockLabel(steal.stealMs ?? 0) }));
-              resolved.current.opp = true;
-              maybeReveal();
-            });
-          } else {
-            resolved.current.opp = true;
-            maybeReveal();
-          }
         } else if (subMode === 'steal') {
           meIn.current = { ...meIn.current, stealChoice: pick, stealMs: subT };
-          resolved.current.me = true;
-          maybeReveal();
+          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : 'TIME' }));
         } else if (subMode === 'open') {
-          meIn.current = { ...meIn.current, choice: pick, lockMs: pick >= 0 ? BUZZ.buzzWindowMs + subT : -1 };
-          resolved.current.me = true;
-          resolveOppShown();
-          maybeReveal();
+          meIn.current = { ...meIn.current, choice: pick, lockMs: pick >= 0 ? subT : -1 };
+          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : 'TIME' }));
         }
+        resolved.current.me = true;
         setSubMode(null);
-        return;
-      }
-      case EV_FREEZE_END: {
-        setFrozen(false);
-        sfx(CUE.unfreeze);
-        fx.current?.burst('bubbles', W - 60, CARD_TOP + 40, { count: 14 });
+        maybeReveal();
         return;
       }
       default:
@@ -1156,149 +1198,180 @@ export function TriviaDuel(props: TriviaDuelProps) {
     fx.current?.burst('shards', c.x, c.y, { count: 12 });
   }, [tileCenter]);
 
-  // -- Reveal (11.4) -----------------------------------------------------------------------------
+  // -- Reveal (11.4): one thing at a time ---------------------------------------------------------
   const reveal = useCallback(async () => {
     const r = round;
     const p = plan;
     if (!r || !p) return;
     setPhase('reveal');
-    const scoreBefore = { me: tally.current.me.score, opp: tally.current.opp.score };
+    setBellOn(false);
+    setChip(null);
     const res = resolveRound(isRide ? 'ride' : 'queue', r, meIn.current, oppIn.current, tally.current);
     resultsLog.current.push(res);
     const q = r.question;
-    // D8: the drum-roll plays when it matters: buzz, Final, decisive, steals, or both sides locked different answers.
+    const final = r.spec.type === 'final';
+    const decisive = res.decisive && !decisiveDone.current && !isRide;
+    if (decisive) decisiveDone.current = true;
+    // Tension path: bell, steals, the Final, the decisive question, or the two sides locked different answers.
     const splitPicks = r.spec.type === 'quick' && meIn.current.lockMs >= 0 && oppIn.current.lockMs >= 0
       && q.format !== 'closest' && meIn.current.choice !== oppIn.current.choice;
-    const tension = !isRide && (r.spec.type !== 'quick' || res.decisive || !!res.buzz?.steal || splitPicks) || (isRide && r.index === p.rounds.length - 1);
-    const final = r.spec.type === 'final';
+    const tension = (!isRide && (r.spec.type !== 'quick' || decisive || !!res.buzz?.steal || splitPicks)) || (isRide && r.index === p.rounds.length - 1);
+    const beats = decisive ? 4 : final ? 2 : 1;
 
-    let wait = await msToGrid(0.5);
     if (tension && !reducedMotion) {
-      await sleep(wait);
-      GameAudio.duck(8, 80, final ? 1100 : 520, 300);
-      sfx(final ? 'sh_drumroll_1022ms' : 'sh_drumroll_441ms');
+      const d = await msToGrid(0.5);
+      await sleep(d);
+      frame('two');
+      const len = beatMs(final) * beats;
+      duckForReveal(len);
+      sfx(beats >= 4 ? CUE.drum4 : beats === 2 ? CUE.drum2 : CUE.drum1);
+      sfx(beats >= 4 ? 'crowd_ooh_1764' : beats === 2 ? 'crowd_ooh_833' : 'crowd_ooh_441', { volume: 0.6 });
       bulbFast.value = 1;
-      push.value = withTiming(1.05, { duration: beatMs(final) * (final ? 2 : 1) });
-      const beat = beatMs(final) * (final ? 2 : 1);
-      for (let k = 0; k < 4; k++) later(beat - beatMs(final) + k * (beatMs(final) / 4), () => Haptic.tickSelection());
-      await sleep(beat);
+      for (let k = 0; k < 4; k++) later(len - beatMs(final) + k * (beatMs(final) / 4), () => Haptic.tickSelection());
+      await sleep(len);
       bulbFast.value = 0;
-      // Hit-stop scaled to stakes (11.0): DEAD HEAT and steals 90, Final 110, decisive 130.
-      clock.hitStop(res.decisive ? 130 : final ? 110 : res.buzz?.deadHeat || res.buzz?.steal ? 90 : CEREMONY.tensionHitStopMs, { force: true });
-      wait = 0;
+      clock.hitStop(decisive ? 130 : final ? 110 : res.buzz?.steal ? 90 : CEREMONY.tensionHitStopMs, { force: decisive || final });
+    } else {
+      await sleep(await msToGrid(0.5));
     }
-    await sleep(wait);
 
-    // Tiles, heads pile-up, bloom, camera punch.
+    // 0-180ms: tile truth. Correct tile white silhouette, gold flip, bloom behind it; your chord note.
     const correctIdx = q.correctIndex;
-    const myPick = r.spec.type === 'buzz' && res.buzz?.steal && res.buzz.first === 'opp' ? meIn.current.stealChoice ?? -1 : meIn.current.choice;
-    const oppPick = r.spec.type === 'buzz' && res.buzz?.steal && res.buzz.first === 'me' ? oppIn.current.stealChoice ?? -1 : oppIn.current.choice;
+    const stoleSide = res.buzz?.steal ? (res.buzz.first === 'opp' ? 'me' : 'opp') : null;
+    const myPick = r.spec.type === 'buzz' && res.buzz && res.buzz.first !== 'me' && !res.buzz.open ? meIn.current.stealChoice ?? -1 : meIn.current.choice;
+    const oppPick = r.spec.type === 'buzz' && res.buzz && res.buzz.first === 'me' ? oppIn.current.stealChoice ?? -1 : oppIn.current.choice;
+    const proofTile = q.format !== 'closest' ? tileCenter(Math.max(0, correctIdx)) : { x: W / 2, y: ZONE_TOP + 40 };
     if (q.format !== 'closest') {
       setTiles((ts) => ts.map((s, k) => (s === 'removed' ? s : k === correctIdx ? 'correct' : k === myPick ? 'wrong' : 'reveal-dim')));
-      const h: SharkLook[][] = q.choices.map(() => []);
-      if (myPick >= 0) h[myPick].push('classic');
-      if (!isRide && oppPick >= 0 && oppPick < h.length) h[oppPick].push(ghost ? opponentLook as SharkLook : 'blue');
-      later(60, () => setHeads(h));
-      const cc = tileCenter(Math.max(0, correctIdx));
-      fx.current?.bloom(cc.x, cc.y, { color: C.gold, radius: Math.hypot(tileGeom.w, tileGeom.h) * 0.9, peak: 0.9, ms: 220 });
-      if (!reducedMotion) camera.punch(0.03);
+      backFx.current?.bloom(proofTile.x, proofTile.y, { color: C.gold, radius: Math.hypot(tileGeom.w, tileGeom.h) * 0.9, peak: 0.85, ms: 220 });
+      if (res.buzz && !res.buzz.firstCorrect && !res.buzz.open) {
+        const wrongBuzz = res.buzz.first === 'me' ? meIn.current.choice : oppIn.current.choice;
+        if (wrongBuzz >= 0 && wrongBuzz !== correctIdx) later(60, () => crumble(wrongBuzz));
+      }
     } else if (q.slider) {
-      stamp(String(q.slider.truth), C.gold, 44, W / 2, ZONE_TOP + 10, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
+      stamp(String(q.slider.truth), C.gold, 0.4, W / 2, BOARD_TOP + ROPE_H + 20, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
     }
     setStakes(final ? { me: `${res.me.stake}`, opp: isRide ? null : `${res.opp.stake}` } : { me: null, opp: null });
-    if (res.buzz?.deadHeat) {
-      const won = !!res.me.deadHeatWon;
-      const lost = !!res.opp.deadHeatWon;
-      later(240, () => stamp(won ? 'DEAD HEAT WON!' : lost ? `${oppName.toUpperCase()} TAKES IT` : 'NOBODY!', won ? C.gold : C.coral, 30, W / 2, RAIL_H + STAGE_H * 0.62));
-    }
 
-    // Your outcome.
     const meOK = res.me.correct;
     const tier = res.me.tier;
+    const stampY = Math.max(RAIL_H + 40, proofTile.y - tileGeom.h * 0.5 - 70);
     if (meOK) {
-      const pts = res.me.points;
-      const txt = TIER_TEXT[tier] || `+${pts}`;
-      stamp(txt, TIER_COLOR[tier], tier === 'lightning' ? 40 : tier === 'none' ? 30 : 34, W * 0.3, RAIL_H + STAGE_H * 0.35, TIER_TEXT[tier] ? `+${pts}` : undefined);
-      sfxLadder(CUE.correct, TIER_STEP[tier]);
-      later(12, () => Haptic.success());
-      meHop(res.me.stole || res.me.buzzedFirst ? 'fist' : 'hop');
-      if (!reducedMotion) cheer.value = withSequence(withTiming(1, { duration: 160 }), withDelay(700, withTiming(0, { duration: 300 })));
-      const from = q.format === 'closest' ? { x: W / 2, y: ZONE_TOP + 40 } : tileCenter(Math.max(0, correctIdx));
-      const coins = res.decisive ? TIER_COINS[tier] + 6 : TIER_COINS[tier];
-      later(200, () => {
-        if (res.decisive && !reducedMotion) clock.slowMo(0.3, 500, 150);
-        fx.current?.burst('coins', from.x, from.y, { count: coins, tx: scoreAnchor.x, ty: scoreAnchor.y });
-        fx.current?.burst('sparkles', from.x, from.y, { count: tier === 'lightning' ? 24 : tier === 'great' ? 14 : 8 });
+      sfxKey('tv_correct', Math.min(Math.max(0, (tally.current.me.streak.streak || 1) - 1), 4));
+      if (tier === 'lightning') sfxKey('spark_tick', 5, { volume: 0.7 });
+      playHaptic('triviaCorrect');
+      // 180-300ms: the tier stamp slams, offset ABOVE the proof tile; the avatar hop starts.
+      later(180, () => {
+        const pts = res.me.points;
+        const isSteal = !!res.me.stole;
+        const txt = isSteal ? 'STEAL!' : TIER_TEXT[tier] || `+${pts}`;
+        stamp(txt, isSteal ? C.coral : TIER_COLOR[tier], isSteal ? 0.6 : TIER_WIDTH[tier], proofTile.x, stampY, TIER_TEXT[tier] || isSteal ? `+${pts}` : undefined);
+        meAct(res.me.stole || res.me.buzzedFirst ? 'buzzWin' : 'hop');
+        if (isSteal) { frame('singleMe'); sfx(CUE.steal); sfx(CUE.crowd, { volume: 0.6 }); clock.hitStop(90); }
+      });
+      // 300-700ms: star sparks arc to your rail drum, arrivals on 16ths; crowd foam fingers rise.
+      later(300, () => {
+        fx.current?.burst('stars', proofTile.x, proofTile.y, { count: TIER_SPARKS[tier] + (decisive ? 6 : 0), tx: railScore.x, ty: railScore.y, magnetDelay: 0.08, magnetDur: 0.32 });
+        if (!reducedMotion) cheer.value = withSequence(withTiming(1, { duration: 160 }), withDelay(600, withTiming(0, { duration: 300 })));
       });
       if (res.me.bullseye) { sfx(CUE.stamp); say('bullseye'); }
-      if (res.decisive && tally.current.me.score > tally.current.opp.score) say('comeback');
-    } else if (r.spec.type !== 'buzz' || res.buzz?.first === 'me' || res.buzz?.open || (res.buzz?.steal && res.buzz.first === 'opp')) {
+      if (decisive) {
+        // Match-deciding correct (Smash final hit): 130ms forced freeze, radial speed lines, hard SINGLE cut, one confetti cannon. Under 700ms, no slow-mo.
+        later(190, () => {
+          frame('singleMe');
+          fx.current?.burst('impact', proofTile.x, stampY + 20, { count: 12 });
+          fx.current?.burst('confetti', W * 0.15, STAGE_TOP + 20, { count: 30, angle: -60 });
+          sfx(CUE.win, { volume: 0.55 });
+        });
+        if (tally.current.me.score > tally.current.opp.score) say('comeback');
+      }
+    } else if (myPick >= 0 || meIn.current.buzzMs != null && meIn.current.buzzMs >= 0) {
+      // Wrong: your tile squashes coral with Alex's X; the correct tile pulses green twice. No red, no shake, no stamp.
       sfx(CUE.wrong, { volume: 0.55 });
-      later(12, () => Haptic.comboHeavy());
-      meHop('shake');
-      if (res.me.points < 0) stamp(`${res.me.points}`, C.coral, 34, W * 0.3, RAIL_H + STAGE_H * 0.35);
+      sfx(CUE.gasp, { volume: 0.5 });
+      playHaptic('triviaWrong');
+      meAct('wrong');
+      if (res.me.points < 0) later(200, () => fx.current?.flyUp(`${res.me.points}`, railScore.x + 20, railScore.y + 30, { size: 'md', color: C.coral }));
     }
 
-    // Opponent reaction (same frame).
+    // Opponent reaction on the same twos frame as your avatar.
     if (!isRide) {
       if (!ghost) {
-        if (res.opp.correct) { setFin('cheer'); finHop(meOK ? 1 : 2, meOK ? 0.6 : 1); if (!meOK) sfx(CUE.streakStep, { volume: 0.5 }); say('finCorrect'); }
-        else if (oppIn.current.lockMs >= 0 || oppIn.current.buzzMs != null) { setFin('surprised'); later(380, () => setFin('sheepish')); sfx(CUE.oops, { volume: 0.7, pan: 0.6 }); say(meOK ? 'youCorrect' : 'finWrong'); }
-        else if (meOK) { setFin('cheer'); finHop(2, 0.6); say('youCorrect'); }
-      } else if (res.opp.correct) finHop(1, 0.6);
+        if (res.opp.correct) { later(180, () => { setFin('cheer'); finHop(meOK ? 1 : 2, meOK ? 0.6 : 1); }); say('finCorrect'); if (res.opp.stole) { later(180, () => stamp('STEAL!', C.coral, 0.6, W * 0.7, RAIL_H + STAGE_BAND * 0.4)); frame('singleOpp'); } }
+        else if (oppPick >= 0 || (oppIn.current.buzzMs ?? -1) >= 0) { later(180, () => { setFin('surprised'); later(380, () => setFin('sheepish')); }); sfx(CUE.oops, { volume: 0.7, pan: 0.6 }); say(meOK ? 'youCorrect' : 'finWrong'); }
+        else if (meOK) { later(180, () => { setFin('cheer'); finHop(2, 0.6); }); say('youCorrect'); }
+      } else if (res.opp.correct) later(180, () => finHop(1, 0.6));
     }
 
-    // Streak events.
+    // 700ms+: who picked what. Heads fly onto the tiles they picked (Quiplash), then thermometers fill (Kahoot, 30+ answers).
+    if (q.format !== 'closest') {
+      later(700, () => {
+        const h: SharkLook[][] = q.choices.map(() => []);
+        if (myPick >= 0 && myPick < h.length) h[myPick].push('classic');
+        if (!isRide && oppPick >= 0 && oppPick < h.length) h[oppPick].push(ghost ? opponentLook as SharkLook : 'blue');
+        setHeads(h);
+      });
+      if ((q.stats.n ?? 0) >= 30 && q.stats.dist && q.stats.dist.length === q.choices.length) {
+        const tot = q.stats.dist.reduce((s2, v) => s2 + Math.max(0, v), 0) || 1;
+        later(900, () => setShares(q.stats.dist!.map((v) => Math.max(0, v) / tot)));
+        const pc = Math.max(0, q.stats.dist[correctIdx] ?? 0) / tot;
+        if (pc < 0.25) later(900, () => setChip(`Only ${Math.round(pc * 100)}% of sharks got this!`));
+      }
+    }
+
+    // Streak events (11.7).
     const sEv = res.me.streak;
     if (sEv) {
       if (sEv.ignited || sEv.blazing) {
         const d = await msToGrid(2);
-        later(d, () => {
+        later(Math.max(d, 620), () => {
           sfx(CUE.ignite);
           Haptic.comboHeavy();
-          fx.current?.burst('embers', W * 0.5, 38, { count: 16 });
-          fx.current?.bloom(W * 0.5, 40, { color: C.gold, radius: 70, peak: 0.8, ms: 300 });
+          frame('singleMe');
+          fx.current?.burst('embers', W * 0.22, STAGE_TOP + STAGE_BAND * 0.7, { count: 16 });
+          backFx.current?.bloom(W * 0.22, STAGE_TOP + STAGE_BAND * 0.7, { color: C.gold, radius: 90, peak: 0.8, ms: 300 });
           if (sEv.ignited) {
             say('streak3');
-            stamp('HOT STREAK!', C.coral, 36, W / 2, RAIL_H + 40, 'SHIELD UP');
+            stamp('HOT STREAK!', C.coral, 0.62, W / 2, RAIL_H + STAGE_BAND * 0.45, sEv.shieldGranted ? 'SHIELD UP' : 'x1.5');
             if (!reducedMotion) shades.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.back(2)) });
-          } else stamp('BLAZING!', C.gold, 38, W / 2, RAIL_H + 40);
+          } else stamp('BLAZING!', C.gold, 0.58, W / 2, RAIL_H + STAGE_BAND * 0.45, 'x1.75');
         });
-        setMusicBed(sEv.blazing ? BEDS.blazing : BEDS.hot);
+        setMusicBed(final ? BEDS.final : sEv.blazing ? BEDS.blazing : BEDS.hot);
       } else if (sEv.shieldUsed) {
         sfx(CUE.shieldPop);
         say('shieldSave');
-        stamp('SHIELD!', C.gold, 32, W / 2, RAIL_H + 40, 'Streak saved');
+        later(300, () => stamp('SHIELD!', C.gold, 0.4, W / 2, RAIL_H + STAGE_BAND * 0.45, 'Streak saved'));
       } else if (sEv.broke) {
         sfx(CUE.fizz, { volume: 0.7 });
         shades.value = withTiming(0, { duration: 300 });
         if (!final) setMusicBed(BEDS.duel);
-      } else if (sEv.streak > 0 && !isRide) sfx(CUE.streakStep, { volume: 0.45 });
-      if (sEv.freezeGranted && !isRide) { setTray((t) => ({ ...t, freeze: true })); sfx(CUE.powerup); Haptic.tapLight(); }
+      } else if (sEv.streak > 0 && !isRide) {
+        sfxKey('streak_step', Math.min(4, sEv.streak - 1), { volume: 0.5, delayMs: 300 });
+        if (sEv.streak === 2) later(300, () => stamp('STREAK x1.2', C.gold, 0.4, W / 2, RAIL_H + STAGE_BAND * 0.35));
+      }
     }
-    if (!isRide && (res.me.stole || (res.me.buzzedFirst && res.me.correct))) setTray((t) => ({ ...t, peek: true }));
     setStreakView({ streak: tally.current.me.streak.streak, shield: tally.current.me.streak.shield });
     sunburst.value = withTiming([0.35, 0.45, 0.6, 0.85, 0.85, 1][flameTier(tally.current.me.streak.streak)] ?? 0.35, { duration: 400 });
 
     // Scores and pips.
-    later(200, () => setScores({ me: tally.current.me.score, opp: tally.current.opp.score }));
+    later(300, () => setScores({ me: tally.current.me.score, opp: tally.current.opp.score }));
     setPips((ps) => ps.map((s, k) => (k === r.index ? (meOK && res.opp.correct ? 'both' : meOK ? 'me' : res.opp.correct ? 'opp' : 'none') : s)));
     if (!isRide && !ghost && q.format !== 'closest') void updateMemory((m) => recordCategory(m, q.category, meOK));
     if (q.fact) factsRef.current.push({ id: q.id, fact: q.fact, source: q.source, tpsArticleUrl: q.tpsArticleUrl, gold: meOK && (tier === 'great' || tier === 'lightning'), at: Date.now() });
-    void scoreBefore;
 
-    // Next.
+    // Next: tap anywhere from reveal + 300ms fast-forwards.
     setPhase('between');
     const next = () => {
       nextTap.current = null;
       clearTimers();
-      push.value = withTiming(1, { duration: 300 });
+      setChip(null);
+      frame('wide');
       F.current.advance();
     };
-    nextTap.current = next;
-    later((res.decisive ? 1500 : CEREMONY.nextQuestionMs) + (tension ? 400 : 250), next);
+    later(300, () => { nextTap.current = next; });
+    later((decisive ? 1500 : CEREMONY.nextQuestionMs) + (tension ? 500 : 350), next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [round, plan, isRide, ghost, reducedMotion, W, H, tileCenter, tileGeom]);
+  }, [round, plan, isRide, ghost, reducedMotion, W, H, tileCenter, tileGeom, BOARD_TOP, STAGE_BAND]);
 
   const advance = useCallback(() => {
     const p = plan;
@@ -1310,12 +1383,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
     }
     const t = tally.current;
     if (!isRide && t.me.score === t.opp.score && p.rounds.length < 7) {
-      // SUDDEN DEATH: one medium Quick Draw.
+      // SUDDEN DEATH: one medium Quick Draw, first correct lock wins.
       const sd = suddenDeathRound(p, poolRef.current, []);
       const np = { ...p, rounds: [...p.rounds, sd] };
       setPlan(np);
       setPips((ps) => [...ps, 'pending']);
-      stamp('SUDDEN DEATH!', C.coral, 40, W / 2, H * 0.4);
+      stamp('SUDDEN DEATH!', C.coral, 0.62, W / 2, RAIL_H + STAGE_BAND * 0.5);
       later(900, () => F.current.startRound(np, next));
       return;
     }
@@ -1335,7 +1408,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       maxCombo: t.me.streak.best,
       seed: seedRef.current,
       oppScore: t.opp.score,
-      fin_rank: rankRef.current,
+      fin_rank: FIN_RANKS[rankRef.current].label,
       forfeit,
       rounds: t.me.log,
       qids: plan?.rounds.map((r) => r.question.id) ?? [],
@@ -1343,30 +1416,55 @@ export function TriviaDuel(props: TriviaDuelProps) {
     };
   }, [isRide, mode, plan]);
 
+  /** Stage takeover (11.2): the board retracts up into the marquee strip over 1 beat; the stage band grows. */
+  const takeoverOn = useCallback((on: boolean) => {
+    const d = reducedMotion ? 300 : beatMs();
+    retract.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
+    takeover.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
+  }, [retract, takeover, reducedMotion]);
+
   const finishMatch = useCallback(async () => {
     const p = plan;
     if (!p) return;
     clearTimers();
     setClock({ phase: PH_IDLE });
+    setRound(null);
     const t = tally.current;
     const facts = factsRef.current;
+    setMusicBed(null);
+    setDuelKey('e');
+    spot.value = withTiming(0, { duration: 300 });
     if (isRide) {
+      const won = rideWon(t.me.correct);
       const stars = rideStars(t.me.correct, p.rounds.length, t.me.score);
-      setMusicBed(null);
-      sfx(rideWon(t.me.correct) ? CUE.win : CUE.lose);
       void updateMemory((m) => { rememberSeen(m, p.rounds.map((r) => r.question.id), p.rounds.flatMap((r) => factKeysOf(r.question))); addFactCards(m, facts); });
-      setShellResult({
+      const fastest = t.me.fastestMs >= 0 ? `${(t.me.fastestMs / 1000).toFixed(1)}s` : '-';
+      const result: GameResult = {
         score: t.me.score,
         stars,
-        message: rideWon(t.me.correct) ? (t.me.score > t.opp.score ? 'FIN BEATEN!' : 'Ride coin earned!') : `${t.me.correct} of ${p.rounds.length} right. You need 2.`,
+        message: won ? (t.me.score > t.opp.score ? 'FIN BEATEN!' : 'Ride coin earned!') : `${t.me.correct} of ${p.rounds.length} right. 2 wins the coin.`,
         thresholds: { one: 200, two: 420, three: 600 },
         stats: [
           { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
-          { label: 'Fastest', value: t.me.fastestMs >= 0 ? `${(t.me.fastestMs / 1000).toFixed(1)}s` : '-' },
+          { label: 'Fastest', value: fastest },
         ],
         meta: buildMeta(),
-      } as GameResult);
-      setPhase('results');
+      } as GameResult;
+      takeoverOn(true);
+      setPhase('crate');
+      if (won) {
+        sfx(CUE.win);
+        frame('wide');
+        later(beatMs(), () => setCrate({ stars, key: Date.now() }));
+        pendingShell.current = result;
+      } else {
+        sfx(CUE.lose);
+        playHaptic('triviaWrong');
+        frame('two');
+        later(beatMs(), () => meAct('pratfall'));
+        if (!ghost) later(beatMs() * 2, () => { setFin('cheer'); finHop(1, 0.6); say('finWins'); });
+        later(beatMs() * 4, () => { setShellResult(result); setPhase('results'); });
+      }
       return;
     }
     const won = t.me.score > t.opp.score;
@@ -1389,74 +1487,98 @@ export function TriviaDuel(props: TriviaDuelProps) {
     });
     if (won) banners.unshift(ghost ? `${oppName.toUpperCase()} BEATEN` : 'FIN BEATEN');
     if (t.me.score > prevBest && prevBest > 0) banners.push('NEW BEST');
-    void mem;
 
-    // Podiums, crown, stingers.
-    setMusicBed(null);
-    if (!reducedMotion) {
-      push.value = withTiming(0.94, { duration: 600 });
-      spot.value = withTiming(0, { duration: 400 });
-      podMe.value = withTiming(won ? 30 : 10, { duration: 500, easing: Easing.out(Easing.back(1.6)) });
-      podOpp.value = withTiming(won ? 10 : 30, { duration: 500, easing: Easing.out(Easing.back(1.6)) });
-    }
+    // Takeover: crown or good-sport loss on the stage, then the half-height card rises.
+    takeoverOn(true);
     sfx(won ? CUE.win : CUE.lose);
     if (won) {
-      later(260 + beatMs() * 1.5 + 260, () => {
+      frame('singleMe');
+      if (!reducedMotion) podMe.value = withTiming(18, { duration: 400, easing: Easing.out(Easing.back(1.6)) });
+      later(260 + beatMs(), () => {
         clock.hitStop(50, { force: true });
-        camera.shake(0.35);
-        Haptic.success();
-        if (!reducedMotion) fx.current?.flash({ color: '#ffffff', peak: 0.6, ms: 160 });
-        fx.current?.burst('confetti', W / 2, H * 0.3, { count: 60 });
+        camera.shake(0.4);
+        playHaptic('triviaCorrect');
+        flash();
+        fx.current?.burst('confetti', W * 0.12, STAGE_TOP + 10, { count: 30, angle: -60 });
+        fx.current?.burst('confetti', W * 0.88, STAGE_TOP + 10, { count: 30, angle: -120 });
         sfx(CUE.crowd);
         if (!reducedMotion) cheer.value = withRepeat(withSequence(withTiming(1, { duration: 200 }), withTiming(0.4, { duration: 200 })), 4, true);
+        crownDrop();
       });
-      if (!ghost) { setFin('dizzy'); sfx(CUE.bonk, { pan: 0.6 }); say('finLoses'); }
-      if (!reducedMotion) meY.value = withRepeat(withSequence(withTiming(-14, { duration: beatMs() / 2 }), withTiming(0, { duration: beatMs() / 2 })), 3);
+      later(260 + beatMs() * 3, () => frame('two'));
+      if (!ghost) { later(400, () => { setFin('dizzy'); sfx(CUE.bonk, { pan: 0.6 }); }); say('finLoses'); }
+      if (!reducedMotion) later(260 + beatMs() * 3, () => { meY.value = withRepeat(withSequence(withTiming(-14, { duration: beatMs() / 2 }), withTiming(0, { duration: beatMs() / 2 })), 3); });
     } else {
-      Haptic.failBuzz();
-      if (!ghost) { setFin('cheer'); finHop(2); say('finWins'); }
-      meHop('shake');
-      later(900, () => meHop('thumbs'));
+      frame('two');
+      playHaptic('triviaWrong');
+      if (!ghost) { setFin('cheer'); finHop(1); later(beatMs() * 2, () => say('finWins')); }
+      later(beatMs(), () => meAct('pratfall'));
     }
+    const fastest = t.me.fastestMs >= 0 ? `${(t.me.fastestMs / 1000).toFixed(1)}s` : '-';
     const rows = [
       { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
-      { label: 'Fastest', value: t.me.fastestMs >= 0 ? `${(t.me.fastestMs / 1000).toFixed(1)}s` : '-' },
+      { label: 'Fastest', value: fastest },
       { label: 'Best tier', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
-      { label: 'Streak', value: String(t.me.streak.streak) },
+      { label: 'Streak', value: String(t.me.streak.best) },
     ];
+    const rk = mem.rank;
+    const ri = FIN_RANK_ORDER.indexOf(rk.rank);
+    const nextRank = ri < FIN_RANK_ORDER.length - 1 ? FIN_RANKS[FIN_RANK_ORDER[ri + 1]].label : null;
+    const fastestIdx = t.me.log.findIndex((row, i) => resultsLog.current[i]?.me.correct && row.lockMs === t.me.fastestMs);
     setResults({
       won, tie: t.me.score === t.opp.score, myScore: t.me.score, oppScore: t.opp.score, oppName,
-      banners, nearMiss: nm.line, rows, facts: newCards.slice(0, 8), stars, practice: mode === 'practice',
+      banners, nearMiss: nm.line, rows, facts: newCards.slice(0, 1), stars, practice: mode === 'practice',
+      rank: ghost ? null : { label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank },
+      best: t.me.fastestMs >= 0 ? { label: `${fastest} on Q${Math.max(0, fastestIdx) + 1}` } : null,
     });
-    setPhase('results');
+    later(beatMs() * 2, () => setPhase('results'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, isRide, ghost, mode, myName, oppName, reducedMotion, W, H, buildMeta]);
 
+  const pendingShell = useRef<GameResult | null>(null);
+  const onCrateDone = useCallback(() => {
+    setCrate(null);
+    if (pendingShell.current) {
+      setShellResult(pendingShell.current);
+      pendingShell.current = null;
+    }
+    setPhase('results');
+  }, []);
+
+  // Crown drops onto your avatar's head part with a squash (drawn in the stage, 11.9).
+  const crownDrop = useCallback(() => {
+    crown.value = 0.001;
+    crown.value = reducedMotion ? 1 : withTiming(1, { duration: 260, easing: Easing.in(Easing.quad) });
+    if (!reducedMotion) {
+      meSY.value = withDelay(260, withSequence(withTiming(0.9, { duration: 83 }), withSpring(1, { damping: 8, stiffness: 300 })));
+      meSX.value = withDelay(260, withSequence(withTiming(1.08, { duration: 83 }), withSpring(1, { damping: 8, stiffness: 300 })));
+    }
+  }, [crown, meSX, meSY, reducedMotion]);
+
   const onContinue = useCallback(() => {
-    const t = tally.current;
     const stars = results?.stars ?? 0;
     const meta = buildMeta();
     setMusicBed(null);
     if (stars > 0) onComplete(stars >= 3 ? 1.5 : stars === 2 ? 1.25 : 1, meta);
     else onClose();
-    void t;
   }, [results, buildMeta, onComplete, onClose]);
 
   const onRematch = useCallback(() => {
     setGhost(null);
     setResults(null);
+    crown.value = 0;
     setRunKey((k) => k + 1);
     void beginMatch(true);
-  }, [beginMatch]);
+  }, [beginMatch, crown]);
 
   const onPassToCrew = useCallback(async () => {
     const mem = await loadMemory();
     const g = listGhosts(mem)[0];
     if (!g) return;
     setResults(null);
+    crown.value = 0;
     setGhost({ ...g, name: g.name === myName ? 'Crew ghost' : g.name, look: 'blue' });
-  }, [myName]);
-  // Starting a ghost duel after "pass to crew".
+  }, [myName, crown]);
   const ghostKey = ghost ? `${ghost.seed}:${ghost.at}` : '';
   useEffect(() => {
     if (!ghost || !visible || phase === 'loading') return;
@@ -1472,43 +1594,44 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const skill = (mixSeed(seedRef.current, k) % 100) / 100;
     const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
     const tapAt = (i: number, ms: number) => later(ms, () => {
-      const alive = tilesRef.current.map((t, k) => (t !== 'removed' ? k : -1)).filter((k) => k >= 0);
+      const alive = tilesRef.current.map((t, kk) => (t !== 'removed' ? kk : -1)).filter((kk) => kk >= 0);
       const x = alive.includes(i) ? i : alive.includes(q.correctIndex) ? q.correctIndex : alive[0] ?? i;
       runOnUI((y: number) => { 'worklet'; onTapUI(y); })(x);
     });
     if (ev === EV_UNLOCK) {
       const ms = 900 + skill * 2200;
       if (r.spec.type === 'buzz') {
-        // Demo capture alternates a clean buzz with a DEAD HEAT (ring 90ms after Fin).
         const fb = oppIn.current.buzzMs ?? -1;
-        later(fb >= 0 && playsRef.current % 2 === 1 ? fb + 90 : ms * 0.7, onBuzzUI);
-      }
-      else if (q.format === 'closest' && q.slider) {
+        if (playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
+      } else if (q.format === 'closest' && q.slider) {
         const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
         later(ms * 0.6, () => setSliderVal(guess));
         later(ms, lockSlider);
       } else {
-        if (k % 4 === 1 && tray.chomp && q.choices.length >= 3) later(400, useChomp);
+        if (k % 4 === 1 && chompHeld && q.choices.length >= 3) later(400, useChomp);
         tapAt(pick, ms);
       }
-    } else if (ev === EV_BUZZ) tapAt(pick, 700 + (Math.abs((oppIn.current.buzzMs ?? -9999) - (meIn.current.buzzMs ?? 0)) <= BUZZ.deadHeatMs ? 900 : 0));
-    else if (ev === EV_FIN_BUZZ && oppIn.current.choice !== q.correctIndex) tapAt(q.correctIndex, 2000);
+    } else if (ev === EV_BUZZ) tapAt(pick, 900);
+    else if (ev === EV_FIN_BUZZ) tapAt(q.correctIndex, BUZZ.stealFlipMs + 1100);
     else if (ev === EV_TIMEOUT && r.spec.type === 'buzz') tapAt(pick, 1200);
   };
   useEffect(() => {
     if (!AUTOPLAY) return;
-    if (phase === 'wager') later(1400, () => pickWager(2));
-    if (phase === 'results' && results) later(6000, () => (playsRef.current < 2 ? onRematch() : playsRef.current === 2 && !ghost ? void onPassToCrew() : onContinue()));
+    if (phase === 'wager' && wager) later(1600, () => pickWager((mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
+    if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
+    if (phase === 'results' && results) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
   F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch, lockWager };
 
-  // -- Lifelines (6) -------------------------------------------------------------------------------------
-  const canLifeline = phase === 'question' && !usedThisQ && round != null && (subMode === null || subMode === 'buzzAnswer' || subMode === 'deadHeat');
+  // -- Chomp (6): server-removed in graded modes; speed capped at 50 ----------------------------------
+  const twoTile = (round?.question.choices.length ?? 4) <= 2;
+  const canChomp = phase === 'question' && chompHeld && !usedThisQ && round != null && !twoTile && (tiles[0] !== 'down' || subMode === 'buzzAnswer')
+    && (round.spec.type !== 'buzz' || subMode === 'buzzAnswer') && !locks.me;
   const useChomp = useCallback(() => {
     const r = round;
-    if (!r || !tray.chomp || usedThisQ) return;
+    if (!r || !chompHeld || usedThisQ) return;
     const q = r.question;
     if (q.format === 'closest' && q.slider) {
       const s = q.slider;
@@ -1521,62 +1644,16 @@ export function TriviaDuel(props: TriviaDuelProps) {
         sfx(CUE.chomp);
         Haptic.hitMedium();
         const c = tileCenter(i);
-        fx.current?.burst('puff', c.x, c.y, { count: 10 });
+        fx.current?.burst('shards', c.x, c.y, { count: 10 });
       }));
       later(460, () => setTiles((ts) => ts.map((s, k) => (rm.includes(k) ? 'removed' : s))));
       setClock({ removed: rm.reduce((m, i) => m | (1 << i), 0) });
     }
     setClock({ chomp: 1 });
-    setTray((t) => ({ ...t, chomp: false }));
+    meIn.current = { ...meIn.current, chomp: true };
+    setChompHeld(false);
     setUsedThisQ(true);
-  }, [round, tray.chomp, usedThisQ, later, tileCenter, setClock]);
-
-  const useFreeze = useCallback(() => {
-    if (!tray.freeze || usedThisQ) return;
-    setClock({ freezeLeft: 4000 });
-    setFrozen(true);
-    sfx(CUE.freeze);
-    fx.current?.burst('sparkles', W - 60, CARD_TOP + 40, { count: 10, color: packHex(C.frost) });
-    setTray((t) => ({ ...t, freeze: false }));
-    setUsedThisQ(true);
-  }, [tray.freeze, usedThisQ, setClock, W, CARD_TOP]);
-
-  const usePeek = useCallback(() => {
-    if (!tray.peek || usedThisQ || !round) return;
-    // C8: never on easy items (the icon is not used up), noisy 12-answer sample only with real data.
-    const mode = peekMode(round.question.stats);
-    if (mode === 'too_easy') {
-      setChip('Too easy to peek');
-      Haptic.tapLight();
-      later(1200, () => setChip(null));
-      return;
-    }
-    sfx(CUE.sonar);
-    if (mode === 'sample' && round.question.stats.dist) {
-      const counts = peekSample(round.question.stats.dist, (() => { let k = 0; return () => (mixSeed(seedRef.current, 0x9ee + round.index * 31 + k++) % 10000) / 10000; })());
-      setHeads(counts.map((n) => Array.from({ length: n }, (_, j) => (['classic', 'blue', 'pink', 'green'] as SharkLook[])[j % 4])));
-      later(PEEK.showMs, () => setHeads(round.question.choices.map(() => [])));
-    }
-    if (ghost) {
-      setChip(resolved.current.opp ? `${oppName} has locked` : `${oppName} is still thinking`);
-      later(2000, () => setChip(null));
-    } else {
-      setPeekLean(oppIn.current.choice);
-      later(2000, () => setPeekLean(-1));
-    }
-    setTray((t) => ({ ...t, peek: false }));
-    setUsedThisQ(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tray.peek, usedThisQ, round, ghost, oppName, later]);
-
-  const twoTile = (round?.question.choices.length ?? 4) <= 2;
-  const lifelineButtons: ('chomp' | 'freeze' | 'peek')[] = [];
-  if (canLifeline && round) {
-    const buzz = round.spec.type === 'buzz';
-    if (tray.chomp && !twoTile && (!buzz || subMode === 'buzzAnswer' || subMode === 'deadHeat')) lifelineButtons.push('chomp');
-    if (!isRide && tray.freeze && !buzz) lifelineButtons.push('freeze');
-    if (!isRide && tray.peek && !buzz && round.question.format !== 'closest') lifelineButtons.push('peek');
-  }
+  }, [round, chompHeld, usedThisQ, later, tileCenter, setClock]);
 
   // -- Shell hooks ----------------------------------------------------------------------------------------
   const onStart = useCallback(() => {
@@ -1588,12 +1665,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     holdStart.current = Date.now();
     setHeld(true);
     holdTimers(true);
+    muffle(false);
     runOnUI(() => {
       'worklet';
       const q = qc.value;
-      // HOLD after unlock forfeits this question's speed bonus (15.2).
+      // HOLD after unlock forfeits this question's speed bonus (15).
       if (q.phase === PH_LIVE || q.phase === PH_SUB) q.forfeit = 1;
     })();
+    if (meIn.current) meIn.current = { ...meIn.current, holdForfeit: qc.value.phase === PH_LIVE || qc.value.phase === PH_SUB ? true : meIn.current.holdForfeit };
   }, [clock, qc, holdTimers]);
 
   const onResume = useCallback(() => {
@@ -1604,8 +1683,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const q = qc.value;
       q.lastSim = -1;
       // A HOLD during the read-lock restarts it with 600ms left.
-      if (q.phase === PH_READ && q.unlockAt - q.t < restart) q.t = Math.max(0, q.unlockAt - restart);
-      else if (q.phase === PH_READ) q.t = Math.max(0, q.unlockAt - restart);
+      if (q.phase === PH_READ) q.t = Math.max(0, q.unlockAt - restart);
       // Past the 6s credit the graded window runs on.
       if ((q.phase === PH_LIVE || q.phase === PH_LOCKED) && h > cr) q.t += h - cr;
       if (q.phase === PH_SUB && h > cr) q.sub += h - cr;
@@ -1634,6 +1712,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setMusicBed(null);
   }, [visible, clearTimers]);
 
+  // Spotlight iris (11.3): the countdown keeps the stage lit (no scrim) with warm cones on both podiums.
+  useEffect(() => {
+    if (!visible) return;
+    if (phase === 'loading') spot.value = reducedMotion ? 1 : withTiming(1, { duration: beatMs() });
+    else if (phase === 'question' && round?.spec.type !== 'final') spot.value = withTiming(0, { duration: 300 });
+  }, [visible, phase, round, spot, reducedMotion]);
+
   // Pre-warm the pool and memory during the shell countdown.
   useEffect(() => {
     if (!visible) return;
@@ -1646,22 +1731,41 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (phase === 'between' && nextTap.current) nextTap.current();
   }, [phase]);
 
+  const onTileTouch = useCallback((_i: number, down: boolean) => {
+    if (down) Haptic.tapLight();
+  }, []);
+  const onTierEdge = useCallback(() => { Haptic.tickSelection(); }, []);
+
   // -- Render --------------------------------------------------------------------------------------------------
   const q = round?.question;
-  const faceDownAll = held;
-  const tileStates: TileState[] = faceDownAll ? tiles.map(() => 'down') : tiles;
+  const preview = phase === 'loading' || phase === 'intro';
+  const tileStates: TileState[] = held ? tiles.map(() => 'down') : tiles;
   const flameT = flameTier(streakView.streak);
   const sunSpeed = flameT >= 5 ? 0.94 : flameT >= 3 ? 0.63 : flameT >= 2 ? 0.42 : 0.1;
-  const roundLabel = round ? (isRide ? `QUESTION ${round.index + 1} OF ${plan?.rounds.length ?? 3}` : `ROUND ${round.index + 1}  ${ROUND_NAMES[round.spec.type]}`) : '';
-  const showCard = !!round && (phase === 'question' || phase === 'reveal' || phase === 'between');
-  const tickerOn = phase === 'question' && round != null && (tiles[0] !== 'down' || q?.format === 'closest');
+  const roundLabel = round
+    ? (isRide ? `QUESTION ${round.index + 1} OF ${plan?.rounds.length ?? 3}` : `ROUND ${round.index + 1}  ${ROUND_NAMES[round.spec.type]}`)
+    : (isRide ? 'QUESTION 1 OF 3' : 'ROUND 1  QUICK DRAW');
+  const showBoard = (preview && visible) || (!!round && (phase === 'question' || phase === 'reveal' || phase === 'between' || phase === 'finalIntro' || phase === 'category' || phase === 'wager'));
+  const showTiles = !!round && (phase === 'question' || phase === 'reveal' || phase === 'between');
+  const mult = isRide ? 1 : streakMult(streakView.streak + 1);
+  const multChip = !isRide && mult > 1 ? `x${mult}` : null;
+  const drumOn = phase === 'question' && round != null && (tiles[0] !== 'down' || q?.format === 'closest' || bellOn);
+  const finalRound = round?.spec.type === 'final';
+  const zoneTiles = q?.choices.length ? q.choices : ['', '', '', ''];
+  const finStripes = FIN_RANKS[rankRef.current].stripes;
+  // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the wager say what is coming.
+  const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
+  const boardText = phase === 'finalIntro' ? "Fin's Final is next"
+    : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
+    : phase === 'wager' ? `Topic: ${finalTopic}. Place your bet.`
+    : preview ? '' : q?.prompt ?? '';
 
   return (
     <GameShellV2
       ref={shell}
       visible={visible}
       title={title ?? (isRide ? 'Beat the Buzzer' : 'Trivia Duel')}
-      subtitle={subtitle ?? (isRide ? 'Get 2 of 3 right' : ghost ? `vs ${oppName}` : rankRef.current)}
+      subtitle={subtitle ?? (isRide ? 'Ride Challenge: 2 of 3 to win' : ghost ? `vs ${oppName}` : 'Queue Duel')}
       score={scores.me}
       result={shellResult}
       thresholds={isRide ? { one: 200, two: 420, three: 600 } : undefined}
@@ -1673,66 +1777,83 @@ export function TriviaDuel(props: TriviaDuelProps) {
       onQuit={onQuit}
       gameId="trivia"
       onWrapUp={onWrapUp}
+      countdownScrim="none"
+      hideHeaderScore
       pauseExtras={<RelaxedToggle on={relaxed} onToggle={toggleRelaxed} />}
     >
       <GestureHandlerRootView style={styles.field} onLayout={onLayout}>
         <Pressable style={StyleSheet.absoluteFill} onPress={tapAnywhere} accessible={false}>
-          <View style={[styles.bg]} />
-          <Animated.View style={[styles.stageWrap, { top: RAIL_H - 4, height: STAGE_H }, camera.style]}>
+          <View style={styles.bg} />
+          <Animated.View style={[styles.stageWrap, { top: STAGE_TOP, height: STAGE_FULL }, camera.style]}>
             <Stage
               width={W}
-              height={STAGE_H}
+              height={STAGE_FULL}
+              bandH={STAGE_BAND}
+              dropPx={DROP_PX}
               actors={actors}
               opponent={opponentLook}
               ghost={!!ghost}
-              stripes={FIN_RANKS[(Object.keys(FIN_RANKS) as (keyof typeof FIN_RANKS)[]).find((k) => FIN_RANKS[k].label === rankRef.current) ?? 'deckhand'].stripes}
+              stripes={finStripes}
               sunburstSpeed={sunSpeed}
               reducedMotion={reducedMotion}
             />
           </Animated.View>
-          <View style={[styles.railWrap]}>
-            <Rail
-              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: locks.me, stake: stakes.me }}
-              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: locks.opp, stake: stakes.opp, ghost: !!ghost }}
-              pips={pips}
-              flame={flameT}
-              streak={streakView.streak}
-              shield={streakView.shield}
-              tray={isRide ? { chomp: tray.chomp, freeze: false, peek: false } : tray}
-              moving={!!movement?.moving}
-              reducedMotion={reducedMotion}
-              onTickCoin={() => sfxLadder(CUE.coinTick, Math.min(5, Math.floor(Math.random() * 6)), { volume: 0.7 })}
-            />
-          </View>
-          <View style={{ position: 'absolute', top: RAIL_H + 50, left: 0, right: 0 }} pointerEvents="none"><Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} /></View>
+          {/* Bloom lives BEHIND the board and tiles (rev 7 H7): never Plus over cream. */}
+          <FxStage ref={backFx} width={W} height={H} timeScale={clock.fxScale} reducedMotion={reducedMotion} flashCap={0} style={StyleSheet.absoluteFill} />
 
-          {showCard && q ? (
-            <View style={[styles.cardWrap, { top: CARD_TOP }]}>
+          {/* Camera-locked foreground set: railing, marquee header strip, board, desk front. */}
+          <Image source={ART.railing} style={[styles.railing, { top: BOARD_TOP + ROPE_H + BOARD_H * 0.35 - (W / 390) * 130, width: W, height: (W / 390) * 130 }]} resizeMode="stretch" />
+          <View style={[styles.deskWrap, { top: DESK_TOP }]} pointerEvents="none">
+            <DeskFront width={W} height={H - DESK_TOP + 6} />
+          </View>
+          <MarqueeStrip width={W} top={BOARD_TOP - 6} />
+
+          {showBoard ? (
+            <View style={[styles.boardWrap, { top: BOARD_TOP }]} pointerEvents="box-none">
               <QuestionCard
                 roundLabel={roundLabel}
-                question={q.prompt}
-                ticker={ticker}
-                tickerOn={tickerOn}
+                question={boardText}
+                drum={drum}
+                drumOn={drumOn}
+                multChip={multChip}
+                speed={ringSpeed}
+                beat={music.beat}
+                fxMs={clock.fxMs}
+                hot={hotSv}
+                lockFlashAt={lockFlashAt}
+                fuse={fuse}
+                urgent={urgentSv}
                 readProgress={readProg}
-                remain={remain}
-                frozen={frozen}
+                preview={preview}
                 dropKey={dropKey}
-                flip3d={round?.spec.type === 'final'}
+                flip3d={finalRound && phase === 'question'}
                 faceDown={held}
+                retract={retract}
                 reducedMotion={reducedMotion}
-                width={Math.min(W - 24, 390)}
+                width={BOARD_W}
+                onTierEdge={onTierEdge}
               />
-              {lifelineButtons.length && phase === 'question' ? (
-                <View style={[styles.lifeRow, { top: -62 }]}>
-                  {lifelineButtons.map((k) => (
-                    <LifelineButton key={k} kind={k} onPress={k === 'chomp' ? useChomp : k === 'freeze' ? useFreeze : usePeek} />
-                  ))}
+              {canChomp ? (
+                <View style={[styles.chomp, { left: (W + BOARD_W) / 2 - 60, top: ROPE_H + BOARD_H - 34 }]}>
+                  <LifelineButton onPress={useChomp} />
                 </View>
               ) : null}
             </View>
           ) : null}
 
-          {showCard && q ? (
+          {/* Answer zone: the bottom 45%, every target at least 62pt tall. */}
+          {((preview && visible) || phase === 'finalIntro') ? (
+            <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2, opacity: 0.6 }]} pointerEvents="none">
+              <View style={[styles.tiles, { flexDirection: 'row' }]}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={i} style={{ marginBottom: 12, marginRight: i % 2 === 0 ? 12 : 0 }}>
+                    <Tile index={i} label="" state="down" width={(tileGeom.zoneW - 12) / 2} height={96} onTapUI={onTapUI} flipDelay={0} heads={[]} share={-1} wiggleKey={0} reducedMotion={reducedMotion} fontSize={18} chomped={false} disabled />
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+          {showTiles && q ? (
             <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
               {q.format === 'closest' && q.slider ? (
                 <ClosestSlider
@@ -1748,7 +1869,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                 />
               ) : (
                 <View style={[styles.tiles, { flexDirection: tileGeom.cols === 1 ? 'column' : 'row' }]}>
-                  {q.choices.map((c, i) => (
+                  {zoneTiles.map((c, i) => (
                     <View key={`${q.id}-${i}`} style={{ marginBottom: tileGeom.gap, marginRight: tileGeom.cols === 2 && i % 2 === 0 ? tileGeom.gap : 0 }}>
                       <Tile
                         index={i}
@@ -1757,62 +1878,126 @@ export function TriviaDuel(props: TriviaDuelProps) {
                         width={tileGeom.w}
                         height={tileGeom.h}
                         onTapUI={onTapUI}
+                        onTouch={onTileTouch}
+                        holdToLock={finalRound}
                         flipDelay={i * CEREMONY.unlockStaggerMs}
-                        heads={[...(heads[i] ?? []), ...(peekLean === i ? ['blue' as SharkLook] : [])]}
-                        bar={-1}
+                        heads={heads[i] ?? []}
+                        share={shares ? shares[i] ?? -1 : -1}
                         wiggleKey={wiggle[i] ?? 0}
                         reducedMotion={reducedMotion}
                         fontSize={tileFont(c, tileGeom.w)}
                         chomped={chomped.includes(i)}
-                        frost={frozen}
-                        rim={flameT >= 5 ? 5 : flameT >= 3 ? 3 : flameT >= 2 ? 1 : 0}
                       />
                     </View>
                   ))}
                 </View>
               )}
-              {bellOn ? <BuzzBell onBuzz={onBuzzUI} disabled={!bellOn} pressedKey={bellKey} reducedMotion={reducedMotion} fuse={0} /> : null}
+              {bellOn && !held ? (
+                <BuzzBell onBuzz={onBuzzUI} disabled={!bellOn} pressedKey={bellKey} reducedMotion={reducedMotion} stake={bellStake} risk={tally.current.me.streak.shield ? 'Shield: -0' : '-100'} />
+              ) : null}
             </View>
           ) : null}
 
           {subMode ? (
-            <View style={[styles.subChip, { top: ZONE_TOP - 34 }]} pointerEvents="none">
-              <Text style={styles.subChipText}>{subMode === 'buzzAnswer' ? 'YOUR ANSWER! 3.5s' : subMode === 'steal' ? 'STEAL IT!' : subMode === 'deadHeat' ? 'DEAD HEAT! PICK BLIND' : 'OPEN TILES! Flat 50'}</Text>
+            <View style={[styles.subChip, { top: ZONE_TOP - 40 }]} pointerEvents="none">
+              <Text style={styles.subChipText}>{subMode === 'buzzAnswer' ? 'YOUR ANSWER! 3.5s' : subMode === 'steal' ? 'PICK IN CASE THEY MISS' : 'OPEN TILES  +50'}</Text>
             </View>
           ) : null}
           {chip ? (
-            <View style={[styles.subChip, { top: RAIL_H + STAGE_H * 0.2 }]} pointerEvents="none">
-              <Text style={styles.subChipText}>{chip}</Text>
+            <View style={[styles.subChip, { top: RAIL_H + 8 }]} pointerEvents="none">
+              <Text style={styles.subChipText} numberOfLines={1}>{chip}</Text>
             </View>
           ) : null}
 
           {wager ? (
-            <View style={[styles.zone, { top: ZONE_TOP - 40, height: ZONE_H + 40, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
-              <WagerChips stakes={wager.stakes} labels={WAGER.labels} picked={wager.picked} onPick={pickWager} secondsLeft={wager.left} category={plan?.rounds[roundIdx]?.question.category ?? 'Trivia'} />
+            <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
+              <WagerChips
+                stakes={wager.stakes}
+                labels={WAGER.labels}
+                picked={wager.picked}
+                suggested={wager.suggested}
+                reason={wager.reason}
+                ifRight={wager.ifRight}
+                onPick={pickWager}
+                secondsLeft={wager.left}
+                category={plan?.rounds[roundIdx]?.question.category ?? 'Trivia'}
+                height={ZONE_H + 18}
+              />
             </View>
           ) : null}
           {catPick ? (
-            <View style={[styles.zone, { top: ZONE_TOP - 40, height: ZONE_H + 40, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
-              <CategoryPick cats={catPick.cats} mine={catPick.picker === 'me'} picked={catPick.picked} left={catPick.left} oppName={oppName} onPick={pickCategory} />
-            </View>
-          ) : null}
-          {finalCard ? (
-            <View style={[styles.finalCard, { top: CARD_TOP + 10 }]} pointerEvents="none">
-              <Text style={styles.finalCat}>{finalCard.toUpperCase()}</Text>
-              <Text style={styles.finalHard}>HARD</Text>
+            <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
+              <CategoryPick cats={catPick.cats} mine={catPick.picker === 'me'} picked={catPick.picked} left={catPick.left} oppName={oppName} onPick={pickCategory} height={ZONE_H + 18} />
             </View>
           ) : null}
 
-          {ribbon && phase === 'question' ? <View style={{ position: 'absolute', top: RAIL_H + 6, left: 0, right: 0 }} pointerEvents="none"><Ribbon text={ribbon.text} holdMs={ribbon.hold} ribbonKey={ribbon.key} reducedMotion={reducedMotion} /></View> : null}
-          {polaroid ? <Polaroid k={polaroid} /> : null}
+          <View style={styles.railWrap}>
+            <Rail
+              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: locks.me, stake: stakes.me }}
+              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: locks.opp, stake: stakes.opp, ghost: !!ghost }}
+              pips={pips}
+              flame={flameT}
+              streak={streakView.streak}
+              shield={streakView.shield}
+              shieldOn={features.shield && !isRide}
+              moving={!!movement?.moving}
+              reducedMotion={reducedMotion}
+              onTickCoin={() => sfxKey('coin_tick', 0, { volume: 0.5 })}
+            />
+          </View>
+          <View style={{ position: 'absolute', top: RAIL_H + 34, left: 0, right: 0 }} pointerEvents="none">
+            <Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} voice={VOICE[rankRef.current]} />
+          </View>
+
           {stamps.map((s) => <Stamp key={s.key} spec={s} reducedMotion={reducedMotion} />)}
 
-          <FxStage ref={fx} width={W} height={H} timeScale={clock.fxScale} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} onArrive={(n) => { for (let k = 0; k < Math.min(3, n); k++) sfxLadder(CUE.coinTick, Math.min(5, k + 1), { volume: 0.8, delayMs: k * CEREMONY.coinArriveStepMs }); if (n) Haptic.tickSelection(); }} />
+          <FxStage
+            ref={fx}
+            width={W}
+            height={H}
+            timeScale={clock.fxScale}
+            reducedMotion={reducedMotion}
+            flashCap={0.35}
+            style={StyleSheet.absoluteFill}
+            onArrive={(n) => {
+              for (let k = 0; k < Math.min(4, n); k++) sfxKey('spark_tick', Math.min(5, k + 1), { volume: 0.7, delayMs: k * 110 });
+              if (n) Haptic.tickSelection();
+            }}
+          />
+
+          {crate ? (
+            <RideCoinCrate
+              key={crate.key}
+              podium={{ x: W * 0.22, y: STAGE_TOP + STAGE_BAND * 0.7 - 6 + DROP_PX }}
+              counter={{ x: 40, y: 10 }}
+              width={W}
+              height={H}
+              stars={crate.stars}
+              beatMs={beatMs()}
+              coin={coinSrc}
+              reducedMotion={reducedMotion}
+              onShake={() => Haptic.tapLight()}
+              onOpen={(x, y) => {
+                sfx(CUE.stamp, { volume: 0.7 });
+                fx.current?.burst('coins', x, y, { count: 24 });
+                fx.current?.burst('sparkles', x, y, { count: 12 });
+              }}
+              onHalfTurn={(n) => sfxKey('coin_tick', Math.min(2, n - 1), { volume: 0.8 })}
+              onTurn={() => Haptic.tickSelection()}
+              onStar={(n) => { sfxKey('spark_tick', Math.min(5, n + 1), { volume: 0.8 }); }}
+              onLand={() => {
+                playHaptic('triviaCorrect');
+                sfx(CUE.rankUp, { volume: 0.8 });
+                if (crate.stars >= 3) fx.current?.ring(40, 10, { color: C.gold, from: 12, to: 90, ms: 220 });
+              }}
+              onDone={onCrateDone}
+            />
+          ) : null}
 
           {vs ? (
-            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Fin'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : rankRef.current} onDone={onVsDone} reducedMotion={reducedMotion} />
+            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Fin'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : FIN_RANKS[rankRef.current].label} onDone={onVsDone} reducedMotion={reducedMotion} />
           ) : null}
-          {results ? (
+          {results && phase === 'results' ? (
             <DuelResults
               key={runKey}
               model={results}
@@ -1821,16 +2006,32 @@ export function TriviaDuel(props: TriviaDuelProps) {
               onGhost={mode === 'daily' ? undefined : () => { void onPassToCrew(); }}
               onContinue={onContinue}
               reducedMotion={reducedMotion}
+              height={RESULTS_H}
             />
           ) : null}
-          {phase === 'loading' && visible ? <View style={styles.loading}><OutlinedText text="Setting the stage..." size={20} color="#ffffff" width={2} /></View> : null}
+          {phase === 'loading' && visible && !preview ? <View style={styles.loading}><OutlinedText text="Setting the stage..." size={20} color="#ffffff" width={2} /></View> : null}
         </Pressable>
       </GestureHandlerRootView>
     </GameShellV2>
   );
 }
 
-/** C9: the hold sheet's Relaxed pace switch. Same points, calmer clock. */
+/** Marquee header strip (code-drawn): blue and cream awning stripes with a scalloped edge; the board's ropes hang from it. */
+function MarqueeStrip({ width, top }: { width: number; top: number }) {
+  const n = Math.ceil(width / 26) + 1;
+  return (
+    <View style={[styles.marquee, { top, width }]} pointerEvents="none">
+      {Array.from({ length: n }, (_, i) => (
+        <View key={i} style={[styles.awning, { left: i * 26 - 4, backgroundColor: i % 2 ? C.cream : C.blue }]}>
+          <View style={[styles.scallop, { backgroundColor: i % 2 ? C.cream : C.blue }]} />
+        </View>
+      ))}
+      <View style={styles.marqueeLine} />
+    </View>
+  );
+}
+
+/** The hold sheet's Relaxed pace switch. Same points, calmer clock. */
 function RelaxedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }} style={styles.relaxRow}>
@@ -1845,57 +2046,15 @@ function RelaxedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) 
   );
 }
 
-/** DEAD HEAT (11.6): Alex's twin polaroid drops in, holds, then pops away (never lingers on screen). */
-function Polaroid({ k }: { k: number }) {
-  const y = useSharedValue(-260);
-  const sc = useSharedValue(1);
-  const op = useSharedValue(0);
-  useEffect(() => {
-    y.value = -260;
-    sc.value = 1;
-    op.value = 1;
-    y.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.back(1.4)) });
-    sc.value = withDelay(640, withTiming(0.6, { duration: 180 }));
-    op.value = withDelay(640, withTiming(0, { duration: 180 }));
-  }, [k, y, sc, op]);
-  const st = useAnimatedStyle(() => ({ opacity: op.value, transform: [{ translateY: y.value }, { rotate: '-6deg' }, { scale: sc.value }] }));
-  return (
-    <Animated.View pointerEvents="none" style={[styles.polaroid, st]}>
-      <Image source={ART.polaroid} style={{ width: 200, height: 152 }} resizeMode="contain" />
-      <OutlinedText text="DEAD HEAT!" size={34} color={C.gold} width={3} />
-      <OutlinedText text="PICK BLIND" size={20} color="#ffffff" width={2} />
-    </Animated.View>
-  );
-}
-
-function ghostStealPick(o: SideInput, myWrong: number): number {
-  if (o.stealChoice != null && o.stealChoice >= 0 && o.stealChoice !== myWrong) return o.stealChoice;
-  return o.choice !== myWrong ? o.choice : -1;
-}
-
-function speedWorklet(t: number, g: number, h: number, chomp: number): number {
-  'worklet';
-  let s = h <= g ? 100 : Math.round((100 * Math.min(1, Math.max(0, 1 - (t - g) / (h - g)))) / 5) * 5;
-  if (chomp) s = Math.min(s, 50);
-  return s;
-}
-
-function rideSpeedWorklet(t: number, g: number, h: number, chomp: number): number {
-  'worklet';
-  let s = Math.round((150 * Math.min(1, Math.max(0, 1 - (t - g) / (h - g)))) / 5) * 5;
-  if (chomp) s = Math.min(s, 50);
-  return s;
-}
-
 /**
- * Largest size (13-20) where the longest word fits on one line and the label
- * wraps into at most 3 lines (greedy word wrap with Knockout-ish 0.56 em width).
- * Long labels use the compact tile (small corner badge), so they get the width.
+ * Largest size (15-20) where the longest word fits on one line and the label
+ * wraps into at most 3 lines (greedy word wrap, ~0.56em per glyph). Tile copy
+ * floor is 15pt and never breaks words (3).
  */
 export function tileFont(label: string, tileW: number): number {
   const avail = tileW - (label.length > TILE_COMPACT_CHARS && tileW < 260 ? 46 : 62);
   const words = label.split(/\s+/);
-  for (let size = label.length > 26 ? 16 : label.length > 14 ? 18 : 20; size > 13; size -= 1) {
+  for (let size = label.length > 26 ? 17 : label.length > 14 ? 18 : 20; size > 15; size -= 1) {
     const cpl = Math.floor(avail / (size * 0.56));
     let lines = 1;
     let cur = 0;
@@ -1908,7 +2067,7 @@ export function tileFont(label: string, tileW: number): number {
     }
     if (fits && lines <= 3) return size;
   }
-  return 13;
+  return 15;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -1927,17 +2086,19 @@ const styles = StyleSheet.create({
   bg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#bfeaff' },
   stageWrap: { position: 'absolute', left: 0, right: 0 },
   railWrap: { position: 'absolute', left: 0, right: 0, top: 0 },
-  cardWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  lifeRow: { position: 'absolute', left: 22, flexDirection: 'row', gap: 8 },
+  railing: { position: 'absolute', left: 0 },
+  deskWrap: { position: 'absolute', left: 0, right: 0 },
+  boardWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  chomp: { position: 'absolute' },
   zone: { position: 'absolute' },
   tiles: { flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', left: 0, right: 0, bottom: 0 },
-  subChip: { position: 'absolute', alignSelf: 'center', backgroundColor: C.gold, borderRadius: 14, borderWidth: 3, borderColor: C.ink, paddingHorizontal: 14, paddingVertical: 4 },
-  subChipText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
-  finalCard: { position: 'absolute', alignSelf: 'center', backgroundColor: C.cream, borderRadius: 20, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, paddingHorizontal: 28, paddingVertical: 14, alignItems: 'center' },
-  finalCat: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
-  finalHard: { fontFamily: 'Knockout', fontSize: 18, color: C.coral, marginTop: 2 },
+  subChip: { position: 'absolute', alignSelf: 'center', maxWidth: '92%', backgroundColor: C.gold, borderRadius: 14, borderWidth: 3, borderColor: C.ink, paddingHorizontal: 14, paddingVertical: 4 },
+  subChipText: { fontFamily: 'Shark', fontSize: 17, color: C.navy },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  polaroid: { position: 'absolute', top: '18%', alignSelf: 'center', alignItems: 'center' },
+  marquee: { position: 'absolute', left: 0, height: 22, overflow: 'visible' },
+  awning: { position: 'absolute', top: 0, width: 26, height: 14, borderLeftWidth: 1.5, borderColor: C.ink },
+  scallop: { position: 'absolute', left: -1, top: 6, width: 26, height: 14, borderBottomLeftRadius: 13, borderBottomRightRadius: 13, borderWidth: 2.5, borderTopWidth: 0, borderColor: C.ink },
+  marqueeLine: { position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: C.ink },
 });
 
 export default TriviaDuel;

@@ -1,7 +1,7 @@
 /**
  * Trivia Duel art. Alex's originals (resized, never redrawn) and the studio's
  * gate-passed GPT Image 2.5 pieces (Fin's 12-cell sheet, captain hat, desk
- * bell, shared FX). Metro needs literal requires.
+ * bell, stage plates, the rev 7 desk front 9-patch and coin crate, shared FX). Metro needs literal requires.
  */
 
 export const FIN_POSES = {
@@ -45,15 +45,19 @@ export const ART = {
   hat: require('../../assets/games/trivia-duel/captain_hat.png'),
   bell: require('../../assets/games/trivia-duel/desk_bell.png'),
   coin: require('../../assets/games/trivia-duel/coin.png'),
-  magnifier: require('../../assets/games/trivia-duel/magnifier.png'),
   foamFinger: require('../../assets/games/trivia-duel/foam_finger.png'),
   sunglasses: require('../../assets/games/trivia-duel/sunglasses.png'),
   polaroid: require('../../assets/games/trivia-duel/polaroid.png'),
   xBadge: require('../../assets/games/trivia-duel/x_badge.png'),
   flame: require('../../assets/games/trivia-duel/flame.png'),
   crown: require('../../assets/games/trivia-duel/crown.png'),
-  stopwatch: require('../../assets/games/trivia-duel/stopwatch.png'),
-  chomp: require('../../assets/games/trivia-duel/shark_dash_chomp.png'),
+  chomp: require('../../assets/games/trivia-duel/tv_chomp_icon.png'),
+  crateClosed: require('../../assets/games/trivia-duel/tv_coin_crate_v2_closed.png'),
+  crateOpen: require('../../assets/games/trivia-duel/tv_coin_crate_v2_open.png'),
+  deskCapL: require('../../assets/games/trivia-duel/tv_desk_front_v2_capL.png'),
+  deskTile: require('../../assets/games/trivia-duel/tv_desk_front_v2_tile.png'),
+  deskCapR: require('../../assets/games/trivia-duel/tv_desk_front_v2_capR.png'),
+  railing: require('../../assets/games/trivia-duel/tv_stage_railing.png'),
   ribbon: require('../../assets/games/trivia-duel/ribbon.png'),
   sweat: require('../../assets/games/trivia-duel/fx_small_sweat_drop.png'),
   dizzyStar: require('../../assets/games/trivia-duel/fx_small_dizzy_star.png'),
@@ -99,8 +103,8 @@ export const C = {
 
 /** Tile shape + colour badges (3): A blue circle, B coral triangle, C gold star, D green diamond. */
 export const BADGES = [
-  { shape: 'circle', color: '#1f9bea' },
-  { shape: 'triangle', color: '#ff6b5c' },
-  { shape: 'star', color: '#fec90e' },
-  { shape: 'diamond', color: '#3fbf5f' },
+  { shape: 'circle', color: '#1f9bea', lip: '#1679c0' },
+  { shape: 'triangle', color: '#ff6b5c', lip: '#d94a3c' },
+  { shape: 'star', color: '#fec90e', lip: '#d9a400' },
+  { shape: 'diamond', color: '#3fbf5f', lip: '#2c9a47' },
 ] as const;

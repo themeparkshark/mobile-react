@@ -149,3 +149,33 @@ test('balance sim (18.3): the Final flips the winner in 15-30% of matches; the s
   const rate = flips / finals;
   assert.ok(rate >= 0.12 && rate <= 0.33, `Final flips ${rate}`);
 });
+
+test('S1 gate 2: no trademarked ride or park name in any planned question, choice or fact; labels stay unique per question', () => {
+  const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
+  const content = loadTs('src/games/trivia-duel/engine/content.ts');
+  const facts = loadTs('src/games/trivia-duel/engine/facts.ts');
+  const pool = [
+    { id: 'gen-38', question: 'Which Disneyland ride welcomed guests on opening day in 1955?', choices: ['Jungle Cruise', 'Haunted Mansion', 'Space Mountain', 'Star Tours'], correctIndex: 0, difficulty: 'easy', fact: 'Jungle Cruise was one of Disneyland’s opening-day attractions.', source: 'x' },
+    { id: 'gen-42', question: 'Which Space Mountain opened first?', choices: ['Tokyo Disneyland', 'Disneyland', 'Magic Kingdom', 'Disneyland Paris'], correctIndex: 2, difficulty: 'medium', fact: 'Magic Kingdom opened Space Mountain in 1975.', source: 'x' },
+    { id: 'gen-48', question: 'In what year did Universal Studios Hollywood’s Studio Tour formally open?', choices: ['1964', '1990', '1977', '1955'], correctIndex: 0, difficulty: 'hard', fact: 'Universal dates the formal opening of the Studio Tour to 1964.', source: 'x' },
+    { id: 'p1', question: 'The Matterhorn Bobsleds pioneered which coaster feature?', choices: ['Magnetic launch', 'A wooden track', 'Tubular steel track', 'Upside-down loops'], correctIndex: 2, difficulty: 'medium', source: 'x' },
+  ];
+  for (let seed = 0; seed < 300; seed++) {
+    const plan = match.planMatch(seed % 5 === 0 ? 'ride' : 'queue', seed, pool, { parkId: seed % 3 ? 8 : undefined, matchNo: 3 + (seed % 3) });
+    const qs = plan.rounds.map((r) => r.question).concat(plan.finalAlt ? [plan.finalAlt.question] : []);
+    for (const q of qs) {
+      const all = [q.prompt, ...q.choices, q.fact ?? ''].join(' | ');
+      assert.ok(!labels.hasTrademarkName(all), `seed ${seed} ${q.id}: ${all}`);
+      assert.equal(new Set(q.choices).size, q.choices.length, `labels collide in ${q.id}`);
+      assert.ok(!/\b[Tt]he the\b/.test(all), all);
+    }
+    // Rebuilt from ids alone (ghosts, server grade): the same labelled text.
+    const again = match.planFromIds(plan.mode, plan.seed, plan.rounds.map((r) => r.question.id), pool, 'deckhand', false, plan.keys);
+    assert.deepEqual(plain(again.rounds.map((r) => r.question.prompt)), plain(plan.rounds.map((r) => r.question.prompt)));
+  }
+  // Every generated-format fact name has a label.
+  for (const f of facts.OPENING_FACTS) assert.ok(!labels.hasTrademarkName(labels.genericize(f.name)), f.name);
+  // Labelled items keep their fact keys (no giveaways across a match).
+  const q = content.materializeQuestion('gen-42', pool, 1);
+  assert.ok(q.factKeys.length > 0);
+});

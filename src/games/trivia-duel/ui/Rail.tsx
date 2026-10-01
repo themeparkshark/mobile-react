@@ -1,17 +1,22 @@
 /**
- * VS rail (design 3 / 8): cream pill with 3pt outline. Your portrait and
- * rolling-odometer score on the left, the opponent's on the right, round pips
- * in the middle (current pulses, won gold, lost cream, opponent blue), the
- * streak flame with visible tiers, the lifeline tray and the LOCKED badges
- * that punch in with the opponent's real lock time.
+ * VS rail (design 3, rev 7): an 84pt cream pill with a 3pt outline. Your
+ * 56pt portrait and 28pt rolling score on the left, the opponent's on the
+ * right, round pips in the middle (current pulses, won gold, lost cream,
+ * opponent blue), the living streak flame next to your score (Skia, 3 seeded
+ * paths line-boiled at 10fps, 0.7 / 0.85 / 1.0 / 1.15 per tier, squash-pop
+ * on each increment), the 32pt Shield slot, and the LOCKED badges that punch
+ * in with the opponent's real lock time (portrait 1 to 1.3 to 1 with a gold
+ * ring). Stakes flip face-up on the rail at the Final reveal.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import { Canvas, Group, Path, Skia } from '@shopify/react-native-skia';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 import Animated, {
-  useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { CountUpText } from '../../../gamekit/fx/CountUpText';
-import { ART, C, FIN_POSES, SHARKS, type SharkLook } from '../art';
+import { C, FIN_POSES, SHARKS, type SharkLook } from '../art';
 
 export type PipState = 'pending' | 'current' | 'me' | 'opp' | 'both' | 'none';
 
@@ -32,13 +37,14 @@ interface Props {
   flame: 0 | 1 | 2 | 3 | 5;
   streak: number;
   shield: boolean;
-  tray: { chomp: boolean; freeze: boolean; peek: boolean };
+  /** The Shield slot only shows once the Shield is unlocked (match 2). */
+  shieldOn?: boolean;
   moving: boolean;
   reducedMotion: boolean;
   onTickCoin?: () => void;
 }
 
-export const Rail = React.memo(function Rail({ me, opp, pips, flame, streak, shield, tray, moving, reducedMotion, onTickCoin }: Props) {
+export const Rail = React.memo(function Rail({ me, opp, pips, flame, streak, shield, shieldOn = true, moving, reducedMotion, onTickCoin }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.pill}>
@@ -48,12 +54,8 @@ export const Rail = React.memo(function Rail({ me, opp, pips, flame, streak, shi
             {pips.map((p, i) => <Pip key={i} state={p} reducedMotion={reducedMotion} />)}
           </View>
           <View style={styles.midRow}>
-            <Flame tier={flame} streak={streak} shield={shield} reducedMotion={reducedMotion} />
-            <View style={styles.tray}>
-              <TraySlot on={tray.chomp} src={ART.chomp} wide />
-              <TraySlot on={tray.freeze} src={ART.stopwatch} />
-              <TraySlot on={tray.peek} src={ART.magnifier} />
-            </View>
+            <Flame tier={flame} streak={streak} reducedMotion={reducedMotion} />
+            {shieldOn ? <ShieldSlot on={shield} reducedMotion={reducedMotion} /> : null}
           </View>
           {moving ? <Text style={styles.moving}>LINE MOVING</Text> : null}
         </View>
@@ -69,14 +71,14 @@ function Side({ side, align, reducedMotion, onTick }: { side: RailSide; align: '
   useEffect(() => {
     if (!side.lockLabel) { badgeS.value = 0; return; }
     if (reducedMotion) { badgeS.value = 1; return; }
-    punch.value = withSequence(withTiming(1.25, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 320 }));
+    punch.value = withSequence(withTiming(1.3, { duration: 90 }), withTiming(1, { duration: 130 }));
     badgeS.value = withSequence(withTiming(1.35, { duration: 80 }), withSpring(1, { damping: 9, stiffness: 360 }));
   }, [side.lockLabel, punch, badgeS, reducedMotion]);
   const pStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
   const bStyle = useAnimatedStyle(() => ({ transform: [{ scale: badgeS.value }], opacity: badgeS.value > 0 ? 1 : 0 }));
   const src = side.look === 'fin' ? FIN_POSES.idle : SHARKS[side.look];
   const portrait = (
-    <Animated.View style={[styles.portrait, side.ghost && styles.ghostRing, pStyle]}>
+    <Animated.View style={[styles.portrait, side.ghost && styles.ghostRing, side.lockLabel ? styles.lockedRing : null, pStyle]}>
       <Image source={src} style={[styles.portraitImg, side.look !== 'fin' && align === 'left' && { transform: [{ scaleX: -1 }] }, side.ghost && { opacity: 0.55 }]} />
     </Animated.View>
   );
@@ -118,67 +120,114 @@ function Pip({ state, reducedMotion }: { state: PipState; reducedMotion: boolean
   return <Animated.View style={[styles.pip, { backgroundColor: bg }, state === 'current' && { borderColor: C.goldDeep }, st]} />;
 }
 
-function Flame({ tier, streak, shield, reducedMotion }: { tier: 0 | 1 | 2 | 3 | 5; streak: number; shield: boolean; reducedMotion: boolean }) {
+/** Three seeded flame silhouettes (outer coral, gold, cream core) around a 32 x 40 box. */
+function flamePath(seed: number, k: number, scale: number): ReturnType<typeof Skia.Path.Make> {
+  const rnd = (n: number) => {
+    const x = Math.sin((seed + 1) * 12.9898 + n * 78.233 + k * 37.719) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  const p = Skia.Path.Make();
+  const cx = 16;
+  const base = 38;
+  const w = 13 * scale;
+  const h = 34 * scale;
+  const j = (n: number) => (rnd(n) - 0.5) * 2.2;
+  p.moveTo(cx, base);
+  p.cubicTo(cx - w + j(1), base - 2, cx - w * 0.9 + j(2), base - h * 0.55, cx - w * 0.25 + j(3), base - h * 0.78);
+  p.cubicTo(cx - w * 0.15 + j(4), base - h * 0.62, cx + j(5), base - h * 0.7, cx + 1 + j(6), base - h);
+  p.cubicTo(cx + w * 0.6 + j(7), base - h * 0.72, cx + w + j(8), base - h * 0.45, cx + w * 0.92 + j(9), base - h * 0.18);
+  p.cubicTo(cx + w * 0.85, base - 2, cx + w * 0.3, base, cx, base);
+  p.close();
+  return p;
+}
+
+const FLAME_SCALE: Record<0 | 1 | 2 | 3 | 5, number> = { 0: 0.6, 1: 0.7, 2: 0.85, 3: 1.0, 5: 1.15 };
+
+function Flame({ tier, streak, reducedMotion }: { tier: 0 | 1 | 2 | 3 | 5; streak: number; reducedMotion: boolean }) {
   const s = useSharedValue(1);
+  const sy = useSharedValue(1);
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion || streak === 0) return;
     s.value = withSequence(withTiming(1.2, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
-  }, [tier, streak, s, reducedMotion]);
-  const scale = tier === 5 ? 1.15 : tier === 3 ? 1 : tier === 2 ? 0.85 : 0.7;
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value * scale }] }));
+    sy.value = withSequence(withTiming(0.82, { duration: 60 }), withTiming(1.15, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
+  }, [tier, streak, s, sy, reducedMotion]);
+  // Line boil at 10fps: 3 seeded variants of each layer.
+  const boilT = useSharedValue(0);
+  useFrameCallback((f) => {
+    'worklet';
+    if (reducedMotion || f.timeSincePreviousFrame == null) return;
+    boilT.value += f.timeSincePreviousFrame;
+  });
+  const sets = useMemo(() => [0, 1, 2].map((v) => ({
+    outer: flamePath(v, 0, 1), mid: flamePath(v + 3, 1, 0.7), core: flamePath(v + 6, 2, 0.42),
+  })), []);
+  const pick = useDerivedValue(() => Math.floor(boilT.value / 100) % 3);
+  const outer = useDerivedValue(() => sets[pick.value].outer);
+  const mid = useDerivedValue(() => sets[pick.value].mid);
+  const core = useDerivedValue(() => sets[pick.value].core);
+  const k = FLAME_SCALE[tier];
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value * k }, { scaleY: sy.value }] }));
   return (
     <View style={styles.flameWrap} accessibilityLabel={`Streak ${streak}`}>
-      {shield ? <View style={styles.shield} /> : null}
-      <Animated.View style={[{ opacity: tier === 0 ? 0.25 : 1 }, st]}>
-        <Image source={ART.flame} style={styles.flame} />
+      <Animated.View style={[{ opacity: tier === 0 ? 0.3 : 1 }, st]}>
+        <Canvas style={{ width: 32, height: 40 }}>
+          <Group>
+            <Path path={outer} color={C.coral} />
+            <Path path={outer} color={C.ink} style="stroke" strokeWidth={2.5} strokeJoin="round" />
+            <Path path={mid} color={C.gold} />
+            <Path path={core} color={C.cream} />
+          </Group>
+        </Canvas>
       </Animated.View>
       <Text style={styles.flameN}>{streak}</Text>
     </View>
   );
 }
 
-function TraySlot({ on, src, wide }: { on: boolean; src: number; wide?: boolean }) {
-  const s = useSharedValue(on ? 1 : 0.8);
+/** 32pt Shield slot: a gold badge when held, a dashed socket when not. */
+function ShieldSlot({ on, reducedMotion }: { on: boolean; reducedMotion: boolean }) {
+  const s = useSharedValue(on ? 1 : 0.85);
   useEffect(() => {
-    s.value = on ? withSequence(withTiming(1.3, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })) : withTiming(0.85, { duration: 160 });
-  }, [on, s]);
+    if (reducedMotion) { s.value = on ? 1 : 0.85; return; }
+    s.value = on ? withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })) : withTiming(0.85, { duration: 160 });
+  }, [on, s, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   return (
-    <View style={[styles.slot, !on && styles.slotEmpty]}>
-      <Animated.View style={st}>
-        <Image source={src} style={[wide ? styles.slotImgWide : styles.slotImg, !on && { opacity: 0.22 }]} resizeMode="contain" />
-      </Animated.View>
-    </View>
+    <Animated.View style={[styles.shieldSlot, on ? styles.shieldOn : styles.shieldOff, st]} accessibilityLabel={on ? 'Shield ready' : 'No shield'}>
+      {on ? (
+        <Svg width={22} height={24}>
+          <SvgPath d="M11 2 L20 5.5 C20 13 17 19 11 22.5 C5 19 2 13 2 5.5 Z" fill="#ffffff" stroke={C.ink} strokeWidth={2.2} strokeLinejoin="round" />
+          <SvgPath d="M11 6 L16.5 8 C16.5 12.5 14.6 16.4 11 18.6 Z" fill={C.blue} />
+        </Svg>
+      ) : null}
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 8, paddingTop: 6 },
   pill: {
-    height: 72, borderRadius: 36, backgroundColor: C.cream, borderWidth: 3, borderColor: C.ink,
+    height: 76, borderRadius: 38, backgroundColor: C.cream, borderWidth: 3, borderColor: C.ink,
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6,
   },
   side: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  portrait: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#bfe8ff', borderWidth: 3, borderColor: C.ink, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  portrait: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#bfe8ff', borderWidth: 3, borderColor: C.ink, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   ghostRing: { borderColor: C.blue, borderStyle: 'dashed' },
-  portraitImg: { width: 52, height: 52, marginTop: 8 },
+  lockedRing: { borderColor: C.goldDeep, borderWidth: 4 },
+  portraitImg: { width: 56, height: 56, marginTop: 8 },
   scoreCol: { marginHorizontal: 6, flexShrink: 1 },
   name: { fontFamily: 'Knockout', fontSize: 13, color: C.navy },
   // Fixed width: the count-up writes text natively, so its box never re-measures (a growing number would clip).
-  score: { fontFamily: 'Shark', fontSize: 24, color: C.navy, padding: 0, margin: 0, width: 70 },
-  mid: { width: 108, alignItems: 'center' },
+  score: { fontFamily: 'Shark', fontSize: 28, color: C.navy, padding: 0, margin: 0, width: 78 },
+  mid: { width: 92, alignItems: 'center' },
   pips: { flexDirection: 'row', marginBottom: 4 },
   pip: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: C.ink, marginHorizontal: 2.5 },
   midRow: { flexDirection: 'row', alignItems: 'center' },
-  flameWrap: { width: 32, height: 34, alignItems: 'center', justifyContent: 'center' },
-  flame: { width: 26, height: 30 },
+  flameWrap: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
   flameN: { position: 'absolute', bottom: -4, fontFamily: 'Shark', fontSize: 13, color: C.navy },
-  shield: { position: 'absolute', width: 34, height: 34, borderRadius: 17, borderWidth: 2.5, borderColor: C.gold, backgroundColor: 'rgba(254,201,14,0.2)' },
-  tray: { flexDirection: 'row', marginLeft: 4 },
-  slot: { width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: '#ffffff', marginHorizontal: 1.5, alignItems: 'center', justifyContent: 'center' },
-  slotEmpty: { borderStyle: 'dashed', backgroundColor: 'transparent', borderColor: '#9aa9b8' },
-  slotImg: { width: 17, height: 17 },
-  slotImgWide: { width: 20, height: 14 },
+  shieldSlot: { width: 32, height: 32, borderRadius: 10, borderWidth: 2.5, marginLeft: 6, alignItems: 'center', justifyContent: 'center' },
+  shieldOn: { backgroundColor: C.gold, borderColor: C.ink },
+  shieldOff: { borderStyle: 'dashed', borderColor: '#9aa9b8', backgroundColor: 'transparent' },
   moving: { fontFamily: 'Knockout', fontSize: 10, color: C.blue, marginTop: 1 },
   lockBadge: { position: 'absolute', top: -14, backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
   lockText: { fontFamily: 'Shark', fontSize: 13, color: C.navy },

@@ -56,11 +56,20 @@ export interface StageActors {
   heat: SharedValue<number>;
   /** D7 window life: 0 calm, 0.6 last 3s (8th bulbs, crowd leans in), 1 last second (16ths). */
   urgency: SharedValue<number>;
+  /** Stage takeover 0..1 (11.2): the scene drops into the taller band. */
+  takeover: SharedValue<number>;
+  /** Crown drop onto your head part: 0 hidden above, 1 seated. */
+  crown: SharedValue<number>;
 }
 
 interface Props {
   width: number;
+  /** Full canvas height (the band a takeover can grow to). */
   height: number;
+  /** The normal stage band the scene is laid out in (the top of the canvas). */
+  bandH?: number;
+  /** How far the scene drops in a takeover (px); default TAKEOVER_DROP of the extra height. */
+  dropPx?: number;
   actors: StageActors;
   /** 'fin' draws Captain Fin; a shark look draws a ghost/rival shark. */
   opponent: 'fin' | SharkLook;
@@ -95,6 +104,8 @@ function archPoint(cx: number, top: number, w: number, h: number, band: number, 
 }
 
 const BULBS = 13;
+/** Share of the extra band height the scene drops by in a takeover (the podium lands mid-band). */
+export const TAKEOVER_DROP = 0.62;
 
 /** Bulb centres in the marquee art (fractions of its size, measured from the file). */
 const MARQUEE_BULBS: readonly [number, number][] = [
@@ -106,7 +117,9 @@ const STAGE_ART = {
   podium: require('../../../assets/games/trivia-duel/stage_podium.png'),
 };
 
-export const Stage = React.memo(function Stage({ width: W, height: H, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
+export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, dropPx, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
+  const H = bandH ?? FULL;
+  const drop = dropPx ?? (FULL - H) * TAKEOVER_DROP;
   const finImgs = FIN_POSE_ORDER.map((p) => useImage(FIN_POSES[p])); // eslint-disable-line react-hooks/rules-of-hooks
   const hat = useImage(ART.hat);
   const backdrop = useImage(STAGE_ART.backdrop);
@@ -117,6 +130,7 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   const flameImg = useImage(ART.flame);
   const meImg = useImage(SHARKS[meLook]);
   const oppImg = useImage(opponent === 'fin' ? SHARKS.blue : SHARKS[opponent]);
+  const crownImg = useImage(ART.crown);
   const crowdImgs = [useImage(SHARKS.pink), useImage(SHARKS.green), useImage(SHARKS.orange), useImage(SHARKS.blue), useImage(SHARKS.red), useImage(SHARKS.classic)];
 
   const seaTop = H * 0.47;
@@ -133,6 +147,22 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
     const h = w / ar;
     return { x: (W - w) / 2, y: H - h + 4, w, h };
   }, [W, H]);
+  // Below the band (only seen in a takeover): the boardwalk deck runs on toward you.
+  const lowerDeck = useMemo(() => {
+    const p = Skia.Path.Make();
+    if (FULL <= H) return p;
+    for (let i = 1; i < 8; i++) {
+      const y = H + (FULL - H) * (i / 8) ** 0.85;
+      p.moveTo(0, y);
+      p.lineTo(W, y);
+    }
+    for (let i = 0; i < 12; i++) {
+      const x = (i / 11) * W;
+      p.moveTo(W / 2 + (x - W / 2) * 0.8, H);
+      p.lineTo(W / 2 + (x - W / 2) * 1.6, FULL);
+    }
+    return p;
+  }, [W, H, FULL]);
   const marq = useMemo(() => {
     const w = W * 0.56;
     const h = w * (559 / 768);
@@ -231,9 +261,10 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   });
   const flameOpacity = useDerivedValue(() => Math.min(1, a.heat.value));
 
-  // Camera rig: push toward the podiums, lateral whip.
+  // Camera rig: push toward the podiums, lateral whip; a takeover drops the scene into the taller band.
   const rig = useDerivedValue(() => [
     { translateX: a.pushX.value + Math.sin(a.t.value / 955) * (reducedMotion ? 0 : 4) },
+    { translateY: a.takeover.value * drop },
     { scale: a.push.value },
   ]);
 
@@ -277,16 +308,23 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
     { scaleY: a.meSY.value * (1 + 0.015 * breath.value) },
   ]);
   const shadesOpacity = useDerivedValue(() => a.shades.value);
+  const crownOpacity = useDerivedValue(() => (a.crown.value > 0 ? 1 : 0));
+  const crownY = useDerivedValue(() => -meH * 1.02 - (1 - a.crown.value) * 320);
   const shadesY = useDerivedValue(() => -meH * 0.78 - (1 - a.shades.value) * 40);
 
+  // Spotlight iris (11.3): warm-white cones; the stage itself never dims.
   const spotOpacity = useDerivedValue(() => a.spot.value * 0.55);
-  const dim = useDerivedValue(() => a.spot.value * 0.1);
 
   const crowdN = CROWD_LOOKS.length;
   const crowdSize = Math.min(W / (crowdN + 0.5), 46);
 
   return (
-    <Canvas style={{ width: W, height: H }} pointerEvents="none">
+    <Canvas style={{ width: W, height: FULL }} pointerEvents="none">
+      <Rect x={0} y={0} width={W} height={FULL}>
+        <LinearGradient start={vec(0, 0)} end={vec(0, FULL)} colors={[C.skyTop, C.sky, '#d8f3ff']} />
+      </Rect>
+      <Rect x={0} y={H - 2} width={W} height={Math.max(0, FULL - H + 2)} color={C.wood} />
+      <Path path={lowerDeck} color={C.woodDeep} style="stroke" strokeWidth={2.5} />
       <Group transform={rig} origin={vec(W / 2, H * 0.75)}>
         {/* L1 backdrop (gate-passed, studio/art/trivia) */}
         {backdrop ? (
@@ -328,6 +366,11 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
         {meImg ? (
           <Group transform={meTransform}>
             <SkImage image={meImg} x={-meH / 2} y={-meH} width={meH} height={meH} />
+            {crownImg ? (
+              <Group opacity={crownOpacity}>
+                <SkImage image={crownImg} x={-meH * 0.27} y={crownY} width={meH * 0.5} height={meH * 0.5 * (91 / 96)} />
+              </Group>
+            ) : null}
             {shades ? (
               <Group opacity={shadesOpacity}>
                 <SkImage image={shades} x={-meH * 0.36} y={shadesY} width={meH * 0.42} height={meH * 0.42 * (153 / 256)} />
@@ -364,7 +407,6 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
           );
         })}
 
-        <Rect x={-40} y={-20} width={W + 80} height={H + 40} color="#063f73" opacity={dim} />
       </Group>
     </Canvas>
   );
