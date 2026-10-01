@@ -20,6 +20,13 @@ export const CQ = {
   coral: '#ff6b5c',
   white: '#ffffff',
   cream: '#fff8e4',
+  /** Results and stake card cream (J11). */
+  card: '#fff6df',
+  /** Tide palette (8.2, Alto): HIGH deep and saturated, LOW pale shallow turquoise. */
+  waterHigh: '#2fb6ec',
+  waterHighCaustic: '#7fdaf7',
+  waterLow: '#5fd0f0',
+  waterLowCaustic: '#a8ecfb',
   sky: '#bfe9ff',
 } as const;
 
@@ -50,13 +57,14 @@ export interface BoardLayout {
  * never goes under 60 pt when the height allows; the rim and margins shrink
  * first on small screens.
  */
-export function boardLayout(availableWidth: number, maxHeight = Infinity, rows = 5): BoardLayout {
-  const margin = availableWidth < 360 ? 6 : 10;
-  const rim = availableWidth < 360 ? 8 : 10;
+export function boardLayout(availableWidth: number, maxHeight = Infinity, rows = 5, tight = false): BoardLayout {
+  // v7.1 J2: 14 pt side gutters (margin 2 + rim 12), so a 5x7 board spans about 92% of a 375 pt screen.
+  const margin = tight ? 2 : availableWidth < 360 ? 6 : 10;
+  const rim = tight ? 12 : availableWidth < 360 ? 8 : 10;
   const topPad = 0.34;
   const face = 12;
   const chrome = (cell: number) => cell * topPad + rim * 2 + face + margin * 2;
-  let cell = Math.min((availableWidth - 2 * (margin + rim) - 4) / 5, 76);
+  let cell = Math.min((availableWidth - 2 * (margin + rim) - (tight ? 0 : 4)) / 5, 76);
   // Fit height too: canvas height = top overlap + rims + face + rows cells.
   while (cell * rows + chrome(cell) > maxHeight && cell > 44) cell -= 1;
   const pw = cell * 5;

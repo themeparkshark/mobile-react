@@ -6,12 +6,13 @@
  *
  * Used for: library par / parGold, Author target, decision points, the Tide
  * Tip (next optimal strokes), the free first-stroke hint, the near-miss line,
- * the red "No way home" preview and the Splash par adjustment.
+ * the "No way home" previews and dead sheet (v7.1 0.A.3), the R1 phase tables
+ * and the R7 aha tags. Verifiers never need it (a Splash is a table lookup).
  */
 
 import {
-  A_TREAD, cellsOf, fullMask, heightOf, isRiptide, simulateStroke, stepCell, tideAt,
-  type Board, type Voyage,
+  A_TREAD, cellsOf, fullMask, heightOf, isRiptide, simulateStroke, stepCell, tideAt, TIDE_LOW,
+  type AhaTag, type Board, type Voyage,
 } from './rules';
 
 const INF = 1 << 29;
@@ -127,10 +128,113 @@ export function distanceFrom(board: Board, v: Pick<Voyage, 'pos' | 'mask' | 'gol
   return d >= INF ? Infinity : d;
 }
 
-/** Remaining par used by the Splash par adjustment. */
-export function remainingPar(board: Board, v: Voyage, withGolden: boolean): number {
-  const d = distanceFrom(board, v, withGolden && !v.golden ? true : v.golden);
-  return Number.isFinite(d) ? d : 0;
+/**
+ * "No way home" (0.A.3): can this state still clear within `left` strokes?
+ * Display only (previews, dead sheet); nothing goes into the proof.
+ */
+export function canClear(board: Board, v: Pick<Voyage, 'pos' | 'mask' | 'golden' | 'moves' | 'phase'>, left: number): boolean {
+  return distanceFrom(board, v, false) <= left;
+}
+
+/**
+ * R1 phase table: par and parGold when a voyage starts at tide phase k, for
+ * k = 0..2P-1 (row 0 is the board's own par). -1 marks an unsolvable row.
+ */
+export function phaseTable(board: Board): { parByPhase: number[]; parGoldByPhase: number[] } {
+  const g = buildGraph(board);
+  const parByPhase: number[] = [];
+  const parGoldByPhase: number[] = [];
+  const rows = board.P ? board.P * 2 : 1;
+  for (let k = 0; k < rows; k++) {
+    const s = stateKey(g.M, board.start, 0, false, k % g.M);
+    const p = g.distClear[s];
+    const pg = board.golden >= 0 ? g.distGold[s] : INF;
+    parByPhase.push(p >= INF ? -1 : p);
+    parGoldByPhase.push(pg >= INF ? -1 : pg);
+  }
+  return { parByPhase, parGoldByPhase };
+}
+
+/**
+ * R1 splash row: the smallest k >= 1 with par0 <= parByPhase[k] <= par0 + 2,
+ * solvable, and parGoldByPhase[k] - parByPhase[k] in 1..4. -1 when none.
+ * Never easier than the unsplashed board, and at most +2 par.
+ */
+export function splashPhaseOf(par0: number, parByPhase: readonly number[], parGoldByPhase: readonly number[]): number {
+  for (let k = 1; k < parByPhase.length; k++) {
+    const p = parByPhase[k];
+    const pg = parGoldByPhase[k];
+    if (p < 0 || pg < 0) continue;
+    if (p < par0 || p > par0 + 2) continue;
+    if (pg - p < 1 || pg - p > 4) continue;
+    return k;
+  }
+  return -1;
+}
+
+/** One stroke of a replayed route, with what the aha tagger needs. */
+export interface RouteStroke {
+  readonly action: number;
+  readonly path: number[];
+  readonly carried: number;
+  readonly runs: number;
+  readonly tideBefore: number;
+  readonly tideAfter: number;
+  /** The carry stopped because the next tile was a dry sandbar (LOW). */
+  readonly stoppedByDry: boolean;
+  /** The stroke ended (not in the chest) on a pearl or the golden pearl it took this stroke. */
+  readonly landedOnPickup: boolean;
+  readonly cleared: boolean;
+}
+
+/** Replay an action list from the voyage start (phase 0) and describe each stroke. */
+export function routeStrokes(board: Board, actions: readonly number[], phase = 0): RouteStroke[] {
+  const H = heightOf(board);
+  const out: RouteStroke[] = [];
+  let pos = board.start; let mask = 0; let golden = false; let moves = 0;
+  for (const a of actions) {
+    const tide = tideAt(board.P, moves, phase);
+    const dir = a === A_TREAD ? -1 : a;
+    const sim = simulateStroke(board, pos, mask, golden, tide, dir);
+    if (sim.bump) break;
+    const carried = dir < 0 ? 0 : Math.max(0, sim.path.length - 2);
+    const end = sim.path[sim.path.length - 1];
+    let stoppedByDry = false;
+    if (carried > 0 && !sim.cleared && tide === TIDE_LOW) {
+      const c = '^>v<'.indexOf(board.tiles[end]);
+      const nxt = c >= 0 ? stepCell(end, c, H) : -1;
+      stoppedByDry = nxt >= 0 && board.tiles[nxt] === 's';
+    }
+    const tookHere = sim.pearls.some((p) => p.cell === end) || (sim.goldenTaken && end === board.golden);
+    moves += 1;
+    out.push({
+      action: a, path: sim.path, carried, runs: sim.runs, tideBefore: tide,
+      tideAfter: sim.cleared ? tide : tideAt(board.P, moves, phase), stoppedByDry,
+      landedOnPickup: carried > 0 && !sim.cleared && tookHere, cleared: sim.cleared,
+    });
+    pos = sim.pos; mask = sim.mask; golden = sim.golden;
+    if (sim.cleared) break;
+  }
+  return out;
+}
+
+/** Which aha verbs a route uses (R7), in tag priority order. */
+export function routeTags(board: Board, actions: readonly number[]): AhaTag[] {
+  const st = routeStrokes(board, actions);
+  const tags: AhaTag[] = [];
+  if (st.some((x) => x.action === A_TREAD && x.tideAfter !== x.tideBefore)) tags.push('wait');
+  if (st.some((x) => x.stoppedByDry)) tags.push('low-road');
+  if (st.some((x) => x.runs >= 2 && isRiptide(x.runs, x.carried))) tags.push('chain');
+  if (st.some((x) => x.carried >= 5)) tags.push('long-ride');
+  if (st.some((x) => x.landedOnPickup)) tags.push('bank-shot');
+  const last = st[st.length - 1];
+  if (last?.cleared && last.path.length >= 2) {
+    // Backdoor: the chest is entered from its far side (the tile before it is farther from the start).
+    const before = last.path[last.path.length - 2];
+    const man = (a: number, b: number) => Math.abs(((a / 5) | 0) - ((b / 5) | 0)) + Math.abs((a % 5) - (b % 5));
+    if (man(before, board.start) > man(board.chest, board.start)) tags.push('backdoor');
+  }
+  return tags;
 }
 
 /**

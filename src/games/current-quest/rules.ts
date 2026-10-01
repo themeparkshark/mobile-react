@@ -1,5 +1,5 @@
 /**
- * Current Quest rules engine (design v5, section 3). Pure TypeScript with no
+ * Current Quest rules engine (design v7.1, section 3; built on v5). Pure TypeScript with no
  * React Native imports: the same file runs in the app, in `node --test`, in the
  * library generator, and is the reference the PHP verifier ports line by line.
  *
@@ -16,9 +16,21 @@
  *
  * v5 changes: boards grow taller (H 5/6/7), the first undo within 1.5 s of
  * the stroke it undoes is a free "slip" (keeps Par), Restart is free in both
- * profiles (Trial keeps the spent budget), a Trial tip costs 2 strokes of
- * budget instead of a ring, and a Riptide is one elegant stroke (2+ chained
- * current runs or 5+ carried tiles) instead of a streak.
+ * profiles (Trial keeps the spent budget), and a Riptide is one elegant stroke
+ * (2+ chained current runs or 5+ carried tiles) instead of a streak.
+ *
+ * v7.1 changes (design 0.A):
+ *   - Trial in one sentence (0.A.4): undo rewinds the board and the stroke
+ *     stays spent, except the silent first-undo refund within 1.5 s (the slip,
+ *     now in both profiles). A ring (action 7) buys +2 strokes at ANY time
+ *     while a ring is left; a Tip (action 9) costs 1 ring and no strokes.
+ *   - Haul (0.A.1): the v5 "treasure" tiebreak, renamed, never shown.
+ *   - Splash is a voyage-start parameter from the board's phase table (R1):
+ *     action 8 is gone, `setRemainingParSolver` is gone. A splashed voyage
+ *     starts at `splashPhase` with that row's par, parGold and limit.
+ *   - goldenAt (0.A.7): the stroke number that banked the golden pearl, per
+ *     voyage, for the 5th rank key (golden reach).
+ *   - Trick Shot slot (R7): 5x5 openers in the `C-trick` cell.
  */
 
 /** Board width: always 5 columns, so cell = row * 5 + col for every height. */
@@ -51,7 +63,17 @@ const CURRENT_CHARS = '^>v<';
 export const TIDE_HIGH = 0;
 export const TIDE_LOW = 1;
 
-export type Slot = 'warmup' | 'standard' | 'treasure';
+/**
+ * Board slots. `treasure` is the code id of the 5x7 Deep slot (cells keep the
+ * `C-treasure` / `CT-treasure` ids so library hashes do not churn; design 0.2).
+ * `trick` is the v7 R7 Trick Shot opener (5x5); `warmup` is the retired v5 opener.
+ */
+export type Slot = 'trick' | 'warmup' | 'standard' | 'treasure';
+/** Player-facing slot names (design 0.2: "Treasure" now means only the chest). */
+export const SLOT_LABEL: Record<Slot, string> = { trick: 'Trick Shot', warmup: 'Warm-up', standard: 'Standard', treasure: 'Deep' };
+/** Curator aha tags (R7): the verb a Deep board's par route turns on, and its Trick Shot opener teaches. */
+export type AhaTag = 'chain' | 'long-ride' | 'bank-shot' | 'backdoor' | 'wait' | 'low-road';
+export const AHA_TAGS: readonly AhaTag[] = ['chain', 'long-ride', 'bank-shot', 'backdoor', 'wait', 'low-road'];
 export type MechanicSet = 'C' | 'CT';
 export type Profile = 'puzzle' | 'trial';
 
@@ -80,7 +102,20 @@ export interface Board {
   readonly parGold: number;
   readonly authorRiptide: number;
   readonly decisionPoints?: number;
+  /** The par route contains a Riptide stroke (design `parHasRiptide`): only these boards celebrate a Riptide (0.A.1). */
   readonly parIsRiptide?: boolean;
+  /** R7 aha tag (every Deep, map, sealed and Trick Shot board). */
+  readonly ahaTag?: AhaTag;
+  /** R10 curator title on sealed boards ("Wait For It"). */
+  readonly title?: string;
+  /**
+   * R1 phase table (tide boards): par and parGold when the voyage starts at
+   * tide phase k (k = 0..2P-1; row 0 equals par / parGold). -1 = unsolvable.
+   */
+  readonly parByPhase?: readonly number[];
+  readonly parGoldByPhase?: readonly number[];
+  /** R1: the row a Splash starts this board at (-1 or missing = cannot be splashed). */
+  readonly splashPhase?: number;
   /** The curation receipt ("Tread once so the sandbar sinks, then ride home"). */
   readonly aha?: string;
   /** Teach board: the one optional line of copy (shown for 2 s, never a gate). */
@@ -93,6 +128,8 @@ export interface Board {
   /** Noisy-player Trial sim: clear rate with at most one ring, and with none (15.2). */
   readonly trialClearRate?: number;
   readonly trialFirstRate?: number;
+  /** Struck from every pool (kept in the file for history; R10, 5.2). */
+  readonly retired?: boolean;
 }
 
 export interface Knobs {
@@ -103,16 +140,19 @@ export interface Knobs {
   readonly continueSize: number;
   /** Slack per slot: limit = max(par + slack, parGold + 2). */
   readonly slack: Readonly<Record<Slot, number>>;
-  /** Budget strokes a Trial Tide Tip costs (Puzzle tips only forfeit Par). */
-  readonly tipCost?: number;
-  /** Same-Board Showdown: golden pearls arm a Shield against one Splash. */
+  /** Same-Board Showdown run (presentation and bots only; the engine treats it as Puzzle). */
   readonly showdown?: boolean;
 }
 
-export const PUZZLE_KNOBS: Knobs = { profile: 'puzzle', rings: 0, continueSize: 2, tipCost: 0, slack: { warmup: 4, standard: 3, treasure: 3 } };
-/** Ride Challenge coin trial: Rookie boards, slack 5/4/5, 2 rings that fall only at a stall (15.1). */
-export const RIDE_KNOBS: Knobs = { profile: 'trial', rings: 2, continueSize: 2, tipCost: 2, slack: { warmup: 5, standard: 4, treasure: 5 } };
-export const LINE_BONUS_KNOBS: Knobs = { profile: 'trial', rings: 3, continueSize: 2, tipCost: 2, slack: { warmup: 5, standard: 4, treasure: 5 } };
+/** Puzzle slack: Trick Shot 3, Standard 3, Deep 3 (3.5); the retired Warm-up keeps 4. */
+export const PUZZLE_KNOBS: Knobs = { profile: 'puzzle', rings: 0, continueSize: 2, slack: { trick: 3, warmup: 4, standard: 3, treasure: 3 } };
+/**
+ * Ride Challenge coin trial: Rookie boards, 2 rings (15.1, 0.A.4). Trial slack
+ * Trick Shot 3, Standard 4, Deep 5: the v7.1 coin sim measured 93.6% first try
+ * with the Trick Shot at +4, over the 93% line, so 0.A.4 drops it to +3.
+ */
+export const RIDE_KNOBS: Knobs = { profile: 'trial', rings: 2, continueSize: 2, slack: { trick: 3, warmup: 5, standard: 4, treasure: 5 } };
+export const LINE_BONUS_KNOBS: Knobs = { profile: 'trial', rings: 3, continueSize: 2, slack: { trick: 3, warmup: 5, standard: 4, treasure: 5 } };
 
 // ---------------------------------------------------------------------------
 // Geometry and tiles
@@ -151,9 +191,52 @@ export function movesToTurn(P: number, moves: number, phase: number): number {
   return P - (k % P);
 }
 
+/** The phase-0 limit of a board (an unsplashed voyage). */
 export function limitFor(board: Board, knobs: Knobs): number {
-  const slack = knobs.slack[board.slot] ?? 3;
-  return Math.max(board.par + slack, board.parGold + 2);
+  return limitOf(board.par, board.parGold, board.slot, knobs);
+}
+
+export function limitOf(par: number, parGold: number, slot: Slot, knobs: Knobs): number {
+  const slack = knobs.slack[slot] ?? 3;
+  return Math.max(par + slack, parGold + 2);
+}
+
+// ---------------------------------------------------------------------------
+// Splash (R1): a voyage-start parameter, never a mid-voyage action.
+
+/** Proof `sp` (0.A.6): which Splash this voyage started with, and whether it was blocked. */
+export interface SplashStart {
+  readonly id: string;
+  readonly blocked: 0 | 1;
+  /** What blocked it: the Shield (First Find / async golden) or a counter-splash (a Par clear). */
+  readonly by: 'shield' | 'counter' | null;
+}
+
+/** Can a Splash land on this board (tide board with a valid phase-table row)? */
+export function splashable(board: Board): boolean {
+  const k = board.splashPhase ?? -1;
+  return board.P > 0 && k >= 1 && !!board.parByPhase && !!board.parGoldByPhase
+    && (board.parByPhase[k] ?? -1) > 0 && (board.parGoldByPhase[k] ?? -1) > 0;
+}
+
+export interface VoyageStart {
+  readonly phase: number;
+  readonly par: number;
+  readonly parGold: number;
+  readonly limit: number;
+  /** A Splash actually shifted this voyage (not blocked). */
+  readonly splashed: boolean;
+}
+
+/** Starting tide phase, par row and limit of a voyage (3.4 step 0). */
+export function voyageStart(board: Board, knobs: Knobs, sp: SplashStart | null | undefined): VoyageStart {
+  if (sp && !sp.blocked && splashable(board)) {
+    const k = board.splashPhase as number;
+    const par = (board.parByPhase as readonly number[])[k];
+    const parGold = (board.parGoldByPhase as readonly number[])[k];
+    return { phase: k, par, parGold, limit: limitOf(par, parGold, board.slot, knobs), splashed: true };
+  }
+  return { phase: 0, par: board.par, parGold: board.parGold, limit: limitFor(board, knobs), splashed: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +314,7 @@ export interface Snap {
   moves: number;
   ripStrokes: number;
   beached: boolean;
-  shield: boolean;
+  goldenAt: number;
   /** ms (run clock) the undone action was applied; NaN when unknown (never a slip). */
   t: number;
 }
@@ -243,11 +326,11 @@ export interface Voyage {
   golden: boolean;
   /** Cost of the surviving action stack (undo restores it). */
   strokes: number;
-  /** Budget used: equals strokes in Puzzle; in Trial undo never refunds it. */
+  /** Budget used: equals strokes in Puzzle; in Trial undo never refunds it (except the slip). */
   spent: number;
   /** Committed swims and treads on the surviving stack (drives the tide). */
   moves: number;
-  /** Splash offset (never undone). */
+  /** Starting tide offset (0, or the board's splashPhase when splashed; fixed for the voyage). */
   phase: number;
   /** Non-slip undos this voyage (never undone; forfeits Par; rank tiebreak). */
   undos: number;
@@ -259,15 +342,19 @@ export interface Voyage {
   continues: number;
   restarts: number;
   limitBonus: number;
-  /** Riptide strokes on the surviving stack (Author medal only). */
+  /** Riptide strokes on the surviving stack (Author medal, rank key 4). */
   ripStrokes: number;
+  /** Stroke number that banked the golden pearl on the surviving stack (0 = not banked). */
+  goldenAt: number;
   beached: boolean;
   cleared: boolean;
   stalled: boolean;
-  shield: boolean;
-  /** Splash-adjusted par targets. */
+  /** This voyage's par targets and base limit (from the phase-table row it started on). */
   parT: number;
   parGoldT: number;
+  limit: number;
+  /** The Splash this voyage started with (proof `sp`), or null. */
+  sp: SplashStart | null;
   stack: Snap[];
 }
 
@@ -286,9 +373,16 @@ export interface VoyageResult {
   readonly continues: number;
   readonly ripStrokes: number;
   readonly requiredPearls: number;
-  readonly treasure: number;
-  /** The par target this voyage was judged against (golden-aware, splash-adjusted). */
+  /** Tiebreak number (3.6), never shown to players. */
+  readonly haul: number;
+  /** Stroke number that banked the golden pearl (0 = not banked). */
+  readonly goldenAt: number;
+  /** The par target this voyage was judged against (golden-aware, from its phase row). */
   readonly parTarget: number;
+  /** The phase-table par row this voyage started on (par, parGold). */
+  readonly par: number;
+  readonly parGold: number;
+  readonly splashed: boolean;
   /** 0 none, 1 bronze, 2 silver, 3 gold, 4 author. */
   readonly medal: number;
 }
@@ -304,23 +398,43 @@ export interface RunState {
   results: VoyageResult[];
   /** Actions applied per voyage (proof). */
   actions: number[][];
+  /** Per-voyage starting Splash (proof `sp`), queued before that voyage starts. */
+  splashes: (SplashStart | null)[];
 }
 
-export function newVoyage(board: Board, phase = 0): Voyage {
+export function newVoyage(board: Board, knobs: Knobs = PUZZLE_KNOBS, sp: SplashStart | null = null): Voyage {
+  const st = voyageStart(board, knobs, sp);
   return {
-    pos: board.start, mask: 0, golden: false, strokes: 0, spent: 0, moves: 0, phase,
-    undos: 0, slipUsed: false, slips: 0, tips: 0, continues: 0, restarts: 0, limitBonus: 0, ripStrokes: 0,
-    beached: false, cleared: false, stalled: false, shield: false,
-    parT: board.par, parGoldT: board.parGold, stack: [],
+    pos: board.start, mask: 0, golden: false, strokes: 0, spent: 0, moves: 0, phase: st.phase,
+    undos: 0, slipUsed: false, slips: 0, tips: 0, continues: 0, restarts: 0, limitBonus: 0, ripStrokes: 0, goldenAt: 0,
+    beached: board.tiles[board.start] === 's' && tideAt(board.P, 0, st.phase) === TIDE_LOW,
+    cleared: false, stalled: false,
+    parT: st.par, parGoldT: st.parGold, limit: st.limit, sp: sp ?? null, stack: [],
   };
 }
 
-export function createRun(boards: readonly Board[], knobs: Knobs): RunState {
+export function createRun(boards: readonly Board[], knobs: Knobs, splashes?: readonly (SplashStart | null | undefined)[]): RunState {
+  const sps = boards.map((_, i) => splashes?.[i] ?? null);
   return {
-    boards, knobs, index: 0, voyage: newVoyage(boards[0]),
+    boards, knobs, index: 0, voyage: newVoyage(boards[0], knobs, sps[0]),
     rings: knobs.profile === 'trial' ? knobs.rings : 0,
-    failed: false, complete: false, results: [], actions: boards.map(() => []),
+    failed: false, complete: false, results: [], actions: boards.map(() => []), splashes: sps,
   };
+}
+
+/**
+ * Queue the Splash a voyage starts with (Showdown inbox, async challenge). Only
+ * a voyage that has not started yet can take one: a later voyage, or the
+ * current voyage while it has no recorded action. One per voyage.
+ */
+export function queueSplash(runIn: RunState, index: number, sp: SplashStart): { run: RunState; ok: boolean } {
+  if (runIn.failed || runIn.complete || index < runIn.index || index >= runIn.boards.length) return { run: runIn, ok: false };
+  if (runIn.splashes[index]) return { run: runIn, ok: false };
+  if (index === runIn.index && runIn.actions[index].length > 0) return { run: runIn, ok: false };
+  const run = cloneRun(runIn);
+  run.splashes[index] = sp;
+  if (index === run.index) run.voyage = newVoyage(run.boards[index], run.knobs, sp);
+  return { run, ok: true };
 }
 
 export function cloneVoyage(v: Voyage): Voyage {
@@ -328,7 +442,7 @@ export function cloneVoyage(v: Voyage): Voyage {
 }
 
 export function cloneRun(run: RunState): RunState {
-  return { ...run, voyage: cloneVoyage(run.voyage), results: run.results.slice(), actions: run.actions.map((a) => a.slice()) };
+  return { ...run, voyage: cloneVoyage(run.voyage), results: run.results.slice(), actions: run.actions.map((a) => a.slice()), splashes: run.splashes.slice() };
 }
 
 export function fullMask(board: Board): number {
@@ -343,25 +457,26 @@ export function currentBoard(run: RunState): Board {
   return run.boards[Math.min(run.index, run.boards.length - 1)];
 }
 
+/** The current voyage's base limit (from its phase row; continues add limitBonus on top). */
 export function voyageLimit(run: RunState): number {
-  return limitFor(currentBoard(run), run.knobs);
+  return run.voyage.limit;
 }
 
 export function strokesLeft(run: RunState): number {
-  return voyageLimit(run) + run.voyage.limitBonus - run.voyage.spent;
+  return run.voyage.limit + run.voyage.limitBonus - run.voyage.spent;
 }
 
-/** Budget strokes a Tide Tip costs in this run (0 in Puzzle). */
-export function tipCostOf(knobs: Knobs): number {
-  return knobs.profile === 'trial' ? (knobs.tipCost ?? 2) : 0;
-}
-
-/** Can a Tide Tip be taken right now? (Trial refuses it when it would leave no stroke to use it.) */
+/** Can a Tide Tip be taken right now? Puzzle: free (forfeits Par). Trial: costs 1 ring (0.A.4). */
 export function tipAllowed(run: RunState): boolean {
   const v = run.voyage;
   if (run.failed || run.complete || v.cleared || v.stalled) return false;
-  const cost = tipCostOf(run.knobs);
-  return cost === 0 || strokesLeft(run) > cost;
+  return run.knobs.profile !== 'trial' || run.rings > 0;
+}
+
+/** Can a ring be used for +2 strokes right now (Trial, any time while a ring is left; 0.A.4)? */
+export function ringAllowed(run: RunState): boolean {
+  const v = run.voyage;
+  return run.knobs.profile === 'trial' && !run.failed && !run.complete && !v.cleared && run.rings > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,9 +515,10 @@ export type CqEvent =
   | { type: 'stall'; nearMiss: boolean }
   | { type: 'undo'; from: number; to: number; tideBefore: number; tideAfter: number; refunded: boolean; slip: boolean }
   | { type: 'restart'; spentKept: boolean }
-  | { type: 'continue'; bonus: number }
-  | { type: 'tip'; cost: number }
-  | { type: 'splash'; blocked: boolean; tideBefore: number; tideAfter: number; beached: boolean }
+  /** A ring bought +2 strokes (Trial; `fromStall` when it lifted a stall). */
+  | { type: 'continue'; bonus: number; fromStall: boolean }
+  /** A Tide Tip: Puzzle forfeits Par; Trial also spends a ring (`ring`). */
+  | { type: 'tip'; ring: boolean }
   | { type: 'fail' };
 
 export interface ApplyOutcome {
@@ -509,31 +625,32 @@ export function simulateStroke(board: Board, pos: number, mask: number, golden: 
 }
 
 function snapOf(v: Voyage, t: number): Snap {
-  return { pos: v.pos, mask: v.mask, golden: v.golden, strokes: v.strokes, spent: v.spent, moves: v.moves, ripStrokes: v.ripStrokes, beached: v.beached, shield: v.shield, t };
+  return { pos: v.pos, mask: v.mask, golden: v.golden, strokes: v.strokes, spent: v.spent, moves: v.moves, ripStrokes: v.ripStrokes, beached: v.beached, goldenAt: v.goldenAt, t };
+}
+
+/** Haul (3.6): 50 per required pearl, +200 golden, +40 per unused base stroke. Never shown. */
+export function haulFor(cleared: boolean, requiredPearls: number, golden: boolean, limit: number, spent: number): number {
+  return cleared ? 50 * requiredPearls + (golden ? 200 : 0) + 40 * Math.max(0, limit - spent) : 0;
 }
 
 export function voyageResult(board: Board, v: Voyage, knobs: Knobs): VoyageResult {
-  const limit = limitFor(board, knobs);
+  void knobs;
+  const limit = v.limit;
   const cleared = v.cleared;
   const target = v.golden ? v.parGoldT : v.parT;
   const shellPar = cleared && v.undos === 0 && v.tips === 0 && v.continues === 0 && v.strokes <= target;
   const shellGolden = cleared && v.golden;
   const shells = (cleared ? 1 : 0) + (shellPar ? 1 : 0) + (shellGolden ? 1 : 0);
   const required = board.pearls.length;
-  const treasure = cleared ? 50 * required + (v.golden ? 200 : 0) + 40 * Math.max(0, limit - v.spent) : 0;
   const gold = shellPar && shellGolden;
   const medal = !cleared ? 0 : gold ? (v.ripStrokes >= board.authorRiptide ? 4 : 3) : shellPar ? 2 : 1;
   return {
     boardId: board.id, cleared, shellClear: cleared, shellPar, shellGolden, shells,
     strokes: v.strokes, spent: v.spent, limit, undos: v.undos, tips: v.tips, continues: v.continues,
-    ripStrokes: v.ripStrokes, requiredPearls: required, treasure, parTarget: target, medal,
+    ripStrokes: v.ripStrokes, requiredPearls: required, haul: haulFor(cleared, required, v.golden, limit, v.spent),
+    goldenAt: v.golden ? v.goldenAt : 0, parTarget: target, par: v.parT, parGold: v.parGoldT, splashed: v.phase !== 0, medal,
   };
 }
-
-/** Optional hook so a Splash can raise the par target (the solver lives in solver.ts). */
-export type RemainingParFn = (board: Board, v: Voyage, withGolden: boolean) => number;
-let remainingPar: RemainingParFn | null = null;
-export function setRemainingParSolver(fn: RemainingParFn | null): void { remainingPar = fn; }
 
 /**
  * Apply one action to the run (mutates a clone and returns it). Illegal
@@ -542,6 +659,7 @@ export function setRemainingParSolver(fn: RemainingParFn | null): void { remaini
  *
  * `t` is the run-clock ms the engine applies the action at (the proof `t[]`).
  * It only matters for the slip undo; without it no undo is ever a slip.
+ * Action 8 (the v6 mid-voyage Splash) is always illegal (R1).
  */
 export function applyAction(runIn: RunState, action: number, t: number = NaN): { run: RunState; ok: boolean; events: CqEvent[]; recorded: boolean } {
   if (runIn.failed || runIn.complete) return { run: runIn, ok: false, events: [], recorded: false };
@@ -549,11 +667,10 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
   const board = currentBoard(run);
   const v = run.voyage;
   const trial = run.knobs.profile === 'trial';
-  const limit = limitFor(board, run.knobs);
   const events: CqEvent[] = [];
   const fail = () => ({ run: runIn, ok: false, events: [] as CqEvent[], recorded: false });
   const stallCheck = () => {
-    if (v.spent >= limit + v.limitBonus) {
+    if (v.spent >= v.limit + v.limitBonus) {
       v.stalled = true;
       events.push({ type: 'stall', nearMiss: false });
       if (trial && run.rings <= 0) { run.failed = true; events.push({ type: 'fail' }); }
@@ -577,10 +694,10 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
     v.pos = sim.pos;
     v.mask = sim.mask;
     v.golden = sim.golden;
-    if (sim.goldenTaken && run.knobs.showdown) v.shield = true;
     v.strokes += 1;
     v.spent += 1;
     v.moves += 1;
+    if (sim.goldenTaken) v.goldenAt = v.strokes;
     const carried = dir < 0 ? 0 : Math.max(0, sim.path.length - 2);
     const riptide = dir >= 0 && isRiptide(sim.runs, carried);
     if (riptide) v.ripStrokes += 1;
@@ -597,7 +714,7 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
       type: 'stroke', dir, path: sim.path, carried, runs: sim.runs, handoffs: sim.handoffs, pearls: sim.pearls,
       golden: sim.goldenTaken, goldenAt: sim.goldenAt, unlocked: sim.unlocked, unlockedAt: sim.unlockedAt,
       cleared: sim.cleared, tideBefore, tideAfter, beached: v.beached, wasBeached, riptide,
-      left: limit + v.limitBonus - v.spent,
+      left: v.limit + v.limitBonus - v.spent,
     });
     if (sim.cleared) finishVoyage(run, events);
     else stallCheck();
@@ -613,15 +730,17 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
     const keepSpent = v.spent;
     const slip = !v.slipUsed && t - s.t <= SLIP_MS && t >= s.t;
     v.pos = s.pos; v.mask = s.mask; v.golden = s.golden; v.strokes = s.strokes; v.moves = s.moves;
-    v.ripStrokes = s.ripStrokes; v.shield = s.shield;
-    v.spent = trial ? keepSpent : s.spent;
+    v.ripStrokes = s.ripStrokes; v.goldenAt = s.goldenAt;
+    // Trial: the stroke stays spent, except the silent first-undo refund (the slip; 0.A.4).
+    const refunded = !trial || slip;
+    v.spent = refunded ? s.spent : keepSpent;
     if (slip) { v.slipUsed = true; v.slips += 1; } else v.undos += 1;
     const tideAfter = tideAt(board.P, v.moves, v.phase);
     v.beached = board.tiles[v.pos] === 's' && tideAfter === TIDE_LOW;
     v.stalled = false;
     run.actions[run.index].push(action);
-    events.push({ type: 'undo', from, to: v.pos, tideBefore, tideAfter, refunded: !trial, slip });
-    // Puzzle undo refunds the stroke, so it always leaves the stall. Trial
+    events.push({ type: 'undo', from, to: v.pos, tideBefore, tideAfter, refunded, slip });
+    // A Puzzle undo refunds the stroke, so it always leaves the stall. A Trial
     // undo is refused while stalled, so it cannot re-stall here.
     return { run, ok: true, events, recorded: true };
   }
@@ -629,8 +748,7 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
   if (action === A_RESTART) {
     if (!v.stack.length) return fail();
     if (trial && v.stalled) return fail();
-    const first = v.stack[0];
-    const fresh = newVoyage(board, v.phase);
+    const fresh = newVoyage(board, run.knobs, v.sp);
     // Counts as one (non-slip) undo for Par. Free in both profiles; Trial keeps the budget.
     fresh.undos = v.undos + 1;
     fresh.slipUsed = v.slipUsed;
@@ -640,10 +758,6 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
     fresh.restarts = v.restarts + 1;
     fresh.limitBonus = v.limitBonus;
     fresh.spent = trial ? v.spent : 0;
-    fresh.shield = first.shield;
-    fresh.parT = v.parT;
-    fresh.parGoldT = v.parGoldT;
-    fresh.beached = board.tiles[fresh.pos] === 's' && tideAt(board.P, 0, fresh.phase) === TIDE_LOW;
     run.voyage = fresh;
     run.actions[run.index].push(action);
     events.push({ type: 'restart', spentKept: trial });
@@ -651,47 +765,28 @@ export function applyAction(runIn: RunState, action: number, t: number = NaN): {
   }
 
   if (action === A_CONTINUE) {
-    if (!trial || !v.stalled || run.rings <= 0) return fail();
+    // A ring: +2 strokes, any time in Trial while a ring is left (0.A.4).
+    if (!ringAllowed(run)) return fail();
+    const fromStall = v.stalled;
     run.rings -= 1;
     v.limitBonus += run.knobs.continueSize;
     v.continues += 1;
     v.stalled = false;
     run.actions[run.index].push(action);
-    events.push({ type: 'continue', bonus: run.knobs.continueSize });
-    return { run, ok: true, events, recorded: true };
-  }
-
-  if (action === A_SPLASH) {
-    if (v.stalled) return fail();
-    const tideBefore = tideAt(board.P, v.moves, v.phase);
-    let blocked = false;
-    if (v.shield) { v.shield = false; blocked = true; } else {
-      v.phase += 1;
-      // A Splash forces replanning, never a dead end: it brings 2 spare strokes.
-      if (board.P) v.limitBonus += 2;
-      if (remainingPar) {
-        v.parT = Math.max(v.parT, v.strokes + remainingPar(board, v, false));
-        v.parGoldT = Math.max(v.parGoldT, v.strokes + remainingPar(board, v, true));
-      }
-    }
-    const tideAfter = tideAt(board.P, v.moves, v.phase);
-    v.beached = board.tiles[v.pos] === 's' && tideAfter === TIDE_LOW;
-    run.actions[run.index].push(action);
-    events.push({ type: 'splash', blocked, tideBefore, tideAfter, beached: v.beached });
+    events.push({ type: 'continue', bonus: run.knobs.continueSize, fromStall });
     return { run, ok: true, events, recorded: true };
   }
 
   if (action === A_TIP) {
     if (!tipAllowed(run)) return fail();
-    const cost = tipCostOf(run.knobs);
     v.tips += 1;
-    v.spent += cost;
+    if (trial) run.rings -= 1;
     run.actions[run.index].push(action);
-    events.push({ type: 'tip', cost });
-    stallCheck();
+    events.push({ type: 'tip', ring: trial });
     return { run, ok: true, events, recorded: true };
   }
 
+  // A_SPLASH (8) and anything unknown.
   return fail();
 }
 
@@ -705,11 +800,8 @@ function finishVoyage(run: RunState, events: CqEvent[]): void {
   if (runComplete) {
     run.complete = true;
   } else {
-    // A Shield armed by a golden pearl carries into the next Showdown voyage.
-    const shield = run.voyage.shield;
     run.index += 1;
-    run.voyage = newVoyage(run.boards[run.index]);
-    run.voyage.shield = shield;
+    run.voyage = newVoyage(run.boards[run.index], run.knobs, run.splashes[run.index]);
   }
 }
 
@@ -720,8 +812,24 @@ export function totalShells(results: readonly VoyageResult[]): number {
   return results.reduce((s, r) => s + r.shells, 0);
 }
 
-export function treasureOf(results: readonly VoyageResult[]): number {
-  return results.reduce((s, r) => s + r.treasure, 0);
+/** Run Haul (3.6): the sum over cleared voyages. Server-only; never on screen (0.A.1). */
+export function haulOf(results: readonly VoyageResult[]): number {
+  return results.reduce((s, r) => s + r.haul, 0);
+}
+
+/**
+ * Golden reach (0.A.7, rank key 5, lower is better): the sum over voyages of
+ * the stroke number that banked the golden pearl. A voyage that never banked
+ * it counts its base limit + 1 (a stroke past any possible bank), so missing
+ * the pearl never ranks above reaching it late. Deterministic, no time.
+ */
+export function goldenReach(results: readonly VoyageResult[]): number {
+  return results.reduce((s, r) => s + (r.shellGolden ? r.goldenAt : r.limit + 1), 0);
+}
+
+/** Riptide strokes over a run (rank key 4, higher is better). */
+export function riptidesOf(results: readonly VoyageResult[]): number {
+  return results.reduce((s, r) => s + r.ripStrokes, 0);
 }
 
 /** Star cut-offs per run length (3.5): 2-voyage Quick Run 2/4/6 of 6, 3-voyage runs 3/6/8 of 9. */
@@ -748,11 +856,13 @@ export function shellsToNextStar(shells: number, voyages = 3): number {
 }
 
 // ---------------------------------------------------------------------------
-// Proof v2 and replay
+// Proof v3 and replay (design 15.3)
 
 export interface VoyageProof {
   readonly id: string;
   readonly tf: number;
+  /** The Splash this voyage started with (null for most voyages, always null in a Ride Challenge). */
+  readonly sp: SplashStart | null;
   readonly a: readonly number[];
   /** ms since run start, one per action. */
   readonly t: readonly number[];
@@ -760,19 +870,23 @@ export interface VoyageProof {
   readonly ready: number;
 }
 
-export interface CurrentQuestProofV2 {
+export interface CurrentQuestProofV3 {
   readonly game: 'current';
-  readonly v: 2;
+  readonly v: 3;
   readonly context: string;
   readonly profile: Profile;
   readonly rings: number;
   /** The board seed (attempt 0: the issued seed; retries: deriveSeed(seed, attempt)). */
   readonly seed: number;
   readonly attempt?: number;
-  readonly treasure: number;
+  readonly haul: number;
   readonly stars: number;
   readonly shells: number;
   readonly elapsed_ms: number;
+  /** R8 keep-your-progress retry (null unless WS7 enables it). */
+  readonly banked: { attempt_id: string; voyages: number[] } | null;
+  /** A failed Trial posts its partial proof too (R8). */
+  readonly failed?: boolean;
   readonly voyages: readonly VoyageProof[];
 }
 
@@ -781,7 +895,7 @@ export interface ReplayVerdict {
   readonly reason?: string;
   readonly run?: RunState;
   readonly shells?: number;
-  readonly treasure?: number;
+  readonly haul?: number;
   readonly stars?: number;
 }
 
@@ -789,7 +903,7 @@ export interface ReplayVerdict {
 export const PROOF_FLOORS = {
   minIntervalMs: 150,
   medianIntervalMs: 350,
-  thinkFloorMs: { warmup: 600, standard: 1200, treasure: 1800 } as Record<Slot, number>,
+  thinkFloorMs: { trick: 600, warmup: 600, standard: 1200, treasure: 1800 } as Record<Slot, number>,
   maxActionsPerVoyage: 160,
 };
 
@@ -800,16 +914,37 @@ function median(values: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+export interface VerifyOptions {
+  /**
+   * Server check that a Splash id was issued to this player for this voyage
+   * (and, for `by: 'shield'`, that the Shield was really armed). Defaults to
+   * accepting any id: the client self-check cannot know the server's log.
+   */
+  readonly issued?: (voyage: number, sp: SplashStart) => boolean;
+}
+
 /**
  * Server-side style verification of a proof against the issued boards. The
  * boards must come from the issuer (seed -> ids + transforms), never from the
  * proof itself.
  */
-export function verifyProof(boards: readonly Board[], knobs: Knobs, proof: CurrentQuestProofV2): ReplayVerdict {
-  if (proof.game !== 'current' || proof.v !== 2) return { ok: false, reason: 'version' };
+export function verifyProof(boards: readonly Board[], knobs: Knobs, proof: CurrentQuestProofV3, opts: VerifyOptions = {}): ReplayVerdict {
+  if (proof.game !== 'current' || proof.v !== 3) return { ok: false, reason: 'version' };
   if (proof.profile !== knobs.profile) return { ok: false, reason: 'profile' };
   if (proof.voyages.length !== boards.length) return { ok: false, reason: 'voyages' };
-  let run = createRun(boards, knobs);
+  const sps: (SplashStart | null)[] = [];
+  for (let vi = 0; vi < proof.voyages.length; vi++) {
+    const sp = proof.voyages[vi].sp ?? null;
+    if (sp) {
+      if (knobs.profile === 'trial') return { ok: false, reason: 'splash-trial' };
+      if (typeof sp.id !== 'string' || !sp.id || (sp.blocked !== 0 && sp.blocked !== 1)) return { ok: false, reason: 'splash' };
+      if (sp.blocked ? sp.by !== 'shield' && sp.by !== 'counter' : sp.by !== null) return { ok: false, reason: 'splash' };
+      if (!sp.blocked && !splashable(boards[vi])) return { ok: false, reason: 'splash-board' };
+      if (opts.issued && !opts.issued(vi, sp)) return { ok: false, reason: 'splash-issue' };
+    }
+    sps.push(sp);
+  }
+  let run = createRun(boards, knobs, sps);
   let last = -1;
   for (let vi = 0; vi < proof.voyages.length; vi++) {
     const vp = proof.voyages[vi];
@@ -818,7 +953,10 @@ export function verifyProof(boards: readonly Board[], knobs: Knobs, proof: Curre
     if (!transformAllowed(vp.tf | 0, heightOf(board))) return { ok: false, reason: 'transform' };
     if (vp.a.length !== vp.t.length) return { ok: false, reason: 'times' };
     if (vp.a.length > PROOF_FLOORS.maxActionsPerVoyage) return { ok: false, reason: 'too-many-actions' };
+    if (vp.a.some((a) => a === A_SPLASH)) return { ok: false, reason: 'splash-action' };
     if (run.index !== vi) return { ok: false, reason: 'order' };
+    // A counter-splash needs a verified Par on the previous voyage (0.A.6).
+    if (vp.sp?.by === 'counter' && !(vi > 0 && run.results[vi - 1]?.shellPar)) return { ok: false, reason: 'counter' };
     if (vp.t.length && vp.t[0] - vp.ready < (PROOF_FLOORS.thinkFloorMs[board.slot] ?? 600)) return { ok: false, reason: 'think-floor' };
     if (vp.ready < last) return { ok: false, reason: 'monotonic' };
     const gaps: number[] = [];
@@ -840,13 +978,19 @@ export function verifyProof(boards: readonly Board[], knobs: Knobs, proof: Curre
     if (gaps.length >= 3 && median(gaps) < PROOF_FLOORS.medianIntervalMs) return { ok: false, reason: 'median' };
     if (run.failed) break;
   }
-  if (!run.complete) return { ok: false, reason: 'incomplete', run };
   const shells = totalShells(run.results);
-  const treasure = treasureOf(run.results);
+  const haul = haulOf(run.results);
+  if (proof.failed) {
+    // R8 partial proof: the replay must end failed, with exactly the claimed shells.
+    if (!run.failed) return { ok: false, reason: 'not-failed', run };
+    if (shells !== proof.shells || proof.stars !== 0) return { ok: false, reason: 'claim', run, shells, haul, stars: 0 };
+    return { ok: true, run, shells, haul, stars: 0 };
+  }
+  if (!run.complete) return { ok: false, reason: 'incomplete', run };
   const stars = starsFor(shells, true, boards.length);
-  if (shells !== proof.shells || treasure !== proof.treasure || stars !== proof.stars) return { ok: false, reason: 'claim', run, shells, treasure, stars };
+  if (shells !== proof.shells || haul !== proof.haul || stars !== proof.stars) return { ok: false, reason: 'claim', run, shells, haul, stars };
   if (last > proof.elapsed_ms) return { ok: false, reason: 'elapsed' };
-  return { ok: true, run, shells, treasure, stars };
+  return { ok: true, run, shells, haul, stars };
 }
 
 export function transformOf(id: string): number {
@@ -874,13 +1018,18 @@ export interface Preview {
   readonly beached: boolean;
   /** This stroke would be a Riptide stroke ("RIPTIDE!" before you commit). */
   readonly riptide: boolean;
+  /** The tide after this stroke (the post-stroke world the preview ghosts; 0.A.2). */
+  readonly tideAfter: number;
+  /** Landing state (for the solver's "No way home" check, 0.A.3). */
+  readonly mask: number;
+  readonly goldenHeld: boolean;
   /** Filled by the game with the solver: this stroke can no longer reach the chest in budget. */
   deadEnd: boolean;
 }
 
 const INVALID: Omit<Preview, 'dir' | 'bump' | 'path'> = {
   valid: false, carried: 0, clears: false, pearls: 0, pearlAt: [], unlockAt: -1, golden: false, tideTurns: false,
-  beached: false, riptide: false, deadEnd: false,
+  beached: false, riptide: false, deadEnd: false, tideAfter: 0, mask: 0, goldenHeld: false,
 };
 
 export function previewFor(run: RunState, action: number): Preview {
@@ -889,9 +1038,9 @@ export function previewFor(run: RunState, action: number): Preview {
   const dir = action === A_TREAD ? -1 : action;
   const tide = tideAt(board.P, v.moves, v.phase);
   const blocked = v.cleared || v.stalled || run.failed || (action === A_TREAD && !board.P);
-  if (blocked) return { ...INVALID, dir, bump: null, path: [v.pos], pearlAt: [] };
+  if (blocked) return { ...INVALID, dir, bump: null, path: [v.pos], pearlAt: [], tideAfter: tide, mask: v.mask, goldenHeld: v.golden };
   const sim = simulateStroke(board, v.pos, v.mask, v.golden, tide, dir);
-  if (sim.bump) return { ...INVALID, dir, bump: sim.bump, path: [v.pos], pearlAt: [] };
+  if (sim.bump) return { ...INVALID, dir, bump: sim.bump, path: [v.pos], pearlAt: [], tideAfter: tide, mask: v.mask, goldenHeld: v.golden };
   const carried = dir < 0 ? 0 : Math.max(0, sim.path.length - 2);
   const nextTide = sim.cleared ? tide : tideAt(board.P, v.moves + 1, v.phase);
   const pearlAt = sim.pearls.map((p) => p.at);
@@ -902,5 +1051,6 @@ export function previewFor(run: RunState, action: number): Preview {
     golden: sim.goldenTaken, tideTurns: !sim.cleared && nextTide !== tide,
     beached: !sim.cleared && board.tiles[sim.pos] === 's' && nextTide === TIDE_LOW,
     riptide: dir >= 0 && isRiptide(sim.runs, carried), deadEnd: false,
+    tideAfter: nextTide, mask: sim.mask, goldenHeld: sim.golden,
   };
 }

@@ -4,7 +4,9 @@
  * and no React render ever drives the shark. Node tests run the same code.
  *
  * Timings (ms): swim = 40 anticipation + 150 travel + 40 land;
- * carry = swim travel + 60 grab + 75 per tile + 180 spit-out settle.
+ * carry (v7.1 0.A.13 J6) = swim travel + 80 grab lean-in + a tile curve that
+ * accelerates (110, 90, 75, then 65 ms per tile) + 180 spit-out settle. The
+ * spit-out impact lands at 80 + T(n) + 40 ms after the grab starts.
  */
 
 export const POSE_IDLE = 0;
@@ -14,7 +16,9 @@ export const POSE_CHEER = 3;
 export const POSE_DIZZY = 4;
 /** Belly-down surf ride: every carry, including vertical ones (design v5 F1). */
 export const POSE_SURF = 5;
-export const POSE_COUNT = 6;
+/** P1 skid stop (9.1): the spit-out landing after a carry. */
+export const POSE_BRACE = 6;
+export const POSE_COUNT = 7;
 
 export const PLAN_IDLE = 0;
 export const PLAN_STROKE = 1;
@@ -28,8 +32,31 @@ export const PLAN_RISE = 7;
 export const T_ANTIC = 40;
 export const T_TRAVEL = 150;
 export const T_LAND = 40;
-export const T_GRAB = 60;
-export const T_TILE = 75;
+export const T_GRAB = 80;
+/** Steady-state ms per carried tile (tiles 4+); the first three ride slower (J6). */
+export const T_TILE = 65;
+/** The J6 carry curve: ms for carried tile 1, 2, 3; every later tile takes T_TILE. */
+export const CARRY_CURVE = [110, 90, 75] as const;
+
+/** ms to ride the first `k` carried tiles (T(k) in design J6). */
+export function carryTime(k: number): number {
+  'worklet';
+  let t = 0;
+  for (let i = 0; i < k; i++) t += i < 3 ? (i === 0 ? 110 : i === 1 ? 90 : 75) : T_TILE;
+  return t;
+}
+
+/** Fractional tiles ridden after `ms` of riding (inverse of carryTime, clamped to `carry`). */
+export function carryProgress(ms: number, carry: number): number {
+  'worklet';
+  let t = 0;
+  for (let i = 0; i < carry; i++) {
+    const d = i < 3 ? (i === 0 ? 110 : i === 1 ? 90 : 75) : T_TILE;
+    if (ms < t + d) return i + (ms - t) / d;
+    t += d;
+  }
+  return carry;
+}
 export const T_SPIT = 180;
 export const T_DIVE = 220;
 export const T_BUMP = 260;
@@ -136,7 +163,7 @@ export function planDuration(p: MotionPlan): number {
   'worklet';
   if (p.kind === PLAN_STROKE || p.kind === PLAN_UNDO) {
     const wr = p.wasBeached ? 120 : 0;
-    const base = p.carry > 0 ? T_ANTIC + T_TRAVEL + T_GRAB + T_TILE * p.carry + T_SPIT : T_ANTIC + T_TRAVEL + T_LAND + 90;
+    const base = p.carry > 0 ? T_ANTIC + T_TRAVEL + T_GRAB + carryTime(p.carry) + T_SPIT : T_ANTIC + T_TRAVEL + T_LAND + 90;
     const dive = p.dive ? T_DIVE + 40 : 0;
     const beach = p.beached ? 160 : 0;
     return (wr + base + dive + beach) / (p.speed || 1);
@@ -265,7 +292,7 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
   const horiz0 = Math.abs(y1 - y0) < Math.abs(x1 - x0);
   const carry = p.carry;
   const travelEnd = T_ANTIC + T_TRAVEL;
-  const rideEnd = travelEnd + (carry > 0 ? T_GRAB + T_TILE * carry : 0);
+  const rideEnd = travelEnd + (carry > 0 ? T_GRAB + carryTime(carry) : 0);
   const settleEnd = rideEnd + (carry > 0 ? T_SPIT : T_LAND + 90);
   out.done = false;
 
@@ -302,11 +329,15 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
     out.waveF = 1.6;
     out.carrying = 1;
     if (rt < T_GRAB) {
-      out.x = x1;
-      out.y = y1;
+      // Grab lean-in (J6): ease into the current, leaning toward its flow.
       const g = rt / T_GRAB;
-      out.sx = 1 + 0.08 * g;
-      out.sy = 1 - 0.05 * g;
+      const gi = g * g;
+      const x2g = px(2);
+      const y2g = py(2);
+      out.x = x1 + (x2g - x1) * 0.08 * gi;
+      out.y = y1 + (y2g - y1) * 0.08 * gi;
+      out.sx = 1 + 0.1 * gi;
+      out.sy = 1 - 0.06 * gi;
       const x2 = px(2);
       const y2 = py(2);
       if (Math.abs(x2 - x1) > 0.5) facing = x2 > x1 ? 1 : -1;
@@ -315,7 +346,7 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
       out.along = 1;
       return;
     }
-    const f = (rt - T_GRAB) / T_TILE;
+    const f = carryProgress(rt - T_GRAB, carry);
     const seg = Math.min(carry - 1, Math.floor(f));
     const k = f - seg;
     const ax = px(1 + seg);
@@ -364,7 +395,7 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
     const squash = carry > 0 ? 0.2 : 0.12;
     out.sx = horiz ? 1 - squash * imp : 1 + 0.1 * imp;
     out.sy = horiz ? 1 + 0.1 * imp : 1 - squash * imp;
-    out.pose = st < 0.4 ? (carry > 0 ? POSE_SURF : POSE_DASH) : POSE_IDLE;
+    out.pose = st < 0.45 ? (carry > 0 ? POSE_BRACE : POSE_DASH) : POSE_IDLE;
     out.rot = tiltFor(ux, uy) * facing * (1 - outQuad(st));
     out.waveA = 3.5;
     out.waveF = 1.6;

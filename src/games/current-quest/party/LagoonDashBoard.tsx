@@ -93,6 +93,7 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
     recap: useSharedValue<number[]>([]), recapPar: useSharedValue<number[]>([]), recapT0: useSharedValue(-1e9),
     wrong: useSharedValue<number[]>([]), wrongT0: useSharedValue(-1e9), sweepT0: useSharedValue(-1e9), tourT0: useSharedValue(-1e9),
     idleSince: useSharedValue(0), sway: useSharedValue<number[]>([]),
+    shield: useSharedValue(0), shieldPopT: useSharedValue(-1e9), tidePip: useSharedValue(0), lowK: useSharedValue(0),
   };
   const svRef = useRef(sv);
   svRef.current = sv;
@@ -132,6 +133,7 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
     const k = board.P ? (v.moves + v.phase) % board.P : 0;
     const low = tideAt(board.P, v.moves, v.phase) === TIDE_LOW;
     s.tideDrop.value = withTiming(!board.P ? 0 : low ? 8 - 2 * Math.min(3, k) : 2 * Math.min(3, k), { duration: 500 });
+    s.lowK.value = withTiming(board.P && low ? 1 : 0, { duration: 650 });
   }, [board]);
 
   const refreshPreviews = useCallback(() => {
@@ -139,7 +141,7 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
     const out: PreviewSV[] = [];
     for (let a = 0; a <= 4; a++) {
       const pv = previewFor(run, a);
-      if (!pv.valid) { out.push({ valid: 0, red: 0, pts: [], lx: 0, ly: 0, facing: 1, rot: 0, beached: 0, clears: 0, rip: 0, icons: [] }); continue; }
+      if (!pv.valid) { out.push({ valid: 0, red: 0, pts: [], lx: 0, ly: 0, facing: 1, rot: 0, beached: 0, clears: 0, rip: 0, icons: [], turn: 0 }); continue; }
       const pts: number[] = [];
       for (const c of pv.path) { const p = center(c); pts.push(p.x, p.y); }
       const land = center(pv.path[pv.path.length - 1]);
@@ -147,7 +149,7 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
       const facing = Math.abs(land.x - prev.x) > 0.5 ? (land.x > prev.x ? 1 : -1) : 1;
       const icons: number[] = [];
       pv.pearlAt.forEach((at, k) => { const c = center(pv.path[at]); icons.push(c.x, c.y, pv.golden && k === pv.pearlAt.length - 1 ? 1 : 0); });
-      out.push({ valid: 1, red: 0, pts, lx: land.x, ly: land.y, facing, rot: 0, beached: pv.beached ? 1 : 0, clears: pv.clears ? 1 : 0, rip: pv.riptide ? 1 : 0, icons });
+      out.push({ valid: 1, red: 0, pts, lx: land.x, ly: land.y, facing, rot: 0, beached: pv.beached ? 1 : 0, clears: pv.clears ? 1 : 0, rip: pv.riptide ? 1 : 0, icons, turn: pv.tideTurns ? 1 : 0 });
     }
     svRef.current.previews.value = out;
   }, [center]);

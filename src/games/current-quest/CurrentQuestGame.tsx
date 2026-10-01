@@ -1,85 +1,95 @@
 /**
- * Current Quest v2 (design v5): "Ride the current. Beat the tide. Find the treasure."
+ * Current Quest (design v7.1): "Ride the current. Beat the tide. Find the treasure."
  *
  * A turn-based lagoon puzzle built to be played while walking forward in a
  * queue. Nothing ticks: look up at the line, look back down, and the board is
- * exactly where you left it. A Quick Run is two voyages (Warm-up 5x5, then a
- * 5x7 Treasure board, 6 shells); Trials (Ride Challenge, LinePlay bonus) are
- * three Rookie voyages (9 shells) with life rings that fall only when the
- * stroke budget runs out.
+ * exactly where you left it. A Quick Run is a 5x5 Trick Shot that previews the
+ * Deep board's aha, then the 5x7 Deep board (6 shells). Trials (Ride
+ * Challenge, LinePlay bonus) are three Rookie voyages (9 shells): every stroke
+ * counts, undo rewinds the board but strokes stay spent, a life ring gives 2
+ * strokes at any time and a Tip uses a ring.
  *
- * Contexts: `quick` (Puzzle profile, practice / queue play), `line` (LinePlay
- * bonus, Trial profile with 3 rings), `ride` (Ride Challenge coin, Trial with
- * 2 rings), `showdown` (Same-Board Showdown vs the house crew). The run is
- * fully deterministic from the seed; the proof v2 in `meta.proof` replays
- * server-side through the same rules (every action is stamped with its
+ * Contexts: `quick` (Puzzle, queue play), `daily` (Daily Tide, 3 voyages, one
+ * scored attempt per day, streak and share card), `chart` (one Lagoon Chart
+ * node), `challenge` (a friend's seed), `line` (LinePlay bonus, Trial, 3
+ * rings), `ride` (Ride Challenge coin, Trial, 2 rings, stake card) and
+ * `showdown` (Ghost Race vs the house crew: 3 tide voyages, aimed Splashes,
+ * counter-splash, First Find and the Shield).
+ *
+ * The run is fully deterministic from the seed; the proof v3 in `meta.proof`
+ * replays server-side through the same rules (every action is stamped with its
  * engine-apply time, which also decides the free slip undo).
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Image as RNImage, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { Image as RNImage, LayoutChangeEvent, Share, StyleSheet, Text, View } from 'react-native';
 import { useFont, useImage } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-  FadeIn, FadeOut, runOnJS, useSharedValue, withSequence, withTiming, ZoomIn,
+  FadeIn, FadeOut, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, ZoomIn,
 } from 'react-native-reanimated';
-import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
+import { GameShellV2, type GameResult, type GameShellV2Handle, type ShellResultsArgs } from '../../gamekit/GameShellV2';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
-import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
-import { nextBarMs } from '../../gamekit/core/audioMix';
-import { Haptic, playHaptic, scheduleHaptics } from '../../gamekit/Haptics';
-import { gridSteps } from '../../gamekit/core/hapticGrammar';
 import { packHex } from '../../gamekit/core/particles';
 import { usePerfTier } from '../../gamekit/perf/usePerfTier';
 import { TIER_FULL, TIER_NAMES } from '../../gamekit/core/perfTier';
 import { useSessionRestore } from '../../gamekit/session/useSessionRestore';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
-  A_CONTINUE, A_RESTART, A_SPLASH, A_TIP, A_TREAD, A_UNDO,
-  applyAction, createRun, currentBoard, heightOf, limitFor, movesToTurn, previewFor, starsFor, starThresholds, strokesLeft,
-  tideAt, tipAllowed, tipCostOf, totalShells, treasureOf, shellsToNextStar, TIDE_LOW, simulateStroke,
-  type Board, type CqEvent, type CurrentQuestProofV2, type RunState, type VoyageResult,
+  A_CONTINUE, A_RESTART, A_TIP, A_TREAD, A_UNDO,
+  applyAction, createRun, currentBoard, haulOf, heightOf, movesToTurn, previewFor, ringAllowed, starsFor, starThresholds, strokesLeft,
+  tideAt, tipAllowed, totalShells, shellsToNextStar, TIDE_LOW, simulateStroke, SLOT_LABEL,
+  type Board, type CqEvent, type CurrentQuestProofV3, type RunState, type VoyageResult,
 } from './rules';
-import { distanceFrom, firstDeadState, hintFrom, solveBoard } from './solver';
-import { boardRefs, isScored, knobsFor, pickRun, voyagesFor, type RunContext } from './library';
-import { addGhost, ghostFor, hintOf, loadProgress, saveProgress, type CqProgress, type GhostRun } from './progress';
+import { canClear, distanceFrom, firstDeadState, hintFrom, solveBoard } from './solver';
+import { boardById, boardRefs, dailySeed, isScored, knobsFor, pickRun, voyagesFor, type RunContext } from './library';
+import {
+  addGhost, dailyNumber, ghostFor, hintOf, isNewBest, liveStreak, loadProgress, localDate, recordDaily, saveProgress, withBest,
+  type CqProgress, type GhostRun,
+} from './progress';
+import { chartNode } from './chart';
 import { LagoonBoard, runsOf, type BoardImages, type BoardSV, type PreviewSV } from './LagoonBoard';
 import {
-  idlePlan, newFrame, planDuration, PLAN_BUMP, PLAN_CHEER, PLAN_STROKE, PLAN_TREAD, PLAN_UNDO, PLAN_WHIRL,
-  T_ANTIC, T_GRAB, T_TILE, T_TRAVEL, type MotionPlan,
+  carryTime, idlePlan, newFrame, planDuration, PLAN_BUMP, PLAN_CHEER, PLAN_STROKE, PLAN_TREAD, PLAN_UNDO, PLAN_WHIRL,
+  T_ANTIC, T_GRAB, T_TRAVEL, type MotionPlan,
 } from './motion';
-import { BottomBar, ArrowPad, StallCard, StrokeBar } from './Controls';
-import { QuestHud, type HudState } from './QuestHud';
+import { ArrowPad, BottomBar, DeadSheet, type DeadSheetInfo } from './Controls';
+import { HUD_ROW_H, QuestHud, RUN_BAR_H, type HudState } from './QuestHud';
 import { GhostRail } from './GhostRail';
-import { ShowdownRail, type RailRacer } from './ShowdownRail';
+import { RAIL_H, ShowdownRail, type RailRacer } from './ShowdownRail';
+import { CqResultsCard, ResultsVeil, type CqResultsSummary, type PodiumRow } from './ResultsCard';
+import { StakeCard } from './StakeCard';
+import { ShareCard, type ShareCardData, type ShareCardHandle } from './ShareCard';
 import {
-  createBot, HOUSE_CREW, progressOf, placesOf, splashTarget, stepBot, SHOWDOWN_WINDOW_MS,
-  type Bot, type RacerProgress,
+  AIM_MS, closeAims, createBot, createRoom, HOUSE_CREW, placesOf, progressOf, racerOf, roomApply, sendSplash, stepBot,
+  SHOWDOWN_WINDOW_MS, type Bot, type Room, type RoomEvent,
 } from './showdown';
 import { boardLayout, cellAt, cellCenter, CQ, type BoardLayout } from './theme';
 import { themeSubtitle } from './themeSubtitle';
 import {
-  bedFor, CQ_PRELOAD, registerCqAudio, sfxAim, sfxAmbience, sfxBeached, sfxBump, sfxButton, sfxCarry, sfxChest, sfxFinalClear,
-  sfxGolden, sfxHandoff, sfxLeftover, sfxPearl, sfxRingLost, sfxRingOn, sfxRiptide, sfxShells, sfxSpitOut, sfxStall, sfxSwim,
-  sfxTally, sfxTide, sfxTideShort, sfxTip, sfxTransition, sfxTread, sfxUndo, sfxUnlock, sfxWhirlpool, sfxWin, sfxWrongTurn,
+  bedFor, bedSetFor, CQ_PRELOAD, registerCqAudio, sfxAim, sfxAmbience, sfxBeached, sfxBump, sfxButton, sfxCarry, sfxChest, sfxFinalClear,
+  sfxGolden, sfxHandoff, sfxLeftover, sfxOpponentClear, sfxPearl, sfxRingLost, sfxRingOn, sfxRiptide, sfxShells, sfxShieldPop, sfxSoClose,
+  sfxSplashIncoming, sfxStall, sfxSwim, sfxTally, sfxTide, sfxTideShort, sfxTip, sfxTransition, sfxTread, sfxUndo, sfxUnlock, sfxWhirlpool,
+  sfxWin, sfxWrongTurn, useCqMusic,
 } from './audio';
+import { carryPlan, cqSchedule, CQH } from './cqHaptics';
 import {
   bannerAt, claimBig, createGovernor, PRI_GOLDEN, PRI_RIPTIDE, PRI_UNLOCK, requestFlash, requestHitStop, requestPunch, requestShake,
 } from './fxGovernor';
 
 const BACKDROP = require('../../assets/games/current-quest/backdrop.jpg');
-const CROWN = require('../../assets/games/current-quest/crown.png');
-const AVATAR_IMG: Record<string, number> = {
-  you: require('../../assets/games/current-quest/avatar_classic.png'),
-  blue: require('../../assets/games/current-quest/avatar_blue.png'),
-  green: require('../../assets/games/current-quest/avatar_green.png'),
-  orange: require('../../assets/games/current-quest/avatar_orange.png'),
-};
+
+export interface FriendChallenge {
+  readonly seed: number;
+  readonly name: string;
+  readonly shells: number;
+  readonly strokes: number;
+}
 
 export interface CurrentQuestGameProps {
   visible: boolean;
@@ -88,6 +98,14 @@ export interface CurrentQuestGameProps {
   taskName?: string;
   themeId?: string;
   context?: RunContext;
+  /** `chart`: the Lagoon Chart node to play. */
+  chartNodeId?: string;
+  /** `daily`: the park key and display name, and the park-local date (YYYY-MM-DD). */
+  parkKey?: string;
+  parkName?: string;
+  date?: string;
+  /** `challenge`: the friend run to beat (from a deep link). */
+  challenge?: FriendChallenge | null;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
@@ -99,9 +117,11 @@ const TIP_IDLE_MS = 8000;
 const THIN_IDLE_MS = 6000;
 /** 4 bars of the 89 BPM lagoon bed: how long a Riptide surge glows. */
 const SURGE_MS = 10780;
-const SLOT_NAMES: Record<string, string> = { warmup: 'Warm-up', standard: 'Standard', treasure: 'Treasure' };
+/** Fixed bottom-bar height (64 pt targets while walking, labels, safe area pad), reserved so walking never re-lays the board. */
+const BAR_H = 104;
+const ARROWS_H = 68;
 
-interface StallInfo { nearMiss: string | null; hint: boolean; wrong: boolean }
+const deadQuietCopy = (trial: boolean) => (trial ? 'Undo rewinds the board. A ring gives 2 strokes.' : 'Undo or restart. Nothing is lost.');
 
 function deriveSeed(base: number, attempt: number): number {
   let h = (base ^ Math.imul(attempt + 1, 0x9e3779b1)) >>> 0;
@@ -109,17 +129,17 @@ function deriveSeed(base: number, attempt: number): number {
   return (h ^ (h >>> 13)) >>> 0;
 }
 
-function emptyShells(n: number): boolean[][] { return Array.from({ length: n }, () => [false, false, false]); }
-
 /** Seed for retry `attempt` (1..4) of a run issued with `base` (server mirrors this). */
 export { deriveSeed };
 
-/** Which shell to name in the NEXT STAR tease ("Par on the Treasure board"). */
+function emptyShells(n: number): boolean[][] { return Array.from({ length: n }, () => [false, false, false]); }
+
+/** Which shell to name in the NEXT STAR tease ("Par on the Deep board = 3 stars"). */
 function nextStarTease(run: RunState, needed: number): string | null {
   if (needed <= 0) return null;
   const missing: string[] = [];
   run.results.forEach((r, i) => {
-    const slot = SLOT_NAMES[run.boards[i].slot] ?? `voyage ${i + 1}`;
+    const slot = SLOT_LABEL[run.boards[i].slot] ?? `voyage ${i + 1}`;
     if (!r.shellPar) missing.push(`Par on the ${slot} board`);
     if (!r.shellGolden) missing.push(`the golden pearl on the ${slot} board`);
   });
@@ -128,35 +148,70 @@ function nextStarTease(run: RunState, needed: number): string | null {
   return needed === 1 ? `${first[0].toUpperCase()}${first.slice(1)} = next star` : `${needed} more shells, like ${first}`;
 }
 
-export default function CurrentQuestGame({ visible, seed, themeId, context: contextProp, onClose, onQuit, onComplete }: CurrentQuestGameProps) {
+function dirBetween(a: number, b: number): number {
+  const dr = Math.floor(b / 5) - Math.floor(a / 5);
+  const dc = (b % 5) - (a % 5);
+  if (Math.abs(dc) >= Math.abs(dr)) return dc >= 0 ? 1 : 3;
+  return dr >= 0 ? 2 : 0;
+}
+
+/** Path-index time of a stroke beat on the J6 carry curve (grab 80 ms, then 110/90/75/65 ms per tile). */
+function tAtPath(i: number, wasBeached: boolean): number {
+  const w = wasBeached ? 120 : 0;
+  if (i <= 0) return w;
+  if (i === 1) return w + T_ANTIC + T_TRAVEL;
+  return w + T_ANTIC + T_TRAVEL + T_GRAB + carryTime(i - 1);
+}
+
+interface Toast { text: string; key: number; tone?: 'gold' | 'coral' | 'white' }
+interface StartCard { title: string; parFrom?: number; parTo?: number; tone: 'coral' | 'gold'; key: number }
+
+export default function CurrentQuestGame({
+  visible, seed, themeId, context: contextProp, chartNodeId, parkKey, parkName, date, challenge, onClose, onQuit, onComplete,
+}: CurrentQuestGameProps) {
   const context: RunContext = contextProp ?? (seed != null ? 'line' : 'quick');
   const knobs = knobsFor(context);
   const trial = knobs.profile === 'trial';
   const scored = isScored(context);
-  const voyagesN = voyagesFor(context);
-  const thresholds = starThresholds(voyagesN);
+  const showdown = context === 'showdown';
+  const node = context === 'chart' && chartNodeId ? chartNode(chartNodeId) : undefined;
+  const voyagesN = context === 'chart' ? 1 : voyagesFor(context);
+  const today = date ?? localDate();
+  const park = parkKey ?? 'lab-park';
   const reducedMotion = useReducedGameMotion();
   const movement = useContext(LinePlayMovementContext);
   const shellRef = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
+  const shareRef = useRef<ShareCardHandle>(null);
 
   // ---- seed, attempt, boards ------------------------------------------------
-  const baseSeed = useMemo(() => (seed == null ? (Math.random() * 0xffffffff) >>> 0 : seed >>> 0), [seed, visible]);
+  const baseSeed = useMemo(() => {
+    if (context === 'daily') return dailySeed(park, today);
+    if (context === 'challenge' && challenge) return challenge.seed >>> 0;
+    return seed == null ? (Math.random() * 0xffffffff) >>> 0 : seed >>> 0;
+  }, [seed, visible, context, park, today, challenge]); // eslint-disable-line react-hooks/exhaustive-deps
   const [attempt, setAttempt] = useState(0);
   const runSeed = attempt === 0 ? baseSeed : deriveSeed(baseSeed, attempt);
   const [progress, setProgress] = useState<CqProgress | null>(null);
   useEffect(() => { void loadProgress().then(setProgress); }, []);
   const [boardsKey, setBoardsKey] = useState(0);
-  const boards = useMemo<Board[] | null>(() => (progress ? pickRun(runSeed, context, hintOf(progress)) : null),
-    // Progress is read once per run so a finished run never reshuffles the next boards mid-play.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [runSeed, context, boardsKey, progress === null]);
-  const ghost = useMemo<GhostRun | null>(() => (progress ? ghostFor(progress, runSeed, context) : null),
+  const boards = useMemo<Board[] | null>(() => {
+    if (!progress) return null;
+    if (context === 'chart') { const b = node ? boardById(node.boardId) : undefined; return b ? [b] : pickRun(runSeed, 'quick', hintOf(progress)).slice(0, 1); }
+    return pickRun(runSeed, context, hintOf(progress));
+  },
+  // Progress is read once per run so a finished run never reshuffles the next boards mid-play.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [runSeed, context, boardsKey, progress === null, chartNodeId]);
+  const ghost = useMemo<GhostRun | null>(() => (progress && !showdown && context !== 'daily' ? ghostFor(progress, runSeed, context) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [runSeed, context, progress === null, boardsKey]);
+  const thresholds = context === 'chart' ? { one: 1, two: 2, three: 3 } : starThresholds(voyagesN);
+  const tiers: [number, number] = [thresholds.two, thresholds.three];
+  const runKey = context === 'chart' ? `chart:${chartNodeId}` : context;
 
   const sessionKey = `cq:${context}:${runSeed}:${attempt}`;
-  const restore = useSessionRestore<{ actions: number[][]; times: number[][]; ready: number[]; elapsed: number }>(visible ? sessionKey : null);
+  const restore = useSessionRestore<{ actions: number[][]; times: number[][]; ready: number[]; elapsed: number }>(visible && !showdown ? sessionKey : null);
 
   // ---- engine clocks, camera, walk sense, perf tier -----------------------------
   const clock = useGameClock({ autostart: true, config: { freezeBudget: 0.06 } });
@@ -165,7 +220,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const tier = usePerfTier({ active: visible });
   const lite = tier.tierJs !== TIER_FULL;
 
-  // ---- layout (cell = min(width / 5, height / rows, 76); rows change per voyage) --
+  // ---- layout: 14 pt gutters; every chrome height reserved up front (walking never re-lays the board) --
   const [field, setField] = useState<{ w: number; h: number } | null>(null);
   const [arrows, setArrows] = useState(false);
   const [rowsNow, setRowsNow] = useState(5);
@@ -173,13 +228,11 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const { width, height } = e.nativeEvent.layout;
     setField((f) => (f && Math.abs(f.w - width) < 1 && Math.abs(f.h - height) < 1 ? f : { w: width, h: height }));
   }, []);
-  const showdown = context === 'showdown';
   const layoutFor = useCallback((rows: number): BoardLayout | null => {
     if (!field) return null;
-    const rail = showdown ? 46 : ghost ? 42 : 0;
-    // Always reserve the walking sizes: walking toggles every few steps and must never re-lay the board.
-    const reserved = 58 + 36 + rail + 106 + (arrows ? 68 : 0) + 6;
-    return boardLayout(field.w, field.h - reserved, rows);
+    const rail = showdown ? RAIL_H : ghost ? 42 : 0;
+    const reserved = HUD_ROW_H + RUN_BAR_H + 4 + rail + BAR_H + (arrows ? ARROWS_H : 0);
+    return boardLayout(field.w, field.h - reserved, rows, true);
   }, [field, arrows, showdown, ghost]);
   const layout = useMemo(() => layoutFor(rowsNow), [layoutFor, rowsNow]);
   const layoutRef = useRef<BoardLayout | null>(layout);
@@ -192,6 +245,9 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     surf: useImage(require('../../assets/games/current-quest/cq_shark_surf_ride.png')),
     ouch: useImage(require('../../assets/games/current-quest/cq_shark_bump_ouch.png')),
     cheer: useImage(require('../../assets/games/current-quest/cq_shark_cheer.png')),
+    brace: useImage(require('../../assets/games/current-quest/cq_shark_brace.png')),
+    dizzy: useImage(require('../../assets/games/current-quest/cq_shark_dizzy.png')),
+    blink: useImage(require('../../assets/games/current-quest/cq_shark_idle_swim_blink.png')),
     coralA: useImage(require('../../assets/games/current-quest/coral_a.png')),
     coralB: useImage(require('../../assets/games/current-quest/coral_b.png')),
     coralC: useImage(require('../../assets/games/current-quest/coral_c.png')),
@@ -204,6 +260,8 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     chestOpen: useImage(require('../../assets/games/current-quest/chest_open.png')),
     padlock: useImage(require('../../assets/games/current-quest/padlock.png')),
     chevron: useImage(require('../../assets/games/current-quest/current_chevron.png')),
+    socket: useImage(require('../../assets/games/current-quest/shell_socket.png')),
+    bubble: useImage(require('../../assets/games/current-quest/shield_bubble.png')),
   };
   const imagesReady = Object.values(images).every(Boolean);
   const stableImages = useMemo(() => images,
@@ -253,6 +311,10 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     tourT0: useSharedValue(-1e9),
     idleSince: useSharedValue(0),
     sway: useSharedValue<number[]>([]),
+    shield: useSharedValue(0),
+    shieldPopT: useSharedValue(-1e9),
+    tidePip: useSharedValue(0),
+    lowK: useSharedValue(0),
   };
   const svRef = useRef(sv);
   svRef.current = sv;
@@ -262,18 +324,21 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const runRef = useRef<RunState | null>(null);
   const [voyageIdx, setVoyageIdx] = useState(0);
   const [hud, setHud] = useState<HudState | null>(null);
-  const [left, setLeft] = useState(0);
-  const [limit, setLimit] = useState(0);
-  const [stall, setStall] = useState<StallInfo | null>(null);
+  const [dead, setDead] = useState<DeadSheetInfo | null>(null);
+  const deadEpisode = useRef(false);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [summary, setSummary] = useState<CqResultsSummary | null>(null);
+  const [share, setShare] = useState<ShareCardData | null>(null);
   const [failed, setFailed] = useState(false);
   const [chip, setChip] = useState<string | null>(null);
   const [ribbon, setRibbon] = useState<{ title: string; sub: string | null; key: number; gold: boolean } | null>(null);
-  const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
+  const [startCard, setStartCard] = useState<StartCard | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const [tipPulse, setTipPulse] = useState(false);
   const [smallChip, setSmallChip] = useState<{ text: string; tone: 'coral' | 'white'; key: number } | null>(null);
   const [inspect, setInspect] = useState<{ text: string; x: number; y: number } | null>(null);
   const [splitChip, setSplitChip] = useState<{ text: string; good: boolean; key: number } | null>(null);
+  const [stake, setStake] = useState(false);
   const [elapsedNow, setElapsedNow] = useState(0);
   const busyUntil = useRef(0);
   const buffered = useRef<number | null>(null);
@@ -284,7 +349,6 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const pathStack = useRef<number[][]>([]);
   const pearlStep = useRef(0);
   const swimStep = useRef(0);
-  const firstStall = useRef(true);
   const tideTurnsThisVoyage = useRef(0);
   const gov = useRef(createGovernor());
   const strokeNo = useRef(0);
@@ -292,19 +356,25 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const misfires = useRef<number[]>([]);
   const lastCommitAt = useRef(0);
   const shellsRef = useRef<boolean[][]>(emptyShells(3));
-  const parLostRef = useRef(false);
   const surgeUntil = useRef(0);
   const thinned = useRef(false);
   const scrubbing = useRef(false);
-  // Showdown (14.1): house-crew racers, incoming splashes, the 3-minute window.
+  const finishing = useRef(false);
+  const runEndAt = useRef(0);
+  // Showdown (14.1): the room (me + house crew), the window, the aim.
+  const room = useRef<Room | null>(null);
   const bots = useRef<Bot[]>([]);
   const [racers, setRacers] = useState<RailRacer[]>([]);
   const [sdRemaining, setSdRemaining] = useState(SHOWDOWN_WINDOW_MS);
-  const incoming = useRef<{ from: string; readyAt: number }[]>([]);
+  const [aiming, setAiming] = useState(false);
   const bumps = useRef<Record<number, number>>({});
-  const [podium, setPodium] = useState<RailRacer[] | null>(null);
-  const finishing = useRef(false);
+  const incomingAt = useRef<Record<number, number>>({});
+  const [incomingFrom, setIncomingFrom] = useState<string | null>(null);
+  // Music: the bed set alternates by run; it starts at a random bar on the Deep voyage (silent on the Trick Shot).
   const [bed, setBed] = useState<string | null>(null);
+  const startBar = useMemo(() => [0, 4, 8, 12][(runSeed >>> 3) % 4], [runSeed]);
+  const bedSet = useMemo(() => bedSetFor(progress?.runsCompleted ?? 0), [progress === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tideTag = !!progress && progress.tideRuns < 3;
 
   // ---- a tiny scheduler: every delayed beat of a stroke can be fast-forwarded (7.3) --
   interface Pending { id: ReturnType<typeof setTimeout>; at: number; fn: () => void; stroke: number }
@@ -354,21 +424,15 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     registerCqAudio();
     void GameAudio.init().then(() => GameAudio.preload(CQ_PRELOAD)).catch(() => undefined);
   }, [visible]);
-  useGameMusic(visible && bed ? bed : null, { at: 'bar', fadeMs: 350 });
+  useCqMusic(visible ? bed : null, startBar);
   const setBedFor = useCallback((run: RunState) => {
     const b = currentBoard(run);
     const v = run.voyage;
+    // The Trick Shot plays on ambience and SFX only (11.2 v7); the bed enters on the next voyage.
+    if (b.slot === 'trick' && run.boards.length > 1) { setBed(null); return; }
     const low = tideAt(b.P, v.moves, v.phase) === TIDE_LOW;
-    const next = bedFor(low, strokesLeft(run), Date.now() < surgeUntil.current, thinned.current);
-    setBed((cur) => {
-      if (cur && cur !== next) {
-        // Stem layers of one mix keep their position.
-        void GameAudio.music.switchTo(next, 'bar', 350, true);
-        return next;
-      }
-      return cur ?? next;
-    });
-  }, []);
+    setBed(bedFor(low, strokesLeft(run), Date.now() < surgeUntil.current, thinned.current, bedSet));
+  }, [bedSet]);
   // Ambient lagoon bed (-30 LUFS) under everything from GO to results; it carries a pause too.
   useEffect(() => {
     if (!visible) return undefined;
@@ -389,33 +453,43 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const cellPx = () => layoutRef.current?.cell ?? 60;
 
   // ---- HUD sync ---------------------------------------------------------------------------
+  const rankOf = useCallback((): { place: number; of: number } | null => {
+    const r = room.current;
+    if (!r) return null;
+    const list = r.racers.map((x) => ({ seat: x.seat, p: progressOf(x.run, x.times) }));
+    const places = placesOf(list);
+    return { place: places[0], of: list.length };
+  }, []);
   const syncHud = useCallback((run: RunState) => {
     const b = currentBoard(run);
     const v = run.voyage;
-    let taken = 0;
-    for (let k = 0; k < b.pearls.length; k++) if (v.mask & (1 << k)) taken++;
-    parLostRef.current = v.undos > 0 || v.tips > 0 || v.continues > 0;
+    const left = strokesLeft(run);
     setHud({
       voyage: run.complete ? run.boards.length - 1 : run.index,
-      pearls: b.pearls.length,
-      pearlsTaken: taken,
+      voyages: run.boards.length,
+      left,
+      limit: v.limit + v.limitBonus,
+      par: v.golden ? v.parGoldT : v.parT,
+      shells: shellsRef.current.map((s) => s.slice()),
       hasGolden: b.golden >= 0,
       goldenTaken: v.golden,
-      shells: shellsRef.current.map((s) => s.slice()),
-      voyages: run.boards.length,
-      ripCount: v.ripStrokes,
-      riptide: Date.now() < surgeUntil.current,
-      parLost: parLostRef.current,
+      parLost: v.undos > 0 || v.tips > 0 || v.continues > 0,
       hasTide: b.P > 0,
       tideLow: tideAt(b.P, v.moves, v.phase) === TIDE_LOW,
+      P: b.P,
       movesToTurn: movesToTurn(b.P, v.moves, v.phase),
+      tideTag,
       rings: run.rings,
       ringsMax: knobs.rings,
       trial,
+      tiers,
+      rank: showdown ? rankOf() : null,
     });
-    setLeft(strokesLeft(run));
-    setLimit(limitFor(b, run.knobs) + v.limitBonus);
-  }, [knobs.rings, trial]);
+    // Tide warning pip over the shark at one move left (0.A.2: a warning only).
+    const s = svRef.current;
+    const k = movesToTurn(b.P, v.moves, v.phase);
+    s.tidePip.value = b.P && k === 1 && !v.cleared ? (tideAt(b.P, v.moves, v.phase) === TIDE_LOW ? 2 : 1) : 0;
+  }, [knobs.rings, trial, tideTag, showdown, rankOf, tiers[0], tiers[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tideDropFor = (b: Board, moves: number, phase: number) => {
     if (!b.P) return 0;
@@ -439,11 +513,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     s.banked.value = banked;
     s.chest.value = v.mask === (1 << b.pearls.length) - 1 ? 1 : 0;
     const drop = tideDropFor(b, v.moves, v.phase);
+    const low = b.P && tideAt(b.P, v.moves, v.phase) === TIDE_LOW ? 1 : 0;
     s.tideDrop.value = animateTide ? withTiming(drop, { duration: 650 }) : drop;
+    s.lowK.value = animateTide ? withTiming(low, { duration: 650 }) : low;
     s.nervous.value = strokesLeft(run) <= 2 && !v.cleared ? 1 : 0;
   }, []);
 
-  // ---- previews (7.2) ------------------------------------------------------------------------
+  // ---- previews (7.2) and "No way home" (0.A.3) ------------------------------------------------
   const refreshPreviews = useCallback((run: RunState) => {
     if (!layoutRef.current) return;
     const b = currentBoard(run);
@@ -452,15 +528,9 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const out: PreviewSV[] = [];
     for (let a = 0; a <= 4; a++) {
       const pv = previewFor(run, a);
-      if (!pv.valid) { out.push({ valid: 0, red: 0, pts: [], lx: 0, ly: 0, facing: 1, rot: 0, beached: 0, clears: 0, rip: 0, icons: [] }); continue; }
-      let red = 0;
-      if (leftNow <= 1 && !pv.clears) {
-        // Last stroke: the solver on the landing copy says whether this one can still get home.
-        const tide = tideAt(b.P, v.moves, v.phase);
-        const sim = simulateStroke(b, v.pos, v.mask, v.golden, tide, a === A_TREAD ? -1 : a);
-        const d = distanceFrom(b, { pos: sim.pos, mask: sim.mask, golden: sim.golden, moves: v.moves + 1, phase: v.phase }, false);
-        if (!(d <= leftNow - 1)) red = 1;
-      }
+      if (!pv.valid) { out.push({ valid: 0, red: 0, pts: [], lx: 0, ly: 0, facing: 1, rot: 0, beached: 0, clears: 0, rip: 0, icons: [], turn: 0 }); continue; }
+      // Any landing state that cannot clear inside the strokes left draws coral, at any count, in both profiles.
+      const red = !pv.clears && !canClear(b, { pos: pv.path[pv.path.length - 1], mask: pv.mask, golden: pv.goldenHeld, moves: v.moves + 1, phase: v.phase }, leftNow - 1) ? 1 : 0;
       const pts: number[] = [];
       for (const c of pv.path) { const p = center(c); pts.push(p.x, p.y); }
       const land = center(pv.path[pv.path.length - 1]);
@@ -477,14 +547,22 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       });
       if (pv.unlockAt >= 0) { const c = center(pv.path[pv.unlockAt]); icons.push(c.x + cellPx() * 0.22, c.y, 3); }
       if (pv.tideTurns) icons.push(land.x - cellPx() * 0.24, land.y + cellPx() * 0.1, 2);
-      out.push({ valid: 1, red, pts, lx: land.x, ly: land.y, facing, rot, beached: pv.beached ? 1 : 0, clears: pv.clears ? 1 : 0, rip: pv.riptide ? 1 : 0, icons: icons.slice(0, 15) });
+      // Riptide is announced only where it is the par route's aha (0.A.1).
+      const rip = pv.riptide && !!b.parIsRiptide ? 1 : 0;
+      out.push({ valid: 1, red, pts, lx: land.x, ly: land.y, facing, rot, beached: pv.beached ? 1 : 0, clears: pv.clears ? 1 : 0, rip, icons: icons.slice(0, 15), turn: pv.tideTurns ? 1 : 0 });
     }
+    // J14: any armed preview whose entry changed redraws with a soft tick.
+    const prevArmed = svRef.current.armed.value;
+    const old = svRef.current.previews.value[prevArmed];
+    const neu = out[prevArmed];
+    if (prevArmed >= 0 && old && neu && (old.red !== neu.red || old.lx !== neu.lx || old.ly !== neu.ly)) CQH.tick();
     svRef.current.previews.value = out;
   }, [center]);
 
   const chipFor = useCallback((a: number): string | null => {
     const run = runRef.current;
     if (!run || a < 0) return null;
+    const b = currentBoard(run);
     const pv = previewFor(run, a);
     if (!pv.valid) {
       if (a === A_TREAD) return null;
@@ -493,19 +571,64 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const prevs = svRef.current.previews.value;
     if (prevs[a]?.red) return 'No way home';
     if (a === A_TREAD) return pv.tideTurns ? 'Tread: 1 stroke, tide turns' : 'Tread: 1 stroke';
-    if (pv.riptide) return 'RIPTIDE!';
+    if (pv.riptide && b.parIsRiptide) return 'RIPTIDE!';
     if (pv.clears) return 'Treasure!';
     if (pv.tideTurns) return 'Tide turns';
     return null;
   }, []);
 
+  // ---- the dead sheet (0.A.3, J12) ---------------------------------------------------------------
+  /** Wrong-turn X: the tile before the first stroke after which no clear fit the budget. */
+  const markWrongTurn = useCallback((run: RunState): boolean => {
+    const b = currentBoard(run);
+    const v = run.voyage;
+    const lim = v.limit + v.limitBonus;
+    const states = [...v.stack.map((x) => ({ pos: x.pos, mask: x.mask, golden: x.golden, moves: x.moves, phase: v.phase })),
+      { pos: v.pos, mask: v.mask, golden: v.golden, moves: v.moves, phase: v.phase }];
+    const budget = [...v.stack.map((x) => lim - x.spent), lim - v.spent];
+    const k = firstDeadState(b, states, budget);
+    if (k <= 0) return false;
+    const s = svRef.current;
+    const c = center(states[k - 1].pos);
+    s.wrong.value = [c.x, c.y];
+    s.wrongT0.value = s.fxT.value + 200;
+    later(200, () => { sfxWrongTurn(); CQH.rigid(); });
+    return true;
+  }, [center, later]);
+
+  const checkDead = useCallback((run: RunState) => {
+    if (run.complete || run.failed) { setDead(null); return; }
+    const b = currentBoard(run);
+    const v = run.voyage;
+    const left = strokesLeft(run);
+    if (v.cleared) { setDead(null); return; }
+    const d = distanceFrom(b, v, false);
+    if (v.stalled) {
+      const near = Number.isFinite(d) && d <= 2 ? `So close! ${d} stroke${d === 1 ? '' : 's'} from the chest.` : 'Out of strokes';
+      markWrongTurn(run);
+      setDead({ kind: 'stall', title: near, body: trial ? (run.rings > 0 ? 'A ring gives 2 strokes.' : null) : deadQuietCopy(false) });
+      deadEpisode.current = true;
+      return;
+    }
+    if (d <= left) { deadEpisode.current = false; setDead(null); return; }
+    if (deadEpisode.current) return; // already shown for this dead state; the player chose to keep swimming
+    deadEpisode.current = true;
+    markWrongTurn(run);
+    const short = Number.isFinite(d) ? d - left : Infinity;
+    const title = Number.isFinite(short) && short <= 2 ? `${short} stroke${short === 1 ? '' : 's'} short of the chest` : 'No way home';
+    setDead({ kind: 'dead', title, body: deadQuietCopy(trial) });
+    CQH.warning();
+  }, [markWrongTurn, trial]);
+
   // ---- starting a voyage ---------------------------------------------------------------------
   const showRibbon = useCallback((run: RunState) => {
     const b = currentBoard(run);
-    const gold = b.slot === 'treasure';
-    setRibbon({ title: `${SLOT_NAMES[b.slot] ?? 'Voyage'}: ${b.name}`, sub: b.teach ?? null, key: Date.now(), gold });
+    const deep = b.slot === 'treasure';
+    const label = SLOT_LABEL[b.slot] ?? 'Voyage';
+    const objective = run.index === 0 ? (trial ? 'Every stroke counts.' : 'Beat par, find the gold.') : null;
+    setRibbon({ title: `${label}: ${b.title ?? b.name}`, sub: b.teach ?? objective, key: Date.now(), gold: deep });
     later(b.teach ? 2600 : 900, () => setRibbon(null));
-  }, [later]);
+  }, [later, trial]);
 
   const beginVoyage = useCallback((run: RunState, rise: boolean) => {
     const s = svRef.current;
@@ -515,7 +638,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     layoutRef.current = layoutFor(H);
     setRowsNow(H);
     const start = center(b.start);
-    s.plan.value = { ...idlePlan(start.x, start.y, 1), t0: -1 };
+    s.plan.value = { ...idlePlan(start.x, start.y, 1), beached: run.voyage.beached ? 1 : 0, t0: -1 };
     s.trail.value = [];
     s.hint.value = [];
     s.swirl.value = 0;
@@ -533,18 +656,20 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     pathStack.current = [];
     pearlStep.current = 0;
     swimStep.current = 0;
-    firstStall.current = true;
     tideTurnsThisVoyage.current = 0;
-    setStall(null);
+    deadEpisode.current = false;
+    setDead(null);
     syncHud(run);
     refreshPreviews(run);
     setBedFor(run);
     showRibbon(run);
+    // A splashed voyage plays the full tide sweep into its phase as the tray rises (9.6).
+    if (run.voyage.phase !== 0) later(rise ? 420 : 60, () => { s.sweepT0.value = s.fxT.value; sfxTide(); CQH.soft(); });
     readyAt.current[run.index] = Math.max(0, Date.now() + (rise ? 720 : 0) - startedAt.current);
     // Input is live from the first frame (the rise is only 0.4 s and buffered commits wait for it).
     busyUntil.current = Date.now() + (rise ? 420 : 0);
     lastStrokeAt.current = Date.now();
-  }, [center, layoutFor, syncBoardVisuals, syncHud, refreshPreviews, setBedFor, showRibbon]);
+  }, [center, layoutFor, syncBoardVisuals, syncHud, refreshPreviews, setBedFor, showRibbon, later]);
 
   // New run whenever the boards change (fresh open, play again, retry).
   useEffect(() => {
@@ -556,12 +681,15 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     readyAt.current = boards.map(() => 0);
     surgeUntil.current = 0;
     svRef.current.surge.value = 0;
+    svRef.current.shield.value = 0;
     setResult(null);
+    setSummary(null);
     setFailed(false);
+    setIncomingFrom(null);
     let run = createRun(boards, knobs);
     // Interrupted run on this exact seed: replay its actions with their times (deterministic, exact restore).
     const snap = restore.snapshot?.state;
-    if (snap && Array.isArray(snap.actions)) {
+    if (snap && Array.isArray(snap.actions) && !showdown) {
       for (let vi = 0; vi < snap.actions.length; vi++) {
         snap.actions[vi].forEach((a, k) => {
           const res = applyAction(run, a, snap.times?.[vi]?.[k]);
@@ -577,14 +705,19 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       readyAt.current = snap.ready.slice();
       startedAt.current = Date.now() - (snap.elapsed ?? 0);
     }
-    runRef.current = run;
-    if (context === 'showdown') {
-      bots.current = HOUSE_CREW.map((seat) => createBot(runSeed, seat, boards, 0));
-      incoming.current = [];
+    if (showdown) {
+      const r = createRoom(runSeed, HOUSE_CREW, boards);
+      room.current = r;
+      run = r.racers[0].run;
+      bots.current = HOUSE_CREW.map((seat) => createBot(runSeed, seat, 0));
       bumps.current = {};
-      setPodium(null);
+      incomingAt.current = {};
       setSdRemaining(SHOWDOWN_WINDOW_MS);
+      setAiming(false);
+    } else {
+      room.current = null;
     }
+    runRef.current = run;
     setVoyageIdx(run.index);
     beginVoyage(run, true);
     if (run.voyage.strokes > 0 || run.voyage.spent > 0) {
@@ -594,10 +727,11 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       syncHud(run);
       refreshPreviews(run);
     }
+    if (showdown) refreshRail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, boards, field !== null, restore.ready]);
 
-  // Board layout follows the field (rotation, arrows toggle, walking targets).
+  // Board layout follows the field (rotation, arrows toggle).
   useEffect(() => {
     const run = runRef.current;
     if (!run || !layout) return;
@@ -637,25 +771,19 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   }, []);
 
   // ---- stroke presentation ----------------------------------------------------------------------------
-  const tAtPath = (i: number, wasBeached: boolean) => {
-    const w = wasBeached ? 120 : 0;
-    if (i <= 0) return w;
-    if (i === 1) return w + T_ANTIC + T_TRAVEL;
-    return w + T_ANTIC + T_TRAVEL + T_GRAB + T_TILE * (i - 1);
-  };
-
   const presentStroke = useCallback((run: RunState, ev: Extract<CqEvent, { type: 'stroke' }>, allEvents: CqEvent[]) => {
     const s = svRef.current;
-    const b = currentBoard(runRef.current ?? run);
+    const b = run.boards[Math.min(run.index - (allEvents.some((e) => e.type === 'clear') && !run.complete ? 1 : 0), run.boards.length - 1)];
     strokeNo.current += 1;
     const sn = strokeNo.current;
     const pts: number[] = [];
     for (const c of ev.path) { const p = center(c); pts.push(p.x, p.y); }
     const facing = s.plan.value.facing || 1;
     const clearEv = allEvents.find((e) => e.type === 'clear') as Extract<CqEvent, { type: 'clear' }> | undefined;
+    const celebrate = ev.riptide && !!b.parIsRiptide;
     const plan: MotionPlan = {
       kind: ev.dir < 0 ? PLAN_TREAD : PLAN_STROKE, t0: -1, pts, carry: ev.carried, facing, dive: ev.cleared ? 1 : 0,
-      beached: ev.beached ? 1 : 0, wasBeached: ev.wasBeached && ev.dir >= 0 ? 1 : 0, bx: 0, by: 0, speed: 1, rip: ev.riptide ? 1 : 0,
+      beached: ev.beached ? 1 : 0, wasBeached: ev.wasBeached && ev.dir >= 0 ? 1 : 0, bx: 0, by: 0, speed: 1, rip: celebrate ? 1 : 0,
     };
     // Pickups vanish on the UI thread the moment the shark reaches them.
     const q: number[] = [];
@@ -670,52 +798,53 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const endAt = ev.carried > 0 ? tAtPath(ev.path.length - 1, wb) : tAtPath(1, wb);
     const cell = cellPx();
 
-    // Sound: one trigger per beat.
+    // Sound: one trigger per beat. Haptics: at most 3 per carry, 100 ms apart (P13, J15).
     if (ev.dir < 0) {
       sfxTread();
       burst('bubbles', ev.path[0], { count: 8 });
-      Haptic.tapLight();
+      CQH.light();
     } else if (ev.carried > 0) {
       sfxSwim(swimStep.current++ % 5);
       const carryStart = tAtPath(1, wb);
-      later(carryStart - 10, () => sfxCarry(ev.carried, ev.riptide));
+      later(carryStart - 10, () => sfxCarry(ev.carried, celebrate));
       cancelHaptics.current?.();
-      const steps = [{ at: 0, p: 'light' as const }, ...gridSteps(Math.min(3, ev.carried), carryStart + T_GRAB, T_TILE, 'selection')];
-      if (ev.carried > 3) steps.push(...gridSteps(ev.carried - 3, carryStart + T_GRAB + T_TILE * 3, T_TILE, 'light', 'selection'));
-      for (const h of ev.handoffs) steps.push({ at: tAtPath(h, wb), p: 'light' as const });
-      steps.push({ at: endAt + 40, p: 'medium' as const });
-      cancelHaptics.current = scheduleHaptics(steps);
-      // Current flare + grid fade + camera lead (+2% zoom toward the landing on 3+ tiles).
+      const spitAt = carryStart + T_GRAB + carryTime(ev.carried) + 40;
+      cancelHaptics.current = cqSchedule(carryPlan(ev.carried, 0, carryStart + T_GRAB + carryTime(Math.floor(ev.carried / 2)), spitAt, celebrate));
+      // Grab: a 5-particle spray fan on the lean-in, the run flares, the grid fades, the camera follows (J6).
       const runs = runsOf(b, null);
       const runIdx = runs.findIndex((r) => r.cells.includes(ev.path[1]));
       later(carryStart, () => {
+        burst('splash', ev.path[1], { count: reducedMotion ? 2 : 5 });
         s.flareRun.value = runIdx;
         s.flareT.value = s.fxT.value;
         s.gridA.value = withTiming(0, { duration: 200 });
         const d = dirBetween(ev.path[1], ev.path[2] ?? ev.path[1]);
         if (!reducedMotion && !lite) {
           camera.kick([0, 6, 0, -6][d] ?? 0, [-6, 0, 6, 0][d] ?? 0);
-          if (ev.carried >= 3) camera.frame(1.02);
+          if (ev.carried >= 3) camera.frame(ev.carried >= 5 ? 1.06 : 1.04);
         }
       });
       for (let k = 2; k < ev.path.length; k++) {
-        later(tAtPath(k, wb), () => burst(ev.riptide ? 'sparks' : 'bubbles', ev.path[k], ev.riptide ? { count: reducedMotion ? 2 : 6, color: packHex(CQ.gold) } : { count: reducedMotion ? 2 : 4 }));
+        later(tAtPath(k, wb), () => burst(celebrate ? 'sparks' : 'bubbles', ev.path[k], celebrate ? { count: reducedMotion ? 2 : 6, color: packHex(CQ.gold) } : { count: reducedMotion ? 2 : 4 }));
       }
       for (const h of ev.handoffs) {
-        // Riptide hand-off between runs: a gold foam burst and a whoosh.
-        later(tAtPath(h, wb), () => { burst('splash', ev.path[h], { count: reducedMotion ? 3 : 8, color: packHex(CQ.gold) }); sfxHandoff(); });
+        // Hand-off between runs: a gold foam burst and a whoosh on Riptide-aha boards, a plain splash elsewhere.
+        later(tAtPath(h, wb), () => {
+          burst('splash', ev.path[h], { count: reducedMotion ? 3 : 8, ...(celebrate ? { color: packHex(CQ.gold) } : {}) });
+          if (celebrate) sfxHandoff();
+        });
       }
       swayNear(b, ev.path.slice(1), carryStart);
       later(endAt + 40, () => {
         burst('splash', ev.path[ev.path.length - 1], { count: reducedMotion ? 4 : 8 });
         const d = dirBetween(ev.path[ev.path.length - 2], ev.path[ev.path.length - 1]);
         if (!reducedMotion) camera.kick([0, -2, 0, 2][d] ?? 0, [2, 0, -2, 0][d] ?? 0);
-        if (!reducedMotion && !lite && ev.carried >= 3) later(200, () => camera.frame(1));
+        if (!reducedMotion && !lite && ev.carried >= 3) later(60, () => camera.frame(1));
         s.gridA.value = withTiming(1, { duration: 300 });
       });
     } else {
       sfxSwim(swimStep.current++ % 5);
-      scheduleHaptics([{ at: 0, p: 'light' }, { at: endAt, p: 'light' }]);
+      cqSchedule([{ at: 0, p: 'light' }, { at: endAt, p: 'light' }]);
       later(T_ANTIC + 20, () => burst('bubbles', ev.path[0], { count: 3 }));
       later(endAt, () => {
         const c = center(ev.path[ev.path.length - 1]);
@@ -730,12 +859,11 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       later(at, () => {
         burst('sparkles', p.cell, { count: reducedMotion ? 4 : 6 });
         sfxPearl(pearlStep.current++, 0);
-        Haptic.tickSelection();
       });
     }
     if (ev.pearls.length) {
       later(endAt + 30, () => {
-        Haptic.hitMedium();
+        if (ev.carried === 0) CQH.medium();
         const last = ev.path[ev.path.length - 1];
         for (let k = 0; k < ev.pearls.length; k++) {
           later(k * 60, () => {
@@ -761,7 +889,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       const fever = lastVoyage && priorAll && clearEv?.result.shellPar;
       if (fever && !reducedMotion) {
         // Extreme Fever (Peggle): the rarest moment gets the biggest beat.
-        later(Math.max(0, endAt - T_TILE), () => { clock.slowMo(0.35, 250, 120); camera.frame(1.06); });
+        later(Math.max(0, endAt - 75), () => { clock.slowMo(0.35, 250, 120); camera.frame(1.06); });
         later(endAt + 380, () => camera.frame(1));
       }
       later(endAt, () => {
@@ -770,7 +898,8 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         if (big && requestHitStop(gov.current, sn)) clock.hitStop(90, { force: true });
         sfxGolden();
         if (fever) sfxWin();
-        playHaptic('golden');
+        cancelHaptics.current?.();
+        cancelHaptics.current = CQH.golden();
         burst('coins', ev.path[ev.goldenAt], { count: reducedMotion ? 6 : 18, color: packHex(CQ.gold) });
         burst('stars', ev.path[ev.goldenAt], { count: reducedMotion ? 3 : 6 });
         const c = center(ev.path[ev.goldenAt]);
@@ -793,7 +922,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         s.chest.value = 1;
         s.unlockT.value = s.fxT.value;
         sfxUnlock();
-        scheduleHaptics([{ at: 0, p: 'medium' }, { at: 70, p: 'medium' }]);
+        CQH.unlock();
         burst('shards', b.chest, { count: reducedMotion ? 2 : 4, color: packHex(CQ.gold) }, -cell * 0.3);
         const c = center(b.chest);
         const fp = toField(c.x, c.y - 10);
@@ -801,12 +930,11 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       });
     }
 
-    // Riptide stroke (3.6, 9.3): banner after the spit-out, gold sparks, 4 bars of surge.
-    if (ev.riptide) {
+    // Riptide stroke (3.6, 9.3): celebrated only on boards whose par route turns on it (0.A.1).
+    if (celebrate) {
       later(endAt + 60, () => {
         const big = claimBig(gov.current, sn, PRI_RIPTIDE);
         sfxRiptide();
-        playHaptic('feverStart');
         surgeUntil.current = Date.now() + SURGE_MS;
         s.surge.value = withSequence(withTiming(1, { duration: 200 }), withTiming(1, { duration: SURGE_MS - 600 }), withTiming(0, { duration: 400 }));
         if (big) banner('RIPTIDE!', PRI_RIPTIDE, 0, 650);
@@ -815,9 +943,14 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         if (r) { syncHud(r); setBedFor(r); }
         later(SURGE_MS + 50, () => { const r2 = runRef.current; if (r2) { syncHud(r2); setBedFor(r2); } });
       });
+      // Mini-Fever (0.A.1, Peggle): a Riptide that clears the voyage with Par alive.
+      if (clearEv?.result.shellPar && !reducedMotion) {
+        later(Math.max(0, endAt - 150), () => { clock.slowMo(0.5, 150, 80); camera.frame(1.04); });
+        later(endAt + 220, () => { camera.frame(1); sfxWin(); });
+      }
     }
 
-    // Tide turn (9.6), non-blocking. Full sweep on the voyage's first turn, compact after.
+    // Tide turn (9.6, J4), non-blocking. Full horizontal wave on the voyage's first turn, compact after.
     if (!ev.cleared && b.P) {
       later(endMove + 20, () => {
         const r = runRef.current;
@@ -830,27 +963,27 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
           if (full) {
             s.sweepT0.value = s.fxT.value;
             sfxTide();
-            Haptic.hitSoft();
+            CQH.soft();
             banner(toLow ? 'LOW TIDE' : 'HIGH TIDE', 1, 2, 520);
           } else {
             sfxTideShort();
-            Haptic.tickSelection();
+            CQH.tick();
           }
           const n = b.tiles.length;
           for (let i = 0; i < n; i++) {
             if (b.tiles[i] !== 's') continue;
-            const delay = full ? Math.abs(i % 5) * 30 : 0;
+            const delay = full ? (Math.floor(n / 5) - Math.floor(i / 5)) * 50 : 0;
             later(delay, () => burst(toLow ? 'splash' : 'bubbles', i, { count: reducedMotion ? 3 : full ? (toLow ? 10 : 6) : 4 }));
           }
         } else if (movesToTurn(b.P, r.voyage.moves, r.voyage.phase) === 1) {
-          Haptic.tickSelection();
+          CQH.tick();
         }
         setBedFor(r);
       });
     }
-    if (ev.beached) later(endMove + 40, () => { sfxBeached(); Haptic.hitSoft(); burst('puff', ev.path[ev.path.length - 1], { count: 6 }); });
+    if (ev.beached) later(endMove + 40, () => { sfxBeached(); CQH.soft(); burst('puff', ev.path[ev.path.length - 1], { count: 6 }); });
 
-    // Low strokes escalation (6): coral at 3 left, nervous idle + tom heartbeat at 2.
+    // Low strokes escalation (6): coral at 3 left, nervous idle + tom heartbeat at 2. Dead check on the land frame.
     later(endAt, () => {
       const r = runRef.current;
       if (!r) return;
@@ -858,87 +991,144 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       syncHud(r);
       setBedFor(r);
     });
+    if (!ev.cleared) later(endMove + 30, () => { const r = runRef.current; if (r && r.index === run.index) checkDead(r); });
 
     return { dur, endAt, endMove, clearEv };
-  }, [center, toField, burst, later, reducedMotion, lite, camera, clock, banner, syncHud, syncBoardVisuals, setBedFor, swayNear]);
+  }, [center, toField, burst, later, reducedMotion, lite, camera, clock, banner, syncHud, syncBoardVisuals, setBedFor, swayNear, checkDead]);
 
   // ---- Showdown -------------------------------------------------------------------------------------------
-  const allProgress = (): { seat: number; p: RacerProgress }[] => {
-    const r = runRef.current;
-    const list: { seat: number; p: RacerProgress }[] = [];
-    if (r) list.push({ seat: 0, p: progressOf(r, times.current.flat()) });
-    for (const b of bots.current) list.push({ seat: b.seat.seat, p: progressOf(b.run, b.times) });
-    return list;
-  };
   const refreshRail = () => {
-    const r = runRef.current;
-    if (!r) return undefined;
-    const list = [
-      { seat: 0, name: 'You', avatar: 'you' as const, you: true, p: progressOf(r, times.current.flat()), shield: r.voyage.shield },
-      ...bots.current.map((b) => ({ seat: b.seat.seat, name: b.seat.name, avatar: b.seat.avatar, you: false, p: progressOf(b.run, b.times), shield: b.run.voyage.shield })),
-    ];
+    const r = room.current;
+    if (!r) return;
+    const list = r.racers.map((x) => ({ x, p: progressOf(x.run, x.times) }));
     const places = placesOf(list);
-    const rail = list.map((x, i) => ({
-      seat: x.seat, name: x.name, avatar: x.avatar, you: x.you, cleared: x.p.voyagesCleared, shells: x.p.shells, strokes: x.p.strokes,
-      finished: x.p.finished, shield: x.shield, bump: bumps.current[x.seat] ?? 0, place: places[i],
-    }));
-    setRacers(rail);
-    return rail;
+    setRacers(list.map(({ x, p }, i) => ({
+      seat: x.seat, name: x.name, avatar: x.avatar, you: x.seat === 0, cleared: p.voyagesCleared, shells: p.shells, strokes: p.strokes,
+      finished: p.finished, shield: x.shield, bump: bumps.current[x.seat] ?? 0, place: places[i],
+      incomingFrom: x.pending ? x.pending.from : null, incomingAt: incomingAt.current[x.seat] ?? 0, firstFinds: x.firstFinds.length,
+      aimable: aiming && x.seat !== 0 && r.aims.some((a) => a.from === 0) && !x.run.complete && x.run.index < x.run.boards.length - 1 && !x.pending,
+    })));
+    svRef.current.shield.value = racerOf(r, 0)?.shield ? 1 : 0;
   };
-  const sendPlayerSplash = () => {
-    const target = splashTarget(allProgress(), 0);
-    const b = bots.current.find((x) => x.seat.seat === target);
-    if (!b) return;
-    b.inbox += 1;
-    setToast({ text: `Par clear! Splash sent to ${b.seat.name}`, key: Date.now() });
-    sfxTide();
-  };
+  const refreshRailRef = useRef(refreshRail);
+  refreshRailRef.current = refreshRail;
+  useEffect(() => { if (showdown) refreshRail(); }, [aiming]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nameOf = (seat: number) => (seat === 0 ? 'You' : racerOf(room.current as Room, seat)?.name ?? 'A racer');
+
+  /** Presentation of the room's events (sends, landings, counters, First Finds). */
+  const presentRoom = useCallback((evs: RoomEvent[]) => {
+    const r = room.current;
+    if (!r) return;
+    const s = svRef.current;
+    for (const e of evs) {
+      if (e.type === 'clear' && e.seat !== 0) {
+        bumps.current[e.seat] = Date.now();
+        sfxOpponentClear();
+        CQH.tick();
+        setToast({ text: `${nameOf(e.seat)} cleared the ${SLOT_LABEL[r.boards[e.voyage].slot]}!`, key: Date.now() });
+      } else if (e.type === 'aim') {
+        setAiming(true);
+        setToast({ text: 'Par! Tap a glowing racer to aim your Splash', key: Date.now(), tone: 'gold' });
+        later(AIM_MS + 50, () => setAiming(false));
+      } else if (e.type === 'sent') {
+        incomingAt.current[e.to] = Date.now();
+        bumps.current[e.from] = Date.now();
+        if (e.to === 0) {
+          setIncomingFrom(nameOf(e.from));
+          banner(`SPLASH from ${nameOf(e.from)}!`, PRI_RIPTIDE, 1, 1100);
+          sfxSplashIncoming();
+          CQH.warning();
+          setToast({ text: `Next voyage: SPLASH from ${nameOf(e.from)}. Clear this one at par to block it.`, key: Date.now(), tone: 'coral' });
+        } else if (e.from === 0) {
+          setAiming(false);
+          setToast({ text: `Splash sent to ${nameOf(e.to)}`, key: Date.now(), tone: 'gold' });
+          sfxTide();
+        }
+      } else if (e.type === 'no-target' && e.from === 0) {
+        setToast({ text: 'Everyone is on their last voyage', key: Date.now() });
+      } else if (e.type === 'blocked' && e.seat === 0) {
+        setIncomingFrom(null);
+        const p = s.shark.value;
+        const fp = toField(p.x, p.y);
+        if (e.by === 'shield') { s.shield.value = 0; s.shieldPopT.value = s.fxT.value; }
+        fx.current?.burst('shards', fp.x, fp.y, { count: 8, color: packHex('#ffffff') });
+        fx.current?.ring(fp.x, fp.y, { color: CQ.gold, from: 12, to: cellPx() * 1.1, ms: 320 });
+        sfxShieldPop();
+        CQH.medium();
+        banner('BLOCKED!', PRI_GOLDEN, 0, 900);
+      } else if (e.type === 'landed' && e.seat === 0) {
+        setIncomingFrom(null);
+        setStartCard({ title: `SPLASHED by ${nameOf(e.from)}`, parFrom: e.parFrom, parTo: e.parTo, tone: 'coral', key: Date.now() });
+        later(2400, () => setStartCard(null));
+        CQH.warning();
+      } else if (e.type === 'first-find') {
+        if (e.seat === 0) {
+          setToast({ text: 'You found the gold first! Shield up.', key: Date.now(), tone: 'gold' });
+          CQH.success();
+          s.shield.value = 1;
+        } else setToast({ text: `${nameOf(e.seat)} found the gold first!`, key: Date.now() });
+      }
+    }
+    refreshRailRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [later, banner, toField]);
+
+  const onAimSeat = useCallback((seat: number) => {
+    const r = room.current;
+    if (!r || !r.aims.some((a) => a.from === 0)) return;
+    const ev = sendSplash(r, 0, seat, Date.now() - startedAt.current, true);
+    CQH.medium();
+    presentRoom([ev]);
+  }, [presentRoom]);
+
   const finishShowdown = (run: RunState) => {
-    if (finishing.current && podium) return;
+    const r = room.current;
+    if (!r || (finishing.current && summary)) return;
     finishing.current = true;
     const now = Date.now() - startedAt.current;
     // Results land when everyone is done: the crew is deterministic, so play them out to the window.
-    for (const b of bots.current) for (let t = Math.min(now, SHOWDOWN_WINDOW_MS); t <= SHOWDOWN_WINDOW_MS && !b.run.complete; t += 250) stepBot(b, t);
-    const rail = refreshRail() ?? [];
-    const ordered = [...rail].sort((a, b) => a.place - b.place || (a.you ? -1 : 1));
-    setPodium(ordered);
-    const me = rail.find((x) => x.you);
-    const place = me?.place ?? 4;
+    for (let t = Math.min(now, SHOWDOWN_WINDOW_MS); t <= SHOWDOWN_WINDOW_MS; t += 250) {
+      for (const b of bots.current) stepBot(r, b, t);
+      closeAims(r, t);
+      if (r.racers.slice(1).every((x) => x.run.complete)) break;
+    }
+    const list = r.racers.map((x) => ({ x, p: progressOf(x.run, x.times) }));
+    const places = placesOf(list);
+    const podium: PodiumRow[] = list.map(({ x, p }, i) => ({
+      seat: x.seat, name: x.name, avatar: x.avatar, you: x.seat === 0, place: places[i], shells: p.shells, strokes: p.strokes, finished: p.finished,
+    })).sort((a, b) => a.place - b.place || (a.you ? -1 : 1));
+    const place = places[0];
     const done = run.complete;
     const shells = totalShells(run.results);
+    const tie = places.filter((p) => p === place).length > 1;
     const stars = !done ? 0 : place === 1 ? 3 : place === 2 ? 2 : 1;
-    const s = svRef.current;
     if (done && place === 1) {
       sfxFinalClear();
-      playHaptic('winRoll');
-      banner(rail.filter((x) => x.place === 1).length > 1 ? 'SHARED CROWN!' : '1ST PLACE!', PRI_GOLDEN, 0, 1100);
+      CQH.success();
+      banner(tie ? 'SHARED CROWN!' : '1ST PLACE!', PRI_GOLDEN, 0, 1100);
       burst('confetti', currentBoard(run).chest, { count: reducedMotion ? 8 : 30 }, -cellPx());
     } else {
       sfxChest();
-      Haptic.success();
+      CQH.success();
       banner(done ? `${['1ST', '2ND', '3RD', '4TH'][place - 1]} PLACE` : 'OUT OF TIME', PRI_GOLDEN, done ? 0 : 1, 1000);
     }
+    const s = svRef.current;
     const p = s.shark.value;
     s.plan.value = { ...idlePlan(p.x, p.y, p.facing), kind: PLAN_CHEER, t0: -1 };
-    const tr = treasureOf(run.results);
-    const proof: CurrentQuestProofV2 = {
-      game: 'current', v: 2, context, profile: knobs.profile, rings: 0, seed: runSeed, treasure: tr, stars: starsFor(shells, done, run.boards.length), shells,
-      elapsed_ms: now,
-      voyages: boardRefs(run.boards).map((ref, i) => ({ id: ref.id, tf: ref.tf, a: run.actions[i].slice(), t: times.current[i].slice(), ready: readyAt.current[i] })),
-    };
-    later(3200, () => {
-      setPodium(null);
+    const proof = proofOf(run, now, done ? starsFor(shells, true, run.boards.length) : 0, !done && run.failed);
+    later(2200, () => {
+      setSummary({
+        title: done ? (place === 1 ? (tie ? 'Shared crown!' : 'Ghost Race won!') : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
+        grid: shellsRef.current.map((x) => x.slice()), stars, failed: false, newBest: false, nextStar: null,
+        stamp: tie && place === 1 ? 'DEAD HEAT' : null, coinPour: 0, line: `Ranked on shells, then strokes, undos, Riptides and golden reach. Never time.`,
+        podium, shareLabel: null,
+      });
       setResult({
-        score: shells,
-        stars,
-        thresholds,
+        score: shells, stars, thresholds,
         message: done ? (place === 1 ? 'Showdown won!' : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
-        stats: [
-          { label: 'Place', value: `${place} of ${rail.length}` },
-          { label: 'Shells', value: `${shells}/${run.boards.length * 3}` },
-          { label: 'Strokes', value: String(me?.strokes ?? 0) },
-        ],
-        meta: { proof, showdown: { place, racers: ordered.map((x) => ({ name: x.name, shells: x.shells, strokes: x.strokes, finished: x.finished, place: x.place })) }, seed: runSeed, context, v: 2, perf_tier: TIER_NAMES[tier.tierJs] },
+        stats: [{ label: 'Place', value: `${place} of ${list.length}` }, { label: 'Shells', value: `${shells}/${run.boards.length * 3}` }],
+        meta: { proof, showdown: { place, tie, racers: podium }, seed: runSeed, context, v: 3, perf_tier: TIER_NAMES[tier.tierJs] },
       });
     });
   };
@@ -948,63 +1138,45 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   useEffect(() => {
     if (!showdown || !visible) return undefined;
     const id = setInterval(() => {
-      if (!playing.current || finishing.current) return;
+      const r = room.current;
+      if (!r || !playing.current || finishing.current) return;
       const now = Date.now() - startedAt.current;
       setSdRemaining(SHOWDOWN_WINDOW_MS - now);
-      let changed = false;
-      for (const b of bots.current) {
-        for (const e of stepBot(b, now)) {
-          changed = true;
-          if (e.type === 'clear' || e.type === 'finish') {
-            bumps.current[e.seat] = Date.now();
-            Haptic.tickSelection();
-            setToast({ text: `${b.seat.name} cleared the ${e.type === 'finish' ? 'Treasure' : 'Standard'}!`, key: Date.now() });
-            if (e.par) {
-              const target = splashTarget(allProgress(), e.seat);
-              if (target === 0) {
-                incoming.current.push({ from: b.seat.name, readyAt: Date.now() + 1500 });
-                banner(`SPLASH from ${b.seat.name}!`, PRI_RIPTIDE, 1, 1300);
-                playHaptic('incoming');
-                sfxTide();
-              } else {
-                const t = bots.current.find((x) => x.seat.seat === target);
-                if (t) t.inbox += 1;
-              }
-            }
-          }
-        }
-      }
-      if (changed) refreshRail();
-      const r = runRef.current;
-      const inc = incoming.current[0];
-      if (inc && r && Date.now() >= inc.readyAt && Date.now() >= busyUntil.current && svRef.current.armed.value < 0 && !r.voyage.stalled && !r.complete) {
-        incoming.current.shift();
-        applyNowRef.current(A_SPLASH);
-      }
-      if (now >= SHOWDOWN_WINDOW_MS && r && !r.complete) finishShowdownRef.current(r);
+      const evs: RoomEvent[] = [];
+      for (const b of bots.current) evs.push(...stepBot(r, b, now));
+      evs.push(...closeAims(r, now));
+      if (evs.length) presentRoom(evs);
+      const me = runRef.current;
+      if (now >= SHOWDOWN_WINDOW_MS && me && !me.complete) finishShowdownRef.current(me);
     }, 250);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showdown, visible]);
+  }, [showdown, visible, presentRoom]);
+
+  // ---- proof v3 ----------------------------------------------------------------------------------------
+  const proofOf = (run: RunState, elapsed: number, stars: number, failedRun = false): CurrentQuestProofV3 => ({
+    game: 'current', v: 3, context, profile: knobs.profile, rings: knobs.rings, seed: runSeed, attempt,
+    haul: failedRun ? 0 : haulOf(run.results), stars, shells: totalShells(run.results), elapsed_ms: elapsed, banked: null,
+    ...(failedRun ? { failed: true } : {}),
+    voyages: boardRefs(run.boards).map((ref, i) => ({ id: ref.id, tf: ref.tf, sp: run.splashes[i] ?? null, a: run.actions[i].slice(), t: times.current[i].slice(), ready: readyAt.current[i] })),
+  });
 
   // ---- clears, stall, fail, finish -------------------------------------------------------------------
   const finishRun = useCallback((run: RunState, lastResult: VoyageResult) => {
     finishing.current = true;
     const n = run.boards.length;
     const shells = totalShells(run.results);
-    const stars = starsFor(shells, true, n);
-    const tr = treasureOf(run.results);
+    const stars = context === 'chart' ? Math.min(3, shells) : starsFor(shells, true, n);
     const s = svRef.current;
     const b = currentBoard(run);
     const cell = cellPx();
     sfxFinalClear();
-    Haptic.success();
+    CQH.success();
     const chestC = center(b.chest);
     s.chest.value = 2;
-    // Finale scaled by stars (9.8). 2+ stars: leftover-stroke payout (Sugar Crush).
+    // Finale scaled by stars (9.8). 2+ stars: the leftover strokes become bubbles the shark gobbles (Sugar Crush).
     const leftover = Math.max(0, lastResult.limit - lastResult.spent);
     burst('coins', b.chest, { count: reducedMotion ? 8 : stars >= 3 ? 26 : stars >= 2 ? 20 : 12 }, -cell * 0.3);
-    if (stars >= 2 && leftover > 0) later(500, () => { sfxLeftover(Math.min(10, leftover)); scheduleHaptics(gridSteps(Math.min(10, leftover), 0, 90, 'selection')); });
+    if (stars >= 2 && leftover > 0) later(500, () => { sfxLeftover(Math.min(10, leftover)); cqSchedule(Array.from({ length: Math.min(4, leftover) }, (_, k) => ({ at: k * 180, p: 'selection' as const }))); });
     s.plan.value = { ...idlePlan(chestC.x, chestC.y - cell * 0.35, 1), kind: PLAN_CHEER, t0: -1 };
     s.breath.value = withSequence(withTiming(0.06, { duration: 250 }), withTiming(0, { duration: 250 }));
     if (stars >= 3) {
@@ -1018,39 +1190,66 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       banner(stars >= 2 ? 'TREASURE!' : 'CLEARED!', PRI_GOLDEN, 0, 700);
     }
     const elapsed = Date.now() - startedAt.current;
-    const proof: CurrentQuestProofV2 = {
-      game: 'current', v: 2, context, profile: knobs.profile, rings: knobs.rings, seed: runSeed, attempt,
-      treasure: tr, stars, shells, elapsed_ms: elapsed,
-      voyages: boardRefs(run.boards).map((ref, i) => ({ id: ref.id, tf: ref.tf, a: run.actions[i].slice(), t: times.current[i].slice(), ready: readyAt.current[i] })),
-    };
+    const proof = proofOf(run, elapsed, stars);
     const strokes = run.results.map((r) => r.strokes);
+    const pars = run.results.map((r) => r.parTarget);
     const clearAt = times.current.map((t) => t[t.length - 1] ?? 0);
+    const grid = run.results.map((r) => [r.shellClear, r.shellPar, r.shellGolden]);
+    const prog = progress;
+    const newBest = !!prog && isNewBest(prog, runKey, shells);
+    const tideMet = run.boards.some((x) => x.P > 0);
+    let dailyNo = 0;
     void saveProgress((p) => {
-      const tideMet = p.tideSeen || run.boards.some((x) => x.P > 0);
-      const sketches = [...new Set([...p.sketches, ...run.results.filter((r) => r.shells === 3).map((r) => r.boardId.split('~')[0])])].slice(-400);
-      return addGhost({ ...p, runsCompleted: p.runsCompleted + 1, tideSeen: tideMet, bestShells: Math.max(p.bestShells, shells), sketches },
-        { seed: runSeed, context, shells, strokes, clearAt, at: Date.now() });
+      let next: CqProgress = { ...p, runsCompleted: p.runsCompleted + 1, tideSeen: p.tideSeen || tideMet, tideRuns: p.tideRuns + (tideMet ? 1 : 0), bestShells: Math.max(p.bestShells, shells) };
+      next = withBest(next, runKey, shells);
+      next.sketches = [...new Set([...p.sketches, ...run.results.filter((r) => r.shells === 3).map((r) => r.boardId.split('~')[0])])].slice(-400);
+      if (context === 'daily') next = recordDaily(next, today, { shells, strokes, pars, grid }).next;
+      if (context === 'chart' && chartNodeId) {
+        const prev = p.chart[chartNodeId];
+        next.chart = { ...p.chart, [chartNodeId]: { medal: Math.max(prev?.medal ?? 0, lastResult.medal), shells: Math.max(prev?.shells ?? 0, shells) } };
+      }
+      next.replays = [...p.replays, { at: Date.now(), again: false }].slice(-50);
+      return addGhost(next, { seed: runSeed, context, shells, strokes, clearAt, at: Date.now() });
     }).then(setProgress);
+    runEndAt.current = Date.now();
+    if (context === 'daily') dailyNo = dailyNumber(today);
     const nextStar = shellsToNextStar(shells, n);
-    const tease = nextStarTease(run, nextStar);
-    later(stars >= 3 ? 2400 : stars >= 2 ? 1900 : 1400, () => {
+    const tease = context === 'chart'
+      ? (lastResult.medal >= 3 && lastResult.medal < 4 ? `Author: Gold + ${b.authorRiptide} Riptide${b.authorRiptide === 1 ? '' : 's'}` : nextStarTease(run, 3 - shells))
+      : nextStarTease(run, nextStar);
+    const rideStamp = trial ? (shells >= 8 ? 'TIDE MASTER RIDE' : shells >= 6 ? 'PERFECT RIDE' : null) : null;
+    const stamp = rideStamp ?? (stars >= 3 && !trial ? 'TIDE MASTER' : null);
+    const strokesLine = `Strokes ${strokes.reduce((a, x) => a + x, 0)}, par ${pars.reduce((a, x) => a + x, 0)}`;
+    const title = context === 'daily' ? `Daily Tide #${dailyNo}` : context === 'chart' ? (node?.name ?? 'Chart') : trial ? 'Ride cleared!' : shells >= n * 3 ? 'Tide Master!' : `${shells} of ${n * 3} shells`;
+    const deepBoard = run.boards[run.boards.length - 1];
+    setShare(context === 'daily' || trial || context === 'quick' ? {
+      heading: context === 'daily' ? `Daily Tide #${dailyNo}` : trial ? 'Ride Challenge' : 'Quick Run',
+      title: deepBoard.title ?? themeSubtitle(themeId),
+      grid, strokes, pars, place: parkName ?? themeSubtitle(themeId), date: today,
+      streak: context === 'daily' ? (prog ? liveStreak({ lastDaily: today, dailyStreak: prog.lastDaily === today ? prog.dailyStreak : (prog.lastDaily && Math.abs(new Date(today).getTime() - new Date(prog.lastDaily).getTime()) <= 86400000 ? prog.dailyStreak + 1 : 1) }, today) : 1) : 0,
+      stamp,
+    } : null);
+    later(stars >= 3 ? 2200 : stars >= 2 ? 1700 : 1300, () => {
       sfxTally(shells);
+      setSummary({
+        title, grid, stars, failed: false, newBest, nextStar: tease, stamp, coinPour: trial ? [0, 4, 7, 10][stars] : 0,
+        line: challenge ? (shells > challenge.shells || (shells === challenge.shells && strokes.reduce((a, x) => a + x, 0) < challenge.strokes)
+          ? `You beat ${challenge.name}!` : `${challenge.name}: ${challenge.shells} shells, ${challenge.strokes} strokes`) : strokesLine,
+        podium: null,
+        shareLabel: context === 'daily' ? 'Share Daily' : trial ? 'Share ride' : null,
+      });
       setResult({
-        // Shells are the headline (design 3.5); treasure is only a small tiebreak line.
         score: shells,
         stars,
         thresholds,
-        message: shells >= n * 3 ? `Tide Master! ${shells} of ${n * 3} shells` : `${shells} of ${n * 3} shells`,
+        message: `${shells} of ${n * 3} shells`,
         rival: ghost ? { name: 'your ghost', score: ghost.shells } : null,
-        stats: [
-          ...(tease ? [{ label: 'Next star', value: tease }] : []),
-          { label: 'Strokes', value: String(strokes.reduce((a, x) => a + x, 0)) },
-          { label: 'Treasure', value: tr.toLocaleString('en-US') },
-        ],
-        meta: { proof, score: tr, shells, stars, seed: runSeed, context, attempt, v: 2, perf_tier: TIER_NAMES[tier.tierJs] },
+        stats: [{ label: 'Strokes', value: String(strokes.reduce((a, x) => a + x, 0)) }],
+        meta: { proof, score: proof.haul, shells, stars, seed: runSeed, context, attempt, v: 3, perf_tier: TIER_NAMES[tier.tierJs], chart: chartNodeId ?? null, daily: context === 'daily' ? today : null },
       });
     });
-  }, [center, burst, later, reducedMotion, camera, banner, context, knobs.profile, knobs.rings, runSeed, attempt, ghost, thresholds, tier.tierJs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [center, burst, later, reducedMotion, camera, banner, context, knobs.profile, knobs.rings, runSeed, attempt, ghost, tier.tierJs, progress, runKey, today, chartNodeId, node, trial, challenge, parkName, themeId]);
 
   /** Route recap (missed Par, unscored contexts): your route as INK dots, the par route as a gold brush. */
   const showRecap = useCallback((run: RunState, index: number) => {
@@ -1076,24 +1275,27 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const s = svRef.current;
     const r = ev.result;
     shellsRef.current[ev.index] = [r.shellClear, r.shellPar, r.shellGolden];
-    const recap = !r.shellPar && !ev.runComplete && !scored && !showdown && !reducedMotion;
+    const recap = !r.shellPar && !ev.runComplete && !scored && !showdown && context !== 'daily' && !reducedMotion && !run.boards[ev.index].id.startsWith('sealed');
+    setDead(null);
     later(startIn, () => {
       const b = run.boards[ev.index];
       if (requestHitStop(gov.current, strokeNo.current)) clock.hitStop(60);
       s.chest.value = 2;
       sfxChest();
-      Haptic.success();
+      CQH.success();
       const cell = cellPx();
-      // Scaled by shells (9.8): clear only, + Par (coin pop), + Golden (splash burst).
-      burst('coins', b.chest, { count: reducedMotion ? 4 : r.shellPar ? 8 : 4, color: packHex(CQ.gold) }, -cell * 0.3);
+      // Scaled by shells (9.8): clear only, + Par (coin pop), + Golden (splash burst, leftover gobble).
+      burst('coins', b.chest, { count: reducedMotion ? 4 : r.shellPar ? 16 : 10, color: packHex(CQ.gold) }, -cell * 0.3);
       if (r.shellPar) burst('bubbles', b.chest, { count: 6 }, -cell * 0.2);
       if (r.shellGolden) burst('splash', b.chest, { count: reducedMotion ? 6 : 12 });
       s.breath.value = withSequence(withTiming(0.06, { duration: 250 }), withTiming(0, { duration: 250 }));
-      later(120, () => { sfxShells(r.shells); scheduleHaptics(gridSteps(r.shells, 0, 110, 'selection')); });
+      later(120, () => { sfxShells(r.shells); cqSchedule(Array.from({ length: r.shells }, (_, k) => ({ at: k * 160, p: 'selection' as const }))); });
+      if (r.shells >= 3 && !ev.runComplete) {
+        const left = Math.max(0, Math.min(8, r.limit - r.spent));
+        if (left) later(480, () => sfxLeftover(left));
+      }
       const cur = runRef.current;
       if (cur) syncHud(cur);
-      if (showdown && r.shellPar) sendPlayerSplash();
-      if (showdown) { bumps.current[0] = Date.now(); refreshRail(); }
       if (recap) {
         showRecap(run, ev.index);
         setSplitChip({ text: `Par: ${r.parTarget}, you: ${r.strokes}`, good: false, key: Date.now() });
@@ -1109,8 +1311,8 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       later(startIn + 250, () => { const cur = runRef.current; if (cur) (showdown ? finishShowdownRef.current(cur) : finishRun(cur, r)); });
       return;
     }
-    // Capped at 1.2 s and overlapping the next board's rise; a recap holds the board a little longer.
-    const nextAt = startIn + (recap ? 1150 : r.shells >= 3 ? 600 : r.shells === 2 ? 500 : 350);
+    // 1.1 to 1.7 s scaled by shells, overlapping the next board's rise; a recap holds the board a little longer.
+    const nextAt = startIn + (recap ? 1150 : r.shells >= 3 ? 700 : r.shells === 2 ? 550 : 400);
     later(nextAt, () => {
       const cur = runRef.current;
       if (!cur) return;
@@ -1119,77 +1321,64 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       beginVoyage(cur, true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [later, clock, burst, reducedMotion, syncHud, ghost, finishRun, beginVoyage, scored, showdown, showRecap]);
+  }, [later, clock, burst, reducedMotion, syncHud, ghost, finishRun, beginVoyage, scored, showdown, showRecap, context]);
 
   const presentStall = useCallback((run: RunState, startIn: number) => {
     const s = svRef.current;
-    // 1.4 s max, any tap skips straight to the card.
     later(Math.min(startIn, 700), () => {
       sfxStall();
-      Haptic.warning();
+      CQH.warning();
       s.swirl.value = withTiming(1, { duration: 300 });
+      // First stall of a voyage: the free first-stroke footprint from the voyage start (Par is already gone).
       const b = currentBoard(run);
       const v = run.voyage;
-      // Near miss (Candy Crush): the solver says how far the chest really was.
-      const d = distanceFrom(b, v, false);
-      let nearMiss: string | null = null;
-      if (Number.isFinite(d) && d <= 2) nearMiss = `So close! ${d} stroke${d === 1 ? '' : 's'} short.`;
-      // Wrong-turn marker: the tile you stood on before the first stroke with no way home in budget.
-      const lim = limitFor(b, run.knobs) + v.limitBonus;
-      const states = [...v.stack.map((x) => ({ pos: x.pos, mask: x.mask, golden: x.golden, moves: x.moves, phase: v.phase })),
-        { pos: v.pos, mask: v.mask, golden: v.golden, moves: v.moves, phase: v.phase }];
-      const budget = [...v.stack.map((x) => lim - x.spent), lim - v.spent];
-      const dead = firstDeadState(b, states, budget);
-      let wrong = false;
-      if (dead > 0) {
-        const c = center(states[dead - 1].pos);
-        s.wrong.value = [c.x, c.y];
-        s.wrongT0.value = s.fxT.value + 300;
-        later(300, () => { sfxWrongTurn(); Haptic.hitRigid(); });
-        wrong = true;
+      const [first] = hintFrom(b, { pos: b.start, mask: 0, golden: false, moves: 0, phase: v.phase }, 1);
+      if (first !== undefined && s.hint.value.length === 0) {
+        const sim = simulateStroke(b, b.start, 0, false, tideAt(b.P, 0, v.phase), first === A_TREAD ? -1 : first);
+        const c = center(sim.pos);
+        s.hint.value = [c.x, c.y];
+        s.hintT0.value = s.fxT.value + 100000; // hold while the sheet is up
       }
-      let hint = false;
-      if (firstStall.current) {
-        firstStall.current = false;
-        const [first] = hintFrom(b, { pos: b.start, mask: 0, golden: false, moves: 0, phase: v.phase }, 1);
-        if (first !== undefined) {
-          const sim = simulateStroke(b, b.start, 0, false, tideAt(b.P, 0, v.phase), first === A_TREAD ? -1 : first);
-          const c = center(sim.pos);
-          s.hint.value = [c.x, c.y];
-          s.hintT0.value = s.fxT.value + 100000; // hold while the card is up
-          hint = true;
-        }
-      }
-      later(400, () => setStall({ nearMiss, hint, wrong }));
+      later(300, () => { const r = runRef.current; if (r) checkDead(r); });
     });
-  }, [later, center]);
+  }, [later, center, checkDead]);
 
   const presentFail = useCallback((run: RunState, startIn: number) => {
     const s = svRef.current;
     finishing.current = true;
+    setDead(null);
     later(Math.min(startIn, 500) + 100, () => {
       const p = s.shark.value;
       s.plan.value = { ...idlePlan(p.x, p.y, p.facing), kind: PLAN_WHIRL, t0: -1 };
       sfxWhirlpool();
       sfxRingLost();
-      Haptic.failBuzz();
+      CQH.fail();
       setFailed(true);
-      setStall(null);
       GameAudio.music.setState('muffled', 600);
+      later(650, () => sfxSoClose());
     });
     later(Math.min(startIn, 500) + 1000, () => {
       GameAudio.music.setState('open', 300);
       const shells = totalShells(run.results);
+      const v = run.voyage;
+      const b = currentBoard(run);
+      const d = distanceFrom(b, v, false);
+      const near = Number.isFinite(d) && d <= 2 ? `${d} stroke${d === 1 ? '' : 's'} from the chest` : null;
+      setSummary({
+        title: 'So close!', grid: shellsRef.current.map((x) => x.slice()), stars: 0, failed: true, newBest: false,
+        nextStar: near, stamp: null, coinPour: 0, line: `${run.results.length} of ${run.boards.length} voyages cleared`, podium: null, shareLabel: null,
+      });
       setResult({
         score: shells,
         stars: 0,
         thresholds,
         message: 'The tide won this round',
-        stats: [{ label: 'Voyages', value: `${run.results.length}/${run.boards.length}` }, { label: 'Shells', value: `${shells}/${run.boards.length * 3}` }],
-        meta: { failed: true, context, seed: runSeed, attempt, v: 2 },
+        stats: [{ label: 'Voyages', value: `${run.results.length}/${run.boards.length}` }],
+        meta: { failed: true, proof: proofOf(run, Date.now() - startedAt.current, 0, true), context, seed: runSeed, attempt, v: 3 },
       });
     });
-  }, [later, context, runSeed, attempt, thresholds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [later, context, runSeed, attempt]);
 
   // ---- applying actions -----------------------------------------------------------------------------------
   const noteInput = () => {
@@ -1205,6 +1394,15 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     }
   };
 
+  const noteMisfire = () => {
+    const now = Date.now();
+    misfires.current = [...misfires.current.filter((t) => now - t < 20000), now];
+    if (misfires.current.length >= 2 && !arrows && progress && !progress.misfireHintShown) {
+      setToast({ text: 'Try the arrow buttons while walking? Menu > Arrows', key: now });
+      void saveProgress((p) => ({ ...p, misfireHintShown: true })).then(setProgress);
+    }
+  };
+
   const applyNow = useCallback((action: number) => {
     const run = runRef.current;
     if (!run || finishing.current) return;
@@ -1212,7 +1410,15 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const vi = run.index;
     const prevT = times.current[vi][times.current[vi].length - 1] ?? 0;
     const t = Math.max(Date.now() - startedAt.current, prevT + 1);
-    const res = applyAction(run, action, t);
+    let res: { ok: boolean; recorded: boolean; events: CqEvent[]; run: RunState };
+    let roomEvs: RoomEvent[] = [];
+    if (showdown && room.current) {
+      const rr = roomApply(room.current, 0, action, t);
+      res = { ok: rr.ok, recorded: rr.recorded, events: rr.events, run: racerOf(room.current, 0)?.run ?? run };
+      roomEvs = rr.room;
+    } else {
+      res = applyAction(run, action, t);
+    }
     if (!res.ok) return;
     const s = svRef.current;
     s.armed.value = -1;
@@ -1222,12 +1428,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     if (!res.recorded) {
       // Bump: pose swap, nudge, board shake, rattle. Never recorded.
       const bump = res.events[0] as Extract<CqEvent, { type: 'bump' }>;
+      if (!bump || bump.type !== 'bump') return;
       const from = center(run.voyage.pos);
       const cell = cellPx();
       const target = bump.target >= 0 ? center(bump.target) : { x: from.x + [0, 1, 0, -1][bump.dir] * cell, y: from.y + [-1, 0, 1, 0][bump.dir] * cell };
       s.plan.value = { ...idlePlan(from.x, from.y, s.plan.value.facing || 1), kind: PLAN_BUMP, t0: -1, pts: [from.x, from.y], bx: target.x, by: target.y };
       sfxBump(bump.reason);
-      Haptic.hitRigid();
+      CQH.rigid();
       if (!reducedMotion && requestShake(gov.current, Date.now())) camera.shake(0.18, [0, 1, 0, -1][bump.dir] ?? 0, [-1, 0, 1, 0][bump.dir] ?? 0);
       if (bump.reason === 'rock') swayNear(currentBoard(run), [run.voyage.pos], 60);
       if (bump.reason === 'locked') {
@@ -1250,11 +1457,14 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const next = res.run;
     let dur = 200;
     let endMove = 0;
+    let stroked = false;
     for (const ev of res.events) {
       if (ev.type === 'stroke') {
         const p = presentStroke(next, ev, res.events);
         dur = p.dur;
         endMove = p.endMove;
+        stroked = true;
+        if (dead && dead.kind === 'dead') setDead(null);
       } else if (ev.type === 'clear') {
         presentClear(next, ev, Math.max(0, endMove));
       } else if (ev.type === 'stall') {
@@ -1271,13 +1481,14 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         dur = planDuration(s.plan.value);
         if (!scrubbing.current) s.undoTint.value = withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: Math.max(200, dur) }));
         sfxUndo(scrubbing.current ? Math.min(3, (pathStack.current.length % 4)) : 0);
-        if (trial) { Haptic.tapLight(); setSmallChip({ text: 'stroke spent', tone: 'coral', key: Date.now() }); } else Haptic.tickSelection();
-        if (ev.slip) setSmallChip({ text: 'Slip, Par kept', tone: 'white', key: Date.now() });
+        if (trial && !ev.refunded) { CQH.light(); setSmallChip({ text: 'stroke spent', tone: 'coral', key: Date.now() }); } else CQH.tick();
+        if (ev.slip) setSmallChip({ text: trial ? 'Refunded' : 'Slip, Par kept', tone: 'white', key: Date.now() });
         syncBoardVisuals(next);
         s.hint.value = [];
         s.wrong.value = [];
-        setStall(null);
         s.swirl.value = withTiming(0, { duration: 200 });
+        deadEpisode.current = false;
+        setDead(null);
         if (Date.now() - lastCommitAt.current < 1500 && !ev.slip) noteMisfire();
       } else if (ev.type === 'restart') {
         const b = currentBoard(next);
@@ -1290,47 +1501,28 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         pathStack.current = [];
         pearlStep.current = 0;
         sfxUndo(3);
-        Haptic.hitMedium();
-        if (ev.spentKept) setSmallChip({ text: 'Budget remembers', tone: 'coral', key: Date.now() });
+        CQH.medium();
+        if (ev.spentKept) setSmallChip({ text: 'strokes stay spent', tone: 'coral', key: Date.now() });
         syncBoardVisuals(next);
         s.hint.value = [];
         s.wrong.value = [];
         s.swirl.value = withTiming(0, { duration: 200 });
-        setStall(null);
+        deadEpisode.current = false;
+        setDead(null);
         dur = 360;
       } else if (ev.type === 'continue') {
         sfxRingOn();
-        Haptic.hitMedium();
+        CQH.medium();
         s.swirl.value = withTiming(0, { duration: 200 });
         s.hint.value = [];
         s.wrong.value = [];
-        setStall(null);
+        deadEpisode.current = false;
+        setDead(null);
         const p = s.shark.value;
         const fp = toField(p.x, p.y);
         fx.current?.ring(fp.x, fp.y, { color: CQ.coral, from: 10, to: cellPx() * 0.7, ms: 300 });
-        setToast({ text: '+2 strokes', key: Date.now() });
+        setToast({ text: '+2 strokes', key: Date.now(), tone: 'gold' });
         dur = 250;
-      } else if (ev.type === 'splash') {
-        const p = s.shark.value;
-        const fp = toField(p.x, p.y);
-        if (ev.blocked) {
-          fx.current?.ring(fp.x, fp.y, { color: '#ffffff', from: 12, to: cellPx() * 0.9, ms: 300 });
-          fx.current?.burst('bubbles', fp.x, fp.y, { count: 12 });
-          setToast({ text: 'Shield popped the Splash!', key: Date.now() });
-          Haptic.hitMedium();
-        } else {
-          syncBoardVisuals(next);
-          s.sweepT0.value = s.fxT.value;
-          sfxTide();
-          Haptic.warning();
-          if (!reducedMotion && requestShake(gov.current, Date.now())) camera.shake(0.22);
-          const b = currentBoard(next);
-          for (let i = 0; i < b.tiles.length; i++) if (b.tiles[i] === 's') burst('splash', i, { count: 6 });
-          if (ev.beached) sfxBeached();
-        }
-        s.plan.value = { ...idlePlan(p.x, p.y, p.facing), beached: next.voyage.beached ? 1 : 0, t0: -1 };
-        dur = 350;
-        refreshRail();
       } else if (ev.type === 'tip') {
         const b = currentBoard(next);
         const v = next.voyage;
@@ -1346,15 +1538,16 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         s.hint.value = pts;
         s.hintT0.value = s.fxT.value;
         sfxTip();
-        Haptic.tickSelection();
-        setToast({ text: ev.cost > 0 ? `Tip: -${ev.cost} strokes. Follow the gold.` : 'Follow the gold. Par shell is gone.', key: Date.now() });
+        if (ev.ring) { CQH.medium(); sfxRingOn(); } else CQH.tick();
+        setToast({ text: ev.ring ? 'Tip: a ring for the next 2 strokes. Follow the gold.' : 'Follow the gold. The Par shell is gone.', key: Date.now() });
         dur = 100;
       }
     }
+    if (roomEvs.length) presentRoom(roomEvs);
     busyUntil.current = Date.now() + Math.min(dur, 900);
-    if (showdown) later(Math.min(dur, 900), refreshRail);
     syncHud(next);
     refreshPreviews(next);
+    if (!stroked && !next.voyage.stalled) later(Math.min(dur, 600), () => { const r = runRef.current; if (r) checkDead(r); });
     lastCommitAt.current = Date.now();
     later(Math.min(dur, 900) + 10, () => {
       const b = buffered.current;
@@ -1362,12 +1555,12 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       if (b !== null) applyNowRef.current(b);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center, reducedMotion, camera, later, presentStroke, presentClear, presentStall, presentFail, trial, syncBoardVisuals, burst, toField, syncHud, refreshPreviews, swayNear]);
+  }, [center, reducedMotion, camera, later, presentStroke, presentClear, presentStall, presentFail, trial, syncBoardVisuals, burst, toField, syncHud, refreshPreviews, swayNear, checkDead, presentRoom, showdown, dead]);
   const applyNowRef = useRef(applyNow);
   applyNowRef.current = applyNow;
 
   const commit = useCallback((action: number) => {
-    if (!playing.current || finishing.current || result) return;
+    if (!playing.current || finishing.current || result || stake) return;
     if (Date.now() < busyUntil.current) {
       // Exactly one buffered commit; the rest of the current animation plays at 2x.
       buffered.current = action;
@@ -1375,16 +1568,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       return;
     }
     applyNowRef.current(action);
-  }, [result, fastForward]);
-
-  const noteMisfire = () => {
-    const now = Date.now();
-    misfires.current = [...misfires.current.filter((t) => now - t < 20000), now];
-    if (misfires.current.length >= 2 && !arrows && progress && !progress.misfireHintShown) {
-      setToast({ text: 'Try the arrow buttons while walking?', key: now });
-      void saveProgress((p) => ({ ...p, misfireHintShown: true })).then(setProgress);
-    }
-  };
+  }, [result, fastForward, stake]);
 
   // ---- input ---------------------------------------------------------------------------------------------
   const onAim = useCallback((dir: number) => {
@@ -1393,7 +1577,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     s.tourT0.value = -1e9;
     if (dir < 0) { setChip(null); return; }
     sfxAim(dir);
-    Haptic.tickSelection();
+    CQH.tick();
     setChip(chipFor(dir));
   }, [chipFor]);
   const onCancelAim = useCallback(() => setChip(null), []);
@@ -1409,7 +1593,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const k = movesToTurn(b.P, v.moves, v.phase);
     const low = tideAt(b.P, v.moves, v.phase) === TIDE_LOW;
     let text = 'Open water';
-    if (i === v.pos) text = v.beached ? 'Beached! Swim off any time, no cost.' : 'Your shark';
+    if (i === v.pos) text = v.beached ? 'Resting on dry sand. Swim off any time, no cost.' : 'Your shark';
     else if (i === b.chest) text = v.mask === (1 << b.pearls.length) - 1 ? 'Treasure chest: open!' : `Treasure chest: ${b.pearls.length} pearls open it`;
     else if (ch === '#') text = 'Coral rock: blocks you and stops currents';
     else if (ch === 's') text = b.P ? `Sandbar: ${low ? 'dry' : 'underwater'} now, ${low ? 'floods' : 'dries'} in ${k} move${k === 1 ? '' : 's'}` : 'Sandbar';
@@ -1418,7 +1602,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     if (i === b.golden && !v.golden) text = 'Golden pearl: optional, worth a shell';
     const p = cellCenter(l, i);
     setInspect({ text, x: p.x, y: p.y });
-    Haptic.tickSelection();
+    CQH.tick();
   }, []);
 
   const gesture = useMemo(() => {
@@ -1504,22 +1688,23 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   }, [visible, lite, reducedMotion, burst]);
 
   // ---- dev autoplay (studio capture only). EXPO_PUBLIC_CQ_AUTOPLAY=1: a clean run with one slip undo.
-  // =2: the "rough day" tour: slip undo, burn strokes into a stall (card, wrong-turn X, first-stroke
-  // footprint), recover (Puzzle Restart / Trial ring), a Tide Tip, then the gold route.
+  // =2: the "rough day" tour: slip undo, wander into the dead sheet (wrong-turn X), recover (Puzzle undo /
+  // Trial ring), a Tide Tip, then the gold route. =3: lose on purpose (Trial: burn every ring).
   const autoMode = typeof __DEV__ !== 'undefined' && __DEV__ ? process.env.EXPO_PUBLIC_CQ_AUTOPLAY ?? '0' : '0';
-  // =3: lose on purpose (Trial: burn every ring) to exercise the run-failed whirlpool.
   const autoplay = autoMode === '1' || autoMode === '2' || autoMode === '3';
-  const auto = useRef<{ slip: boolean; stalled: boolean; tipped: boolean; recovered: boolean }>({ slip: false, stalled: false, tipped: false, recovered: false });
+  const auto = useRef<{ slip: boolean; deadSeen: boolean; tipped: boolean; recovered: boolean }>({ slip: false, deadSeen: false, tipped: false, recovered: false });
   const autoNext = useRef(0);
+  const deadRef = useRef(dead);
+  deadRef.current = dead;
   useEffect(() => {
     if (!autoplay || !visible) return undefined;
     let stop = false;
-    auto.current = { slip: false, stalled: false, tipped: false, recovered: false };
+    auto.current = { slip: false, deadSeen: false, tipped: false, recovered: false };
     const tick = () => {
       if (stop) return;
       const run = runRef.current;
       const s = svRef.current;
-      if (run && playing.current && !finishing.current && Date.now() > busyUntil.current + 250 && Date.now() > autoNext.current) {
+      if (run && playing.current && !finishing.current && !stake && Date.now() > busyUntil.current + 250 && Date.now() > autoNext.current) {
         const b = currentBoard(run);
         const v = run.voyage;
         const st = auto.current;
@@ -1528,39 +1713,39 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         let gap = 1100;
         const good = () => hintFrom(b, v, 1, autoMode === '1' ? Infinity : strokesLeft(run))[0];
         const wrong = () => { const g = good(); for (let d = 0; d < 4; d++) if (d !== g && previewFor(run, d).valid) return d; return undefined; };
+        // Showdown: aim at the first glowing chip after a second, like a person would.
+        if (room.current && room.current.aims.some((x) => x.from === 0)) {
+          const target = room.current.racers.find((x) => x.seat !== 0 && !x.pending && x.run.index < x.run.boards.length - 1);
+          if (target) later(900, () => onAimSeat(target.seat));
+          autoNext.current = Date.now() + 1400;
+          setTimeout(tick, 300);
+          return;
+        }
         if (autoMode === '3') {
-          a = v.stalled ? A_CONTINUE : (wrong() ?? good());
+          a = v.stalled ? (run.rings > 0 ? A_CONTINUE : undefined) : (wrong() ?? good());
           gap = 700;
-        } else if (v.stalled) {
-          st.stalled = true;
+        } else if (deadRef.current) {
+          st.deadSeen = true;
           if (!st.recovered) { st.recovered = true; autoNext.current = Date.now() + 2600; setTimeout(tick, 300); return; }
-          a = trial ? A_CONTINUE : A_RESTART;
-          gap = 1400;
+          a = trial ? (ringAllowed(run) && deadRef.current.kind === 'stall' ? A_CONTINUE : run.voyage.stack.length ? A_UNDO : A_CONTINUE) : A_UNDO;
+          gap = 900;
         } else if (run.index === 0 && !st.slip && v.strokes === 1) {
-          // One wrong turn, undone at once: a slip (Par kept).
+          // One wrong turn, undone at once: a slip (Par kept; a Trial refund).
           a = wrong();
           st.slip = true;
           if (a !== undefined) later(1050, () => commitRef.current(A_UNDO));
           gap = 1800;
-        } else if (autoMode === '2' && run.index === (trial ? 1 : 0) && !st.stalled && v.strokes >= 1 && st.slip
-          && strokesLeft(run) - distanceFrom(b, v, false) >= 0) {
-          // Wander, but never more than one stroke past saving: the stall lands as a near miss.
-          const left0 = strokesLeft(run);
+        } else if (autoMode === '2' && run.index === (trial ? 1 : 1) && !st.deadSeen && v.strokes >= 1 && st.slip) {
+          // Wander until the dead sheet rises (never more than one stroke past saving).
           let pick: number | undefined;
-          let best = Infinity;
           for (let d = 0; d < 4; d++) {
             const pv = previewFor(run, d);
-            if (!pv.valid || pv.clears) continue;
-            const sim = simulateStroke(b, v.pos, v.mask, v.golden, tideAt(b.P, v.moves, v.phase), d);
-            const nd = distanceFrom(b, { pos: sim.pos, mask: sim.mask, golden: sim.golden, moves: v.moves + 1, phase: v.phase }, false);
-            const slack = left0 - 1 - nd;
-            if (slack >= -1 && slack < best) { best = slack; pick = d; }
+            if (pv.valid && !pv.clears && s.previews.value[d]?.red) { pick = d; break; }
           }
           a = pick ?? good();
-          hold = 260;
-          gap = 560;
-        } else if (autoMode === '2' && !st.tipped && tipAllowed(run) && v.strokes === 0
-          && ((trial && run.index === 2) || (!trial && run.index === 1))) {
+          hold = 700;
+          gap = 900;
+        } else if (autoMode === '2' && !st.tipped && tipAllowed(run) && v.strokes === 0 && run.index === run.boards.length - 1) {
           st.tipped = true;
           later(50, () => commitRef.current(A_TIP));
           autoNext.current = Date.now() + 2600;
@@ -1583,7 +1768,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     const t = setTimeout(tick, 1800);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoplay, visible, boards]);
+  }, [autoplay, visible, boards, stake]);
 
   // ---- shell callbacks ---------------------------------------------------------------------------------------
   const handleStart = useCallback(() => {
@@ -1595,8 +1780,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     svRef.current.idleSince.value = svRef.current.fxT.value;
     GameAudio.music.setState('open', 200);
     setElapsedNow(0);
+    // R10 one-more metric: PLAY AGAIN within 10 s of the last results.
+    if (runEndAt.current && Date.now() - runEndAt.current < 10000) {
+      void saveProgress((p) => ({ ...p, replays: p.replays.map((x, i) => (i === p.replays.length - 1 ? { ...x, again: true } : x)) }));
+    }
+    if (context === 'ride' && run && run.voyage.strokes === 0 && run.index === 0) setStake(true);
     if (run && run.voyage.strokes === 0) { showRibbon(run); svRef.current.tourT0.value = svRef.current.fxT.value + 100; }
-  }, [restore.snapshot, showRibbon]);
+  }, [restore.snapshot, showRibbon, context]);
   const handlePause = useCallback(() => {
     playing.current = false;
     buffered.current = null;
@@ -1613,12 +1803,12 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   }, [toField]);
   const getSnapshot = useCallback(() => {
     const run = runRef.current;
-    if (!run) return null;
+    if (!run || showdown) return null;
     return {
-      score: treasureOf(run.results),
+      score: totalShells(run.results),
       state: { actions: run.actions.map((a) => a.slice()), times: times.current.map((t) => t.slice()), ready: readyAt.current.slice(), elapsed: Date.now() - startedAt.current },
     };
-  }, []);
+  }, [showdown]);
   const onWrapUp = useCallback((): GameResult | null => {
     const run = runRef.current;
     if (!run) return null;
@@ -1630,7 +1820,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       thresholds,
       message: `${shells} shell${shells === 1 ? '' : 's'} so far`,
       stats: [{ label: 'Voyages', value: `${run.results.length}/${run.boards.length}` }, { label: 'Shells', value: `${shells}/${run.boards.length * 3}` }],
-      meta: { partial: true, context, seed: runSeed, v: 2 },
+      meta: { partial: true, context, seed: runSeed, v: 3 },
     };
   }, [context, runSeed, thresholds]);
   const onRematch = useCallback(() => {
@@ -1639,8 +1829,35 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     if (failed || trial) setAttempt((a) => a + 1);
     else setBoardsKey((k) => k + 1);
     setResult(null);
+    setSummary(null);
     setFailed(false);
   }, [clearTimers, failed, trial]);
+
+  /** Challenge a friend (0.A.11): the system share sheet with a deep link; the app never sends anything itself. */
+  const onChallengeFriend = useCallback(() => {
+    const run = runRef.current;
+    if (!run) return;
+    const shells = totalShells(run.results);
+    const strokes = run.results.reduce((a, r) => a + r.strokes, 0);
+    const url = `themeparkshark://current-quest/challenge?seed=${runSeed}&ctx=${context === 'daily' ? 'daily' : 'challenge'}&s=${shells}&k=${strokes}`;
+    void Share.share({ message: `Beat my Current Quest run: ${shells} shells in ${strokes} strokes. ${url}`, url });
+  }, [runSeed, context]);
+  const onShareCard = useCallback(() => {
+    if (!share) return;
+    void shareRef.current?.share(`${share.heading}: ${share.grid.flat().filter(Boolean).length} shells`);
+  }, [share]);
+
+  const renderResults = useCallback((args: ShellResultsArgs) => (summary ? (
+    <CqResultsCard
+      s={summary}
+      stars={summary.stars}
+      reducedMotion={args.reducedMotion}
+      onDone={args.claim}
+      onAgain={args.rematch}
+      onChallenge={!scored && !summary.failed && context !== 'chart' ? onChallengeFriend : undefined}
+      onShare={share ? onShareCard : undefined}
+    />
+  ) : null), [summary, scored, context, onChallengeFriend, share, onShareCard]);
 
   // ---- controls callbacks -----------------------------------------------------------------------------------
   const onUndo = useCallback(() => { if (!scrubbing.current) sfxButton(); commit(A_UNDO); }, [commit]);
@@ -1649,14 +1866,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     svRef.current.undoTint.value = withTiming(on ? 1 : 0, { duration: on ? 80 : 300 });
   }, []);
   const onRestart = useCallback(() => { commit(A_RESTART); }, [commit]);
-  const onContinue = useCallback(() => { commit(A_CONTINUE); }, [commit]);
+  const onRing = useCallback(() => { commit(A_CONTINUE); }, [commit]);
   const onTip = useCallback(() => {
     const run = runRef.current;
     if (!run || !tipAllowed(run)) {
-      if (run && trial) setToast({ text: 'Not enough strokes left for a tip', key: Date.now() });
+      if (run && trial) setToast({ text: 'A tip uses a ring, and none are left', key: Date.now() });
       return;
     }
-    // Recorded as action 9 in both profiles: it forfeits Par, and in a Trial it costs 2 strokes of budget.
     commit(A_TIP);
   }, [commit, trial]);
   const onTreadArm = useCallback(() => { sv.armed.value = A_TREAD; setChip(chipFor(A_TREAD)); }, [sv.armed, chipFor]);
@@ -1676,7 +1892,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   useEffect(() => { if (progress) setArrows(progress.arrows); }, [progress === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const onArrowArm = useCallback((dir: number) => { sv.armed.value = dir; onAim(dir); }, [sv.armed, onAim]);
   const onArrowDisarm = useCallback(() => { sv.armed.value = -1; }, [sv.armed]);
-  // Hold the tide dial: the whole board previews its next tide (water level, sandbars) while held.
+  // Hold the tide medallion: the whole board previews its next tide (water level, sandbars, palette) while held.
   const onTideHold = useCallback((on: boolean) => {
     const run = runRef.current;
     if (!run) return;
@@ -1687,16 +1903,18 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       const k = movesToTurn(b.P, v.moves, v.phase);
       const nextLow = tideAt(b.P, v.moves + k, v.phase) === TIDE_LOW;
       s.tideDrop.value = withTiming(nextLow ? 8 : 0, { duration: 220 });
-      Haptic.tickSelection();
+      s.lowK.value = withTiming(nextLow ? 1 : 0, { duration: 220 });
+      CQH.tick();
     } else {
       s.tideDrop.value = withTiming(tideDropFor(b, v.moves, v.phase), { duration: 260 });
+      s.lowK.value = withTiming(tideAt(b.P, v.moves, v.phase) === TIDE_LOW ? 1 : 0, { duration: 260 });
     }
   }, []);
 
   // Toast and small chip auto-hide.
   useEffect(() => {
     if (!toast) return undefined;
-    const t = setTimeout(() => setToast(null), 1600);
+    const t = setTimeout(() => setToast(null), toast.tone === 'coral' ? 2600 : 1700);
     return () => clearTimeout(t);
   }, [toast]);
   useEffect(() => {
@@ -1712,28 +1930,38 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     return () => clearInterval(id);
   }, [ghost, visible]);
 
+  // Results: the board slides 40 px down under the white veil (P8).
+  const boardDrop = useSharedValue(0);
+  useEffect(() => { boardDrop.value = result ? withSpring(40, { damping: 16, stiffness: 140 }) : withTiming(0, { duration: 200 }); }, [result, boardDrop]);
+  const boardDropSt = useAnimatedStyle(() => ({ transform: [{ translateY: boardDrop.value }] }));
+
   // ---- render --------------------------------------------------------------------------------------------------
   const run = runRef.current;
   const board = run && boards ? boards[Math.min(voyageIdx, boards.length - 1)] : null;
-  const shellsNow = shellsRef.current.flat().filter(Boolean).length;
-  const par = board ? (hud?.goldenTaken ? board.parGold : board.par) : 0;
-  const spent = limit - left;
   const objective = showdown
-    ? 'Showdown: 2 voyages vs the crew. Most shells wins.'
-    : trial ? `3 voyages, ${knobs.rings} life rings. Beat par. Find the gold.` : `${voyagesN} voyages. Beat par. Find the gold.`;
+    ? 'Ghost Race: 3 voyages vs the crew. Par clears send Splashes.'
+    : context === 'daily' ? `Daily Tide #${dailyNumber(today)}: one scored try today.`
+      : context === 'chart' ? `${node?.name ?? 'Chart'}: one voyage.`
+        : trial ? 'Every stroke counts. A life ring gives 2 strokes.' : `${voyagesN} voyages. Beat par, find the gold.`;
+  const controlsOn = !result && !failed;
+  const hudW = Math.max(200, (field?.w ?? 375) - 28);
 
   return (
     <GameShellV2
       ref={shellRef}
       visible={visible}
       title="Current Quest"
-      subtitle={themeSubtitle(themeId)}
-      score={shellsNow}
+      subtitle={showdown ? 'Ghost Race' : context === 'daily' ? `Daily Tide #${dailyNumber(today)}` : themeSubtitle(themeId)}
+      score={totalShells(run?.results ?? [])}
+      hideHeaderScore
       objective={objective}
       result={result}
       thresholds={thresholds}
       resumeStyle="instant"
       countdownStyle="go"
+      countdownScrim="light"
+      resultsScrim="none"
+      renderResults={renderResults}
       gameId="current"
       sessionKey={sessionKey}
       getSnapshot={getSnapshot}
@@ -1749,28 +1977,15 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       <GestureHandlerRootView style={styles.root}>
         <RNImage source={BACKDROP} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.root} onLayout={onFieldLayout}>
-          {hud ? <QuestHud h={hud} walkingChip={walking} onTideHold={onTideHold} /> : <View style={{ height: 58 }} />}
-          {showdown && racers.length ? <ShowdownRail racers={racers} remainingMs={sdRemaining} total={voyagesN} /> : null}
+          {hud ? <QuestHud h={hud} onTideHold={onTideHold} width={hudW} tierLabels={trial ? ['6', '8'] : undefined} /> : <View style={{ height: HUD_ROW_H + RUN_BAR_H }} />}
+          {showdown && racers.length ? <ShowdownRail racers={racers} remainingMs={sdRemaining} total={voyagesN} onAim={onAimSeat} /> : null}
           {!showdown && ghost ? <GhostRail ghost={ghost} elapsedMs={elapsedNow} voyage={voyageIdx} cleared={run?.results.length ?? 0} total={voyagesN} /> : null}
-          <View style={[styles.strokeRow, walking && { paddingLeft: 96 }]}>
-            {walking ? (
-              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(300)} style={styles.moving} pointerEvents="none">
-                <Text style={styles.movingTxt}>Line moving</Text>
-              </Animated.View>
-            ) : null}
-            {limit > 0 && layout ? <StrokeBar limit={limit} spent={spent} par={par} hot={left <= 3 && left >= 0} width={layout.cw - (walking ? 96 : 0)} /> : null}
-            {smallChip ? (
-              <Animated.View key={smallChip.key} entering={FadeIn.duration(100)} exiting={FadeOut} style={[styles.smallChip, smallChip.tone === 'coral' ? styles.smallChipCoral : styles.smallChipWhite]} pointerEvents="none">
-                <Text style={[styles.smallChipTxt, smallChip.tone === 'coral' && styles.smallChipTxtCoral]}>{smallChip.text}</Text>
-              </Animated.View>
-            ) : null}
-          </View>
-          <View style={styles.boardArea}>
+          <Animated.View style={[styles.boardArea, boardDropSt]}>
             {layout && board && stableImages.idle ? (
               <GestureDetector gesture={gesture}>
                 <View
                   style={{ width: layout.cw, height: layout.ch }}
-                  onLayout={(e) => { boardOrigin.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; }}
+                  onLayout={(e) => { boardOrigin.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y + HUD_ROW_H + RUN_BAR_H + (showdown ? RAIL_H : 0) }; }}
                   accessibilityLabel="Lagoon board. Swipe to swim, tap a tile to inspect."
                 >
                   <Animated.View style={camera.style}>
@@ -1787,10 +2002,20 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
                       <Text style={styles.inspectTxt}>{inspect.text}</Text>
                     </Animated.View>
                   ) : null}
-                  {ribbon ? (
+                  {ribbon && !startCard ? (
                     <Animated.View key={ribbon.key} entering={ZoomIn.springify().damping(11)} exiting={FadeOut} style={[styles.ribbon, ribbon.gold && styles.ribbonGold]} pointerEvents="none">
                       <Text style={styles.ribbonTxt}>{ribbon.title}</Text>
                       {ribbon.sub ? <Text style={styles.ribbonSub}>{ribbon.sub}</Text> : null}
+                    </Animated.View>
+                  ) : null}
+                  {startCard ? (
+                    <Animated.View key={startCard.key} entering={ZoomIn.springify().damping(10)} exiting={FadeOut} style={[styles.ribbon, styles.ribbonCoral]} pointerEvents="none">
+                      <Text style={styles.ribbonTxt}>{startCard.title}</Text>
+                      {startCard.parFrom != null ? (
+                        <Text style={styles.ribbonSub}>
+                          {'par '}<Text style={styles.strike}>{String(startCard.parFrom)}</Text>{` to ${startCard.parTo}`}
+                        </Text>
+                      ) : null}
                     </Animated.View>
                   ) : null}
                   {splitChip ? (
@@ -1798,70 +2023,72 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
                       <Text style={styles.splitTxt}>{splitChip.text}</Text>
                     </Animated.View>
                   ) : null}
-                  {toast ? (
-                    <Animated.View key={toast.key} entering={FadeIn.duration(120)} exiting={FadeOut} style={styles.toast} pointerEvents="none">
-                      <Text style={styles.toastTxt}>{toast.text}</Text>
+                  {smallChip ? (
+                    <Animated.View key={smallChip.key} entering={FadeIn.duration(100)} exiting={FadeOut} style={[styles.smallChip, smallChip.tone === 'coral' ? styles.smallChipCoral : styles.smallChipWhite]} pointerEvents="none">
+                      <Text style={[styles.smallChipTxt, smallChip.tone === 'coral' && styles.smallChipTxtCoral]}>{smallChip.text}</Text>
                     </Animated.View>
-                  ) : null}
-                  {stall && run ? (
-                    <StallCard trial={trial} rings={run.rings} nearMiss={stall.nearMiss} hintShown={stall.hint} wrongTurn={stall.wrong}
-                      onUndo={onUndo} onRestart={onRestart} onContinue={onContinue} />
                   ) : null}
                 </View>
               </GestureDetector>
             ) : <View style={{ height: 300 }} />}
-          </View>
-          {arrows ? (
+          </Animated.View>
+          {controlsOn && arrows ? (
             <View style={styles.arrowArea}>
-              <ArrowPad big={walking} disabled={!!stall || !!result} onArm={onArrowArm} onDisarm={onArrowDisarm} onCommit={commit} />
+              <ArrowPad big={walking} disabled={!!dead && dead.kind === 'stall'} onArm={onArrowArm} onDisarm={onArrowDisarm} onCommit={commit} />
             </View>
           ) : null}
-          <BottomBar
-            big={walking}
-            trial={trial}
-            rings={run?.rings ?? 0}
-            canUndo={!!run && run.voyage.stack.length > 0 && !(trial && run.voyage.stalled)}
-            undos={run?.voyage.undos ?? 0}
-            hasTide={!!board && board.P > 0}
-            tipPulse={tipPulse}
-            tipDisabled={!run || !tipAllowed(run)}
-            tipCost={tipCostOf(knobs)}
-            arrows={arrows}
-            disabled={!!result || failed}
-            onUndo={onUndo}
-            onScrub={onScrub}
-            onTreadArm={onTreadArm}
-            onTreadCommit={onTreadCommit}
-            onTreadCancel={onTreadCancel}
-            onTip={onTip}
-            onRestart={onRestart}
-            onToggleArrows={onToggleArrows}
-          />
+          {controlsOn ? (
+            <BottomBar
+              big={walking}
+              trial={trial}
+              rings={run?.rings ?? 0}
+              canUndo={!!run && run.voyage.stack.length > 0 && !(trial && run.voyage.stalled)}
+              undos={run?.voyage.undos ?? 0}
+              hasTide={!!board && board.P > 0}
+              tipPulse={tipPulse}
+              tipDisabled={!run || !tipAllowed(run)}
+              ringDisabled={!run || !ringAllowed(run)}
+              canRestart={!!run && run.voyage.stack.length > 0 && !(trial && run.voyage.stalled)}
+              arrows={arrows}
+              disabled={!!stake}
+              onUndo={onUndo}
+              onScrub={onScrub}
+              onTreadArm={onTreadArm}
+              onTreadCommit={onTreadCommit}
+              onTreadCancel={onTreadCancel}
+              onTip={onTip}
+              onRing={onRing}
+              onRestart={onRestart}
+              onToggleArrows={onToggleArrows}
+            />
+          ) : <View style={{ height: BAR_H }} />}
+          {controlsOn && dead && run ? (
+            <DeadSheet info={dead} trial={trial} rings={run.rings} canUndo={run.voyage.stack.length > 0 && !(trial && run.voyage.stalled)}
+              onUndo={onUndo} onRestart={onRestart} onRing={onRing} />
+          ) : null}
+          {walking && controlsOn ? (
+            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(300)} style={styles.moving} pointerEvents="none">
+              <Text style={styles.movingTxt}>Line moving</Text>
+            </Animated.View>
+          ) : null}
+          {incomingFrom && controlsOn ? (
+            <View style={styles.incoming} pointerEvents="none">
+              <Text style={styles.incomingTxt}>{`Next voyage: SPLASH from ${incomingFrom}`}</Text>
+            </View>
+          ) : null}
+          {toast ? (
+            <Animated.View key={toast.key} entering={FadeIn.duration(120)} exiting={FadeOut} style={[styles.toast, toast.tone === 'gold' && styles.toastGold, toast.tone === 'coral' && styles.toastCoral]} pointerEvents="none">
+              <Text style={styles.toastTxt}>{toast.text}</Text>
+            </Animated.View>
+          ) : null}
+          {result ? <ResultsVeil /> : null}
         </View>
-        {podium ? (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.podium} pointerEvents="none">
-            {podium.map((r, i) => (
-              <Animated.View key={`pd${r.seat}`} entering={ZoomIn.delay(200 + (podium.length - i) * 220).springify().damping(10)} style={[styles.podRow, r.you && styles.podRowYou]}>
-                <Text style={styles.podPlace}>{['1st', '2nd', '3rd', '4th'][r.place - 1]}</Text>
-                <RNImage source={AVATAR_IMG[r.avatar]} style={styles.podAvatar} />
-                {r.place === 1 ? <RNImage source={CROWN} style={styles.podCrown} /> : null}
-                <Text style={styles.podName}>{r.you ? 'You' : r.name}</Text>
-                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'out of time'}</Text>
-              </Animated.View>
-            ))}
-          </Animated.View>
-        ) : null}
+        {stake ? <StakeCard onDone={() => setStake(false)} /> : null}
+        {share ? <ShareCard ref={shareRef} data={share} /> : null}
         {layout ? <FxStage ref={fx} width={field?.w ?? layout.cw} height={field?.h ?? layout.ch} timeScale={clock.fxScale} reducedMotion={reducedMotion} capacity={lite ? 120 : 200} style={styles.fx} /> : null}
       </GestureHandlerRootView>
     </GameShellV2>
   );
-}
-
-function dirBetween(a: number, b: number): number {
-  const dr = Math.floor(b / 5) - Math.floor(a / 5);
-  const dc = (b % 5) - (a % 5);
-  if (Math.abs(dc) >= Math.abs(dr)) return dc >= 0 ? 1 : 3;
-  return dr >= 0 ? 2 : 0;
 }
 
 const styles = StyleSheet.create({
@@ -1869,11 +2096,10 @@ const styles = StyleSheet.create({
   boardArea: { alignItems: 'center', justifyContent: 'center', paddingBottom: 4, flex: 1 },
   fx: { position: 'absolute', left: 0, top: 0 },
   arrowArea: { alignItems: 'stretch', paddingBottom: 4 },
-  strokeRow: { height: 34, alignItems: 'center', justifyContent: 'center' },
-  // Walking is a state, not a pause (17): a quiet chip, input stays live.
-  moving: { position: 'absolute', left: 8, top: 6, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 9, backgroundColor: CQ.water, borderWidth: 1.5, borderColor: CQ.ink },
+  // Walking is a state, not a pause (17): a quiet chip by the medallion, input stays live.
+  moving: { position: 'absolute', left: 74, top: 6, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 9, backgroundColor: CQ.water, borderWidth: 1.5, borderColor: CQ.ink },
   movingTxt: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff' },
-  smallChip: { position: 'absolute', right: 10, top: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1.5, borderColor: CQ.ink },
+  smallChip: { position: 'absolute', right: 8, top: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1.5, borderColor: CQ.ink },
   smallChipCoral: { backgroundColor: CQ.coral },
   smallChipWhite: { backgroundColor: '#ffffff' },
   smallChipTxt: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy },
@@ -1893,23 +2119,22 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: CQ.ink, alignItems: 'center', maxWidth: '92%',
   },
   ribbonGold: { backgroundColor: CQ.gold, borderColor: CQ.ink },
+  ribbonCoral: { backgroundColor: '#ffe3df', borderColor: CQ.coral },
   ribbonTxt: { fontFamily: 'Shark', fontSize: 19, color: CQ.navy },
   ribbonSub: { fontFamily: 'Knockout', fontSize: 13, color: CQ.navy, marginTop: 1, textAlign: 'center' },
+  strike: { textDecorationLine: 'line-through', textDecorationColor: CQ.ink },
   split: { position: 'absolute', right: 6, top: 2, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, borderWidth: 2, borderColor: CQ.ink },
   splitGood: { backgroundColor: '#d9f7c9' },
   splitBad: { backgroundColor: '#fff3c2' },
   splitTxt: { fontFamily: 'Knockout', fontSize: 13, color: CQ.navy },
+  // Toasts dock above the HUD row, never behind controls (J12).
   toast: {
-    position: 'absolute', alignSelf: 'center', top: 40, maxWidth: '90%', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 2, borderColor: CQ.ink,
+    position: 'absolute', alignSelf: 'center', top: 2, maxWidth: '92%', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.97)',
+    borderWidth: 2, borderColor: CQ.ink, zIndex: 30,
   },
-  toastTxt: { fontFamily: 'Knockout', fontSize: 14, color: CQ.navy },
-  podium: { position: 'absolute', left: 24, right: 24, top: '22%', padding: 12, borderRadius: 20, backgroundColor: CQ.cream, borderWidth: 3, borderColor: CQ.ink, gap: 6 },
-  podRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: CQ.ink },
-  podRowYou: { backgroundColor: '#fff3c2', borderColor: CQ.goldDeep, borderWidth: 2.5 },
-  podPlace: { fontFamily: 'Shark', fontSize: 20, color: CQ.navy, width: 44 },
-  podAvatar: { width: 30, height: 32, resizeMode: 'contain' },
-  podCrown: { position: 'absolute', left: 52, top: -10, width: 28, height: 26, resizeMode: 'contain' },
-  podName: { fontFamily: 'Shark', fontSize: 17, color: CQ.navy, flex: 1 },
-  podStat: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy },
+  toastGold: { backgroundColor: '#fff3c2', borderColor: CQ.goldDeep },
+  toastCoral: { backgroundColor: '#ffe3df', borderColor: CQ.coral },
+  toastTxt: { fontFamily: 'Knockout', fontSize: 14, color: CQ.navy, textAlign: 'center' },
+  incoming: { position: 'absolute', alignSelf: 'center', top: HUD_ROW_H + RUN_BAR_H + RAIL_H + 2, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, backgroundColor: '#fff3c2', borderWidth: 2, borderColor: CQ.goldDeep },
+  incomingTxt: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy },
 });

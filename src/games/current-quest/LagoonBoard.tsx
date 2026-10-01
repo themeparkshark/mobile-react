@@ -1,5 +1,5 @@
 /**
- * LagoonBoard: the whole Current Quest diorama in one Skia canvas (design v5 8, 9).
+ * LagoonBoard: the whole Current Quest diorama in one Skia canvas (design v7.1 8, 9, 0.A.2, 0.A.13).
  *
  * Orthographic oblique board, always 5 columns and 5 to 7 rows: flat toon
  * water with the cell grid in the shader, a sandy island rim whose front face
@@ -23,10 +23,10 @@ import { useDerivedValue, useFrameCallback, useSharedValue, withTiming, type Sha
 import { cellsOf, currentDir, heightOf, MAX_H, type Board } from './rules';
 import {
   evalShark, meshIndices, meshTextures, meshVertices, newFrame,
-  POSE_CHEER, POSE_COUNT, POSE_DASH, POSE_DIZZY, POSE_IDLE, POSE_OUCH, POSE_SURF,
+  POSE_BRACE, POSE_CHEER, POSE_COUNT, POSE_DASH, POSE_DIZZY, POSE_IDLE, POSE_OUCH, POSE_SURF,
   type MotionPlan, type SharkFrame,
 } from './motion';
-import { InkStrip, ringPts, spiralPts, waveLinePts, xMarkPts } from './InkStrip';
+import { InkStrip, ringPts, spiralPts, waveRowPts, xMarkPts } from './InkStrip';
 import { CQ, type BoardLayout } from './theme';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,8 @@ export interface PreviewSV {
   rip: number;
   /** Icons along the dotted path: x, y, kind (0 pearl, 1 golden, 2 tide turn, 3 unlock). */
   icons: number[];
+  /** 1 when this stroke turns the tide: the board ghosts its post-stroke sandbars (0.A.2, Into the Breach). */
+  turn: number;
 }
 
 export interface BannerSV {
@@ -109,6 +111,13 @@ export interface BoardSV {
   idleSince: SharedValue<number>;
   /** Coral sway impulses: pairs (cell, fx t0). */
   sway: SharedValue<number[]>;
+  /** Shield dome on the shark (Showdown First Find, 0.A.6): 1 up, 0 down; popT = fx ms it popped. */
+  shield: SharedValue<number>;
+  shieldPopT: SharedValue<number>;
+  /** Tide warning pip over the shark at 1 move left (0.A.2: a warning only): 0 off, 1 next is LOW, 2 next is HIGH. */
+  tidePip: SharedValue<number>;
+  /** The tide palette level 0 (HIGH) .. 1 (LOW), crossfaded on turns (8.2 Alto). */
+  lowK: SharedValue<number>;
 }
 
 export interface BoardImages {
@@ -129,6 +138,13 @@ export interface BoardImages {
   chestOpen: SkImage | null;
   padlock: SkImage | null;
   chevron: SkImage | null;
+  /** P1 poses (gate-passed): skid brace, dizzy (beached, whirlpool) and the idle blink frame. */
+  brace?: SkImage | null;
+  dizzy?: SkImage | null;
+  blink?: SkImage | null;
+  /** Shell cradle under each pearl (J13) and the shield dome. */
+  socket?: SkImage | null;
+  bubble?: SkImage | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +158,7 @@ uniform float uTime;
 uniform float uGrid;
 uniform float uBright;
 uniform float uTint;
+uniform float uLow;
 
 float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 float noise(float2 p) {
@@ -159,8 +176,11 @@ half4 main(float2 p) {
   float2 a0 = uArea.xy;
   float2 a1 = uArea.xy + uArea.zw;
   bool inside = p.x >= a0.x && p.y >= a0.y && p.x <= a1.x && p.y <= a1.y;
-  float3 base = float3(0.247, 0.757, 0.937);
-  float3 caus = float3(0.561, 0.890, 0.980);
+  // Tide palette (8.2): HIGH #2fb6ec / #7fdaf7, LOW #5fd0f0 / #a8ecfb; never darker than #1f8fd1.
+  float3 base = mix(float3(0.184, 0.714, 0.925), float3(0.373, 0.816, 0.941), uLow);
+  float3 caus = mix(float3(0.498, 0.855, 0.969), float3(0.659, 0.925, 0.984), uLow);
+  // Depth falloff: 6% deeper toward the back row.
+  if (p.y < uArea.y + uArea.w) base = mix(base * 0.94, base, clamp((p.y - uArea.y) / max(1.0, uArea.w), 0.0, 1.0));
   float3 col = mix(base, caus, band * (inside ? 0.12 : 0.35));
   if (inside) {
     float2 g = (p - a0) / uCell;
@@ -239,10 +259,10 @@ export function runsOf(board: Board, l: BoardLayout | null): CurrentRun[] {
 // ---------------------------------------------------------------------------
 
 /** Side poses swim along x; upright poses stand. Surf faces left in the art, so its texture is mirrored. */
-const POSE_SIDE = [false, true, false, false, false, true];
-const POSE_MIRROR = [false, false, false, false, false, true];
-/** Facing of each image as drawn (after the mirror): +1 looks right. */
-const POSE_NATIVE = [1, 1, -1, 1, -1, 1];
+const POSE_SIDE = [false, true, false, false, false, true, false];
+const POSE_MIRROR = [false, false, false, false, false, true, false];
+/** Facing of each image as drawn (after the mirror): +1 looks right. Dizzy and brace face left in the P1 art. */
+const POSE_NATIVE = [1, 1, -1, 1, -1, 1, -1];
 const MESH_IDX = meshIndices();
 const ROWS = Array.from({ length: MAX_H }, (_, r) => r);
 
@@ -262,7 +282,9 @@ interface Props {
 function poseImage(images: BoardImages, pose: number): SkImage | null {
   if (pose === POSE_DASH) return images.dash;
   if (pose === POSE_SURF) return images.surf;
-  if (pose === POSE_OUCH || pose === POSE_DIZZY) return images.ouch;
+  if (pose === POSE_DIZZY) return images.dizzy ?? images.ouch;
+  if (pose === POSE_BRACE) return images.brace ?? images.surf;
+  if (pose === POSE_OUCH) return images.ouch;
   if (pose === POSE_CHEER) return images.cheer;
   return images.idle;
 }
@@ -378,6 +400,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     uGrid: sv.gridA.value,
     uBright: sv.breath.value,
     uTint: sv.undoTint.value,
+    uLow: sv.lowK.value,
   }));
 
   // ---- rise transition (Captain Toad: the island rises out of the water)
@@ -448,12 +471,39 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
       return 0.78 + 0.22 * Math.max(flare, sv.surge.value);
     }));
   const chevronBob = useDerivedValue(() => Math.sin(sv.fxT.value / 1000 * Math.PI * 2 * 1.4) * 2);
+  // Tempo pulse (8.3, P6): every 1.6 s a highlight runs down each run's chevrons at 75 ms per tile.
+  const runTiles = useMemo(() => runs.flatMap((run, ri) => run.cells.map((cell, k) => ({ ri, cell, k, dir: run.dir, entry: k === 0 }))), [runs]);
+  const tileGlow = runTiles.map((t) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const ph = (sv.fxT.value + t.ri * 400) % 1600;
+      const e = (ph - t.k * 75) / 160;
+      const pulse = e >= 0 && e < 1 ? Math.sin(e * Math.PI) : 0;
+      return 0.8 + 0.2 * pulse;
+    }));
+  const tileScale = runTiles.map((t, i) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const base = t.entry ? 1 : 0.6;
+      const g = (tileGlow[i].value - 0.8) / 0.2;
+      return [{ scale: base * (1 + 0.12 * g) }];
+    }));
+
+  const chevBobEntry = useDerivedValue(() => [{ translateX: chevronBob.value }]);
 
   // ---- sandbars: wet sprite at HIGH, dry sprite with a wet shoreline at LOW
   const dryAlpha = useDerivedValue(() => Math.min(1, sv.tideDrop.value / 8));
   const wetAlpha = useDerivedValue(() => 1 - Math.min(1, sv.tideDrop.value / 8));
   const sandLift = useDerivedValue(() => [{ translateY: -2 * (sv.tideDrop.value / 8) }]);
   const shoreAlpha = useDerivedValue(() => Math.max(0, (sv.tideDrop.value - 4) / 4));
+  // Post-stroke ghosts (0.A.2): while an armed stroke would turn the tide, every sandbar shows its next state at 45%.
+  const ghostTurn = useDerivedValue(() => {
+    const a = sv.armed.value;
+    const pv = a >= 0 ? sv.previews.value[a] : null;
+    return pv && pv.valid && pv.turn ? 1 : 0;
+  });
+  const dryGhost = useDerivedValue(() => (ghostTurn.value && sv.tideDrop.value < 4 ? 0.45 + 0.1 * Math.sin(sv.fxT.value / 160) : 0));
+  const wetGhost = useDerivedValue(() => (ghostTurn.value && sv.tideDrop.value >= 4 ? 0.45 + 0.1 * Math.sin(sv.fxT.value / 160) : 0));
 
   // ---- coral sway (idle +/-1 deg; impulse when a carry passes or the shark bumps it)
   const rockSway = rocks.map((cell) =>
@@ -577,9 +627,16 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   const socketAlpha = useDerivedValue(() => (sv.chest.value === 2 ? 0 : sv.chest.value === 1 ? Math.max(0, 1 - (sv.fxT.value - sv.unlockT.value) / 500) : 1));
 
   // ---- shark mesh
+  // Blink (9.1): the P1 eyes-closed idle frame for 140 ms every 3 to 6 s while resting.
   const sharkImage = useDerivedValue(() => {
-    const p = sv.shark.value.pose;
-    return p === POSE_DASH ? images.dash : p === POSE_SURF ? images.surf : p === POSE_OUCH || p === POSE_DIZZY ? images.ouch : p === POSE_CHEER ? images.cheer : images.idle;
+    const f = sv.shark.value;
+    const p = f.pose;
+    if (p === POSE_IDLE && images.blink && f.done) {
+      const t = sv.fxT.value % 4700;
+      if (t < 140 || (t > 2600 && t < 2740 && (sv.fxT.value / 4700) % 2 < 1)) return images.blink;
+    }
+    return p === POSE_DASH ? images.dash : p === POSE_SURF ? images.surf : p === POSE_DIZZY ? (images.dizzy ?? images.ouch)
+      : p === POSE_BRACE ? (images.brace ?? images.surf) : p === POSE_OUCH ? images.ouch : p === POSE_CHEER ? images.cheer : images.idle;
   });
   const texs = useMemo(() => Array.from({ length: POSE_COUNT }, (_, pose) => {
     const img = poseImage(images, pose);
@@ -730,7 +787,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   });
   const wrongAlpha = useDerivedValue<number>(() => (sv.wrong.value.length >= 2 && sv.fxT.value >= sv.wrongT0.value ? 1 : 0));
 
-  // Tide sweep (full turn only): a foam-capped brush wave crossing left to right in 500 ms.
+  // Tide turn (J4): a horizontal foam-capped brush wave rolls from the front tray wall to the back row in 500 ms.
   const sweepK = useDerivedValue(() => {
     const e = (sv.fxT.value - sv.sweepT0.value) / 500;
     return e < 0 || e > 1 ? -1 : e;
@@ -738,10 +795,54 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   const sweepPts = useDerivedValue(() => {
     const k = sweepK.value;
     if (k < 0) return [];
-    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    return waveLinePts(l.ax - 6 + (l.pw + 12) * e, l.ay - 4, l.ay + l.ph + 4, sv.fxT.value, 4);
+    const e = Math.sin((k * Math.PI) / 2);
+    return waveRowPts(l.ay + l.ph + l.rim - (l.ph + l.rim + 6) * e, l.ax - 4, l.ax + l.pw + 4, sv.fxT.value, 4);
+  });
+  // The water behind the front: a soft band trailing the wave (it reads as the water level moving).
+  const sweepBand = useDerivedValue(() => {
+    const k = sweepK.value;
+    if (k < 0) return Skia.XYWHRect(0, -100, 1, 1);
+    const e = Math.sin((k * Math.PI) / 2);
+    const y = l.ay + l.ph + l.rim - (l.ph + l.rim + 6) * e;
+    return Skia.XYWHRect(l.ax, y, l.pw, Math.min(l.cell * 0.9, l.ay + l.ph - y + 4));
   });
   const sweepAlpha = useDerivedValue(() => (sweepK.value < 0 ? 0 : Math.min(1, Math.sin(sweepK.value * Math.PI) * 2)));
+
+  // Shield dome (0.A.6): a bubble bobbing with the shark; it pops into shards when it takes a Splash.
+  const shieldRect = useDerivedValue(() => {
+    const f = sv.shark.value;
+    const r = l.cell * 0.62 * (1 + 0.03 * Math.sin(sv.fxT.value / 300));
+    return Skia.XYWHRect(f.x - r, f.y - r - l.cell * 0.12, r * 2, r * 2);
+  });
+  const shieldAlpha = useDerivedValue(() => {
+    const pop = sv.fxT.value - sv.shieldPopT.value;
+    if (pop >= 0 && pop < 220) return 1 - pop / 220;
+    return sv.shield.value * 0.75;
+  });
+  // Tide warning pip over the shark at 1 move left (0.A.2: a warning only, the medallion is the counter).
+  const pipXY = useDerivedValue(() => {
+    const f = sv.shark.value;
+    const k = 1 + 0.25 * Math.max(0, Math.sin((sv.fxT.value / 500) * Math.PI));
+    return [{ translateX: f.x }, { translateY: f.y - l.cell * 0.78 }, { scale: k }];
+  });
+  const pipAlpha = useDerivedValue(() => (sv.tidePip.value > 0 && sv.shark.value.done ? 1 : 0));
+  const pipLowA = useDerivedValue(() => (sv.tidePip.value === 1 ? 1 : 0));
+  const pipHighA = useDerivedValue(() => (sv.tidePip.value === 2 ? 1 : 0));
+  // Golden pearl rays (J13): 3 soft rays turning at 6 deg/s at 14%, additive, bright only.
+  const raysPath = useDerivedValue(() => {
+    const p = Skia.Path.Make();
+    if (goldenXY[0] < 0 || (sv.picks.value[board.pearls.length] ?? -1) !== -1) return p;
+    const a0 = (sv.fxT.value / 1000) * (6 * Math.PI / 180);
+    const R = l.cell * 0.85;
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + (k * Math.PI * 2) / 3;
+      p.moveTo(goldenXY[0], goldenXY[1]);
+      p.lineTo(goldenXY[0] + Math.cos(a - 0.16) * R, goldenXY[1] + Math.sin(a - 0.16) * R);
+      p.lineTo(goldenXY[0] + Math.cos(a + 0.16) * R, goldenXY[1] + Math.sin(a + 0.16) * R);
+      p.close();
+    }
+    return p;
+  });
 
   // Glance tour shark ring (300 to 500 ms) and the resume re-find pulse share one brush ring.
   const tourRingPts = useDerivedValue(() => {
@@ -931,7 +1032,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
       if ((pk >= 0 || isGolden) && (isGolden ? images.golden : images.pearl)) {
         const slot = isGolden ? nP : pk;
         const pimg = (isGolden ? images.golden : images.pearl) as SkImage;
-        const s = l.cell * (isGolden ? 0.6 : 0.46);
+        const s = l.cell * (isGolden ? 0.6 : 0.4);
         const hImg = (s * pimg.height()) / pimg.width();
         const cx = x + l.cell / 2;
         const cy = y + l.cell * 0.52;
@@ -939,6 +1040,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
           <Group key={`pk${i}`} transform={pickBob[slot]}>
             <Group opacity={pickAlpha[slot]} transform={useScaleAt(pickScale[slot], cx, cy)}>
               <Oval x={cx - s * 0.42} y={cy + hImg * 0.34} width={s * 0.84} height={s * 0.22} color="rgba(31,143,209,0.28)" />
+              {images.socket && !isGolden ? (
+                <Image image={images.socket} x={cx - l.cell * 0.3} y={cy - l.cell * 0.18} width={l.cell * 0.6} height={l.cell * 0.6} fit="contain" opacity={0.95} />
+              ) : null}
               <Image image={pimg} x={cx - s / 2} y={cy - hImg / 2} width={s} height={hImg} fit="contain" />
               {isGolden ? (
                 <Group opacity={goldenSpark} transform={useScaleAt(goldenSparkScale, cx + s * 0.34, cy - hImg * 0.36)}>
@@ -1049,23 +1153,34 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
                     <Image image={dry} x={cx - w / 2} y={bottom - hd} width={w} height={hd} fit="contain" />
                   </Group>
                 ) : null}
+                {dry ? (
+                  <Group opacity={dryGhost}>
+                    <Image image={dry} x={cx - w / 2} y={bottom - hd - 2} width={w} height={hd} fit="contain" />
+                  </Group>
+                ) : null}
+                {wet ? (
+                  <Group opacity={wetGhost}>
+                    <Image image={wet} x={cx - w / 2} y={bottom - hw} width={w} height={hw} fit="contain" />
+                  </Group>
+                ) : null}
               </Group>
             );
           })}
 
-          {/* Chevron at each run's entry. */}
-          {images.chevron ? runs.map((run, ri) => {
-            const e = run.cells[0];
-            const cx = cellX(e) + l.cell / 2;
-            const cy = cellY(e) + l.cell / 2;
-            const cw = l.cell * 0.58;
+          {/* A chevron on every current tile (0.6 cell, 80%), the run's entry at 1.0 cell; the tempo pulse runs down them. */}
+          {images.chevron ? runTiles.map((t, i) => {
+            const cx = cellX(t.cell) + l.cell / 2;
+            const cy = cellY(t.cell) + l.cell / 2;
+            const cw = l.cell * 0.62;
             const chev = images.chevron as SkImage;
             const chh = (cw * chev.height()) / chev.width();
-            const rot = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][run.dir];
+            const rot = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][t.dir];
             return (
-              <Group key={`chev${ri}`} transform={[{ translateX: cx }, { translateY: cy }, { rotate: rot }]}>
-                <Group transform={useBob(chevronBob)}>
-                  <Image image={chev} x={-cw / 2} y={-chh / 2} width={cw} height={chh} fit="contain" />
+              <Group key={`chev${t.cell}`} transform={[{ translateX: cx }, { translateY: cy }, { rotate: rot }]} opacity={tileGlow[i]}>
+                <Group transform={tileScale[i]}>
+                  <Group transform={t.entry ? chevBobEntry : undefined}>
+                    <Image image={chev} x={-cw / 2} y={-chh / 2} width={cw} height={chh} fit="contain" />
+                  </Group>
                 </Group>
               </Group>
             );
@@ -1099,6 +1214,12 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
         <Group opacity={previewOn}>
           <Points points={previewDots} mode="points" color={CQ.ink} strokeWidth={previewInkW} strokeCap="round" />
           <Points points={previewDots} mode="points" color={previewColor} strokeWidth={previewDotW} strokeCap="round" />
+        </Group>
+
+        <Group opacity={ambientOn}>
+          <Path path={raysPath} color={CQ.gold} opacity={0.14} blendMode="plus">
+            <BlurMask blur={4} style="normal" />
+          </Path>
         </Group>
 
         {/* Uprights, y-sorted by row, shark slotted into its row. */}
@@ -1156,12 +1277,32 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
 
         {/* Wrong-turn X (stall card), tide sweep wave, glance-tour ring. */}
         <InkStrip pts={wrongPts} alpha={wrongAlpha} color={CQ.coral} head={9} tail={6} taperIn={0.08} />
-        <InkStrip pts={sweepPts} alpha={sweepAlpha} color="#ffffff" head={7} tail={7} taperIn={0.05} />
+        <Rect rect={sweepBand} color="#ffffff" opacity={sweepAlpha} blendMode="softLight" />
+        <InkStrip pts={sweepPts} alpha={sweepAlpha} color="#ffffff" head={8} tail={8} taperIn={0.05} />
         <InkStrip pts={tourRingPts} alpha={tourRingAlpha} color={CQ.gold} head={6} tail={2} taperIn={0.05} />
 
         <Path path={gullPath} color="#0b6f99" opacity={gullAlpha}>
           <BlurMask blur={4} style="normal" />
         </Path>
+
+        {/* Shield dome and the tide warning pip ride the shark. */}
+        {images.bubble ? (
+          <Group opacity={shieldAlpha}>
+            <Image image={images.bubble} rect={shieldRect} fit="contain" />
+          </Group>
+        ) : null}
+        <Group transform={pipXY} opacity={pipAlpha}>
+          <Circle cx={0} cy={0} r={l.cell * 0.2} color={CQ.ink} />
+          <Circle cx={0} cy={0} r={l.cell * 0.2 - 2} color="#ffffff" />
+          <Group opacity={pipLowA}>
+            <Path path={moundPath(0, 2, l.cell * 0.13)} color={CQ.sand} />
+            <Path path={moundPath(0, 2, l.cell * 0.13)} color={CQ.ink} style="stroke" strokeWidth={2} />
+          </Group>
+          <Group opacity={pipHighA}>
+            <Path path={wavePath(0, 0, l.cell * 0.13)} color="#2fb6ec" />
+            <Path path={wavePath(0, 0, l.cell * 0.13)} color={CQ.ink} style="stroke" strokeWidth={2} />
+          </Group>
+        </Group>
 
         {/* Banners. */}
         {font ? (
@@ -1190,6 +1331,25 @@ function useRotAt(rot: SharedValue<number>, cx: number, cy: number) {
 
 function useBob(bob: SharedValue<number>) {
   return useDerivedValue(() => [{ translateY: bob.value }]);
+}
+
+function moundPath(cx: number, cy: number, s: number) {
+  const p = Skia.Path.Make();
+  p.moveTo(cx - s, cy + s * 0.45);
+  p.cubicTo(cx - s * 0.6, cy - s * 0.6, cx + s * 0.6, cy - s * 0.6, cx + s, cy + s * 0.45);
+  p.close();
+  return p;
+}
+
+function wavePath(cx: number, cy: number, s: number) {
+  const p = Skia.Path.Make();
+  p.moveTo(cx - s, cy + s * 0.3);
+  p.cubicTo(cx - s * 0.5, cy - s * 0.7, cx + s * 0.1, cy - s * 0.6, cx + s * 0.2, cy);
+  p.cubicTo(cx + s * 0.4, cy + s * 0.3, cx + s * 0.8, cy + s * 0.1, cx + s, cy - s * 0.1);
+  p.lineTo(cx + s, cy + s * 0.6);
+  p.lineTo(cx - s, cy + s * 0.6);
+  p.close();
+  return p;
 }
 
 function sparklePath(cx: number, cy: number, r: number) {

@@ -13,10 +13,13 @@
  *   to Chris's closest sound until Dustin approves them by ear.
  */
 
+import { useContext, useEffect, useRef } from 'react';
 import { GameAudio, type PlayOptions } from '../../gamekit/audio/GameAudio';
 import { nextBarMs } from '../../gamekit/core/audioMix';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
-import type { CueDef } from '../../gamekit/audio/chrisBank';
+import type { BedDef, CueDef } from '../../gamekit/audio/chrisBank';
+import { AuthContext } from '../../context/AuthProvider';
+import { MusicContext } from '../../context/MusicProvider';
 
 let registered = false;
 
@@ -30,11 +33,43 @@ function registerSequences(): void {
   GameAudio.registerCues(out);
 }
 
+/**
+ * v7.1 additions from the audio lead (0.A.10, G5), dev-only until Dustin's by-ear
+ * OK: the second bed (Chris's track-2, 54.5 to 82.8 s, 16 bars at 136 BPM, the
+ * same open / calm / lowstrokes recipe), the brighter fail stinger
+ * `cq_sting_soclose` (login's final cadence, a soft tom and a G4 to D5 lift)
+ * and the four aim blips pitched per direction. Release builds fall back to
+ * Chris's sounds and the login bed.
+ */
+function registerV71(): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  const cues: Record<string, CueDef> = {
+    cq_sting_soclose: { src: require('../../assets/games/current-quest/music/cq_sting_soclose.m4a'), durationMs: 1300, bus: 'stinger', maxVoices: 1, priority: 3, approved: false, fallback: 'fx.whoosh' },
+    cq_aim_0: { src: require('../../assets/games/current-quest/sfx/cq_aim_0.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
+    cq_aim_1: { src: require('../../assets/games/current-quest/sfx/cq_aim_1.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
+    cq_aim_2: { src: require('../../assets/games/current-quest/sfx/cq_aim_2.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
+    cq_aim_3: { src: require('../../assets/games/current-quest/sfx/cq_aim_3.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
+  };
+  GameAudio.registerCues(cues);
+  const bed = (src: number): BedDef => ({ src, bpm: 136, beatsPerBar: 4, offsetMs: 0, loopEndMs: BED2_LOOP_MS, approved: false });
+  GameAudio.registerBeds({
+    cq_bed2_open: bed(require('../../assets/games/current-quest/music/cq_bed2_open.m4a')),
+    cq_bed2_calm: bed(require('../../assets/games/current-quest/music/cq_bed2_calm.m4a')),
+    cq_bed2_lowstrokes: bed(require('../../assets/games/current-quest/music/cq_bed2_lowstrokes.m4a')),
+  });
+}
+
+/** 16 bars at 136 BPM. */
+export const BED2_LOOP_MS = 28235;
+/** 16 bars at 89.103 BPM (the login edit). */
+export const BED1_LOOP_MS = 42649;
+
 export function registerCqAudio(): void {
   if (registered) return;
   registered = true;
   registerStudioAudio(['current-quest', 'sharky']);
   registerSequences();
+  registerV71();
 }
 
 /** Every cue is loaded into the voice pool at game open; nothing loads mid-play (11.5). */
@@ -48,9 +83,6 @@ export const CQ_PRELOAD = [
   'cq_shells_1', 'cq_shells_2', 'cq_shells_3', 'ui.complete', 'fx.purchase', 'fx.whoosh', 'ui.press',
 ];
 
-export const BED_OPEN = 'cq_bed_open';
-export const BED_CALM = 'cq_bed_calm';
-export const BED_LOW = 'cq_bed_lowstrokes';
 
 function play(id: string, opts?: PlayOptions): void {
   try {
@@ -60,11 +92,21 @@ function play(id: string, opts?: PlayOptions): void {
   }
 }
 
-/** Re-target blip, pitched per direction (up E, right F#, down A, left B). */
+/** Re-target blip, pitched per direction (G5: up D, right C, down G, left A; a tread uses the plain blip). */
 export function sfxAim(dir: number): void {
-  play('cq_aim', { volume: 0.8 });
-  void dir;
+  const id = dir >= 0 && dir <= 3 && GameAudio.hasCue(`cq_aim_${dir}`) ? `cq_aim_${dir}` : 'cq_aim';
+  play(id, { volume: 0.8 });
 }
+
+/** The fail stinger (0.A.10): a bright "so close", never silence. */
+export function sfxSoClose(): void {
+  play(GameAudio.hasCue('cq_sting_soclose') ? 'cq_sting_soclose' : 'fx.whoosh', { volume: 0.9 });
+}
+
+/** Shield / counter pop (0.A.6) and an opponent's distant splash (14.1), from shared one-shots. */
+export function sfxShieldPop(): void { play('sh_bubble_pop', { volume: 0.95 }); play('cq_shell_tick', { volume: 0.7, delayMs: 60 }); }
+export function sfxSplashIncoming(): void { play('sh_wave_wash', { volume: 0.7 }); }
+export function sfxOpponentClear(): void { play('cq_tide_turn_short', { volume: 0.45 }); }
 
 export function sfxSwim(step: number): void {
   try { GameAudio.playLadder('cq_swim', Math.max(0, Math.min(4, step))); } catch { /* noop */ }
@@ -172,9 +214,55 @@ export function sfxTally(n: number): void {
  * layer at LOW tide (the percussion audibly thins) and while thinking idle
  * (6 s without input), the open layer otherwise.
  */
-export function bedFor(tideLow: boolean, left: number, riptide: boolean, idleThin = false): string {
-  if (left <= 2 && left >= 0) return BED_LOW;
-  if (riptide) return BED_OPEN;
-  if (idleThin) return BED_CALM;
-  return tideLow ? BED_CALM : BED_OPEN;
+export function bedFor(tideLow: boolean, left: number, riptide: boolean, idleThin = false, set: 1 | 2 = 1): string {
+  const pre = set === 2 && GameAudio.bed('cq_bed2_open') ? 'cq_bed2_' : 'cq_bed_';
+  if (left <= 2 && left >= 0) return `${pre}lowstrokes`;
+  if (riptide) return `${pre}open`;
+  if (idleThin) return `${pre}calm`;
+  return tideLow ? `${pre}calm` : `${pre}open`;
+}
+
+/** Which bed set a run uses: runs alternate the login and track-2 beds by run index (0.A.10). */
+export function bedSetFor(runIndex: number): 1 | 2 {
+  return runIndex % 2 === 1 ? 2 : 1;
+}
+
+/**
+ * Current Quest's own bed player (11.2, v7): the bed is silent on the Trick
+ * Shot and enters on the Deep tray rise at a random bar (0, 4, 8 or 12 of the
+ * 16-bar loop), so the same downbeat never greets every run. Layer changes
+ * (tide, low strokes, surge, idle thinning) keep the loop position. It hands
+ * the app's own music off and back exactly like useGameMusic.
+ */
+export function useCqMusic(bed: string | null, startBar: number): void {
+  const app = useContext(MusicContext);
+  const { player } = useContext(AuthContext);
+  const musicOn = player?.enabled_music !== false;
+  const started = useRef<string | null>(null);
+  useEffect(() => {
+    GameAudio.setMusicEnabled(musicOn);
+    GameAudio.music.setAppMusicBridge({
+      suspend: () => { try { void app?.stopMusic?.(); } catch { /* optional */ } },
+      restore: () => { try { void app?.restoreMusic?.(); } catch { /* optional */ } },
+    });
+  }, [app, musicOn]);
+  useEffect(() => {
+    if (!musicOn) return;
+    if (!bed) {
+      if (started.current) { GameAudio.music.stop(400); started.current = null; }
+      return;
+    }
+    void GameAudio.init().then(() => {
+      if (!started.current) {
+        started.current = bed;
+        const def = GameAudio.bed(bed);
+        const barMs = def?.bpm ? (60000 / def.bpm) * (def.beatsPerBar ?? 4) : 0;
+        return GameAudio.music.play(bed, 350, Math.max(0, startBar) * barMs);
+      }
+      if (started.current === bed) return undefined;
+      started.current = bed;
+      return GameAudio.music.switchTo(bed, 'bar', 350, true);
+    });
+  }, [bed, musicOn, startBar]);
+  useEffect(() => () => { started.current = null; GameAudio.music.stop(400); }, []);
 }

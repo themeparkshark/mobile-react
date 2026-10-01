@@ -129,6 +129,18 @@ export function waveLinePts(x: number, top: number, bottom: number, t: number, a
   return out;
 }
 
+/** A horizontal foam-capped wave front at height `y` from x0 to x1 (J4: the tide rolls front to back). */
+export function waveRowPts(y: number, x0: number, x1: number, t: number, amp: number): number[] {
+  'worklet';
+  const out: number[] = [];
+  const steps = 22;
+  for (let i = 0; i <= steps; i++) {
+    const x = x0 + ((x1 - x0) * i) / steps;
+    out.push(x, y + Math.sin(i * 0.85 + t * 0.012) * amp);
+  }
+  return out;
+}
+
 /** Spiral under the shark (stall swirl), `k` 0..1 grows it. */
 export function spiralPts(cx: number, cy: number, k: number, rot: number, squash: number): number[] {
   'worklet';

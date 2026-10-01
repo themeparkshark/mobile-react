@@ -3,4 +3,4 @@
  * The content hash of the party sim bundle this build plays: sent at join and
  * on every submit so the server can match it to the replay bundle (design 11.2).
  */
-export const SIM_BUNDLE = 'eb4d5074ce4b';
+export const SIM_BUNDLE = 'ce8acfc3ff0a';

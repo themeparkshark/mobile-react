@@ -1,26 +1,38 @@
 /**
- * Board issue (design v5 5.3). Deterministic from a seed so a server can
+ * Board issue (design v7.1 5.3). Deterministic from a seed so a server can
  * reproduce the exact boards (ids + transforms) of a run from the same client
  * library file. Scored contexts ignore local progress; the Quick Run uses it
  * to teach currents first and tide second.
  *
- * Run shapes (4.3, 4.4):
- *   quick / practice / ghost: 2 voyages, Warm-up (5x5) + Treasure (5x7), Puzzle.
- *   ride / line (Trial):      3 voyages, Rookie coin pool Warm-up + Standard (5x6) + Treasure (5x7).
- *   showdown:                 2 voyages, Standard + Treasure (tide set).
+ * Run shapes (4.3, 4.4, 14.1, 14.3):
+ *   quick / practice / ghost / challenge: 2 voyages, Trick Shot (5x5) matched
+ *     to the Deep board's aha tag (R7) + Deep (5x7), Puzzle.
+ *   ride / line (Trial): 3 voyages, Rookie coin pool Trick Shot + Standard (5x6) + Deep (5x7).
+ *   daily: 3 voyages, Trick Shot matched to the Deep tag + Standard + Deep (Adept band), Puzzle.
+ *   showdown: 3 voyages, Standard + Standard + Deep (all tide boards), Puzzle.
+ *   chart: one curated chart node (one voyage).
  * Transforms are drawn from the board's allowed set (8 on 5x5, 4 on tall boards).
+ * Retired boards (the v5 Warm-up cell, struck boards) never enter a pool.
  */
 
-import { CQ_LIBRARY } from './boards.v2.client';
+import { CQ_LIBRARY } from './boards.v3.client';
 import {
   allowedTransforms, heightOf, LINE_BONUS_KNOBS, PUZZLE_KNOBS, RIDE_KNOBS, transformAllowed, transformBoard,
-  type Board, type Knobs, type MechanicSet, type Slot,
+  type AhaTag, type Board, type Knobs, type MechanicSet, type Slot,
 } from './rules';
 
 /** Server knob (4.3): the Quick Run is 2 voyages unless the walking playtest earns it a third. */
 export const QUICK_RUN_VOYAGES = 2;
+/**
+ * Server knob (0.A.9): rows of the Quick Run's second voyage. 7 = a Deep board.
+ * If the G7b 2-voyage walking median is over 75 s it drops to 6: the second
+ * voyage then draws an aha-tagged CT Standard board instead.
+ */
+export const QUICK_RUN_DEEP_ROWS: 6 | 7 = 7;
+/** Showdown window (14.1, v7): 210 s for 3 voyages. */
+export const SHOWDOWN_VOYAGES = 3;
 
-export type RunContext = 'quick' | 'ride' | 'line' | 'ghost' | 'practice' | 'showdown';
+export type RunContext = 'quick' | 'ride' | 'line' | 'ghost' | 'practice' | 'showdown' | 'daily' | 'chart' | 'challenge';
 
 export interface RunProgressHint {
   /** Completed runs on this device (0 = first run ever: teach currents). */
@@ -57,8 +69,8 @@ export function boardById(id: string): Board | undefined {
   return CQ_LIBRARY.find((b) => b.id === base);
 }
 
-export function poolOf(set: MechanicSet, slot: Slot, coinOnly = false): Board[] {
-  return CQ_LIBRARY.filter((b) => b.set === set && b.slot === slot && !b.teach && (!coinOnly || b.coin));
+export function poolOf(set: MechanicSet | null, slot: Slot, coinOnly = false): Board[] {
+  return CQ_LIBRARY.filter((b) => (set === null || b.set === set) && b.slot === slot && !b.teach && !b.retired && (!coinOnly || b.coin));
 }
 
 export function knobsFor(context: RunContext): Knobs {
@@ -68,9 +80,14 @@ export function knobsFor(context: RunContext): Knobs {
   return PUZZLE_KNOBS;
 }
 
-/** Scored contexts (server reproduces them): fixed coin pool, progress ignored. */
+/** Scored Trial contexts (server reproduces them): fixed coin pool, progress ignored. */
 export function isScored(context: RunContext): boolean {
   return context === 'ride' || context === 'line';
+}
+
+/** Contexts whose boards come from the seed alone (never local progress). */
+export function isSeeded(context: RunContext): boolean {
+  return isScored(context) || context === 'daily' || context === 'showdown' || context === 'challenge';
 }
 
 /** Pick a board and one of its allowed transforms with two draws from `rand`. */
@@ -81,9 +98,27 @@ function drawFrom(rand: () => number, pool: Board[]): Board {
   return transformBoard(b, tf);
 }
 
-/** How many voyages a context plays (2 for queue runs and Showdowns, 3 for Trials). */
+/** How many voyages a context plays. */
 export function voyagesFor(context: RunContext): number {
-  return isScored(context) ? 3 : context === 'showdown' ? 2 : QUICK_RUN_VOYAGES;
+  if (context === 'chart') return 1;
+  if (isScored(context) || context === 'daily') return 3;
+  if (context === 'showdown') return SHOWDOWN_VOYAGES;
+  return QUICK_RUN_VOYAGES;
+}
+
+/** The Trick Shot opener for a Deep board (R7): same aha tag, else any opener of the same mechanic set. */
+export function trickFor(rand: () => number, deep: Board, coinOnly = false): Board {
+  const tag = deep.ahaTag;
+  const sameSet = poolOf(deep.P > 0 ? null : 'C', 'trick', coinOnly);
+  const matched = tag ? sameSet.filter((b) => b.ahaTag === tag) : [];
+  return drawFrom(rand, matched.length ? matched : poolOf('C', 'trick', coinOnly));
+}
+
+/** Second Quick Run voyage: a tagged Deep board, or a tagged CT Standard under quickRunDeepRows = 6 (0.A.9). */
+function quickDeepPool(set: MechanicSet): Board[] {
+  const slot: Slot = QUICK_RUN_DEEP_ROWS === 7 ? 'treasure' : 'standard';
+  const tagged = poolOf(set, slot).filter((b) => !!b.ahaTag);
+  return tagged.length ? tagged : poolOf(set, slot);
 }
 
 /** The boards of a run, in play order, transformed. */
@@ -92,22 +127,22 @@ export function pickRun(seed: number, context: RunContext, progress: RunProgress
   const draw = (pool: Board[]): Board => drawFrom(rand, pool);
   const teach = (id: string) => CQ_LIBRARY.find((b) => b.id === id) as Board;
   if (context === 'showdown') return showdownBoards(seed);
+  if (context === 'daily') return dailyBoards(seed);
   if (isScored(context)) {
-    // Ride Challenge / LinePlay bonus: Rookie band only, fixed coin window (4.4).
-    return [draw(poolOf('C', 'warmup', true)), draw(poolOf('CT', 'standard', true)), draw(poolOf('CT', 'treasure', true))];
+    // Ride Challenge / LinePlay bonus: Rookie band only, fixed coin window (4.4); the opener never brings tide.
+    return [draw(poolOf('C', 'trick', true)), draw(poolOf('CT', 'standard', true)), draw(poolOf('CT', 'treasure', true))];
   }
-  const three = QUICK_RUN_VOYAGES >= 3;
-  if (progress.runsCompleted <= 0) {
-    // First run ever: the current teach board (riding is the only way through), then currents only.
-    return three ? [teach('T1'), draw(poolOf('C', 'standard')), draw(poolOf('C', 'treasure'))] : [teach('T1'), draw(poolOf('C', 'treasure'))];
+  const fresh = context === 'challenge' ? { runsCompleted: 9, tideSeen: true } : progress;
+  if (fresh.runsCompleted <= 0) {
+    // First run ever: the current teach board (riding is the only way through), then a currents-only Deep board.
+    return [teach('T1'), draw(quickDeepPool('C'))];
   }
-  if (!progress.tideSeen) {
+  if (!fresh.tideSeen) {
     // Tide arrives through its teach board; one twist per voyage, never two at once.
-    return three ? [draw(poolOf('C', 'warmup')), teach('T2'), draw(poolOf('CT', 'treasure'))] : [draw(poolOf('C', 'warmup')), teach('T2')];
+    return [draw(poolOf('C', 'trick')), teach('T2')];
   }
-  return three
-    ? [draw(poolOf('C', 'warmup')), draw(poolOf('CT', 'standard')), draw(poolOf('CT', 'treasure'))]
-    : [draw(poolOf('C', 'warmup')), draw(poolOf('CT', 'treasure'))];
+  const deep = draw(quickDeepPool('CT'));
+  return [trickFor(rand, deep), deep];
 }
 
 /** Proof board refs for a run (ids without the transform suffix + transform). */
@@ -129,8 +164,32 @@ export function boardsFromRefs(refs: readonly { id: string; tf: number }[]): Boa
   return out;
 }
 
-/** The two Same-Board Showdown voyages for a seed (Standard + Treasure, tide set). */
+/** The three Same-Board Showdown voyages for a seed (Standard, Standard, Deep; all tide boards; 14.1). */
 export function showdownBoards(seed: number): Board[] {
   const rand = mulberry32((seed >>> 0) ^ hashString('cq:showdown'));
-  return [drawFrom(rand, poolOf('CT', 'standard')), drawFrom(rand, poolOf('CT', 'treasure'))];
+  const std = poolOf('CT', 'standard').filter((b) => (b.splashPhase ?? -1) >= 1);
+  const deep = poolOf('CT', 'treasure').filter((b) => (b.splashPhase ?? -1) >= 1);
+  const a = drawFrom(rand, std);
+  let b = drawFrom(rand, std);
+  for (let k = 0; k < 4 && b.id.split('~')[0] === a.id.split('~')[0]; k++) b = drawFrom(rand, std);
+  return [a, b, drawFrom(rand, deep)];
+}
+
+/** Daily Tide (14.3): Trick Shot matched to the Deep tag, then Adept Standard and Deep (client pool stands in for the sealed set). */
+export function dailyBoards(seed: number): Board[] {
+  const rand = mulberry32((seed >>> 0) ^ hashString('cq:daily'));
+  const adept = (bs: Board[]) => { const a = bs.filter((b) => b.band === 'adept'); return a.length ? a : bs; };
+  const deep = drawFrom(rand, adept(poolOf('CT', 'treasure').filter((b) => !!b.ahaTag)));
+  const std = drawFrom(rand, adept(poolOf('CT', 'standard')));
+  return [trickFor(rand, deep), std, deep];
+}
+
+/** Daily seed for a park and a park-local date (YYYY-MM-DD). The server uses hmac(park_id + date); this is the lab stub. */
+export function dailySeed(parkKey: string, date: string): number {
+  return hashString(`daily:${parkKey}:${date}`);
+}
+
+/** Tag of a board id (for the share card and curator copy). */
+export function ahaTagOf(id: string): AhaTag | undefined {
+  return boardById(id)?.ahaTag;
 }
