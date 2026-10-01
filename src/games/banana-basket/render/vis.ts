@@ -98,6 +98,13 @@ export interface Vis {
   tipT: number;
 }
 
+function stamp(v: Vis, id: number, suffix: number): void {
+  'worklet';
+  v.stamp = id;
+  v.stampT = v.t;
+  v.stampSuffix = suffix;
+}
+
 export function createVis(): Vis {
   'worklet';
   const z = (n: number, v: number) => {
@@ -146,13 +153,6 @@ export function createVis(): Vis {
     resumeT: -1e6,
     tipT: -1e6,
   };
-}
-
-function stamp(v: Vis, id: number, suffix: number): void {
-  'worklet';
-  v.stamp = id;
-  v.stampT = v.t;
-  v.stampSuffix = suffix;
 }
 
 function setPose(v: Vis, pose: number, ms: number): void {

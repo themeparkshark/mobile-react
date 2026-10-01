@@ -21,6 +21,11 @@ export interface Ghost {
   final: number;
 }
 
+export interface GhostCompare {
+  line: string;
+  won: boolean;
+}
+
 export function createGhost(cfg: SimConfig, log: number[], name: string, final: number): Ghost {
   'worklet';
   return { sim: createSim(cfg), log, cursor: 0, name, final };
@@ -51,11 +56,6 @@ export function finnRun(cfg: SimConfig, seed = 0x46494e4e): { log: number[]; sco
     step(s, 1, q4);
   }
   return { log: s.log.slice(), score: finalScore(s) };
-}
-
-export interface GhostCompare {
-  line: string;
-  won: boolean;
 }
 
 /** One comparison line from the biggest stat delta ("They caught 4 more PERFECTs"). */

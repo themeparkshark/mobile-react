@@ -31,7 +31,6 @@ import {
   Skia,
   Text,
   rect,
-  useColorBuffer,
   useFont,
   useImage,
   useRSXformBuffer,
@@ -90,9 +89,9 @@ const SLOT_SPLAT = MAX_SPLATS;
 const SLOTS = SLOT_ITEMS + SLOT_PILE + SLOT_SPLAT;
 const PILE_AT = [1, 3, 6, 8, 11, 15, 20, 25, 32, 40, 50, 64];
 
-const SHARK_H = 178;
+const SHARK_H = 162;
 const SHARK_W = (SHARK_H * 573) / 768;
-const BASKET_W = 156;
+const BASKET_W = 142;
 const BASKET_H = (BASKET_W * 332) / 384;
 const BASKET_RIM = 0.3;
 const INK = '#23263a';
@@ -300,36 +299,6 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const hh = src.height / 2;
     xf.set(c, sn, x - (c * hw - sn * hh), y - (sn * hw + c * hh));
   });
-  const colors = useColorBuffer(SLOTS, (col, i) => {
-    'worklet';
-    tick.value;
-    const s = sim.value;
-    const v = vis.value;
-    col[0] = 1;
-    col[1] = 1;
-    col[2] = 1;
-    col[3] = 1;
-    if (i < SLOT_ITEMS) {
-      const st = s.iSt[i];
-      const kind = s.iKind[i];
-      if (kind === K_LUCKY) {
-        col[0] = 1;
-        col[1] = 0.86;
-        col[2] = 0.35;
-      }
-      if (st === S_PASS || st === S_MISS) col[3] = 0.85;
-      if (st === S_DUNK) col[3] = 1 - clamp01(s.iT[i] / 256 / 6) * 0.3;
-      if (st === S_FALL && s.iMust[i] === 1 && s.iOpt[i] === 1) col[3] = 0.92;
-    } else if (i >= SLOT_ITEMS + SLOT_PILE) {
-      const n = i - SLOT_ITEMS - SLOT_PILE;
-      const age = v.t - v.splatT[n];
-      col[3] = age < 80 ? 0.9 : 0.55;
-      col[0] = 0.95;
-      col[1] = 0.85;
-      col[2] = 0.55;
-    }
-  });
-
   // -- shadows, Excellent rings, puffer shadows, ball arc ----------------------------------
   const shadows = useDerivedValue(() => {
     tick.value;
@@ -345,6 +314,22 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     return p;
   });
   const shadowOpacity = 0.18;
+  // Lucky Bunch: a gold halo with an orbiting sparkle (it reads as "a shinier bunch").
+  const luckyHalo = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const t = vis.value.t;
+    const p = Skia.Path.Make();
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL || (s.iKind[i] !== K_LUCKY && !(s.iKind[i] === K_BUNCH && s.iFlag[i] === 1))) continue;
+      const x = s.iX[i] / SUB;
+      const y = s.iY[i] / SUB;
+      p.addCircle(x, y, 40);
+      const a = t / 180 + i;
+      p.addCircle(x + Math.cos(a) * 40, y + Math.sin(a) * 40, 5);
+    }
+    return p;
+  });
   const pufferShadows = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -885,8 +870,10 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
               </SkImage>
             ) : null}
           </Group>
+          <Path path={luckyHalo} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
+          <Path path={luckyHalo} style="stroke" strokeWidth={3.5} color={GOLD} />
           {/* Items, pile, splats: one Atlas draw */}
-          <Atlas image={atlas.image} sprites={sprites} transforms={transforms} colors={colors} blendMode="modulate" />
+          <Atlas image={atlas.image} sprites={sprites} transforms={transforms} />
           {/* Basket in front of the pile */}
           <Group transform={basketTransform}>
             {im.basket ? <SkImage image={im.basket} x={0} y={0} width={BASKET_W} height={BASKET_H} /> : null}

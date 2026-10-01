@@ -206,5 +206,4 @@ export function runBot(s: SimState, b: Bot, step: (s: SimState, touch: number, q
   }
   return s;
 }
-
 export { BALL_R };

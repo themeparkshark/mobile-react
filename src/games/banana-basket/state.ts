@@ -450,4 +450,3 @@ export function queueRaw(s: SimState, at: number, kind: number, xSub: number, vx
   s.pFlag[i] = flag;
   s.pN = i + 1;
 }
-

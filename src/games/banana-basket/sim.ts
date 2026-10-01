@@ -41,6 +41,25 @@ import {
 
 export * from './state';
 
+// -- time ---------------------------------------------------------------------
+
+// -- basket ---------------------------------------------------------------------
+
+// -- chain, meter, golden hour ---------------------------------------------------------
+
+// -- items ------------------------------------------------------------------------------
+
+// -- juggle ball -------------------------------------------------------------------------
+
+
+// -- gull and splash ----------------------------------------------------------------------
+
+// -- timers and end ----------------------------------------------------------------------
+
+// -- the clock-step timeline (sets, rush, ticks) -------------------------------------------
+
+// -- the step ------------------------------------------------------------------------------
+
 /** Ball Boost: the chain tier counts one higher while the ball is up with a bounce. */
 export function boosted(s: SimState): number {
   'worklet';
@@ -69,8 +88,6 @@ export function catchZone(s: SimState): number {
   if (s.assist) z = floorDiv(z * 5, 4);
   return z;
 }
-
-// -- time ---------------------------------------------------------------------
 
 function nextHoldTs(cur: number, touch: number): number {
   'worklet';
@@ -102,8 +119,6 @@ export function hitStop(s: SimState, steps: number): void {
   if (q > s.hitStopQ) s.hitStopQ = q;
 }
 
-// -- basket ---------------------------------------------------------------------
-
 export function moveBasket(s: SimState): void {
   'worklet';
   const h = s.holdTs;
@@ -129,8 +144,6 @@ export function moveBasket(s: SimState): void {
     s.bx += s.bv;
   }
 }
-
-// -- chain, meter, golden hour ---------------------------------------------------------
 
 function addChain(s: SimState): void {
   'worklet';
@@ -185,11 +198,45 @@ function addPip(s: SimState, x: number): void {
   }
 }
 
-// -- items ------------------------------------------------------------------------------
-
 function perfectBreak(s: SimState): void {
   'worklet';
   s.perfStreak = 0;
+}
+
+function collectPower(s: SimState, kind: number, xf: number): void {
+  'worklet';
+  if (kind === K_GIFT) {
+    // Deterministic by chain tier: x1-x2 a coin shower, x3+ a Foam Finger.
+    if (tierOf(s.chain) <= 2) {
+      emit(s, EV_POWER, K_GIFT, 0, xf);
+      for (let k = 0; k < 8; k++) {
+        const x = clampInt(xf - 140 + k * 40, BASKET_MIN + 10, BASKET_MAX - 10);
+        queueRaw(s, s.clock + 4 + k * 7, K_COIN, x * SUB, 0, 0, 22, 0, 0);
+      }
+      return;
+    }
+    kind = K_FINGER;
+  }
+  if (s.fingerQ > 0) {
+    s.score += SPARE_POWER_PTS;
+    emit(s, EV_POWER, kind, 2, xf);
+    return;
+  }
+  if (kind === K_FINGER) {
+    s.fingerQ = FINGER_STEPS * 256;
+    emit(s, EV_POWER, K_FINGER, 1, xf);
+    maybeCard(s, CARD_FINGER);
+  } else if (kind === K_WATCH) {
+    if (s.watchUsed >= WATCH_MAX) {
+      s.score += SPARE_POWER_PTS;
+      emit(s, EV_POWER, K_WATCH, 2, xf);
+      return;
+    }
+    s.watchUsed += 1;
+    s.setLen += WATCH_STEPS;
+    s.total += WATCH_STEPS;
+    emit(s, EV_POWER, K_WATCH, 1, xf);
+  }
 }
 
 function collect(s: SimState, i: number, xc: number, grade: number, popped: number): void {
@@ -242,42 +289,6 @@ function collect(s: SimState, i: number, xc: number, grade: number, popped: numb
   }
 }
 
-function collectPower(s: SimState, kind: number, xf: number): void {
-  'worklet';
-  if (kind === K_GIFT) {
-    // Deterministic by chain tier: x1-x2 a coin shower, x3+ a Foam Finger.
-    if (tierOf(s.chain) <= 2) {
-      emit(s, EV_POWER, K_GIFT, 0, xf);
-      for (let k = 0; k < 8; k++) {
-        const x = clampInt(xf - 140 + k * 40, BASKET_MIN + 10, BASKET_MAX - 10);
-        queueRaw(s, s.clock + 4 + k * 7, K_COIN, x * SUB, 0, 0, 22, 0, 0);
-      }
-      return;
-    }
-    kind = K_FINGER;
-  }
-  if (s.fingerQ > 0) {
-    s.score += SPARE_POWER_PTS;
-    emit(s, EV_POWER, kind, 2, xf);
-    return;
-  }
-  if (kind === K_FINGER) {
-    s.fingerQ = FINGER_STEPS * 256;
-    emit(s, EV_POWER, K_FINGER, 1, xf);
-    maybeCard(s, CARD_FINGER);
-  } else if (kind === K_WATCH) {
-    if (s.watchUsed >= WATCH_MAX) {
-      s.score += SPARE_POWER_PTS;
-      emit(s, EV_POWER, K_WATCH, 2, xf);
-      return;
-    }
-    s.watchUsed += 1;
-    s.setLen += WATCH_STEPS;
-    s.total += WATCH_STEPS;
-    emit(s, EV_POWER, K_WATCH, 1, xf);
-  }
-}
-
 function spawnPending(s: SimState): void {
   'worklet';
   let w = 0;
@@ -325,6 +336,383 @@ function spawnPending(s: SimState): void {
     w++;
   }
   s.pN = w;
+}
+
+function endFinale(s: SimState, i: number): void {
+  'worklet';
+  if (s.finaleSlot === i) {
+    s.finale = 2;
+    s.finaleSlot = -1;
+  }
+}
+
+/** Tally bonuses (deterministic; part of the verified score). */
+export function endBonus(s: SimState): number {
+  'worklet';
+  let b = 0;
+  if (s.misses === 0 && s.catches > 0) b += CLEAN_SWEEP;
+  b += s.bestPerfStreak * PERFECT_STREAK_PTS;
+  if (s.endReason !== END_HEARTS) b += s.hearts * HEART_PTS;
+  b += s.banked * GOLDEN_BANK;
+  return b;
+}
+
+export function finish(s: SimState, reason: number): void {
+  'worklet';
+  if (s.done) return;
+  s.done = 1;
+  s.endReason = reason;
+  s.bonus = endBonus(s);
+  if (reason === END_TIME) hitStop(s, HITSTOP_TIME);
+  emit(s, EV_TIME, reason, 0, 0);
+}
+
+function resolveCrossing(s: SimState, i: number, xc: number, zone: number): void {
+  'worklet';
+  const kind = s.iKind[i];
+  const d = absInt(xc - s.bx);
+  if (kind === K_PUFFER) {
+    s.iSt[i] = S_PASS;
+    const hz = HALF_ZONE * SUB;
+    if (d <= hz && s.invulnQ <= 0) {
+      s.hearts -= 1;
+      s.invulnQ = INVULN_STEPS * 256;
+      hitStop(s, HITSTOP_PUFFER);
+      perfectBreak(s);
+      emit(s, EV_HIT, xc >> 8, s.hearts, i);
+      if (s.hearts <= 0) {
+        emit(s, EV_HEARTS_OUT, 0, 0, 0);
+        finish(s, END_HEARTS);
+      }
+    } else if (d > hz && d <= hz + CLOSE_CALL_BAND * SUB) {
+      s.score += CLOSE_PTS;
+      s.slowQ = 0;
+      emit(s, EV_CLOSE, xc >> 8, CLOSE_PTS, 0);
+      if (s.clock - s.closeA <= GRAZE_WINDOW) {
+        s.score += GRAZE_PTS;
+        s.grazes += 1;
+        s.closeA = -100000;
+        s.closeB = -100000;
+        emit(s, EV_GRAZE, xc >> 8, GRAZE_PTS, 0);
+      } else {
+        s.closeA = s.closeB;
+        s.closeB = s.clock;
+      }
+    }
+    return;
+  }
+  // Assist: 6 fu extra on the side the basket is moving toward.
+  let z = zone;
+  if (s.bv !== 0 && signInt(xc - s.bx) === signInt(s.bv)) z += ASSIST_ZONE * SUB;
+  if (d <= z) {
+    const grade = d <= PERFECT_D * SUB ? G_PERFECT : d <= GREAT_D * SUB ? G_GREAT : G_GOOD;
+    s.iSt[i] = S_DUNK;
+    s.iT[i] = 0;
+    s.iX[i] = xc;
+    collect(s, i, xc, grade, 0);
+    endFinale(s, i);
+    return;
+  }
+  if (d <= z + RIM_ROLL_BAND * SUB) {
+    s.iSt[i] = S_RIM;
+    s.iT[i] = 0;
+    s.iX[i] = xc;
+    s.iY[i] = LANE_Y * SUB;
+    s.iSide[i] = signInt(xc - s.bx);
+    emit(s, EV_RIM, xc >> 8, kind, s.iSide[i]);
+    maybeCard(s, CARD_RIM);
+    endFinale(s, i);
+    return;
+  }
+  s.iSt[i] = S_MISS;
+  const must = s.iMust[i] === 1 && s.iOpt[i] === 0 && (kind === K_BANANA || kind === K_BUNCH || kind === K_LUCKY);
+  if (must) {
+    s.misses += 1;
+    perfectBreak(s);
+    breakChain(s);
+  }
+  emit(s, EV_MISS, xc >> 8, kind, must ? 1 : 0);
+  endFinale(s, i);
+}
+
+export function tossBall(s: SimState, xFu: number): void {
+  'worklet';
+  s.bOn = 1;
+  s.bX = xFu * SUB;
+  s.bY = 120 * SUB;
+  s.bVx = signInt(s.bx - s.bX) * 256;
+  s.bVy = 0;
+  s.bG = G_BALL[0];
+  s.bN = 0;
+  s.bGold = 0;
+  s.bRespawnQ = -1;
+  predictBall(s);
+  emit(s, EV_BALL_TOSS, xFu, 0, 0);
+  maybeCard(s, CARD_BALL);
+}
+
+function bounce(s: SimState, dx: number): void {
+  'worklet';
+  s.bN += 1;
+  s.bRun += 1;
+  s.bounces += 1;
+  const n = s.bN < 12 ? s.bN : 12;
+  s.bY = (LANE_Y - BALL_R) * SUB;
+  s.bVy = VY_BALL[n];
+  s.bG = G_BALL[n];
+  s.bVx = floorDiv(dx * VX_GAIN[n], HALF_ZONE * SUB) + floorDiv(s.bv, 4);
+  if (s.bN === BALL_GOLD_AT) {
+    s.bGold = 1;
+    s.goldBalls += 1;
+    emit(s, EV_GOLD_BALL, s.bX >> 8, 0, 0);
+  }
+  let pts = s.bN * 5 < 40 ? s.bN * 5 : 40;
+  if (s.bGold) pts = GOLD_BOUNCE_PTS;
+  if (s.twist === TWIST_BEACH && s.set === 1) pts = pts * 2;
+  s.score += pts;
+  emit(s, EV_BOUNCE, s.bX >> 8, s.bN, s.bGold | (pts << 1));
+  // Downwell: every 5th consecutive bounce fills one pip, once per meter cycle.
+  if (s.bN % 5 === 0 && s.bPip === 0 && s.ghQ <= 0) {
+    s.bPip = 1;
+    emit(s, EV_DOWNWELL, s.bX >> 8, s.meter + 1, 0);
+    addPip(s, s.bX >> 8);
+  }
+  predictBall(s);
+  // Demote in-flight must-catch items the new arc makes unreachable.
+  if (s.bPredStep >= 0) {
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL || s.iMust[i] !== 1 || s.iOpt[i] === 1) continue;
+      const dtS = absInt(s.iLandStep[i] - s.bPredStep);
+      if (dtS > 24) continue;
+      const need = absInt((s.iX[i] - s.bPredX) >> 8) - 40;
+      if (need > 0 && dtS < travelOf(need)) s.iOpt[i] = 1;
+    }
+  }
+}
+
+function stepBall(s: SimState, dt: number): void {
+  'worklet';
+  if (s.bOn !== 1) {
+    if (s.bRespawnQ >= 0) {
+      s.bRespawnQ -= s.holdTs;
+      if (s.bRespawnQ <= 0 && !s.done) {
+        s.bRespawnQ = -1;
+        tossBall(s, clampInt(s.dLastX, 80, 320));
+      }
+    }
+    return;
+  }
+  const py = s.bY;
+  s.bVy += floorDiv(s.bG * dt, 256);
+  s.bY += floorDiv(s.bVy * dt, 256);
+  s.bX += floorDiv(s.bVx * dt, 256);
+  const lo = BALL_R * SUB;
+  const hi = (FIELD_W - BALL_R) * SUB;
+  if (s.bX < lo) {
+    s.bX = lo + (lo - s.bX);
+    s.bVx = floorDiv(-s.bVx * BALL_WALL_Q8, 256);
+  } else if (s.bX > hi) {
+    s.bX = hi - (s.bX - hi);
+    s.bVx = floorDiv(-s.bVx * BALL_WALL_Q8, 256);
+  }
+  // Bounce off the basket's top band (the ball's bottom meets the rim).
+  const rim = (LANE_Y - BALL_R) * SUB;
+  if (s.bVy > 0 && py <= rim + BALL_SURFACE * SUB && s.bY >= rim && s.bY <= rim + BALL_SURFACE * 2 * SUB) {
+    const dx = s.bX - s.bx;
+    if (absInt(dx) <= (HALF_ZONE + 14) * SUB) {
+      bounce(s, dx);
+      return;
+    }
+  }
+  // Ball Pop and BONK against falling items.
+  for (let i = 0; i < MAX_ITEMS; i++) {
+    if (s.iSt[i] !== S_FALL || s.iFlag[i] === 1) continue;
+    const kind = s.iKind[i];
+    const r = BALL_R + (ITEM_SIZE[kind] >> 1) - 6;
+    const dx = (s.iX[i] - s.bX) >> 8;
+    const dy = (s.iY[i] - s.bY) >> 8;
+    if (dx * dx + dy * dy > r * r) continue;
+    if (s.iY[i] > (LANE_Y - 30) * SUB) continue;
+    const t = tierOf(s.chain) + boosted(s);
+    if (kind === K_PUFFER) {
+      const pts = scorePoints(BONK_BASE, t, G_POP, eventQuarters(s));
+      s.score += pts;
+      s.bonks += 1;
+      s.iSt[i] = S_BONKED;
+      s.iT[i] = 0;
+      s.iVy[i] = -1620;
+      s.iVx[i] = signInt(s.iX[i] - s.bX) * 1024 + (s.iX[i] >= s.bX ? 256 : -256);
+      emit(s, EV_BONK, s.iX[i] >> 8, pts, i);
+      continue;
+    }
+    s.iSt[i] = S_POP;
+    s.iT[i] = 0;
+    collect(s, i, s.iX[i], s.bGold ? G_GOLD_POP : G_POP, 1);
+    emit(s, EV_BALL_POP, s.iX[i] >> 8, kind, i);
+    endFinale(s, i);
+  }
+  if (s.bY > (LANE_Y + 70) * SUB) {
+    s.bOn = 0;
+    s.bN = 0;
+    s.bGold = 0;
+    s.bPredStep = -1;
+    s.bRespawnQ = (s.twist === TWIST_BEACH && s.set === 1 ? BALL_RESPAWN_BEACH : BALL_RESPAWN) * 256;
+    emit(s, EV_BALL_LOST, s.bX >> 8, 0, 0);
+  }
+}
+
+function stepHazards(s: SimState): void {
+  'worklet';
+  if (s.gSt > 0) {
+    s.gQ += s.holdTs;
+    const t = s.gQ >> 8;
+    if (s.gSt === 1 && t >= s.gLen) {
+      s.gSt = 2;
+      s.gQ = 0;
+      emit(s, EV_GULL, 2, s.gX >> 8, s.gSent);
+    } else if (s.gSt === 2 && t >= 8) {
+      const hit = absInt(s.bx - s.gX) <= GULL_REACH * SUB;
+      if (hit) {
+        dropTier(s);
+        perfectBreak(s);
+      }
+      emit(s, EV_GULL, hit ? 3 : 4, s.gX >> 8, s.gSent);
+      s.gSt = 0;
+    }
+  }
+  if (s.sSt > 0) {
+    s.sQ += s.holdTs;
+    if (s.sSt === 1 && s.sQ >> 8 >= SPLASH_TELL) {
+      const hit = absInt(s.bx - s.sX) <= (SPLASH_HALF + 20) * SUB;
+      if (hit) s.chainFreezeQ = CHAIN_FREEZE_STEPS * 256;
+      emit(s, EV_SPLASH, hit ? 2 : 3, s.sX >> 8, 0);
+      s.sSt = 0;
+    }
+  }
+}
+
+function stepTimers(s: SimState): void {
+  'worklet';
+  const h = s.holdTs;
+  if (s.hitStopQ > 0) s.hitStopQ -= h;
+  if (s.slowQ >= 0) {
+    s.slowQ += h;
+    if (s.slowQ >> 8 >= CLOSE_HOLD + CLOSE_EASE) s.slowQ = -1;
+  }
+  if (s.invulnQ > 0) s.invulnQ -= h;
+  if (s.chainFreezeQ > 0) s.chainFreezeQ -= h;
+  if (s.fingerQ > 0) s.fingerQ -= h;
+  if (s.ghQ > 0) {
+    const before = s.ghQ >> 8;
+    s.ghQ -= h;
+    const after = s.ghQ > 0 ? s.ghQ >> 8 : 0;
+    if (before > GOLDEN_WARN && after <= GOLDEN_WARN) emit(s, EV_GOLDEN, 2, 0, 0);
+    if (s.ghQ <= 0) {
+      s.ghQ = 0;
+      emit(s, EV_GOLDEN, 3, 0, 0);
+    }
+  }
+}
+
+export function startGull(s: SimState, sent: number): void {
+  'worklet';
+  if (s.gSt !== 0) return;
+  s.gSt = 1;
+  s.gQ = 0;
+  s.gX = s.bx;
+  s.gLen = s.gSeen ? GULL_TELL : GULL_TELL_FIRST;
+  s.gSeen = 1;
+  s.gSent = sent;
+  emit(s, EV_TELL, s.gX >> 8, 100, 0);
+  emit(s, EV_GULL, 1, s.gX >> 8, sent);
+}
+
+export function startSplash(s: SimState, xFu: number): void {
+  'worklet';
+  if (s.sSt !== 0) return;
+  s.sSt = 1;
+  s.sQ = 0;
+  s.sX = xFu * SUB;
+  emit(s, EV_TELL, xFu, 101, 0);
+  emit(s, EV_SPLASH, 1, xFu, 0);
+}
+
+/** Twist cards show at the start of set 2 (right after the set card). */
+function maybeCardLater(s: SimState, card: number): void {
+  'worklet';
+  if ((s.cardsSeen & card) !== 0) return;
+  s.cardsSeen |= card;
+  emit(s, EV_CARD, card, 0, 0);
+}
+
+function onClockStep(s: SimState): void {
+  'worklet';
+  const c = s.clock;
+  const lt = c - s.setStart;
+  const lastSet = s.mode === MODE_RIDE || s.set === QUEUE_SETS - 1;
+  if (lt >= s.setLen) {
+    if (lastSet) {
+      if (s.finale !== 1) finish(s, END_TIME);
+      return;
+    }
+    // Queue set break: bank the set, keep the chain, forced freeze with a set card.
+    s.set += 1;
+    s.setStart = c;
+    s.setLen = SET_STEPS;
+    s.rushOn = 0;
+    s.gSt = 0;
+    s.sSt = 0;
+    if (s.set === QUEUE_SETS - 1) s.rushAt = c + 600;
+    s.cardPending = CARD_SET_BASE + s.set;
+    s.holdTs = 0;
+    emit(s, EV_SET, s.set, 0, 0);
+    emit(s, EV_CARD, CARD_SET_BASE + s.set, 0, 0);
+    s.dNext = c + STEPS_BEAT;
+    if (s.set === 1 && s.twist !== TWIST_NONE) {
+      if (s.twist === TWIST_GULLS) {
+        s.gNext = c + STEPS_BAR;
+        maybeCardLater(s, CARD_GULLS);
+      } else if (s.twist === TWIST_SPLASH) {
+        s.sNext = c + STEPS_BAR;
+        maybeCardLater(s, CARD_SPLASH);
+      } else if (s.twist === TWIST_BREEZY) maybeCardLater(s, CARD_BREEZY);
+      else if (s.twist === TWIST_BEACH) maybeCardLater(s, CARD_BEACH);
+    }
+    if (s.set === 2) {
+      s.gNext = 1 << 30;
+      s.sNext = 1 << 30;
+    }
+    return;
+  }
+  if (c === s.rushAt - STEPS_BEAT) emit(s, EV_RUSH, 1, 0, 0);
+  if (c === s.rushAt) {
+    s.rushOn = 1;
+    emit(s, EV_RUSH, 2, 0, 0);
+  }
+  if (lastSet) {
+    const left = s.setLen - lt;
+    if (left <= 300 && left > 0 && left % STEPS_BEAT === 0) emit(s, EV_TICK, floorDiv(left + 59, 60), 0, 0);
+  }
+  // Twists (set 2 in the queue).
+  if (s.mode === MODE_QUEUE && s.set === 1) {
+    if (c >= s.gNext && s.twist === TWIST_GULLS) {
+      startGull(s, -1);
+      s.gNext = c + STEPS_BAR * 3 + (rngRange(s.rng, 0, 1) * STEPS_BAR);
+    }
+    if (c >= s.sNext && s.twist === TWIST_SPLASH) {
+      startSplash(s, rngRange(s.rng, 90, 310));
+      s.sNext = c + STEPS_BAR * 2 + (rngRange(s.rng, 0, 1) * STEPS_BAR);
+    }
+    if (s.twist === TWIST_BREEZY && lt % (STEPS_BAR * 4) === 0) s.wind = -s.wind;
+  }
+  // Gull Send: pairs [receivedAt, applyAt] (applyAt >= sender step + 90); lands on a beat.
+  if (s.gullIn.length >= 2 && s.gSt === 0 && lt % STEPS_BEAT === 0 && c >= s.gullIn[0] && c >= s.gullIn[1]) {
+    const recv = s.gullIn.shift() as number;
+    const apply = s.gullIn.shift() as number;
+    s.gullLog.push(recv, apply, c, 0);
+    startGull(s, recv);
+  }
+  directorStep(s);
 }
 
 function stepItems(s: SimState, dt: number): void {
@@ -413,399 +801,6 @@ function stepItems(s: SimState, dt: number): void {
   }
 }
 
-function endFinale(s: SimState, i: number): void {
-  'worklet';
-  if (s.finaleSlot === i) {
-    s.finale = 2;
-    s.finaleSlot = -1;
-  }
-}
-
-function resolveCrossing(s: SimState, i: number, xc: number, zone: number): void {
-  'worklet';
-  const kind = s.iKind[i];
-  const d = absInt(xc - s.bx);
-  if (kind === K_PUFFER) {
-    s.iSt[i] = S_PASS;
-    const hz = HALF_ZONE * SUB;
-    if (d <= hz && s.invulnQ <= 0) {
-      s.hearts -= 1;
-      s.invulnQ = INVULN_STEPS * 256;
-      hitStop(s, HITSTOP_PUFFER);
-      perfectBreak(s);
-      emit(s, EV_HIT, xc >> 8, s.hearts, i);
-      if (s.hearts <= 0) {
-        emit(s, EV_HEARTS_OUT, 0, 0, 0);
-        finish(s, END_HEARTS);
-      }
-    } else if (d > hz && d <= hz + CLOSE_CALL_BAND * SUB) {
-      s.score += CLOSE_PTS;
-      s.slowQ = 0;
-      emit(s, EV_CLOSE, xc >> 8, CLOSE_PTS, 0);
-      if (s.clock - s.closeA <= GRAZE_WINDOW) {
-        s.score += GRAZE_PTS;
-        s.grazes += 1;
-        s.closeA = -100000;
-        s.closeB = -100000;
-        emit(s, EV_GRAZE, xc >> 8, GRAZE_PTS, 0);
-      } else {
-        s.closeA = s.closeB;
-        s.closeB = s.clock;
-      }
-    }
-    return;
-  }
-  // Assist: 6 fu extra on the side the basket is moving toward.
-  let z = zone;
-  if (s.bv !== 0 && signInt(xc - s.bx) === signInt(s.bv)) z += ASSIST_ZONE * SUB;
-  if (d <= z) {
-    const grade = d <= PERFECT_D * SUB ? G_PERFECT : d <= GREAT_D * SUB ? G_GREAT : G_GOOD;
-    s.iSt[i] = S_DUNK;
-    s.iT[i] = 0;
-    s.iX[i] = xc;
-    collect(s, i, xc, grade, 0);
-    endFinale(s, i);
-    return;
-  }
-  if (d <= z + RIM_ROLL_BAND * SUB) {
-    s.iSt[i] = S_RIM;
-    s.iT[i] = 0;
-    s.iX[i] = xc;
-    s.iY[i] = LANE_Y * SUB;
-    s.iSide[i] = signInt(xc - s.bx);
-    emit(s, EV_RIM, xc >> 8, kind, s.iSide[i]);
-    maybeCard(s, CARD_RIM);
-    endFinale(s, i);
-    return;
-  }
-  s.iSt[i] = S_MISS;
-  const must = s.iMust[i] === 1 && s.iOpt[i] === 0 && (kind === K_BANANA || kind === K_BUNCH || kind === K_LUCKY);
-  if (must) {
-    s.misses += 1;
-    perfectBreak(s);
-    breakChain(s);
-  }
-  emit(s, EV_MISS, xc >> 8, kind, must ? 1 : 0);
-  endFinale(s, i);
-}
-
-// -- juggle ball -------------------------------------------------------------------------
-
-export function tossBall(s: SimState, xFu: number): void {
-  'worklet';
-  s.bOn = 1;
-  s.bX = xFu * SUB;
-  s.bY = 120 * SUB;
-  s.bVx = signInt(s.bx - s.bX) * 256;
-  s.bVy = 0;
-  s.bG = G_BALL[0];
-  s.bN = 0;
-  s.bGold = 0;
-  s.bRespawnQ = -1;
-  predictBall(s);
-  emit(s, EV_BALL_TOSS, xFu, 0, 0);
-  maybeCard(s, CARD_BALL);
-}
-
-function stepBall(s: SimState, dt: number): void {
-  'worklet';
-  if (s.bOn !== 1) {
-    if (s.bRespawnQ >= 0) {
-      s.bRespawnQ -= s.holdTs;
-      if (s.bRespawnQ <= 0 && !s.done) {
-        s.bRespawnQ = -1;
-        tossBall(s, clampInt(s.dLastX, 80, 320));
-      }
-    }
-    return;
-  }
-  const py = s.bY;
-  s.bVy += floorDiv(s.bG * dt, 256);
-  s.bY += floorDiv(s.bVy * dt, 256);
-  s.bX += floorDiv(s.bVx * dt, 256);
-  const lo = BALL_R * SUB;
-  const hi = (FIELD_W - BALL_R) * SUB;
-  if (s.bX < lo) {
-    s.bX = lo + (lo - s.bX);
-    s.bVx = floorDiv(-s.bVx * BALL_WALL_Q8, 256);
-  } else if (s.bX > hi) {
-    s.bX = hi - (s.bX - hi);
-    s.bVx = floorDiv(-s.bVx * BALL_WALL_Q8, 256);
-  }
-  // Bounce off the basket's top band (the ball's bottom meets the rim).
-  const rim = (LANE_Y - BALL_R) * SUB;
-  if (s.bVy > 0 && py <= rim + BALL_SURFACE * SUB && s.bY >= rim && s.bY <= rim + BALL_SURFACE * 2 * SUB) {
-    const dx = s.bX - s.bx;
-    if (absInt(dx) <= (HALF_ZONE + 14) * SUB) {
-      bounce(s, dx);
-      return;
-    }
-  }
-  // Ball Pop and BONK against falling items.
-  for (let i = 0; i < MAX_ITEMS; i++) {
-    if (s.iSt[i] !== S_FALL || s.iFlag[i] === 1) continue;
-    const kind = s.iKind[i];
-    const r = BALL_R + (ITEM_SIZE[kind] >> 1) - 6;
-    const dx = (s.iX[i] - s.bX) >> 8;
-    const dy = (s.iY[i] - s.bY) >> 8;
-    if (dx * dx + dy * dy > r * r) continue;
-    if (s.iY[i] > (LANE_Y - 30) * SUB) continue;
-    const t = tierOf(s.chain) + boosted(s);
-    if (kind === K_PUFFER) {
-      const pts = scorePoints(BONK_BASE, t, G_POP, eventQuarters(s));
-      s.score += pts;
-      s.bonks += 1;
-      s.iSt[i] = S_BONKED;
-      s.iT[i] = 0;
-      s.iVy[i] = -1620;
-      s.iVx[i] = signInt(s.iX[i] - s.bX) * 1024 + (s.iX[i] >= s.bX ? 256 : -256);
-      emit(s, EV_BONK, s.iX[i] >> 8, pts, i);
-      continue;
-    }
-    s.iSt[i] = S_POP;
-    s.iT[i] = 0;
-    collect(s, i, s.iX[i], s.bGold ? G_GOLD_POP : G_POP, 1);
-    emit(s, EV_BALL_POP, s.iX[i] >> 8, kind, i);
-    endFinale(s, i);
-  }
-  if (s.bY > (LANE_Y + 70) * SUB) {
-    s.bOn = 0;
-    s.bN = 0;
-    s.bGold = 0;
-    s.bPredStep = -1;
-    s.bRespawnQ = (s.twist === TWIST_BEACH && s.set === 1 ? BALL_RESPAWN_BEACH : BALL_RESPAWN) * 256;
-    emit(s, EV_BALL_LOST, s.bX >> 8, 0, 0);
-  }
-}
-
-function bounce(s: SimState, dx: number): void {
-  'worklet';
-  s.bN += 1;
-  s.bRun += 1;
-  s.bounces += 1;
-  const n = s.bN < 12 ? s.bN : 12;
-  s.bY = (LANE_Y - BALL_R) * SUB;
-  s.bVy = VY_BALL[n];
-  s.bG = G_BALL[n];
-  s.bVx = floorDiv(dx * VX_GAIN[n], HALF_ZONE * SUB) + floorDiv(s.bv, 4);
-  if (s.bN === BALL_GOLD_AT) {
-    s.bGold = 1;
-    s.goldBalls += 1;
-    emit(s, EV_GOLD_BALL, s.bX >> 8, 0, 0);
-  }
-  let pts = s.bN * 5 < 40 ? s.bN * 5 : 40;
-  if (s.bGold) pts = GOLD_BOUNCE_PTS;
-  if (s.twist === TWIST_BEACH && s.set === 1) pts = pts * 2;
-  s.score += pts;
-  emit(s, EV_BOUNCE, s.bX >> 8, s.bN, s.bGold | (pts << 1));
-  // Downwell: every 5th consecutive bounce fills one pip, once per meter cycle.
-  if (s.bN % 5 === 0 && s.bPip === 0 && s.ghQ <= 0) {
-    s.bPip = 1;
-    emit(s, EV_DOWNWELL, s.bX >> 8, s.meter + 1, 0);
-    addPip(s, s.bX >> 8);
-  }
-  predictBall(s);
-  // Demote in-flight must-catch items the new arc makes unreachable.
-  if (s.bPredStep >= 0) {
-    for (let i = 0; i < MAX_ITEMS; i++) {
-      if (s.iSt[i] !== S_FALL || s.iMust[i] !== 1 || s.iOpt[i] === 1) continue;
-      const dtS = absInt(s.iLandStep[i] - s.bPredStep);
-      if (dtS > 24) continue;
-      const need = absInt((s.iX[i] - s.bPredX) >> 8) - 40;
-      if (need > 0 && dtS < travelOf(need)) s.iOpt[i] = 1;
-    }
-  }
-}
-
-
-// -- gull and splash ----------------------------------------------------------------------
-
-function stepHazards(s: SimState): void {
-  'worklet';
-  if (s.gSt > 0) {
-    s.gQ += s.holdTs;
-    const t = s.gQ >> 8;
-    if (s.gSt === 1 && t >= s.gLen) {
-      s.gSt = 2;
-      s.gQ = 0;
-      emit(s, EV_GULL, 2, s.gX >> 8, s.gSent);
-    } else if (s.gSt === 2 && t >= 8) {
-      const hit = absInt(s.bx - s.gX) <= GULL_REACH * SUB;
-      if (hit) {
-        dropTier(s);
-        perfectBreak(s);
-      }
-      emit(s, EV_GULL, hit ? 3 : 4, s.gX >> 8, s.gSent);
-      s.gSt = 0;
-    }
-  }
-  if (s.sSt > 0) {
-    s.sQ += s.holdTs;
-    if (s.sSt === 1 && s.sQ >> 8 >= SPLASH_TELL) {
-      const hit = absInt(s.bx - s.sX) <= (SPLASH_HALF + 20) * SUB;
-      if (hit) s.chainFreezeQ = CHAIN_FREEZE_STEPS * 256;
-      emit(s, EV_SPLASH, hit ? 2 : 3, s.sX >> 8, 0);
-      s.sSt = 0;
-    }
-  }
-}
-
-export function startGull(s: SimState, sent: number): void {
-  'worklet';
-  if (s.gSt !== 0) return;
-  s.gSt = 1;
-  s.gQ = 0;
-  s.gX = s.bx;
-  s.gLen = s.gSeen ? GULL_TELL : GULL_TELL_FIRST;
-  s.gSeen = 1;
-  s.gSent = sent;
-  emit(s, EV_TELL, s.gX >> 8, 100, 0);
-  emit(s, EV_GULL, 1, s.gX >> 8, sent);
-}
-
-export function startSplash(s: SimState, xFu: number): void {
-  'worklet';
-  if (s.sSt !== 0) return;
-  s.sSt = 1;
-  s.sQ = 0;
-  s.sX = xFu * SUB;
-  emit(s, EV_TELL, xFu, 101, 0);
-  emit(s, EV_SPLASH, 1, xFu, 0);
-}
-
-// -- timers and end ----------------------------------------------------------------------
-
-function stepTimers(s: SimState): void {
-  'worklet';
-  const h = s.holdTs;
-  if (s.hitStopQ > 0) s.hitStopQ -= h;
-  if (s.slowQ >= 0) {
-    s.slowQ += h;
-    if (s.slowQ >> 8 >= CLOSE_HOLD + CLOSE_EASE) s.slowQ = -1;
-  }
-  if (s.invulnQ > 0) s.invulnQ -= h;
-  if (s.chainFreezeQ > 0) s.chainFreezeQ -= h;
-  if (s.fingerQ > 0) s.fingerQ -= h;
-  if (s.ghQ > 0) {
-    const before = s.ghQ >> 8;
-    s.ghQ -= h;
-    const after = s.ghQ > 0 ? s.ghQ >> 8 : 0;
-    if (before > GOLDEN_WARN && after <= GOLDEN_WARN) emit(s, EV_GOLDEN, 2, 0, 0);
-    if (s.ghQ <= 0) {
-      s.ghQ = 0;
-      emit(s, EV_GOLDEN, 3, 0, 0);
-    }
-  }
-}
-
-/** Tally bonuses (deterministic; part of the verified score). */
-export function endBonus(s: SimState): number {
-  'worklet';
-  let b = 0;
-  if (s.misses === 0 && s.catches > 0) b += CLEAN_SWEEP;
-  b += s.bestPerfStreak * PERFECT_STREAK_PTS;
-  if (s.endReason !== END_HEARTS) b += s.hearts * HEART_PTS;
-  b += s.banked * GOLDEN_BANK;
-  return b;
-}
-
-export function finish(s: SimState, reason: number): void {
-  'worklet';
-  if (s.done) return;
-  s.done = 1;
-  s.endReason = reason;
-  s.bonus = endBonus(s);
-  if (reason === END_TIME) hitStop(s, HITSTOP_TIME);
-  emit(s, EV_TIME, reason, 0, 0);
-}
-
-export function finalScore(s: SimState): number {
-  'worklet';
-  return s.score + s.bonus;
-}
-
-// -- the clock-step timeline (sets, rush, ticks) -------------------------------------------
-
-function onClockStep(s: SimState): void {
-  'worklet';
-  const c = s.clock;
-  const lt = c - s.setStart;
-  const lastSet = s.mode === MODE_RIDE || s.set === QUEUE_SETS - 1;
-  if (lt >= s.setLen) {
-    if (lastSet) {
-      if (s.finale !== 1) finish(s, END_TIME);
-      return;
-    }
-    // Queue set break: bank the set, keep the chain, forced freeze with a set card.
-    s.set += 1;
-    s.setStart = c;
-    s.setLen = SET_STEPS;
-    s.rushOn = 0;
-    s.gSt = 0;
-    s.sSt = 0;
-    if (s.set === QUEUE_SETS - 1) s.rushAt = c + 600;
-    s.cardPending = CARD_SET_BASE + s.set;
-    s.holdTs = 0;
-    emit(s, EV_SET, s.set, 0, 0);
-    emit(s, EV_CARD, CARD_SET_BASE + s.set, 0, 0);
-    s.dNext = c + STEPS_BEAT;
-    if (s.set === 1 && s.twist !== TWIST_NONE) {
-      if (s.twist === TWIST_GULLS) {
-        s.gNext = c + STEPS_BAR;
-        maybeCardLater(s, CARD_GULLS);
-      } else if (s.twist === TWIST_SPLASH) {
-        s.sNext = c + STEPS_BAR;
-        maybeCardLater(s, CARD_SPLASH);
-      } else if (s.twist === TWIST_BREEZY) maybeCardLater(s, CARD_BREEZY);
-      else if (s.twist === TWIST_BEACH) maybeCardLater(s, CARD_BEACH);
-    }
-    if (s.set === 2) {
-      s.gNext = 1 << 30;
-      s.sNext = 1 << 30;
-    }
-    return;
-  }
-  if (c === s.rushAt - STEPS_BEAT) emit(s, EV_RUSH, 1, 0, 0);
-  if (c === s.rushAt) {
-    s.rushOn = 1;
-    emit(s, EV_RUSH, 2, 0, 0);
-  }
-  if (lastSet) {
-    const left = s.setLen - lt;
-    if (left <= 300 && left > 0 && left % STEPS_BEAT === 0) emit(s, EV_TICK, floorDiv(left + 59, 60), 0, 0);
-  }
-  // Twists (set 2 in the queue).
-  if (s.mode === MODE_QUEUE && s.set === 1) {
-    if (c >= s.gNext && s.twist === TWIST_GULLS) {
-      startGull(s, -1);
-      s.gNext = c + STEPS_BAR * 3 + (rngRange(s.rng, 0, 1) * STEPS_BAR);
-    }
-    if (c >= s.sNext && s.twist === TWIST_SPLASH) {
-      startSplash(s, rngRange(s.rng, 90, 310));
-      s.sNext = c + STEPS_BAR * 2 + (rngRange(s.rng, 0, 1) * STEPS_BAR);
-    }
-    if (s.twist === TWIST_BREEZY && lt % (STEPS_BAR * 4) === 0) s.wind = -s.wind;
-  }
-  // Gull Send: pairs [receivedAt, applyAt] (applyAt >= sender step + 90); lands on a beat.
-  if (s.gullIn.length >= 2 && s.gSt === 0 && lt % STEPS_BEAT === 0 && c >= s.gullIn[0] && c >= s.gullIn[1]) {
-    const recv = s.gullIn.shift() as number;
-    const apply = s.gullIn.shift() as number;
-    s.gullLog.push(recv, apply, c, 0);
-    startGull(s, recv);
-  }
-  directorStep(s);
-}
-
-/** Twist cards show at the start of set 2 (right after the set card). */
-function maybeCardLater(s: SimState, card: number): void {
-  'worklet';
-  if ((s.cardsSeen & card) !== 0) return;
-  s.cardsSeen |= card;
-  emit(s, EV_CARD, card, 0, 0);
-}
-
-// -- the step ------------------------------------------------------------------------------
-
 /**
  * Advance one logged step. `touch` is 0/1, `targetQ4` the basket target in
  * 1/16 fu (already clamped by the input layer; clamped again here).
@@ -842,6 +837,11 @@ export function step(s: SimState, touch: number, targetQ4: number): void {
   stepHazards(s);
   stepTimers(s);
   if (s.finale === 2 && !s.done && s.clock - s.setStart >= s.setLen) finish(s, END_TIME);
+}
+
+export function finalScore(s: SimState): number {
+  'worklet';
+  return s.score + s.bonus;
 }
 
 /** Run a full proof log (the replay). Returns the final state. */

@@ -434,3 +434,9 @@ test('golden vectors (shared with the WS7 PHP replay) replay to their exact scor
   }
   assert.ok(vectors.some((v) => v.expect.end === 'hearts'));
 });
+
+test('worklet files define every callee before its callers (Reanimated closure capture)', () => {
+  for (const f of ['state.ts', 'sim.ts', 'patterns.ts', 'fixed.ts', 'bots.ts', 'ghost.ts', 'render/vis.ts']) {
+    execFileSync('python3', [path.join(root, 'tools/banana/order-worklets.py'), path.join(root, 'src/games/banana-basket', f), '--check']);
+  }
+});

@@ -25,6 +25,49 @@ import { absInt, clampInt, floorDiv, rngBelow, rngRange, rngWeighted } from './f
 import { MAXDX, TRAVEL, TRAVEL_MAX } from './tables';
 import { EV_TIPOVER, MAX_PENDING, MODE_QUEUE, WINDOW, emit, tierOf, type SimState } from './state';
 
+// -- phases -------------------------------------------------------------------------
+
+// -- reachability windows ----------------------------------------------------------------
+
+// -- phrases -------------------------------------------------------------------------------
+
+export const PH_SINGLE = 0;
+export const PH_PAIR = 1;
+export const PH_STAIRS_L = 2;
+export const PH_STAIRS_R = 3;
+export const PH_ZIGZAG = 4;
+export const PH_ARC = 5;
+export const PH_RAIN = 6;
+export const PH_BUNCH_SINGLES = 7;
+export const PH_COIN_BAIT = 8;
+export const PH_PUFFER_GATE = 9;
+export const PH_COIN_BEHIND_PUFFER = 10;
+export const PH_WEAVE = 11;
+export const PH_DOUBLE_STACK = 12;
+export const PH_BALL_ASSIST = 13;
+export const PH_LUCKY = 14;
+export const PH_GOLDEN_RAIN = 15;
+export const PH_BREATHER = 16;
+export const PH_PUFFER_SOLO = 17;
+export const PH_POWER = 18;
+export const PH_COUNT = 19;
+
+// -- the director step -----------------------------------------------------------------------
+
+export const TL_COIN = 1;
+export const TL_BALL = 2;
+export const TL_PUFFER = 4;
+export const TL_BREATHER = 8;
+export const TL_FINALE = 16;
+export const TL_GIFT = 32;
+export const TL_TIPOVER = 64;
+
+export const PHRASE_NAMES = [
+  'Single', 'Pair', 'Stairs L', 'Stairs R', 'Zigzag', 'Arc', 'Rain', 'Bunch+Singles', 'Coin Bait', 'Puffer Gate',
+  'Coin Behind Puffer', 'Weave', 'Double Stack', 'Ball Assist', 'Lucky Drop', 'Golden Rain', 'Breather Arc',
+  'Puffer Solo', 'Power Drop',
+];
+
 export function travelOf(dx: number): number {
   'worklet';
   if (dx <= 0) return 0;
@@ -43,6 +86,11 @@ export function reachAllowed(dt: number): number {
   const a = dt < 0 ? -dt : dt;
   if (a < REACT_STEPS) return REACH_SLACK;
   return REACH_SLACK + maxDxIn(a - REACT_STEPS);
+}
+
+function lane(s: SimState): number {
+  'worklet';
+  return rngRange(s.rng, BASKET_MIN + 10, BASKET_MAX - 10);
 }
 
 /** Integer free fall from the cart to the lane: steps (and drifted x). */
@@ -91,8 +139,6 @@ export function predictBall(s: SimState): void {
   }
 }
 
-// -- phases -------------------------------------------------------------------------
-
 export function phaseAt(s: SimState, lt: number): number {
   'worklet';
   if (s.mode !== MODE_QUEUE) {
@@ -123,8 +169,6 @@ export function fallParams(s: SimState, kind: number, phase: number, out: number
   out[0] = vy0;
   out[1] = floorDiv(g, 256) > 1 ? floorDiv(g, 256) : 2;
 }
-
-// -- reachability windows ----------------------------------------------------------------
 
 function pushMust(s: SimState, step: number, x: number): void {
   'worklet';
@@ -204,6 +248,15 @@ export function constrainPuffer(s: SimState, land: number, want: number): number
   return x;
 }
 
+function near(s: SimState, x: number, lo: number, hi: number): number {
+  'worklet';
+  const d = rngRange(s.rng, lo, hi);
+  const dir = rngBelow(s.rng, 2) === 0 ? -1 : 1;
+  let nx = x + dir * d;
+  if (nx < BASKET_MIN + 6 || nx > BASKET_MAX - 6) nx = x - dir * d;
+  return clampInt(nx, BASKET_MIN + 6, BASKET_MAX - 6);
+}
+
 /**
  * Schedule one item (landing x in fu). must: 1 must-catch, 0 optional.
  * flag: 1 finale, 2 free placement (no reachability). Returns the landing x or -1.
@@ -265,29 +318,6 @@ export function addItem(s: SimState, at: number, kind: number, want: number, mus
   return x;
 }
 
-// -- phrases -------------------------------------------------------------------------------
-
-export const PH_SINGLE = 0;
-export const PH_PAIR = 1;
-export const PH_STAIRS_L = 2;
-export const PH_STAIRS_R = 3;
-export const PH_ZIGZAG = 4;
-export const PH_ARC = 5;
-export const PH_RAIN = 6;
-export const PH_BUNCH_SINGLES = 7;
-export const PH_COIN_BAIT = 8;
-export const PH_PUFFER_GATE = 9;
-export const PH_COIN_BEHIND_PUFFER = 10;
-export const PH_WEAVE = 11;
-export const PH_DOUBLE_STACK = 12;
-export const PH_BALL_ASSIST = 13;
-export const PH_LUCKY = 14;
-export const PH_GOLDEN_RAIN = 15;
-export const PH_BREATHER = 16;
-export const PH_PUFFER_SOLO = 17;
-export const PH_POWER = 18;
-export const PH_COUNT = 19;
-
 /** Phrase weights for the current state (index = phrase id). */
 export function phraseWeights(s: SimState, phase: number, out: number[]): void {
   'worklet';
@@ -347,20 +377,6 @@ export function phraseWeights(s: SimState, phase: number, out: number[]): void {
     out[PH_LUCKY] = lucky;
     out[PH_BALL_ASSIST] = ball > 0 ? 1 : 0;
   }
-}
-
-function lane(s: SimState): number {
-  'worklet';
-  return rngRange(s.rng, BASKET_MIN + 10, BASKET_MAX - 10);
-}
-
-function near(s: SimState, x: number, lo: number, hi: number): number {
-  'worklet';
-  const d = rngRange(s.rng, lo, hi);
-  const dir = rngBelow(s.rng, 2) === 0 ? -1 : 1;
-  let nx = x + dir * d;
-  if (nx < BASKET_MIN + 6 || nx > BASKET_MAX - 6) nx = x - dir * d;
-  return clampInt(nx, BASKET_MIN + 6, BASKET_MAX - 6);
 }
 
 /**
@@ -488,8 +504,6 @@ export function playPhrase(s: SimState, id: number, at: number, phase: number): 
   return dur | (cost << 16);
 }
 
-// -- the director step -----------------------------------------------------------------------
-
 /** Round up to the next beat of the current set. */
 function onBeat(s: SimState, at: number): number {
   'worklet';
@@ -504,14 +518,6 @@ function oneShot(s: SimState, bit: number, lt: number, when: number): boolean {
   s.tl |= bit;
   return true;
 }
-
-export const TL_COIN = 1;
-export const TL_BALL = 2;
-export const TL_PUFFER = 4;
-export const TL_BREATHER = 8;
-export const TL_FINALE = 16;
-export const TL_GIFT = 32;
-export const TL_TIPOVER = 64;
 
 export function directorStep(s: SimState): void {
   'worklet';
@@ -592,11 +598,4 @@ export function directorStep(s: SimState): void {
   if (gap < dur + STEPS_HALF) gap = dur + STEPS_HALF;
   s.dNext = onBeat(s, c + gap);
 }
-
-export const PHRASE_NAMES = [
-  'Single', 'Pair', 'Stairs L', 'Stairs R', 'Zigzag', 'Arc', 'Rain', 'Bunch+Singles', 'Coin Bait', 'Puffer Gate',
-  'Coin Behind Puffer', 'Weave', 'Double Stack', 'Ball Assist', 'Lucky Drop', 'Golden Rain', 'Breather Arc',
-  'Puffer Solo', 'Power Drop',
-];
-
 export { K_BANANA, K_BUNCH, K_COIN, K_FINGER, K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, PHASE_BUILD, PHASE_PRESSURE, PHASE_RUSH };

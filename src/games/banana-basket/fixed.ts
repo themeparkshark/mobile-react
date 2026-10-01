@@ -4,6 +4,15 @@
  * table lookups: no sqrt, pow, trig or float literals.
  */
 
+/** mulberry32 over a mutable { s } state; uint32 math via Math.imul. */
+export interface BRng {
+  s: number;
+}
+
+// -- zigzag varints (proof input encoding) -------------------------------------
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
 /** floor(a / b) for integers, b > 0. The PHP port defines the same. */
 export function floorDiv(a: number, b: number): number {
   'worklet';
@@ -23,11 +32,6 @@ export function absInt(v: number): number {
 export function signInt(v: number): number {
   'worklet';
   return v > 0 ? 1 : v < 0 ? -1 : 0;
-}
-
-/** mulberry32 over a mutable { s } state; uint32 math via Math.imul. */
-export interface BRng {
-  s: number;
 }
 
 export function rngNext(r: BRng): number {
@@ -77,8 +81,6 @@ export function mixSeed(a: number, b: number): number {
   return h >>> 0;
 }
 
-// -- zigzag varints (proof input encoding) -------------------------------------
-
 export function zigzag(n: number): number {
   return n >= 0 ? n * 2 : -n * 2 - 1;
 }
@@ -108,8 +110,6 @@ export function readVarint(bytes: ArrayLike<number>, pos: { i: number }): number
     if (mul > 2 ** 35) throw new Error('varint: too long');
   }
 }
-
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 export function bytesToBase64(bytes: ArrayLike<number>): string {
   let out = '';
