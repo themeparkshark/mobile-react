@@ -50,7 +50,11 @@ export interface WellKit {
   rimRect: SkRect[];
   highlight: SkRect[];
   studs: SkPath[];
+  /** v5: the 6 golden studs one by one (Ripe Golden lights 2, 4, 6). */
+  studList: SkPath[][];
   bolts: SkPath[];
+  /** v5 waterline: the submerged tint (-12% value, -20% saturation, +6% teal). */
+  tint: SkPaint;
   paint: SkPaint;
   white: SkPaint;
   gold: SkPaint;
@@ -84,6 +88,7 @@ export function buildWellKit(L: BoardLayout, hatAspect: number): WellKit {
   const rimRect: SkRect[] = [];
   const highlight: SkRect[] = [];
   const studs: SkPath[] = [];
+  const studList: SkPath[][] = [];
   const bolts: SkPath[] = [];
   for (let i = 0; i < 9; i++) {
     const cx = L.cx[i];
@@ -124,6 +129,13 @@ export function buildWellKit(L: BoardLayout, hatAspect: number): WellKit {
       st.addPath(starPath(cx + Math.cos(a) * mrx * 1.22, my + Math.sin(a) * mry * 1.5, Math.max(5, L.rimW[i] * 0.065)));
     }
     studs.push(st);
+    const one: SkPath[] = [];
+    for (let k = 0; k < 6; k++) {
+      // Reading order around the rim from the top, so the lit studs climb as it ripens.
+      const a = -Math.PI / 2 + (k / 6) * Math.PI * 2 + Math.PI / 6;
+      one.push(starPath(cx + Math.cos(a) * mrx * 1.22, my + Math.sin(a) * mry * 1.5, Math.max(5, L.rimW[i] * 0.065)));
+    }
+    studList.push(one);
     const bo = Skia.Path.Make();
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
@@ -144,8 +156,22 @@ export function buildWellKit(L: BoardLayout, hatAspect: number): WellKit {
   stroke.setStyle(1);
   const fill = Skia.Paint();
   fill.setAntiAlias(true);
+  // Submerged tint: value x0.88, saturation x0.8 (toward luma), then a small teal lift.
+  const sat = 0.8;
+  const v = 0.88;
+  const lr = 0.213 * (1 - sat);
+  const lg = 0.715 * (1 - sat);
+  const lb = 0.072 * (1 - sat);
+  const tint = Skia.Paint();
+  tint.setAntiAlias(true);
+  tint.setColorFilter(Skia.ColorFilter.MakeMatrix([
+    (lr + sat) * v, lg * v, lb * v, 0, 0,
+    lr * v, (lg + sat) * v, lb * v, 0, 0.024,
+    lr * v, lg * v, (lb + sat) * v, 0, 0.036,
+    0, 0, 0, 1, 0,
+  ]));
   return {
-    interior, mouth, mouthPath, occClip, lipClip, rimRect, highlight, studs, bolts, paint, white, gold, navySil, stroke, fill,
+    interior, mouth, mouthPath, occClip, lipClip, rimRect, highlight, studs, studList, bolts, tint, paint, white, gold, navySil, stroke, fill,
     hatW: L.cellW * 0.62 * (hatAspect > 0 ? 1 : 1),
   };
 }
@@ -160,6 +186,7 @@ const C_WHITE = Skia.Color('#ffffff');
 const C_CORAL = Skia.Color(CORAL);
 const C_GOLD = Skia.Color(GOLD);
 const C_NAVY = Skia.Color(NAVY);
+const C_CREAM = Skia.Color('#fff8e4');
 
 function img(canvas: SkCanvas, im: SkImage | null, x: number, y: number, w: number, h: number, p: SkPaint): void {
   'worklet';
@@ -236,9 +263,14 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     }
     if (rs.pulse[i] > 0.01) {
       const k = rs.pulseKind[i];
+      const al = Math.min(1, rs.pulse[i] * 0.85);
+      // Two-tone (7.1): every light ring carries a navy edge.
+      st.setColor(C_NAVY);
+      st.setStrokeWidth(8);
+      st.setAlphaf(al);
+      canvas.drawOval(kit.mouth[i], st);
       st.setColor(k === 2 || k === 6 ? C_CORAL : k === 1 || k === 8 ? C_GOLD : C_WHITE);
-      st.setStrokeWidth(5);
-      st.setAlphaf(Math.min(1, rs.pulse[i] * 0.85));
+      st.setStrokeWidth(4);
       canvas.drawOval(kit.mouth[i], st);
     }
     if (feverRim > 0.01) {
@@ -250,10 +282,15 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     // Ripple ring on emerge / duck.
     if (rs.rippleOp[i] > 0.01) {
       const r = rs.ripple[i];
+      const ro = R(cx - r, my - r * (mry / mrx) * 1.1, r * 2, r * 2 * (mry / mrx) * 1.1);
+      st.setColor(C_NAVY);
+      st.setStrokeWidth(5);
+      st.setAlphaf(rs.rippleOp[i] * 0.8);
+      canvas.drawOval(ro, st);
       st.setColor(C_WHITE);
-      st.setStrokeWidth(3);
+      st.setStrokeWidth(2.5);
       st.setAlphaf(rs.rippleOp[i]);
-      canvas.drawOval(R(cx - r, my - r * (mry / mrx) * 1.1, r * 2, r * 2 * (mry / mrx) * 1.1), st);
+      canvas.drawOval(ro, st);
     }
     // Impact-frame starburst behind the sprite.
     const frame = rs.frame[i];
@@ -267,6 +304,8 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     if (fi) {
       canvas.save();
       canvas.clipPath(kit.occClip[i], ClipOp.Intersect, true);
+      // The hat-off pose's drawn hat is handed to the physics hat: clip it off the sinking pose.
+      if (rs.clipTop[i] > 0) canvas.clipRect(R(cx - L.w, rs.clipTop[i], L.w * 2, L.h), ClipOp.Intersect, true);
       const px = rs.px[i];
       const py = rs.py[i];
       canvas.translate(px, py);
@@ -290,8 +329,19 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
         kit.white.setAlphaf(1);
         img(canvas, fi, x, y, w, h, kit.white);
       } else {
+        // QUICK: a 2-frame white outline flash (a 2pt white outer edge) under the brightness flash.
+        if (rs.outline[i] > 0) {
+          kit.white.setAlphaf(1);
+          img(canvas, fi, x - 2, y - 2, w + 4, h + 3, kit.white);
+        }
         p.setAlphaf(alpha);
         img(canvas, fi, x, y, w, h, p);
+        // Waterline (v5 8.2): the part of the occupant inside the water disc is lit as submerged.
+        canvas.save();
+        canvas.clipPath(kit.mouthPath[i], ClipOp.Intersect, true);
+        kit.tint.setAlphaf(alpha);
+        img(canvas, fi, x, y, w, h, kit.tint);
+        canvas.restore();
         if (rs.flash[i] > 0) {
           kit.white.setAlphaf(rs.flash[i]);
           img(canvas, fi, x, y, w, h, kit.white);
@@ -299,8 +349,37 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
       }
       p.setAlphaf(alpha);
       if (rs.helm[i] > 0 && art.helmet) img(canvas, art.helmet, px - H * 0.26, y + h * 0.02 - H * 0.08, H * 0.52, H * 0.46, p);
-      if (rs.glasses[i] > 0 && art.glasses) img(canvas, art.glasses, px - H * 0.2, y + h * 0.2, H * 0.4, H * 0.2, p);
+      if (rs.glasses[i] > 0 && art.glasses && rs.glW[i] > 0) {
+        const gw = rs.glW[i];
+        const gh = gw * (art.glasses.height() / Math.max(1, art.glasses.width()));
+        img(canvas, art.glasses, rs.glX[i] - gw / 2, rs.glY[i] - gh / 2, gw, gh, p);
+      }
       canvas.restore();
+      // Foam line where the occupant meets the water: a wavy white strip with a navy underside, stepped on twos.
+      if (rs.foam[i] > 0 && rs.foamW[i] > 2) {
+        const fw = rs.foamW[i];
+        const fy = rs.foamY[i];
+        const th = 2.2 * rs.foam[i];
+        const ph = (rs.foamStep + i * 3) % 4;
+        const path = Skia.Path.Make();
+        const n = 7;
+        for (let k = 0; k <= n; k++) {
+          const xx = cx - fw + (2 * fw * k) / n;
+          const yy = fy + ((k + ph) % 2 === 0 ? -1.4 : 1.1) * rs.foam[i];
+          if (k === 0) path.moveTo(xx, yy);
+          else path.lineTo(xx, yy);
+        }
+        st.setAlphaf(0.9 * alpha);
+        st.setColor(C_NAVY);
+        st.setStrokeWidth(th + 2.5);
+        canvas.save();
+        canvas.translate(0, 1.2);
+        canvas.drawPath(path, st);
+        canvas.restore();
+        st.setColor(C_WHITE);
+        st.setStrokeWidth(th);
+        canvas.drawPath(path, st);
+      }
     }
     // 5. Front lip occludes the occupant's base.
     canvas.save();
@@ -308,6 +387,11 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     p.setAlphaf(1);
     img(canvas, art.rim, rr.x, rr.y, rr.width, rr.height, p);
     canvas.restore();
+    // Wet highlight: a 2pt white arc on the inner front lip.
+    st.setColor(C_WHITE);
+    st.setStrokeWidth(2);
+    st.setAlphaf(0.7);
+    canvas.drawArc(R(cx - mrx * 0.88, my - mry * 0.8, mrx * 1.76, mry * 1.6), 35, 110, false, st);
     // 6. Rim language overlays.
     const rim = rs.rim[i];
     if (rim === RIM_HARMFUL) {
@@ -318,13 +402,38 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
         imgC(canvas, art.tab, cx, my - mry - tw * 0.55, tw * 0.8, tw, p);
       }
     } else if (rim === RIM_GOLDEN) {
-      fl.setColor(C_GOLD);
-      fl.setAlphaf(1);
-      canvas.drawPath(kit.studs[i], fl);
-      st.setColor(C_NAVY);
-      st.setStrokeWidth(2);
-      st.setAlphaf(1);
-      canvas.drawPath(kit.studs[i], st);
+      const lit = rs.studs[i];
+      if (rs.studPulse[i] > 0) {
+        // Stage 3: the whole rim pulses gold (800 is on the table, and it can bolt any moment).
+        st.setColor(C_NAVY);
+        st.setStrokeWidth(9);
+        st.setAlphaf(0.85);
+        canvas.drawOval(R(cx - mrx * 1.12, my - mry * 1.35, mrx * 2.24, mry * 2.7), st);
+        st.setColor(C_GOLD);
+        st.setStrokeWidth(4 + 3 * rs.studPulse[i]);
+        st.setAlphaf(1);
+        canvas.drawOval(R(cx - mrx * 1.12, my - mry * 1.35, mrx * 2.24, mry * 2.7), st);
+      }
+      if (lit > 0) {
+        // Ripe Golden: studs light 2, 4, 6 as it ripens; unlit studs are cream.
+        for (let k = 0; k < 6; k++) {
+          fl.setColor(k < lit ? C_GOLD : C_CREAM);
+          fl.setAlphaf(1);
+          canvas.drawPath(kit.studList[i][k], fl);
+          st.setColor(C_NAVY);
+          st.setStrokeWidth(2);
+          st.setAlphaf(1);
+          canvas.drawPath(kit.studList[i][k], st);
+        }
+      } else {
+        fl.setColor(C_GOLD);
+        fl.setAlphaf(1);
+        canvas.drawPath(kit.studs[i], fl);
+        st.setColor(C_NAVY);
+        st.setStrokeWidth(2);
+        st.setAlphaf(1);
+        canvas.drawPath(kit.studs[i], st);
+      }
     } else if (rim === RIM_HEAVY) {
       fl.setColor(C_GOLD);
       fl.setAlphaf(1);
@@ -398,10 +507,43 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     fl.setAlphaf(rs.veil * 0.3);
     canvas.drawRect(R(0, L.deckTop, L.w, L.h - L.deckTop), fl);
   }
+  // Look-up resume: a soft two-tone release ring (the touch only resumes).
+  if (rs.release >= 0) {
+    const r = 10 + 34 * rs.release;
+    st.setAlphaf(1 - rs.release);
+    st.setColor(C_NAVY);
+    st.setStrokeWidth(5);
+    canvas.drawCircle(rs.releaseX, rs.releaseY, r, st);
+    st.setColor(C_WHITE);
+    st.setStrokeWidth(2.5);
+    canvas.drawCircle(rs.releaseX, rs.releaseY, r, st);
+  }
   // Foam finger above the touch.
   if (rs.fingerOp > 0 && art.finger) {
     const fw = L.cellW * 0.5;
     const fh = fw / 0.871;
+    if (rs.smear > 0) {
+      // The swing smear, already behind the finger on the touch-down frame: a navy-edged white
+      // ribbon along a -40 deg arc and one afterimage at 35%, fading over 90 ms.
+      const ax = rs.fingerX;
+      const ay = rs.fingerY + fh * 0.1;
+      const rad = fh * 0.95;
+      const arc = Skia.Path.Make();
+      arc.addArc(R(ax - rad * 2, ay - rad, rad * 2, rad * 2), -40, 38);
+      st.setAlphaf(0.7 * rs.smear);
+      st.setColor(C_NAVY);
+      st.setStrokeWidth(9);
+      canvas.drawPath(arc, st);
+      st.setColor(C_WHITE);
+      st.setStrokeWidth(5);
+      canvas.drawPath(arc, st);
+      canvas.save();
+      canvas.translate(rs.fingerX - fw * 0.42, rs.fingerY - fh * 0.16);
+      canvas.rotate(-36, 0, 0);
+      p.setAlphaf(0.35 * rs.smear);
+      img(canvas, art.finger, -fw * 0.5, -fh * 0.2, fw, fh, p);
+      canvas.restore();
+    }
     canvas.save();
     canvas.translate(rs.fingerX, rs.fingerY);
     canvas.rotate(rs.fingerRot, 0, 0);

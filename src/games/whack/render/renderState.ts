@@ -137,7 +137,48 @@ export interface RenderState {
   /** Count of hat deck bounces (the runtime turns increments into a sound + haptic). */
   hatBounces: number;
   tick: number;
+  // v5 additions.
+  /** Ripe Golden: studs lit (0, 2, 4, 6) and the stage-3 gold rim pulse (0..1). */
+  studs: number[];
+  studPulse: number[];
+  /** Screen y above which the occupant is clipped (the hat-off pose's baked hat once the physics hat takes over); 0 = none. */
+  clipTop: number[];
+  /** Waterline foam: thickness multiplier (0 = none), half width, y, and the 12 fps step. */
+  foam: number[];
+  foamW: number[];
+  foamY: number[];
+  foamStep: number;
+  /** Sunglasses rect per hole (fever, per-theme eye-line anchor). */
+  glX: number[];
+  glY: number[];
+  glW: number[];
+  /** QUICK white outline flash (2 frames). */
+  outline: number[];
+  /** Swing smear behind the finger on the touch-down frame (0..1 fade). */
+  smear: number;
+  /** Resume release ring (look-up resume touch): 0..1 progress, -1 none. */
+  release: number;
+  releaseX: number;
+  releaseY: number;
 }
+
+/**
+ * Per-theme presentation constants (v5 8.5, 8.10), measured from the
+ * gate-passed art: [hatClipFrac, hatX, hatY, glassesOn, glX, glY, glW].
+ *   hatClipFrac, hatX, hatY: in the hat-off pose's content box, the row
+ *     above which the baked flying hat sits, and that hat's centroid.
+ *   glassesOn, glX, glY, glW: sunglasses on the pop frame (eye line, centre
+ *     and width as content-box fractions). Pirates (eyepatch) and space
+ *     (helmet bubble) have none: their hat gets a gold sparkle instead.
+ */
+export const THEME_FX: Record<string, number[]> = {
+  park: [0.24, 0.743, 0.123, 1, 0.47, 0.28, 0.44],
+  pirates: [0.23, 0.608, 0.111, 0, 0.5, 0.3, 0.4],
+  mansion: [0.26, 0.682, 0.122, 1, 0.53, 0.34, 0.34],
+  space: [0.37, 0.463, 0.18, 0, 0.5, 0.3, 0.4],
+  jungle: [0.19, 0.531, 0.09, 1, 0.5, 0.28, 0.4],
+  backlot: [0.22, 0.731, 0.116, 1, 0.53, 0.27, 0.38],
+};
 
 function arr(v: number, n = 9): number[] {
   'worklet';
@@ -156,6 +197,8 @@ export function createRenderState(): RenderState {
     hfx: arr(0), hfy: arr(0), hfr: arr(0), hfo: arr(0),
     hatX: arr(0, HAT_SLOTS), hatY: arr(0, HAT_SLOTS), hatR: arr(0, HAT_SLOTS), hatO: arr(0, HAT_SLOTS),
     fingerX: 0, fingerY: 0, fingerRot: 0, fingerScale: 1, fingerOp: 0, medShake: 0, medSlam: 1, veil: 0, fever: 0, occupied: 0, hatBounces: 0, tick: 0,
+    studs: arr(0), studPulse: arr(0), clipTop: arr(0), foam: arr(0), foamW: arr(0), foamY: arr(0), foamStep: 0,
+    glX: arr(0), glY: arr(0), glW: arr(0), outline: arr(0), smear: 0, release: -1, releaseX: 0, releaseY: 0,
   };
 }
 
@@ -208,6 +251,13 @@ export interface HoleAnim {
   fxNow: number;
   veil: number;
   fever: number;
+  /** v5: the physics hat launches when the hat-off pose hands over (local ms), -1 none; crit launches harder. */
+  hatAt: number[];
+  hatCrit: number[];
+  /** Resume release ring start (fx ms). */
+  releaseAt: number;
+  releaseX: number;
+  releaseY: number;
 }
 
 export function createHoleAnim(): HoleAnim {
@@ -221,6 +271,7 @@ export function createHoleAnim(): HoleAnim {
     hatBounced: arr(0, HAT_SLOTS), hatSlid: arr(0, HAT_SLOTS), hatNext: 0,
     lastTier: 0, medShakeAt: -99999, medSlamAt: -99999,
     fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, fever: 0,
+    hatAt: arr(-1), hatCrit: arr(0), releaseAt: -99999, releaseX: 0, releaseY: 0,
   };
 }
 
@@ -291,7 +342,7 @@ function placePose(rs: RenderState, i: number, box: number[], pop: number[], bx:
   return H * (box[3] - box[1]);
 }
 
-function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number): void {
+function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number, ox?: number, oy?: number, crit = false): void {
   'worklet';
   // At most 2 hats live: reuse the oldest slot.
   let slot = -1;
@@ -301,16 +352,20 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number): void 
   }
   an.hatNext += 1;
   const H = L.spriteH[i];
-  const dir = an.tapX[i] <= L.cx[i] ? 1 : -1; // away from the thumb
+  // Away from the thumb, unless the drawn pose already sent the hat one way (continuity wins).
+  let dir = an.tapX[i] <= L.cx[i] ? 1 : -1;
+  if (ox !== undefined && Math.abs(ox - L.cx[i]) > H * 0.06) dir = ox > L.cx[i] ? 1 : -1;
   const r = hash2(seed, i + an.hatNext * 31);
+  const boost = crit ? 1.4 : 1;
   an.hatOn[slot] = 1;
   an.hatHole[slot] = i;
-  an.hatX[slot] = L.cx[i] + dir * H * 0.08;
-  an.hatY[slot] = L.my[i] - H * 0.86;
-  an.hatVx[slot] = dir * (120 + (r % 100));
-  an.hatVy[slot] = -480;
+  an.hatX[slot] = ox ?? L.cx[i] + dir * H * 0.08;
+  an.hatY[slot] = oy ?? L.my[i] - H * 0.86;
+  an.hatVx[slot] = dir * (120 + (r % 100)) * boost;
+  an.hatVy[slot] = -480 * boost;
   an.hatR[slot] = 0;
-  an.hatVr[slot] = (r & 1 ? 1 : -1) * 540;
+  // A crit adds a full extra spin.
+  an.hatVr[slot] = (r & 1 ? 1 : -1) * (540 + (crit ? 360 : 0));
   an.hatAge[slot] = 0;
   an.hatFloor[slot] = L.rimY[i] + L.rimH[i] * 0.98;
   an.hatBounced[slot] = 0;
@@ -323,7 +378,7 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number): void 
  * per-frame size multiplier for the key poses (art framing differences).
  */
 export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: BoardLayout, boxes: BoxTable,
-  dtFx: number, localDt: number[], reducedMotion: boolean, poseScale?: number[]): void {
+  dtFx: number, localDt: number[], reducedMotion: boolean, poseScale?: number[], tfx?: number[]): void {
   'worklet';
   an.fxNow += dtFx;
   const now = an.fxNow;
@@ -345,6 +400,8 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
   rs.medSlam = sl < 120 ? 0.3 + outBack(sl / 120, 2.2) * 0.7 : 1;
   const popBox = boxes[F_POP];
   let occupied = 0;
+  // Hand-drawn FX step on twos (12 fps): the foam line re-picks its wiggle every 83 ms.
+  rs.foamStep = Math.floor(now / 83.3);
 
   for (let i = 0; i < 9; i++) {
     an.local[i] += localDt[i];
@@ -362,8 +419,11 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
         an.flashKind[i] = k0 === K_GOLDEN || g === G_CRIT ? 2 : g === G_QUICK ? 1 : 0;
         if (finnish0) {
           if (g >= G_QUICK) {
+            // The hat-off pose draws the hat flying; the physics hat takes over from that drawn
+            // hat when the pose sinks (never two hats on screen at once).
             an.react[i] = F_HATOFF;
-            launchHat(an, L, i, s.seed + ev);
+            an.hatAt[i] = an.local[i] + 210;
+            an.hatCrit[i] = g === G_CRIT ? 1 : 0;
           } else {
             let pickR = hash2(s.seed, ev) % 2 === 0 ? F_SPIRAL : F_TONGUE;
             if (pickR === an.lastReact[i]) pickR = pickR === F_SPIRAL ? F_TONGUE : F_SPIRAL;
@@ -406,6 +466,11 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
     rs.dizzy[i] = 0;
     rs.flash[i] = 0;
     rs.impact[i] = 0;
+    rs.outline[i] = 0;
+    rs.studs[i] = 0;
+    rs.studPulse[i] = 0;
+    rs.clipTop[i] = 0;
+    rs.foam[i] = 0;
     rs.rim[i] = RIM_NONE;
     rs.tab[i] = 1;
     rs.shadowOp[i] = 0;
@@ -471,7 +536,19 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
         const sq = e < 260 ? Math.exp(-e / 55) * Math.cos(e / 28) : 0;
         rs.sx[i] = 1 + 0.12 * sq * wob;
         rs.sy[i] = 1 - 0.1 * sq * wob;
-        const bob = e >= 120 ? Math.sin(gt * 0.01005) * 2 * wob : 0;
+        // Motion language (v5 6.4): friendly targets bob (vertical, 1.6 Hz); decoys sway (lateral, 1.2 Hz).
+        const bob = e >= 120 && !harmful ? Math.sin(gt * 0.01005) * 2 * wob : 0;
+        if (harmful && k === K_ANGLER) rs.rot[i] = 3 * Math.sin(gt * 0.00754) * wob;
+        const ugR = s.evUg[ev];
+        if (k === K_GOLDEN && ugR > 0) {
+          // Ripe Golden: studs light 2, 4, 6 as it ripens; stage 3 pulses the rim gold and glances around.
+          const st3 = s.hStage[i];
+          rs.studs[i] = 2 + 2 * st3;
+          if (st3 >= 2) {
+            rs.studPulse[i] = 0.5 + 0.5 * Math.sin(now * 0.0262);
+            if (wob && Math.floor(gt / 380) % 2 === 1) rs.sx[i] = -rs.sx[i];
+          }
+        }
         if (k === K_BRUISER && sinceHit < 140) {
           const q = sinceHit / 140;
           rs.sy[i] = 0.82 + 0.18 * q;
@@ -506,9 +583,20 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
         if (isPoseFrame(frame)) placePose(rs, i, boxes[frame], popBox, cx, y, ch, poseScale ? poseScale[frame] : 1);
         else placeImage(rs, i, boxes[frame], cx, y, ch);
         if (k === K_HELMET && s.hHelm[i]) rs.helm[i] = 1;
-        if (s.fever && finnish) rs.glasses[i] = frame === F_GLANCE ? 0 : 1;
-        // QUICK ring: closes from 1.25 to 0.55 cell between the pop and 0.35U, gold for its last 40% (never on decoys).
-        if (!harmful && k !== K_BRUISER && !s.lap) {
+        // Sunglasses sit on the eye line of each costume (per-theme anchor); never on an eyepatch or visor.
+        if (s.fever && finnish && frame === F_POP && tfx && tfx[3] > 0) {
+          const bx = boxes[F_POP];
+          const cw = rs.iw[i] * (bx[2] - bx[0]);
+          const chh = rs.ih[i] * (bx[3] - bx[1]);
+          rs.glasses[i] = 1;
+          rs.glW[i] = cw * tfx[6];
+          rs.glX[i] = rs.ix[i] + rs.iw[i] * bx[0] + cw * tfx[4];
+          rs.glY[i] = rs.iy[i] + rs.ih[i] * bx[1] + chh * tfx[5];
+        }
+        // Waterline foam where the occupant meets the water (thicker for 120 ms on the pop).
+        rs.foam[i] = e < 120 ? 1.5 : 1;
+        // QUICK ring: closes from 1.25 to 0.55 cell between the pop and 0.35U, gold for its last 40% (never on decoys or a Ripe Golden).
+        if (!harmful && k !== K_BRUISER && !s.lap && !(k === K_GOLDEN && s.evUg[ev] > 0)) {
           const q = e / (U * QUICK_FRAC);
           if (q < 1) {
             rs.ring[i] = L.rimW[i] * 0.5 * (1.25 - 0.7 * q);
@@ -525,7 +613,9 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
           rs.impact[i] = 0.6 + 0.4 * (a / 33);
         } else if (fk >= 1 && a < 33) {
           rs.flash[i] = 0.55;
+          rs.outline[i] = 1;
         }
+        if (a < 120) rs.foam[i] = 1.5;
         if (finnish) {
           // contact (50 ms, held by the local freeze) -> reaction hold 160 ms -> 220 ms sink.
           let frame = F_CONTACT;
@@ -535,6 +625,18 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
           if (a >= 430) frame = F_NONE;
           rs.frame[i] = frame;
           rise = 1 - sink;
+          if (frame === F_HATOFF && an.hatAt[i] >= 0 && an.local[i] >= an.hatAt[i]) {
+            // Hand the drawn hat to the physics hat: launch from the baked hat, clip it off the sinking pose.
+            const hb = boxes[F_HATOFF];
+            const ph0 = placePose(rs, i, hb, popBox, cx, base, H, poseScale ? poseScale[F_HATOFF] : 1);
+            const top = rs.iy[i] + rs.ih[i] * hb[1];
+            const left = rs.ix[i] + rs.iw[i] * hb[0];
+            const cw = rs.iw[i] * (hb[2] - hb[0]);
+            const clipF = tfx ? tfx[0] : 0.24;
+            an.hatAt[i] = -2 - (top + ph0 * clipF); // remember the clip line (encoded, < -1)
+            launchHat(an, L, i, s.seed + ev, left + cw * (tfx ? tfx[1] : 0.6), top + ph0 * (tfx ? tfx[2] : 0.12), an.hatCrit[i] === 1);
+          }
+          if (frame === F_HATOFF && an.hatAt[i] < -1) rs.clipTop[i] = -2 - an.hatAt[i];
           if (frame !== F_NONE) {
             if (frame === F_CONTACT) {
               rs.sx[i] = 1 + 0.06 * wob;
@@ -581,7 +683,9 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
           }
         }
       } else if (ph === P_ESCAPE) {
-        const t = clamp01(a / 140);
+        // A Ripe Golden bolts: a 90 ms duck instead of 140.
+        const t = clamp01(a / (k === K_GOLDEN && s.evUg[ev] > 0 ? 90 : 140));
+        if (t < 1) rs.foam[i] = 1.5;
         if (t < 1) {
           const frame = finnish ? F_DUCK : k === K_GOLDEN ? F_GOLDEN : k === K_ANGLER ? F_ANGLER : k === K_BRUISER ? F_BRUISER : k === K_PUFFER ? (s.hPuffed[i] ? F_PUFFED : F_PUFFER) : F_POP;
           rs.frame[i] = frame;
@@ -599,6 +703,15 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
       }
       if (rs.frame[i] !== F_NONE && an.fever > 0.01 && !harmful) rs.rimLight[i] = an.fever * 0.7;
       else rs.rimLight[i] = 0;
+      // Foam line width follows the occupant's silhouette at the waterline (content box width).
+      if (rs.foam[i] > 0 && rs.frame[i] !== F_NONE) {
+        const fb = boxes[rs.frame[i]];
+        const cwid = rs.iw[i] * (fb[2] - fb[0]) * Math.abs(rs.sx[i]);
+        rs.foamW[i] = Math.min(cwid * 0.42, L.mrx[i] * 0.92);
+        rs.foamY[i] = my + mry * 0.05;
+      } else {
+        rs.foam[i] = 0;
+      }
     } else {
       rs.rimLight[i] = 0;
     }
@@ -677,18 +790,30 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
     if (age >= 1100) an.hatOn[k] = 0;
   }
 
-  // Foam finger: -12deg/1.15 -> +4deg/0.95 over 60 ms, hold 90, fade 120.
+  // Foam finger (v5 8.6): front-loaded impact. On the touch-down frame it is already in its
+  // contact pose (+4 deg, pressed on the head) with the swing smear behind it; nothing travels in.
+  // Recovery only: hold 90 ms, lift -8 deg and 6pt over 120 ms, fade over 120 ms.
   const fa = now - an.fingerAt;
-  if (fa >= 0 && fa < 270) {
-    const t = clamp01(fa / 60);
-    const e = outCubic(t);
+  if (fa >= 0 && fa < 330) {
     rs.fingerX = an.fingerX;
-    rs.fingerY = an.fingerY;
-    rs.fingerRot = -12 + 16 * e + an.fingerSpin * clamp01(fa / 300) * 360;
-    rs.fingerScale = 1.15 - 0.2 * e;
-    rs.fingerOp = fa < 150 ? 1 : 1 - (fa - 150) / 120;
+    const lift = fa < 90 ? 0 : outQuad(clamp01((fa - 90) / 120));
+    rs.fingerY = an.fingerY - 6 * lift;
+    rs.fingerRot = 4 - 12 * lift + an.fingerSpin * clamp01(fa / 300) * 360;
+    rs.fingerScale = 1;
+    rs.fingerOp = fa < 210 ? 1 : 1 - (fa - 210) / 120;
+    rs.smear = fa < 90 ? 1 - fa / 90 : 0;
   } else {
     rs.fingerOp = 0;
+    rs.smear = 0;
+  }
+  // Look-up resume: a soft release ring where the touch landed (it never bonks).
+  const ra2 = now - an.releaseAt;
+  if (ra2 >= 0 && ra2 < 260) {
+    rs.release = ra2 / 260;
+    rs.releaseX = an.releaseX;
+    rs.releaseY = an.releaseY;
+  } else {
+    rs.release = -1;
   }
   rs.tick += 1;
 }

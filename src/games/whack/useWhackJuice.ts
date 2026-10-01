@@ -24,17 +24,19 @@ import type { FxStageHandle } from '../../gamekit/fx/FxStage';
 import type { CameraRig } from '../../gamekit/fx/useCamera';
 import type { StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useFeel, type FeelDef } from '../../gamekit/feel';
-import { createFxGovernor, govHitStop } from '../../gamekit/core/fxGovernor';
+import { createFxGovernor, govHitStop, GOVERNOR_PRESETS } from '../../gamekit/core/fxGovernor';
+import { whackLayerLevel } from '../../gamekit/core/beatLayers';
+import type { BeatLayerPlayer } from '../../gamekit/audio/BeatLayers';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { configureHaptics, playPattern } from '../../gamekit/Haptics';
 import { createFlurry, flurryHit, flurryResolve, FLURRY_GROW, FLURRY_START, type FlurryState } from '../../gamekit/core/scoring';
 import {
   E_BREAK, E_BRUISER, E_BUTTER, E_COIN_BUBBLE, E_DECOY, E_DOUBLE, E_EMERGE, E_ESCAPE, E_FEVER, E_FEVER_READY, E_FREEZE, E_HELMET, E_HIT,
-  E_PUFF, E_RESUME, E_TELL, E_TIER, E_TIER_DROP, E_WHIFF, E_WIN,
+  E_LOOKUP_DROP, E_PERFECT, E_PUFF, E_RESUME, E_RIPE_BOLT, E_RIPE_HIT, E_RIPE_STAGE, E_TELL, E_TIER, E_TIER_DROP, E_WHIFF, E_WIN,
 } from './sim';
 import { E_HAT_BOUNCE } from './useWhackRuntime';
-import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, TIER_AT, TIER_MULT } from './waves';
+import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, SIXTEENTH_MS, TIER_AT, TIER_MULT } from './waves';
 import type { BoardLayout } from './render/layout';
 import type { WhackRuntime } from './useWhackRuntime';
 
@@ -58,7 +60,8 @@ export function useWhackCues(visible: boolean) {
     void GameAudio.init().then(() => GameAudio.preload([
       cues.bonk, cues.crit, cues.whiff, cues.duck, cues.golden, cues.chomp, cues.tier, ...cues.tells, ...cues.phrases.flat(), cues.helmet, cues.double,
       cues.tally, cues.feverStart, cues.lookup, cues.splat, cues.squeegee, cues.bossHit, cues.hatBounce, cues.swing, cues.comboDrop, cues.starSlam,
-    ])).catch(() => undefined);
+      cues.ripeStage, cues.ripeBolt, cues.perfect, cues.lookupTier, cues.bonkThump, cues.bonkSqueak, cues.bonkBoing,
+    ].filter((c) => !!c))).catch(() => undefined);
   }, [visible, cues]);
   return cues;
 }
@@ -82,6 +85,11 @@ function useWhackCueTable() {
     scan: pick('wh_scan', 'ui.select'), bossHit: pick('bo_hit', 'fx.hit'), stingWin: pick('sting_whack_win', 'fx.reward'),
     stingLose: pick('sting_whack_lose', 'fx.nope'), stingBoss: pick('sting_whack_boss_win', 'fx.reward'), blocked: pick('sh_shield_pop', 'fx.reveal'),
     hatBounce: pick('wh_hat_bounce', 'ui.tap'), swing: pick('wh_swing', 'ui.tap'),
+    // v5 offline edits (10.3): the Ripe Golden stage pings and bolt, the PERFECT ping, the look-up tier cost.
+    ripeStage: pick('wh_ripe_stage', 'wh_tell_golden', 'fx.coin'), ripeBolt: pick('wh_golden_bolt', 'fx.whooshRev', 'fx.whoosh'),
+    perfect: pick('wh_perfect', 'wh_crit', 'fx.coinTick'), lookupTier: pick('wh_lookup_tier', 'wh_combo_drop', 'fx.nopeShort'),
+    // v5 layered bonk (10.5): body, squeak, boing tail; each falls back to Chris-consistent cues until approved.
+    bonkThump: pick('wh_bonk_thump', ''), bonkSqueak: pick('wh_bonk_squeak', ''), bonkBoing: pick('wh_bonk_boing', ''),
     tells: [pick('wh_tell_finn', 'ui.select'), pick('wh_tell_golden', 'fx.reveal'), pick('wh_tell_angler', 'ui.select'), pick('wh_tell_helmet', 'ui.select'),
       pick('wh_tell_twins', 'ui.select'), pick('wh_tell_sprinter', 'fx.whoosh'), pick('wh_tell_finn', 'ui.select'), pick('wh_tell_tentacle', 'ui.select'),
       pick('wh_tell_bruiser', 'fx.hit')],
@@ -108,6 +116,8 @@ export interface WhackJuiceOpts {
   walking: boolean;
   /** Live party round: hit-stops stay local, no global freeze or slow-mo (the room clock never stops). */
   party?: boolean;
+  /** Beat-locked percussion layers (10.4): the level follows the combo tier and fever. */
+  layers?: BeatLayerPlayer | null;
   onFever?: (on: boolean) => void;
   onFeverReady?: () => void;
 }
@@ -139,26 +149,42 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     configureHaptics('whack');
     return () => configureHaptics('default');
   }, []);
+  // Fly-ups travel to the header score (v5 8.6): it sits just above the play field, right side.
+  const scoreAt = useMemo(() => ({ x: width - 48, y: -22 }), [width]);
   const table = useMemo<Record<string, FeelDef>>(() => ({
-    // v4 three FX tiers (8.6); hit-stops teach the grade (6.6).
+    // v5 three FX tiers (8.6); hit-stops teach the grade (6.6). The costume poses already draw their
+    // dizzy stars and impact dashes (8.5), so Finn-class bonks never add procedural stars or impact stars:
+    // the ring, splash and flash carry the hit, and the fly-up travels to the score.
     late: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'bubbles', count: 3 }],
-      ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm' } },
-    good: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'stars', count: 6 }],
-      ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md' } },
-    goodLite: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'stars', count: 3 }],
+      ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm', to: scoreAt } },
+    good: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 4 }],
+      ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md', to: scoreAt } },
+    goodLite: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 2 }],
       ring: { from: 10, to: 60, ms: 180 } },
     quick: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
-      burst: [{ emitter: 'impact' }, { emitter: 'splash', count: 8 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
-      bloom: { radius: 80, peak: 0.55, ms: 160 }, flyUp: { size: 'lg', color: GOLD } },
+      burst: [{ emitter: 'splash', count: 8 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
+      bloom: { radius: 80, peak: 0.55, ms: 160 }, flyUp: { size: 'lg', color: GOLD, to: scoreAt } },
     quickLite: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
-      burst: [{ emitter: 'impact' }, { emitter: 'splash', count: 3 }], ring: { color: GOLD, from: 12, to: 70, ms: 200 } },
+      burst: [{ emitter: 'splash', count: 3 }], ring: { color: GOLD, from: 12, to: 70, ms: 200 } },
     crit: { prio: 2, sfx: cues.crit, spatial: true, pattern: 'whackCrit', priority: WHACK_PRIO.quick, localStop: 100,
+      burst: [{ emitter: 'sparks' }, { emitter: 'splash', count: 8 }],
+      ring: { color: GOLD, from: 14, to: 110, ms: 240 }, bloom: { radius: 110, peak: 0.8, ms: 220 }, flyUp: { size: 'lg', color: '#ffe07a', to: scoreAt } },
+    // Non-pose targets (Bruiser, tentacles) still get the procedural stars and impact star.
+    goodStars: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'stars', count: 6 }],
+      ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md', to: scoreAt } },
+    critImpact: { prio: 2, sfx: cues.crit, spatial: true, pattern: 'whackCrit', priority: WHACK_PRIO.quick, localStop: 100,
       burst: [{ emitter: 'impact', size: 1.4 }, { emitter: 'sparks' }, { emitter: 'splash', count: 8 }],
-      ring: { color: GOLD, from: 14, to: 110, ms: 240 }, bloom: { radius: 110, peak: 0.8, ms: 220 }, flyUp: { size: 'lg', color: '#ffe07a' } },
+      ring: { color: GOLD, from: 14, to: 110, ms: 240 }, bloom: { radius: 110, peak: 0.8, ms: 220 }, flyUp: { size: 'lg', color: '#ffe07a', to: scoreAt } },
     golden: { prio: 5, sfx: cues.golden, pattern: 'goldenHit', priority: WHACK_PRIO.golden, hitStop: 110, hitStopSim: true, forceStop: true, slowMo: [0.35, 280, 120],
       burst: [{ emitter: 'speedLines', count: 12 }, { emitter: 'coins', count: 16, magnet: true }, { emitter: 'sparkles' }],
-      vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD }, duckDb: 6 },
-    angler: { sfx: cues.chomp, pattern: 'anglerHit', priority: WHACK_PRIO.decoy, localStop: 90, shake: 0.25, burst: [{ emitter: 'bubbles', count: 8, color: 0xffff6b5c }],
+      vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD, to: scoreAt }, duckDb: 6 },
+    // v5 PERFECT pip: a small gold word above the fly-up (accent on the 16th grid).
+    perfect: { flyUp: { size: 'sm', color: GOLD, dy: -52 } },
+    ripeStage: { pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.9 }], priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 4 }] },
+    ripeBolt: { sfx: cues.ripeBolt, volume: 0.8, pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.1 }], priority: WHACK_PRIO.flow,
+      burst: [{ emitter: 'splash', count: 8 }], flyUp: { size: 'md', color: '#ff9f1c' } },
+    lookTier: { sfx: cues.lookupTier, volume: 0.7, pattern: 'tierDrop', priority: WHACK_PRIO.flow, flyUp: { size: 'md', color: '#ff9f1c' } },
+    angler: { sfx: cues.chomp, pattern: 'anglerHit', priority: WHACK_PRIO.decoy, localStop: 90, shake: 0.45, burst: [{ emitter: 'bubbles', count: 8, color: 0xffff6b5c }],
       vignette: { color: CORAL, peak: 0.3, inMs: 20, holdMs: 0, outMs: 200 }, flyUp: { size: 'md', color: CORAL } },
     helmet: { sfx: cues.helmet, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 60, burst: [{ emitter: 'sparks', count: 4 }], flyUp: { size: 'sm' } },
     double: { sfx: cues.double, pattern: 'whackCrit', priority: WHACK_PRIO.golden, localStop: 80, burst: [{ emitter: 'bubbles', count: 8 }, { emitter: 'stars', count: 6 }],
@@ -175,7 +201,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       flash: { color: '#ffffff', peak: 0.4, ms: 160 }, burst: [{ emitter: 'speedLines', count: 16 }, { emitter: 'confetti', count: 26 }],
       vignette: { color: GOLD, peak: 0.24, inMs: 120, holdMs: 6600, outMs: 300 }, flyUp: { size: 'xl', color: GOLD } },
     feverEnd: { sfx: cues.feverEnd, burst: [{ emitter: 'stars', count: 6 }] },
-    bossHit: { sfx: cues.bossHit, pattern: 'whackQuick', priority: WHACK_PRIO.golden, shake: 0.3 },
+    bossHit: { sfx: cues.bossHit, pattern: 'whackQuick', priority: WHACK_PRIO.golden, shake: 0.55 },
     bossDown: { prio: 6, force: true, pattern: 'finalBonk', priority: WHACK_PRIO.golden, burst: [{ emitter: 'coins', count: 24, magnet: true }], flyUp: { size: 'xl', color: GOLD } },
     splat: { sfx: cues.splat, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'ink', count: 8 }] },
     squeegee: { sfx: cues.squeegee, pattern: 'lookUpResume', priority: WHACK_PRIO.flow, burst: [{ emitter: 'splash', count: 6 }] },
@@ -183,9 +209,13 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     tellGolden: { pattern: 'goldenTell', priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 6 }] },
     tellAngler: { pattern: 'purrTell', priority: WHACK_PRIO.decoy, tell: true },
     combo: { sfx: cues.tally, volume: 0.85, stamp: { style: 'slab', color: GOLD, size: 30 } },
-  }), [cues]);
-  // One governor per board: stacked goldens, fever and boss beats read as one big moment, never a strobe.
-  const governor = useMemo(() => createFxGovernor({ calm: reducedMotion || walking }), [reducedMotion, walking]);
+  }), [cues, scoreAt]);
+  // One governor per board (v5 8.7): counted flashes 334 ms apart, 3 per second, merged inside the window.
+  const governor = useMemo(() => createFxGovernor({ ...GOVERNOR_PRESETS.whack, calm: reducedMotion || walking }), [reducedMotion, walking]);
+  const layersRef = useRef(opts.layers);
+  layersRef.current = opts.layers;
+  const feverOn = useRef(false);
+  const syncLayers = () => layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, feverOn.current));
   const feel = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
   const liveScore = useRef(0);
   const streak = useRef(0);
@@ -193,6 +223,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   const flurry = useRef(createFlurry(900, 3));
   const lastHit = useRef({ x: 0, y: 0, mult: 1 });
   const busy = useRef(new Set<number>());
+  const ripeHit = useRef(-1);
+  const ripeWord = useRef('GOLDEN!');
   const hud = useMemo(() => ({ x: width / 2, y: 34 }), [width]);
 
   const holeXY = useCallback((h: number) => {
@@ -224,6 +256,22 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   };
 
   const multNow = () => Math.min(MULT_CAP, TIER_MULT[tier.current] ?? 1);
+  // Layered bonk (v5 10.5): body, squeak and boing tail mixed per grade on the touch-down frame.
+  // Until Dustin approves the ElevenLabs layers (empty cue names) only the ladder bonk plays.
+  const layerBonk = (grade: number) => {
+    const db = (d: number) => Math.pow(10, d / 20);
+    if (grade === G_QUICK || grade === G_CRIT) {
+      if (cues.bonkThump) GameAudio.play(cues.bonkThump, { volume: db(0) });
+      if (cues.bonkSqueak) GameAudio.play(cues.bonkSqueak, { volume: db(-4) });
+      if (cues.bonkBoing) GameAudio.play(cues.bonkBoing, { volume: db(-5) });
+    } else if (grade === G_GOOD) {
+      if (cues.bonkThump) GameAudio.play(cues.bonkThump, { volume: db(-2) });
+      if (cues.bonkSqueak) GameAudio.play(cues.bonkSqueak, { volume: db(-6) });
+    } else if (cues.bonkSqueak) {
+      GameAudio.play(cues.bonkSqueak, { volume: db(-2) });
+      if (cues.bonkThump) GameAudio.play(cues.bonkThump, { volume: db(-10) });
+    }
+  };
 
   const handle = (kind: number, a: number, b: number, c: number, now: number): boolean => {
     const G = layout.current;
@@ -265,8 +313,11 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         const xy = holeXY(h);
         lastHit.current = { x: xy.x, y: xy.y, mult: multNow() };
         GameAudio.play(cues.swing, { volume: 0.2 });
+        const poseHit = k === K_FINN || k === K_TWIN || k === K_HELMET;
+        if (k !== K_GOLDEN) layerBonk(grade);
         if (k === K_GOLDEN) {
-          fireHit('golden', h, `GOLDEN! +${pts}`, step);
+          fireHit('golden', h, ripeHit.current === h ? `${ripeWord.current} +${pts}` : `GOLDEN! +${pts}`, step);
+          ripeHit.current = -1;
           GameAudio.play(cues.coinLayer, { volume: 0.8 });
           // 1.04 push-in toward the well during the 0.35x beat.
           if (camera && !reducedMotion && !party && G) {
@@ -275,13 +326,47 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
             setTimeout(() => { camera.frame(1); camera.lean(0, 0); }, 420);
           }
         } else if (grade === G_CRIT) {
-          fireHit('crit', h, quiet ? undefined : `CRIT! +${pts}`, step);
+          fireHit(poseHit ? 'crit' : 'critImpact', h, quiet ? undefined : `CRIT! +${pts}`, step);
           GameAudio.play(cues.bonk, { volume: 0.7 });
         } else if (grade === G_QUICK) fireHit(crowded ? 'quickLite' : 'quick', h, quiet ? undefined : `QUICK +${pts}`, step);
-        else if (grade === G_GOOD) fireHit(crowded ? 'goodLite' : 'good', h, quiet ? undefined : `+${pts}`, step);
+        else if (grade === G_GOOD) fireHit(crowded ? 'goodLite' : poseHit ? 'good' : 'goodStars', h, quiet ? undefined : `+${pts}`, step);
         else fireHit('late', h, quiet ? undefined : `+${pts}`, step);
         return true;
       }
+      case E_PERFECT: {
+        // Accent on the grid (8.8): the ping snaps to the next 16th of the bed; the pip shows at once.
+        liveScore.current += b;
+        const xy = holeXY(a);
+        feel('perfect', { ...xy, text: 'PERFECT' });
+        const step = Math.min(14, (Math.max(0, streak.current - TIER_AT[tier.current]) % 8) + 2);
+        const asked = Date.now();
+        void GameAudio.music.positionMs().then((pos) => {
+          const lag = Date.now() - asked;
+          const d = SIXTEENTH_MS - (((pos + lag) % SIXTEENTH_MS) + SIXTEENTH_MS) % SIXTEENTH_MS;
+          GameAudio.playLadder(cues.perfect, step, { delayMs: Math.round(Math.min(SIXTEENTH_MS, d)) });
+        }).catch(() => GameAudio.playLadder(cues.perfect, step));
+        return true;
+      }
+      case E_RIPE_STAGE: {
+        // One rising ting per stage (10.3); the studs light on the board.
+        GameAudio.play(cues.ripeStage, { volume: 0.55, pitch: b === 1 ? 5 : 9 });
+        if (busy.current.size < 3) feel('ripeStage', { ...holeXY(a) });
+        return true;
+      }
+      case E_RIPE_HIT:
+        ripeHit.current = a;
+        ripeWord.current = b === 2 ? 'RIPE!' : b === 1 ? 'NICE!' : 'GOLDEN!';
+        return true;
+      case E_RIPE_BOLT:
+        busy.current.delete(a);
+        feel('ripeBolt', { ...holeXY(a), text: 'BOLTED!' });
+        return true;
+      case E_LOOKUP_DROP:
+        tier.current = a;
+        streak.current = b;
+        if (G) feel('lookTier', { x: G.w / 2, y: G.hudH + 40, text: 'LOOKED UP' });
+        syncLayers();
+        return true;
       case E_BRUISER:
         liveScore.current += c;
         streak.current += 1;
@@ -323,22 +408,27 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       case E_TIER:
         tier.current = a;
         if (G) feel('tierUp', { x: G.w / 2, y: 40, step: a - 1 });
+        syncLayers();
         return true;
       case E_TIER_DROP:
         tier.current = a;
         streak.current = b;
         feel('tierDrop');
+        syncLayers();
         return true;
       case E_BREAK:
         if (a >= 5) feel('comboBreak');
         streak.current = 0;
         tier.current = 0;
+        syncLayers();
         return true;
       case E_FEVER_READY:
         if (G) feel('feverReady', { x: G.w / 2, y: G.hudH + 40, text: 'FEVER READY!' });
         onReadyRef.current?.();
         return true;
       case E_FEVER:
+        feverOn.current = a === 1;
+        syncLayers();
         if (a === 1) {
           onFeverRef.current?.(true);
           if (G) feel('fever', { x: G.w / 2, y: G.deckTop + (G.h - G.deckTop) * 0.3, text: 'FEVER!' });
@@ -390,6 +480,9 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   const reset = useCallback((s: number) => {
     liveScore.current = 0;
     streak.current = s;
+    tier.current = Math.max(0, TIER_AT.reduce((t, at, i) => (s >= at ? i : t), 0));
+    feverOn.current = false;
+    layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, false));
     flurry.current = createFlurry(900, 3);
     busy.current.clear();
   }, []);

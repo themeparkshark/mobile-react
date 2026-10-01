@@ -125,9 +125,11 @@ export function useWhackRuntime(opts: {
   boxes: SharedValue<number[][]>;
   /** Key-pose size multipliers per frame code (render/boxes.ts poseScaleFor). */
   poseScale?: SharedValue<number[]>;
+  /** Per-theme presentation constants (renderState THEME_FX). */
+  themeFx?: SharedValue<number[]>;
   onEvents: (batch: number[]) => void;
 }): WhackRuntime {
-  const { geo, boxes, poseScale, onEvents } = opts;
+  const { geo, boxes, poseScale, themeFx, onEvents } = opts;
   const sim = useSharedValue<WhackSim>(emptySim());
   const rs = useSharedValue<RenderState>(createRenderState());
   const an = useSharedValue<HoleAnim>(createHoleAnim());
@@ -184,6 +186,9 @@ export function useWhackRuntime(opts: {
     // post-resume emerges ease in (in the sim).
     if (wasFrozen && !s.frozen) {
       r.resumedAt = a.fxNow;
+      a.releaseAt = a.fxNow;
+      a.releaseX = x;
+      a.releaseY = y;
       return;
     }
     if (helmBefore === 1 && s.hHelm[h] === 0) {
@@ -278,7 +283,7 @@ export function useWhackRuntime(opts: {
       const locals: number[] = [];
       for (let i = 0; i < 9; i++) locals.push(slotDt(c, i));
       const R = rs.value;
-      computeRender(R, a, s, L, boxes.value, fxDt, locals, r.reducedMotion, poseScale ? poseScale.value : undefined);
+      computeRender(R, a, s, L, boxes.value, fxDt, locals, r.reducedMotion, poseScale ? poseScale.value : undefined, themeFx ? themeFx.value : undefined);
       if (R.hatBounces !== r.hatBounces) {
         r.hatBounces = R.hatBounces;
         pushEvent(ring.value, E_HAT_BOUNCE, 0, 0, 0, s.t);

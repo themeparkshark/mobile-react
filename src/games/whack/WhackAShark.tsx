@@ -30,6 +30,8 @@ import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../game
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { StampLayer, type StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useCamera } from '../../gamekit/fx/useCamera';
+import { CAMERA_PRESETS } from '../../gamekit/core/camera';
+import { useBeatLayers } from '../../gamekit/audio/BeatLayers';
 import { useFinisher } from '../../gamekit/fx/useFinisher';
 import { TIER_NAMES, TIER_SCALES } from '../../gamekit/core/perfTier';
 import { usePerfTier } from '../../gamekit/perf/usePerfTier';
@@ -54,13 +56,14 @@ import {
 } from './sim';
 import { buildProof, type WhackProofV4 } from './proof';
 import {
-  PTS_CRIT, PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, RIDE_WIN_NOTCHES, RUN_STARS, WALK_BOOST_EVERY, WALK_PCT_PER_M, burstCount, isBossRun,
+  PTS_CRIT, PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_PERFECT, RIDE_WIN_NOTCHES, RUN_STARS, WALK_BOOST_EVERY, WALK_PCT_PER_M, burstCount, isBossRun,
   type Difficulty, type WhackFormat,
 } from './waves';
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
 import { boxesFor, poseScaleFor } from './render/boxes';
-import { WhackBoard, useBoardImages } from './render/WhackBoard';
+import { THEME_FX } from './render/renderState';
+import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
@@ -107,6 +110,8 @@ export interface WhackASharkProps {
   raid?: WhackRaidConfig | null;
   net?: WhackNetAdapter | null;
   autoplay?: boolean;
+  /** Wave 2 (MiniGameTester only): Boss Run finales every 3rd Run. The Wave 1 build is Golden Rush only. */
+  bossRuns?: boolean;
   onBurstBanked?: (b: BurstBanked) => void;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -186,13 +191,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const geo = useSharedValue<BoardLayout>(computeLayout(390, 700, theme));
   const boxes = useSharedValue<number[][]>(boxesFor(theme));
   const poseScale = useSharedValue<number[]>(poseScaleFor(theme));
+  const themeFx = useSharedValue<number[]>(THEME_FX[theme] ?? THEME_FX.park);
   useEffect(() => {
     if (L) geo.value = L;
   }, [L, geo]);
   useEffect(() => {
     boxes.value = boxesFor(theme);
     poseScale.value = poseScaleFor(theme);
-  }, [theme, boxes, poseScale]);
+    themeFx.value = THEME_FX[theme] ?? THEME_FX.park;
+  }, [theme, boxes, poseScale, themeFx]);
   const onFieldLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width > 0 && height > 0) setField((f) => (f && Math.abs(f.w - width) < 1 && Math.abs(f.h - height) < 1 ? f : { w: width, h: height }));
@@ -274,9 +281,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       xform: lineRun ? lineXform : 0,
       walkBoost: walkOk(format) ? pendingBoost.current : null,
       runOfDay: runOfDayRef.current,
+      bossRuns: !!props.bossRuns,
       feverFired,
     });
-  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid, lineRun, props.seed, lineSeed, lineXform]);
+  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid, lineRun, props.seed, lineSeed, lineXform, props.bossRuns]);
 
   // ---------------------------------------------------------------- audio
   const cues = useWhackCues(visible);
@@ -299,12 +307,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (walkMeters && typeof walkMeters === 'object') return walkMeters.value;
     return walk.state.current.steps * 0.7;
   }, [walkMeters, walk.state]);
-  const camera = useCamera({ width: field?.w ?? 390, height: field?.h ?? 700, timeScale: undefined, reducedMotion, walking: walk.walking });
+  // v5 8.12: board-only shake at 16pt max with a 250 ms linear decay; walking never calms feedback shakes.
+  const camera = useCamera({ width: field?.w ?? 390, height: field?.h ?? 700, timeScale: undefined, reducedMotion, walking: false, config: CAMERA_PRESETS.whack });
 
   // ---------------------------------------------------------------- sim events (JS)
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
   const onEvents = useCallback((batch: number[]) => onEventsRef.current(batch), []);
-  const runtime = useWhackRuntime({ geo, boxes, poseScale, onEvents });
+  const runtime = useWhackRuntime({ geo, boxes, poseScale, themeFx, onEvents });
   const bossFx = useSharedValue({ rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 });
   const pace = useSharedValue(0);
   const finisher = useFinisher({
@@ -312,8 +321,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     stinger: ride ? cues.stingWin : cues.stingBoss, reducedMotion,
   });
   // The shared Bonk Rush feel layer (tells, grades, crits, goldens, combo slab, tiers, fever).
+  // Beat-locked percussion layers from Chris's one-shots (10.4): the level follows the combo tier and fever.
+  const layers = useBeatLayers('whack', visible && !result && phase === 'play');
   const juice = useWhackJuice({
-    fx, stamps, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever,
+    fx, stamps, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever, layers,
   });
   const feel = juice.fire;
   const HUD = juice.hud;
@@ -559,9 +570,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
     // Buckets (8.9): HITS (base grade points), COMBO (what the multiplier added), BONUS (flat).
     const base = sum((r) => r.quick * PTS_FINN[2] + r.good * PTS_FINN[1] + r.late * PTS_FINN[0]);
-    const bonus = sum((r) => r.goldens * PTS_GOLDEN + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT);
+    const bonus = sum((r) => (r.goldens - r.ripeHits) * PTS_GOLDEN + r.ripePoints + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT + r.perfects * PTS_PERFECT);
     const combo = Math.max(0, total - base - bonus);
-    const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8);
+    const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8, 5, !!props.bossRuns);
     const goal = ride ? null : nextStarGoal(total, thresholds);
     const rivals = props.lineDay?.rivals ?? [];
     const target = rivals.length ? [...rivals].sort((a, b) => a.score - b.score).find((r) => r.score > total) ?? rivals[rivals.length - 1] : null;
@@ -916,9 +927,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             <GestureDetector gesture={runtime.gesture}>
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
               </Animated.View>
             </GestureDetector>
+          ) : null}
+          {L ? (
+            <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
+              showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}
             onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); }} /> : null}

@@ -167,9 +167,27 @@ export interface WhackBoardProps {
   pace: SharedValue<number>;
   showPace: boolean;
   paceLabel?: string;
+  /** v5 8.12: the HUD plate and prompts render in their own canvas outside the camera (WhackHud). */
+  hudOutside?: boolean;
 }
 
-export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, images, hud, theme = 'park', bossFx, pace, showPace, paceLabel }: WhackBoardProps) {
+/** The HUD plate and stage prompts in their own canvas, outside the camera transform (they never shake). */
+export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pace, showPace, paceLabel }: {
+  L: BoardLayout; sim: SharedValue<WhackSim>; rs: SharedValue<RenderState>; tick: SharedValue<number>; hud: HudProps;
+  pace: SharedValue<number>; showPace: boolean; paceLabel?: string;
+}) {
+  const fontS = useFont(FONT, 13);
+  const fontM = useFont(FONT, 20);
+  const fontL = useFont(FONT, 24);
+  return (
+    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
+      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />
+    </Canvas>
+  );
+});
+
+export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, images, hud, theme = 'park', bossFx, pace, showPace, paceLabel, hudOutside }: WhackBoardProps) {
   const fontS = useFont(FONT, 13);
   const fontM = useFont(FONT, 20);
   const fontL = useFont(FONT, 24);
@@ -187,8 +205,8 @@ export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, ima
       <Stage L={L} images={images} theme={theme} sky={sky} />
       <Boss L={L} rs={rs} sim={sim} tick={tick} boss={images.boss} bossFx={bossFx} on={hud.boss} />
       <Picture picture={wells} />
-      <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
-      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />
+      {hudOutside ? null : <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />}
+      {hudOutside ? null : <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />}
     </Canvas>
   );
 });
