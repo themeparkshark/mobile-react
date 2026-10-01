@@ -208,7 +208,7 @@ export default function MiniGameSelector({
         );
       case 'memory':
         return (
-          <MemoryGame visible={visible} seed={seed} difficulty={rewardMode === 'task-attempt' ? 0 : 1} taskName={taskName} onClose={onClose} onQuit={handleQuit}
+          <MemoryGame visible={visible} seed={seed} mode={rewardMode === 'task-attempt' ? 'ride' : undefined} difficulty={1} menu={rewardMode !== 'task-attempt'} taskName={taskName} onClose={onClose} onQuit={handleQuit}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'trivia':
