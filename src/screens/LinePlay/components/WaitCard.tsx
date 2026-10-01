@@ -155,8 +155,9 @@ export default function WaitCard({
         : rewardConnectionIssue === 'sign_in' ? 'Sign-in needed'
           : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
-        : countdown.needsCheck || countdown.checking ? 'Checking you’re in line…'
-          : fmt(countdown.remainingSeconds);
+        : countdown.needsCheck ? 'Checking you’re in line…'
+          : countdown.checking ? 'Part on the way…'
+            : fmt(countdown.remainingSeconds);
   const subline = completed ? 'Your game recap is ready below.' : paused
     ? pauseReason === 'manual' ? 'Time near the ride still counts. Tap play when you’re ready.' : 'Time near the ride still counts.'
     : !rewardTrackingAvailable
@@ -168,7 +169,8 @@ export default function WaitCard({
               : 'Play while we check your queue location.'
       : atCap
         ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'Session limit reached. Great wait!'
-        : countdown.needsCheck || countdown.checking ? 'Stay near the ride to keep earning.'
+        : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
+          : countdown.checking ? 'Keep playing. Your next check adds it.'
           : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
 
   return (

@@ -18,6 +18,14 @@ import {
   isRecentQueueSample,
 } from './LinePlaySession';
 
+/**
+ * Minimum gap between on-demand fixes. Under the 30 s heartbeat, so a guest
+ * standing still (iOS sends no watcher fixes) still sends a fresh sample on
+ * every heartbeat; the old 45 s gate skipped every other one.
+ */
+export const FRESH_FIX_MIN_GAP_MS = 25_000;
+export const QUEUE_HEARTBEAT_MS = 30_000;
+
 export interface UseLinePlaySession {
   readonly session: LinePlaySession;
   readonly snapshot: SessionSnapshot;
@@ -41,7 +49,7 @@ export function useLinePlaySession(): UseLinePlaySession {
 
   const requestFreshQueuePosition = useCallback((): boolean => {
     if (AppState.currentState !== 'active' || positionRequestInFlightRef.current ||
-        Date.now() - lastPositionRequestAtRef.current < 45_000) return false;
+        Date.now() - lastPositionRequestAtRef.current < FRESH_FIX_MIN_GAP_MS) return false;
     positionRequestInFlightRef.current = true;
     lastPositionRequestAtRef.current = Date.now();
     void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
@@ -118,7 +126,7 @@ export function useLinePlaySession(): UseLinePlaySession {
       if (!requestFreshQueuePosition()) {
         void session.refreshSharedState();
       }
-    }, 30_000);
+    }, QUEUE_HEARTBEAT_MS);
     return () => clearInterval(timer);
   }, [session, snapshot.state, requestFreshQueuePosition]);
 

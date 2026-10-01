@@ -35,7 +35,8 @@ export function useLinePlayLiveActivity(input: Input) {
     parts: input.creditedParts ?? 0,
     nextPartAtMs: capped || paused || checking ? null : now + countdown.remainingSeconds * 1000,
     intervalSeconds: interval,
-    status: capped ? 'Max Parts today' : paused ? 'Paused' : checking ? 'Checking you’re in line' : '',
+    status: capped ? 'Max Parts today' : paused ? 'Paused'
+      : countdown.needsCheck ? 'Checking you’re in line' : countdown.checking ? 'Part on the way' : '',
     paused,
   };
   const live = input.rewardTracking && (input.state === 'active' || input.state === 'paused');
