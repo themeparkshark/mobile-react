@@ -741,6 +741,7 @@ function BananaRun({
         t = BASKET_MAX;
       }
       target.value = t;
+      if (__DEV__ && DEBUG_DRAG) runOnJS(logDrag)(e.absoluteX, t);
     })
     .onFinalize(() => {
       'worklet';
@@ -926,6 +927,11 @@ function BananaRun({
       </GestureHandlerRootView>
     </GameShellV2>
   );
+}
+
+const DEBUG_DRAG = false;
+function logDrag(x: number, t: number) {
+  console.log('[banana drag]', Math.round(x), Math.round(t));
 }
 
 // Banana particle defs on the Banana FX sheet (outlined art, design D-3).
