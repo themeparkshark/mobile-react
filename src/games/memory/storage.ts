@@ -9,6 +9,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { parseAlbum, type Album } from './modes/album';
+import { EMPTY_STREAK, type StreakState } from './modes/daily';
 
 const KEY_PREFIX = 'tps.memorymatch.best.v1';
 
@@ -98,4 +100,96 @@ export function ghostPairsAt(ghost: MemoryGhost, elapsedMs: number): number {
   let n = 0;
   while (n < ghost.pairTimes.length && ghost.pairTimes[n] <= elapsedMs) n++;
   return n;
+}
+
+// -----------------------------------------------------------------------------
+// Album, Daily streak and today's Daily (design 4.3, 5.6). Cosmetic, local.
+// -----------------------------------------------------------------------------
+
+
+const ALBUM_KEY = 'tps.memorymatch.album.v1';
+const STREAK_KEY = 'tps.memorymatch.streak.v1';
+const DAILY_PREFIX = 'tps.memorymatch.daily.v1';
+const PLAYER_KEY = 'tps.memorymatch.player.v1';
+
+export async function loadAlbum(): Promise<Album> {
+  try {
+    return parseAlbum(await AsyncStorage.getItem(ALBUM_KEY));
+  } catch {
+    return parseAlbum(null);
+  }
+}
+
+export async function saveAlbum(album: Album): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ALBUM_KEY, JSON.stringify(album));
+  } catch {
+    // Cosmetic only: a failed write never breaks a run.
+  }
+}
+
+export async function loadStreak(): Promise<StreakState> {
+  try {
+    const raw = await AsyncStorage.getItem(STREAK_KEY);
+    if (!raw) return EMPTY_STREAK;
+    const s = JSON.parse(raw) as StreakState;
+    return typeof s.streak === 'number' ? s : EMPTY_STREAK;
+  } catch {
+    return EMPTY_STREAK;
+  }
+}
+
+export async function saveStreak(s: StreakState): Promise<void> {
+  try {
+    await AsyncStorage.setItem(STREAK_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}
+
+/** Today's ranked Daily as it finished (verdicts only: no faces, no slots). */
+export interface DailyRecord {
+  day: string;
+  deck: string;
+  cleared: boolean;
+  turns: number;
+  pairs: number;
+  score: number;
+  stars: number;
+  verdicts: number[];
+  streak: number;
+}
+
+export async function loadDaily(day: string): Promise<DailyRecord | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${DAILY_PREFIX}.${day}`);
+    return raw ? (JSON.parse(raw) as DailyRecord) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Only the first finished attempt of the day is kept (the ranked one). */
+export async function saveDailyIfFirst(rec: DailyRecord): Promise<boolean> {
+  try {
+    const key = `${DAILY_PREFIX}.${rec.day}`;
+    if (await AsyncStorage.getItem(key)) return false;
+    await AsyncStorage.setItem(key, JSON.stringify(rec));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A stable local player key for the practice Daily shuffle. */
+export async function loadPlayerKey(): Promise<string> {
+  try {
+    const k = await AsyncStorage.getItem(PLAYER_KEY);
+    if (k) return k;
+    const n = `p${Math.floor(Math.random() * 1e12).toString(36)}`;
+    await AsyncStorage.setItem(PLAYER_KEY, n);
+    return n;
+  } catch {
+    return 'local';
+  }
 }

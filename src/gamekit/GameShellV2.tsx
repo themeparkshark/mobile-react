@@ -156,6 +156,8 @@ interface GameShellV2Props {
   onRematch?: () => void;
   /** Offer CHALLENGE (ghost / score challenge to a friend or crew). */
   onChallenge?: () => void;
+  /** Optional game-owned row under the results card (share, album, new cards). */
+  resultExtras?: React.ReactNode;
   /**
    * Movement never pauses (QUEUE REALITY). 'pause' is accepted for older
    * call sites and treated as play-through.
@@ -204,6 +206,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onQuit,
       onRematch,
       onChallenge,
+      resultExtras,
       resumeStyle = 'countdown',
       gameId,
       sessionKey,
@@ -703,6 +706,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
                   reducedMotion={reducedMotion}
                 />
+                {resultExtras ?? null}
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}

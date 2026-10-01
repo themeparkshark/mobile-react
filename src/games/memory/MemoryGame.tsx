@@ -93,11 +93,18 @@ import {
   loadGhost,
   loadPersonalBest,
   medianGhost,
+  loadAlbum,
+  saveAlbum,
+  saveDailyIfFirst,
   saveGhostIfBest,
   savePersonalBest,
+  saveStreak,
   type MemoryGhost,
 } from './storage';
 import { useMemoryAutoplay } from './autoplay';
+import { ResultsExtras, type DailySummary, type RunRewards } from './MemoryExtras';
+import { recordRun, rideKeyFor, stampRide, type RunMatch } from './modes/album';
+import { applyRankedDay, earnsStamp, ghostDelta, ghostDeltaLabel, pairsAfter, type DailyGhost, type StreakState } from './modes/daily';
 import type { Layout } from './logic';
 import type { EmoteId } from '../../gamekit/net/partyTypes';
 import {
@@ -145,6 +152,19 @@ export interface MemoryGameProps {
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   /** Live Line Party round (Memory Race). The party owns timing and results. */
   party?: MemoryPartyBinding;
+  /** Daily Deck setup from the booth menu (deck of the day, shuffle, ghost, streak). */
+  daily?: DailySetup;
+}
+
+export interface DailySetup {
+  day: string;
+  deckId: string;
+  layoutSeed: number;
+  faceSeed: number;
+  /** First attempt of the day (ranked). Rematches are practice. */
+  ranked: boolean;
+  ghost: DailyGhost | null;
+  streak: StreakState;
 }
 
 export const RIDE_TRIES = 3;
@@ -243,6 +263,9 @@ interface Run {
   lastMovingAt: number;
   stumbleUntil: number;
   race: RaceState | null;
+  /** Every match this run (album: new cards and foil progress). */
+  albumMatches: RunMatch[];
+  ranked: boolean;
 }
 
 interface RaceState {
@@ -270,6 +293,7 @@ export default function MemoryGame({
   onQuit,
   onComplete,
   party,
+  daily,
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
@@ -279,7 +303,7 @@ export default function MemoryGame({
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
-  const deck: Deck = useMemo(() => deckById(deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!, [deckId, taskName]);
+  const deck: Deck = useMemo(() => deckById(daily?.deckId ?? deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!, [daily?.deckId, deckId, taskName]);
   const baseSeed = useMemo(
     () => (party ? party.seed >>> 0 : seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
     // A fresh seed each time the game opens without a server seed.
@@ -336,6 +360,10 @@ export default function MemoryGame({
   const [runIndex, setRunIndex] = useState(0);
   const [racers, setRacers] = useState<Racer[]>([]);
   const [stumble, setStumble] = useState(false);
+  const [rewards, setRewards] = useState<RunRewards | null>(null);
+  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
+  const dailyRef = useRef(daily);
+  dailyRef.current = daily;
 
   const cards = useRef<(MemoryCardHandle | null)[]>([]);
   const fx = useRef<FxStageHandle>(null);
@@ -448,6 +476,24 @@ export default function MemoryGame({
       rimDim.value = withTiming(isLookAway(e) ? 1 : 0, { duration: 200 });
       rimUrgent.value = e.overtime ? 1 : 0;
     }
+    // Daily ghost lane: by turns, never on the board (4.4, 6.8).
+    const dg = dailyRef.current?.ghost;
+    if (r.mode === 'daily' && dg) {
+      const gp = Math.min(e.pairsTotal, pairsAfter(dg.verdicts, e.turns));
+      const d = ghostDelta(dg.verdicts, e.turns, e.pairs);
+      const delta = ghostDeltaLabel(d, dg.name);
+      const ahead = d != null && d >= 0;
+      let passed = 0;
+      if (d != null && d > 0 && !r.wasAhead) {
+        passed = Date.now();
+        GameAudio.playLadder('mm_sharp_twinkle', 7, { volume: 0.7 });
+        Haptic.tickSelection();
+      }
+      r.wasAhead = d != null && d > 0;
+      setGhostUi((u) => (u.ghostPairs === gp && u.delta === delta && u.ahead === ahead && !passed ? u : {
+        ghostPairs: gp, delta, ahead, passed: passed || u.passed, label: dg.kind === 'par' ? 'PAR SHARK' : dg.name.toUpperCase(),
+      }));
+    }
     // Ghost lane
     if (r.ghost && r.mode === 'ride') {
       const gp = ghostPairsAt(r.ghost, e.elapsedMs);
@@ -493,7 +539,9 @@ export default function MemoryGame({
       eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
     } else if (mode === 'daily') {
       const cfg = dailyConfig();
-      src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: s, golden: true }, deckSize, engineSeed: s ^ 0x5bd1e995 });
+      // Same faces for everyone today, shuffled per player; rematches are practice boards.
+      const ls = daily ? (opts.runIndex === 0 ? daily.layoutSeed : boardSeed(daily.layoutSeed, opts.runIndex)) : s;
+      src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: ls, golden: true, faceSeed: daily?.faceSeed }, deckSize, engineSeed: s ^ 0x5bd1e995 });
       eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
     } else if (mode === 'race') {
       const cfg = raceConfig();
@@ -526,11 +574,11 @@ export default function MemoryGame({
       sizeRepeats: {}, playing: false, busy: true, ended: false, t0: now(), pausedAt: null, pausedTotal: 0,
       pending: false, peekArmed: false, peeks: 0, moved: new Set(), cleared: 0,
       ghost: opts.keep?.ghost ?? null, ghostShown: 0, wasAhead: false, shelfNext: 0, lastTurnPop: 0, lastMovingAt: 0,
-      stumbleUntil: 0, race,
+      stumbleUntil: 0, race, albumMatches: [], ranked: mode === 'daily' && !!daily?.ranked && opts.runIndex === 0,
     };
     runRef.current = r;
     return r;
-  }, [baseSeed, deck.symbols.length, mode]);
+  }, [baseSeed, daily, deck.symbols.length, mode]);
 
   const newBoardView = useCallback((cols: number, rows: number, pairs: number) => {
     cards.current = [];
@@ -592,6 +640,8 @@ export default function MemoryGame({
     newBoardView(sh.cols, sh.rows, sh.pairs);
     setScore(0);
     setResult(null);
+    setRewards(null);
+    setDailySummary(null);
     setTryScreen(null);
     setUnlock(null);
     setPeeks({ n: 0, armed: false, show: false });
@@ -608,6 +658,7 @@ export default function MemoryGame({
     stage.current?.pose('idle');
     syncHud();
     void loadPersonalBest(mode === 'ride' ? 0 : mode === 'daily' ? 2 : 1).then(setPersonalBest);
+    if (mode === 'daily') setGhostUi({ ghostPairs: 0, delta: null, ahead: false, passed: 0, label: daily?.ghost?.kind === 'par' ? 'PAR SHARK' : (daily?.ghost?.name ?? 'PAR').toUpperCase() });
     if (mode === 'ride') {
       void loadGhost(ghostKey).then((g) => {
         if (runRef.current === r) r.ghost = g ?? medianGhost(8);
@@ -741,6 +792,38 @@ export default function MemoryGame({
     } else fx.current?.flyUp(`+${parts.value}`, x, y, { size: big, key: 'tally', color });
   }, [later]);
 
+  /** Album, stamps, streak and today's Daily record (cosmetic, local; ranked lives on the server). */
+  const collectRewards = useCallback((r: Run, won: boolean, perfect: boolean, stars: number) => {
+    const e = r.eng;
+    const dl = dailyRef.current;
+    const rideKey = rideKeyFor(taskName);
+    void (async () => {
+      const before = await loadAlbum();
+      const delta = recordRun(before, deck.id, deck.symbols.length, r.albumMatches, perfect && won);
+      let album = delta.album;
+      let newStamp = false;
+      if (r.mode === 'daily' && r.ranked && earnsStamp(won, e.turns, e.pairsTotal, rideKey)) {
+        const st = stampRide(album, rideKey!, { day: dl?.day ?? '', deck: deck.id, label: deck.label });
+        album = st.album;
+        newStamp = st.isNew;
+      }
+      await saveAlbum(album);
+      if (runRef.current !== r) return;
+      setRewards({ deckId: deck.id, newCards: delta.newCards, newFoils: delta.newFoils, foilDeckDone: delta.foilDeckDone, newStamp, album });
+      if (r.mode === 'daily' && dl) {
+        let streak = dl.streak.streak;
+        if (r.ranked) {
+          const st = applyRankedDay(dl.streak, dl.day);
+          streak = st.state.streak;
+          await saveStreak(st.state);
+          await saveDailyIfFirst({ day: dl.day, deck: deck.id, cleared: won, turns: e.turns, pairs: e.pairsTotal, score: e.score, stars, verdicts: e.verdicts.slice(), streak });
+        }
+        if (runRef.current !== r) return;
+        setDailySummary({ day: dl.day, ranked: r.ranked, cleared: won, turns: e.turns, pairs: e.pairsTotal, stars, streak, verdicts: e.verdicts.slice(), deckId: deck.id });
+      }
+    })();
+  }, [deck.id, deck.label, deck.symbols.length, taskName]);
+
   const finishRide = useCallback((won: boolean) => {
     const r = runRef.current;
     if (!r || r.ended) return;
@@ -758,6 +841,7 @@ export default function MemoryGame({
     GameAudio.music.stop(400);
     const par = parFor(e.pairsTotal);
     const verdict = r.src.verdict();
+    collectRewards(r, won, e.turns <= parFor(e.pairsTotal) - 1, stars);
     setResult({
       score: finalScore,
       stars,
@@ -779,6 +863,7 @@ export default function MemoryGame({
         duration: Math.round(e.elapsedMs),
         seed: baseSeed,
         tryIndex: r.tryIndex,
+        ranked: r.ranked,
         runIndex: r.runIndex,
         deck: deck.id,
         turns: e.turns,
@@ -790,7 +875,7 @@ export default function MemoryGame({
         walking: walkingRef.current,
       },
     });
-  }, [baseSeed, deck.id, ghostKey]);
+  }, [baseSeed, collectRewards, deck.id, ghostKey]);
 
   const finalPair = useCallback((a: number, b: number, bonus: number, secondsLeft: number) => {
     const r = runRef.current;
@@ -963,6 +1048,7 @@ export default function MemoryGame({
       const wi = rc.crew.findIndex((c) => c.id === w?.key);
       if (wi >= 0) stage.current?.say(`${rc.crew[wi].name.toUpperCase()} WINS`, '#ffffff', 'right');
     }
+    collectRewards(r, e.status === 'cleared', false, mine === 1 ? 3 : mine === 2 ? 2 : 1);
     const ord = ['1ST', '2ND', '3RD', '4TH'][mine - 1] ?? `${mine}TH`;
     later(1400, () => {
       setScore(e.score);
@@ -984,7 +1070,7 @@ export default function MemoryGame({
         },
       });
     });
-  }, [baseSeed, dizzy, later, raceEntries, syncRacers]);
+  }, [baseSeed, collectRewards, dizzy, later, raceEntries, syncRacers]);
 
   const incoming = useSharedValue(0);
   const startTelegraph = useCallback((r: Run, at: number) => {
@@ -1135,6 +1221,7 @@ export default function MemoryGame({
         }
         case 'match': {
           const { a, b, recall, chain, parts } = ev;
+          r.albumMatches.push({ face: ev.face, recall });
           if (r.race?.telegraph) r.race.telegraph.blocked = true;
           const ida = e.ids[a];
           const idb = e.ids[b];
@@ -1693,7 +1780,8 @@ export default function MemoryGame({
   const title = mode === 'ride' ? 'Ride Sprint' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : 'Memory Match';
   const subtitle = mode === 'ride'
     ? `${deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}`
-    : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}` : deck.label;
+    : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
+    : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}` : deck.label;
 
   return (
     <GameShellV2
@@ -1715,6 +1803,7 @@ export default function MemoryGame({
       onQuit={onQuit}
       onRematch={mode !== 'ride' ? onRematch : undefined}
       onWrapUp={onWrapUp}
+      resultExtras={result && !party ? <ResultsExtras rewards={rewards} daily={dailySummary} reducedMotion={reducedMotion} /> : null}
     >
       <View style={styles.field} onLayout={onFieldLayout}>
         <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />
@@ -1730,7 +1819,7 @@ export default function MemoryGame({
               <StopwatchPlate seconds={hud.seconds} urgent={hud.urgent} frozen={hud.frozen} delta={clockDelta} reducedMotion={reducedMotion} />
               {mode === 'race' ? (
                 <RivalStrip racers={racers} total={8} reducedMotion={reducedMotion} />
-              ) : mode === 'ride' ? (
+              ) : mode === 'ride' || (mode === 'daily' && daily?.ghost) ? (
                 <GhostLane label={ghostUi.label} ghostPairs={ghostUi.ghostPairs} myPairs={hud.pairs} total={hud.total}
                   delta={ghostUi.delta} ahead={ghostUi.ahead} passed={ghostUi.passed} />
               ) : <View style={{ flex: 1 }} />}
