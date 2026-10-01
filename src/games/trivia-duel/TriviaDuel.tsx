@@ -881,6 +881,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     });
     const toWager = (fr: PlannedRound) => {
       const t = tally.current;
+      if (t.me.score <= 0) {
+        // Nothing to bet: every chip is 0, so the wager beat is skipped (no dead 4s in a moving line).
+        meIn.current.stake = 0;
+        setStakes({ me: '0', opp: '?' });
+        later(300, () => F.current.presentQuestion(p, fr));
+        return;
+      }
       say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
       frame('two');
       const st = wagerStakes(t.me.score);
@@ -1723,6 +1730,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setShellResult(null);
     setMusicBed(null);
   }, [visible, clearTimers]);
+
+  useEffect(() => { if (__DEV__) console.log('[trivia-duel] phase', phase, round?.index ?? -1, round?.spec.type ?? ''); }, [phase, round]);
 
   // Spotlight iris (11.3): the countdown keeps the stage lit (no scrim) with warm cones on both podiums.
   useEffect(() => {
