@@ -60,7 +60,7 @@ export function useWhackCues(visible: boolean) {
     void GameAudio.init().then(() => GameAudio.preload([
       cues.bonk, cues.crit, cues.whiff, cues.duck, cues.golden, cues.chomp, cues.tier, ...cues.tells, ...cues.phrases.flat(), cues.helmet, cues.double,
       cues.tally, cues.feverStart, cues.lookup, cues.splat, cues.squeegee, cues.bossHit, cues.hatBounce, cues.swing, cues.comboDrop, cues.starSlam,
-      cues.ripeStage, cues.ripeBolt, cues.perfect, cues.lookupTier, cues.bonkThump, cues.bonkSqueak, cues.bonkBoing,
+      cues.ripeStage, cues.ripeBolt, cues.perfect, cues.lookupTier, cues.bonkThump, cues.bonkThumpQuick, cues.bonkSqueak, cues.bonkBoing,
     ].filter((c) => !!c))).catch(() => undefined);
   }, [visible, cues]);
   return cues;
@@ -89,7 +89,7 @@ function useWhackCueTable() {
     ripeStage: pick('wh_ripe_stage', 'wh_tell_golden', 'fx.coin'), ripeBolt: pick('wh_golden_bolt', 'fx.whooshRev', 'fx.whoosh'),
     perfect: pick('wh_perfect', 'wh_crit', 'fx.coinTick'), lookupTier: pick('wh_lookup_tier', 'wh_combo_drop', 'fx.nopeShort'),
     // v5 layered bonk (10.5): body, squeak, boing tail; each falls back to Chris-consistent cues until approved.
-    bonkThump: pick('wh_bonk_thump', ''), bonkSqueak: pick('wh_bonk_squeak', ''), bonkBoing: pick('wh_bonk_boing', ''),
+    bonkThump: pick('wh_bonk_thump', ''), bonkThumpQuick: pick('wh_bonk_thump_quick', 'wh_bonk_thump', ''), bonkSqueak: pick('wh_bonk_squeak', ''), bonkBoing: pick('wh_bonk_boing', ''),
     tells: [pick('wh_tell_finn', 'ui.select'), pick('wh_tell_golden', 'fx.reveal'), pick('wh_tell_angler', 'ui.select'), pick('wh_tell_helmet', 'ui.select'),
       pick('wh_tell_twins', 'ui.select'), pick('wh_tell_sprinter', 'fx.whoosh'), pick('wh_tell_finn', 'ui.select'), pick('wh_tell_tentacle', 'ui.select'),
       pick('wh_tell_bruiser', 'fx.hit')],
@@ -261,7 +261,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   const layerBonk = (grade: number) => {
     const db = (d: number) => Math.pow(10, d / 20);
     if (grade === G_QUICK || grade === G_CRIT) {
-      if (cues.bonkThump) GameAudio.play(cues.bonkThump, { volume: db(0) });
+      if (cues.bonkThumpQuick) GameAudio.play(cues.bonkThumpQuick, { volume: db(0) });
       if (cues.bonkSqueak) GameAudio.play(cues.bonkSqueak, { volume: db(-4) });
       if (cues.bonkBoing) GameAudio.play(cues.bonkBoing, { volume: db(-5) });
     } else if (grade === G_GOOD) {
@@ -349,7 +349,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       }
       case E_RIPE_STAGE: {
         // One rising ting per stage (10.3); the studs light on the board.
-        GameAudio.play(cues.ripeStage, { volume: 0.55, pitch: b === 1 ? 5 : 9 });
+        GameAudio.playLadder(cues.ripeStage, Math.max(0, b - 1), { volume: 0.55 });
         if (busy.current.size < 3) feel('ripeStage', { ...holeXY(a) });
         return true;
       }

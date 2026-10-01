@@ -139,6 +139,8 @@ function listingFromManifest(game, manifest) {
     else if (parts.length > 1 && parts[0] === 'lanes') out.lanes.push(f);
     // Per-row tell renders and v4 tell phrases: one cue per file, kept in their subfolder.
     else if (parts.length === 2 && (parts[0] === 'phrases' || parts[0] === 'tells')) out.top.push({ ...f, file: parts.join('/') });
+    // Round-robin takes (bonk/<cue>_rrN): variants of <cue>, played without immediate repeats.
+    else if (parts.length === 2 && parts[0] === 'bonk' && /_rr\d+$/.test(stem)) (out.rr = out.rr || []).push({ ...f, file: parts.join('/') });
     else if (parts.length === 1) out.top.push(f);
   }
   return out;
@@ -166,6 +168,11 @@ function inferGame(game, dir, listing = listingFromDir(dir)) {
     members.sort((a, b) => a.order - b.order);
     if (!cues[base]) cues[base] = { files: [], ladder: [] };
     cues[base].ladder = members;
+  }
+  for (const f of (listing.rr || []).sort((a, b) => a.stem.localeCompare(b.stem))) {
+    const base = f.stem.replace(/_rr\d+$/, '');
+    if (!cues[base]) cues[base] = { files: [], ladder: [], meta: f.meta };
+    cues[base].files.push(f);
   }
   const beds = {};
   const musicReport = readJson(path.join(SRC, '_metrics', 'music.json')) || {};
