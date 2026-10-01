@@ -38,28 +38,28 @@ import { mixSeed } from '../../gamekit/core/rng';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { AuthContext } from '../../context/AuthProvider';
 import {
-  BUZZ, CEREMONY, FIN_RANKS, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
+  BUZZ, CEREMONY, FIN_RANKS, FIN_RESOLVE_AFTER_MS, HOLD, PEEK, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
   type DuelMode, type SpeedTier,
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
 import { applyMatchToRank, pickBark, BARKS } from './engine/finAI';
 import {
-  createTally, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound, suddenDeathRound,
+  createTally, finalPicker, finCategoryPick, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound, suddenDeathRound,
   type GhostRecord, type MatchPlan, type MatchTally, type PlannedRound, type RoundResult, type SideInput,
 } from './engine/match';
 import { nearMiss } from './engine/nearMiss';
-import { duelStars, flameTier, rideStars, rideWon, tickerValue, wagerStakes } from './engine/scoring';
+import { duelStars, flameTier, peekMode, peekSample, rideStars, rideWon, tickerValue, wagerStakes } from './engine/scoring';
 import { FIN_POSE_ORDER, C, type FinPose, type SharkLook } from './art';
 import { BEDS, CUE, bed, beatMs, msToGrid, registerDuelAudio, resetFreeBeat, sfx, sfxLadder } from './audio';
 import { loadPool } from './pool';
 import {
-  activeCarry, addFactCards, currentRank, listGhosts, loadMemory, rememberSeen, saveGhost, updateMemory, type FactCard,
+  activeCarry, addFactCards, currentRank, listGhosts, loadMemory, memorySync, recordCategory, rememberSeen, saveGhost, updateMemory, type FactCard,
 } from './store';
 import { Stage, type StageActors } from './ui/Stage';
 import { Rail, type PipState } from './ui/Rail';
 import { QuestionCard } from './ui/Card';
-import { Tile, type TileState } from './ui/Tile';
-import { Bark, BuzzBell, ClosestSlider, LifelineButton, OutlinedText, Ribbon, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
+import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
+import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Ribbon, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
 
 
@@ -85,6 +85,9 @@ const EV_SUB_LOCK = 9;
 const EV_SUB_TIMEOUT = 10;
 const EV_FREEZE_END = 11;
 const EV_FIN_LEAN = 12;
+const EV_FIN_RING = 13;
+/** Worklet copy of BUZZ.deadHeatMs (worklets capture module values, not imported bindings). */
+const DEAD_HEAT_W = 200;
 
 interface QClock {
   phase: number;
@@ -114,8 +117,8 @@ function freshClock(): QClock {
   return { phase: PH_IDLE, t: 0, unlockAt: 0, windowMs: 1, finMs: -1, finFired: 0, finBuzzMs: -1, finBuzzFired: 0, leanFired: 0, frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: 400, h: 6000, kind: 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1 };
 }
 
-type SubMode = 'buzzAnswer' | 'steal' | 'open' | null;
-type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'wager' | 'reveal' | 'between' | 'results';
+type SubMode = 'buzzAnswer' | 'steal' | 'open' | 'deadHeat' | null;
+type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'wager' | 'reveal' | 'between' | 'results';
 
 export interface TriviaDuelProps {
   visible: boolean;
@@ -199,6 +202,19 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [chip, setChip] = useState<string | null>(null);
   const [wager, setWager] = useState<{ stakes: number[]; picked: number; left: number } | null>(null);
   const [finalCard, setFinalCard] = useState<string | null>(null);
+  /** C11 Final category pick: two cards, who picks, seconds left, the pick. */
+  // C9 Relaxed pace: read-lock x1.5, windows +4s, speed horizon x1.5 (from the next match or question set).
+  const [relaxed, setRelaxed] = useState(false);
+  useEffect(() => { void loadMemory().then((m) => setRelaxed(!!m.relaxed)); }, []);
+  const toggleRelaxed = useCallback(() => {
+    setRelaxed((v) => {
+      void updateMemory((m) => { m.relaxed = !v; });
+      return !v;
+    });
+    Haptic.tapLight();
+  }, []);
+  const [catPick, setCatPick] = useState<{ cats: [string, string]; picker: 'me' | 'opp'; left: number; picked: number } | null>(null);
+  const catDone = useRef<((i: number) => void) | null>(null);
   const [sliderVal, setSliderVal] = useState(0);
   const [narrow, setNarrow] = useState<[number, number] | null>(null);
   const [frozen, setFrozen] = useState(false);
@@ -335,8 +351,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     }, 100);
   }, [finPose]);
 
+  const lastBarkAt = useRef(0);
   const say = useCallback((kind: keyof typeof BARKS) => {
     if (ghost) return;
+    // 7.3: event-keyed barks at most every 6s; match-defining beats always speak.
+    const now = Date.now();
+    const urgent = kind === 'deadHeat' || kind === 'steal' || kind === 'finWins' || kind === 'finLoses' || kind === 'categoryPick' || kind === 'categoryFin';
+    if (!urgent && now - lastBarkAt.current < 6000) return;
+    lastBarkAt.current = now;
     barkN.current += 1;
     setBark({ text: pickBark(kind, (seedRef.current + barkN.current) % 97), key: barkN.current });
   }, [ghost]);
@@ -415,13 +437,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
           if (q.kind === 2) {
             ticker.value = 150 + (q.forfeit ? 0 : speedWorklet(my, q.g, q.h, q.chomp));
             if (q.finBuzzMs >= 0 && q.finBuzzFired === 0 && since >= q.finBuzzMs) {
+              // He rang: the bell stays live for the 200ms DEAD HEAT window.
               q.finBuzzFired = 1;
+              runOnJS(dispatch)(EV_FIN_RING, q.finBuzzMs, 0);
+            }
+            if (q.finBuzzFired === 1 && since >= q.finBuzzMs + DEAD_HEAT_W) {
+              q.finBuzzFired = 2;
               q.phase = PH_WAIT;
               runOnJS(dispatch)(EV_FIN_BUZZ, q.finBuzzMs, 0);
               return;
             }
           } else if (q.kind === 1) {
-            ticker.value = 100 + (q.forfeit ? 0 : rideSpeedWorklet(my, q.g, q.chomp));
+            ticker.value = 100 + (q.forfeit ? 0 : rideSpeedWorklet(my, q.g, q.h, q.chomp));
           } else {
             ticker.value = tickerValue(my, q.g, q.h, { chomp: q.chomp === 1, holdForfeit: q.forfeit === 1 });
           }
@@ -554,13 +581,15 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setShellResult(null);
     const mem = await loadMemory();
     if (!poolRef.current.length) poolRef.current = props.pool ?? await loadPool({ rideId, parkId, chapterId });
-    const seed = rematch ? mixSeed(seedRef.current, 0x9e37 + playsRef.current) : (baseSeed >>> 0);
+    // Queue and practice vary per play even from a fixed base seed; ride and daily keep the issued seed.
+    const fresh = mode === 'queue' || mode === 'practice' ? mixSeed(baseSeed >>> 0, 0x51ed + mem.plays) : (baseSeed >>> 0);
+    const seed = rematch ? mixSeed(seedRef.current, 0x9e37 + playsRef.current) : fresh;
     seedRef.current = seed;
     const rank = mode === 'queue' || mode === 'practice' ? currentRank(mem) : 'firstmate';
     rankRef.current = FIN_RANKS[rank].label;
     let p: MatchPlan | null = null;
-    if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank);
-    if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank });
+    if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank, !!mem.relaxed);
+    if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank, relaxed: !!mem.relaxed });
     if (__DEV__) console.log('[trivia-duel] plan', { seed, seen: mem.seen.length, pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id) });
     const carry = mode === 'queue' || mode === 'practice' ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
     carryRef.current = carry;
@@ -687,34 +716,82 @@ export function TriviaDuel(props: TriviaDuelProps) {
       spot.value = withTiming(1, { duration: 400 });
     }
     const d = await msToGrid(2);
+    const t0 = tally.current;
+    const alt = !ghost ? p.finalAlt : undefined;
     later(d, () => {
       stamp("FIN'S FINAL", C.gold, 52, W / 2, H * 0.36);
       sfx(CUE.stamp);
       Haptic.comboHeavy();
       if (!reducedMotion) fx.current?.flash({ color: '#ffffff', peak: 0.6, ms: 160 });
-      setFinalCard(r.question.category);
-      const t = tally.current;
-      setFin(t.opp.score > t.me.score ? 'point' : 'nervous');
-      say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
+      setFin(t0.opp.score > t0.me.score ? 'point' : 'nervous');
     });
-    later(d + CEREMONY.categoryCardMs, () => {
-      setFinalCard(null);
-      setMusicBed(BEDS.finalOpen);
-      const st = wagerStakes(tally.current.me.score);
-      finalWager.current = WAGER.defaultIndex;
-      setWager({ stakes: st, picked: WAGER.defaultIndex, left: 5 });
-      setPhase('wager');
-      let left = 5;
-      const tick = () => {
-        left -= 1;
-        if (left <= 0) {
-          F.current.lockWager(p, r);
-          return;
-        }
-        setWager((w) => (w ? { ...w, left } : w));
+    const toWager = (fr: PlannedRound) => {
+      setFinalCard(fr.question.category);
+      sfx(CUE.stamp, { volume: 0.7 });
+      const t = tally.current;
+      say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
+      later(CEREMONY.categoryCardMs, () => {
+        setFinalCard(null);
+        setMusicBed(BEDS.finalOpen);
+        const st = wagerStakes(tally.current.me.score);
+        finalWager.current = WAGER.defaultIndex;
+        setWager({ stakes: st, picked: WAGER.defaultIndex, left: 5 });
+        setPhase('wager');
+        let left = 5;
+        const tick = () => {
+          left -= 1;
+          if (left <= 0) {
+            F.current.lockWager(p, fr);
+            return;
+          }
+          setWager((w) => (w ? { ...w, left } : w));
+          later(1000, tick);
+        };
         later(1000, tick);
-      };
-      later(1000, tick);
+      });
+    };
+    if (!alt) {
+      later(d + 500, () => toWager(r));
+      return;
+    }
+    // C11: whoever trails after round 4 picks the Final's category (3s, default left).
+    const picker = finalPicker(tally.current);
+    const cats: [string, string] = [r.question.category, alt.question.category];
+    let done = false;
+    const choose = (i: number) => {
+      if (done) return;
+      done = true;
+      catDone.current = null;
+      const fr = i === 1 ? alt : r;
+      p.rounds[r.index] = fr;
+      p.finalAlt = undefined;
+      setRound(fr);
+      oppIn.current = finInput(p, fr, tally.current).input;
+      setCatPick((c) => (c ? { ...c, picked: i } : c));
+      sfx(CUE.chip);
+      Haptic.hitMedium();
+      later(380, () => { setCatPick(null); toWager(fr); });
+    };
+    later(d + 500, () => {
+      setPhase('category');
+      setCatPick({ cats, picker, left: 3, picked: -1 });
+      sfx(CUE.whoosh, { volume: 0.6 });
+      say(picker === 'me' ? 'categoryPick' : 'categoryFin');
+      if (picker === 'me') {
+        catDone.current = choose;
+        let left = 3;
+        const tick = () => {
+          if (done) return;
+          left -= 1;
+          if (left <= 0) { choose(0); return; }
+          setCatPick((c) => (c ? { ...c, left } : c));
+          later(1000, tick);
+        };
+        later(1000, tick);
+      } else {
+        // Fin trails: he picks the category where your record is weakest.
+        later(1300, () => choose(finCategoryPick(cats, memorySync().catStats)));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [W, H, reducedMotion]);
@@ -735,11 +812,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     });
   }, [presentQuestion, later]);
 
+  const pickCategory = useCallback((i: number) => { catDone.current?.(i); }, []);
+
   const pickWager = useCallback((i: number) => {
     finalWager.current = i;
     setWager((w) => (w ? { ...w, picked: i } : w));
     sfx(CUE.chip);
     Haptic.tapLight();
+    if (i === 3) say('allIn');
     if (plan && round) later(220, () => F.current.lockWager(plan, round));
   }, [plan, round, lockWager, later]);
 
@@ -782,6 +862,50 @@ export function TriviaDuel(props: TriviaDuelProps) {
       say('youFast');
     }
   }, [later, reducedMotion, push, meHop, ghost, isRide, setFin, say]);
+
+  /**
+   * DEAD HEAT (5.3 / 11.6): both bells inside 200ms. Both pick blind within
+   * 3.5s; correct beats wrong, then the faster pick. Nobody sees the other's pick.
+   */
+  const startDeadHeat = (my: number) => {
+    const r = round;
+    if (!r) return;
+    const o = oppIn.current;
+    meIn.current = { ...meIn.current, buzzMs: my };
+    // Ghost rows without a recorded blind pick use their buzz pick at the default time.
+    const oppAnswer = o.answerMs ?? BUZZ.deadHeatDefaultAnswerMs;
+    oppIn.current = { ...o, answerMs: oppAnswer };
+    setBellKey((k) => k + 1);
+    setBellOn(false);
+    setChip(null);
+    sfx(CUE.bell);
+    later(60, () => sfx(CUE.bell, { volume: 0.7, pan: 0.6 }));
+    sfx(CUE.photo);
+    Haptic.comboHeavy();
+    clock.hitStop(BUZZ.hitStopMs, { force: true });
+    setPolaroid((p) => p + 1);
+    if (!reducedMotion) crowdLean.value = withSequence(withTiming(1, { duration: 200 }), withDelay(600, withSpring(0)));
+    fx.current?.ring(W / 2, ZONE_TOP + 70, { color: C.gold, from: 60, to: 180, ms: 260 });
+    meHop('fist');
+    say('deadHeat');
+    setLocks((l) => ({ ...l, me: `${(my / 1000).toFixed(1)}s`, opp: finLockLabel(o.buzzMs ?? my) }));
+    // The polaroid holds 640ms, then both pick blind.
+    later(640, () => {
+      setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
+      setSubMode('deadHeat');
+      setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, lastSec: 99, finFired: 1 });
+      // The opponent's blind pick lands on their clock: badge only, the pick stays hidden.
+      later(Math.min(BUZZ.answerMs, oppAnswer), () => {
+        if (o.choice >= 0) {
+          sfx(CUE.oppLock, { pan: 0.6 });
+          Haptic.tapLight();
+          setLocks((l) => ({ ...l, opp: `${(oppAnswer / 1000).toFixed(1)}s` }));
+        }
+        resolved.current.opp = true;
+        maybeReveal();
+      });
+    });
+  };
 
   dispatchRef.current = (ev: number, a: number, b: number) => {
     const r = round;
@@ -863,13 +987,19 @@ export function TriviaDuel(props: TriviaDuelProps) {
         else maybeReveal();
         return;
       }
-      case EV_FIN_BUZZ: {
-        // Opponent rang first.
-        setBellOn(false);
+      case EV_FIN_RING: {
+        // Opponent rang: you still have 200ms to make it a DEAD HEAT.
         setChip(`${oppName.toUpperCase()} BUZZED!`);
+        setBellKey((k) => k + 1);
         Haptic.tapLight();
         sfx(CUE.bell, { volume: 0.6, pan: 0.6 });
         if (!ghost) setFin('point');
+        return;
+      }
+      case EV_FIN_BUZZ: {
+        // Opponent rang first, cleanly: they answer, you wait for a steal.
+        setBellOn(false);
+        setChip(`${oppName.toUpperCase()} BUZZED!`);
         meIn.current = { ...meIn.current, buzzMs: -1 };
         const o = oppIn.current;
         later(900, () => {
@@ -897,18 +1027,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
       case EV_BUZZ: {
         const my = a;
         const o = oppIn.current;
-        let iWin = true;
-        if (o.buzzMs != null && o.buzzMs >= 0 && Math.abs(o.buzzMs - my) <= BUZZ.photoFinishMs) {
-          const coin = (mixSeed(seedRef.current, 0xc01 + r.index) % 1000) / 1000;
-          iWin = coin < 0.5;
-          setPolaroid((p) => p + 1);
-          sfx(CUE.photo);
-          if (!reducedMotion) crowdLean.value = withSequence(withTiming(1, { duration: 200 }), withDelay(400, withSpring(0)));
-          if (!iWin) {
-            setClock({ phase: PH_WAIT, finBuzzFired: 1 });
-            later(700, () => dispatchRef.current(EV_FIN_BUZZ, o.buzzMs ?? my, 0));
-            return;
-          }
+        if (o.buzzMs != null && o.buzzMs >= 0 && Math.abs(o.buzzMs - my) <= BUZZ.deadHeatMs) {
+          startDeadHeat(my);
+          return;
         }
         // You win the bell.
         meIn.current = { ...meIn.current, buzzMs: my };
@@ -936,7 +1057,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
           sfx(CUE.lockIn);
           Haptic.hitMedium();
         }
-        if (subMode === 'buzzAnswer') {
+        if (subMode === 'deadHeat') {
+          meIn.current = { ...meIn.current, choice: pick, lockMs: meIn.current.buzzMs ?? -1, answerMs: pick >= 0 ? subT : undefined };
+          setLocks((l) => ({ ...l, me: pick >= 0 ? `${(subT / 1000).toFixed(1)}s` : 'TIME' }));
+          resolved.current.me = true;
+          maybeReveal();
+        } else if (subMode === 'buzzAnswer') {
           meIn.current = { ...meIn.current, choice: pick, lockMs: meIn.current.buzzMs ?? -1 };
           resolved.current.me = true;
           if (pick !== r.question.correctIndex) {
@@ -1001,11 +1127,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (!r || !p) return;
     setPhase('reveal');
     const scoreBefore = { me: tally.current.me.score, opp: tally.current.opp.score };
-    const coin = (mixSeed(seedRef.current, 0xc01 + r.index) % 1000) / 1000;
-    const res = resolveRound(isRide ? 'ride' : 'queue', r, meIn.current, oppIn.current, tally.current, coin);
+    const res = resolveRound(isRide ? 'ride' : 'queue', r, meIn.current, oppIn.current, tally.current);
     resultsLog.current.push(res);
     const q = r.question;
-    const tension = !isRide && (r.spec.type !== 'quick' || res.decisive || !!res.buzz?.steal) || (isRide && r.index === p.rounds.length - 1);
+    // D8: the drum-roll plays when it matters: buzz, Final, decisive, steals, or both sides locked different answers.
+    const splitPicks = r.spec.type === 'quick' && meIn.current.lockMs >= 0 && oppIn.current.lockMs >= 0
+      && q.format !== 'closest' && meIn.current.choice !== oppIn.current.choice;
+    const tension = !isRide && (r.spec.type !== 'quick' || res.decisive || !!res.buzz?.steal || splitPicks) || (isRide && r.index === p.rounds.length - 1);
     const final = r.spec.type === 'final';
 
     let wait = await msToGrid(0.5);
@@ -1019,7 +1147,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       for (let k = 0; k < 4; k++) later(beat - beatMs(final) + k * (beatMs(final) / 4), () => Haptic.tickSelection());
       await sleep(beat);
       bulbFast.value = 0;
-      clock.hitStop(CEREMONY.tensionHitStopMs, { force: true });
+      // Hit-stop scaled to stakes (11.0): DEAD HEAT and steals 90, Final 110, decisive 130.
+      clock.hitStop(res.decisive ? 130 : final ? 110 : res.buzz?.deadHeat || res.buzz?.steal ? 90 : CEREMONY.tensionHitStopMs, { force: true });
       wait = 0;
     }
     await sleep(wait);
@@ -1041,6 +1170,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
       stamp(String(q.slider.truth), C.gold, 44, W / 2, ZONE_TOP + 10, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
     }
     setStakes(final ? { me: `${res.me.stake}`, opp: isRide ? null : `${res.opp.stake}` } : { me: null, opp: null });
+    if (res.buzz?.deadHeat) {
+      const won = !!res.me.deadHeatWon;
+      const lost = !!res.opp.deadHeatWon;
+      later(240, () => stamp(won ? 'DEAD HEAT WON!' : lost ? `${oppName.toUpperCase()} TAKES IT` : 'NOBODY!', won ? C.gold : C.coral, 30, W / 2, ZONE_TOP - 24));
+    }
 
     // Your outcome.
     const meOK = res.me.correct;
@@ -1060,7 +1194,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
         fx.current?.burst('coins', from.x, from.y, { count: coins, tx: scoreAnchor.x, ty: scoreAnchor.y });
         fx.current?.burst('sparkles', from.x, from.y, { count: tier === 'lightning' ? 24 : tier === 'great' ? 14 : 8 });
       });
-      if (res.me.bullseye) sfx(CUE.stamp);
+      if (res.me.bullseye) { sfx(CUE.stamp); say('bullseye'); }
+      if (res.decisive && tally.current.me.score > tally.current.opp.score) say('comeback');
     } else if (r.spec.type !== 'buzz' || res.buzz?.first === 'me' || res.buzz?.open || (res.buzz?.steal && res.buzz.first === 'opp')) {
       sfx(CUE.wrong, { volume: 0.55 });
       later(12, () => Haptic.comboHeavy());
@@ -1088,6 +1223,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           fx.current?.burst('embers', W * 0.5, 38, { count: 16 });
           fx.current?.bloom(W * 0.5, 40, { color: C.gold, radius: 70, peak: 0.8, ms: 300 });
           if (sEv.ignited) {
+            say('streak3');
             stamp('HOT STREAK!', C.coral, 36, W / 2, RAIL_H + 40, 'SHIELD UP');
             if (!reducedMotion) shades.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.back(2)) });
           } else stamp('BLAZING!', C.gold, 38, W / 2, RAIL_H + 40);
@@ -1095,6 +1231,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         setMusicBed(sEv.blazing ? BEDS.blazing : BEDS.hot);
       } else if (sEv.shieldUsed) {
         sfx(CUE.shieldPop);
+        say('shieldSave');
         stamp('SHIELD!', C.gold, 32, W / 2, RAIL_H + 40, 'Streak saved');
       } else if (sEv.broke) {
         sfx(CUE.fizz, { volume: 0.7 });
@@ -1110,6 +1247,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     // Scores and pips.
     later(200, () => setScores({ me: tally.current.me.score, opp: tally.current.opp.score }));
     setPips((ps) => ps.map((s, k) => (k === r.index ? (meOK && res.opp.correct ? 'both' : meOK ? 'me' : res.opp.correct ? 'opp' : 'none') : s)));
+    if (!isRide && !ghost && q.format !== 'closest') void updateMemory((m) => recordCategory(m, q.category, meOK));
     if (q.fact) factsRef.current.push({ id: q.id, fact: q.fact, source: q.source, tpsArticleUrl: q.tpsArticleUrl, gold: meOK && (tier === 'great' || tier === 'lightning'), at: Date.now() });
     void scoreBefore;
 
@@ -1313,7 +1451,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         if (k % 4 === 1 && tray.chomp && q.choices.length >= 3) later(400, useChomp);
         tapAt(pick, ms);
       }
-    } else if (ev === EV_BUZZ) tapAt(pick, 700);
+    } else if (ev === EV_BUZZ) tapAt(pick, 700 + (Math.abs((oppIn.current.buzzMs ?? -9999) - (meIn.current.buzzMs ?? 0)) <= BUZZ.deadHeatMs ? 900 : 0));
     else if (ev === EV_FIN_BUZZ && oppIn.current.choice !== q.correctIndex) tapAt(q.correctIndex, 2000);
     else if (ev === EV_TIMEOUT && r.spec.type === 'buzz') tapAt(pick, 1200);
   };
@@ -1327,7 +1465,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch, lockWager };
 
   // -- Lifelines (6) -------------------------------------------------------------------------------------
-  const canLifeline = phase === 'question' && !usedThisQ && round != null && (subMode === null || subMode === 'buzzAnswer');
+  const canLifeline = phase === 'question' && !usedThisQ && round != null && (subMode === null || subMode === 'buzzAnswer' || subMode === 'deadHeat');
   const useChomp = useCallback(() => {
     const r = round;
     if (!r || !tray.chomp || usedThisQ) return;
@@ -1365,7 +1503,20 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
   const usePeek = useCallback(() => {
     if (!tray.peek || usedThisQ || !round) return;
+    // C8: never on easy items (the icon is not used up), noisy 12-answer sample only with real data.
+    const mode = peekMode(round.question.stats);
+    if (mode === 'too_easy') {
+      setChip('Too easy to peek');
+      Haptic.tapLight();
+      later(1200, () => setChip(null));
+      return;
+    }
     sfx(CUE.sonar);
+    if (mode === 'sample' && round.question.stats.dist) {
+      const counts = peekSample(round.question.stats.dist, (() => { let k = 0; return () => (mixSeed(seedRef.current, 0x9ee + round.index * 31 + k++) % 10000) / 10000; })());
+      setHeads(counts.map((n) => Array.from({ length: n }, (_, j) => (['classic', 'blue', 'pink', 'green'] as SharkLook[])[j % 4])));
+      later(PEEK.showMs, () => setHeads(round.question.choices.map(() => [])));
+    }
     if (ghost) {
       setChip(resolved.current.opp ? `${oppName} has locked` : `${oppName} is still thinking`);
       later(2000, () => setChip(null));
@@ -1382,7 +1533,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const lifelineButtons: ('chomp' | 'freeze' | 'peek')[] = [];
   if (canLifeline && round) {
     const buzz = round.spec.type === 'buzz';
-    if (tray.chomp && !twoTile && (!buzz || subMode === 'buzzAnswer')) lifelineButtons.push('chomp');
+    if (tray.chomp && !twoTile && (!buzz || subMode === 'buzzAnswer' || subMode === 'deadHeat')) lifelineButtons.push('chomp');
     if (!isRide && tray.freeze && !buzz) lifelineButtons.push('freeze');
     if (!isRide && tray.peek && !buzz && round.question.format !== 'closest') lifelineButtons.push('peek');
   }
@@ -1480,6 +1631,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       onQuit={onQuit}
       gameId="trivia"
       onWrapUp={onWrapUp}
+      pauseExtras={<RelaxedToggle on={relaxed} onToggle={toggleRelaxed} />}
     >
       <GestureHandlerRootView style={styles.field} onLayout={onLayout}>
         <Pressable style={StyleSheet.absoluteFill} onPress={tapAnywhere} accessible={false}>
@@ -1510,7 +1662,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               onTickCoin={() => sfxLadder(CUE.coinTick, Math.min(5, Math.floor(Math.random() * 6)), { volume: 0.7 })}
             />
           </View>
-          <View style={{ position: 'absolute', top: RAIL_H + 4, left: 0, right: 0 }} pointerEvents="none"><Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} /></View>
+          <View style={{ position: 'absolute', top: RAIL_H + 50, left: 0, right: 0 }} pointerEvents="none"><Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} /></View>
 
           {showCard && q ? (
             <View style={[styles.cardWrap, { top: CARD_TOP }]}>
@@ -1583,7 +1735,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
           {subMode ? (
             <View style={[styles.subChip, { top: ZONE_TOP - 34 }]} pointerEvents="none">
-              <Text style={styles.subChipText}>{subMode === 'buzzAnswer' ? 'YOUR ANSWER! 3.5s' : subMode === 'steal' ? 'STEAL IT!' : 'OPEN TILES! Flat 50'}</Text>
+              <Text style={styles.subChipText}>{subMode === 'buzzAnswer' ? 'YOUR ANSWER! 3.5s' : subMode === 'steal' ? 'STEAL IT!' : subMode === 'deadHeat' ? 'DEAD HEAT! PICK BLIND' : 'OPEN TILES! Flat 50'}</Text>
             </View>
           ) : null}
           {chip ? (
@@ -1595,6 +1747,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {wager ? (
             <View style={[styles.zone, { top: ZONE_TOP - 40, height: ZONE_H + 40, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
               <WagerChips stakes={wager.stakes} labels={WAGER.labels} picked={wager.picked} onPick={pickWager} secondsLeft={wager.left} category={plan?.rounds[roundIdx]?.question.category ?? 'Trivia'} />
+            </View>
+          ) : null}
+          {catPick ? (
+            <View style={[styles.zone, { top: ZONE_TOP - 40, height: ZONE_H + 40, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
+              <CategoryPick cats={catPick.cats} mine={catPick.picker === 'me'} picked={catPick.picked} left={catPick.left} oppName={oppName} onPick={pickCategory} />
             </View>
           ) : null}
           {finalCard ? (
@@ -1631,6 +1788,21 @@ export function TriviaDuel(props: TriviaDuelProps) {
   );
 }
 
+/** C9: the hold sheet's Relaxed pace switch. Same points, calmer clock. */
+function RelaxedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }} style={styles.relaxRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.relaxTitle}>Relaxed pace</Text>
+        <Text style={styles.relaxSub}>More time to read, same points. Starts next match.</Text>
+      </View>
+      <View style={[styles.relaxPill, on && styles.relaxPillOn]}>
+        <View style={[styles.relaxKnob, on && styles.relaxKnobOn]} />
+      </View>
+    </Pressable>
+  );
+}
+
 function Polaroid({ k }: { k: number }) {
   const y = useSharedValue(-300);
   useEffect(() => {
@@ -1640,7 +1812,7 @@ function Polaroid({ k }: { k: number }) {
   const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { rotate: '-6deg' }] }));
   return (
     <Animated.View pointerEvents="none" style={[styles.polaroid, st]}>
-      <OutlinedText text="PHOTO FINISH!" size={28} color="#ffffff" width={2} />
+      <OutlinedText text="DEAD HEAT!" size={30} color="#ffffff" width={2} />
     </Animated.View>
   );
 }
@@ -1657,21 +1829,35 @@ function speedWorklet(t: number, g: number, h: number, chomp: number): number {
   return s;
 }
 
-function rideSpeedWorklet(t: number, g: number, chomp: number): number {
+function rideSpeedWorklet(t: number, g: number, h: number, chomp: number): number {
   'worklet';
-  const h = 8000;
   let s = Math.round((150 * Math.min(1, Math.max(0, 1 - (t - g) / (h - g)))) / 5) * 5;
   if (chomp) s = Math.min(s, 50);
   return s;
 }
 
-/** Largest size (15-20) where the longest word fits on one line and the label fits in 3 lines. */
-function tileFont(label: string, tileW: number): number {
-  const avail = tileW - 62;
-  const longest = label.split(/\s+/).reduce((m, w) => Math.max(m, w.length), 1);
-  let size = label.length > 26 ? 15 : label.length > 14 ? 17 : 20;
-  while (size > 12 && longest * size * 0.6 > avail) size -= 1;
-  return size;
+/**
+ * Largest size (13-20) where the longest word fits on one line and the label
+ * wraps into at most 3 lines (greedy word wrap with Knockout-ish 0.56 em width).
+ * Long labels use the compact tile (small corner badge), so they get the width.
+ */
+export function tileFont(label: string, tileW: number): number {
+  const avail = tileW - (label.length > TILE_COMPACT_CHARS && tileW < 260 ? 46 : 62);
+  const words = label.split(/\s+/);
+  for (let size = label.length > 26 ? 16 : label.length > 14 ? 18 : 20; size > 13; size -= 1) {
+    const cpl = Math.floor(avail / (size * 0.56));
+    let lines = 1;
+    let cur = 0;
+    let fits = true;
+    for (const w of words) {
+      if (w.length > cpl) { fits = false; break; }
+      if (cur === 0) cur = w.length;
+      else if (cur + 1 + w.length <= cpl) cur += 1 + w.length;
+      else { lines += 1; cur = w.length; }
+    }
+    if (fits && lines <= 3) return size;
+  }
+  return 13;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -1679,6 +1865,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 const styles = StyleSheet.create({
+  relaxRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.cream, borderRadius: 16, borderWidth: 3, borderColor: C.ink, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10, alignSelf: 'stretch' },
+  relaxTitle: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
+  relaxSub: { fontFamily: 'Knockout', fontSize: 13, color: '#4b6c8c' },
+  relaxPill: { width: 54, height: 32, borderRadius: 16, borderWidth: 3, borderColor: C.ink, backgroundColor: '#dfe8f0', justifyContent: 'center', paddingHorizontal: 2 },
+  relaxPillOn: { backgroundColor: C.gold },
+  relaxKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#ffffff', borderWidth: 2, borderColor: C.ink },
+  relaxKnobOn: { alignSelf: 'flex-end' },
   field: { flex: 1, overflow: 'hidden' },
   bg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#bfeaff' },
   stageWrap: { position: 'absolute', left: 0, right: 0 },

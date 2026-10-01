@@ -39,6 +39,9 @@ interface Props {
   rim: number;
 }
 
+/** Labels longer than this use the compact face: smaller corner badge, wider text. */
+export const TILE_COMPACT_CHARS = 26;
+
 export const Tile = React.memo(function Tile({
   index, label, state, width, height, onTapUI, flipDelay, heads, bar, wiggleKey, reducedMotion, fontSize, chomped, frost, rim,
 }: Props) {
@@ -50,6 +53,7 @@ export const Tile = React.memo(function Tile({
   const bite = useSharedValue(0);
   const barFill = useSharedValue(0);
   const faceUp = state !== 'down';
+  const compact = label.length > TILE_COMPACT_CHARS && width < 260;
   const [showFace, setShowFace] = React.useState(faceUp);
 
   // Face-down -> face-up flip on unlock.
@@ -143,14 +147,14 @@ export const Tile = React.memo(function Tile({
         <Animated.View style={[styles.tile, { backgroundColor: bg, borderColor: border, borderWidth: state === 'locked' ? 4 : 3 }, rim > 0 && { shadowColor: C.gold, shadowOpacity: 1, shadowRadius: rim * 2, shadowOffset: { width: 0, height: 0 } }, chomped && leftHalf]}>
           {showFace ? null : <CardBack />}
           {bar >= 0 ? <Animated.View style={[styles.bar, barStyle]} /> : null}
-          <View style={styles.row}>
-            <Badge shape={badge.shape} color={badge.color} size={Math.min(28, height * 0.34)} />
+          <View style={[styles.row, compact && styles.rowCompact]}>
+            <Badge shape={badge.shape} color={badge.color} size={compact ? 20 : Math.min(28, height * 0.34)} />
             {showFace ? (
               <Text
-                style={[styles.label, { fontSize, color: state === 'wrong' ? '#fff' : C.navy }]}
+                style={[styles.label, compact && styles.labelCompact, { fontSize, lineHeight: Math.round(fontSize * 1.12), color: state === 'wrong' ? '#fff' : C.navy }]}
                 numberOfLines={3}
                 adjustsFontSizeToFit
-                minimumFontScale={0.7}
+                minimumFontScale={0.92}
               >
                 {label}
               </Text>
@@ -227,6 +231,8 @@ const styles = StyleSheet.create({
   tile: { flex: 1, borderRadius: 18, overflow: 'hidden', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
   label: { flex: 1, marginLeft: 10, fontWeight: '800' },
+  rowCompact: { paddingHorizontal: 8 },
+  labelCompact: { marginLeft: 6 },
   back: { backgroundColor: '#fff1cc', overflow: 'hidden' },
   stripe: { position: 'absolute', top: -20, bottom: -20, width: 10, backgroundColor: 'rgba(0,165,245,0.16)', transform: [{ rotate: '24deg' }] },
   x: { position: 'absolute', right: 8, top: 8, width: 26, height: 26 },

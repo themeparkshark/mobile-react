@@ -173,6 +173,8 @@ interface GameShellV2Props {
   getSnapshot?: () => ShellSnapshotData | null;
   /** Called when a queue event ends the run: return the final result. */
   onWrapUp?: (reason: WrapUpReason) => GameResult | null;
+  /** Game-specific settings shown in the hold sheet (e.g. Trivia Duel's Relaxed pace). */
+  pauseExtras?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -209,6 +211,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       sessionKey,
       getSnapshot,
       onWrapUp,
+      pauseExtras,
       children,
     },
     ref,
@@ -662,6 +665,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>
                 <Text style={styles.sheetBody}>Your run is saved right where you left it.</Text>
+                {pauseExtras ?? null}
                 <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn]} onPress={doResume}>
                   <Text style={styles.primaryBtnTxt}>Resume</Text>
                 </TouchableOpacity>

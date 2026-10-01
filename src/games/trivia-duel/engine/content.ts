@@ -273,6 +273,8 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   const r = createRng(mixSeed(opts.seed >>> 0, 0x71c1a));
   const usable = usablePool(pool, opts.ride ? TEXT_LIMITS.ride : TEXT_LIMITS.queue);
   const seen = new Set(opts.seen ?? []);
+  // Seen order is oldest first: when everything is seen, the least recently played comes back first.
+  const seenAge = new Map((opts.seen ?? []).map((id, i) => [id, i] as const));
   const used = new Set<string>();
   const allFacts = factsFor(opts.parkId);
   const usedFacts = new Set<string>();
@@ -295,7 +297,10 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   const takeAuthored = (difficulty: Difficulty, allowSeen: boolean): DuelQuestion | null => {
     for (const pass of allowSeen ? [0, 1] : [0]) {
       for (const d of DIFF_ORDER[difficulty]) {
-        const cand = usable.filter((q) => q.difficulty === d && !used.has(q.id) && !clashes(q) && (pass === 1 || !seen.has(q.id)));
+        let cand = usable.filter((q) => q.difficulty === d && !used.has(q.id) && !clashes(q) && (pass === 1 || !seen.has(q.id)));
+        if (pass === 1 && cand.length > 3) {
+          cand = cand.slice().sort((a, b) => (seenAge.get(a.id) ?? -1) - (seenAge.get(b.id) ?? -1)).slice(0, 3);
+        }
         if (cand.length) {
           const q = cand[rngInt(r, 0, cand.length - 1)];
           used.add(q.id);

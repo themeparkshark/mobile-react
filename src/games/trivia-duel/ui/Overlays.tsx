@@ -119,7 +119,8 @@ export function Bark({ text, barkKey, side, onTalk, muted }: { text: string | nu
   const st = useAnimatedStyle(() => ({ opacity: s.value > 0.05 ? 1 : 0, transform: [{ scale: s.value }] }));
   return (
     <Animated.View pointerEvents="none" style={[styles.bark, side === 'right' ? { right: 12 } : { left: 12 }, st]}>
-      <Text style={styles.barkText}>{shown}</Text>
+      {/* The full line lays out up front (the rest is transparent), so the bubble never grows while it types. */}
+      <Text style={styles.barkText}>{shown}<Text style={{ color: 'transparent' }}>{text ? text.slice(shown.length) : ''}</Text></Text>
       <View style={[styles.barkTail, side === 'right' ? { right: 40 } : { left: 40 }]} />
     </Animated.View>
   );
@@ -246,6 +247,45 @@ function Chip({ i, label, stake, picked, onPick }: { i: number; label: string; s
   );
 }
 
+// -- Final category pick (C11) ----------------------------------------------------------
+
+/** Two category cards in the thumb zone. The trailing player picks; the leader watches. */
+export function CategoryPick({ cats, mine, picked, left, oppName, onPick }: {
+  cats: readonly [string, string]; mine: boolean; picked: number; left: number; oppName: string; onPick: (i: number) => void;
+}) {
+  return (
+    <View style={styles.wager}>
+      <Text style={styles.wagerTitle}>{mine ? 'YOU PICK THE FINAL' : `${oppName.toUpperCase()} IS PICKING...`}</Text>
+      <Text style={styles.wagerSub}>{mine ? `You're behind, so you choose. ${left}s` : 'Behind after round 4 picks the category'}</Text>
+      <View style={[styles.chipGrid, { flexWrap: 'nowrap', alignSelf: 'stretch' }]}>
+        {cats.map((c, i) => <CategoryCard key={i} i={i} label={c} picked={picked === i} out={picked >= 0 && picked !== i} disabled={!mine || picked >= 0} onPick={onPick} />)}
+      </View>
+    </View>
+  );
+}
+
+function CategoryCard({ i, label, picked, out, disabled, onPick }: { i: number; label: string; picked: boolean; out: boolean; disabled: boolean; onPick: (i: number) => void }) {
+  const s = useSharedValue(0);
+  const flip = useSharedValue(90);
+  useEffect(() => {
+    flip.value = withDelay(60 * i, withTiming(0, { duration: 260, easing: Easing.out(Easing.back(1.6)) }));
+    s.value = withDelay(60 * i, withSpring(1, { damping: 9, stiffness: 260 }));
+  }, [s, flip, i]);
+  useEffect(() => {
+    if (picked) s.value = withSequence(withTiming(0.9, { duration: 70 }), withSpring(1.1, { damping: 7, stiffness: 380 }));
+    if (out) s.value = withTiming(0.82, { duration: 160 });
+  }, [picked, out, s]);
+  const st = useAnimatedStyle(() => ({ opacity: out ? 0.45 : 1, transform: [{ perspective: 600 }, { rotateY: `${flip.value}deg` }, { scale: s.value }] }));
+  return (
+    <Animated.View style={[styles.catCell, st]}>
+      <Pressable disabled={disabled} onPress={() => onPick(i)} style={[styles.catCard, { backgroundColor: i === 0 ? '#bfe8ff' : '#ffe58a' }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={`Final category ${label}`}>
+        <Text style={styles.catLabel} numberOfLines={2} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
+        <Text style={styles.chipStake}>HARD</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 // -- Buzz Bell (11.6) ------------------------------------------------------------------
 
 export function BuzzBell({ onBuzz, disabled, pressedKey, reducedMotion, fuse }: { onBuzz: () => void; disabled: boolean; pressedKey: number; reducedMotion: boolean; fuse: number }) {
@@ -361,6 +401,9 @@ const styles = StyleSheet.create({
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   chipCell: { width: '47%', margin: '1.5%' },
   chip: { height: 92, borderRadius: 18, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, alignItems: 'center', justifyContent: 'center' },
+  catCell: { flex: 1, paddingHorizontal: 6, height: 150 },
+  catCard: { flex: 1, borderRadius: 20, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  catLabel: { fontFamily: 'Shark', fontSize: 28, color: C.navy, textAlign: 'center' },
   chipPicked: { borderColor: C.goldDeep, borderWidth: 5, borderBottomWidth: 8 },
   chipLabel: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
   chipStake: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },

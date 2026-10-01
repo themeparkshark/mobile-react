@@ -6,7 +6,7 @@
  * tools/tests/fixtures/trivia-duel-vectors.json).
  */
 import {
-  BUZZ, GRACE, HOT_STREAK, BLAZING, POINTS, READ_LOCK, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, WAGER,
+  BUZZ, GRACE, HOT_STREAK, BLAZING, PEEK, POINTS, READ_LOCK, RELAXED, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, WAGER,
   type SpeedTier,
 } from './config';
 
@@ -109,11 +109,11 @@ export function quickPoints(correct: boolean, t: number, g: number, h: number, s
 }
 
 /** 4.1 ride challenge points: 100 + round5(150 x speed fraction), no streak multiplier. */
-export function ridePoints(correct: boolean, t: number, g: number, mods: SpeedMods = {}): number {
+export function ridePoints(correct: boolean, t: number, g: number, mods: SpeedMods = {}, h?: number): number {
   'worklet';
   if (!correct) return 0;
   if (mods.holdForfeit) return W_BASE;
-  let s = speedPoints(t, g, W_RIDE_WINDOW, W_RIDE_SPEED_MAX);
+  let s = speedPoints(t, g, h === undefined ? W_RIDE_WINDOW : h, W_RIDE_SPEED_MAX);
   if (mods.chomp) s = Math.min(s, W_CHOMP_CAP);
   return W_BASE + s;
 }
@@ -130,24 +130,91 @@ export function rideStars(correctCount: number, total: number, points: number): 
   return 1;
 }
 
-/** 5.3 buzz: correct = (150 + speed) x mult, wrong = -75 (0 with a Shield). */
+/** 5.3 buzz: correct = (150 + speed) x mult, wrong = -100 (0 with a Shield). */
 export function buzzPoints(correct: boolean, buzzT: number, g: number, streakAfter: number, shield: boolean, mods: SpeedMods = {}): number {
   if (!correct) return shield ? 0 : POINTS.buzzWrong;
   const s = creditedSpeed(buzzT, g, BUZZ.horizonMs, mods);
   return Math.round((POINTS.buzzBase + s) * streakMult(streakAfter));
 }
 
-/** 5.3 steal: 100 + speed(steal time, g 300, H 3s). */
+/** 5.3 steal: 125 + speed(steal time, g 300, H 3s), max 225. */
 export function stealPoints(correct: boolean, stealT: number, mods: SpeedMods = {}): number {
   if (!correct) return 0;
   return POINTS.stealBase + creditedSpeed(stealT, BUZZ.stealGraceMs, BUZZ.stealHorizonMs, mods);
 }
 
-/** Buzz order: lower scored time wins; within 30ms is a photo finish (seeded coin flip). */
-export function buzzOrder(aMs: number, bMs: number, coin: number): { first: 'a' | 'b'; photoFinish: boolean } {
-  const photo = Math.abs(aMs - bMs) <= BUZZ.photoFinishMs;
-  if (photo) return { first: coin < 0.5 ? 'a' : 'b', photoFinish: true };
-  return { first: aMs <= bMs ? 'a' : 'b', photoFinish: false };
+/**
+ * Buzz order (rev 4): lower scored time wins; a second buzz within 200ms of
+ * the first is a DEAD HEAT, settled by blind picks (never a coin flip).
+ */
+export function buzzOrder(aMs: number, bMs: number): { first: 'a' | 'b'; deadHeat: boolean } {
+  return { first: aMs <= bMs ? 'a' : 'b', deadHeat: Math.abs(aMs - bMs) <= BUZZ.deadHeatMs };
+}
+
+/**
+ * DEAD HEAT resolution (5.3): correct beats wrong; between two correct blind
+ * picks the lower answer time takes 150 + speed (buzz time), the other a flat
+ * 75. A wrong (or missing) blind pick costs 50, 0 with a Shield. Equal answer
+ * times fall back to the earlier buzz, then to side a.
+ */
+export function deadHeatPoints(
+  a: { correct: boolean; answerMs: number; buzzMs: number; streakAfter: number; shield: boolean; mods?: SpeedMods },
+  b: { correct: boolean; answerMs: number; buzzMs: number; streakAfter: number; shield: boolean; mods?: SpeedMods },
+  g: number,
+): { a: number; b: number; winner: 'a' | 'b' | 'none' } {
+  const win = (x: typeof a) => buzzPoints(true, x.buzzMs, g, x.streakAfter, false, x.mods ?? {});
+  const lose = (x: typeof a) => (x.shield ? 0 : POINTS.deadHeatWrong);
+  if (a.correct && b.correct) {
+    const aFirst = a.answerMs < b.answerMs || (a.answerMs === b.answerMs && a.buzzMs <= b.buzzMs);
+    return aFirst
+      ? { a: win(a), b: POINTS.deadHeatSecond, winner: 'a' }
+      : { a: POINTS.deadHeatSecond, b: win(b), winner: 'b' };
+  }
+  if (a.correct) return { a: win(a), b: lose(b), winner: 'a' };
+  if (b.correct) return { a: lose(a), b: win(b), winner: 'b' };
+  return { a: lose(a), b: lose(b), winner: 'none' };
+}
+
+/** Relaxed scaling (C9) for one round's timing. */
+export function relaxedTiming(t: { readLockMs: number; windowMs: number; graceMs: number; horizonMs: number }): { readLockMs: number; windowMs: number; graceMs: number; horizonMs: number } {
+  const windowMs = t.windowMs + RELAXED.windowAddMs;
+  return {
+    readLockMs: Math.round(t.readLockMs * RELAXED.readLockScale),
+    windowMs,
+    graceMs: Math.round(t.graceMs * RELAXED.graceScale),
+    horizonMs: Math.min(windowMs, Math.round(t.horizonMs * RELAXED.horizonScale)),
+  };
+}
+
+/**
+ * C8 Peek gate: never on easy items (p >= 0.75, the icon greys and is not
+ * used up). The 12-answer sample needs 30+ answers on record; without them
+ * Peek still marks the opponent's lean (vs Fin) or lock state (vs a ghost).
+ */
+export function peekMode(stats: { p: number; n?: number; dist?: readonly number[] }): 'too_easy' | 'lean_only' | 'sample' {
+  if (stats.p >= PEEK.maxP) return 'too_easy';
+  if ((stats.n ?? 0) < PEEK.minAnswers || !stats.dist?.length) return 'lean_only';
+  return 'sample';
+}
+
+/**
+ * C8 Peek sample: 12 answers drawn (seeded) from the item's answer
+ * distribution, so it's noisy by design. Returns counts per choice.
+ */
+export function peekSample(dist: readonly number[], rnd: () => number, n: number = PEEK.sample): number[] {
+  const total = dist.reduce((s, v) => s + Math.max(0, v), 0);
+  const out = dist.map(() => 0);
+  if (total <= 0 || !dist.length) return out;
+  for (let k = 0; k < n; k++) {
+    let x = rnd() * total;
+    let i = 0;
+    for (; i < dist.length - 1; i++) {
+      x -= Math.max(0, dist[i]);
+      if (x < 0) break;
+    }
+    out[i] += 1;
+  }
+  return out;
 }
 
 /** 5.2 Closest Number accuracy 0..1. */

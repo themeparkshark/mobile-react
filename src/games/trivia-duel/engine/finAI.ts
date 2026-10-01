@@ -18,8 +18,10 @@ export interface QuestionStats {
   p: number;
   /** t10, t30, t50, t70 of correct-answer lock times (ms from unlock). */
   t: readonly [number, number, number, number];
-  /** Park wrong-answer distribution by choice index (weights), optional. */
+  /** Park answer distribution by choice index (weights), optional. */
   dist?: readonly number[];
+  /** Answers on record (calibration needs 30+). Absent for tier priors. */
+  n?: number;
 }
 
 export function priorStats(difficulty: Difficulty): QuestionStats {
@@ -160,6 +162,15 @@ export const BARKS = {
   finLoses: ['You got me! Great game!', 'Captain overboard! GG!'],
   buzz: ['Hands on the bell!', 'Who rings first?'],
   steal: ['Steal it!', 'Your chance to steal!'],
+  deadHeat: ['Dead heat! Pick blind!', 'Same instant! Choose!', 'Photo finish, matey!'],
+  comeback: ['What a comeback!', 'Look who caught up!'],
+  streak3: ['You are on fire!', 'Three in a row, wow!'],
+  shieldSave: ['Saved by the shield!', 'Lucky shield, matey!'],
+  bullseye: ['Bullseye! Spot on!', 'Right on the number!'],
+  categoryPick: ['Your pick, matey!', 'Choose wisely!'],
+  categoryFin: ['I will pick this one!', 'Captain picks!'],
+  allIn: ['ALL IN? Bold shark!', 'Going big, I like it!'],
+  rematch: ['Back for more? Yes!', 'Round two, matey!'],
 } as const;
 
 export function pickBark(kind: keyof typeof BARKS, n: number): string {

@@ -1,5 +1,5 @@
 /**
- * Trivia Duel tunables (design doc studio/design/trivia.md, rev 3).
+ * Trivia Duel tunables (design doc studio/design/trivia.md, rev 4).
  *
  * Every number the doc names lives here so balance passes never touch logic.
  * Pure data: safe on the UI thread, in node tests and as the source for the
@@ -44,8 +44,12 @@ export const POINTS = {
   speedMax: 100,
   chompSpeedCap: 50,
   buzzBase: 150,
-  buzzWrong: -75,
-  stealBase: 100,
+  /** Rev 4 (C2): a wrong buzz costs 100, so buzzing breaks even near 50% confidence. */
+  buzzWrong: -100,
+  stealBase: 125,
+  /** DEAD HEAT: the slower of two correct blind picks still takes a flat 75; a wrong blind pick costs 50. */
+  deadHeatSecond: 75,
+  deadHeatWrong: -50,
   openPhaseFlat: 50,
   /** Ride challenge: correct = 100 + round5(150 x speed fraction), no streak. */
   rideSpeedMax: 150,
@@ -68,7 +72,10 @@ export const BUZZ = {
   stealGraceMs: 300,
   stealHorizonMs: 3000,
   openPhaseMs: 4000,
-  photoFinishMs: 30,
+  /** Rev 4 (C2): buzzes within 200ms of the first are a DEAD HEAT (blind picks), never a coin flip. */
+  deadHeatMs: 200,
+  /** Fallback blind-pick time for a record without one (older ghosts). */
+  deadHeatDefaultAnswerMs: 2000,
   hitStopMs: 60,
 } as const;
 
@@ -81,6 +88,18 @@ export const WAGER = {
   pickMs: 5000,
   labels: ['SAFE', '25%', '50%', 'ALL IN'] as const,
 } as const;
+
+/**
+ * C9 Relaxed mode: the same speed points at a calmer pace. Read-lock x1.5,
+ * windows +4s, grace and horizon x1.5. Never changes grading or the question band.
+ */
+export const RELAXED = { readLockScale: 1.5, windowAddMs: 4000, graceScale: 1.5, horizonScale: 1.5 } as const;
+
+/** C11 Final category pick: 2 cards, 3s, default left. */
+export const CATEGORY_PICK = { cards: 2, pickMs: 3000 } as const;
+
+/** C8 Peek: a noisy sample of real answers, only on medium/hard items. */
+export const PEEK = { sample: 12, maxP: 0.75, minAnswers: 30, showMs: 2000 } as const;
 
 /** 15.2 HOLD credit per question in graded modes. */
 export const HOLD = { creditMs: 6000 } as const;
@@ -120,11 +139,11 @@ export interface RoundSpec {
 
 /** 4.2 queue round table. */
 export const QUEUE_ROUNDS: Record<'q1' | 'q2' | 'buzz' | 'q4' | 'final', RoundSpec> = {
-  q1: { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 12000, horizonMs: 6000 },
+  q1: { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 10000, horizonMs: 6000 },
   q2: { type: 'quick', formats: ['pair', 'closest'], difficulty: 'medium', windowMs: 8000, sliderWindowMs: 14000, horizonMs: 4000, sliderHorizonMs: 7000 },
   buzz: { type: 'buzz', formats: ['choice4'], difficulty: 'medium', windowMs: BUZZ.buzzWindowMs, horizonMs: BUZZ.horizonMs },
-  q4: { type: 'quick', formats: ['choice4', 'opened'], difficulty: 'medium', windowMs: 14000, horizonMs: 7000 },
-  final: { type: 'final', formats: ['choice4'], difficulty: 'hard', windowMs: 16000, horizonMs: 8000 },
+  q4: { type: 'quick', formats: ['choice4', 'opened'], difficulty: 'medium', windowMs: 12000, horizonMs: 7000 },
+  final: { type: 'final', formats: ['choice4'], difficulty: 'hard', windowMs: 14000, horizonMs: 8000 },
 };
 /** Templates rotate per match: B never first, F always last. */
 export const TEMPLATES: readonly (readonly (keyof typeof QUEUE_ROUNDS)[])[] = [

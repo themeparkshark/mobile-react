@@ -70,17 +70,45 @@ test('speed tiers', () => {
   assert.deepEqual([100, 95, 94, 70, 69, 35, 34, 0].map(sc.speedTier), ['lightning', 'lightning', 'great', 'great', 'nice', 'nice', 'none', 'none']);
 });
 
-test('buzz: correct 150 + speed, wrong -75 (0 with Shield), steal 100 + steal speed', () => {
+test('buzz (rev 4): correct 150 + speed, wrong -100 (0 with Shield), steal 125 + steal speed (max 225)', () => {
   assert.equal(sc.buzzPoints(true, 500, 780, 1, false), 250);
   assert.equal(sc.buzzPoints(true, 500, 780, 5, false), Math.round(250 * 1.75), 'buzz max 437');
-  assert.equal(sc.buzzPoints(false, 500, 780, 1, false), -75);
+  assert.equal(sc.buzzPoints(false, 500, 780, 1, false), -100);
   assert.equal(sc.buzzPoints(false, 500, 780, 1, true), 0);
-  assert.equal(sc.stealPoints(true, 200), 200);
-  assert.equal(sc.stealPoints(true, 3000), 100);
+  assert.equal(sc.stealPoints(true, 200), 225);
+  assert.equal(sc.stealPoints(true, 3000), 125);
   assert.equal(sc.stealPoints(false, 200), 0);
-  assert.deepEqual(plain(sc.buzzOrder(1000, 1020, 0.2)), { first: 'a', photoFinish: true });
-  assert.deepEqual(plain(sc.buzzOrder(1000, 1020, 0.7)), { first: 'b', photoFinish: true });
-  assert.deepEqual(plain(sc.buzzOrder(1100, 1000, 0.2)), { first: 'b', photoFinish: false });
+  assert.deepEqual(plain(sc.buzzOrder(1000, 1020)), { first: 'a', deadHeat: true });
+  assert.deepEqual(plain(sc.buzzOrder(1199, 1000)), { first: 'b', deadHeat: true });
+  assert.deepEqual(plain(sc.buzzOrder(1000, 1200)), { first: 'a', deadHeat: true }, '200ms is inside the window');
+  assert.deepEqual(plain(sc.buzzOrder(1000, 1201)), { first: 'a', deadHeat: false });
+});
+
+test('buzz EV: break-even confidence sits near 50% once the steal is counted', () => {
+  // Relative swing of buzzing vs the opponent: 220c - (1 - c)(100 + 126) at p(steal) 0.7 (design 5.3).
+  const correct = 220;
+  const loss = -sc.buzzPoints(false, 0, 780, 1, false) + 0.7 * 180;
+  const breakEven = loss / (correct + loss);
+  assert.ok(breakEven > 0.45 && breakEven < 0.55, `break-even ${breakEven}`);
+});
+
+test('DEAD HEAT: correct beats wrong, faster blind pick wins, slower correct takes 75, wrong costs 50', () => {
+  const side = (correct, answerMs, buzzMs = 1000, shield = false) => ({ correct, answerMs, buzzMs, streakAfter: 1, shield });
+  let r = sc.deadHeatPoints(side(true, 900), side(true, 1400), 780);
+  assert.equal(r.winner, 'a');
+  assert.equal(r.a, sc.buzzPoints(true, 1000, 780, 1, false));
+  assert.equal(r.b, 75);
+  r = sc.deadHeatPoints(side(true, 2000), side(true, 600), 780);
+  assert.equal(r.winner, 'b');
+  assert.equal(r.a, 75);
+  r = sc.deadHeatPoints(side(false, 300), side(true, 2500), 780);
+  assert.equal(r.winner, 'b');
+  assert.equal(r.a, -50);
+  r = sc.deadHeatPoints(side(false, 300), side(false, 2500, 1000, true), 780);
+  assert.equal(r.winner, 'none');
+  assert.deepEqual([r.a, r.b], [-50, 0], 'a Shield absorbs the blind miss');
+  r = sc.deadHeatPoints(side(true, 900, 1100), side(true, 900, 1000), 780);
+  assert.equal(r.winner, 'b', 'equal pick times fall back to the earlier buzz');
 });
 
 test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () => {
@@ -288,16 +316,41 @@ test('resolveRound: quick draw applies streak multiplier to both sides', () => {
   assert.equal(t.me.streak.shield, true);
 });
 
-test('resolveRound: buzz wrong -75 hands the steal; steal scores 100 + speed', () => {
+test('resolveRound: buzz wrong -100 hands the steal; steal scores 125 + speed', () => {
   const t = match.createTally();
   t.me.score = 300;
   const r = quickRound('buzz');
   const res = match.resolveRound('queue', r, { choice: 1, lockMs: 900, buzzMs: 900 }, { choice: 2, lockMs: -1, buzzMs: 2000, stealChoice: 2, stealMs: 200 }, t);
   assert.equal(res.buzz.first, 'me');
+  assert.equal(res.buzz.deadHeat, false);
   assert.equal(res.buzz.steal, true);
-  assert.equal(res.me.points, -75);
-  assert.equal(res.opp.points, 200);
-  assert.equal(t.me.score, 225);
+  assert.equal(res.me.points, -100);
+  assert.equal(res.opp.points, 225);
+  assert.equal(t.me.score, 200);
+});
+
+test('resolveRound: buzzes 150ms apart are a DEAD HEAT settled by blind picks, never a coin', () => {
+  const r = quickRound('buzz');
+  // Fin buzzed first but picked wrong; you picked right, slower: correct beats wrong.
+  let t = match.createTally();
+  let res = match.resolveRound('queue', r, { choice: 2, lockMs: 1150, buzzMs: 1150, answerMs: 2400 }, { choice: 0, lockMs: 1000, buzzMs: 1000, answerMs: 500 }, t);
+  assert.equal(res.buzz.deadHeat, true);
+  assert.equal(res.me.deadHeatWon, true);
+  assert.equal(res.me.correct, true);
+  assert.equal(res.opp.points, -50);
+  assert.equal(t.me.streak.streak, 1);
+  // Both right: the faster pick takes the bell points, the other a flat 75 (both keep their streaks).
+  t = match.createTally();
+  res = match.resolveRound('queue', r, { choice: 2, lockMs: 1000, buzzMs: 1000, answerMs: 1600 }, { choice: 2, lockMs: 1100, buzzMs: 1100, answerMs: 700 }, t);
+  assert.equal(res.opp.deadHeatWon, true);
+  assert.equal(res.me.points, 75);
+  assert.equal(res.opp.points, sc.buzzPoints(true, 1100, r.graceMs, 1, false));
+  assert.equal(t.me.streak.streak, 1);
+  assert.equal(t.opp.streak.streak, 1);
+  // Same inputs, same result: replays and the server agree.
+  const t2 = match.createTally();
+  const res2 = match.resolveRound('queue', r, { choice: 2, lockMs: 1000, buzzMs: 1000, answerMs: 1600 }, { choice: 2, lockMs: 1100, buzzMs: 1100, answerMs: 700 }, t2);
+  assert.deepEqual(plain(res2), plain(res));
 });
 
 test('resolveRound: nobody buzzes -> open phase flat 50', () => {
@@ -391,4 +444,99 @@ test('balance sim: a typical player beats Deckhand far more often than Admiral',
   assert.ok(deck > 0.55, `vs deckhand ${deck}`);
   assert.ok(adm < 0.45, `vs admiral ${adm}`);
   assert.ok(deck - adm > 0.2);
+});
+
+// -- Revision 4 (C6, C8, C9, C11) ---------------------------------------------------
+
+test('rev 4 windows: R1 10s, R4 12s, Final 14s; horizons stay shorter than windows', () => {
+  assert.equal(cfg.QUEUE_ROUNDS.q1.windowMs, 10000);
+  assert.equal(cfg.QUEUE_ROUNDS.q4.windowMs, 12000);
+  assert.equal(cfg.QUEUE_ROUNDS.final.windowMs, 14000);
+  for (const k of Object.keys(cfg.QUEUE_ROUNDS)) assert.ok(cfg.QUEUE_ROUNDS[k].horizonMs < cfg.QUEUE_ROUNDS[k].windowMs, k);
+});
+
+test('Relaxed mode: read-lock x1.5, window +4s, grace and horizon x1.5, same points reachable', () => {
+  const spec = cfg.QUEUE_ROUNDS.q1;
+  const q = { id: 'x', format: 'choice4', prompt: 'Which ride opened first at the park?', choices: ['aaaa', 'bbbb', 'cccc', 'dddd'], correctIndex: 0, difficulty: 'easy', category: 'X', stats: fin.priorStats('easy') };
+  const std = match.planRound(spec, q, 0, 9, 'queue');
+  const rel = match.planRound(spec, q, 0, 9, 'queue', true);
+  assert.equal(rel.readLockMs, Math.round(std.readLockMs * 1.5));
+  assert.equal(rel.windowMs, std.windowMs + 4000);
+  assert.equal(rel.graceMs, Math.round(std.graceMs * 1.5));
+  assert.equal(rel.horizonMs, Math.round(std.horizonMs * 1.5));
+  assert.equal(rel.jitterMs, std.jitterMs, 'jitter is seeded, not scaled');
+  // A relaxed player at 1.5x the time scores what a standard player scores.
+  const t = 2400;
+  assert.equal(sc.tickerValue(t * 1.5, rel.graceMs, rel.horizonMs), sc.tickerValue(t, std.graceMs, std.horizonMs));
+  const plan = match.planMatch('queue', 77, POOL, { relaxed: true });
+  assert.equal(plan.relaxed, true);
+  assert.ok(plan.rounds.every((r) => r.windowMs >= 12000));
+});
+
+test('Peek gate: never on easy items; the 12-answer sample needs 30+ answers', () => {
+  assert.equal(sc.peekMode({ p: 0.8, t: [0, 0, 0, 0] }), 'too_easy');
+  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0] }), 'lean_only');
+  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0], n: 12, dist: [1, 1, 1, 1] }), 'lean_only');
+  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0], n: 40, dist: [5, 1, 1, 1] }), 'sample');
+  let k = 0;
+  const rnd = () => ((k++ * 0.6180339) % 1);
+  const counts = sc.peekSample([60, 20, 10, 10], rnd);
+  assert.equal(counts.reduce((a, b) => a + b, 0), 12, 'never more than 12 answers');
+  assert.ok(counts[0] >= counts[1], 'it leans toward the real distribution');
+  assert.deepEqual(plain(sc.peekSample([], rnd)), []);
+});
+
+test('Final category pick: the trailing player picks; ties go to the slower locker', () => {
+  const t = match.createTally();
+  t.me.score = 300; t.opp.score = 500;
+  assert.equal(match.finalPicker(t), 'me');
+  t.me.score = 600;
+  assert.equal(match.finalPicker(t), 'opp');
+  t.opp.score = 600;
+  t.me.log = [{ choice: 0, lockMs: 1000 }, { choice: 0, lockMs: 2000 }];
+  t.opp.log = [{ choice: 0, lockMs: 3000 }, { choice: 0, lockMs: 4000 }];
+  assert.equal(match.finalPicker(t), 'opp', 'Fin was slower on average, so he picks');
+  assert.equal(match.finCategoryPick(['Park History', 'Ride History'], { 'Park History': [10, 9], 'Ride History': [10, 4] }), 1);
+  assert.equal(match.finCategoryPick(['Park History', 'Ride History'], { 'Park History': [10, 3] }), 0, 'unknown counts as 50%');
+  assert.equal(match.finCategoryPick(['A', 'B'], {}), 0, 'ties go to the left card');
+});
+
+test('Final alternative is a different category and shares no fact with the match', () => {
+  let found = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const plan = match.planMatch('queue', seed, POOL, { parkId: 8 });
+    const fi = plan.rounds.length - 1;
+    if (!plan.finalAlt) continue;
+    found++;
+    assert.notEqual(plan.finalAlt.question.category, plan.rounds[fi].question.category);
+    assert.equal(plan.finalAlt.index, fi);
+    assert.equal(plan.finalAlt.spec.type, 'final');
+    const ids = plan.rounds.map((r) => r.question.id);
+    assert.ok(!ids.includes(plan.finalAlt.question.id));
+    const facts = new Set(plan.rounds.flatMap((r) => content.factKeysOf(r.question)));
+    assert.ok(content.factKeysOf(plan.finalAlt.question).every((f) => !facts.has(f)), `seed ${seed}`);
+  }
+  assert.ok(found >= 10, `alternates found for ${found} of 40 seeds`);
+  assert.equal(match.planMatch('ride', 3, POOL).finalAlt, undefined, 'ride challenge has no Final');
+});
+
+test('seen list: when every item is seen, the least recently played comes back first', () => {
+  const pool = [0, 1, 2, 3, 4, 5].map((i) => ({ id: `s${i}`, question: `Seen question ${i}?`, choices: ['a', 'b', 'c', 'd'], correctIndex: 0, difficulty: 'easy' }));
+  const spec = [{ ...cfg.QUEUE_ROUNDS.q1, formats: ['choice4'] }];
+  const seen = ['s3', 's4', 's5', 's0', 's1', 's2'];
+  // Generated formats need facts; with a park that has none the authored LRU decides.
+  for (let seed = 1; seed < 20; seed++) {
+    const [q] = content.buildDeck(pool, spec, { seed, seen, parkId: 999999 });
+    if (q.id.startsWith('s')) assert.ok(['s3', 's4', 's5'].includes(q.id), `seed ${seed} picked ${q.id}`);
+  }
+});
+
+test('ghost rows keep DEAD HEAT blind-pick times through encode/decode', () => {
+  const plan = match.planMatch('queue', 5, POOL);
+  const t = match.createTally();
+  plan.rounds.forEach((r, i) => match.resolveRound('queue', r, { choice: 0, lockMs: 1200, buzzMs: 900, answerMs: 640 + i }, null, t));
+  const g = match.makeGhost(plan, t, 'Crew', 'blue', 1);
+  const back = match.decodeGhost(match.encodeGhost(g));
+  assert.equal(back.rows[2].answerMs, 642);
+  assert.ok(match.encodeGhost(g).length < 1024);
 });

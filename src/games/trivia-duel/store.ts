@@ -35,10 +35,14 @@ export interface DuelMemory {
   ghosts: string[];
   vsSeen: number;
   buzzRulesSeen: boolean;
+  /** C11: per-category [attempts, correct] (drives Fin's Final category pick). */
+  catStats: Record<string, [number, number]>;
+  /** C9: Relaxed mode (pause sheet toggle). */
+  relaxed: boolean;
 }
 
 function fresh(): DuelMemory {
-  return { rank: createRankState(), seen: [], plays: 0, carry: null, best: 0, album: [], ghosts: [], vsSeen: 0, buzzRulesSeen: false };
+  return { rank: createRankState(), seen: [], plays: 0, carry: null, best: 0, album: [], ghosts: [], vsSeen: 0, buzzRulesSeen: false, catStats: {}, relaxed: false };
 }
 
 let cache: DuelMemory | null = null;
@@ -101,6 +105,11 @@ export function saveGhost(m: DuelMemory, g: GhostRecord): void {
 
 export function listGhosts(m: DuelMemory): GhostRecord[] {
   return m.ghosts.map(decodeGhost).filter((g): g is GhostRecord => !!g);
+}
+
+export function recordCategory(m: DuelMemory, category: string, correct: boolean): void {
+  const st = m.catStats[category] ?? [0, 0];
+  m.catStats = { ...m.catStats, [category]: [st[0] + 1, st[1] + (correct ? 1 : 0)] };
 }
 
 export function currentRank(m: DuelMemory): FinRank {
