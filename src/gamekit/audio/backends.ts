@@ -340,18 +340,39 @@ export class AudioApiBackend implements AudioBackend {
     return this.buffers.has(key);
   }
 
-  async load(key: string, src: number): Promise<boolean> {
-    if (this.buffers.has(key)) return true;
-    const path = await localPath(src);
-    if (!path) return false;
-    try {
-      const buffer = await this.ctx.decodeAudioDataSource(path);
-      this.buffers.set(key, buffer);
-      return true;
-    } catch (e) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
-      return false;
-    }
+  /**
+   * Decodes run ONE AT A TIME. react-native-audio-api 0.6.5 decodes each file
+   * on its own detached thread and builds the buffer host object there, and
+   * its JsiHostObject constructor pushes into an unsynchronized global vector
+   * (JSI_DEBUG_ALLOCATIONS is on in the shipped source). Parallel decodes race
+   * on that vector and abort the app (seen as bad_alloc in push_back on the
+   * engine simulator, Sep 30). Serializing is the JS-side root fix; the native
+   * one is tools/audio/patch-audio-api.mjs (turns the debug registry off).
+   */
+  private decodeChain: Promise<unknown> = Promise.resolve();
+  private pending = new Map<string, Promise<boolean>>();
+
+  load(key: string, src: number): Promise<boolean> {
+    if (this.buffers.has(key)) return Promise.resolve(true);
+    const inFlight = this.pending.get(key);
+    if (inFlight) return inFlight;
+    const job = this.decodeChain.then(async () => {
+      if (this.buffers.has(key)) return true;
+      const path = await localPath(src);
+      if (!path) return false;
+      try {
+        const buffer = await this.ctx.decodeAudioDataSource(path);
+        this.buffers.set(key, buffer);
+        return true;
+      } catch (e) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
+        return false;
+      }
+    });
+    this.decodeChain = job.catch(() => false);
+    this.pending.set(key, job);
+    void job.finally(() => this.pending.delete(key));
+    return job;
   }
 
   play(key: string, a: PlayArgs): number {
