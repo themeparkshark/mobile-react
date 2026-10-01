@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
@@ -13,6 +13,7 @@ import { buildDecorations, buildLampPoints, buildWaterGlints, DECO_ICONS, decora
 import { MapAliveProvider, useMapAliveEngine } from './map/alive/MapAliveContext';
 import { MapLightOverlay, MapSkyOverlay } from './map/alive/MapSkyOverlay';
 import { WaterGlints } from './map/alive/WaterGlints';
+import { SharkTrail } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
@@ -21,6 +22,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { outfitLayerUrls } from '../helpers/wardrobe';
 
 type LatLng = { latitude: number; longitude: number };
+
+/** Where a map coordinate is on screen, in window points (null when off the map or not ready). */
+export type MapProjector = (latitude: number, longitude: number) => Promise<{ x: number; y: number } | null>;
 
 /** Lets map pins ask about the rendered map (e.g. where the nearest water is). */
 export const MapQueryContext = createContext<{
@@ -37,7 +41,7 @@ const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -53,6 +57,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly crowdHaze?: GeoJSON.FeatureCollection | null;
   /** Development previews: pin the sun at this elevation (degrees) instead of the real sky. */
   readonly sunOverride?: number;
+  /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
+  readonly projector?: MutableRefObject<MapProjector | null>;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -169,6 +175,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
+  const rootRef = useRef<View>(null);
+  useEffect(() => {
+    if (!projector) return;
+    projector.current = async (latitude, longitude) => {
+      const point = await mapViewRef.current?.getPointInView([longitude, latitude]).catch(() => null);
+      if (!point) return null;
+      const origin = await new Promise<{ x: number; y: number } | null>(resolve => {
+        if (!rootRef.current) { resolve(null); return; }
+        rootRef.current.measureInWindow((x, y) => resolve(Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null));
+      });
+      return origin ? { x: origin.x + point[0], y: origin.y + point[1] } : null;
+    };
+    return () => { projector.current = null; };
+  }, [projector]);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
@@ -345,6 +365,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   return (
     <MapAliveProvider value={alive}>
     <View
+      ref={rootRef}
       style={{
         position: 'relative',
         flex: 1,
@@ -467,6 +488,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </ShapeSource>
         )}
         <WaterGlints spots={glints} />
+        {/* Sparkles where the shark walked: on the ground, under the islands. */}
+        <SharkTrail latitude={location?.latitude ?? null} longitude={location?.longitude ?? null} />
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
         {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
             order, so it comes after the ride islands and is never hidden under one. */}

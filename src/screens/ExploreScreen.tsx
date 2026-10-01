@@ -14,7 +14,10 @@ import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import Map from '../components/Map';
+import Map, { type MapProjector } from '../components/Map';
+import { CoinCollectFlight } from '../components/map/alive/CoinCollectFlight';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import RedeemModal from '../components/RedeemModal';
 import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
@@ -274,6 +277,39 @@ function ExploreScreen() {
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
+
+  // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
+  const mapProjector = useRef<MapProjector | null>(null);
+  const avatarRef = useRef<View>(null);
+  const flightLayerRef = useRef<View>(null);
+  const reducedMotion = useReducedGameMotion();
+  const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
+  const [collectFlight, setCollectFlight] = useState<{ key: number; from: { x: number; y: number }; to: { x: number; y: number };
+    coinUrl: string | null; label: string | null } | null>(null);
+  const avatarPop = useSharedValue(1);
+  const avatarPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarPop.value }] }));
+  const mapFocusedRef = useRef(mapFocused); mapFocusedRef.current = mapFocused;
+  useEffect(() => {
+    if (!pendingCollect || redeemFlowOpen) return;
+    // Let the reward sheet finish sliding away; "View coin" navigates off the map instead.
+    const timer = setTimeout(async () => {
+      const collect = pendingCollect;
+      setPendingCollect(null);
+      if (!mapFocusedRef.current) return;
+      const measure = (ref: { current: View | null }) => new Promise<{ x: number; y: number; width: number; height: number } | null>(resolve => {
+        if (!ref.current) { resolve(null); return; }
+        ref.current.measureInWindow((x, y, width, height) => resolve(Number.isFinite(x) ? { x, y, width, height } : null));
+      });
+      const [start, avatar, layer] = await Promise.all([
+        mapProjector.current?.(collect.latitude, collect.longitude) ?? null, measure(avatarRef), measure(flightLayerRef)]);
+      if (!avatar || !layer || !mapFocusedRef.current) return;
+      const from = start ?? { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+      setCollectFlight({ key: Date.now(), coinUrl: collect.coinUrl, label: collect.first ? 'New coin on your shelf!' : null,
+        from: { x: from.x - layer.x, y: from.y - layer.y },
+        to: { x: avatar.x + avatar.width / 2 - layer.x, y: avatar.y + avatar.height / 2 - layer.y } });
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [pendingCollect, redeemFlowOpen]);
 
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
@@ -894,6 +930,11 @@ function ExploreScreen() {
                 setActiveRedeemable(undefined);
               }}
               onTaskCompleted={(taskId, isSecretTask) => {
+                const won = isSecretTask ? undefined : redeemables?.tasks.find(t => t.id === taskId);
+                if (won && Number.isFinite(Number(won.latitude)) && Number.isFinite(Number(won.longitude))) {
+                  setPendingCollect({ latitude: Number(won.latitude), longitude: Number(won.longitude),
+                    coinUrl: won.coin_url || null, first: (won.times_completed ?? 0) === 0 });
+                }
                 // Remove completed task from local state immediately
                 setRedeemables((prev) => {
                   if (!prev) return prev;
@@ -926,13 +967,15 @@ function ExploreScreen() {
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
-              <Button
-                onPress={() => {
-                  RootNavigation.navigate('Park', { park: park.id, player: player.id });
-                }}
-              >
-                <Avatar player={player} size="lg" />
-              </Button>
+              <Animated.View ref={avatarRef} collapsable={false} style={avatarPopStyle}>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Park', { park: park.id, player: player.id });
+                  }}
+                >
+                  <Avatar player={player} size="lg" />
+                </Button>
+              </Animated.View>
             )}
           </View>
         </>
@@ -1050,6 +1093,7 @@ function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          projector={mapProjector}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
           crowdHaze={parkHaze}
@@ -1223,6 +1267,14 @@ function ExploreScreen() {
         onAction={refreshCommunityCenter}
       />
       
+      {/* The collect moment flies over everything on the map screen. */}
+      <View ref={flightLayerRef} collapsable={false} pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60 }}>
+        {collectFlight && <CoinCollectFlight key={collectFlight.key} from={collectFlight.from} to={collectFlight.to}
+          coinUrl={collectFlight.coinUrl} label={collectFlight.label} reducedMotion={reducedMotion}
+          onLand={() => { avatarPop.value = reducedMotion ? 1 : withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 })); }}
+          onDone={() => setCollectFlight(null)} />}
+      </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
         homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />

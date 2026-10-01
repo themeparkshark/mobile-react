@@ -1,11 +1,12 @@
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { hash01, withinBudget } from '../../components/map/alive/ambientBudget';
 import { waitGlow, type WaitGlow as WaitGlowLook } from '../../components/map/alive/parkPulse';
+import { arrivalBurstAllowed } from '../../components/map/alive/presence';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
@@ -165,6 +166,51 @@ function LampGlow({ id, level, moving }: { readonly id: number; readonly level: 
     </Animated.View>
   );
 }
+
+const FLECKS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ff8a6b', '#8fe8c6', '#ffcf3b', '#ffffff', '#c9a6ff', '#7cc6f5', '#ffcf3b'];
+
+function Fleck({ p, i }: { p: SharedValue<number>; i: number }) {
+  const angle = Math.PI * (0.12 + (i / (FLECKS.length - 1)) * 0.76) + (hash01(i) - 0.5) * 0.3;
+  const speed = 70 + hash01(i + 9) * 55;
+  const style = useAnimatedStyle(() => {
+    const t = p.value;
+    return {
+      opacity: t < 0.7 ? 1 : (1 - t) / 0.3,
+      transform: [{ translateX: Math.cos(angle) * speed * t }, { translateY: -Math.sin(angle) * speed * t + 90 * t * t },
+        { rotate: `${(i % 2 ? 1 : -1) * t * 540}deg` }, { scaleY: 0.5 + 0.5 * Math.abs(Math.cos(t * 12 + i)) }],
+    };
+  });
+  return <Animated.View style={[styles.fleck, { backgroundColor: FLECKS[i] }, style]} />;
+}
+
+/**
+ * Arrival: stepping into a ride's range pops a gold ring off the island's base
+ * and a puff of confetti flecks, once per ride per stretch of play.
+ */
+function ArrivalBurst({ onDone }: { readonly onDone: () => void }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.quad) });
+    const timer = setTimeout(onDone, 1000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const ring = useAnimatedStyle(() => ({ opacity: 1 - p.value, transform: [{ scaleX: 0.7 + p.value * 1.9 }, { scaleY: 0.7 + p.value * 1.9 }] }));
+  const star = useAnimatedStyle(() => {
+    const k = Math.sin(Math.min(1, p.value / 0.6) * Math.PI);
+    return { opacity: k, transform: [{ translateY: -48 - p.value * 16 }, { scale: 0.4 + k * 0.9 }, { rotate: `${p.value * 120}deg` }] };
+  });
+  return (
+    <View pointerEvents="none" style={styles.burst}>
+      <Animated.View style={[styles.burstRing, ring]} />
+      <View style={styles.burstOrigin}>{FLECKS.map((_, i) => <Fleck key={i} p={p} i={i} />)}</View>
+      <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.burstStar, star]} />
+    </View>
+  );
+}
+
+// Last arrival burst per ride, kept across re-mounts (islands remount as clusters change).
+const lastArrival = new Map<number, number>();
 
 /** A sleeping island: little "z" float up and fade, one after another. */
 function SleepyZ({ i, moving, seed }: { readonly i: number; readonly moving: boolean; readonly seed: number }) {
@@ -339,6 +385,18 @@ function TaskMarker({
     transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],
   }));
 
+  // Entering the ride's range: a burst (motion permitting) and a happy buzz, once in a while.
+  const [burst, setBurst] = useState(0);
+  const wasPlayable = useRef(playable);
+  useEffect(() => {
+    if (playable && !wasPlayable.current && arrivalBurstAllowed(lastArrival.get(task.id), Date.now())) {
+      lastArrival.set(task.id, Date.now());
+      haptic('success');
+      if (!calm) setBurst(value => value + 1);
+    }
+    wasPlayable.current = playable;
+  }, [playable, task.id, calm]);
+
   const press = () => onPress(task);
   const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
@@ -441,6 +499,7 @@ function TaskMarker({
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
+        {burst > 0 && <ArrivalBurst key={burst} onDone={() => setBurst(0)} />}
       </Animated.View>
     </Marker>
   </>);
@@ -510,6 +569,11 @@ const styles = StyleSheet.create({
   // Two full colour cycles (9 stops), so sliding one band left loops seamlessly.
   limitedFlow: { position: 'absolute', left: 0, top: 0, bottom: 0, width: LIMITED_BAND * 2 },
   waitGlow: { position: 'absolute', bottom: 0, width: 104, height: 40 },
+  burst: { position: 'absolute', left: 0, right: 0, bottom: 10, height: 24, alignItems: 'center', justifyContent: 'center', zIndex: 30 },
+  burstRing: { position: 'absolute', width: 60, height: 22, borderRadius: 30, borderWidth: 4, borderColor: BRAND.gold },
+  burstOrigin: { position: 'absolute', width: 0, height: 0 },
+  burstStar: { position: 'absolute', width: 26, height: 26 },
+  fleck: { position: 'absolute', left: -3, top: -2, width: 6, height: 4, borderRadius: 1 },
   lampGlow: { position: 'absolute', bottom: -8, width: 124, height: 64 },
   sleepy: { position: 'absolute', top: 14, right: 4, width: 30, height: 40, zIndex: 6 },
   sleepyZ: { position: 'absolute', left: 0, bottom: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy,
