@@ -17,51 +17,12 @@ import { useAppUpdates } from './hooks/useAppUpdates';
 import { useRideDetection } from './hooks/useRideDetection';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
-import FriendsScreen from './screens/FriendsScreen';
-import InventoryScreen from './screens/InventoryScreen';
-import LeaderboardScreen from './screens/LeaderboardScreen';
 import LoadingScreen from './screens/LoadingScreen';
-import MembershipScreen from './screens/MembershipScreen';
-import ArticleScreen from './screens/ArticleScreen';
-import NewsScreen from './screens/NewsScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
-import ParkScreen from './screens/ParkScreen';
-import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
-import PinCollectionScreen from './screens/PinCollectionsScreen';
-import PinSwapsScreen from './screens/PinSwapsScreen';
-import PlayerScreen from './screens/PlayerScreen';
-import ProfileScreen from './screens/ProfileScreen';
-import QueueTimesScreen from './screens/QueueTimesScreen';
-import RedeemCoinCodeScreen from './screens/RedeemCoinCodeScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import SocialScreen from './screens/SocialScreen';
 import SplashScreen from './screens/SplashScreen';
-import StoreScreen from './screens/StoreScreen';
-import ThreadScreen from './screens/ThreadScreen';
-import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
-// V2 Screens
-import SetCollectionScreen from './screens/SetCollectionScreen';
-import StampBookScreen from './screens/StampBookScreen';
-import CoinShelfScreen from './screens/CoinShelfScreen';
-import BananaBasketScreen from './screens/BananaBasketScreen';
-import CommunityCenterScreen from './screens/CommunityCenterScreen';
-import SharkParkScreen from './screens/SharkParkScreen';
-import LinePlayScreen from './screens/LinePlay/LinePlayScreen';
-// Gym Battle Screens
-import { TeamSelectionScreen, GymBattleScreen } from './screens/GymBattle';
-// Ride Tracker Screens
-import RideTrackerScreen from './screens/RideTracker/RideTrackerScreen';
-import RideLogScreen from './screens/RideTracker/RideLogScreen';
-import RideHistoryScreen from './screens/RideTracker/RideHistoryScreen';
-import RideStatsScreen from './screens/RideTracker/RideStatsScreen';
-import RideDetailScreen from './screens/RideTracker/RideDetailScreen';
-import RideAchievementsScreen from './screens/RideTracker/RideAchievementsScreen';
-import RideWrappedScreen from './screens/RideTracker/RideWrappedScreen';
-import RideCollectionsScreen from './screens/RideTracker/RideCollectionsScreen';
-import RideWishlistScreen from './screens/RideTracker/RideWishlistScreen';
-import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
-import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
+// Only the launch path (Splash, Loading, Login, Welcome, Explore) loads with the
+// app. Every other screen loads on first visit through getComponent, so its
+// module, styles and assets are not evaluated during startup.
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
@@ -155,27 +116,27 @@ export default function App() {
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="Store" component={StoreScreen} />
-        <Stack.Screen name="PinCollections" component={PinCollectionScreen} />
+        <Stack.Screen name="Store" getComponent={() => require('./screens/StoreScreen').default} />
+        <Stack.Screen name="PinCollections" getComponent={() => require('./screens/PinCollectionsScreen').default} />
         <Stack.Screen
           name="Profile"
-          component={ProfileScreen}
+          getComponent={() => require('./screens/ProfileScreen').default}
           options={{
             animation: 'none',
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="Player" component={PlayerScreen} />
-        <Stack.Screen name="Park" component={ParkScreen} />
+        <Stack.Screen name="Player" getComponent={() => require('./screens/PlayerScreen').default} />
+        <Stack.Screen name="Park" getComponent={() => require('./screens/ParkScreen').default} />
         <Stack.Screen
           name="Inventory"
-          component={InventoryScreen}
+          getComponent={() => require('./screens/InventoryScreen').default}
         />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
+        <Stack.Screen name="Settings" getComponent={() => require('./screens/SettingsScreen').default} />
+        <Stack.Screen name="QueueTimes" getComponent={() => require('./screens/QueueTimesScreen').default} />
         <Stack.Screen
           name="LinePlay"
-          component={LinePlayScreen}
+          getComponent={() => require('./screens/LinePlay/LinePlayScreen').default}
           initialParams={isLinePlayFlowPreview ? { ride: process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_ID ? {
             // Dev only: a real local-backend ride, so verified Parts and the
             // Lock Screen Live Activity run end to end.
@@ -193,24 +154,24 @@ export default function App() {
           } } : undefined}
           options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
-        <Stack.Screen name="Friends" component={FriendsScreen} />
-        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="Friends" getComponent={() => require('./screens/FriendsScreen').default} />
+        <Stack.Screen name="Notifications" getComponent={() => require('./screens/NotificationsScreen').default} />
         <Stack.Screen
           name="PendingFriendRequests"
-          component={PendingFriendRequestsScreen}
+          getComponent={() => require('./screens/PendingFriendRequestsScreen').default}
         />
-        <Stack.Screen name="Thread" component={ThreadScreen} />
-        <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
-        <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
+        <Stack.Screen name="Thread" getComponent={() => require('./screens/ThreadScreen').default} />
+        <Stack.Screen name="PinSwaps" getComponent={() => require('./screens/PinSwapsScreen').default} />
+        <Stack.Screen name="RedeemCoinCode" getComponent={() => require('./screens/RedeemCoinCodeScreen').default} />
         <Stack.Screen
           name="Membership"
-          component={MembershipScreen}
+          getComponent={() => require('./screens/MembershipScreen').default}
           options={{
             animation: 'slide_from_bottom',
             gestureEnabled: true,
           }}
         />
-        <Stack.Screen name="Watch" component={WatchScreen} />
+        <Stack.Screen name="Watch" getComponent={() => require('./screens/WatchScreen').default} />
         <Stack.Screen
           name="Loading"
           component={LoadingScreen}
@@ -237,7 +198,7 @@ export default function App() {
         />
         <Stack.Screen
           name="Leaderboard"
-          component={LeaderboardScreen}
+          getComponent={() => require('./screens/LeaderboardScreen').default}
           options={{
             animation: 'none',
             gestureEnabled: false,
@@ -245,7 +206,7 @@ export default function App() {
         />
         <Stack.Screen
           name="Social"
-          component={SocialScreen}
+          getComponent={() => require('./screens/SocialScreen').default}
           options={{
             animation: 'none',
             gestureEnabled: false,
@@ -261,21 +222,21 @@ export default function App() {
         />
         <Stack.Screen
           name="News"
-          component={NewsScreen}
+          getComponent={() => require('./screens/NewsScreen').default}
           options={{
             animation: 'none',
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="Article" component={ArticleScreen} />
+        <Stack.Screen name="Article" getComponent={() => require('./screens/ArticleScreen').default} />
         {/* V2 Screens */}
-        <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
-        <Stack.Screen name="StampBook" component={StampBookScreen} />
-        <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
-        <Stack.Screen name="SharkPark" component={SharkParkScreen} />
+        <Stack.Screen name="SetCollection" getComponent={() => require('./screens/SetCollectionScreen').default} />
+        <Stack.Screen name="StampBook" getComponent={() => require('./screens/StampBookScreen').default} />
+        <Stack.Screen name="CoinShelf" getComponent={() => require('./screens/CoinShelfScreen').default} />
+        <Stack.Screen name="SharkPark" getComponent={() => require('./screens/SharkParkScreen').default} />
         <Stack.Screen 
           name="CommunityCenter" 
-          component={CommunityCenterScreen}
+          getComponent={() => require('./screens/CommunityCenterScreen').default}
           options={{
             animation: 'slide_from_bottom',
             gestureEnabled: true,
@@ -284,7 +245,7 @@ export default function App() {
         {/* Gym Battle Screens */}
         <Stack.Screen 
           name="TeamSelection" 
-          component={TeamSelectionScreen}
+          getComponent={() => require('./screens/GymBattle').TeamSelectionScreen}
           options={{
             animation: 'slide_from_bottom',
             gestureEnabled: false,
@@ -292,24 +253,24 @@ export default function App() {
         />
         <Stack.Screen 
           name="GymBattle" 
-          component={GymBattleScreen}
+          getComponent={() => require('./screens/GymBattle').GymBattleScreen}
           options={{
             animation: 'slide_from_bottom',
             gestureEnabled: true,
           }}
         />
         {/* Ride Tracker */}
-        <Stack.Screen name="RideTracker" component={RideTrackerScreen} />
-        <Stack.Screen name="RideLog" component={RideLogScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="RideHistory" component={RideHistoryScreen} />
-        <Stack.Screen name="RideStats" component={RideStatsScreen} />
-        <Stack.Screen name="RideDetail" component={RideDetailScreen} />
-        <Stack.Screen name="RideAchievements" component={RideAchievementsScreen} />
-        <Stack.Screen name="RideWrapped" component={RideWrappedScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="RideCollections" component={RideCollectionsScreen} />
-        <Stack.Screen name="RideWishlist" component={RideWishlistScreen} />
-        <Stack.Screen name="RideOnboarding" component={RideOnboardingScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-        <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen}
+        <Stack.Screen name="RideTracker" getComponent={() => require('./screens/RideTracker/RideTrackerScreen').default} />
+        <Stack.Screen name="RideLog" getComponent={() => require('./screens/RideTracker/RideLogScreen').default} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="RideHistory" getComponent={() => require('./screens/RideTracker/RideHistoryScreen').default} />
+        <Stack.Screen name="RideStats" getComponent={() => require('./screens/RideTracker/RideStatsScreen').default} />
+        <Stack.Screen name="RideDetail" getComponent={() => require('./screens/RideTracker/RideDetailScreen').default} />
+        <Stack.Screen name="RideAchievements" getComponent={() => require('./screens/RideTracker/RideAchievementsScreen').default} />
+        <Stack.Screen name="RideWrapped" getComponent={() => require('./screens/RideTracker/RideWrappedScreen').default} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="RideCollections" getComponent={() => require('./screens/RideTracker/RideCollectionsScreen').default} />
+        <Stack.Screen name="RideWishlist" getComponent={() => require('./screens/RideTracker/RideWishlistScreen').default} />
+        <Stack.Screen name="RideOnboarding" getComponent={() => require('./screens/RideTracker/RideOnboardingScreen').default} options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="RideBatchConfirm" getComponent={() => require('./screens/RideTracker/RideBatchConfirmScreen').default}
           initialParams={isRideBatchPreview ? { detections: [
             { id: 'det_preview_1', rideId: 10, rideName: 'Space Mountain', rideType: 'coaster', parkId: 2,
               enteredAt: Date.now() - 600000, exitedAt: Date.now(), dwellTimeMs: 600000,
@@ -324,7 +285,7 @@ export default function App() {
         ))}
         <Stack.Screen
           name="BananaBasket"
-          component={BananaBasketScreen}
+          getComponent={() => require('./screens/BananaBasketScreen').default}
           options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
 

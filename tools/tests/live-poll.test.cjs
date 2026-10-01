@@ -148,3 +148,11 @@ test('entry screens left under the map stop their video and loops', () => {
   const welcome = read('src/screens/WelcomeScreen.tsx');
   assert.match(welcome, /if \(!focused \|\| reduced\) return;/);
 });
+
+test('only the launch path loads with the app; other screens load on first visit', () => {
+  const root = read('src/Root.tsx');
+  const eager = [...root.matchAll(/^import (\w+) from '\.\/screens\/[^']+';$/gm)].map(m => m[1]).sort();
+  assert.deepEqual(eager, ['ExploreScreen', 'LoadingScreen', 'LoginScreen', 'SplashScreen', 'WelcomeScreen']);
+  assert.match(root, /name="LinePlay"\s*getComponent=\{\(\) => require\('\.\/screens\/LinePlay\/LinePlayScreen'\)\.default\}/);
+  assert.ok((root.match(/getComponent=\{\(\) => require\(/g) ?? []).length >= 40);
+});
