@@ -54,8 +54,9 @@ function Pop({ on, children, size }: { on: boolean; children: React.ReactNode; s
 }
 
 export const QuestHud = React.memo(function QuestHud({ h, walkingChip, onTideHold }: {
-  h: HudState; walkingChip: boolean; onTideHold?: (on: boolean) => void;
+  h: HudState; walkingChip?: boolean; onTideHold?: (on: boolean) => void;
 }) {
+  void walkingChip;
   const ripple = useSharedValue(1);
   useEffect(() => {
     if (h.ripCount > 0) ripple.value = withSequence(withTiming(1.3, { duration: 120 }), withSpring(1, POP));
@@ -130,7 +131,6 @@ export const QuestHud = React.memo(function QuestHud({ h, walkingChip, onTideHol
             <Text style={[styles.tideNext, h.movesToTurn === 1 && styles.tideNextHot]}>{h.movesToTurn}</Text>
           </Pressable>
         ) : null}
-        {walkingChip ? <View style={styles.moving}><Text style={styles.movingTxt}>Line moving</Text></View> : null}
       </View>
     </View>
   );

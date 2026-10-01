@@ -13,13 +13,13 @@
  * board itself changes.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Canvas, Circle, Group, Image, ImageShader, Oval, Paint, Path, Points, Rect, RoundedRect, Shader, Skia, Text,
   Vertices, BlurMask, ColorMatrix, vec,
   type SkFont, type SkImage, type SkPoint,
 } from '@shopify/react-native-skia';
-import { useDerivedValue, useFrameCallback, type SharedValue } from 'react-native-reanimated';
+import { useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { cellsOf, currentDir, heightOf, MAX_H, type Board } from './rules';
 import {
   evalShark, meshIndices, meshTextures, meshVertices, newFrame,
@@ -835,13 +835,13 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   const bannerFill = useDerivedValue(() => (sv.banner.value.kind === 1 ? CQ.coral : sv.banner.value.kind === 2 ? '#ffffff' : CQ.gold));
   const bannerOpacity = useDerivedValue(() => (bannerK.value > 0.01 ? 1 : 0));
 
-  const desatMatrix = useMemo(() => {
-    const s = 0.7;
-    const lr = 0.2126 * (1 - s);
-    const lg = 0.7152 * (1 - s);
-    const lb = 0.0722 * (1 - s);
-    return [lr + s, lg, lb, 0, 0, lr, lg + s, lb, 0, 0, lr, lg, lb + s, 0, 0, 0, 0, 0, 1, 0];
-  }, []);
+  // Run failed (Trial): 30% desaturation through a saturation-blend overlay, never darkened.
+  // Kept structurally stable (opacity only): toggling a layer on this tree mid-draw crashes Skia.
+  const desatK = useSharedValue(0);
+  useEffect(() => { desatK.value = withTiming(desaturate ? 0.3 : 0, { duration: 300 }); }, [desaturate, desatK]);
+  const ambientOn = useSharedValue(lite || reducedMotion ? 0 : 1);
+  useEffect(() => { ambientOn.value = lite || reducedMotion ? 0 : 1; }, [lite, reducedMotion, ambientOn]);
+  const gullAlpha = useDerivedValue(() => 0.08 * ambientOn.value);
 
   const redTint = useMemo(() => [0.6, 0.3, 0.1, 0, 0.45, 0.2, 0.3, 0.1, 0, 0.05, 0.2, 0.2, 0.2, 0, 0.02, 0, 0, 0, 1, 0], []);
 
@@ -971,7 +971,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
 
   return (
     <Canvas style={{ width: l.cw, height: l.ch }} pointerEvents="none">
-      <Group layer={desaturate ? <Paint><ColorMatrix matrix={desatMatrix} /></Paint> : undefined}>
+      <Group>
         {/* Soft lagoon pool around the island (the backdrop shows beyond it). */}
         <RoundedRect rect={poolGlow} color="rgba(143,227,250,0.55)">
           <BlurMask blur={8} style="normal" />
@@ -984,15 +984,13 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
         <RoundedRect rect={poolRect} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} />
 
         {/* Ambient: fish shadows glide under the water, a gull shadow crosses now and then. */}
-        {!lite && !reducedMotion ? (
-          <Group>
-            {fishLanes.map((_, i) => (
-              <Path key={`fish${i}`} path={fishPaths[i]} color="#0b6f99" opacity={fishAlpha[i]}>
-                <BlurMask blur={3} style="normal" />
-              </Path>
-            ))}
-          </Group>
-        ) : null}
+        <Group opacity={ambientOn}>
+          {fishLanes.map((_, i) => (
+            <Path key={`fish${i}`} path={fishPaths[i]} color="#0b6f99" opacity={fishAlpha[i]}>
+              <BlurMask blur={3} style="normal" />
+            </Path>
+          ))}
+        </Group>
 
         <Group transform={riseTransform} opacity={riseOpacity}>
           {/* Island rim with its front face; the waterline on the face is the tide read. */}
@@ -1160,11 +1158,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
         <InkStrip pts={sweepPts} alpha={sweepAlpha} color="#ffffff" head={7} tail={7} taperIn={0.05} />
         <InkStrip pts={tourRingPts} alpha={tourRingAlpha} color={CQ.gold} head={6} tail={2} taperIn={0.05} />
 
-        {!lite && !reducedMotion ? (
-          <Path path={gullPath} color="#0b6f99" opacity={0.08}>
-            <BlurMask blur={4} style="normal" />
-          </Path>
-        ) : null}
+        <Path path={gullPath} color="#0b6f99" opacity={gullAlpha}>
+          <BlurMask blur={4} style="normal" />
+        </Path>
 
         {/* Banners. */}
         {font ? (
@@ -1173,6 +1169,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
             <Text text={bannerText} x={bannerX} y={bannerY + 14} font={font} color={bannerFill} />
           </Group>
         ) : null}
+        <RoundedRect rect={poolRect} color="#808080" blendMode="saturation" opacity={desatK} />
       </Group>
     </Canvas>
   );

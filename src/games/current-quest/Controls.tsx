@@ -214,11 +214,16 @@ export const BottomBar = React.memo(function BottomBar(p: BarProps) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Walk-safe arrow pad: four big buttons in one thumb row (left, up, down,
+ * right) so a tall 5x7 board keeps its 60 pt cells. Press previews, release
+ * on the same button commits; sliding off cancels.
+ */
 export function ArrowPad({ big, onArm, onCommit, onDisarm, disabled }: {
   big: boolean; disabled: boolean; onArm: (dir: number) => void; onCommit: (dir: number) => void; onDisarm: () => void;
 }) {
-  const s = big ? 70 : 64;
-  const btn = (dir: number, rot: number, style: object) => (
+  const h = big ? 60 : 56;
+  const btn = (dir: number, rot: number) => (
     <Pressable
       key={`a${dir}`}
       disabled={disabled}
@@ -227,17 +232,18 @@ export function ArrowPad({ big, onArm, onCommit, onDisarm, disabled }: {
       onPressIn={() => onArm(dir)}
       onPressOut={onDisarm}
       onPress={() => onCommit(dir)}
-      style={({ pressed }) => [styles.arrow, { width: s, height: s, borderRadius: 18 }, style, pressed && styles.arrowPressed]}
+      hitSlop={4}
+      style={({ pressed }) => [styles.arrow, { height: h, borderRadius: 16, flex: 1 }, pressed && styles.arrowPressed]}
     >
-      <View style={{ transform: [{ rotate: `${rot}deg` }] }}><GameIcon name="arrow" size={s * 0.5} /></View>
+      <View style={{ transform: [{ rotate: `${rot}deg` }] }}><GameIcon name="arrow" size={h * 0.5} /></View>
     </Pressable>
   );
   return (
-    <View style={{ width: s * 3 + 8, height: s * 2 + 4 }}>
-      {btn(0, -90, { position: 'absolute', left: s + 4, top: 0 })}
-      {btn(3, 180, { position: 'absolute', left: 0, top: s + 4 - s / 2 })}
-      {btn(2, 90, { position: 'absolute', left: s + 4, top: s + 4 })}
-      {btn(1, 0, { position: 'absolute', left: 2 * s + 8, top: s + 4 - s / 2 })}
+    <View style={styles.arrowRow}>
+      {btn(3, 180)}
+      {btn(0, -90)}
+      {btn(2, 90)}
+      {btn(1, 0)}
     </View>
   );
 }
@@ -325,6 +331,7 @@ const styles = StyleSheet.create({
   flip: { transform: [{ scaleX: -1 }] },
   rotUp: { transform: [{ rotate: '-90deg' }] },
   arrow: { backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: CQ.ink, alignItems: 'center', justifyContent: 'center' },
+  arrowRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, alignSelf: 'stretch' },
   arrowPressed: { backgroundColor: '#fff3c2', transform: [{ scale: 0.94 }] },
   stall: {
     position: 'absolute', left: 14, right: 14, bottom: 8, borderRadius: 18, padding: 14, backgroundColor: CQ.cream,

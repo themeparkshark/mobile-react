@@ -177,7 +177,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const layoutFor = useCallback((rows: number): BoardLayout | null => {
     if (!field) return null;
     const rail = showdown ? 46 : ghost ? 42 : 0;
-    const reserved = 58 + 36 + rail + (walking ? 106 : 98) + (arrows ? 148 : 0) + 6;
+    const reserved = 58 + 36 + rail + (walking ? 106 : 98) + (arrows ? (walking ? 68 : 64) : 0) + 6;
     return boardLayout(field.w, field.h - reserved, rows);
   }, [field, arrows, walking, showdown, ghost]);
   const layout = useMemo(() => layoutFor(rowsNow), [layoutFor, rowsNow]);
@@ -1502,13 +1502,18 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     return () => { stop = true; clearTimeout(t); };
   }, [visible, lite, reducedMotion, burst]);
 
-  // ---- dev autoplay (studio capture only): plays with previews, one mistake + undo, then the gold route.
-  const autoplay = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_CQ_AUTOPLAY === '1';
-  const autoMistake = useRef<Record<number, boolean>>({});
+  // ---- dev autoplay (studio capture only). EXPO_PUBLIC_CQ_AUTOPLAY=1: a clean run with one slip undo.
+  // =2: the "rough day" tour: slip undo, burn strokes into a stall (card, wrong-turn X, first-stroke
+  // footprint), recover (Puzzle Restart / Trial ring), a Tide Tip, then the gold route.
+  const autoMode = typeof __DEV__ !== 'undefined' && __DEV__ ? process.env.EXPO_PUBLIC_CQ_AUTOPLAY ?? '0' : '0';
+  // =3: lose on purpose (Trial: burn every ring) to exercise the run-failed whirlpool.
+  const autoplay = autoMode === '1' || autoMode === '2' || autoMode === '3';
+  const auto = useRef<{ slip: boolean; stalled: boolean; tipped: boolean; recovered: boolean }>({ slip: false, stalled: false, tipped: false, recovered: false });
   const autoNext = useRef(0);
   useEffect(() => {
     if (!autoplay || !visible) return undefined;
     let stop = false;
+    auto.current = { slip: false, stalled: false, tipped: false, recovered: false };
     const tick = () => {
       if (stop) return;
       const run = runRef.current;
@@ -1516,22 +1521,60 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       if (run && playing.current && !finishing.current && Date.now() > busyUntil.current + 250 && Date.now() > autoNext.current) {
         const b = currentBoard(run);
         const v = run.voyage;
+        const st = auto.current;
         let a: number | undefined;
-        let mistake = false;
-        if (v.stalled) a = trial ? A_CONTINUE : A_UNDO;
-        else if (run.index === 0 && !autoMistake.current[0] && v.strokes === 1) {
-          // One wrong turn, felt and undone at once (a slip: Par is kept).
-          const good = hintFrom(b, v, 1, Infinity)[0];
-          for (let d = 0; d < 4; d++) if (d !== good && previewFor(run, d).valid) { a = d; break; }
-          autoMistake.current[0] = true;
-          mistake = true;
-          if (a !== undefined) { later(1100, () => commitRef.current(A_UNDO)); }
-        } else a = hintFrom(b, v, 1, Infinity)[0];
+        let hold = 600;
+        let gap = 1100;
+        const good = () => hintFrom(b, v, 1, autoMode === '1' ? Infinity : strokesLeft(run))[0];
+        const wrong = () => { const g = good(); for (let d = 0; d < 4; d++) if (d !== g && previewFor(run, d).valid) return d; return undefined; };
+        if (autoMode === '3') {
+          a = v.stalled ? A_CONTINUE : (wrong() ?? good());
+          gap = 700;
+        } else if (v.stalled) {
+          st.stalled = true;
+          if (!st.recovered) { st.recovered = true; autoNext.current = Date.now() + 2600; setTimeout(tick, 300); return; }
+          a = trial ? A_CONTINUE : A_RESTART;
+          gap = 1400;
+        } else if (run.index === 0 && !st.slip && v.strokes === 1) {
+          // One wrong turn, undone at once: a slip (Par kept).
+          a = wrong();
+          st.slip = true;
+          if (a !== undefined) later(1050, () => commitRef.current(A_UNDO));
+          gap = 1800;
+        } else if (autoMode === '2' && run.index === 1 && !st.stalled && v.strokes >= 1
+          && strokesLeft(run) - distanceFrom(b, v, false) >= 0) {
+          // Wander, but never more than one stroke past saving: the stall lands as a near miss.
+          const left0 = strokesLeft(run);
+          let pick: number | undefined;
+          let best = Infinity;
+          for (let d = 0; d < 4; d++) {
+            const pv = previewFor(run, d);
+            if (!pv.valid || pv.clears) continue;
+            const sim = simulateStroke(b, v.pos, v.mask, v.golden, tideAt(b.P, v.moves, v.phase), d);
+            const nd = distanceFrom(b, { pos: sim.pos, mask: sim.mask, golden: sim.golden, moves: v.moves + 1, phase: v.phase }, false);
+            const slack = left0 - 1 - nd;
+            if (slack >= -1 && slack < best) { best = slack; pick = d; }
+          }
+          a = pick ?? good();
+          hold = 260;
+          gap = 560;
+        } else if (autoMode === '2' && !st.tipped && tipAllowed(run) && v.strokes === 0
+          && ((trial && run.index === 2) || (!trial && run.index === 1 && st.recovered))) {
+          st.tipped = true;
+          later(50, () => commitRef.current(A_TIP));
+          autoNext.current = Date.now() + 2600;
+          setTimeout(tick, 300);
+          return;
+        } else {
+          a = good();
+          // Linger on previews that carry far, so the path icons and RIPTIDE! read on video.
+          if (a !== undefined && a <= 4 && previewFor(run, a).carried >= 2) hold = 1000;
+        }
         if (a !== undefined) {
           const act = a;
           if (act <= 4) { s.armed.value = act; onAim(act); }
-          setTimeout(() => { s.armed.value = -1; commitRef.current(act); }, act <= 4 ? 600 : 50);
-          autoNext.current = Date.now() + (mistake ? 1700 : 1100);
+          setTimeout(() => { s.armed.value = -1; commitRef.current(act); }, act <= 4 ? hold : 50);
+          autoNext.current = Date.now() + gap;
         }
       }
       setTimeout(tick, 300);
@@ -1708,8 +1751,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
           {hud ? <QuestHud h={hud} walkingChip={walking} onTideHold={onTideHold} /> : <View style={{ height: 58 }} />}
           {showdown && racers.length ? <ShowdownRail racers={racers} remainingMs={sdRemaining} total={voyagesN} /> : null}
           {!showdown && ghost ? <GhostRail ghost={ghost} elapsedMs={elapsedNow} voyage={voyageIdx} cleared={run?.results.length ?? 0} total={voyagesN} /> : null}
-          <View style={styles.strokeRow}>
-            {limit > 0 && layout ? <StrokeBar limit={limit} spent={spent} par={par} hot={left <= 3 && left >= 0} width={layout.cw} /> : null}
+          <View style={[styles.strokeRow, walking && { paddingLeft: 96 }]}>
+            {walking ? (
+              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(300)} style={styles.moving} pointerEvents="none">
+                <Text style={styles.movingTxt}>Line moving</Text>
+              </Animated.View>
+            ) : null}
+            {limit > 0 && layout ? <StrokeBar limit={limit} spent={spent} par={par} hot={left <= 3 && left >= 0} width={layout.cw - (walking ? 96 : 0)} /> : null}
             {smallChip ? (
               <Animated.View key={smallChip.key} entering={FadeIn.duration(100)} exiting={FadeOut} style={[styles.smallChip, smallChip.tone === 'coral' ? styles.smallChipCoral : styles.smallChipWhite]} pointerEvents="none">
                 <Text style={[styles.smallChipTxt, smallChip.tone === 'coral' && styles.smallChipTxtCoral]}>{smallChip.text}</Text>
@@ -1749,6 +1797,11 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
                       <Text style={styles.splitTxt}>{splitChip.text}</Text>
                     </Animated.View>
                   ) : null}
+                  {toast ? (
+                    <Animated.View key={toast.key} entering={FadeIn.duration(120)} exiting={FadeOut} style={styles.toast} pointerEvents="none">
+                      <Text style={styles.toastTxt}>{toast.text}</Text>
+                    </Animated.View>
+                  ) : null}
                   {stall && run ? (
                     <StallCard trial={trial} rings={run.rings} nearMiss={stall.nearMiss} hintShown={stall.hint} wrongTurn={stall.wrong}
                       onUndo={onUndo} onRestart={onRestart} onContinue={onContinue} />
@@ -1757,11 +1810,6 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
               </GestureDetector>
             ) : <View style={{ height: 300 }} />}
           </View>
-          {toast ? (
-            <Animated.View key={toast.key} entering={FadeIn.duration(120)} exiting={FadeOut} style={styles.toast} pointerEvents="none">
-              <Text style={styles.toastTxt}>{toast.text}</Text>
-            </Animated.View>
-          ) : null}
           {arrows ? (
             <View style={styles.arrowArea}>
               <ArrowPad big={walking} disabled={!!stall || !!result} onArm={onArrowArm} onDisarm={onArrowDisarm} onCommit={commit} />
@@ -1819,8 +1867,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   boardArea: { alignItems: 'center', justifyContent: 'center', paddingBottom: 4, flex: 1 },
   fx: { position: 'absolute', left: 0, top: 0 },
-  arrowArea: { alignItems: 'center', paddingBottom: 4 },
+  arrowArea: { alignItems: 'stretch', paddingBottom: 4 },
   strokeRow: { height: 34, alignItems: 'center', justifyContent: 'center' },
+  // Walking is a state, not a pause (17): a quiet chip, input stays live.
+  moving: { position: 'absolute', left: 8, top: 6, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 9, backgroundColor: CQ.water, borderWidth: 1.5, borderColor: CQ.ink },
+  movingTxt: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff' },
   smallChip: { position: 'absolute', right: 10, top: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1.5, borderColor: CQ.ink },
   smallChipCoral: { backgroundColor: CQ.coral },
   smallChipWhite: { backgroundColor: '#ffffff' },
@@ -1848,7 +1899,7 @@ const styles = StyleSheet.create({
   splitBad: { backgroundColor: '#fff3c2' },
   splitTxt: { fontFamily: 'Knockout', fontSize: 13, color: CQ.navy },
   toast: {
-    position: 'absolute', alignSelf: 'center', bottom: 104, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.95)',
+    position: 'absolute', alignSelf: 'center', top: 40, maxWidth: '90%', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 2, borderColor: CQ.ink,
   },
   toastTxt: { fontFamily: 'Knockout', fontSize: 14, color: CQ.navy },
