@@ -15,12 +15,21 @@ const STORAGE_KEY = 'lineplay_active_background_session_v1';
 const MAX_SESSION_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_SAMPLE_AGE_MS = 90_000;
 const MIN_SEND_GAP_MS = 20_000;
+/**
+ * A guest who walked away from the line without ending LinePlay is far from
+ * the ride on every sample. Stop the background task after this long instead of
+ * posting a rejected heartbeat every 20 s for up to three hours (a tester's
+ * abandoned Autopia session did exactly that all evening).
+ */
+export const MAX_AWAY_MS = 20 * 60 * 1000;
 
 interface ActiveQueueSession {
   sessionId: string;
   playerId: number;
   startedAt: number;
   lastSentAt: number;
+  /** First far-from-the-ride answer in the current away streak. */
+  awaySince?: number | null;
 }
 
 let operation: Promise<unknown> = Promise.resolve();
@@ -155,11 +164,27 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
         await stopTask();
         return;
       }
+      if (active.awaySince) {
+        active.awaySince = null;
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
+      }
     } catch (requestError) {
-      const status = (requestError as { response?: { status?: number } })?.response?.status;
+      const response = (requestError as { response?: { status?: number; data?: { code?: string } } })?.response;
+      const status = response?.status;
       if (status === 401 || status === 404) {
         await AsyncStorage.removeItem(STORAGE_KEY);
         await stopTask();
+        return;
+      }
+      if (status === 422 && response?.data?.code === 'NOT_NEAR_RIDE') {
+        const awaySince = active.awaySince ?? now;
+        if (now - awaySince >= MAX_AWAY_MS) {
+          await AsyncStorage.removeItem(STORAGE_KEY);
+          await stopTask();
+          return;
+        }
+        active.awaySince = awaySince;
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
       }
       // A rejected/far sample or network outage earns no time. Retry only
       // when the OS supplies another recent location.

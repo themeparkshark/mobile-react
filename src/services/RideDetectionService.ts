@@ -39,6 +39,16 @@ const AMBIGUOUS_DISTANCE_MARGIN = 15;
 export const DWELL_SUGGESTION_MS = 90_000;
 /** Rides with a real queue to play in (no shows, walk-throughs or transport). */
 const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
+/**
+ * iOS sends no fixes while a guest stands still (the watcher has a distance
+ * filter), so a slow indoor queue can go minutes without a sample. The queue
+ * area stays current this long after the last fix that placed the guest in it.
+ */
+export const QUEUE_DWELL_STALE_MS = 5 * 60_000;
+/** Each fix keeps this share of a ride's closeness score, so the latest ride leads quickly. */
+const QUEUE_SCORE_DECAY = 0.8;
+
+interface QueueCandidate { ride: RideType; since: number; score: number }
 
 function isDetectionCandidate(ride: RideType): boolean {
   return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
@@ -114,6 +124,14 @@ function calculateConfidence(
 
 class RideDetectionService {
   private zoneStates: Map<number, ZoneState> = new Map();
+  /**
+   * The "In line at X? Play" suggestion, tracked apart from ride logging.
+   * Ride logging follows one zone until a real exit; the queue card follows the
+   * ride the guest is closest to now. Disneyland's Buzz Lightyear Astro Blasters
+   * sits 28 m from Star Tours and 37 m from Astro Orbitor, so the first zone a
+   * guest walked through used to keep the card on the wrong ride (or none).
+   */
+  private queueArea: { lastSeenAt: number; candidates: Map<number, QueueCandidate> } | null = null;
   private rides: RideType[] = [];
   private running = false;
   private lifecycleToken = 0;
@@ -255,6 +273,7 @@ class RideDetectionService {
     // Stopping/reloading is not evidence that a guest left or rode an attraction.
     // Already queued detections remain intact; unfinished zones are discarded.
     this.zoneStates.clear();
+    this.queueArea = null;
 
     // Stop background location
     try {
@@ -273,6 +292,7 @@ class RideDetectionService {
     const now = Date.now();
     const nearbyRides = this.findNearbyRides(lat, lng);
     const nearbyIds = new Set(nearbyRides.map(r => r.id));
+    this.trackQueueArea(lat, lng, nearbyRides, now);
 
     // Check for zone exits
     for (const [rideId, state] of Array.from(this.zoneStates.entries())) {
@@ -331,6 +351,27 @@ class RideDetectionService {
         });
       }
     }
+  }
+
+  private trackQueueArea(lat: number, lng: number, nearbyRides: RideType[], now: number): void {
+    const queueRides = nearbyRides.filter(ride => QUEUE_TYPES.has(ride.type))
+      .map(ride => ({ ride, distance: haversineDistance(lat, lng, ride.lat!, ride.lng!) }))
+      .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
+    if (queueRides.length === 0) { this.queueArea = null; return; }
+    if (!this.queueArea || now - this.queueArea.lastSeenAt > QUEUE_DWELL_STALE_MS) {
+      this.queueArea = { lastSeenAt: now, candidates: new Map() };
+    }
+    const area = this.queueArea;
+    area.lastSeenAt = now;
+    const inside = new Set(queueRides.map(entry => entry.ride.id));
+    for (const [rideId, candidate] of Array.from(area.candidates.entries())) {
+      if (!inside.has(rideId)) area.candidates.delete(rideId);
+      else candidate.score *= QUEUE_SCORE_DECAY;
+    }
+    for (const { ride } of queueRides) {
+      if (!area.candidates.has(ride.id)) area.candidates.set(ride.id, { ride, since: now, score: 0 });
+    }
+    area.candidates.get(queueRides[0].ride.id)!.score += 1;
   }
 
   private findNearbyRides(lat: number, lng: number): RideType[] {
@@ -432,13 +473,17 @@ class RideDetectionService {
    * now (the map's "In line at X? Play" card). Read-only; null when none.
    */
   currentDwell(minMs = DWELL_SUGGESTION_MS, now = Date.now()): { rideId: number; rideName: string; parkId: number; dwellMs: number } | null {
-    for (const state of this.zoneStates.values()) {
-      const dwellMs = now - state.enteredAt;
-      if (dwellMs >= minMs && QUEUE_TYPES.has(state.rideType) && now - state.lastSeenAt < 60_000) {
-        return { rideId: state.rideId, rideName: state.rideName, parkId: state.parkId, dwellMs };
-      }
+    const area = this.queueArea;
+    if (!area || now - area.lastSeenAt > QUEUE_DWELL_STALE_MS) return null;
+    let leader: QueueCandidate | null = null;
+    for (const candidate of area.candidates.values()) {
+      if (!leader || candidate.score > leader.score ||
+          (candidate.score === leader.score && candidate.since < leader.since)) leader = candidate;
     }
-    return null;
+    if (!leader) return null;
+    const dwellMs = now - leader.since;
+    if (dwellMs < minMs) return null;
+    return { rideId: leader.ride.id, rideName: leader.ride.name, parkId: leader.ride.park_id, dwellMs };
   }
 
   isRunning(): boolean {
