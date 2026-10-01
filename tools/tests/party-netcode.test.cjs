@@ -601,7 +601,7 @@ test('a 10-streak Splash is POSTed at once; AttackIncoming for me lands in my lo
   c.destroy();
 });
 
-test('during a round the heartbeat carries my live score once a second (the server aims Splashes by it)', async () => {
+test('during a round the heartbeat carries my live score every 3 s, and the whole client stays under 60 calls a minute', async () => {
   const w = world();
   const http = fakeHttp(w);
   const socket = fakeSocket();
@@ -615,8 +615,12 @@ test('during a round the heartbeat carries my live score once a second (the serv
   const before = http.calls.filter(([, u]) => u.endsWith('/heartbeat')).length;
   await w.advance(5000);
   const beats = http.calls.filter(([, u]) => u.endsWith('/heartbeat')).slice(before);
-  assert.ok(beats.length >= 4 && beats.length <= 6, `${beats.length} heartbeats in 5 s`);
+  assert.ok(beats.length >= 1 && beats.length <= 2, `${beats.length} heartbeats in 5 s`);
   assert.ok(beats.every(([, , body]) => typeof body.live_score === 'number'));
+  // API budget: the general limit is 60 a minute per player, LinePlay's own calls included.
+  const t0 = http.calls.length;
+  await w.advance(10000);
+  assert.ok(http.calls.length - t0 <= 6, `${http.calls.length - t0} calls in 10 s with the socket live`);
   // Outside a round it drops back to every 10 s.
   await w.advance(sim.ROUND_MS);
   http.setRoom(snapshot({ version: 9, status: 'results', round_no: 1, round: { ...round, status: 'finalized', results: [] } }));

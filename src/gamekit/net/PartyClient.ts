@@ -132,10 +132,18 @@ export interface LocalRound {
 }
 
 export const HEARTBEAT_MS = 10000;
-/** During a round the heartbeat carries my live score once a second: the server aims Splashes by it. */
-export const ROUND_HEARTBEAT_MS = 1000;
+/**
+ * During a round the heartbeat carries my live score every 3 s: the server
+ * aims Splashes by it. Every call counts against the API's general 60 per
+ * minute per player, so the round budget is heartbeats (20/min) plus polls,
+ * and a heartbeat's snapshot stands in for a poll.
+ */
+export const ROUND_HEARTBEAT_MS = 3000;
 export const POLL_LIVE_MS = 5000;
-export const POLL_FALLBACK_MS = 1000;
+/** Socket down: poll at 1.25 s (48/min) so the room still moves inside the 60/min API limit. */
+export const POLL_FALLBACK_MS = 1250;
+/** The loops wake this often and decide what is due. */
+const LOOP_MS = 250;
 export const WHISPER_MS = 250;
 /** A board may start at most this late and still play a full round. */
 export const MAX_LATE_START_MS = 12000;
@@ -673,15 +681,18 @@ export class PartyClient {
   };
 
   private lastBeatAt = 0;
+  /** Last time any request brought back a room snapshot (a heartbeat counts as a poll). */
+  private lastSyncAt = 0;
 
   private heartbeat = (): void => {
     const room = this.state.room;
     if (!room || this.destroyed) return;
     const r = this.local;
     const inRound = !!r && !r.ended && this.state.phase === 'playing';
-    // Outside a round the 10 s cadence is enough; inside one, once a second.
-    if (!inRound && this.now() - this.lastBeatAt < HEARTBEAT_MS - 50) return;
+    // Outside a round every 10 s; inside one every 3 s with my live score.
+    if (this.now() - this.lastBeatAt < (inRound ? ROUND_HEARTBEAT_MS : HEARTBEAT_MS) - 50) return;
     this.lastBeatAt = this.now();
+    this.lastSyncAt = this.now();
     const sim = r ? partySim(r.game) : null;
     const liveScore = r && sim && r.board && inRound ? sim.resolve(r.board, r.taps).score : undefined;
     this.opts.http.post<{ room: RoomSnapshot }>(`/party/rooms/${room.id}/heartbeat`, liveScore !== undefined ? { live_score: liveScore } : {})
@@ -702,13 +713,17 @@ export class PartyClient {
       };
       this.loopTimers.push(this.setTimer(tick, ms()));
     };
-    loop(this.heartbeat, () => ROUND_HEARTBEAT_MS);
-    loop(this.pollIfNeeded, () => (this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS));
+    loop(this.heartbeat, () => LOOP_MS);
+    loop(this.pollIfNeeded, () => LOOP_MS);
   }
 
-  /** Safety poll: every second without a socket, every five with one. */
+  /** Safety poll: every 1.25 s without a socket, every 5 s with one; any fresh snapshot resets the wait. */
   private pollIfNeeded = (): void => {
-    if (this.state.room) this.refresh();
+    if (!this.state.room) return;
+    const every = this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS;
+    if (this.now() - this.lastSyncAt < every - 50) return;
+    this.lastSyncAt = this.now();
+    this.refresh();
   };
 
   /**
