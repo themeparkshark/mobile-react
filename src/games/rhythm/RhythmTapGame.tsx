@@ -36,6 +36,8 @@ import {
   GameAudio,
   GameShellV2,
   Haptic,
+  PerfOverlay,
+  usePerfProbe,
   deriveRunSeed,
   drainEvents,
   forEachEvent,
@@ -120,6 +122,8 @@ const DEV_STAGE = (__DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_STAGE : undefined) a
 const DEV_DIFF = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_DIFF || 0) : 0;
 // Dev only: start from empty progress (First Parade, callouts) without touching saved data.
 const DEV_FRESH = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_FRESH === '1';
+// Dev only: the engine's frame-time overlay (UI fps, p5, p95).
+const DEV_PERF = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_PERF === '1';
 
 export interface RhythmTapGameProps {
   visible: boolean;
@@ -230,6 +234,7 @@ const THUD_VOL = 0.42;
 export function RhythmTapGame(props: RhythmTapGameProps) {
   const { visible, seed: roundSeed, onComplete, onClose, onQuit } = props;
   const reducedMotion = useReducedGameMotion();
+  const perfProbe = usePerfProbe(DEV_PERF);
   const shellRef = useRef<GameShellV2Handle>(null);
   const baseSeed = useMemo(() => (roundSeed ?? (Math.floor(Math.random() * 0xffffffff) ^ Date.now())) >>> 0, [roundSeed]);
   const [runIndex, setRunIndex] = useState(0);
@@ -1164,6 +1169,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
             onPress={launchFromMeter}
             style={styles.meterTap}
           />
+          {DEV_PERF ? <PerfOverlay probe={perfProbe} visible style={styles.perf} /> : null}
           {!ready ? (
             <View pointerEvents="none" style={styles.loading}>
               <Text style={styles.loadingTxt}>The parade is lining up...</Text>
@@ -1247,6 +1253,7 @@ const styles = StyleSheet.create({
   marchTxt: { fontFamily: 'Shark', fontSize: 15, color: '#0b3a6b' },
   marchTxtLive: { color: '#0b3a6b' },
   marchHint: { fontFamily: 'Knockout', fontSize: 11, color: '#1f6fc0' },
+  perf: { position: 'absolute', right: 8, bottom: 8 },
   meterTap: { position: 'absolute', right: 6, top: 34, width: 64, height: 64, borderRadius: 32 },
   rivalStrip: { position: 'absolute', top: 46, left: 64, right: 64, flexDirection: 'row', justifyContent: 'center' },
   rivalChip: { backgroundColor: 'rgba(255,248,228,0.92)', borderWidth: 2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginHorizontal: 3, alignItems: 'center', minWidth: 64 },
