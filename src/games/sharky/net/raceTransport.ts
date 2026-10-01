@@ -1,12 +1,12 @@
 /**
- * Sprint Race transport (design 10.1 / 10.4).
+ * Rally transport (design v7.1 11.1 / 11.3; file name kept from the Sprint Race).
  *
  * One interface, two wires:
  *   - LabRaceTransport: a plain WebSocket to tools/sharky/lab-race-server.cjs
  *     (dev lab, two simulators). Same room/round/results semantics as Line
  *     Party, so the UI and the sim path are identical.
  *   - Production: Line Party (Laravel + Reverb) once the backend registers the
- *     'sharky_race' game (change request in studio/sharky/NOTES.md). The
+ *     'sharky_rally' game (change request in studio/sharky/NOTES.md). The
  *     PartyClient game adapter plugs in behind this same interface.
  *
  * Nothing here pauses anyone: whispers are display-only (10 Hz), results come
@@ -50,6 +50,7 @@ export interface RaceResult {
   finished: boolean;
   finishStep: number;
   score: number;
+  closeSkims?: number;
   placement: number;
   points: number;
   verified: boolean;
@@ -64,6 +65,16 @@ export interface RaceWhisper {
   d: number;
   y: number;
   f: number;
+  /** Live score and crowd (display only; results come from replays). */
+  score: number;
+  crowd: number;
+}
+
+/** A server-stamped Bubble Gift arriving for this player (design 11.3). */
+export interface RaceGift {
+  eventId: number;
+  from: number;
+  fromName: string;
 }
 
 export interface RaceState {
@@ -84,9 +95,12 @@ export interface RaceTransport {
   readonly state: RaceState;
   subscribe(cb: (s: RaceState) => void): () => void;
   onWhisper(cb: (w: RaceWhisper) => void): () => void;
+  onGift(cb: (g: RaceGift) => void): () => void;
   join(rideId: number, name: string): void;
   ready(): void;
-  whisper(step: number, d: number, y: number, f: number): void;
+  whisper(step: number, d: number, y: number, f: number, score?: number, crowd?: number): void;
+  /** Your Overdrive started: the server puffs a gift to the rival behind you. */
+  gift(): void;
   submit(roundId: string, proof: unknown): void;
   background(on: boolean): void;
   emote(id: string): void;
@@ -134,6 +148,7 @@ export class LabRaceTransport implements RaceTransport {
   private ws: WsLike | null = null;
   private subs = new Set<(s: RaceState) => void>();
   private wsubs = new Set<(w: RaceWhisper) => void>();
+  private gsubs = new Set<(g: RaceGift) => void>();
   private pings: Array<{ c0: number; s: number; c1: number }> = [];
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
@@ -151,6 +166,11 @@ export class LabRaceTransport implements RaceTransport {
   onWhisper(cb: (w: RaceWhisper) => void): () => void {
     this.wsubs.add(cb);
     return () => this.wsubs.delete(cb);
+  }
+
+  onGift(cb: (g: RaceGift) => void): () => void {
+    this.gsubs.add(cb);
+    return () => this.gsubs.delete(cb);
   }
 
   private set(patch: Partial<RaceState>): void {
@@ -224,7 +244,10 @@ export class LabRaceTransport implements RaceTransport {
         });
         break;
       case 'w':
-        this.wsubs.forEach((cb) => cb({ seat: m.seat, step: m.step, d: m.d, y: m.y, f: m.f }));
+        this.wsubs.forEach((cb) => cb({ seat: m.seat, step: m.step, d: m.d, y: m.y, f: m.f, score: m.score | 0, crowd: m.crowd | 0 }));
+        break;
+      case 'gift':
+        this.gsubs.forEach((cb) => cb({ eventId: m.eventId | 0, from: m.from | 0, fromName: String(m.fromName || '') }));
         break;
       case 'entry':
         this.set({ entryVerdict: m.verdict });
@@ -241,8 +264,12 @@ export class LabRaceTransport implements RaceTransport {
     this.send({ t: 'ready' });
   }
 
-  whisper(step: number, d: number, y: number, f: number): void {
-    this.send({ t: 'w', step, d, y, f });
+  whisper(step: number, d: number, y: number, f: number, score = 0, crowd = 0): void {
+    this.send({ t: 'w', step, d, y, f, score, crowd });
+  }
+
+  gift(): void {
+    this.send({ t: 'gift' });
   }
 
   submit(roundId: string, proof: unknown): void {

@@ -1,94 +1,133 @@
 /**
- * SharkySwim: "Tide Run", the one-thumb underwater theme-park runner.
+ * SharkySwim: "Tide Run" (design v7.1), the one-thumb underwater theme-park runner.
  *
- * Hold anywhere to swim up, let go to sink. Skim the coaster pylons, chomp the
- * prize boxes, chain the golden rings into a Frenzy, beat the tide to each
- * gate, then look up while your shark cruises the Tide Pocket. Walk-safe:
- * line movement never pauses (the shell plays through); letting go wraps the
- * shark in a Bubble Float instead of crashing.
+ * Hold anywhere to swim up, let go to sink; let go entirely and the shark
+ * settles to mid-depth. Graze hazards inside their white halo to build one
+ * chain that floats behind the shark; Close Skims and Perfect rings count
+ * double and fire Overdrive once the dorsal fin glows gold. Each Tide Gate
+ * cashes the chain (Gate Bonus) and adds a flat +4s; Frenzy is x1.5 and banks
+ * at once. A hit costs a heart and a Coin Scatter you can win back. Runs last
+ * 30-60 seconds; line movement never pauses (QUEUE REALITY).
  *
  * Everything that matters runs in the deterministic integer sim (sim/core.ts)
  * on the UI thread; the same file is the server verifier, so ghosts replay
  * exactly and results are server-authoritative (swim proof in meta).
  *
  * External contract (unchanged): onComplete(multiplier, meta), onClose().
+ * The game never renders `taskName`: the header shows a themed course label.
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from '../../context/AuthProvider';
 import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { runOnUI } from 'react-native-reanimated';
-import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
+import Animated, { runOnUI, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+import { GameShellV2, type GameResult, type GameShellV2Handle, type ShellResultsArgs } from '../../gamekit/GameShellV2';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
+import { CAMERA_PRESETS } from '../../gamekit/core/camera';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { registerStudioAudio, useStudioAudio } from '../../gamekit/audio/studioLibrary';
-import { useGameMusic } from '../../gamekit/audio/useGameMusic';
+import { configureHaptics } from '../../gamekit/Haptics';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { usePerfProbe, PerfOverlay } from '../../gamekit/perf/PerfOverlay';
 import { usePerfTier } from '../../gamekit/perf/usePerfTier';
 import { starsFor } from '../../gamekit/core/scoring';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
-  END_FINISH, END_GATE, END_TIME, G_TIDE, EXT_PAUSE_RESUME, EXT_REVIVE, IN_DASH, IN_PRESS, IN_RELEASE,
-  MODE_GHOST, MODE_PRACTICE, MODE_QUEUE, MODE_RACE, MODE_RIDE, decodeInputs, encodeInputs, hash2, multiplier, replay,
-  type InputEntry, type SimConfig, type SimState,
+  END_FINISH, END_GATE, END_TIME, EXT_BUBBLE_GIFT, EXT_PAUSE_RESUME, EXT_REVIVE, G_TIDE,
+  IN_PRESS, IN_RELEASE, MODE_GHOST, MODE_PRACTICE, MODE_QUEUE, MODE_RALLY, MODE_RIDE, chainTier, decodeInputs,
+  encodeInputs, hash2, multiplier, replay, timedMode,
+  type SimConfig, type SimState,
 } from './sim/core';
 import { buildSwimProof } from './sim/verify';
 import { BOT_PROFILES, planRun } from './sim/bots';
 import { useSharkyEngine, type RivalSpec } from './useSharkyEngine';
-import { raceConfig } from './sim/race';
-import { useSprintRace } from './net/useSprintRace';
-import { RaceCountIn, RaceLobby, RacePodium } from './hud/RaceOverlays';
+import { RALLY_HOUSE_CREW, RALLY_MAX_STEPS, rallyConfig } from './sim/rally';
+import { useRally } from './net/useRally';
+import { RallyCountIn, RallyLobby, RallyPodium } from './hud/RallyOverlays';
+import { SharkyResults, type SharkyResultsData } from './hud/SharkyResults';
 import { SharkyCanvas } from './render/SharkyCanvas';
 import { SharkyHud } from './render/SharkyHud';
 import { sharkyLayout, type SharkyLayout } from './render/view';
+import { INK, NEUTRAL, REWARD } from './render/palette';
 import { createSharkyFeel } from './sharkyFeel';
-import { applyRun, missionTarget, missionText, type MissionUpdate } from './meta/missions';
+import { registerSharkyAudio, sharkyBed, useSharkyMusic, type SharkyMusicState } from './audio/sharkyAudio';
+import { applyRun, type MissionUpdate } from './meta/missions';
 import {
   EMPTY_PROGRESS, loadProgress, ratedDifficulty, saveProgress, unlockCard, unlockTier,
   type GhostRecord, type SharkyProgress,
 } from './meta/progress';
 
 registerStudioAudio('sharky');
+registerSharkyAudio();
 
-export type SharkyMode = 'queue' | 'ride' | 'race' | 'ghost' | 'practice';
+export type SharkyMode = 'queue' | 'ride' | 'rally' | 'ghost' | 'practice';
 export type Difficulty = 1 | 2 | 3;
 
 export interface SharkySwimProps {
   visible: boolean;
-  /** 1-3. When omitted, a local rating from recent stars is used (design 5.6). */
+  /** 1-3. When omitted, a local rating from recent stars is used (design 5.9). */
   difficulty?: Difficulty;
   /** Deterministic seed (server attempt seed or LinePlay item seed). */
   seed?: number;
-  /** queue (LinePlay, default), ride (Ride Challenge), race, ghost, practice. */
-  mode?: SharkyMode;
+  /** queue (LinePlay, default), ride (Ride Challenge), rally, ghost, practice. 'race' is accepted as 'rally'. */
+  mode?: SharkyMode | 'race';
+  /** Kept for the selector's API; never rendered (design 5.10: no real ride names in game UI). */
   taskName?: string;
   rideId?: number;
-  /** Live Sprint Race server (lab: ws://localhost:8413). Without it, races run against the house crew offline. */
+  /** Ride category for the themed course label (coaster, water, dark, spinner, family). */
+  rideCategory?: string;
+  /** Live Rally server (lab: ws://localhost:8413). Without it, rallies run against labeled ghost seats. */
   raceUrl?: string;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
 }
 
-const MODE_ID: Record<SharkyMode, number> = { queue: MODE_QUEUE, ride: MODE_RIDE, race: MODE_RACE, ghost: MODE_GHOST, practice: MODE_PRACTICE };
-const QUEUE_STARS = { one: 900, two: 2400, three: 5000 };
-const RACE_NAMES = ['Captain Fin', 'Bubbles', 'Coral'];
-const RIVAL_COLORS = ['#ffffff', '#ffe27a', '#bff3ff'];
-const RIVAL_PROFILES = ['ace', 'regular', 'rookie'];
+const MODE_ID: Record<SharkyMode, number> = { queue: MODE_QUEUE, ride: MODE_RIDE, rally: MODE_RALLY, ghost: MODE_GHOST, practice: MODE_PRACTICE };
+/** Queue stars from the starting-value bot spread (regular p50 about 7k, ace about 14k). */
+const QUEUE_STARS = { one: 2500, two: 6000, three: 11000 };
+const RIDE_STARS = { one: 1, two: 4000, three: 7000 };
+const RIVAL_COLORS = [NEUTRAL, '#ffe27a', '#bff3ff'];
+
+/** Themed course label (design 5.10): never the ride's real name. */
+export function courseLabel(category?: string): string {
+  switch ((category ?? '').toLowerCase()) {
+    case 'coaster': return 'Coaster Course';
+    case 'water': case 'water ride': return 'Splash Course';
+    case 'dark': case 'dark ride': return 'Lantern Course';
+    case 'spinner': return 'Twirl Course';
+    case 'family': case 'family train': return 'Station Course';
+    default: return 'Lagoon Course';
+  }
+}
 
 function rideStars(s: SimState): number {
   if (s.endReason !== END_GATE || s.hearts < 1) return 0;
-  if (s.tokens >= 3 && s.score >= 3300) return 3;
-  if (s.score >= 1800) return 2;
+  if (s.tokens >= 3 && s.score >= RIDE_STARS.three) return 3;
+  if (s.score >= RIDE_STARS.two) return 2;
   return 1;
 }
 
+/** The closest goal you missed (Geometry Dash / Clash Royale near-miss line). */
+function nearMissLine(s: SimState, mode: number, best: number, stars: number): string {
+  if (mode === MODE_RIDE && s.endReason !== END_GATE) {
+    const pct = Math.min(99, Math.floor((100 * ((s.dist >> 8) - 0)) / Math.max(1, s.gateX || 15000)));
+    return `${pct}% to the gate`;
+  }
+  if (best > s.score && best - s.score < 0.12 * best) return `Only ${best - s.score} from your best`;
+  if (mode !== MODE_RIDE && stars < 3) {
+    const next = stars === 0 ? QUEUE_STARS.one : stars === 1 ? QUEUE_STARS.two : QUEUE_STARS.three;
+    return `Only ${Math.max(1, next - s.score)} from ${stars + 1} star${stars === 0 ? '' : 's'}`;
+  }
+  return '';
+}
+
 export function SharkySwim({
-  visible, difficulty, seed, mode = 'queue', taskName, rideId, raceUrl, onComplete, onClose, onQuit,
+  visible, difficulty, seed, mode: modeProp = 'queue', rideId, rideCategory, raceUrl, onComplete, onClose, onQuit,
 }: SharkySwimProps) {
+  const mode: SharkyMode = modeProp === 'race' ? 'rally' : modeProp;
   const auth = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
   const shell = useRef<GameShellV2Handle>(null);
@@ -97,45 +136,46 @@ export function SharkySwim({
   const layoutRef = useRef<SharkyLayout>(sharkyLayout(390, 700));
   const [progress, setProgress] = useState<SharkyProgress | null>(null);
   const [runIdx, setRunIdx] = useState(0);
-  // Dev lab: EXPO_PUBLIC_SHARKY_MODE=race|ghost|ride opens that mode directly.
-  const devMode = (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_MODE : undefined) as SharkyMode | undefined;
-  const [runMode, setRunMode] = useState<SharkyMode>(devMode ?? mode);
+  const devMode = (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_MODE : undefined) as SharkyMode | 'race' | undefined;
+  const [runMode, setRunMode] = useState<SharkyMode>(devMode === 'race' ? 'rally' : devMode ?? mode);
   const [ghost, setGhost] = useState<GhostRecord | null>(null);
   const [score, setScore] = useState(0);
   const [fever, setFever] = useState(false);
+  const [overdrive, setOverdrive] = useState(false);
+  const [floating, setFloating] = useState(false);
+  const [inPocket, setInPocket] = useState(false);
+  const [deep, setDeep] = useState(false);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [resultsData, setResultsData] = useState<SharkyResultsData | null>(null);
   const [reviveOffer, setReviveOffer] = useState(false);
   const [frozen, setFrozen] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
   const [gates, setGates] = useState(0);
-  const [newCard, setNewCard] = useState<string | null>(null);
   const [missionView, setMissionView] = useState<MissionUpdate | null>(null);
   const startedAt = useRef(0);
-  const pausedMs = useRef(0);
   const endedRef = useRef(false);
+  const deepSince = useRef(0);
   const perf = usePerfProbe(visible && !result);
-  // Quality tier (full / lite / min): picked from the first second of real
-  // frames, then only steps down. Lite drops the caustic shader and halves FX;
-  // min also drops the far reef, god rays and the near strip.
   const perfTier = usePerfTier({ active: visible && !result });
   const qualityRef = useRef(0);
   qualityRef.current = perfTier.tierJs;
-  // Dev captures: EXPO_PUBLIC_SHARKY_QUALITY=0|1|2 pins the tier (simulator Debug
-  // frame times are not device frame times).
   const pinQuality = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_QUALITY : undefined;
   useEffect(() => {
     if (pinQuality !== undefined && pinQuality !== '') perfTier.force(Number(pinQuality));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinQuality]);
+  useEffect(() => {
+    configureHaptics('sharky');
+    return () => configureHaptics('default');
+  }, []);
 
-  // --- live Sprint Race (Line Party semantics; lab transport in dev) ----------------
+  // --- live Rally (Line Party semantics; lab transport in dev) ---------------------
   const liveUrl = raceUrl ?? (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_RACE_URL : undefined) ?? null;
-  const liveRace = runMode === 'race' && !!liveUrl;
+  const liveRally = runMode === 'rally' && !!liveUrl;
   const playerName = (__DEV__ && process.env.EXPO_PUBLIC_SHARKY_NAME) || auth?.player?.username || 'Shark';
-  const race = useSprintRace(liveRace ? liveUrl : null, rideId ?? 1, playerName);
-  const round = liveRace ? race.state.round : null;
-  const [raceGo, setRaceGo] = useState(false);
-  const [raceDone, setRaceDone] = useState(false);
+  const rally = useRally(liveRally ? liveUrl : null, rideId ?? 1, playerName);
+  const round = liveRally ? rally.state.round : null;
+  const [rallyGo, setRallyGo] = useState(false);
+  const [rallyDone, setRallyDone] = useState(false);
   const seatToSlot = useRef<Record<number, number>>({});
   const slotNames = useRef<string[]>([]);
 
@@ -150,10 +190,11 @@ export function SharkySwim({
   // --- run config ---------------------------------------------------------------
   const prog = progress ?? EMPTY_PROGRESS;
   const cfg = useMemo<SimConfig>(() => {
-    if (round) return raceConfig(round.seed);
+    if (round) return rallyConfig(round.seed);
     const m = MODE_ID[runMode];
-    const base = (seed ?? 20260930) >>> 0;
+    const base = (seed ?? 20261001) >>> 0;
     const runSeed = ghost ? ghost.seed : runIdx === 0 ? base : hash2(base, runIdx) >>> 0;
+    if (m === MODE_RALLY) return rallyConfig(runSeed | 0);
     return {
       seed: runSeed | 0,
       mode: m,
@@ -162,96 +203,117 @@ export function SharkySwim({
       runs: ghost ? ghost.runs : prog.runs,
     };
   }, [runMode, seed, runIdx, ghost, difficulty, prog, round]);
-
-  // Reset only when the run itself changes (not when saved progress re-creates cfg).
   const cfgKey = `${cfg.seed}:${cfg.mode}:${cfg.difficulty}:${cfg.tier}:${cfg.runs}:${runIdx}:${ghost ? ghost.at : 0}`;
 
   // --- engine ---------------------------------------------------------------------
   const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
-  // Dev: AUTOPLAY=1 runs the lookahead planner bot, AUTOPLAY=2 a cheap line-follower (perf captures).
   const autoplay = __DEV__ && (process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
   const autoCheap = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2';
   const autoSalt = autoplay ? ((process.env.EXPO_PUBLIC_SHARKY_NAME ?? '').length % 5) : 0;
-  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt, autoCheap);
+  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt, autoCheap, reducedMotion);
   const walk = useWalkSense({ active: visible && !result });
   const L = layout ?? layoutRef.current;
-  const camera = useCamera({ width: L.w, height: L.h, timeScale: engine.clock.fxScale, reducedMotion, walking: walk.walking });
+  const camera = useCamera({ width: L.w, height: L.h, timeScale: engine.clock.fxScale, reducedMotion, walking: walk.walking, config: CAMERA_PRESETS.sharky });
+
+  // HUD shared state: the rolling score, the split chip, the postcard.
+  const shownScore = useSharedValue(0);
+  const split = useSharedValue({ delta: 0, at: -9999, label: '' });
+  const postcard = useSharedValue({ title: '', at: -9999, until: -9999 });
+  const ghostSplits = useRef<number[]>([]);
+  const mySplits = useRef<number[]>([]);
 
   const finish = useCallback((reason: number) => {
     if (endedRef.current) return;
     endedRef.current = true;
-    // Read the final state by replaying the JS log (exact, and proof-grade).
     const entries = engine.log.current.slice();
     setTimeout(() => {
-      {
-        const s = replay(cfg, entries, 60 * 60 * 20);
-        const elapsed = Date.now() - startedAt.current;
-        const proof = buildSwimProof(cfg, entries, s, elapsed);
-        const m = cfg.mode;
-        const stars = m === MODE_RIDE ? rideStars(s) : m === MODE_RACE ? (s.endReason === END_FINISH ? 1 : 0) : starsFor(s.score, QUEUE_STARS);
-        const before = prog.runs;
-        const next: SharkyProgress = {
-          ...prog,
-          runs: before + 1,
-          best: { ...prog.best },
-          recentStars: [...prog.recentStars, stars].slice(-5),
-          ghosts: { ...prog.ghosts },
-          rideTokens: { ...prog.rideTokens },
+      const s = replay(cfg, entries, 60 * 60 * 20);
+      const elapsed = Date.now() - startedAt.current;
+      const proof = buildSwimProof(cfg, entries, s, elapsed);
+      const m = cfg.mode;
+      const stars = m === MODE_RIDE ? rideStars(s) : m === MODE_RALLY ? (s.endReason === END_FINISH ? 1 : 0) : starsFor(s.score, QUEUE_STARS);
+      const before = prog.runs;
+      const key = runMode;
+      const best = prog.best[key] ?? 0;
+      const isBest = s.score > best;
+      const next: SharkyProgress = {
+        ...prog,
+        runs: m === MODE_RALLY ? before : before + 1,
+        best: { ...prog.best },
+        recentStars: [...prog.recentStars, stars].slice(-5),
+        ghosts: { ...prog.ghosts },
+        rideTokens: { ...prog.rideTokens },
+      };
+      if (isBest) next.best[key] = s.score;
+      if (isBest || !prog.ghosts[key]) {
+        next.ghosts[key] = {
+          seed: cfg.seed, mode: cfg.mode, tier: cfg.tier, difficulty: cfg.difficulty, runs: cfg.runs,
+          score: s.score, finishStep: s.finishStep || s.step, inputs: encodeInputs(entries), name: 'Your best', at: Date.now(),
+          splits: s.splitScores.slice(0, Math.max(1, s.gates)),
         };
-        const key = runMode;
-        const isBest = s.score > (prog.best[key] ?? 0);
-        if (isBest) next.best[key] = s.score;
-        if (m !== MODE_RACE && (isBest || !prog.ghosts[key])) {
-          next.ghosts[key] = {
-            seed: cfg.seed, mode: cfg.mode, tier: cfg.tier, difficulty: cfg.difficulty, runs: cfg.runs,
-            score: s.score, finishStep: s.finishStep || s.step, inputs: encodeInputs(entries), name: 'Your best', at: Date.now(),
-          };
-        }
-        if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
-        // Missions from run 3 (design 5.5), local with a rank bar until WS7 pays out.
-        if (before >= 3 && m !== MODE_RIDE) {
-          const mu = applyRun(prog.missions, prog.rank, prog.rankCount ?? 0, cfg.tier, {
-            skims: s.stSkims, perfects: s.stPerfects, frenzies: s.stFrenzies, tokens: s.tokens, chomps: s.stChomps,
-            score: s.score, gates: s.gates, coins: s.stCoins, dashes: s.stDashes, hits: s.stHits,
-          }, cfg.seed);
-          next.missions = mu.missions.filter((x) => !x.done);
-          next.rank = mu.rank;
-          next.rankCount = mu.rankCount;
-          setMissionView(mu);
-        } else {
-          setMissionView(null);
-        }
-        setNewCard(m === MODE_QUEUE ? unlockCard(before, before + 1) : null);
-        setProgress(next);
-        void saveProgress(next);
-        if (liveRace && round && race.transport) {
-          // Server-authoritative: the room replays this proof; the podium waits for it.
-          race.transport.submit(round.roundId, proof);
-          setRaceDone(true);
-          return;
-        }
-        const res: GameResult = {
-          score: s.score,
-          stars,
-          message: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
-          maxCombo: s.maxChain,
-          thresholds: m === MODE_RIDE ? { one: 1, two: 1800, three: 3300 } : QUEUE_STARS,
-          stats: [
-            { label: 'SKIMS', value: `${s.stSkims}` },
-            { label: 'PERFECT', value: `${s.stPerfects}` },
-            { label: 'TOKENS', value: `${s.tokens}/3` },
-            { label: 'CHOMPS', value: `${s.stChomps}` },
-          ],
-          meta: {
-            game: 'shark', score: s.score, seed: cfg.seed, mode: runMode, stars, reason,
-            maxCombo: s.maxChain, tokens: s.tokens, hearts: s.hearts, distance: s.dist >> 8,
-            duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
-          },
-        };
-        setResult(res);
       }
-    }, reason === END_TIME || reason === END_GATE || reason === END_FINISH ? 900 : 300);
-  }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf, liveRace, round, race.transport]);
+      if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
+      let mu: (MissionUpdate & { rankCount: number }) | null = null;
+      if (before >= 3 && m !== MODE_RIDE && m !== MODE_RALLY) {
+        mu = applyRun(prog.missions, prog.rank, prog.rankCount ?? 0, cfg.tier, {
+          skims: s.stSkims, closeSkims: s.stCloseSkims, perfects: s.stPerfects, frenzies: s.stFrenzies, tokens: s.tokens,
+          chomps: s.stChomps, score: s.score, gates: s.gates, coins: s.stCoins, overdrives: s.stOverdrives, hits: s.stHits,
+        }, cfg.seed);
+        next.missions = mu.missions.filter((x) => !x.done);
+        next.rank = mu.rank;
+        next.rankCount = mu.rankCount;
+      }
+      setMissionView(mu);
+      const card = m === MODE_QUEUE ? unlockCard(before, before + 1) : null;
+      setProgress(next);
+      void saveProgress(next);
+      if (liveRally && round && rally.transport) {
+        // Server-authoritative: the room replays this proof; the podium waits for it.
+        rally.transport.submit(round.roundId, proof);
+        setRallyDone(true);
+        return;
+      }
+      const ghostSp = ghostSplits.current;
+      const splits = s.splitScores.slice(0, s.gates).map((v, i) => (ghostSp[i] !== undefined ? v - ghostSp[i] : 0)).filter((_, i) => ghostSp[i] !== undefined);
+      setResultsData({
+        score: s.score,
+        stars,
+        won: m === MODE_RIDE ? stars > 0 : true,
+        wipeout: s.hearts <= 0,
+        newBest: isBest && best > 0,
+        bestChainMult: Math.min(4, Math.floor(Math.min(s.maxChain, 9) / 3) + 1),
+        closeSkims: s.stCloseSkims,
+        nearMiss: nearMissLine(s, m, best, stars),
+        splits,
+        missions: mu,
+        newCard: card,
+        tokensAtRide: rideId != null ? next.rideTokens[String(rideId)] % 9 || (next.rideTokens[String(rideId)] ? 9 : 0) : null,
+        fullClear: s.tokens >= 3,
+        headline: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
+      });
+      setResult({
+        score: s.score,
+        stars,
+        message: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
+        maxCombo: s.maxChain,
+        thresholds: m === MODE_RIDE ? RIDE_STARS : QUEUE_STARS,
+        meta: {
+          game: 'shark', score: s.score, seed: cfg.seed, mode: runMode, stars, reason,
+          maxCombo: s.maxChain, closeSkims: s.stCloseSkims, tokens: s.tokens, hearts: s.hearts, distance: s.dist >> 8,
+          duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
+        },
+      });
+    }, reason === END_TIME || reason === END_GATE || reason === END_FINISH ? 1100 : 450);
+  }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf, liveRally, round, rally.transport]);
+
+  const scoreAt = useCallback(() => ({ x: 40, y: Math.max(6, Math.min(12, layoutRef.current.skyH * 0.05)) + 20 }), []);
+  const pipAt = useCallback((slot: number) => {
+    const Lr = layoutRef.current;
+    const barW = Math.min(170, Lr.w * 0.42);
+    return { x: Lr.w / 2 + barW / 2 - 18 - slot * 22, y: Math.max(6, Math.min(12, Lr.skyH * 0.05)) + 19 };
+  }, []);
+  const gatesRef = useRef(0);
+  gatesRef.current = gates;
 
   feelRef.current = useMemo(() => createSharkyFeel({
     fx,
@@ -259,21 +321,56 @@ export function SharkySwim({
     clock: engine.clock,
     layout: () => layoutRef.current,
     calm: reducedMotion,
-    tier: () => cfg.tier,
+    rally: () => cfg.mode === MODE_RALLY,
+    gates: () => gatesRef.current,
     quality: () => qualityRef.current,
     hooks: {
-      onScore: (sc) => setScore(sc),
-      onGate: (_bonus, kind, _step, g) => {
-        if (kind !== G_TIDE) return;
-        setGates(g);
-        setBanner(`SPRINT ${g + 1}`);
-        setTimeout(() => setBanner(null), 1800);
+      onScore: (sc) => {
+        setScore(sc);
+        runOnUI((v: number) => {
+          'worklet';
+          shownScore.value = withTiming(v, { duration: v < shownScore.value ? 260 : 200, easing: Easing.out(Easing.quad) });
+        })(sc);
       },
-      onPocketEnd: () => setBanner(null),
+      onGate: (_bonus, kind, _step, g) => {
+        if (kind === G_TIDE) {
+          setGates(g);
+          setInPocket(true);
+        }
+      },
+      onGateBonus: () => {
+        // Split vs your ghost / best at this gate (score at the gate, design 7.10).
+        const s = engine.sim.value;
+        const gi = Math.max(0, s.gates - 1);
+        mySplits.current[gi] = s.score;
+        const gv = ghostSplits.current[gi];
+        const fxNow = engine.pres.value.fx;
+        if (gv !== undefined) {
+          const delta = s.score - gv;
+          split.value = { delta, at: fxNow, label: `${delta >= 0 ? '+' : '-'}${Math.abs(delta)}` };
+        } else if (cfg.mode === MODE_RIDE) {
+          const need = RIDE_STARS.two - s.score;
+          split.value = { delta: -need, at: fxNow, label: need > 0 ? `2 STARS -${need}` : `2 STARS +${-need}` };
+        } else if (timedMode(cfg.mode)) {
+          const next = s.score < QUEUE_STARS.one ? QUEUE_STARS.one : s.score < QUEUE_STARS.two ? QUEUE_STARS.two : QUEUE_STARS.three;
+          if (s.score < next) split.value = { delta: 1, at: fxNow, label: `NEXT STAR +${next - s.score}` };
+        }
+        if (s.phase === 1 && s.pocketLen > 48) {
+          const titles = ['Shipwreck Coaster', 'Storm Surge', 'Final Stretch'];
+          postcard.value = { title: titles[Math.min(2, gi)], at: fxNow + 150, until: fxNow + (s.pocketLen * 1000) / 60 - 100 };
+        }
+      },
+      onPocketEnd: () => setInPocket(false),
       onFrenzy: (on) => setFever(on),
+      onOverdrive: (on) => {
+        setOverdrive(on);
+        // Live Rally: your Overdrive puffs a Bubble Gift to the rival behind you.
+        if (on && liveRally && rally.transport) rally.transport.gift();
+      },
+      onFloat: (on) => setFloating(on),
       onFreeze: (on) => setFrozen(on),
       onWipeout: () => {
-        if ((cfg.mode === MODE_QUEUE || cfg.mode === MODE_GHOST || cfg.mode === MODE_PRACTICE)) {
+        if (timedMode(cfg.mode)) {
           setTimeout(() => setReviveOffer(true), 900);
           if (autoplay) setTimeout(() => engine.ext(EXT_REVIVE, 1), 1800);
         }
@@ -287,65 +384,77 @@ export function SharkySwim({
       onRivalDone: () => undefined,
       onCam: (du, y, step) => {
         const t = Date.now();
-        if (liveRace && race.transport && raceGo && t - lastWhisper.current >= 100) {
+        if (liveRally && rally.transport && rallyGo && t - lastWhisper.current >= 100) {
           lastWhisper.current = t;
-          race.transport.whisper(step, du, y, 0);
+          const s = engine.sim.value;
+          rally.transport.whisper(step, du, y, 0, s.score, s.crowd);
         }
-        myDist.current = du;
-      },
-      onRivalPos: (slot, d, _y, step) => {
-        const ahead = myDist.current > d;
-        const was = rivalAhead.current[slot];
-        rivalAhead.current[slot] = ahead;
-        if (ahead && was === false && step > 90) {
-          const L = layoutRef.current;
-          GameAudio.play(GameAudio.hasCue('sk_pass_whoosh') ? 'sk_pass_whoosh' : 'fx.whoosh');
-          fx.current?.flyUp(`PASSED ${slotNames.current[slot] ?? ''}`.trim(), L.w / 2, L.skyH + 60, { size: 'lg', color: '#ffffff', key: 'pass' });
+        // Muffled when the shark stays below y 700 for 300ms+ (design 8.5).
+        if (y > 700) {
+          if (!deepSince.current) deepSince.current = t;
+          if (t - deepSince.current > 300 && !deepRef.current) setDeep(true);
+        } else {
+          deepSince.current = 0;
+          if (deepRef.current) setDeep(false);
         }
       },
+      onRivalPos: () => undefined,
       onSprint: () => undefined,
       onGateNear: () => undefined,
+      scoreAt,
+      pipAt,
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [camera, engine.clock, reducedMotion, cfg, finish, liveRace, race.transport, raceGo]);
+  }), [camera, engine.clock, reducedMotion, cfg, finish, liveRally, rally.transport, rallyGo]);
   const lastWhisper = useRef(0);
-  const myDist = useRef(0);
-  const rivalAhead = useRef<Record<number, boolean>>({});
+  const deepRef = useRef(false);
+  deepRef.current = deep;
 
-  // Reset the sim for every run (rematch, ghost race, sprint race).
+  // Reset the sim for every run (rematch, ghost, rally).
   const [rivalNames, setRivalNames] = useState<string[]>([]);
   useEffect(() => {
     if (!progress) return;
     endedRef.current = false;
     setScore(0);
     setFever(false);
+    setOverdrive(false);
+    setFloating(false);
+    setInPocket(false);
     setGates(0);
     setReviveOffer(false);
     setFrozen(false);
+    runOnUI(() => {
+      'worklet';
+      shownScore.value = 0;
+    })();
     let rv: Array<RivalSpec | null> = [];
     const names: string[] = [];
-    rivalAhead.current = {};
+    mySplits.current = [];
+    ghostSplits.current = [];
     if (round) {
-      // Live race: bots replay the room's planned logs; humans arrive as whispers.
+      // Live rally: ghost seats replay the room's planned logs; humans arrive as whispers.
       seatToSlot.current = {};
       round.seats.filter((st) => st.seat !== round.you).slice(0, 3).forEach((st, j) => {
         seatToSlot.current[st.seat] = j;
-        names.push(st.name);
-        rv.push(st.kind === 'bot' && st.inputs ? { cfg: raceConfig(round.seed), log: decodeInputs(st.inputs) } : { remote: true });
+        names.push(st.kind === 'bot' ? `GHOST ${st.name}` : st.name);
+        rv.push(st.kind === 'bot' && st.inputs ? { cfg: rallyConfig(round.seed), log: decodeInputs(st.inputs) } : { remote: true });
       });
-      setRaceGo(false);
-      setRaceDone(false);
+      setRallyGo(false);
+      setRallyDone(false);
     } else if (ghost) {
       rv = [{ cfg: { seed: ghost.seed, mode: ghost.mode, difficulty: ghost.difficulty, tier: ghost.tier, runs: ghost.runs }, log: decodeInputs(ghost.inputs) }];
-      names.push(ghost.name);
-    } else if (cfg.mode === MODE_RACE && !liveRace) {
-      // House-crew racers: planned once here, then replayed in lockstep.
-      rv = RIVAL_PROFILES.map((p, j) => {
-        const bc = { ...cfg };
-        const plan = planRun(bc, BOT_PROFILES[p], hash2(cfg.seed, j + 11), 2400);
-        names.push(RACE_NAMES[j]);
-        return { cfg: bc, log: plan.log };
+      names.push(`GHOST ${ghost.name}`);
+      ghostSplits.current = ghost.splits ?? [];
+    } else if (cfg.mode === MODE_RALLY) {
+      // Ghost Rally (async): labeled ghost seats planned once, then replayed in lockstep.
+      rv = RALLY_HOUSE_CREW.slice(0, 3).map((c, j) => {
+        const plan = planRun({ ...cfg }, BOT_PROFILES[c.profile], hash2(cfg.seed, j + 101), RALLY_MAX_STEPS);
+        names.push(`GHOST ${c.name}`);
+        return { cfg: { ...cfg }, log: plan.log };
       });
+    } else {
+      // Splits against your best on this mode (score at each gate).
+      ghostSplits.current = prog.ghosts[runMode]?.splits ?? [];
     }
     setRivalNames(names);
     slotNames.current = names;
@@ -353,23 +462,29 @@ export function SharkySwim({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfgKey, progress == null, round?.roundId]);
 
-  // Live rivals: 10 Hz display whispers, interpolated on the UI thread.
+  // Live rivals: 10 Hz display whispers (with live scores), interpolated on the UI thread.
   useEffect(() => {
-    if (!race.transport) return undefined;
+    if (!rally.transport) return undefined;
     const last: Record<number, { d: number; at: number }> = {};
-    return race.transport.onWhisper((w) => {
+    const offW = rally.transport.onWhisper((w) => {
       const slot = seatToSlot.current[w.seat];
       if (slot === undefined) return;
       const prev = last[w.seat];
       const t = Date.now();
       const vel = prev && t > prev.at ? ((w.d - prev.d) * 1000) / (t - prev.at) : 0;
       last[w.seat] = { d: w.d, at: t };
-      engine.remote(slot, w.d, w.y, Math.max(0, Math.min(1000, vel)));
+      engine.remote(slot, w.d, w.y, Math.max(0, Math.min(1000, vel)), w.score, w.crowd);
     });
-  }, [race.transport, engine]);
+    // A server-stamped Bubble Gift: the sim places a 5-coin line in your lane.
+    const offG = rally.transport.onGift((g) => engine.ext(EXT_BUBBLE_GIFT, g.eventId));
+    return () => {
+      offW();
+      offG();
+    };
+  }, [rally.transport, engine]);
 
-  const onRaceGo = useCallback(() => {
-    setRaceGo(true);
+  const onRallyGo = useCallback(() => {
+    setRallyGo(true);
     startedAt.current = Date.now();
     engine.clock.resume();
     engine.setRunning(true);
@@ -380,55 +495,30 @@ export function SharkySwim({
     void GameAudio.init();
     return undefined;
   }, [visible]);
-  useStudioAudio('sharky', ['sk_ring', 'sk_ring_perfect', 'sk_skim', 'sk_bump', 'sk_dash', 'sk_tide_gate', 'sh_chomp', 'coin_tick']);
+  useStudioAudio('sharky', ['sk_ring', 'sk_ring_perfect', 'sk_skim', 'sk_bump', 'sk_close_glint', 'sk_tide_gate', 'sh_chomp', 'sk_coin_k0', 'sk_graze']);
 
-  // Music: Chris's track-3 loop-edit; key rises each Tide Gate; Frenzy variant.
+  // Music (8.5): Chris's track-3 loop-edit; the key rises each Tide Gate;
+  // muffled in pockets, Float and deep water; lift in Frenzy and Overdrive.
   const key = gates >= 2 ? '_p4' : gates === 1 ? '_p2' : '';
-  const wanted = fever ? `sharky_frenzy_loop${key}` : `sharky_loop${key}`;
-  const bed = GameAudio.bed?.(wanted) ? wanted : GameAudio.bed?.('sharky_loop') ? 'sharky_loop' : 'chris.track3';
-  useGameMusic(visible && !result ? bed : null, { at: 'bar', fadeMs: 250 });
+  const state: SharkyMusicState = fever || overdrive ? 'lift' : inPocket || floating || frozen || deep ? 'muffled' : 'open';
+  const bed = sharkyBed(key, state, fever);
+  const prevKey = useRef(key);
+  const stateOnly = prevKey.current === key;
+  prevKey.current = key;
+  useSharkyMusic(visible && !result ? bed : null, stateOnly && !fever);
 
-  // --- input: one thumb; hold = swim, slide right or 2nd finger = Dash ------------
+  // --- input: one thumb, one verb (design 3.1): hold = swim up, release = sink ----
   const input = engine.input;
   const gesture = useMemo(() => Gesture.Manual()
     .onTouchesDown((e, mgr) => {
       'worklet';
       mgr.activate();
       const inp = input.value;
-      const t = e.allTouches[0];
       if (inp.fingers === 0) {
         inp.q.push(IN_PRESS, 0, 0);
         inp.holding = true;
-        inp.startX = t ? t.x : 0;
-        inp.startY = t ? t.y : 0;
-        inp.startT = Date.now();
-        inp.slideFired = false;
-      } else if (e.numberOfTouches >= 2) {
-        inp.q.push(IN_DASH, 0, 0);
       }
       inp.fingers = e.numberOfTouches;
-    })
-    .onTouchesMove((e) => {
-      'worklet';
-      const inp = input.value;
-      const t = e.allTouches[0];
-      if (!t || !inp.holding) return;
-      const now = Date.now();
-      if (now - inp.startT > 180) {
-        inp.startX = t.x;
-        inp.startY = t.y;
-        inp.startT = now;
-        inp.slideFired = false;
-      }
-      const dx = t.x - inp.startX;
-      const dy = t.y - inp.startY;
-      if (!inp.slideFired && dx >= 28 && dy < 36 && dy > -36) {
-        inp.q.push(IN_DASH, 0, 0);
-        inp.slideFired = true;
-        inp.startX = t.x;
-        inp.startY = t.y;
-        inp.startT = now;
-      }
     })
     .onTouchesUp((e, mgr) => {
       'worklet';
@@ -452,17 +542,15 @@ export function SharkySwim({
 
   // --- shell hooks -------------------------------------------------------------------
   const onStart = useCallback(() => {
-    if (liveRace) return; // the server's synced GO starts a live race
+    if (liveRally) return; // the server's synced GO starts a live rally
     startedAt.current = Date.now();
-    pausedMs.current = 0;
     engine.clock.resume();
     engine.setRunning(true);
-  }, [engine, liveRace]);
+  }, [engine, liveRally]);
 
   const onPause = useCallback(() => {
     engine.clock.pause();
-    race.transport?.background(true);
-    // A held finger is gone after a hold: release on the first step back.
+    rally.transport?.background(true);
     runOnUI(() => {
       'worklet';
       const inp = input.value;
@@ -470,40 +558,39 @@ export function SharkySwim({
       inp.holding = false;
       inp.fingers = 0;
     })();
-  }, [engine, input, race.transport]);
+  }, [engine, input, rally.transport]);
 
   const onResume = useCallback(() => {
-    race.transport?.background(false);
+    rally.transport?.background(false);
     engine.ext(EXT_PAUSE_RESUME, 0);
     engine.clock.resume();
-  }, [engine, race.transport]);
+  }, [engine, rally.transport]);
 
   const onRematch = useCallback(() => {
     setGhost(null);
     setRunMode(mode);
     setResult(null);
-    setNewCard(null);
+    setResultsData(null);
     setMissionView(null);
     setRunIdx((n) => n + 1);
   }, [mode]);
 
   const onChallenge = useCallback(() => {
-    // Race your best ghost on its identical course, or the house crew once races unlock.
+    // Ghost Rally: your best ghost on its exact course early, labeled ghost seats from unlock 3.
     const g = progress?.ghosts[mode] ?? null;
     setResult(null);
-    setNewCard(null);
+    setResultsData(null);
     if (g && (progress?.runs ?? 0) < 3) {
       setGhost(g);
       setRunMode('ghost');
     } else {
       setGhost(null);
-      setRunMode('race');
+      setRunMode('rally');
     }
     setRunIdx((n) => n + 1);
   }, [progress, mode]);
 
   const onWrapUp = useCallback(() => {
-    // "Your ride's up!": save what we have.
     const entries = engine.log.current.slice();
     const sc = score;
     return {
@@ -528,11 +615,25 @@ export function SharkySwim({
     setLayout(l);
   }, []);
 
-  const title = runMode === 'ride' ? 'Ride Challenge' : runMode === 'race' ? 'Sprint Race' : runMode === 'ghost' ? 'Ghost Race' : 'Sharky Swim';
+  const renderResults = useCallback((args: ShellResultsArgs) => {
+    if (!resultsData) return null;
+    return (
+      <SharkyResults
+        data={resultsData}
+        playAgain={args.rematch}
+        claim={args.claim}
+        claimLabel={runMode === 'ride' ? (args.won ? 'COLLECT' : 'CONTINUE') : 'DONE'}
+        challenge={args.challenge}
+        challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Rally a ghost'}
+        reducedMotion={args.reducedMotion}
+      />
+    );
+  }, [resultsData, runMode, prog.runs]);
+
+  const title = runMode === 'ride' ? 'Ride Challenge' : runMode === 'rally' ? 'Rally' : runMode === 'ghost' ? 'Ghost Rally' : 'Sharky Swim';
   const objective = runMode === 'ride'
     ? 'Reach the Ride Gate. Hold to swim up, let go to sink.'
-    : cfg.tier === 0 ? 'Hold anywhere to swim up. Let go to sink.' : 'Beat the tide to each gate. Chain rings into a FRENZY.';
-  const showBoost = cfg.tier >= 2 || cfg.mode === MODE_RACE;
+    : cfg.tier === 0 ? 'Hold anywhere to swim up. Let go to sink.' : 'Skim close past the sparkle halos to build your chain.';
 
   return (
     <GameShellV2
@@ -540,17 +641,20 @@ export function SharkySwim({
       ref={shell}
       visible={visible}
       title={title}
-      subtitle={taskName}
+      subtitle={courseLabel(rideCategory)}
       score={result?.score ?? score}
       multiplier={1}
       fever={fever}
+      hideHeaderScore
       personalBest={prog.best[runMode] ?? 0}
       objective={objective}
       result={result}
-      thresholds={cfg.mode === MODE_RIDE ? { one: 1, two: 1800, three: 3300 } : QUEUE_STARS}
+      thresholds={cfg.mode === MODE_RIDE ? RIDE_STARS : QUEUE_STARS}
       gameId="sharky"
       sessionKey={`sharky:${rideId ?? 0}:${cfg.seed}`}
       movementPolicy="playThrough"
+      countdownStyle={runIdx > 0 ? 'go' : 'full'}
+      countdownScrim="light"
       getSnapshot={getSnapshot}
       onWrapUp={onWrapUp}
       onStart={onStart}
@@ -561,23 +665,8 @@ export function SharkySwim({
       onQuit={onQuit}
       onRematch={runMode === 'ride' ? undefined : onRematch}
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
-      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Sprint race'}
-      resultsExtra={(newCard || missionView) && runMode !== 'ride' ? (
-        <View style={styles.extra}>
-          {newCard ? <Text style={styles.extraNew}>{newCard}</Text> : null}
-          {missionView ? (
-            <>
-              {missionView.missions.map((mm) => (
-                <View key={mm.id} style={styles.mRow}>
-                  <Text style={[styles.mText, mm.done && styles.mDone]} numberOfLines={1}>{missionText(mm.id)}</Text>
-                  <View style={styles.mTrack}><View style={[styles.mFill, { width: `${Math.round((100 * mm.progress) / missionTarget(mm.id))}%` }]} /></View>
-                </View>
-              ))}
-              <Text style={styles.mRank}>{missionView.rankedUp ? `RANK UP! Rank ${missionView.rank}` : `Rank ${missionView.rank}  ·  ${missionView.rankProgress}/3 to next`}</Text>
-            </>
-          ) : null}
-        </View>
-      ) : undefined}
+      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Rally a ghost'}
+      renderResults={renderResults}
     >
       <GestureHandlerRootView style={styles.fill}>
         <GestureDetector gesture={gesture}>
@@ -590,6 +679,7 @@ export function SharkySwim({
                     sim={engine.sim}
                     rivals={engine.rivals}
                     ambient={engine.ambient}
+                    pres={engine.pres}
                     tick={engine.tick}
                     alpha={engine.alpha}
                     rivalColors={RIVAL_COLORS}
@@ -597,25 +687,19 @@ export function SharkySwim({
                     quality={perfTier.tierJs}
                   />
                 </Animated.View>
-                <SharkyHud layout={layout} sim={engine.sim} rivals={engine.rivals} tick={engine.tick} showBoost={showBoost} boostHint={!prog.boostHintSeen} />
+                <SharkyHud layout={layout} sim={engine.sim} pres={engine.pres} rivals={engine.rivals} tick={engine.tick}
+                  shownScore={shownScore} split={split} postcard={postcard} rivalColors={RIVAL_COLORS} />
                 <FxStage ref={fx} width={layout.w} height={layout.h} timeScale={engine.clock.fxScale} reducedMotion={reducedMotion} />
               </>
             ) : null}
 
             {rivalNames.length ? (
-              <View pointerEvents="none" style={[styles.pills, { top: (layout?.skyH ?? 120) - 34 }]}>
+              <View pointerEvents="none" style={[styles.pills, { top: (layout?.skyH ?? 120) - 30 }]}>
                 {rivalNames.map((n, j) => (
-                  <View key={n} style={[styles.pill, { borderColor: RIVAL_COLORS[j] }]}>
-                    <Text style={styles.pillText}>{n}</Text>
+                  <View key={`${n}-${j}`} style={[styles.pill, { borderColor: RIVAL_COLORS[j] }]}>
+                    <Text style={styles.pillText} numberOfLines={1}>{n}</Text>
                   </View>
                 ))}
-              </View>
-            ) : null}
-
-            {banner ? (
-              <View pointerEvents="none" style={[styles.banner, { top: (layout?.skyH ?? 120) + 40 }]}>
-                <Text style={styles.bannerText}>{banner}</Text>
-                <Text style={styles.bannerSub}>Look up, your shark is cruising</Text>
               </View>
             ) : null}
 
@@ -649,21 +733,25 @@ export function SharkySwim({
               </View>
             ) : null}
 
-            {liveRace && !round && !race.state.results ? (
-              <RaceLobby state={race.state} crew={['Captain Fin', 'Bubbles', 'Coral']} onReady={() => race.transport?.ready()}
-                onLeave={onClose} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms} />
+            {liveRally && !round && !rally.state.results ? (
+              <RallyLobby state={rally.state} crew={RALLY_HOUSE_CREW.map((c) => c.name)} onReady={() => rally.transport?.ready()}
+                onLeave={onClose} toLocal={(ms) => rally.transport?.toLocal(ms) ?? ms} />
             ) : null}
-            {liveRace && round && !raceGo && !raceDone ? (
-              <RaceCountIn round={round} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms} onGo={onRaceGo} />
+            {liveRally && round && !rallyGo && !rallyDone ? (
+              <RallyCountIn round={round} toLocal={(ms) => rally.transport?.toLocal(ms) ?? ms} onGo={onRallyGo} />
             ) : null}
-            {liveRace && (raceDone || race.state.results) ? (
-              <RacePodium results={race.state.results} you={round?.you ?? -1} verdict={race.state.entryVerdict}
-                nextAtMs={race.state.nextLobbyAtMs} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms}
-                onAgain={() => { setRaceDone(false); race.transport?.ready(); }} onLeave={onClose} />
+            {liveRally && (rallyDone || rally.state.results) ? (
+              <RallyPodium results={rally.state.results} you={round?.you ?? -1} verdict={rally.state.entryVerdict}
+                nextAtMs={rally.state.nextLobbyAtMs} toLocal={(ms) => rally.transport?.toLocal(ms) ?? ms}
+                onAgain={() => { setRallyDone(false); rally.transport?.ready(); }}
+                onSolo={() => { setRunMode('queue'); setRunIdx((n) => n + 1); }}
+                onLeave={onClose} />
             ) : null}
 
-
-            {__DEV__ ? <PerfOverlay probe={perf} style={styles.perf} extra={() => `mult x${multiplier(engine.sim.value)} ${walk.walking ? 'walking' : ''}`} /> : null}
+            {__DEV__ ? <PerfOverlay probe={perf} style={styles.perf} extra={() => {
+              const s = engine.sim.value;
+              return `x${multiplier(s)} t${chainTier(s)} ${walk.walking ? 'walking' : ''}`;
+            }} /> : null}
           </View>
         </GestureDetector>
       </GestureHandlerRootView>
@@ -671,43 +759,22 @@ export function SharkySwim({
   );
 }
 
-const INK = '#23384f';
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#7fd3ff' },
   pills: { position: 'absolute', right: 10, flexDirection: 'row' },
-  pill: { backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 999, borderWidth: 3, paddingHorizontal: 10, paddingVertical: 3, marginLeft: 6 },
-  pillText: { fontFamily: 'Knockout', fontSize: 13, color: INK },
-  banner: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  bannerText: {
-    fontFamily: 'Shark', fontSize: 40, color: '#ffffff',
-    textShadowColor: INK, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
-  },
-  bannerSub: { fontFamily: 'Knockout', fontSize: 16, color: INK, marginTop: 2 },
+  pill: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 999, borderWidth: 3, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 6, maxWidth: 120 },
+  pillText: { fontFamily: 'Knockout', fontSize: 12, color: INK },
   freeze: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(235,248,255,0.55)' },
-  freezeBubble: { backgroundColor: '#ffffff', borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 26, paddingVertical: 14 },
+  freezeBubble: { backgroundColor: NEUTRAL, borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 26, paddingVertical: 14 },
   freezeText: { fontFamily: 'Shark', fontSize: 30, color: INK },
   revive: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   reviveCard: { width: '80%', backgroundColor: '#fff8e4', borderRadius: 24, borderWidth: 4, borderColor: INK, padding: 20, alignItems: 'center' },
   reviveTitle: { fontFamily: 'Shark', fontSize: 34, color: INK },
   reviveBody: { fontFamily: 'Knockout', fontSize: 16, color: INK, textAlign: 'center', marginVertical: 10 },
-  reviveBtn: { backgroundColor: '#ffc233', borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 40, paddingVertical: 12, marginTop: 4 },
+  reviveBtn: { backgroundColor: REWARD, borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 40, paddingVertical: 12, marginTop: 4 },
   reviveBtnText: { fontFamily: 'Shark', fontSize: 28, color: INK },
   reviveSkip: { fontFamily: 'Knockout', fontSize: 15, color: INK, marginTop: 12, opacity: 0.8 },
-  newCard: {
-    position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: '#ffc233', borderRadius: 16, borderWidth: 4,
-    borderColor: INK, paddingHorizontal: 18, paddingVertical: 8, alignItems: 'center',
-  },
-  newCardTitle: { fontFamily: 'Knockout', fontSize: 13, color: INK, letterSpacing: 1 },
-  newCardText: { fontFamily: 'Shark', fontSize: 22, color: INK },
   perf: { top: undefined, bottom: 4, left: 4, right: undefined },
-  extra: { backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: INK, padding: 10, marginTop: 8 },
-  extraNew: { fontFamily: 'Shark', fontSize: 17, color: INK, textAlign: 'center', backgroundColor: '#ffc233', borderRadius: 10, overflow: 'hidden', paddingVertical: 4, marginBottom: 4 },
-  mRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
-  mText: { flex: 1, fontFamily: 'Knockout', fontSize: 13, color: INK },
-  mDone: { color: '#1b8f3a' },
-  mTrack: { width: 70, height: 8, borderRadius: 4, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
-  mFill: { height: '100%', backgroundColor: '#ffc233' },
-  mRank: { fontFamily: 'Shark', fontSize: 14, color: INK, textAlign: 'center', marginTop: 4 },
 });
 
 export default SharkySwim;

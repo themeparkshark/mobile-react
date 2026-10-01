@@ -1,63 +1,47 @@
 /**
- * SharkyCanvas: the Tide Run world in one Skia canvas on the UI thread.
+ * SharkyCanvas: the Tide Run world in one Skia canvas on the UI thread
+ * (design v7.1 sections 4, 7 and 13.3).
  *
- * Layers (back to front): sky band (Alex-style lagoon art, mirror-tiled),
- * graded water, toon caustics + flat god rays (background only), coral floor
- * strip (0.5x), rival silhouettes, rings (back half), world Atlas (every
- * pickup and hazard in one draw), pylons and gates, the shark (Alex's swim
- * pose with a rigid head and a rear-only tail mesh, pose swaps), rings (front
- * half), bubbles, near strip (40% alpha, floor band only), edge badges.
+ * Back to front:
+ *   graded background group (one ColorMatrix: saturation -25%, lightness +15%,
+ *   a blue haze, the Frenzy gold grade and the wipeout desaturate): water,
+ *   god rays and toon caustics above y 300 only, far reef (0.2x), coral floor
+ *   strip (0.5x), the 60% gate arches;
+ *   sand, floor blob shadow, speed streaks and rising bubbles, ghosts/rivals,
+ *   graze halos (white, outside the art), the world shadow pass, the world
+ *   Atlas (every hazard and pickup), coral danger rims (inside the art, 2Hz),
+ *   the Close Skim edge flash and sparkle burst, ring back halves, the Frenzy
+ *   ribbon, the shark (render/SharkSprite), ring front halves, the bow wake,
+ *   the Perfect shockwave, stamps, the ink kelp strips (1.4x, y < 150 and
+ *   y > 850 only), fin-shaped warning badges at each hazard's own y, the Gate
+ *   Rush bunting, then the sky band over the water line.
  *
- * Nothing here allocates React state per frame: a single derived "plan" is
- * recomputed from the sim each frame and fed to fixed-size Skia buffers.
- * The component is memoized; props never change during a run.
+ * Nothing here allocates React state per frame: derived values read the sim
+ * and the presentation director (render/pres.ts) and feed fixed buffers.
  */
 
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  Atlas,
-  Canvas,
-  Circle,
-  Fill,
-  Group,
-  Image as SkImage,
-  ImageShader,
-  LinearGradient,
-  Path,
-  Rect,
-  RoundedRect,
-  Shader,
-  Skia,
-  Text as SkText,
-  Vertices,
-  rect,
-  useFont,
-  useImage,
-  useRSXformBuffer,
-  useRectBuffer,
-  vec,
-  type SkFont,
+  Atlas, BlendMode, Canvas, Circle, ColorMatrix, Group, Image as SkImage, LinearGradient, Oval, Paint, Path, Rect,
+  Shader, Skia, rect, useFont, useImage, useRSXformBuffer, useRectBuffer, vec,
   type SkImage as SkImageType,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import {
-  E_BOX, E_COIN, E_GATE, E_JELLY, E_PUFFER, E_PYLON, E_RING, E_SCATTER, E_SHIELD, E_TOKEN, E_TORPEDO,
-  ENT_CAP, F_BADGE, F_DONE, F_HIT, FLOOR_Y, PYLON_W, G_RIDE, G_SPLIT, G_FINISH, JELLY_R, PH_POCKET, PH_WIPE, PH_DONE,
-  PUFF_R0, PUFF_R1, RING_R, SURFACE_Y, TORP_W, aheadU, anchorX, hazardSpan, jellyY, pufferR,
+  E_BOX, E_COIN, E_GATE, E_GIFT, E_JELLY, E_PUFFER, E_PYLON, E_RING, E_SCATTER, E_SHIELD, E_TOKEN, E_TORPEDO,
+  CF_CLOSE, ENT_CAP, F_BADGE, F_DONE, F_HIT, F_PASS, F_SMASH, FLOOR_Y, G_FINISH, G_RIDE, G_SPLIT, JELLY_R,
+  PH_POCKET, PH_WIPE, PUFF_R0, PUFF_R1, PYLON_W, RING_R, SURFACE_Y, TORP_H, TORP_W, hazardSpan, jellyY, pufferR,
   type SimState,
 } from '../sim/core';
 import { AMB_N, type Ambient, type RivalSlot } from '../useSharkyEngine';
-import { VIEW_H, VIEW_W, type SharkyLayout } from './view';
-import { SHARKY_ART } from '../assets';
+import { VIEW_W, type SharkyLayout } from './view';
+import { SHARKY_ART, SHARKY_STAMPS } from '../assets';
+import { isBanner, presSharkY, RIBBON_N, type Pres } from './pres';
+import { SharkSprite, SHARK_H, SHARK_W } from './SharkSprite';
+import { DANGER, FRENZY_WATER, HAZE, INK, NEUTRAL, REWARD, REWARD_LIGHT, hexToRgb } from './palette';
 
-// ---------------------------------------------------------------------------
-// Palette (bright world: blue, white, gold; coral is danger only)
-// ---------------------------------------------------------------------------
-export const INK = '#23384f';
-export const CORAL = '#ff6b57';
-export const GOLD = '#ffc233';
 const ZONES = [
   ['#8ce8f2', '#34bfdc', '#1aa3c8'], // lagoon aqua
   ['#7ae3ea', '#26b4cc', '#128fb3'], // midway turquoise
@@ -66,44 +50,44 @@ const ZONES = [
 ];
 
 // Atlas sprite indices.
-const SPR_COIN = 0;
-const SPR_TOKEN_G = 1;
-const SPR_BOX = 2;
-const SPR_JELLY = 3;
-const SPR_PUFF = 4;
-const SPR_PUFFED = 5;
-const SPR_BOAT = 6;
-const SPR_BUBBLE = 7;
-const SPR_TOKEN_O = 8;
-const SPR_TOKEN_B = 9;
-const SPR_SEG = 10;
-const SPR_CAP = 11;
-const SPR_POLE = 12;
+const SPR_COIN = 0; // coin spin frames 0..3 (render-time squash)
+const SPR_TOKEN_G = 4;
+const SPR_BOX = 5;
+const SPR_JELLY = 6;
+const SPR_PUFF = 7;
+const SPR_PUFFED = 8;
+const SPR_BOAT = 9;
+const SPR_BUBBLE = 10;
+const SPR_TOKEN_O = 11;
+const SPR_TOKEN_B = 12;
+const SPR_SEG = 13;
+const SPR_CAP = 14;
+const SPR_BURST = 15; // sparkle burst flipbook 15..17
+const SPR_STREAK = 18; // bubble streak 18..19
+const SPR_SPARKLE = 20;
 
-const SLOTS = 176; // atlas draw slots per frame
+const SLOTS = 200;
 const PSTRIDE = 7; // sprite, cx, cy, scale(u per atlas px), rot, alpha, flip
-const PYLONS = 6;
+const BACK_SLOTS = 72;
 const RINGS = 4;
 const BADGES = 6;
 const RIVAL_N = 3;
-
-const SHARK_W = 150;
-
-// Tail mesh: 12 x 4 quads over the swim pose; only the rear 55% moves.
-const MESH_C = 12;
-const MESH_R = 4;
+const STAMP_N = 12;
+/** Coin spin (12fps, 8 steps): squash frame index and mirror per step. */
+const SPIN_FRAMES = [0, 1, 2, 3, 3, 2, 1, 0];
 
 export interface SharkyCanvasProps {
   layout: SharkyLayout;
   sim: SharedValue<SimState>;
   rivals: SharedValue<RivalSlot[]>;
   ambient: SharedValue<Ambient>;
+  pres: SharedValue<Pres>;
   tick: SharedValue<number>;
   alpha: SharedValue<number>;
-  /** Rival tint colours (player colours). */
+  /** Rival outline colours (player colours). */
   rivalColors: string[];
   reducedMotion: boolean;
-  /** Perf tier: 0 full, 1 lite (no caustic shader), 2 min (also no far reef, rays, near strip). */
+  /** Perf tier: 0 full, 1 lite (no caustic shader, no shadow pass), 2 min (also no far reef, rays, kelp strips). */
   quality?: number;
 }
 
@@ -117,60 +101,67 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-/** Render-time shark state shared by several layers. */
-interface SharkPose {
-  x: number;
-  y: number;
-  tilt: number;
-  sx: number;
-  sy: number;
-  alpha: number;
-  pose: number; // 0 swim, 1 dash/chomp, 2 dizzy, 3 bonked, 4 cheer
-  t: number;
-  hold: number;
+function outBack(k: number, s: number): number {
+  'worklet';
+  const t = k - 1;
+  return 1 + (s + 1) * t * t * t + s * t * t;
 }
 
-function sharkPose(s: SimState, a: number): SharkPose {
+/** Background grade (design 7.8 / 7.5 / 7.7): one 4x5 matrix. */
+function gradeMatrix(frenzy: number, desat: number): number[] {
   'worklet';
-  const y = lerp(s.py, s.y, a) / 256;
-  let x = anchorX(s);
-  // Horizontal stumble: slide back 30u, recover with the speed ramp.
-  if (s.stumble > 0) {
-    const k = s.stumble > 33 ? 1 : s.stumble / 33;
-    x -= 30 * k;
+  // Saturation 0.75 (less a desaturate for wipeouts).
+  const sat = 0.75 * (1 - desat);
+  const lr = 0.2126 * (1 - sat);
+  const lg = 0.7152 * (1 - sat);
+  const lb = 0.0722 * (1 - sat);
+  // Lightness +15% then a 12% haze mix toward #cfeaff; Frenzy mixes 30% toward warm gold, x1.08.
+  const haze = [0xcf / 255, 0xea / 255, 0xff / 255];
+  const gold = [0xff / 255, 0xd8 / 255, 0x6b / 255];
+  const light = 0.85;
+  const mixH = 0.12;
+  const mixG = 0.3 * frenzy;
+  const bright = 1 + 0.08 * frenzy;
+  const m: number[] = [];
+  const rows = [[lr + sat, lg, lb], [lr, lg + sat, lb], [lr, lg, lb + sat]];
+  for (let r = 0; r < 3; r++) {
+    const scale = light * (1 - mixH) * (1 - mixG) * bright;
+    const off = (0.15 * (1 - mixH) + haze[r] * mixH) * (1 - mixG) * bright + gold[r] * mixG * bright;
+    m.push(rows[r][0] * scale, rows[r][1] * scale, rows[r][2] * scale, 0, off);
   }
-  const vy = s.vy / 256;
-  let tilt = vy / 1400;
-  if (tilt < -0.45) tilt = -0.45;
-  if (tilt > 0.55) tilt = 0.55;
-  if (s.float > 0 || s.phase === PH_POCKET) tilt *= 0.3;
-  let sx = 1;
-  let sy = 1;
-  const sincePress = s.step - s.lastPress;
-  if (s.holding && sincePress < 8) {
-    // Press squash 1.15 / 0.88, springing back.
-    const k = 1 - sincePress / 8;
-    sx = 1 - 0.12 * k;
-    sy = 1 + 0.15 * k;
-    sx = 1 + 0.15 * k * 0.6;
-    sy = 1 - 0.12 * k;
+  m.push(0, 0, 0, 1, 0);
+  return m;
+}
+
+/** Squashed copies of a coin for the render-time spin (scaleX 1, 0.72, 0.4, 0.14). */
+function squashFrames(img: SkImageType | null): Array<SkImageType | null> {
+  if (!img) return [null, null, null, null];
+  const out: Array<SkImageType | null> = [];
+  for (const sx of [1, 0.72, 0.4, 0.14]) {
+    try {
+      const w = Math.max(4, Math.round(img.width() * sx));
+      const h = img.height();
+      const surf = Skia.Surface.MakeOffscreen(w, h);
+      if (!surf) {
+        out.push(img);
+        continue;
+      }
+      const c = surf.getCanvas();
+      c.clear(Skia.Color('transparent'));
+      const paint = Skia.Paint();
+      paint.setAntiAlias(true);
+      c.drawImageRect(img, Skia.XYWHRect(0, 0, img.width(), h), Skia.XYWHRect(0, 0, w, h), paint);
+      surf.flush();
+      out.push(surf.makeImageSnapshot().makeNonTextureImage());
+    } catch {
+      out.push(img);
+    }
   }
-  if (s.dash > 0) {
-    sx = 1.12;
-    sy = 0.92;
-  }
-  let alpha = 1;
-  if (s.iframes > 0 && s.reviveShield === 0 && Math.floor(s.iframes / 3) % 2 === 1) alpha = 0.45;
-  let pose = 0;
-  if (s.phase === PH_WIPE || (s.phase === PH_DONE && s.hearts <= 0)) pose = 3;
-  else if (s.phase === PH_DONE) pose = 4;
-  else if (s.dash > 0 || s.skimTimer > 50 || (s.stChomps > 0 && s.chainTimer > 105 && s.frenzy === 0 && false)) pose = 1;
-  else if (s.iframes > 30 && s.reviveShield === 0) pose = 2;
-  return { x, y, tilt, sx, sy, alpha, pose, t: (s.worldT + a) / 60, hold: s.holding };
+  return out;
 }
 
 export const SharkyCanvas = React.memo(function SharkyCanvas({
-  layout, sim, rivals, ambient, tick, alpha, rivalColors, reducedMotion, quality = 0,
+  layout, sim, rivals, ambient, pres, tick, alpha, rivalColors, reducedMotion, quality = 0,
 }: SharkyCanvasProps) {
   const L = layout;
   // --- art ------------------------------------------------------------------
@@ -185,7 +176,6 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const boat = useImage(SHARKY_ART.boat);
   const seg = useImage(SHARKY_ART.pylonSegment);
   const cap = useImage(SHARKY_ART.pylonCap);
-  const pole = useImage(SHARKY_ART.gatePole);
   const bubble = useImage(SHARKY_ART.bubble);
   const ringImg = useImage(SHARKY_ART.ring);
   const swim = useImage(SHARKY_ART.swim);
@@ -199,9 +189,22 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const farReef = useImage(SHARKY_ART.farReef);
   const tideGate = useImage(SHARKY_ART.tideGate);
   const rideGate = useImage(SHARKY_ART.rideGate);
-  const font = useFont(SHARKY_ART.font, 44);
+  const burst0 = useImage(SHARKY_ART.sparkleBurst0);
+  const burst1 = useImage(SHARKY_ART.sparkleBurst1);
+  const burst2 = useImage(SHARKY_ART.sparkleBurst2);
+  const streak0 = useImage(SHARKY_ART.streak0);
+  const streak1 = useImage(SHARKY_ART.streak1);
+  const sparkle = useImage(SHARKY_ART.sparkle);
+  const finBadge = useImage(SHARKY_ART.finBadge);
+  const bunting = useImage(SHARKY_ART.rushBunting);
+  const stampImgs = SHARKY_STAMPS.map((src) => useImage(src ?? SHARKY_ART.bubble));
+  const font = useFont(SHARKY_ART.displayFont, 44);
 
-  const atlas = useSpriteAtlas([coin, tokenG, box, jelly, puff, puffed, boat, bubble, tokenO, tokenB, seg, cap, pole], { cell: 256 });
+  const coins = useMemo(() => squashFrames(coin), [coin]);
+  const atlas = useSpriteAtlas(
+    [coins[0], coins[1], coins[2], coins[3], tokenG, box, jelly, puff, puffed, boat, bubble, tokenO, tokenB, seg, cap, burst0, burst1, burst2, streak0, streak1, sparkle],
+    { cell: 256 },
+  );
   const rects = useMemo(() => {
     if (!atlas) return [] as number[];
     const out: number[] = [];
@@ -209,20 +212,168 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     return out;
   }, [atlas]);
 
-  // --- per-frame plan -------------------------------------------------------
+  // --- camera: view units -> field points, y follow and zoom about the shark --
+  const worldTransform = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const y = presSharkY(p, lerp(s.py, s.y, alpha.value) / 256);
+    const z = p.zoom;
+    return [
+      { translateX: L.offX },
+      { translateY: L.offY + p.camY * L.k },
+      { scale: L.k },
+      { translateX: p.anc },
+      { translateY: y },
+      { scale: z },
+      { translateX: -p.anc },
+      { translateY: -y },
+    ];
+  });
+
+  // --- per-frame world plan ---------------------------------------------------
   const plan = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
+    const p = pres.value;
     const a = alpha.value;
     const out: number[] = new Array(SLOTS * PSTRIDE).fill(0);
     if (rects.length === 0) return out;
     const dist = lerp(s.pdist, s.dist, a) / 256;
-    const anc = anchorX(s);
-    const t = (s.worldT + a) / 60;
+    const anc = p.anc;
+    const now = p.fx;
     const frenzy = s.frenzy > 0;
+    const twos = Math.floor(now / 83.333);
+    let n = 0;
+    const put = (spr: number, cx: number, cy: number, w: number, rot: number, al: number, byH: boolean) => {
+      if (n >= SLOTS) return;
+      const o = n * PSTRIDE;
+      const rw = rects[spr * 4 + 2];
+      const rh = rects[spr * 4 + 3];
+      out[o] = spr;
+      out[o + 1] = cx;
+      out[o + 2] = cy;
+      out[o + 3] = byH ? (rh > 0 ? w / rh : 0) : rw > 0 ? w / rw : 0;
+      out[o + 4] = rot;
+      out[o + 5] = al;
+      out[o + 6] = 1;
+      n++;
+    };
+    const floatPhase = s.float > 0;
+    for (let i = 0; i < ENT_CAP; i++) {
+      const et = s.et[i];
+      if (et === 0 || et === E_RING || et === E_GATE) continue;
+      const ex = lerp(s.epx[i], s.ex[i], a);
+      const vx = anc + (ex - dist);
+      if (vx < -220 || vx > VIEW_W + 220) continue;
+      const hazardAlpha = floatPhase ? 0.5 : 1;
+      if (et === E_PYLON) {
+        // Stacked coaster segments with a striped cap at each gap edge. A hit
+        // shudders 4pt; a Close Skim jolts it away from the shark (art only).
+        let jolt = 0;
+        if ((s.ef[i] & F_HIT) && s.etm[i] < 8) jolt = Math.sin(s.etm[i] * 2.2) * 7;
+        if (p.closeEnt === i && now - p.closeT < 120) jolt += 7 * Math.sin(((now - p.closeT) / 120) * Math.PI);
+        if ((s.ef[i] & F_SMASH) && s.etm[i] < 12) jolt += Math.sin(s.etm[i] * 2.6) * 9;
+        const cx = vx + PYLON_W / 2 + jolt;
+        const half = s.ep1[i] / 2;
+        const top = s.ey[i] - half;
+        const bot = s.ey[i] + half;
+        const capW = PYLON_W + 24;
+        const capH = capW * rects[SPR_CAP * 4 + 3] / Math.max(1, rects[SPR_CAP * 4 + 2]);
+        const segW = PYLON_W;
+        const segH = segW * rects[SPR_SEG * 4 + 3] / Math.max(1, rects[SPR_SEG * 4 + 2]);
+        for (let y = top - capH - segH / 2 + 10; y + segH / 2 > SURFACE_Y - 80; y -= segH - 6) put(SPR_SEG, cx, y, segW, 0, 1, false);
+        for (let y = bot + capH + segH / 2 - 10; y - segH / 2 < FLOOR_Y + 80; y += segH - 6) put(SPR_SEG, cx, y, segW, 0, 1, false);
+        put(SPR_CAP, cx, top - capH / 2, capW, 0, 1, false);
+        put(SPR_CAP, cx, bot + capH / 2, capW, Math.PI, 1, false);
+        continue;
+      }
+      if (et === E_COIN || et === E_SCATTER) {
+        // Spin: a 12fps 8-step squash cycle, 40ms phase offset per coin in a line.
+        const ph = (twos + Math.floor(((s.ep2[i] & CF_CLOSE ? 1 : 0) + i) * 0.5)) % 8;
+        const fr = SPIN_FRAMES[ph];
+        let al = 1;
+        let h = 44;
+        if (et === E_SCATTER) {
+          const life = s.etm[i] / 90;
+          // Flash at 8Hz in the last 500ms, then pop.
+          if (life > 0.66) al = Math.floor(now / 62.5) % 2 ? 1 : 0.3;
+          h = 40;
+        }
+        const cy = et === E_SCATTER ? lerp(s.epy[i], s.ey[i], a) : s.ey[i];
+        if (frenzy) {
+          // Star coins: 1.3x, a rotating outlined star behind, gold halo.
+          put(SPR_SPARKLE, vx, cy, 70, now / 300 + i, 0.9, false);
+          h = 57;
+        }
+        put(SPR_COIN + fr, vx, cy, h, 0, al, true);
+        // White glint sweep every 1.2s per coin.
+        const g = (now + i * 97) % 1200;
+        if (g < 120) put(SPR_SPARKLE, vx + 8, cy - 10, 26 * (1 - Math.abs(g - 60) / 60), 0, 1, false);
+      } else if (et === E_TOKEN) {
+        const flip = Math.abs(Math.cos(now / 333 + i));
+        put(s.ep1[i] === 1 ? SPR_TOKEN_O : s.ep1[i] === 2 ? SPR_TOKEN_B : SPR_TOKEN_G, vx, s.ey[i] + Math.sin(now / 333) * 6, 76 * (0.75 + 0.25 * flip), 0, 1, false);
+      } else if (et === E_BOX) {
+        if (s.ef[i] & F_DONE) {
+          const k = s.etm[i];
+          if (k < 8) put(SPR_BOX, vx, s.ey[i], 92 * (1 - k / 10), 0, 1 - k / 8, false);
+        } else put(SPR_BOX, vx, s.ey[i] + Math.sin(now / 416 + i) * 5, 92, Math.sin(now / 500 + i) * 0.06, 1, false);
+      } else if (et === E_SHIELD || et === E_GIFT) {
+        put(SPR_BUBBLE, vx, s.ey[i] + Math.sin(now / 450) * 8, 96 * (1 + 0.05 * Math.sin(now / 200)), 0, 0.9, false);
+        if (et === E_GIFT) put(SPR_COIN, vx, s.ey[i] + Math.sin(now / 450) * 8, 40, 0, 1, true);
+      } else if (et === E_JELLY) {
+        // Jellies draw at 1.1x (hitbox unchanged); bell squash 1.0/0.92 at 1.2Hz.
+        const jy = lerp(s.epy[i], jellyY(s, i), a);
+        const hit = (s.ef[i] & F_HIT) && s.etm[i] < 20;
+        if ((s.ef[i] & F_DONE) && s.est[i] === 5) {
+          const k = s.etm[i];
+          if (k < 10) put(SPR_JELLY, vx, jy, 119 * (1 + k / 10), k * 0.2, 1 - k / 10, false);
+          continue;
+        }
+        put(SPR_JELLY, vx + (hit ? 20 * (1 - s.etm[i] / 20) : 0), jy, 119 * (1 + 0.04 * Math.sin(now / 133 + i)), Math.sin(now / 133 + i) * 0.07, hazardAlpha * (hit && Math.floor(now / 50) % 2 ? 0.6 : 1), false);
+      } else if (et === E_PUFFER) {
+        const st = s.est[i];
+        if (st === 5) {
+          const k = s.etm[i];
+          if (k < 10) put(SPR_PUFFED, vx, s.ey[i], 190 * (1 - k / 12), k * 0.3, 1 - k / 10, false);
+          continue;
+        }
+        const r = pufferR(s, i);
+        // Calm read (v7.1): 1.3x art, spikes wobble 6deg at 3Hz; wiggle telegraph +-8deg at 12Hz.
+        const wig = st === 1 ? Math.sin(now / 13.3) * 0.14 : Math.sin(now / 53 + i) * 0.1;
+        const spin = st === 4 ? s.etm[i] * 0.35 : 0;
+        const big = st >= 2 && st !== 4 && r > (PUFF_R0 + PUFF_R1) / 2;
+        put(big ? SPR_PUFFED : SPR_PUFF, vx, s.ey[i], r * 2 * (big ? 1.32 : 1.45) * 1.3, wig + spin, hazardAlpha, false);
+      } else if (et === E_TORPEDO) {
+        const st = s.est[i];
+        if (st === 0) continue;
+        const bob = Math.sin(now / 111) * 4;
+        const spin = st === 4 ? s.etm[i] * 0.25 : 0;
+        put(SPR_BOAT, vx, lerp(s.epy[i], s.ey[i], a) + bob, TORP_W + 12, spin, hazardAlpha, false);
+      }
+    }
+    // Close Skim confirm: the drawn sparkle burst flipbook (12fps) at the contact.
+    const tc = now - p.closeT;
+    if (tc >= 0 && tc < 250) {
+      const f = Math.min(2, Math.floor(tc / 83.3));
+      put(SPR_BURST + f, anc + (p.closeX - dist), p.closeY, 120, 0, 1, false);
+    }
+    return out;
+  });
+
+  // Back plan: speed streaks and ambient bubbles (under the gameplay sprites).
+  const backPlan = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const out: number[] = new Array(BACK_SLOTS * PSTRIDE).fill(0);
+    if (rects.length === 0) return out;
+    const dist = lerp(s.pdist, s.dist, alpha.value) / 256;
+    const anc = p.anc;
+    const now = p.fx;
     let n = 0;
     const put = (spr: number, cx: number, cy: number, w: number, rot: number, al: number) => {
-      if (n >= SLOTS) return;
+      if (n >= BACK_SLOTS) return;
       const o = n * PSTRIDE;
       const rw = rects[spr * 4 + 2];
       out[o] = spr;
@@ -234,328 +385,539 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
       out[o + 6] = 1;
       n++;
     };
-    const floatPhase = s.float > 0;
-    // Ambient bubbles and sand puffs first (they sit behind the gameplay sprites).
+    // Speed streaks (7.6): 2 at base (alpha 0.3), 4 at the cap (0.6), 12 in Overdrive or Frenzy.
+    const sf = (s.speed - s.speedBase) / Math.max(1, s.speedCap - s.speedBase);
+    const hot = s.od > 0 || s.frenzy > 0;
+    const count = hot ? 12 : s.phase === PH_POCKET ? 1 : 2 + Math.round(2 * sf);
+    const al = hot ? 0.7 : 0.3 + 0.3 * sf;
+    const fr = Math.floor(now / 83.333) % 2;
+    for (let k = 0; k < count; k++) {
+      const lane = 160 + ((k * 211) % 680);
+      const span = VIEW_W + 400;
+      const x = VIEW_W + 200 - (((dist * 1.6 + k * 397) % span) + span) % span;
+      put(SPR_STREAK + fr, x, lane, hot ? 150 : 110, 0, al);
+    }
     const am = ambient.value;
     for (let i = 0; i < AMB_N; i++) {
       if (am.life[i] <= 0) continue;
       const k = am.life[i] / am.max[i];
       const vx = anc + (am.x[i] - dist);
       if (vx < -40 || vx > VIEW_W + 40) continue;
-      if (am.kind[i] === 3) put(SPR_COIN, vx, am.y[i], am.size[i] * k, am.life[i] * 9, 1);
-      else if (am.kind[i] === 1) put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (1.6 - k * 0.6), 0, 1);
-      else put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (am.kind[i] === 0 ? 0.6 + 0.4 * k : 1), 0, 1);
-    }
-    for (let i = 0; i < ENT_CAP; i++) {
-      const et = s.et[i];
-      if (et === 0 || et === E_RING) continue;
-      const ex = lerp(s.epx[i], s.ex[i], a);
-      const vx = anc + (ex - dist);
-      if (vx < -200 || vx > VIEW_W + 200) continue;
-      const hazardAlpha = floatPhase ? 0.5 : 1;
-      if (et === E_PYLON) {
-        // Stacked coaster segments with a striped cap at each gap edge.
-        const shake = (s.ef[i] & F_HIT) && s.etm[i] < 8 ? Math.sin(s.etm[i] * 2.2) * 3 : 0;
-        const cx = vx + PYLON_W / 2 + shake;
-        const half = s.ep1[i] / 2;
-        const top = s.ey[i] - half;
-        const bot = s.ey[i] + half;
-        const capW = 124;
-        const capH = capW * rects[SPR_CAP * 4 + 3] / Math.max(1, rects[SPR_CAP * 4 + 2]);
-        const segW = PYLON_W;
-        const segH = segW * rects[SPR_SEG * 4 + 3] / Math.max(1, rects[SPR_SEG * 4 + 2]);
-        for (let y = top - capH - segH / 2 + 10; y + segH / 2 > SURFACE_Y - 80; y -= segH - 6) put(SPR_SEG, cx, y, segW, 0, 1);
-        for (let y = bot + capH + segH / 2 - 10; y - segH / 2 < FLOOR_Y + 80; y += segH - 6) put(SPR_SEG, cx, y, segW, 0, 1);
-        put(SPR_CAP, cx, top - capH / 2, capW, 0, 1);
-        put(SPR_CAP, cx, bot + capH / 2, capW, Math.PI, 1);
-        continue;
-      }
-      if (et === E_GATE) {
-        // Every gate is its arch set piece plus the bunting line (Gates layer);
-        // the old marquee poles cluttered the arch opening.
-        continue;
-      }
-      if (et === E_COIN) {
-        const glint = 1 + 0.06 * Math.sin(t * 6.283 + i);
-        put(SPR_COIN, vx, s.ey[i], (frenzy ? 62 : 48) * glint, 0, 1);
-      } else if (et === E_SCATTER) {
-        const life = s.etm[i] / 90;
-        put(SPR_COIN, vx, lerp(s.epy[i], s.ey[i], a), 40, Math.sin(t * 14 + i) * 0.6, life > 0.75 ? (Math.floor(t * 16) % 2 ? 1 : 0.4) : 1);
-      } else if (et === E_TOKEN) {
-        const flip = Math.abs(Math.cos(t * 3 + i));
-        put(s.ep1[i] === 1 ? SPR_TOKEN_O : s.ep1[i] === 2 ? SPR_TOKEN_B : SPR_TOKEN_G, vx, s.ey[i] + Math.sin(t * 3) * 6, 70 * (0.75 + 0.25 * flip), 0, 1);
-      } else if (et === E_BOX) {
-        if (s.ef[i] & F_DONE) {
-          const k = s.etm[i];
-          if (k < 8) put(SPR_BOX, vx, s.ey[i], 84 * (1 - k / 10), 0, 1 - k / 8);
-        } else put(SPR_BOX, vx, s.ey[i] + Math.sin(t * 2.4 + i) * 5, 84, Math.sin(t * 2 + i) * 0.06, 1);
-      } else if (et === E_SHIELD) {
-        put(SPR_BUBBLE, vx, s.ey[i] + Math.sin(t * 2.2) * 8, 90 * (1 + 0.05 * Math.sin(t * 5)), 0, 0.9);
-      } else if (et === E_JELLY) {
-        const jy = lerp(s.epy[i], jellyY(s, i), a);
-        const hit = (s.ef[i] & F_HIT) && s.etm[i] < 20;
-        put(SPR_JELLY, vx + (hit ? 20 * (1 - s.etm[i] / 20) : 0), jy, 108, Math.sin(t * 7.5 + i) * 0.07, hazardAlpha * (hit && Math.floor(t * 20) % 2 ? 0.6 : 1));
-      } else if (et === E_PUFFER) {
-        const st = s.est[i];
-        if (st === 5) {
-          const k = s.etm[i];
-          if (k < 10) put(SPR_PUFFED, vx, s.ey[i], 150 * (1 - k / 12), k * 0.3, 1 - k / 10);
-          continue;
-        }
-        const r = pufferR(s, i);
-        const wig = st === 1 ? Math.sin(t * 75) * 0.14 : 0;
-        const spin = st === 4 ? s.etm[i] * 0.35 : 0;
-        const big = st >= 2 && st !== 4 && r > (PUFF_R0 + PUFF_R1) / 2;
-        put(big ? SPR_PUFFED : SPR_PUFF, vx, s.ey[i], r * 2 * (big ? 1.32 : 1.45), wig + spin, hazardAlpha);
-      } else if (et === E_TORPEDO) {
-        const st = s.est[i];
-        if (st === 0) continue;
-        const bob = Math.sin(t * 9) * 4;
-        const spin = st === 4 ? s.etm[i] * 0.25 : 0;
-        put(SPR_BOAT, vx, lerp(s.epy[i], s.ey[i], a) + bob, TORP_W + 10, spin, hazardAlpha);
-      }
+      if (am.kind[i] === 3) put(SPR_SPARKLE, vx, am.y[i], am.size[i] * 1.6 * k, am.life[i] * 9, 1);
+      else if (am.kind[i] === 1) put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (1.6 - k * 0.6), 0, 0.8);
+      else put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (am.kind[i] === 0 ? 0.6 + 0.4 * k : 1), 0, 0.9);
     }
     return out;
   });
 
-  const sprites = useRectBuffer(SLOTS, (r, i) => {
-    'worklet';
+  const mkBuffers = (src: SharedValue<number[]>, slots: number) => {
+    const sprites = useRectBuffer(slots, (r, i) => {
+      'worklet';
+      const p = src.value;
+      const spr = p[i * PSTRIDE];
+      if (rects.length === 0) {
+        r.setXYWH(0, 0, 0, 0);
+        return;
+      }
+      r.setXYWH(rects[spr * 4], rects[spr * 4 + 1], rects[spr * 4 + 2], rects[spr * 4 + 3]);
+    });
+    const transforms = useRSXformBuffer(slots, (x, i) => {
+      'worklet';
+      const p = src.value;
+      const o = i * PSTRIDE;
+      const sc = p[o + 3];
+      if (sc === 0 || rects.length === 0) {
+        x.set(0, 0, -9999, -9999);
+        return;
+      }
+      const spr = p[o];
+      const w = rects[spr * 4 + 2];
+      const h = rects[spr * 4 + 3];
+      const rot = p[o + 4];
+      const c = Math.cos(rot) * sc;
+      const sn = Math.sin(rot) * sc;
+      x.set(c, sn, p[o + 1] - (c * w * 0.5 - sn * h * 0.5), p[o + 2] - (sn * w * 0.5 + c * h * 0.5));
+    });
+    return { sprites, transforms };
+  };
+  const world = mkBuffers(plan, SLOTS);
+  const back = mkBuffers(backPlan, BACK_SLOTS);
+  const worldColors = useDerivedValue(() => {
     const p = plan.value;
-    const spr = p[i * PSTRIDE];
-    if (rects.length === 0) {
-      r.setXYWH(0, 0, 0, 0);
-      return;
+    const out = [];
+    for (let i = 0; i < SLOTS; i++) {
+      const al = p[i * PSTRIDE + 5];
+      out.push(new Float32Array([al, al, al, al]));
     }
-    r.setXYWH(rects[spr * 4], rects[spr * 4 + 1], rects[spr * 4 + 2], rects[spr * 4 + 3]);
+    return out;
   });
-  const transforms = useRSXformBuffer(SLOTS, (x, i) => {
-    'worklet';
-    const p = plan.value;
-    const o = i * PSTRIDE;
-    const sc = p[o + 3];
-    if (sc === 0 || rects.length === 0) {
-      x.set(0, 0, -9999, -9999);
-      return;
+  const backColors = useDerivedValue(() => {
+    const p = backPlan.value;
+    const out = [];
+    for (let i = 0; i < BACK_SLOTS; i++) {
+      const al = p[i * PSTRIDE + 5];
+      out.push(new Float32Array([al, al, al, al]));
     }
-    const spr = p[o];
-    const w = rects[spr * 4 + 2];
-    const h = rects[spr * 4 + 3];
-    const rot = p[o + 4];
-    const c = Math.cos(rot) * sc;
-    const sn = Math.sin(rot) * sc;
-    const tx = p[o + 1] - (c * w * 0.5 - sn * h * 0.5);
-    const ty = p[o + 2] - (sn * w * 0.5 + c * h * 0.5);
-    x.set(c, sn, tx, ty);
+    return out;
   });
-  // Float phases hazards through: the whole world layer drops to 55% (nothing scores then).
-  const worldAlpha = useDerivedValue(() => {
-    tick.value;
-    return sim.value.float > 0 ? 0.55 : 1;
-  });
+  const shadowPaint = useMemo(() => {
+    const pt = Skia.Paint();
+    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('rgba(35,56,79,0.18)'), BlendMode.SrcIn));
+    return pt;
+  }, []);
 
-  // --- camera (world group) -------------------------------------------------
-  const worldTransform = useDerivedValue(() => {
+  // --- background grade ---------------------------------------------------------
+  const grade = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const y = lerp(s.py, s.y, alpha.value) / 256;
-    const follow = reducedMotion ? 0 : (500 - y) * 0.06;
-    return [{ translateX: L.offX }, { translateY: L.offY + follow * L.k }, { scale: L.k }];
+    const p = pres.value;
+    let f = 0;
+    if (s.frenzy > 0) f = clamp01((p.fx - p.frenzyT) / 300);
+    else if (p.fx - p.frenzyEndT < 400) f = 1 - clamp01((p.fx - p.frenzyEndT) / 400);
+    const d = s.phase === PH_WIPE || (s.phase === 3 && s.hearts <= 0) ? 0.35 : 0;
+    return gradeMatrix(f, d);
   });
+  const gradeLayer = useMemo(() => <Paint><ColorMatrix matrix={grade} /></Paint>, [grade]);
 
-  // --- zone grading ---------------------------------------------------------
-  const zone = useDerivedValue(() => {
+  // --- zone water colours -------------------------------------------------------
+  const waterColors = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     let z = s.sprint < 0 ? 0 : s.sprint;
-    // The next sprint is already queued in a pocket: grade across it.
     if (s.phase === PH_POCKET) z = Math.max(0, s.sprint - 1) + Math.min(1, s.phaseSteps / 48);
-    return Math.min(3, z);
-  });
-  const waterColors = useDerivedValue(() => {
-    const z = zone.value;
+    z = Math.min(3, z);
     const i0 = Math.floor(z);
     const i1 = Math.min(3, i0 + 1);
     const f = z - i0;
-    const mix = (a: string, b: string) => {
-      const pa = parseInt(a.slice(1), 16);
-      const pb = parseInt(b.slice(1), 16);
-      const r = Math.round(lerp((pa >> 16) & 255, (pb >> 16) & 255, f));
-      const g = Math.round(lerp((pa >> 8) & 255, (pb >> 8) & 255, f));
-      const bl = Math.round(lerp(pa & 255, pb & 255, f));
-      return `rgb(${r},${g},${bl})`;
+    const mix = (x: string, y: string) => {
+      const pa = parseInt(x.slice(1), 16);
+      const pb = parseInt(y.slice(1), 16);
+      return `rgb(${Math.round(lerp((pa >> 16) & 255, (pb >> 16) & 255, f))},${Math.round(lerp((pa >> 8) & 255, (pb >> 8) & 255, f))},${Math.round(lerp(pa & 255, pb & 255, f))})`;
     };
     return [mix(ZONES[i0][0], ZONES[i1][0]), mix(ZONES[i0][1], ZONES[i1][1]), mix(ZONES[i0][2], ZONES[i1][2])];
   });
 
   // --- parallax -------------------------------------------------------------
-  const SKY_TILE = useMemo(() => {
-    // Sky band art (mirror-tiled so it scrolls forever), in field pt.
-    // sk_sky_band: 2048 x 768. Its painted lagoon water spans rows 404-480, so
-    // row 470 lands on the surface line and the skyline fills the band above.
-    const band = Math.max(1, L.offY + SURFACE_Y * L.k + 6);
-    const R = 470 / 768;
-    const hPt = Math.max(band / R, 160);
-    const wPt = hPt * (2048 / 768);
-    return { w: wPt, h: hPt, y: band - hPt * R };
-  }, [L]);
-  const skyX = useDerivedValue(() => {
+  const distV = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
-    const px = (d * 0.06 * L.k) % (SKY_TILE.w * 2);
-    return [{ translateX: -px }];
+    return lerp(s.pdist, s.dist, alpha.value) / 256;
   });
   const FAR = { w: 1020, h: 680 };
-  const farX = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
-    return [{ translateX: -((d * 0.2) % (FAR.w * 2)) }];
-  });
+  const farX = useDerivedValue(() => [{ translateX: -((distV.value * 0.2) % (FAR.w * 2)) }]);
   const REEF = { w: 620, h: 310 };
-  const reefX = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
-    return [{ translateX: -((d * 0.5) % REEF.w) }];
-  });
+  const reefX = useDerivedValue(() => [{ translateX: -((distV.value * 0.5) % REEF.w) }]);
   const NEAR = { w: 880, h: 330 };
-  const nearX = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
-    return [{ translateX: -((d * 1.15) % NEAR.w) }];
-  });
+  const nearX = useDerivedValue(() => [{ translateX: -((distV.value * 1.4) % (NEAR.w * 2)) }]);
 
-  // --- toon caustics (background only) ---------------------------------------
+  // --- toon caustics and god rays (background, above y 300 only) --------------
   const caustic = useMemo(() => Skia.RuntimeEffect.Make(CAUSTIC_SKSL), []);
   const causticUniforms = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
     const sf = (s.speed - s.speedBase) / Math.max(1, s.speedCap - s.speedBase);
-    return { t: (s.worldT + alpha.value) / 60, off: d * 0.2, strength: 0.16 * (1 - 0.4 * sf) };
+    return { t: pres.value.fx / 1000, off: distV.value * 0.2, strength: 0.14 * (1 - 0.4 * sf) };
   });
-  const rays = useDerivedValue(() => {
-    tick.value;
-    const t = (sim.value.worldT + alpha.value) / 60;
-    return Math.sin(t * 0.94) * 0.07;
-  });
-  const rayTransform = useDerivedValue(() => [{ rotate: rays.value }]);
+  const rayTransform = useDerivedValue(() => [{ rotate: Math.sin((pres.value.fx / 1000) * 0.63) * 0.06 }]);
   const rayPaths = useMemo(() => {
     const out: ReturnType<typeof Skia.Path.Make>[] = [];
-    const xs = [120, 360, 610, 840];
-    const ws = [70, 110, 60, 90];
-    xs.forEach((x, i) => {
+    [130, 380, 610].forEach((x, i) => {
+      const w = [80, 120, 70][i];
       const p = Skia.Path.Make();
-      p.moveTo(x - ws[i] * 0.4, SURFACE_Y);
-      p.lineTo(x + ws[i] * 0.4, SURFACE_Y);
-      p.lineTo(x + ws[i] * 1.6 - 120, 780);
-      p.lineTo(x - ws[i] * 1.2 - 120, 780);
+      p.moveTo(x - w * 0.4, SURFACE_Y);
+      p.lineTo(x + w * 0.4, SURFACE_Y);
+      p.lineTo(x + w * 1.2 - 60, 300);
+      p.lineTo(x - w * 1.0 - 60, 300);
       p.close();
       out.push(p);
     });
     return out;
   }, []);
 
-  // --- surface line ---------------------------------------------------------
+  // --- surface line -----------------------------------------------------------
   const surfacePath = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
-    const t = (s.worldT + alpha.value) / 60;
+    const d = distV.value;
+    const t = pres.value.fx / 1000;
     const p = Skia.Path.Make();
-    p.moveTo(-40, -600);
-    for (let x = -40; x <= VIEW_W + 40; x += 24) {
+    p.moveTo(-200, -900);
+    for (let x = -200; x <= VIEW_W + 200; x += 24) {
       const y = SURFACE_Y + Math.sin((x + d) * 0.03 + t * 2.2) * 6 + Math.sin((x + d) * 0.011 - t) * 4;
       p.lineTo(x, y);
     }
-    p.lineTo(VIEW_W + 40, -600);
+    p.lineTo(VIEW_W + 200, -900);
     p.close();
     return p;
   });
 
-  const skyTiles = useMemo(() => [0, 1, 2, 3], []);
+  // --- halos, coral rims and the Close Skim edge flash --------------------------
+  const hazardPaths = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const dist = distV.value;
+    const halo = Skia.Path.Make();
+    const near = Skia.Path.Make();
+    const rim = Skia.Path.Make();
+    const flash = Skia.Path.Make();
+    const flashOn = p.fx - p.closeT < 33 || (p.fx - p.closeT >= 0 && p.fx - p.closeT < 66 && Math.floor((p.fx - p.closeT) / 33) === 1);
+    for (let i = 0; i < ENT_CAP; i++) {
+      const t = s.et[i];
+      if (t !== E_PYLON && t !== E_JELLY && t !== E_PUFFER && t !== E_TORPEDO) continue;
+      if ((s.ef[i] & F_HIT) || (s.ef[i] & F_DONE && s.est[i] === 5)) continue;
+      if (t === E_PUFFER && s.est[i] >= 4) continue;
+      if (t === E_TORPEDO && (s.est[i] === 0 || s.est[i] >= 4)) continue;
+      const vx = p.anc + (lerp(s.epx[i], s.ex[i], alpha.value) - dist);
+      if (vx < -260 || vx > VIEW_W + 260) continue;
+      const hp = s.grazeEnt === i || (s.ef[i] & F_PASS) ? near : halo;
+      const isFlash = flashOn && p.closeEnt === i;
+      if (t === E_PYLON) {
+        const half = s.ep1[i] / 2;
+        const top = s.ey[i] - half;
+        const bot = s.ey[i] + half;
+        const x0 = vx - 12;
+        const x1 = vx + PYLON_W + 12;
+        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, SURFACE_Y - 300, x1 - x0 + 56, top + 28 - (SURFACE_Y - 300)), 30, 30));
+        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, bot - 28, x1 - x0 + 56, FLOOR_Y + 300 - (bot - 28)), 30, 30));
+        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 6, SURFACE_Y - 300, x1 - x0 - 12, top - 6 - (SURFACE_Y - 300)), 10, 10));
+        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 6, bot + 6, x1 - x0 - 12, FLOOR_Y + 300 - (bot + 6)), 10, 10));
+        if (isFlash) {
+          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, SURFACE_Y - 300, x1 - x0, top - (SURFACE_Y - 300)), 10, 10));
+          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, bot, x1 - x0, FLOOR_Y + 300 - bot), 10, 10));
+        }
+      } else if (t === E_JELLY) {
+        const jy = jellyY(s, i);
+        const r = JELLY_R * 1.1;
+        hp.addCircle(vx, jy, r + 28);
+        rim.addCircle(vx, jy, r - 8);
+        if (isFlash) flash.addCircle(vx, jy, r);
+      } else if (t === E_PUFFER) {
+        const r = pufferR(s, i) * 1.3;
+        hp.addCircle(vx, s.ey[i], r + 28);
+        rim.addCircle(vx, s.ey[i], r - 6);
+        if (isFlash) flash.addCircle(vx, s.ey[i], r);
+      } else {
+        const sp = hazardSpan(s, i);
+        const w = sp[1] - sp[0];
+        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(vx - w / 2 - 28, s.ey[i] - TORP_H / 2 - 28, w + 56, TORP_H + 56), 40, 40));
+        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(vx - w / 2 + 8, s.ey[i] - TORP_H / 2 + 8, w - 16, TORP_H - 16), 20, 20));
+      }
+    }
+    return { halo, near, rim, flash };
+  });
+  const haloPath = useDerivedValue(() => hazardPaths.value.halo);
+  const nearPath = useDerivedValue(() => hazardPaths.value.near);
+  const rimPath = useDerivedValue(() => hazardPaths.value.rim);
+  const flashPath = useDerivedValue(() => hazardPaths.value.flash);
+  const rimOp = useDerivedValue(() => 0.8 + 0.2 * Math.sin((pres.value.fx / 1000) * 2 * Math.PI * 2));
+  const hazardOp = useDerivedValue(() => (tick.value, sim.value.float > 0 ? 0.5 : 1));
 
+  // --- floor blob shadow --------------------------------------------------------
+  const shadowRect = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const y = presSharkY(p, lerp(s.py, s.y, alpha.value) / 256);
+    const k = clamp01((900 - y) / 800);
+    const w = lerp(120, 70, k);
+    return rect(p.anc - w / 2, FLOOR_Y - 9, w, 18);
+  });
+  const shadowOp = useDerivedValue(() => {
+    const s = sim.value;
+    const y = lerp(s.py, s.y, alpha.value) / 256;
+    return lerp(0.3, 0.1, clamp01((900 - y) / 800));
+  });
+
+  // --- Frenzy ribbon: a tapered path through the tail tip's last 24 positions ---
+  const ribbon = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const path = Skia.Path.Make();
+    const core = Skia.Path.Make();
+    if (p.rN < 3) return { path, core };
+    const dist = distV.value;
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let k = 0; k < p.rN; k++) {
+      const j = (p.rHead - k + RIBBON_N * 4) % RIBBON_N;
+      xs.push(p.anc + (p.rx[j] - dist));
+      ys.push(p.ry[j]);
+    }
+    const n = xs.length;
+    const left: number[] = [];
+    const right: number[] = [];
+    for (let k = 0; k < n; k++) {
+      const k0 = Math.max(0, k - 1);
+      const k1 = Math.min(n - 1, k + 1);
+      let dx = xs[k1] - xs[k0];
+      let dy = ys[k1] - ys[k0];
+      const len = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+      dx /= len;
+      dy /= len;
+      const w = 13 * (1 - k / (n - 1));
+      left.push(xs[k] - dy * w, ys[k] + dx * w);
+      right.push(xs[k] + dy * w, ys[k] - dx * w);
+    }
+    path.moveTo(left[0], left[1]);
+    for (let k = 1; k < n; k++) path.lineTo(left[k * 2], left[k * 2 + 1]);
+    for (let k = n - 1; k >= 0; k--) path.lineTo(right[k * 2], right[k * 2 + 1]);
+    path.close();
+    core.moveTo(xs[0], ys[0]);
+    for (let k = 1; k < Math.floor(n * 0.7); k++) core.lineTo(xs[k], ys[k]);
+    return { path, core };
+  });
+  const ribbonPath = useDerivedValue(() => ribbon.value.path);
+  const ribbonCore = useDerivedValue(() => ribbon.value.core);
+
+  // --- bow wake (2 frames at 12fps, length by speed) ------------------------------
+  const wake = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const path = Skia.Path.Make();
+    if (s.phase === PH_WIPE || s.phase === 3 || s.float > 0) return path;
+    const y = presSharkY(p, lerp(s.py, s.y, alpha.value) / 256);
+    const sf = (s.speed - s.speedBase) / Math.max(1, s.speedCap - s.speedBase);
+    const len = (15 + 22 * sf) * (s.frenzy > 0 ? 1.5 : 1);
+    const nx = p.anc + SHARK_W * 0.5 - 6;
+    const f = Math.floor(p.fx / 83.333) % 2;
+    const sp = 10 + f * 4;
+    path.moveTo(nx, y - 8);
+    path.quadTo(nx + sp, y - 14, nx - len * 0.2, y - 20 - len * 0.3);
+    path.moveTo(nx, y + 8);
+    path.quadTo(nx + sp, y + 14, nx - len * 0.2, y + 20 + len * 0.3);
+    return path;
+  });
+
+  // --- Perfect shockwave: 16 -> 60pt over 180ms, 4pt line thinning to 1pt ----------
+  const shock = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const t = p.fx - p.perfT;
+    if (t < 0 || t > 180) return { r: 0, w: 0, x: -999, y: -999 };
+    const k = 1 - (1 - t / 180) * (1 - t / 180) * (1 - t / 180);
+    return { r: lerp(30, 110, k), w: lerp(7.4, 1.8, t / 180), x: p.anc, y: p.perfY };
+  });
+  const shockR = useDerivedValue(() => shock.value.r);
+  const shockW = useDerivedValue(() => shock.value.w);
+  const shockX = useDerivedValue(() => shock.value.x);
+  const shockY = useDerivedValue(() => shock.value.y);
+
+  // --- stamps: drawn word art, one at a time ----------------------------------------
+  const stampState = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const id = p.stamp;
+    const t = p.fx - p.stampT;
+    const banner = isBanner(id);
+    const hold = banner ? 900 : 380;
+    const total = 150 + hold + 200;
+    if (id === 0 || t < 0 || t > total) return { id: 0, sc: 0, sy: 1, op: 0, x: 0, y: 0, w: 0 };
+    let sc = 1;
+    let sy = 1;
+    let op = 1;
+    let dy = 0;
+    if (t < 90) sc = lerp(0.6, 1.15, outBack(t / 90, 1.7));
+    else if (t < 150) sc = lerp(1.15, 1, (t - 90) / 60);
+    if (t < 17) sy = 0.85;
+    if (t > 150 + hold) {
+      const k = (t - 150 - hold) / 200;
+      op = 1 - k;
+      dy = -22 * k;
+    }
+    if (reducedMotion) {
+      sc = 1;
+      sy = 1;
+    }
+    const w = banner ? 470 : 250;
+    const x = banner ? VIEW_W / 2 : Math.min(VIEW_W - w / 2 - 20, p.stampX + 30);
+    const y = banner ? 210 : Math.max(120, p.stampY);
+    return { id, sc, sy, op, x, y: y + dy, w };
+  });
+
+  // --- warning badges (fin-shaped, at the hazard's own y) -----------------------------
+  const badges = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = pres.value;
+    const dist = distV.value;
+    const edge = dist + (VIEW_W - p.anc);
+    const lead = (Math.max(s.speedEff, s.speed) / 256) * 0.6 || 1;
+    const out: number[] = [p.fx];
+    for (let i = 0; i < ENT_CAP && out.length < 1 + BADGES * 7; i++) {
+      const t = s.et[i];
+      if (t !== E_PYLON && t !== E_JELLY && t !== E_PUFFER && t !== E_TORPEDO) continue;
+      if (!(s.ef[i] & F_BADGE) || (s.ef[i] & F_HIT)) continue;
+      if (t === E_TORPEDO) {
+        const st = s.est[i];
+        if (st !== 1 && st !== 2) continue;
+        const flash = st === 2 ? (Math.floor(p.fx / 50) % 2 ? 1 : 0.4) : 1;
+        out.push(3, s.ey[i], s.ey[i] - TORP_H / 2, s.ey[i] + TORP_H / 2, flash, 1, st === 2 ? 1 : 0);
+        continue;
+      }
+      const sp = hazardSpan(s, i);
+      const ahead = sp[0] - edge;
+      if (ahead < -80 || ahead > lead) continue;
+      const slide = clamp01((lead - ahead) / (lead * 0.2));
+      const fade = ahead < 0 ? clamp01(1 + ahead / 80) : 1;
+      if (t === E_PYLON) {
+        const half = s.ep1[i] / 2;
+        out.push(0, s.ey[i], s.ey[i] - half, s.ey[i] + half, fade, slide, 0);
+      } else {
+        const y = t === E_JELLY ? jellyY(s, i) : s.ey[i];
+        const r = t === E_JELLY ? JELLY_R : PUFF_R1;
+        out.push(t === E_JELLY ? 1 : 2, y, y - r, y + r, fade, slide, 0);
+      }
+    }
+    return out;
+  });
+  const badgePaint = useMemo(() => {
+    const pt = Skia.Paint();
+    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(DANGER), BlendMode.Multiply));
+    return pt;
+  }, []);
+
+  // --- Gate Rush bunting drops in at the top during the rush -------------------------
+  const buntingT = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const k = clamp01(s.rushK / 288);
+    return [{ translateX: -((distV.value * 1.1) % 512) }, { translateY: lerp(-160, 0, outBack(k, 1.4)) }];
+  });
+
+  const skyTile = useMemo(() => {
+    const band = Math.max(1, L.offY + SURFACE_Y * L.k + 6);
+    const R = 470 / 768;
+    const hPt = Math.max(band / R, 160);
+    return { w: hPt * (2048 / 768), h: hPt, y: band - hPt * R };
+  }, [L]);
+  const skyX = useDerivedValue(() => [{ translateX: -((distV.value * 0.06 * L.k) % (skyTile.w * 2)) }]);
+  const inkLayer = useMemo(() => {
+    const pt = Skia.Paint();
+    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('rgba(35,56,79,0.7)'), BlendMode.SrcIn));
+    return pt;
+  }, []);
+
+  const q = quality;
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Water body fills the whole field; bands draw over it. */}
-      <Rect x={0} y={0} width={L.w} height={L.h}>
-        <LinearGradient start={vec(0, L.offY)} end={vec(0, L.offY + FLOOR_Y * L.k)} colors={waterColors} />
-      </Rect>
-
-      <Group transform={worldTransform}>
-        {/* God rays and caustics: far layer only, never over gameplay sprites. */}
-        {/* Quality tiers never unmount Skia nodes (removing a node with live
-            derived props crashed Skia 1.5 on the UI thread); they zero sizes instead. */}
-        <Group transform={rayTransform} origin={vec(480, SURFACE_Y)} opacity={quality < 2 ? 1 : 0}>
-          {rayPaths.map((p, i) => (
-            <Path key={i} path={p} color="#ffffff" opacity={0.07 + (i % 2) * 0.03} />
-          ))}
-        </Group>
-        {caustic ? (
-          <Rect x={-60} y={SURFACE_Y} width={quality === 0 ? VIEW_W + 120 : 0} height={quality === 0 ? 560 : 0}>
-            <Shader source={caustic} uniforms={causticUniforms} />
-          </Rect>
-        ) : null}
-
-        {/* Far layer (0.2x): the sunken carnival reef, low contrast behind everything. */}
-        {farReef ? (
-          <Group transform={farX} opacity={0.42}>
-            {[0, 1, 2, 3].map((k) => (
-              <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * FAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * FAR.w }]}>
-                <SkImage image={farReef} x={0} y={FLOOR_Y + 30 - FAR.h} width={quality < 2 ? FAR.w : 0} height={quality < 2 ? FAR.h : 0} />
-              </Group>
+      {/* Graded background: water, rays, caustics, far reef, floor strip, arches. */}
+      <Group layer={gradeLayer}>
+        <Rect x={0} y={0} width={L.w} height={L.h}>
+          <LinearGradient start={vec(0, L.offY)} end={vec(0, L.offY + FLOOR_Y * L.k)} colors={waterColors} />
+        </Rect>
+        <Group transform={worldTransform}>
+          <Group transform={rayTransform} origin={vec(360, SURFACE_Y)} opacity={q < 2 ? 1 : 0}>
+            {rayPaths.map((p, i) => (
+              <Path key={i} path={p}>
+                <LinearGradient start={vec(0, SURFACE_Y)} end={vec(0, 300)} colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0)']} />
+              </Path>
             ))}
           </Group>
-        ) : null}
-
-        {/* Coral floor strip (mid layer, 0.5x), bottom band only. */}
-        <Group transform={reefX}>
-          {[0, 1, 2, 3].map((k) => (
-            reefMid ? <SkImage key={k} image={reefMid} x={-60 + k * REEF.w} y={FLOOR_Y + 40 - REEF.h} width={REEF.w} height={REEF.h} opacity={0.85} /> : null
-          ))}
+          {caustic ? (
+            <Rect x={-80} y={SURFACE_Y} width={q === 0 ? VIEW_W + 160 : 0} height={q === 0 ? 260 : 0}>
+              <Shader source={caustic} uniforms={causticUniforms} />
+            </Rect>
+          ) : null}
+          {farReef ? (
+            <Group transform={farX} opacity={0.5}>
+              {[0, 1, 2].map((k) => (
+                <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * FAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * FAR.w }]}>
+                  <SkImage image={farReef} x={0} y={FLOOR_Y + 30 - FAR.h} width={q < 2 ? FAR.w : 0} height={q < 2 ? FAR.h : 0} />
+                </Group>
+              ))}
+            </Group>
+          ) : null}
+          <Group transform={reefX}>
+            {[0, 1, 2].map((k) => (reefMid ? <SkImage key={k} image={reefMid} x={-60 + k * REEF.w} y={FLOOR_Y + 40 - REEF.h} width={REEF.w} height={REEF.h} opacity={0.85} /> : null))}
+          </Group>
+          <Gates sim={sim} pres={pres} tick={tick} alpha={alpha} tideArt={tideGate} rideArt={rideGate} part="arch" />
         </Group>
+      </Group>
 
+      <Group transform={worldTransform}>
         {/* Sand floor */}
-        <Rect x={-200} y={FLOOR_Y - 4} width={VIEW_W + 400} height={1400}>
+        <Rect x={-300} y={FLOOR_Y - 4} width={VIEW_W + 600} height={1400}>
           <LinearGradient start={vec(0, FLOOR_Y)} end={vec(0, FLOOR_Y + 300)} colors={['#f7e3b0', '#ecc987']} />
         </Rect>
-        <Rect x={-200} y={FLOOR_Y - 6} width={VIEW_W + 400} height={5} color={INK} opacity={0.55} />
+        <Rect x={-300} y={FLOOR_Y - 6} width={VIEW_W + 600} height={5} color={INK} opacity={0.55} />
+        <Oval rect={shadowRect} color={INK} opacity={shadowOp} />
 
-        <Rivals sim={sim} rivals={rivals} tick={tick} alpha={alpha} swim={swim} colors={rivalColors} />
-        <Gates sim={sim} tick={tick} alpha={alpha} font={font} tideArt={tideGate} rideArt={rideGate} />
-        <Rings sim={sim} tick={tick} alpha={alpha} image={ringImg} half="back" />
+        {atlas ? <Atlas image={atlas.image} sprites={back.sprites} transforms={back.transforms} colors={backColors} blendMode="modulate" /> : null}
+
+        <Rivals sim={sim} pres={pres} rivals={rivals} tick={tick} alpha={alpha} swim={swim} colors={rivalColors} />
+        <Gates sim={sim} pres={pres} tick={tick} alpha={alpha} tideArt={tideGate} rideArt={rideGate} part="line" />
+
+        {/* Graze halos: white = where to be */}
+        <Group opacity={hazardOp}>
+          <Path path={haloPath} style="stroke" strokeWidth={5.5} color={NEUTRAL} opacity={0.3} />
+          <Path path={nearPath} style="stroke" strokeWidth={6.5} color={NEUTRAL} opacity={0.7} />
+        </Group>
+
+        <Rings sim={sim} pres={pres} tick={tick} alpha={alpha} image={ringImg} half="back" />
 
         {atlas ? (
-          <Group opacity={worldAlpha}>
-            <Atlas image={atlas.image} sprites={sprites} transforms={transforms} />
+          <Group opacity={hazardOp}>
+            {q === 0 ? (
+              <Group transform={[{ translateY: 7.4 }]} layer={shadowPaint}>
+                <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} colors={worldColors} blendMode="modulate" />
+              </Group>
+            ) : null}
+            <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} colors={worldColors} blendMode="modulate" />
           </Group>
         ) : null}
 
-        <Shark sim={sim} tick={tick} alpha={alpha} swim={swim} dash={dashImg} dizzy={dizzy} bonked={bonked} cheer={cheer} bubble={bubble} />
-        <Rings sim={sim} tick={tick} alpha={alpha} image={ringImg} half="front" />
-        <FrenzyPot sim={sim} tick={tick} alpha={alpha} font={font} />
-
-        {/* Near strip: 40% alpha (25% in Storm Surge), floor band only. */}
-        <Group transform={nearX} opacity={0.5}>
-          {[0, 1, 2, 3].map((k) => (
-            reefNear ? (
-              <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * NEAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * NEAR.w }]}>
-                <SkImage image={reefNear} x={0} y={FLOOR_Y + 110 - NEAR.h} width={quality < 2 ? NEAR.w : 0} height={quality < 2 ? NEAR.h : 0} />
-              </Group>
-            ) : null
-          ))}
+        {/* Coral danger rims: coral = what not to touch (2Hz pulse) */}
+        <Group opacity={hazardOp}>
+          <Path path={rimPath} style="stroke" strokeWidth={5.5} color={DANGER} opacity={rimOp} />
         </Group>
+        <Path path={flashPath} style="stroke" strokeWidth={5.5} color={NEUTRAL} />
 
-        <Badges sim={sim} tick={tick} alpha={alpha} font={font} />
+        {/* Frenzy ribbon */}
+        <Path path={ribbonPath} color={REWARD} />
+        <Path path={ribbonPath} style="stroke" strokeWidth={2.5} color={INK} opacity={0.6} />
+        <Path path={ribbonCore} style="stroke" strokeWidth={2.5} color={NEUTRAL} opacity={0.9} />
+
+        <SharkSprite sim={sim} pres={pres} tick={tick} alpha={alpha} swim={swim} dash={dashImg} dizzy={dizzy} bonked={bonked} cheer={cheer} bubble={bubble} font={font} reducedMotion={reducedMotion} />
+        <Rings sim={sim} pres={pres} tick={tick} alpha={alpha} image={ringImg} half="front" />
+
+        <Path path={wake} style="stroke" strokeWidth={7} strokeCap="round" color={INK} opacity={0.5} />
+        <Path path={wake} style="stroke" strokeWidth={4} strokeCap="round" color={NEUTRAL} opacity={0.9} />
+        <Circle cx={shockX} cy={shockY} r={shockR} style="stroke" strokeWidth={shockW} color={NEUTRAL} />
+
+        {/* Ink kelp and rope strips (1.4x): only above y 150 and below y 850 */}
+        {reefNear ? (
+          <Group opacity={q < 2 ? 1 : 0}>
+            <Group clip={rect(-300, 850, VIEW_W + 600, 600)} layer={inkLayer}>
+              <Group transform={nearX}>
+                {[0, 1, 2].map((k) => (
+                  <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * NEAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * NEAR.w }]}>
+                    <SkImage image={reefNear} x={0} y={FLOOR_Y + 150 - NEAR.h} width={NEAR.w} height={NEAR.h} />
+                  </Group>
+                ))}
+              </Group>
+            </Group>
+            <Group clip={rect(-300, -400, VIEW_W + 600, 550)} layer={inkLayer}>
+              <Group transform={nearX}>
+                {[0, 1, 2].map((k) => (
+                  <Group key={k} transform={[{ translateX: -260 + k * NEAR.w }, { translateY: SURFACE_Y - 170 }, { scaleY: -1 }, { translateY: -NEAR.h }]}>
+                    <SkImage image={reefNear} x={0} y={0} width={NEAR.w} height={NEAR.h} opacity={0.8} />
+                  </Group>
+                ))}
+              </Group>
+            </Group>
+          </Group>
+        ) : null}
+
+        <Stamps state={stampState} images={stampImgs} />
+        <Badges list={badges} fin={finBadge} paint={badgePaint} icons={[cap, jelly, puff, boat]} />
+        {bunting ? (
+          <Group transform={buntingT}>
+            {[0, 1, 2].map((k) => <SkImage key={k} image={bunting} x={-60 + k * 512} y={SURFACE_Y - 20} width={512} height={170} />)}
+          </Group>
+        ) : null}
       </Group>
 
-      {/* Sky band over the water top: Alex-style lagoon skyline, mirror-tiled. */}
-      <Group clip={rect(0, 0, L.w, 1)}>
-        <Rect x={0} y={0} width={0} height={0} color="transparent" />
-      </Group>
-      <SkyBand sim={sim} tick={tick} alpha={alpha} sky={sky} layout={L} tile={SKY_TILE} skyX={skyX} surface={surfacePath} tiles={skyTiles} />
+      <SkyBand sky={sky} layout={L} tile={skyTile} skyX={skyX} surface={surfacePath} pres={pres} />
     </Canvas>
   );
 });
@@ -563,17 +925,16 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
 // ---------------------------------------------------------------------------
 // Sky band: art clipped by the animated water surface line.
 // ---------------------------------------------------------------------------
-const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surface, tiles }: {
-  sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>;
+const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surface, pres }: {
   sky: SkImageType | null; layout: SharkyLayout; tile: { w: number; h: number; y: number };
-  skyX: SharedValue<{ translateX: number }[]>; surface: SharedValue<ReturnType<typeof Skia.Path.Make>>; tiles: number[];
+  skyX: SharedValue<{ translateX: number }[]>; surface: SharedValue<ReturnType<typeof Skia.Path.Make>>; pres: SharedValue<Pres>;
 }) {
   const clipPath = useDerivedValue(() => {
     const p = surface.value.copy();
-    p.transform(Skia.Matrix().translate(L.offX, L.offY).scale(L.k, L.k));
+    p.transform(Skia.Matrix().translate(L.offX, L.offY + pres.value.camY * L.k).scale(L.k, L.k));
     return p;
   });
-  const lip = useDerivedValue(() => clipPath.value);
+  const tiles = useMemo(() => [0, 1, 2, 3], []);
   return (
     <Group>
       <Group clip={clipPath}>
@@ -588,221 +949,64 @@ const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surfac
           )) : null}
         </Group>
       </Group>
-      <Path path={lip} style="stroke" strokeWidth={Math.max(2, 3 * L.k * 1.6)} color="#ffffff" opacity={0.95} />
+      <Path path={clipPath} style="stroke" strokeWidth={Math.max(2, 3 * L.k * 1.6)} color={NEUTRAL} opacity={0.95} />
     </Group>
   );
 });
 
 // ---------------------------------------------------------------------------
-// Shark: Alex's swim pose, rigid head + rear tail mesh, pose swaps.
+// Gates: the 60% arch set piece (background) and the bunting line (world).
 // ---------------------------------------------------------------------------
-const MESH_TEX_W = 576;
-const MESH_TEX_H = 331;
-const MESH_INDICES = (() => {
-  const idx: number[] = [];
-  for (let r = 0; r < MESH_R; r++) {
-    for (let c = 0; c < MESH_C; c++) {
-      const a = r * (MESH_C + 1) + c;
-      const b = a + 1;
-      const d = a + (MESH_C + 1);
-      const e = d + 1;
-      idx.push(a, b, d, b, e, d);
-    }
-  }
-  return idx;
-})();
-
-const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, bonked, cheer, bubble }: {
-  sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>;
-  swim: SkImageType | null; dash: SkImageType | null; dizzy: SkImageType | null; bonked: SkImageType | null;
-  cheer: SkImageType | null; bubble: SkImageType | null;
-}) {
-  const pose = useDerivedValue(() => {
-    tick.value;
-    return sharkPose(sim.value, alpha.value);
-  });
-  const transform = useDerivedValue(() => {
-    const p = pose.value;
-    const s = sim.value;
-    let spin = 0;
-    let lift = 0;
-    let scale = 1;
-    if (p.pose === 3) {
-      // Wipeout: 540 deg spin while floating up 120u over 900ms.
-      const k = Math.min(1, s.phaseSteps / 54);
-      const e = 1 - (1 - k) * (1 - k);
-      spin = e * Math.PI * 3;
-      lift = -120 * e;
-      scale = 1 + 0.1 * e;
-    }
-    if (p.pose === 4) {
-      const k = Math.min(1, s.phaseSteps / 30);
-      lift = -40 * Math.sin(k * Math.PI);
-    }
-    return [
-      { translateX: p.x },
-      { translateY: p.y + lift },
-      { rotate: p.tilt + spin },
-      { scaleX: p.sx * scale },
-      { scaleY: p.sy * scale },
-    ];
-  });
-  const vertices = useDerivedValue(() => {
-    const p = pose.value;
-    const pts = [];
-    const amp = p.hold ? 6 : 4;
-    const f = p.hold ? 3.2 : 2.2;
-    const h = (SHARK_W * MESH_TEX_H) / MESH_TEX_W;
-    for (let r = 0; r <= MESH_R; r++) {
-      for (let c = 0; c <= MESH_C; c++) {
-        const x = -SHARK_W / 2 + (SHARK_W * c) / MESH_C;
-        let y = -h / 2 + (h * r) / MESH_R;
-        // Rear 55% only (columns 0..6 from the tail, the image faces right).
-        if (c < 7) {
-          const w = ((6.6 - c) / 6.6) * ((6.6 - c) / 6.6);
-          y += amp * w * Math.sin(2 * Math.PI * f * p.t - (12 - c) * 0.55);
-        }
-        pts.push(vec(x, y));
-      }
-    }
-    return pts;
-  });
-  const textures = useMemo(() => {
-    const pts = [];
-    for (let r = 0; r <= MESH_R; r++) {
-      for (let c = 0; c <= MESH_C; c++) pts.push(vec((MESH_TEX_W * c) / MESH_C, (MESH_TEX_H * r) / MESH_R));
-    }
-    return pts;
-  }, []);
-  const op = (k: number) => useDerivedValue(() => (pose.value.pose === k ? pose.value.alpha : 0));
-  const o0 = op(0);
-  const o1 = op(1);
-  const o2 = op(2);
-  const o3 = op(3);
-  const o4 = op(4);
-  const floatScale = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    if (s.float === 0) return 0;
-    const k = Math.min(1, s.floatSteps / 24);
-    const back = 1.4;
-    const e = 1 + (back + 1) * Math.pow(k - 1, 3) + back * Math.pow(k - 1, 2);
-    return Math.max(0, e);
-  });
-  const floatT = useDerivedValue(() => {
-    const p = pose.value;
-    const sc = floatScale.value;
-    return [{ translateX: p.x }, { translateY: p.y }, { scale: sc }];
-  });
-  const shieldOp = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    return s.shield || s.reviveShield > 0 ? 0.55 + 0.1 * Math.sin(s.worldT / 5) : 0;
-  });
-  const shieldT = useDerivedValue(() => [{ translateX: pose.value.x }, { translateY: pose.value.y }]);
-  const DH = (SHARK_W * 458) / 768;
-  // Dash afterimages: 3 ghosts trailing 30u apart, fading 0.45 -> 0.
-  const ghostOp = useDerivedValue(() => (tick.value, sim.value.dash > 0 ? 1 : 0));
-  const ghostT = [1, 2, 3].map((k) => useDerivedValue(() => {
-    const p = pose.value;
-    return [{ translateX: p.x - k * 34 }, { translateY: p.y }, { rotate: p.tilt }, { scaleX: 1.12 }, { scaleY: 0.92 }];
-  }));
-  return (
-    <Group>
-      {dash ? (
-        <Group opacity={ghostOp}>
-          {ghostT.map((t, k) => (
-            <Group key={k} transform={t} opacity={0.45 - k * 0.13}>
-              <SkImage image={dash} x={-SHARK_W * 0.55} y={-DH / 2} width={SHARK_W * 1.1} height={DH * 1.1} />
-            </Group>
-          ))}
-        </Group>
-      ) : null}
-      <Group transform={transform}>
-        {swim ? (
-          <Group opacity={o0}>
-            <Vertices vertices={vertices} textures={textures} indices={MESH_INDICES} mode="triangles">
-              <ImageShader image={swim} />
-            </Vertices>
-          </Group>
-        ) : null}
-        {dash ? <SkImage image={dash} x={-SHARK_W * 0.55} y={-DH / 2} width={SHARK_W * 1.1} height={DH * 1.1} opacity={o1} /> : null}
-        {dizzy ? <SkImage image={dizzy} x={-60} y={-80} width={120} height={167} opacity={o2} /> : null}
-        {bonked ? <SkImage image={bonked} x={-62} y={-83} width={124} height={166} opacity={o3} /> : null}
-        {cheer ? <SkImage image={cheer} x={-64} y={-80} width={128} height={160} opacity={o4} /> : null}
-      </Group>
-      {/* Shield / revive bubble */}
-      <Group transform={shieldT} opacity={shieldOp}>
-        <Circle cx={0} cy={0} r={92} color="#bfeaff" opacity={0.35} />
-        <Circle cx={0} cy={0} r={92} style="stroke" strokeWidth={6} color="#ffffff" />
-        <Circle cx={-34} cy={-44} r={12} color="#ffffff" opacity={0.8} />
-      </Group>
-      {/* Bubble Float */}
-      <Group transform={floatT}>
-        {bubble ? <SkImage image={bubble} x={-118} y={-118} width={236} height={236} opacity={0.55} /> : null}
-        <Circle cx={0} cy={0} r={112} style="stroke" strokeWidth={5} color="#ffffff" opacity={0.9} />
-      </Group>
-    </Group>
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Gates: Tide Gate (bunting arch), race split line, Ride Gate / finish.
-// ---------------------------------------------------------------------------
-const Gates = React.memo(function Gates({ sim, tick, alpha, font, tideArt, rideArt }: {
-  sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null;
-  tideArt: SkImageType | null; rideArt: SkImageType | null;
+const ARCH_H = 606;
+const ARCH_W = (ARCH_H * 384) / 351;
+const Gates = React.memo(function Gates({ sim, pres, tick, alpha, tideArt, rideArt, part }: {
+  sim: SharedValue<SimState>; pres: SharedValue<Pres>; tick: SharedValue<number>; alpha: SharedValue<number>;
+  tideArt: SkImageType | null; rideArt: SkImageType | null; part: 'arch' | 'line';
 }) {
   const list = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const a = alpha.value;
-    const dist = lerp(s.pdist, s.dist, a) / 256;
-    const anc = anchorX(s);
+    const p = pres.value;
+    const dist = lerp(s.pdist, s.dist, alpha.value) / 256;
     const out: number[] = [];
     for (let i = 0; i < ENT_CAP && out.length < 6; i++) {
       if (s.et[i] !== E_GATE) continue;
-      const vx = anc + (s.ex[i] - dist);
-      // Wide window: the arch set piece is ~1100u across.
-      if (vx < -300 || vx > VIEW_W + 900) continue;
-      out.push(vx, s.ep1[i], (s.worldT + a) / 60);
+      const vx = p.anc + (s.ex[i] - dist);
+      if (vx < -500 || vx > VIEW_W + 500) continue;
+      out.push(vx, s.ep1[i], p.fx / 1000);
     }
     return out;
   });
+  if (part === 'arch') {
+    return (
+      <Group>
+        <GateArch i={0} list={list} tide={tideArt} ride={rideArt} />
+        <GateArch i={1} list={list} tide={tideArt} ride={rideArt} />
+      </Group>
+    );
+  }
   return (
     <Group>
-      <GateArch i={0} list={list} tide={tideArt} ride={rideArt} />
-      <GateArch i={1} list={list} tide={tideArt} ride={rideArt} />
-      <Gate i={0} list={list} font={font} />
-      <Gate i={1} list={list} font={font} />
+      <GateLine i={0} list={list} />
+      <GateLine i={1} list={list} />
     </Group>
   );
 });
 
-/**
- * The gate set piece: a huge front-view arch (Tide Gate: bubble-and-bunting arch
- * with the tide clock; Ride Gate: the bulb-lit grand entrance) framing the whole
- * water column, so crossing a gate reads as swimming through it. Drawn behind
- * every gameplay sprite. A Tide Gate arch is centred 300u before the bunting
- * line so it has fully passed before the sim culls the gate entity.
- */
-const ARCH_H = 1010;
-const ARCH_W = (ARCH_H * 384) / 351;
 function GateArch({ i, list, tide, ride }: { i: number; list: SharedValue<number[]>; tide: SkImageType | null; ride: SkImageType | null }) {
   const st = useDerivedValue(() => {
     const l = list.value;
     const o = i * 3;
-    if (o >= l.length || l[o + 1] === G_SPLIT) return { x: -9999, ride: 0, t: 0 };
+    if (o >= l.length) return { x: -9999, ride: 0, t: 0 };
     const big = l[o + 1] === G_RIDE || l[o + 1] === G_FINISH;
-    return { x: l[o] + (big ? 0 : -300), ride: big ? 1 : 0, t: l[o + 2] };
+    return { x: l[o], ride: big ? 1 : 0, t: l[o + 2] };
   });
   const tr = useDerivedValue(() => {
     const v = st.value;
-    // A slow 1.5% breathe so the arch feels alive (bubbles / bulbs).
     const b = 1 + 0.015 * Math.sin(v.t * 3.1);
-    return [{ translateX: v.x }, { translateY: FLOOR_Y + 40 }, { scale: b }];
+    return [{ translateX: v.x }, { translateY: 480 + ARCH_H / 2 }, { scale: b }];
   });
-  const tideOp = useDerivedValue(() => (st.value.x < -9000 || st.value.ride ? 0 : 0.72));
+  const tideOp = useDerivedValue(() => (st.value.x < -9000 || st.value.ride ? 0 : 0.9));
   const rideOp = useDerivedValue(() => (st.value.x < -9000 || !st.value.ride ? 0 : 1));
   return (
     <Group transform={tr}>
@@ -812,7 +1016,7 @@ function GateArch({ i, list, tide, ride }: { i: number; list: SharedValue<number
   );
 }
 
-function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font: SkFont | null }) {
+function GateLine({ i, list }: { i: number; list: SharedValue<number[]> }) {
   const paths = useDerivedValue(() => {
     const l = list.value;
     const o = i * 3;
@@ -824,21 +1028,21 @@ function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font:
     const kind = l[o + 1];
     const t = l[o + 2];
     if (kind === G_SPLIT) {
-      for (let y = SURFACE_Y; y < FLOOR_Y; y += 40) split.addRect(Skia.XYWHRect(x - 4, y, 8, 22));
+      for (let y = SURFACE_Y + 20; y < FLOOR_Y; y += 46) split.addRRect(Skia.RRectXY(Skia.XYWHRect(x - 5, y, 10, 26), 5, 5));
       return { rope, flags, split };
     }
-    // Bunting rope between the hanging pole and the standing pole, flags wave at 3 Hz.
-    const y0 = SURFACE_Y + 250;
-    const y1 = FLOOR_Y - 250;
+    // Bunting line across the arch opening; flags wave at 3Hz.
+    const y0 = 220;
+    const y1 = 780;
     rope.moveTo(x, y0);
-    rope.quadTo(x + 26 + Math.sin(t * 2) * 6, (y0 + y1) / 2, x, y1);
+    rope.quadTo(x + 22 + Math.sin(t * 2) * 6, (y0 + y1) / 2, x, y1);
     for (let k = 0; k < 7; k++) {
       const y = y0 + 20 + k * ((y1 - y0 - 40) / 6);
-      const bow = Math.sin((k / 6) * Math.PI) * 22;
-      const wave = Math.sin(t * 6.28 * 1.5 + k) * 8;
-      flags.moveTo(x + bow, y - 16);
-      flags.lineTo(x + bow + 44 + wave, y);
-      flags.lineTo(x + bow, y + 16);
+      const bow = Math.sin((k / 6) * Math.PI) * 18;
+      const wave = Math.sin(t * 6.28 * 3 + k) * 7;
+      flags.moveTo(x + bow, y - 15);
+      flags.lineTo(x + bow + 40 + wave, y);
+      flags.lineTo(x + bow, y + 15);
       flags.close();
     }
     return { rope, flags, split };
@@ -846,12 +1050,12 @@ function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font:
   const rope = useDerivedValue(() => paths.value.rope);
   const flags = useDerivedValue(() => paths.value.flags);
   const split = useDerivedValue(() => paths.value.split);
-  void font;
   return (
     <Group>
-      <Path path={split} color="#ffffff" opacity={0.85} />
+      <Path path={split} color={NEUTRAL} opacity={0.9} />
+      <Path path={split} style="stroke" strokeWidth={3} color={INK} opacity={0.5} />
       <Path path={rope} style="stroke" strokeWidth={5} color={INK} />
-      <Path path={flags} color={GOLD} />
+      <Path path={flags} color={REWARD} />
       <Path path={flags} style="stroke" strokeWidth={4} color={INK} />
     </Group>
   );
@@ -860,22 +1064,21 @@ function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font:
 // ---------------------------------------------------------------------------
 // Rings: drawn side-on in two halves so the shark swims THROUGH them.
 // ---------------------------------------------------------------------------
-const Rings = React.memo(function Rings({ sim, tick, alpha, image, half }: {
-  sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; image: SkImageType | null; half: 'back' | 'front';
+const Rings = React.memo(function Rings({ sim, pres, tick, alpha, image, half }: {
+  sim: SharedValue<SimState>; pres: SharedValue<Pres>; tick: SharedValue<number>; alpha: SharedValue<number>; image: SkImageType | null; half: 'back' | 'front';
 }) {
   const list = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const a = alpha.value;
-    const dist = lerp(s.pdist, s.dist, a) / 256;
-    const anc = anchorX(s);
+    const p = pres.value;
+    const dist = lerp(s.pdist, s.dist, alpha.value) / 256;
     const out: number[] = [];
     for (let i = 0; i < ENT_CAP && out.length < RINGS * 3; i++) {
       if (s.et[i] !== E_RING) continue;
-      const vx = anc + (s.ex[i] - dist);
-      if (vx < -120 || vx > VIEW_W + 120) continue;
-      const done = s.ef[i] & F_DONE ? Math.min(1, (vx < anc ? (anc - vx) / 80 : 0)) : 0;
-      out.push(vx, s.ey[i], done);
+      const vx = p.anc + (s.ex[i] - dist);
+      if (vx < -140 || vx > VIEW_W + 140) continue;
+      // The Perfect ring freezes with the shark for 50ms (local freeze).
+      out.push(vx, s.ey[i], s.ef[i] & F_DONE ? 1 : 0);
     }
     return out;
   });
@@ -888,7 +1091,7 @@ const Rings = React.memo(function Rings({ sim, tick, alpha, image, half }: {
 });
 
 function Ring({ i, list, image, half }: { i: number; list: SharedValue<number[]>; image: SkImageType; half: 'back' | 'front' }) {
-  const H = RING_R * 2 + 44;
+  const H = RING_R * 2 + 48;
   const W = H * 0.42;
   const tr = useDerivedValue(() => {
     const l = list.value;
@@ -896,146 +1099,147 @@ function Ring({ i, list, image, half }: { i: number; list: SharedValue<number[]>
     if (o >= l.length) return [{ translateX: -9999 }, { translateY: 0 }];
     return [{ translateX: l[o] }, { translateY: l[o + 1] }];
   });
+  const op = useDerivedValue(() => {
+    const l = list.value;
+    const o = i * 3;
+    return o < l.length && l[o + 2] ? 0.55 : half === 'back' ? 0.85 : 1;
+  });
   const clip = useMemo(() => (half === 'back' ? rect(-W, -H, W, H * 2) : rect(0, -H, W, H * 2)), [half, W, H]);
   return (
     <Group transform={tr}>
       <Group clip={clip}>
-        <SkImage image={image} x={-W / 2} y={-H / 2} width={W} height={H} fit="fill" opacity={half === 'back' ? 0.85 : 1} />
+        <SkImage image={image} x={-W / 2} y={-H / 2} width={W} height={H} fit="fill" opacity={op} />
       </Group>
     </Group>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Frenzy Pot: floating gold number above the shark.
+// Stamps: the drawn word art, one on screen at a time (design 7.2).
 // ---------------------------------------------------------------------------
-const FrenzyPot = React.memo(function FrenzyPot({ sim, tick, alpha, font }: { sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null }) {
-  const text = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    return s.frenzy > 0 ? `${s.pot}` : '';
-  });
-  const pos = useDerivedValue(() => {
-    const s = sim.value;
-    const y = lerp(s.py, s.y, alpha.value) / 256;
-    const w = font ? font.measureText(text.value).width : 0;
-    return [{ translateX: anchorX(s) - w / 2 }, { translateY: y - 70 }];
-  });
-  if (!font) return null;
-  return (
-    <Group transform={pos}>
-      <SkText x={0} y={0} text={text} font={font} color={INK} style="stroke" strokeWidth={8} />
-      <SkText x={0} y={0} text={text} font={font} color={GOLD} />
-    </Group>
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Edge badges: coral tabs at the right edge 600ms before a hazard enters.
-// ---------------------------------------------------------------------------
-const Badges = React.memo(function Badges({ sim, tick, alpha, font }: { sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null }) {
-  const list = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const a = alpha.value;
-    const dist = lerp(s.pdist, s.dist, a) / 256;
-    const edge = dist + aheadU(s);
-    const lead = ((s.speedEff / 256) * 0.6) || 1;
-    const out: number[] = [];
-    for (let i = 0; i < ENT_CAP && out.length < BADGES * 6; i++) {
-      const t = s.et[i];
-      if (t !== E_PYLON && t !== E_JELLY && t !== E_PUFFER && t !== E_TORPEDO) continue;
-      if (!(s.ef[i] & F_BADGE) || (s.ef[i] & F_HIT)) continue;
-      if (t === E_TORPEDO) {
-        const st = s.est[i];
-        if (st !== 1 && st !== 2) continue;
-        const flash = st === 2 ? (Math.floor(s.etm[i] / 3) % 2 ? 1 : 0.35) : 1;
-        out.push(3, s.ey[i] - 60, s.ey[i] + 60, 0, flash, 1);
-        continue;
-      }
-      const sp = hazardSpan(s, i);
-      const ahead = sp[0] - edge;
-      if (ahead < -60 || ahead > lead) continue;
-      const slide = clamp01((lead - ahead) / (lead * 0.2));
-      const fade = ahead < 0 ? clamp01(1 + ahead / 60) : 1;
-      if (t === E_PYLON) {
-        const half = s.ep1[i] / 2;
-        out.push(0, s.ey[i] - half, s.ey[i] + half, 0, fade, slide);
-      } else {
-        const y = t === E_JELLY ? jellyY(s, i) : s.ey[i];
-        const r = t === E_JELLY ? JELLY_R : PUFF_R1;
-        out.push(1, y - r, y + r, 0, fade, slide);
-      }
-    }
-    return out;
-  });
+function Stamps({ state, images }: { state: SharedValue<{ id: number; sc: number; sy: number; op: number; x: number; y: number; w: number }>; images: Array<SkImageType | null> }) {
   return (
     <Group>
-      {Array.from({ length: BADGES }, (_, i) => <Badge key={i} i={i} list={list} font={font} />)}
+      {images.map((img, id) => (id === 0 || !img ? null : <Stamp key={id} id={id} state={state} image={img} />))}
     </Group>
   );
-});
+}
 
-function Badge({ i, list, font }: { i: number; list: SharedValue<number[]>; font: SkFont | null }) {
-  const paths = useDerivedValue(() => {
+function Stamp({ id, state, image }: { id: number; state: SharedValue<{ id: number; sc: number; sy: number; op: number; x: number; y: number; w: number }>; image: SkImageType }) {
+  const aspect = image.height() / Math.max(1, image.width());
+  const tr = useDerivedValue(() => {
+    const s = state.value;
+    return [{ translateX: s.x }, { translateY: s.y }, { scaleX: s.sc }, { scaleY: s.sc * s.sy }];
+  });
+  const op = useDerivedValue(() => (state.value.id === id ? state.value.op : 0));
+  const w = useDerivedValue(() => (state.value.id === id ? state.value.w : 0));
+  const h = useDerivedValue(() => w.value * aspect);
+  const x = useDerivedValue(() => -w.value / 2);
+  const y = useDerivedValue(() => -h.value / 2);
+  return (
+    <Group transform={tr} opacity={op}>
+      <SkImage image={image} x={x} y={y} width={w} height={h} />
+    </Group>
+  );
+}
+void STAMP_N;
+
+// ---------------------------------------------------------------------------
+// Warning badges: drawn shark-fin badges, coral, at the hazard's y (design 4.1).
+// ---------------------------------------------------------------------------
+function Badges({ list, fin, paint, icons }: { list: SharedValue<number[]>; fin: SkImageType | null; paint: ReturnType<typeof Skia.Paint>; icons: Array<SkImageType | null> }) {
+  if (!fin) return null;
+  return (
+    <Group>
+      {Array.from({ length: BADGES }, (_, i) => <Badge key={i} i={i} list={list} fin={fin} paint={paint} icons={icons} />)}
+    </Group>
+  );
+}
+
+function Badge({ i, list, fin, paint, icons }: { i: number; list: SharedValue<number[]>; fin: SkImageType; paint: ReturnType<typeof Skia.Paint>; icons: Array<SkImageType | null> }) {
+  const S = 74; // 40pt tall on the reference phone
+  const st = useDerivedValue(() => {
     const l = list.value;
-    const o = i * 6;
-    const p = Skia.Path.Make();
-    if (o >= l.length) return p;
-    const kind = l[o];
+    const o = 1 + i * 7;
+    if (o >= l.length) return { on: 0, kind: 0, y: -999, y0: 0, y1: 0, op: 0, x: VIEW_W + 200, pulse: 1, lock: 0 };
     const slide = l[o + 5];
-    // outBack slide-in from the right edge.
-    const k = slide;
-    const e = 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
-    const x = VIEW_W + 4 - 30 * e;
-    if (kind === 0) {
-      // Pylon: bracket above and below the gap, gap left open.
-      p.addRRect(Skia.RRectXY(Skia.XYWHRect(x, SURFACE_Y + 6, 34, Math.max(10, l[o + 1] - SURFACE_Y - 12)), 10, 10));
-      p.addRRect(Skia.RRectXY(Skia.XYWHRect(x, l[o + 2] + 6, 34, Math.max(10, FLOOR_Y - l[o + 2] - 12)), 10, 10));
-    } else if (kind === 1) {
-      p.addRRect(Skia.RRectXY(Skia.XYWHRect(x, l[o + 1], 34, l[o + 2] - l[o + 1]), 14, 14));
+    const e = outBack(clamp01(slide), 1.6);
+    const x = VIEW_W + 60 - 100 * e;
+    // Pulse 1.0 to 1.15 at 6Hz (art only), on the fx clock.
+    const pulse = 1 + 0.075 * (1 + Math.sin((l[0] / 1000) * 2 * Math.PI * 6));
+    return { on: 1, kind: l[o], y: Math.max(SURFACE_Y + 50, Math.min(FLOOR_Y - 50, l[o + 1])), y0: l[o + 2], y1: l[o + 3], op: l[o + 4], x, pulse, lock: l[o + 6] };
+  });
+  const tr = useDerivedValue(() => [{ translateX: st.value.x }, { translateY: st.value.y }, { scale: st.value.pulse }]);
+  const op = useDerivedValue(() => st.value.op);
+  const bracket = useDerivedValue(() => {
+    const v = st.value;
+    const p = Skia.Path.Make();
+    if (!v.on) return p;
+    const bx = VIEW_W - 14;
+    if (v.kind === 0) {
+      // Pylon: two brackets with the gap left open.
+      const top = Math.max(SURFACE_Y + 8, v.y0);
+      const bot = Math.min(FLOOR_Y - 8, v.y1);
+      p.moveTo(bx - 14, SURFACE_Y + 8); p.lineTo(bx, SURFACE_Y + 8); p.lineTo(bx, top); p.lineTo(bx - 14, top);
+      p.moveTo(bx - 14, bot); p.lineTo(bx, bot); p.lineTo(bx, FLOOR_Y - 8); p.lineTo(bx - 14, FLOOR_Y - 8);
     } else {
-      p.addRRect(Skia.RRectXY(Skia.XYWHRect(VIEW_W - 58, l[o + 1] + 20, 52, 80), 16, 16));
+      p.moveTo(bx - 14, v.y0); p.lineTo(bx, v.y0); p.lineTo(bx, v.y1); p.lineTo(bx - 14, v.y1);
     }
     return p;
   });
-  const op = useDerivedValue(() => {
-    const l = list.value;
-    const o = i * 6;
-    return o < l.length ? l[o + 4] : 0;
+  const chevron = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-S * 0.62, 0);
+    p.lineTo(-S * 0.42, -14);
+    p.lineTo(-S * 0.42, 14);
+    p.close();
+    return p;
+  }, []);
+  const aim = useDerivedValue(() => {
+    const v = st.value;
+    const p = Skia.Path.Make();
+    if (v.kind !== 3 || !v.lock) return p;
+    // Torpedo lock: a dotted coral aim line across the whole lane.
+    for (let x = 30; x < VIEW_W - 60; x += 34) p.addRRect(Skia.RRectXY(Skia.XYWHRect(x, v.y - 4, 18, 8), 4, 4));
+    return p;
   });
-  const bang = useDerivedValue(() => {
-    const l = list.value;
-    const o = i * 6;
-    return o < l.length && l[o] === 3 ? '!' : '';
-  });
-  const bangY = useDerivedValue(() => {
-    const l = list.value;
-    const o = i * 6;
-    return o < l.length ? l[o + 1] + 78 : -999;
-  });
+  const iconOp = (k: number) => useDerivedValue(() => (st.value.kind === k ? 1 : 0));
+  const ic = [iconOp(0), iconOp(1), iconOp(2), iconOp(3)];
   return (
     <Group opacity={op}>
-      <Path path={paths} color={CORAL} />
-      <Path path={paths} style="stroke" strokeWidth={6} color={INK} />
-      {font ? <SkText x={VIEW_W - 42} y={bangY} text={bang} font={font} color="#ffffff" /> : null}
+      <Path path={bracket} style="stroke" strokeWidth={9} strokeCap="round" color={INK} />
+      <Path path={bracket} style="stroke" strokeWidth={5} strokeCap="round" color={DANGER} />
+      <Path path={aim} color={DANGER} opacity={0.85} />
+      <Group transform={tr}>
+        <Group layer={paint}>
+          <SkImage image={fin} x={-S / 2} y={-S / 2} width={S} height={S} />
+        </Group>
+        {icons.map((img, k) => (img ? (
+          <SkImage key={k} image={img} x={-S * 0.2} y={-S * 0.18} width={S * 0.38} height={S * 0.38} fit="contain" opacity={ic[k]} />
+        ) : null))}
+        <Path path={chevron} color={NEUTRAL} />
+        <Path path={chevron} style="stroke" strokeWidth={3} color={INK} />
+      </Group>
     </Group>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Rivals and ghosts: player-colour silhouettes at 0.4 alpha behind hazards.
+// Rivals and ghosts: behind hazards and the shark, 0.85 scale, body at 40%
+// saturation and 0.55 alpha with a 2pt player-colour outline; they fade to 0.2
+// when they overlap your shark (Trackmania fade-through, design 7.10).
 // ---------------------------------------------------------------------------
-const Rivals = React.memo(function Rivals({ sim, rivals, tick, alpha, swim, colors }: {
-  sim: SharedValue<SimState>; rivals: SharedValue<RivalSlot[]>; tick: SharedValue<number>; alpha: SharedValue<number>;
+const Rivals = React.memo(function Rivals({ sim, pres, rivals, tick, alpha, swim, colors }: {
+  sim: SharedValue<SimState>; pres: SharedValue<Pres>; rivals: SharedValue<RivalSlot[]>; tick: SharedValue<number>; alpha: SharedValue<number>;
   swim: SkImageType | null; colors: string[];
 }) {
   const list = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
+    const p = pres.value;
     const a = alpha.value;
     const dist = lerp(s.pdist, s.dist, a) / 256;
-    const anc = anchorX(s);
+    const myY = lerp(s.py, s.y, a) / 256;
     const rv = rivals.value;
     const out: number[] = [];
     for (let j = 0; j < RIVAL_N; j++) {
@@ -1056,43 +1260,57 @@ const Rivals = React.memo(function Rivals({ sim, rivals, tick, alpha, swim, colo
         d = g.rDist + g.rVel * Math.min(0.25, Math.max(0, dt));
         y = g.rY;
       }
-      let gap = d - dist;
-      const clamped = gap > 220 ? 1 : gap < -220 ? -1 : 0;
-      if (gap > 220) gap = 220;
-      if (gap < -220) gap = -220;
+      const gap = d - dist;
+      // Beyond +-160u the sprite hides (the rail and pills show the gap).
+      if (gap > 160 || gap < -160) {
+        out.push(-9999, 0, 0, 0);
+        continue;
+      }
       let tilt = vy / 1400;
       if (tilt < -0.45) tilt = -0.45;
       if (tilt > 0.55) tilt = 0.55;
-      out.push(anc + gap, y, tilt, clamped);
+      const overlap = Math.abs(gap) < 60 && Math.abs(y - myY) < 60 ? 0.2 : 0.55;
+      out.push(p.anc + gap, y, tilt, overlap);
     }
     return out;
   });
   if (!swim) return null;
   return (
     <Group>
-      {Array.from({ length: RIVAL_N }, (_, j) => <RivalShark key={j} j={j} list={list} swim={swim} color={colors[j] ?? '#ffffff'} />)}
+      {Array.from({ length: RIVAL_N }, (_, j) => <RivalShark key={j} j={j} list={list} swim={swim} color={colors[j] ?? NEUTRAL} />)}
     </Group>
   );
 });
 
 function RivalShark({ j, list, swim, color }: { j: number; list: SharedValue<number[]>; swim: SkImageType; color: string }) {
+  const W = SHARK_W * 0.85;
+  const H = SHARK_H * 0.85;
   const tr = useDerivedValue(() => {
     const l = list.value;
     return [{ translateX: l[j * 4] }, { translateY: l[j * 4 + 1] }, { rotate: l[j * 4 + 2] }];
   });
-  const h = (SHARK_W * MESH_TEX_H) / MESH_TEX_W;
-  const tint = useMemo(() => {
-    const paint = Skia.Paint();
-    paint.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(color), 5 /* SrcIn */));
-    return paint;
+  const op = useDerivedValue(() => list.value[j * 4 + 3]);
+  const outline = useMemo(() => {
+    const p = Skia.Paint();
+    p.setImageFilter(Skia.ImageFilter.MakeColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(color), BlendMode.SrcIn), Skia.ImageFilter.MakeDilate(4, 4, null)));
+    return p;
   }, [color]);
+  const desat = useMemo(() => {
+    const p = Skia.Paint();
+    const s = 0.4;
+    const lr = 0.2126 * (1 - s);
+    const lg = 0.7152 * (1 - s);
+    const lb = 0.0722 * (1 - s);
+    p.setColorFilter(Skia.ColorFilter.MakeMatrix([lr + s, lg, lb, 0, 0, lr, lg + s, lb, 0, 0, lr, lg, lb + s, 0, 0, 0, 0, 0, 1, 0]));
+    return p;
+  }, []);
   return (
-    <Group transform={tr} opacity={0.4}>
-      <Group layer={tint}>
-        <SkImage image={swim} x={-SHARK_W / 2 - 3} y={-h / 2 - 3} width={SHARK_W + 6} height={h + 6} />
+    <Group transform={tr} opacity={op}>
+      <Group layer={outline}>
+        <SkImage image={swim} x={-W / 2} y={-H / 2} width={W} height={H} />
       </Group>
-      <Group layer={tint}>
-        <SkImage image={swim} x={-SHARK_W / 2} y={-h / 2} width={SHARK_W} height={h} />
+      <Group layer={desat}>
+        <SkImage image={swim} x={-W / 2} y={-H / 2} width={W} height={H} />
       </Group>
     </Group>
   );
@@ -1100,7 +1318,7 @@ function RivalShark({ j, list, swim, color }: { j: number; list: SharedValue<num
 
 // ---------------------------------------------------------------------------
 // Toon caustics: cell lines posterized to one hard tone (Alex's cel style),
-// white at ~12%, top 55% of the water, alpha down with speed.
+// background band only (y 40 to 300), alpha down with speed.
 // ---------------------------------------------------------------------------
 const CAUSTIC_SKSL = `
 uniform float t;
@@ -1108,7 +1326,7 @@ uniform float off;
 uniform float strength;
 float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 half4 main(float2 xy) {
-  float2 p = float2(xy.x + off, xy.y) / 110.0;
+  float2 p = float2(xy.x + off, xy.y) / 96.0;
   float2 i = floor(p);
   float2 f = fract(p);
   float d1 = 8.0;
@@ -1123,11 +1341,11 @@ half4 main(float2 xy) {
     }
   }
   float line = (d2 - d1) < 0.07 ? 1.0 : 0.0;
-  float fade = clamp(1.0 - (xy.y - 40.0) / 540.0, 0.0, 1.0);
+  float fade = clamp(1.0 - (xy.y - 40.0) / 260.0, 0.0, 1.0);
   float a = line * strength * fade;
   return half4(a, a, a, a);
 }
 `;
 
 export { SLOTS as SHARKY_ATLAS_SLOTS };
-void E_COIN; void PH_DONE;
+void E_COIN; void REWARD_LIGHT; void HAZE; void FRENZY_WATER; void hexToRgb;

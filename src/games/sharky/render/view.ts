@@ -1,11 +1,11 @@
 /**
- * The fixed Sharky view (design 3.2): every device sees exactly 960 x 1000u
- * of course. k = fieldWidth / 960; extra height becomes non-gameplay art bands
- * (sky above the surface, sand below the floor). Fields wider than 0.96:1 are
+ * The fixed Sharky view (design 3.2): every device sees exactly 720 x 1000u
+ * of course. k = min(fieldWidth / 720, fieldHeight / 1000); extra height becomes non-gameplay art bands
+ * (sky above the surface, sand below the floor). Fields wider than 0.72:1 are
  * pillarboxed so no device ever sees more course than another.
  */
 
-export const VIEW_W = 960;
+export const VIEW_W = 720;
 export const VIEW_H = 1000;
 
 export interface SharkyLayout {
@@ -14,14 +14,14 @@ export interface SharkyLayout {
   h: number;
   /** pt per world unit. */
   k: number;
-  /** Top-left of the 960 x 1000 view in the field (pt). */
+  /** Top-left of the 720 x 1000 view in the field (pt). */
   offX: number;
   offY: number;
   /** Sky band height above the view (pt) and sand band below it. */
   skyH: number;
   sandTop: number;
   sandH: number;
-  /** Visible course (u): always 960 x 1000. */
+  /** Visible course (u): always 720 x 1000. */
   visibleW: number;
   visibleH: number;
 }

@@ -44,4 +44,45 @@ export const SHARKY_ART = {
   reefMid: require('../../assets/games/sharky/ocean-layer-mid.png'),
   reefNear: require('../../assets/games/sharky/ocean-layer-front.png'),
   font: require('../../../assets/fonts/knockout.otf'),
+  /** The app's display font for numbers and dynamic text (design 7.2). */
+  displayFont: require('../../../assets/fonts/shark-random-funnyness-2.ttf'),
+  // v7.1 Feel Slice (gate-passed, Codex route, 0 credits; studio/art manifest):
+  finBadge: require('../../assets/games/sharky/tide/v71/fin_badge.png'),
+  postcard: require('../../assets/games/sharky/tide/v71/postcard_frame.png'),
+  sparkleBurst0: require('../../assets/games/sharky/tide/v71/sparkle_burst_f0.png'),
+  sparkleBurst1: require('../../assets/games/sharky/tide/v71/sparkle_burst_f1.png'),
+  sparkleBurst2: require('../../assets/games/sharky/tide/v71/sparkle_burst_f2.png'),
+  streak0: require('../../assets/games/sharky/tide/v71/bubble_streak_f0.png'),
+  streak1: require('../../assets/games/sharky/tide/v71/bubble_streak_f1.png'),
+  podium: require('../../assets/games/sharky/tide/v71/podium.png'),
+  fullClear: require('../../assets/games/sharky/tide/v71/full_clear_badge.png'),
+  fanCheer: require('../../assets/games/sharky/tide/v71/fan_fish_cheer.png'),
+  fanCalm: require('../../assets/games/sharky/tide/v71/fan_fish_calm.png'),
+  rushBunting: require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png'),
+  dizzyStar: require('../../assets/games/sharky/tide/v71/dizzy_star.png'),
+  sparkle: require('../../assets/games/sharky/tide/v71/sparkle.png'),
 };
+
+/** Drawn word stamps (v7.1-2), by render/pres.ts stamp id. */
+export const SHARKY_STAMPS = [
+  null,
+  require('../../assets/games/sharky/tide/v71/stamp_close.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_perfect.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_chomp.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_overdrive.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_frenzy.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_sprint2.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_sprint3.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_final_stretch.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_time.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_wipeout.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_gift.png'),
+];
+
+/** Placement stamps 1ST to 4TH (Rally results). */
+export const SHARKY_PLACE_STAMPS = [
+  require('../../assets/games/sharky/tide/v71/stamp_1st.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_2nd.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_3rd.png'),
+  require('../../assets/games/sharky/tide/v71/stamp_4th.png'),
+];

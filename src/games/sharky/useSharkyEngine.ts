@@ -3,6 +3,9 @@
  *
  *   - fixed 60 Hz steps from the studio GameClock (hit-stop and slow-mo hold
  *     the sim too, so juice never costs a racer steps or tide time);
+ *   - the presentation director (render/pres.ts) reads each step's events on
+ *     the UI thread, so stamps, local freezes and the on-shark readouts land
+ *     on the event frame without a JS round trip;
  *   - input from RNGH worklets goes into a UI-thread queue and is applied on
  *     the next step; every applied input is mirrored to JS (the proof log);
  *   - rival sims (house-crew bots, async ghosts) step in lockstep with their
@@ -25,11 +28,10 @@ import {
   botTargetY,
   createSim,
   planHold,
-  IN_DASH,
   IN_PRESS,
   IN_RELEASE,
   PH_PLAY,
-  MODE_RACE,
+  MODE_RALLY,
   MODE_GHOST,
   EXT_DRAFT_ON,
   EXT_DRAFT_OFF,
@@ -38,6 +40,7 @@ import {
   type SimConfig,
   type SimState,
 } from './sim/core';
+import { createPres, presFrame, presStep, type Pres } from './render/pres';
 
 /** Bridge-only kinds (outside the sim's event space). */
 export const BR_CAM = 90;
@@ -45,6 +48,8 @@ export const BR_INPUT = 91;
 export const BR_RIVAL = 92;
 /** Rival position sample for overtakes / position tags: slot, dist, y, step. */
 export const BR_RIVALPOS = 93;
+/** Camera record 2: camY x10, zoom x1000 (FX placement through the camera group). */
+export const BR_CAM2 = 94;
 
 export const MAX_RIVALS = 3;
 
@@ -54,24 +59,21 @@ export interface RivalSlot {
   sim: SimState | null;
   log: InputEntry[];
   k: number;
-  /** Remote: last known distance/y (u) and velocity for extrapolation. */
+  /** Remote: last known distance/y (u), velocity, live score and crowd. */
   rDist: number;
   rY: number;
   rVel: number;
   rAt: number;
+  rScore: number;
+  rCrowd: number;
   done: number;
 }
 
 export interface EngineInput {
   q: number[];
   holding: boolean;
-  /** Slide tracking for Dash (UI thread). */
-  startX: number;
-  startY: number;
-  startT: number;
-  slideFired: boolean;
   fingers: number;
-  /** Slipstream: steps spent in a rival's draft zone, and a re-arm latch. */
+  /** Drafting: steps spent in a rival's wake, and a re-arm latch. */
   draftZone: number;
   draftUsed: boolean;
 }
@@ -132,15 +134,19 @@ function ambStep(a: Ambient, s: SimState, dtMs: number): void {
   const du = s.dist / 256;
   const y = s.y / 256;
   const playing = s.phase === PH_PLAY && s.float === 0;
-  // Jetpack bubble jet: a downward cone while holding, one every 40ms.
-  if (playing && s.holding) {
+  // Tail bubble trail (design 7.1): one bubble from the tail tip every
+  // max(20, 60 - 40*speedFrac) ms while holding and every 90ms otherwise,
+  // drifting back at world speed, so bubble spacing reads as speed.
+  if (playing) {
+    const sf = (s.speed - s.speedBase) / Math.max(1, s.speedCap - s.speedBase);
+    const every = s.holding ? Math.max(20, 60 - 40 * sf) : 90;
     a.jetAcc += dtMs;
-    while (a.jetAcc >= 40) {
-      a.jetAcc -= 40;
-      ambSpawn(a, du - 50 + ambRand(a) * 16, y + 18, -40 - ambRand(a) * 60, 200 + ambRand(a) * 60, 0.55, 12 + ambRand(a) * 10, 0);
+    while (a.jetAcc >= every) {
+      a.jetAcc -= every;
+      ambSpawn(a, du - 96 + ambRand(a) * 10, y + 4 + ambRand(a) * 14, -30 - ambRand(a) * 40, -30 - ambRand(a) * 50, 0.7, 10 + ambRand(a) * 10, 0);
     }
-    // Sand kicked up where the jet reaches the floor band.
-    if (y > 700) {
+    // Sand puffs when the trail reaches the floor band.
+    if (y > 780) {
       a.puffAcc += dtMs;
       while (a.puffAcc >= 120) {
         a.puffAcc -= 120;
@@ -183,6 +189,8 @@ export interface SharkyEngine {
   rivals: SharedValue<RivalSlot[]>;
   input: SharedValue<EngineInput>;
   ambient: SharedValue<Ambient>;
+  /** UI-thread presentation director (render/pres.ts). */
+  pres: SharedValue<Pres>;
   running: SharedValue<boolean>;
   tick: SharedValue<number>;
   alpha: SharedValue<number>;
@@ -193,18 +201,18 @@ export interface SharkyEngine {
   setRunning: (on: boolean) => void;
   /** Queue an ext input (revive, pause_resume, line boost, draft) for the next step. */
   ext: (sub: number, arg: number) => void;
-  /** Push a remote rival position (live race whispers). */
-  remote: (slot: number, dist: number, y: number, vel: number) => void;
+  /** Push a remote rival position (live rally whispers). */
+  remote: (slot: number, dist: number, y: number, vel: number, score?: number, crowd?: number) => void;
 }
 
 export function emptyRival(): RivalSlot {
   'worklet';
-  return { kind: 0, sim: null, log: [], k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 };
+  return { kind: 0, sim: null, log: [], k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, rScore: 0, rCrowd: 0, done: 0 };
 }
 
 function emptyInput(): EngineInput {
   'worklet';
-  return { q: [], holding: false, startX: 0, startY: 0, startT: 0, slideFired: false, fingers: 0, draftZone: 0, draftUsed: false };
+  return { q: [], holding: false, fingers: 0, draftZone: 0, draftUsed: false };
 }
 
 export function useSharkyEngine(
@@ -214,11 +222,13 @@ export function useSharkyEngine(
   autoSalt = 0,
   /** Dev perf runs: 'cheap' steers by the target line only (no lookahead planner on the UI thread). */
   autoCheap = false,
+  reducedMotion = false,
 ): SharkyEngine {
   const sim = useSharedValue<SimState>(createSim(initial));
   const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
   const input = useSharedValue<EngineInput>(emptyInput());
   const ambient = useSharedValue<Ambient>(createAmbient());
+  const pres = useSharedValue<Pres>(createPres());
   const running = useSharedValue(false);
   const tick = useSharedValue(0);
   const alpha = useSharedValue(0);
@@ -238,7 +248,7 @@ export function useSharkyEngine(
   const clock = useGameClock({
     config: { freezeBudget: 0.05, slots: 4 },
     maxStepsPerFrame: 4,
-    onStep: () => {
+    onStep: (_dt, _i, c) => {
       'worklet';
       if (!running.value) return;
       const s = sim.value;
@@ -247,19 +257,21 @@ export function useSharkyEngine(
       const r = ring.value;
       // Dev autoplay: the planner bot plays through the real input path.
       if (autoplay && s.phase === PH_PLAY && s.step % 6 === 0) {
-        const ty = botTargetY(s, (s.speed >> 8) + 120);
+        // The dev autopilot hugs the Close line most of the time (an ace).
+        const hug = ((s.step / 30) | 0) % 10 < 8 ? 1 : 0;
+        const ty = botTargetY(s, (s.speed >> 8) + 120, hug);
         const prefer = (s.y >> 8) > ty ? 1 : 0;
-        // Per-device salt so two lab phones don't play identical races.
+        // Per-device salt so two lab phones don't play identical rallies.
         const pref = autoSalt > 0 && ((s.step / 6) | 0) % 7 === autoSalt % 7 ? 1 - prefer : prefer;
-        let c = autoCheap ? prefer : planHold(s, autoSalt > 0 ? 7 : 6, 12, 400, pref);
-        if (c < 0) c = prefer;
-        if (c === 1 && !s.holding) inp.q.push(IN_PRESS, 0, 0);
-        if (c === 0 && s.holding) inp.q.push(IN_RELEASE, 0, 0);
-        if (s.boost >= 200 && s.dash === 0 && s.step % 240 === 0) inp.q.push(IN_DASH, 0, 0);
+        let ch = autoCheap ? prefer : planHold(s, autoSalt > 0 ? 7 : 6, 12, 400, pref);
+        if (ch < 0 && !autoCheap) ch = planHold(s, 6, 12, 400, 1 - pref);
+        if (ch < 0) ch = prefer;
+        if (ch === 1 && !s.holding) inp.q.push(IN_PRESS, 0, 0);
+        if (ch === 0 && s.holding) inp.q.push(IN_RELEASE, 0, 0);
       }
-      // Slipstream (design 10.4): 40-160u behind a rival, |dy| <= 90, for 300ms.
+      // Drafting (design 5.5): 40-160u behind a rival, |dy| <= 90, for 300ms fills Boost.
       const rvs = rivals.value;
-      if ((s.mode === MODE_RACE || s.mode === MODE_GHOST) && s.phase === PH_PLAY) {
+      if ((s.mode === MODE_RALLY || s.mode === MODE_GHOST) && s.phase === PH_PLAY) {
         const du = s.dist >> 8;
         const sy = s.y >> 8;
         let zone = -1;
@@ -314,16 +326,21 @@ export function useSharkyEngine(
         }
       }
       simStep(s);
+      presStep(pres.value, s, c.fxMs);
       // Camera record, then this step's sim events.
-      pushEvent(r, BR_CAM, s.dist >> 8, anchorX(s), s.y >> 8, s.step);
+      const pv = pres.value;
+      pushEvent(r, BR_CAM, s.dist >> 8, Math.round(pv.anc), s.y >> 8, s.step);
+      pushEvent(r, BR_CAM2, Math.round(pv.camY * 10), Math.round(pv.zoom * 1000), 0, s.step);
       for (let e = 0; e < s.evN; e++) {
         const o = e * EV_STRIDE;
         pushEvent(r, s.ev[o], s.ev[o + 1], s.ev[o + 2], s.ev[o + 3], s.ev[o + 4]);
       }
     },
-    onFrame: (a, fxDt) => {
+    onFrame: (a, fxDt, c) => {
       'worklet';
       if (running.value) ambStep(ambient.value, sim.value, fxDt);
+      const sv = sim.value;
+      presFrame(pres.value, sv, fxDt, c.fxMs, (sv.py + (sv.y - sv.py) * a) / 256, reducedMotion);
       alpha.value = a;
       tick.value = tick.value + 1;
       bridge.flush();
@@ -336,7 +353,7 @@ export function useSharkyEngine(
     for (let j = 0; j < MAX_RIVALS; j++) {
       const g = rv[j];
       if (g && 'remote' in g) slots.push({ ...emptyRival(), kind: 2 });
-      else if (g) slots.push({ kind: 1, sim: createSim(g.cfg), log: g.log, k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 });
+      else if (g) slots.push({ ...emptyRival(), kind: 1, sim: createSim(g.cfg), log: g.log });
       else slots.push(emptyRival());
     }
     runOnUI((c: SimConfig, sl: RivalSlot[]) => {
@@ -344,9 +361,10 @@ export function useSharkyEngine(
       sim.value = createSim(c);
       rivals.value = sl;
       input.value = emptyInput();
+      pres.value = createPres();
       running.value = false;
     })(cfg, slots);
-  }, [sim, rivals, input, running]);
+  }, [sim, rivals, input, running, pres]);
 
   const setRunning = useCallback((on: boolean) => {
     runOnUI((v: boolean) => {
@@ -362,8 +380,8 @@ export function useSharkyEngine(
     })(sub, arg);
   }, [input]);
 
-  const remote = useCallback((slot: number, dist: number, y: number, vel: number) => {
-    runOnUI((j: number, d: number, yy: number, v: number) => {
+  const remote = useCallback((slot: number, dist: number, y: number, vel: number, score = 0, crowd = 0) => {
+    runOnUI((j: number, d: number, yy: number, v: number, sc: number, cr: number) => {
       'worklet';
       const g = rivals.value[j];
       if (!g) return;
@@ -371,10 +389,12 @@ export function useSharkyEngine(
       g.rDist = d;
       g.rY = yy;
       g.rVel = v;
+      g.rScore = sc;
+      g.rCrowd = cr;
       g.rAt = sim.value.step;
-    })(slot, dist, y, vel);
+    })(slot, dist, y, vel, score, crowd);
   }, [rivals, sim]);
 
-  return useMemo(() => ({ sim, rivals, input, ambient, running, tick, alpha, clock, log, reset, setRunning, ext, remote }),
-    [sim, rivals, input, ambient, running, tick, alpha, clock, reset, setRunning, ext, remote]);
+  return useMemo(() => ({ sim, rivals, input, ambient, pres, running, tick, alpha, clock, log, reset, setRunning, ext, remote }),
+    [sim, rivals, input, ambient, pres, running, tick, alpha, clock, reset, setRunning, ext, remote]);
 }

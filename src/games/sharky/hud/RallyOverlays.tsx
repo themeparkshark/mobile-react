@@ -1,15 +1,18 @@
 /**
- * Sprint Race overlays (RN, outside the Skia world): the lineup lobby, the
- * server-synced count-in, and the VERIFIED podium. Bright world, Alex's
- * palette, the Shark/Knockout fonts; no emoji.
+ * Rally overlays (design v7.1 11.3, RN outside the Skia world): the queue
+ * lobby that fills while the line moves (empty seats are clearly labeled
+ * GHOST seats), the server-synced count-in, and the results: the placement
+ * slams in huge gold bubble letters (the drawn 1ST..4TH stamps) over your
+ * shark, the bunting podium rises, then the finish order with verified
+ * scores and crowds, Rematch first. Bright world, Alex's palette; no emoji.
  */
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { RaceMember, RaceResult, RaceRound, RaceState } from '../net/raceTransport';
-import { SHARKY_ART } from '../assets';
-
-const INK = '#23384f';
-const GOLD = '#ffc233';
+import { SHARKY_ART, SHARKY_PLACE_STAMPS } from '../assets';
+import { playHaptic } from '../../../gamekit/Haptics';
+import { INK, REWARD as GOLD } from '../render/palette';
 
 function useNow(active: boolean, ms = 100): number {
   const [now, setNow] = useState(Date.now());
@@ -21,7 +24,7 @@ function useNow(active: boolean, ms = 100): number {
   return now;
 }
 
-export function RaceLobby({ state, crew, onReady, onLeave, toLocal }: {
+export function RallyLobby({ state, crew, onReady, onLeave, toLocal }: {
   state: RaceState;
   crew: string[];
   onReady: () => void;
@@ -37,18 +40,18 @@ export function RaceLobby({ state, crew, onReady, onLeave, toLocal }: {
   return (
     <View style={styles.scrim}>
       <View style={styles.card}>
-        <Text style={styles.kicker}>SPRINT RACE</Text>
-        <Text style={styles.title}>{state.phase === 'connecting' || state.phase === 'offline' ? 'Finding your line...' : 'Sharks in your line'}</Text>
+        <Text style={styles.kicker}>RALLY</Text>
+        <Text style={styles.title}>{state.phase === 'connecting' || state.phase === 'offline' ? 'Finding your line...' : `Rally filling ${Math.min(4, humans.length)}/4`}</Text>
         <View style={styles.lineup}>
           {seats.map((s, i) => (
             <View key={`${s.name}-${i}`} style={[styles.seat, s.me && styles.seatMe]}>
               <Image source={SHARKY_ART.swim} style={[styles.seatShark, !s.human && styles.crewShark]} resizeMode="contain" />
               <Text style={styles.seatName} numberOfLines={1}>{s.me ? 'You' : s.name}</Text>
-              <Text style={styles.seatTag}>{s.human ? (s.ready ? 'READY' : 'IN LINE') : 'HOUSE CREW'}</Text>
+              <Text style={styles.seatTag}>{s.human ? (s.ready ? 'READY' : 'IN LINE') : 'GHOST'}</Text>
             </View>
           ))}
         </View>
-        <Text style={styles.body}>18 seconds. Draft behind a rival to fill Boost, then slide right to Dash past.</Text>
+        <Text style={styles.body}>18 seconds, same course for everyone. Score is style: graze close, thread Perfects, keep your chain. Your Overdrive puffs a gift to the shark behind you.</Text>
         {state.phase === 'lobby' ? (
           <>
             <TouchableOpacity accessibilityRole="button" style={[styles.btn, me?.ready && styles.btnDone]} onPress={onReady} disabled={!!me?.ready}>
@@ -58,7 +61,7 @@ export function RaceLobby({ state, crew, onReady, onLeave, toLocal }: {
           </>
         ) : null}
         <TouchableOpacity accessibilityRole="button" onPress={onLeave}>
-          <Text style={styles.leave}>Leave race</Text>
+          <Text style={styles.leave}>Leave rally</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -66,7 +69,7 @@ export function RaceLobby({ state, crew, onReady, onLeave, toLocal }: {
 }
 
 /** Server-synced 3-2-1-GO. Presentation only: the round length is sim steps. */
-export function RaceCountIn({ round, toLocal, onGo }: { round: RaceRound; toLocal: (serverMs: number) => number; onGo: () => void }) {
+export function RallyCountIn({ round, toLocal, onGo }: { round: RaceRound; toLocal: (serverMs: number) => number; onGo: () => void }) {
   const now = useNow(true, 50);
   const goAt = toLocal(round.startAtMs);
   const ms = goAt - now;
@@ -90,31 +93,56 @@ export function RaceCountIn({ round, toLocal, onGo }: { round: RaceRound; toLoca
 
 const PLACE = ['1ST', '2ND', '3RD', '4TH'];
 
-export function RacePodium({ results, you, verdict, nextAtMs, toLocal, onAgain, onLeave }: {
+/** The placement slam: 2.4 to 0.9 to 1.0 over 260ms, Heavy for 1st, Medium otherwise. */
+function PlacementSlam({ place }: { place: number }) {
+  const sc = useSharedValue(2.4);
+  useEffect(() => {
+    sc.value = withSequence(withTiming(0.9, { duration: 180, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 300 }));
+    playHaptic([{ at: 0, p: place === 1 ? 'heavy' : 'medium' }]);
+  }, [place, sc]);
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
+  const src = SHARKY_PLACE_STAMPS[Math.max(0, Math.min(3, place - 1))];
+  return (
+    <View style={styles.slamWrap}>
+      <Image source={place === 1 ? SHARKY_ART.cheer : SHARKY_ART.dizzy} style={styles.slamShark} resizeMode="contain" />
+      <Animated.Image source={src} style={[styles.slam, st]} resizeMode="contain" />
+    </View>
+  );
+}
+
+export function RallyPodium({ results, you, verdict, nextAtMs, toLocal, onAgain, onSolo, onLeave }: {
   results: RaceResult[] | null;
   you: number;
   verdict: string | null;
   nextAtMs: number;
   toLocal: (serverMs: number) => number;
   onAgain: () => void;
+  onSolo?: () => void;
   onLeave: () => void;
 }) {
   const now = useNow(true, 250);
+  const rise = useSharedValue(160);
+  useEffect(() => {
+    if (results) rise.value = withDelay(450, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+  }, [results, rise]);
+  const riseSt = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value }] }));
   if (!results) {
     return (
       <View style={styles.scrim}>
         <View style={styles.card}>
           <Text style={styles.title}>FINISH!</Text>
-          <Text style={styles.body}>{verdict === 'ok' ? 'Your run is VERIFIED. Waiting for the other sharks...' : 'Checking your run with the server...'}</Text>
+          <Text style={styles.body}>{verdict === 'ok' ? 'Your run is VERIFIED. Waiting for the other sharks...' : 'Checking your run...'}</Text>
         </View>
       </View>
     );
   }
   const left = Math.max(0, Math.ceil((toLocal(nextAtMs) - now) / 1000));
+  const mine = results.find((r) => r.seat === you);
   return (
     <View style={styles.scrim}>
-      <View style={styles.card}>
-        <Text style={styles.kicker}>SPRINT RACE RESULTS</Text>
+      {mine ? <PlacementSlam place={mine.placement} /> : null}
+      <Animated.View style={[styles.card, riseSt]}>
+        <Image source={SHARKY_ART.podium} style={styles.podium} resizeMode="contain" />
         {results.map((r) => (
           <View key={r.seat} style={[styles.row, r.seat === you && styles.rowMe]}>
             <Text style={[styles.place, r.placement === 1 && { color: GOLD }]}>{PLACE[r.placement - 1] ?? `${r.placement}TH`}</Text>
@@ -122,27 +150,33 @@ export function RacePodium({ results, you, verdict, nextAtMs, toLocal, onAgain, 
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName} numberOfLines={1}>{r.seat === you ? 'You' : r.name}</Text>
               <Text style={styles.rowSub}>
-                {r.finished ? `${(r.finishStep / 60).toFixed(2)}s` : 'DNF'}
-                {r.filledBy === 'ghost' ? '  ·  ghost finished' : r.kind === 'bot' ? '  ·  house crew' : ''}
+                {r.finished ? `${r.score.toLocaleString()}` : 'DNF'}
+                {r.closeSkims !== undefined ? `  ·  ${r.closeSkims} Close` : ''}
+                {r.filledBy === 'ghost' ? '  ·  ghost finished' : r.kind === 'bot' ? '  ·  GHOST' : ''}
               </Text>
             </View>
-            <View style={styles.verified}><Text style={styles.verifiedText}>{r.verified ? 'VERIFIED' : 'CHECKING'}</Text></View>
+            <View style={styles.verified}><Text style={styles.verifiedText}>{r.verified ? 'VERIFIED' : 'PROVISIONAL'}</Text></View>
           </View>
         ))}
         <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={onAgain}>
-          <Text style={styles.btnText}>RACE AGAIN</Text>
+          <Text style={styles.btnText}>REMATCH</Text>
         </TouchableOpacity>
-        <Text style={styles.small}>{`Next race opens in ${left}s`}</Text>
+        <Text style={styles.small}>{`Next rally opens in ${left}s`}</Text>
+        {onSolo ? (
+          <TouchableOpacity accessibilityRole="button" onPress={onSolo}>
+            <Text style={styles.leave}>Solo run</Text>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity accessibilityRole="button" onPress={onLeave}>
-          <Text style={styles.leave}>Leave race</Text>
+          <Text style={styles.leave}>Leave rally</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(223,244,255,0.72)', alignItems: 'center', justifyContent: 'center' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(223,244,255,0.86)', alignItems: 'center', justifyContent: 'center' },
   card: { width: '88%', backgroundColor: '#fff8e4', borderRadius: 26, borderWidth: 4, borderColor: INK, padding: 18, alignItems: 'center' },
   kicker: { fontFamily: 'Knockout', fontSize: 14, color: INK, letterSpacing: 2 },
   title: { fontFamily: 'Shark', fontSize: 30, color: INK, marginTop: 2, textAlign: 'center' },
@@ -170,4 +204,8 @@ const styles = StyleSheet.create({
   rowSub: { fontFamily: 'Knockout', fontSize: 12, color: INK },
   verified: { backgroundColor: '#3aa7f0', borderRadius: 8, borderWidth: 2, borderColor: INK, paddingHorizontal: 6, paddingVertical: 2 },
   verifiedText: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff', letterSpacing: 1 },
+  slamWrap: { position: 'absolute', top: '6%', alignItems: 'center' },
+  slamShark: { width: 110, height: 130 },
+  slam: { width: 230, height: 118, marginTop: -40 },
+  podium: { width: 150, height: 80, marginTop: -6 },
 });

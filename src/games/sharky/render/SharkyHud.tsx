@@ -1,49 +1,50 @@
 /**
- * SharkyHud: the Tide Run HUD, drawn in Skia on the UI thread straight from
- * the sim (no React renders during play). Lives in the sky and sand bands so
- * it never covers the 960 x 1000u play view, and it never shakes.
+ * SharkyHud (design v7.1 5.1): three elements in the sky band, drawn in Skia
+ * on the UI thread straight from the sim (no React renders during play), never
+ * inside the camera:
  *
- *   sky band:  tide clock bar (queue) or Ride Gate progress (ride/race),
- *              hearts, chain pill with its draining window, token slots,
- *              race position tag
- *   sand band: Boost meter (3 segments, sky blue and white) with the
- *              "slide right" hint the first time it unlocks
+ *   score (top-left)   one number in the display font, rolls up on events and
+ *                      visibly down (in white, never coral) on a Coin Scatter
+ *   tide bar (centre)  time left, the +4s refill as a gold ghost while a gate is
+ *                      ahead, 3 token pips inside; FINAL STRETCH in sprint 4;
+ *                      a Ride Gate progress bar in ride mode, the rally rail in
+ *                      a rally
+ *   hearts (top-right) 3 hearts; a lost heart pops to 1.3 and splits in 4
+ *
+ * The chain, Boost and Overdrive live on the shark (render/SharkSprite).
+ * In a pocket, the sky band also shows the hero-size split chip and the
+ * next-sprint postcard (5.7).
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  Canvas,
-  Circle,
-  Group,
-  Path,
-  RoundedRect,
-  Skia,
-  Text as SkText,
-  useFont,
-  useImage,
-  Image as SkImage,
-  type SkFont,
+  Canvas, Circle, Group, Image as SkImage, Path, RoundedRect, Skia, Text as SkText, useFont, useImage,
+  type SkImage as SkImageType,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import {
-  BOOST_MAX, CHAIN_WINDOW, CLOCK_BASE, FRENZY_STEPS, MODE_QUEUE, MODE_GHOST, MODE_PRACTICE, MODE_RACE, MODE_RIDE,
-  PH_POCKET, chainTier, multiplier, type SimState,
+  CLOCK_BASE, GATE_CLOCK, MODE_RALLY, MODE_RIDE, PH_POCKET, POCKET_SHORT, timedMode, type SimState,
 } from '../sim/core';
 import type { RivalSlot } from '../useSharkyEngine';
 import type { SharkyLayout } from './view';
+import type { Pres } from './pres';
 import { SHARKY_ART } from '../assets';
-import { CORAL, GOLD, INK } from './SharkyCanvas';
-
-const TIER_COLORS = ['#3aa7f0', '#5fd0ff', GOLD, '#fff1b8'];
+import { BOOST, DANGER, HEART, INK, NEUTRAL, REWARD } from './palette';
 
 export interface SharkyHudProps {
   layout: SharkyLayout;
   sim: SharedValue<SimState>;
+  pres: SharedValue<Pres>;
   rivals: SharedValue<RivalSlot[]>;
   tick: SharedValue<number>;
-  showBoost: boolean;
-  boostHint: boolean;
+  /** Displayed score (rolls toward the sim score; JS sets the target for fly-to-score). */
+  shownScore: SharedValue<number>;
+  /** Split chip: delta vs ghost/best at the last gate, and when it popped (fx ms). */
+  split: SharedValue<{ delta: number; at: number; label: string }>;
+  /** Next-sprint postcard (full pockets only): sprint name and its hazard. */
+  postcard: SharedValue<{ title: string; at: number; until: number }>;
+  rivalColors: string[];
 }
 
 function heartPath(cx: number, cy: number, r: number) {
@@ -55,208 +56,254 @@ function heartPath(cx: number, cy: number, r: number) {
   return p;
 }
 
-export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals, tick, showBoost, boostHint }: SharkyHudProps) {
-  const fontL = useFont(SHARKY_ART.font, 30);
-  const fontS = useFont(SHARKY_ART.font, 17);
-  const fontXL = useFont(SHARKY_ART.font, 46);
+/** Four-pass number treatment (design 7.2): shadow, 7pt ink, 2pt white inner, fill. */
+function Num({ text, x, y, font, color, size }: { text: SharedValue<string>; x: SharedValue<number> | number; y: number; font: ReturnType<typeof useFont>; color: string | SharedValue<string> | SharedValue<'#ffc233' | '#ffffff'>; size: number }) {
+  if (!font) return null;
+  const sh = Math.max(1.5, size * 0.07);
+  return (
+    <Group>
+      <SkText x={x} y={y + sh} text={text} font={font} color={INK} opacity={0.35} />
+      <SkText x={x} y={y} text={text} font={font} color={INK} style="stroke" strokeWidth={Math.max(5, size * 0.24)} strokeJoin="round" />
+      <SkText x={x} y={y} text={text} font={font} color={NEUTRAL} style="stroke" strokeWidth={Math.max(2, size * 0.07)} strokeJoin="round" />
+      <SkText x={x} y={y} text={text} font={font} color={color} />
+    </Group>
+  );
+}
+
+export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, pres, rivals, tick, shownScore, split, postcard, rivalColors }: SharkyHudProps) {
+  const fontScore = useFont(SHARKY_ART.displayFont, 30);
+  const fontS = useFont(SHARKY_ART.font, 15);
+  const fontChip = useFont(SHARKY_ART.displayFont, 40);
+  const fontPost = useFont(SHARKY_ART.displayFont, 22);
   const tokenImg = useImage(SHARKY_ART.tokenGold);
+  const postImg = useImage(SHARKY_ART.postcard);
+  const farReef = useImage(SHARKY_ART.farReef);
   const W = L.w;
-  const barX = 14;
-  const barW = W - 28;
-  const barY = Math.max(8, Math.min(14, L.skyH * 0.06));
-  const barH = 20;
-  const rowY = barY + barH + 10;
-  const sandY = L.sandTop + Math.max(8, L.sandH * 0.18);
+  const top = Math.max(6, Math.min(12, L.skyH * 0.05));
+  const barW = Math.min(170, W * 0.42);
+  const barX = W / 2 - barW / 2;
+  const barY = top + 8;
+  const barH = 22;
 
-  // --- tide clock / progress bar ------------------------------------------
-  const frac = useDerivedValue(() => {
+  // --- score (top-left) ---------------------------------------------------------
+  const scoreText = useDerivedValue(() => (tick.value, `${Math.round(shownScore.value)}`));
+  const scoreColor = useDerivedValue((): string => {
+    tick.value;
+    // Ticks down in white on a scatter, never coral.
+    return shownScore.value > sim.value.score + 0.5 ? NEUTRAL : REWARD;
+  });
+
+  // --- tide bar / ride progress -----------------------------------------------------
+  const bar = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
-      return Math.max(0, Math.min(1, s.clockSteps / Math.max(CLOCK_BASE, CLOCK_BASE + s.bonusSteps)));
+    const p = pres.value;
+    let frac = 0;
+    let ghost = 0;
+    let low = false;
+    let label = '';
+    if (timedMode(s.mode)) {
+      const full = CLOCK_BASE + 3 * GATE_CLOCK;
+      frac = Math.max(0, Math.min(1, s.clockSteps / full));
+      if (s.gateX > 0 && s.phase !== PH_POCKET) ghost = Math.min(1 - frac, GATE_CLOCK / full);
+      low = s.clockSteps < 480 && s.phase !== PH_POCKET;
+      label = `${Math.ceil(s.clockSteps / 60)}`;
+    } else {
+      const within = Math.max(0, Math.min(1, ((s.dist >> 8) - s.sprintStart) / Math.max(1, s.gateX - s.sprintStart)));
+      if (s.mode === MODE_RALLY) frac = within;
+      else frac = Math.max(0, Math.min(1, (s.phase === PH_POCKET ? s.sprint : s.sprint + within) / 3));
+      label = `${Math.round(frac * 100)}%`;
     }
-    // Ride: 3 sprints to the Ride Gate; race: one course to the finish.
-    const within = Math.max(0, Math.min(1, ((s.dist >> 8) - s.sprintStart) / Math.max(1, s.gateX - s.sprintStart)));
-    if (s.mode === MODE_RACE) return within;
-    const done = s.phase === PH_POCKET ? s.sprint : s.sprint + within;
-    return Math.max(0, Math.min(1, done / 3));
+    // Refill sweep at a gate: 400ms outBack.
+    const tg = p.fx - p.gateT;
+    const sweep = tg >= 0 && tg < 400 ? 1 + 0.18 * Math.sin((tg / 400) * Math.PI) : 1;
+    const pulse = low ? 1 + 0.18 * Math.max(0, Math.sin((p.fx / 1000) * Math.PI * 4)) : 1;
+    return { frac, ghost, low, label, sweep: sweep * pulse, final: timedMode(s.mode) && s.sprint >= 3 && s.gateX === 0 ? 1 : 0 };
   });
-  const barFill = useDerivedValue(() => (tick.value, Skia.RRectXY(Skia.XYWHRect(barX + 3, barY + 3, Math.max(0, (barW - 6) * frac.value), barH - 6), 7, 7)));
-  const low = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const timed = s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE;
-    return timed && s.clockSteps < 480 && s.phase !== PH_POCKET;
+  const fill = useDerivedValue(() => Skia.RRectXY(Skia.XYWHRect(barX + 3, barY + 3, Math.max(0, (barW - 6) * bar.value.frac), barH - 6), 8, 8));
+  const ghostR = useDerivedValue(() => {
+    const b = bar.value;
+    return Skia.RRectXY(Skia.XYWHRect(barX + 3 + (barW - 6) * b.frac, barY + 3, Math.max(0, (barW - 6) * b.ghost), barH - 6), 8, 8);
   });
-  const barColor = useDerivedValue(() => (tick.value, (low.value ? CORAL : '#5fd0ff')));
-  const barPulse = useDerivedValue(() => {
-    tick.value;
-    if (!low.value) return [{ scaleY: 1 }];
-    const k = 1 + 0.2 * Math.max(0, Math.sin((tick.value / 60) * Math.PI * 4));
-    return [{ scaleY: k }];
-  });
-  const clockText = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) return `${Math.ceil(s.clockSteps / 60)}s`;
-    return `${Math.round(frac.value * 100)}%`;
-  });
+  const fillColor = useDerivedValue(() => (bar.value.low ? DANGER : BOOST));
+  const barT = useDerivedValue(() => [{ scaleY: bar.value.sweep }]);
+  const barLabel = useDerivedValue(() => bar.value.label);
+  const finalOp = useDerivedValue(() => bar.value.final);
+  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, sim.value.tokenMask & (1 << i) ? 1 : 0.0)));
+  const tokShow = useDerivedValue(() => (tick.value, sim.value.etier >= 1 && sim.value.mode !== MODE_RALLY ? 1 : 0));
 
-  // --- hearts ---------------------------------------------------------------
-  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.hearts > i ? 1 : 0))));
-  const shieldOp = useDerivedValue(() => (tick.value, (sim.value.shield ? 1 : 0)));
+  // --- hearts (top-right) -------------------------------------------------------------
+  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, sim.value.hearts > i ? 1 : 0)));
+  const shieldOp = useDerivedValue(() => (tick.value, sim.value.shield ? 1 : 0));
+  const heartPop = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const t = p.fx - p.hitT;
+    if (t < 0 || t > 400) return { i: -1, k: 0 };
+    return { i: sim.value.hearts, k: t / 400 };
+  });
+  const hx = (i: number) => W - 30 - (2 - i) * 32;
+  const heartShards = useDerivedValue(() => {
+    const h = heartPop.value;
+    const p = Skia.Path.Make();
+    if (h.i < 0 || h.i > 2) return p;
+    const cx = hx(h.i);
+    const cy = top + 19;
+    const k = h.k;
+    for (let s = 0; s < 4; s++) {
+      const ang = (s / 4) * Math.PI * 2 + 0.6;
+      const r = 6 + 26 * k;
+      const x = cx + Math.cos(ang) * r;
+      const y = cy + Math.sin(ang) * r + 30 * k * k;
+      p.moveTo(x, y - 6);
+      p.lineTo(x + 6, y + 4);
+      p.lineTo(x - 6, y + 4);
+      p.close();
+    }
+    return p;
+  });
+  const shardOp = useDerivedValue(() => (heartPop.value.i < 0 ? 0 : 1 - heartPop.value.k));
 
-  // --- chain pill -------------------------------------------------------------
-  const chainText = useDerivedValue(() => {
+  // --- rally rail + placement -------------------------------------------------------
+  const rally = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    if (s.frenzy > 0) return `FRENZY x${multiplier(s)}`;
-    if (s.chain <= 0) return 'CHAIN x1';
-    const toNext = s.chain >= 9 ? s.frenzyAt - s.chain : 3 - (s.chain % 3);
-    return s.chain >= 9 ? `x${multiplier(s)}  FRENZY IN ${Math.max(1, toNext)}` : `CHAIN x${multiplier(s)}`;
-  });
-  const pillColor = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    if (s.frenzy > 0) return Math.floor(tick.value / 8) % 2 ? GOLD : '#fff1b8';
-    return TIER_COLORS[chainTier(s)];
-  });
-  const pillW = 190;
-  const pillX = W / 2 - pillW / 2;
-  const drain = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const k = s.frenzy > 0 ? s.frenzy / FRENZY_STEPS : s.chain > 0 ? s.chainTimer / CHAIN_WINDOW : 0;
-    return Skia.RRectXY(Skia.XYWHRect(pillX + 12, rowY + 30, Math.max(0, (pillW - 24) * k), 5), 2, 2);
-  });
-  const pillScale = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    // Spring pop on tier ups (reads the chain window freshly refilled).
-    const fresh = s.chainTimer > CHAIN_WINDOW - 8 && s.chain > 0 ? (s.chainTimer - (CHAIN_WINDOW - 8)) / 8 : 0;
-    return [{ scale: 1 + 0.18 * fresh }];
-  });
-  const chainTextX = useDerivedValue(() => {
-    tick.value;
-    const w = fontS ? fontS.measureText(chainText.value).width : 0;
-    return W / 2 - w / 2;
-  });
-
-  // --- tokens -------------------------------------------------------------------
-  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.tokenMask & (1 << i) ? 1 : 0))));
-  const showTokens = useDerivedValue(() => (tick.value, (sim.value.etier >= 1 ? 1 : 0)));
-
-  // --- position tag (race / ghost) ----------------------------------------------
-  const place = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    if (s.mode !== MODE_RACE && s.mode !== MODE_GHOST) return '';
-    let p = 1;
-    let any = false;
+    if (s.mode !== MODE_RALLY) return { on: 0, dots: [] as number[], place: '' };
+    const len = Math.max(1, s.gateX - s.sprintStart);
+    const dots: number[] = [Math.max(0, Math.min(1, ((s.dist >> 8) - s.sprintStart) / len))];
+    let place = 1;
     for (const g of rivals.value) {
-      if (!g || g.kind === 0) continue;
-      any = true;
+      if (!g || g.kind === 0) {
+        dots.push(-1);
+        continue;
+      }
       const d = g.kind === 1 && g.sim ? g.sim.dist >> 8 : g.rDist;
-      const done = g.kind === 1 && g.sim && g.sim.finishStep > 0 && (s.finishStep === 0 || g.sim.finishStep < s.finishStep);
-      if (done || d > (s.dist >> 8)) p++;
+      const sc = g.kind === 1 && g.sim ? g.sim.score : g.rScore;
+      dots.push(Math.max(0, Math.min(1, (d - s.sprintStart) / len)));
+      if (sc > s.score) place++;
     }
-    if (!any) return '';
-    return p === 1 ? '1ST' : p === 2 ? '2ND' : p === 3 ? '3RD' : `${p}TH`;
+    return { on: 1, dots, place: place === 1 ? '1ST' : place === 2 ? '2ND' : place === 3 ? '3RD' : `${place}TH` };
   });
-
-  // --- boost meter ----------------------------------------------------------------
-  const segW = Math.min(76, (W - 120) / 3);
-  const boostX = W / 2 - (segW * 3 + 16) / 2;
-  const segFill = [0, 1, 2].map((i) => useDerivedValue(() => {
-    tick.value;
-    const b = sim.value.boost;
-    const f = Math.max(0, Math.min(1, (b - i * 100) / 100));
-    return Skia.RRectXY(Skia.XYWHRect(boostX + i * (segW + 8) + 3, sandY + 3, (segW - 6) * f, 18), 7, 7);
+  const railY = barY + barH + 18;
+  const railOp = useDerivedValue(() => rally.value.on);
+  const dotX = [0, 1, 2, 3].map((j) => useDerivedValue(() => {
+    const d = rally.value.dots[j];
+    return d === undefined || d < 0 ? -999 : 20 + (W - 40) * d;
   }));
-  const segColor = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.boost >= (i + 1) * 100 ? '#ffffff' : '#7fd8ff'))));
-  const boostLabel = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    if (s.dash > 0) return 'DASH!';
-    return s.boost >= 100 ? 'SLIDE RIGHT TO DASH' : 'BOOST';
-  });
-  const boostLabelX = useDerivedValue(() => {
-    tick.value;
-    const w = fontS ? fontS.measureText(boostLabel.value).width : 0;
-    return W / 2 - w / 2;
-  });
-  void BOOST_MAX;
-  void boostHint;
+  const placeText = useDerivedValue(() => rally.value.place);
 
+  // --- split chip (hero size, 1200ms) and next-sprint postcard ------------------------
+  const chip = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const sp = split.value;
+    const t = p.fx - sp.at;
+    if (sp.label === '' || t < 0 || t > 1200) return { op: 0, sc: 0, text: '', color: REWARD };
+    const sc = t < 160 ? 0.7 + 0.4 * (t / 160) : t < 260 ? 1.1 - 0.1 * ((t - 160) / 100) : 1;
+    return { op: t > 1000 ? 1 - (t - 1000) / 200 : 1, sc, text: sp.label, color: sp.delta >= 0 ? '#3ccf6b' : DANGER };
+  });
+  const chipText = useDerivedValue(() => chip.value.text);
+  const chipX = useDerivedValue(() => (fontChip ? W / 2 - fontChip.measureText(chip.value.text).width / 2 : 0));
+  const chipColor = useDerivedValue(() => chip.value.color);
+  const chipT = useDerivedValue(() => [{ scale: chip.value.sc }]);
+  const chipOp = useDerivedValue(() => chip.value.op);
+  const chipY = Math.max(barY + barH + 54, L.skyH * 0.62);
+
+  const post = useDerivedValue(() => {
+    tick.value;
+    const p = pres.value;
+    const pc = postcard.value;
+    const s = sim.value;
+    if (!pc.title || s.phase !== PH_POCKET || s.pocketLen === POCKET_SHORT) return { op: 0, x: W + 200, rot: 0 };
+    const t = p.fx - pc.at;
+    const left = pc.until - p.fx;
+    const inK = Math.max(0, Math.min(1, t / 280));
+    const e = 1 + 2.4 * Math.pow(inK - 1, 3) + 1.4 * Math.pow(inK - 1, 2);
+    const x = W + 160 - (W / 2 + 160) * e;
+    const flip = left < 220 ? Math.max(0, left / 220) : 1;
+    return { op: flip, x, rot: (6 * Math.PI) / 180 };
+  });
+  const postT = useDerivedValue(() => [{ translateX: post.value.x }, { translateY: L.offY + 160 * L.k }, { rotate: post.value.rot }, { scaleX: post.value.op }]);
+  const postOp = useDerivedValue(() => post.value.op > 0 ? 1 : 0);
+  const postTitle = useDerivedValue(() => postcard.value.title);
+  const postTitleX = useDerivedValue(() => (fontPost ? -fontPost.measureText(postcard.value.title).width / 2 : 0));
+  const PW = 190;
+  const PH = (PW * 255) / 384;
+
+  const heartGeo = useMemo(() => [0, 1, 2].map((i) => heartPath(hx(i), top + 19, 12)), [W, top]);
+  void REWARD;
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* Score */}
+      <Num text={scoreText} x={14} y={top + 30} font={fontScore} color={scoreColor} size={30} />
+
       {/* Tide bar */}
-      <RoundedRect x={barX} y={barY} width={barW} height={barH} r={10} color="#ffffff" opacity={0.92} />
-      <Group transform={barPulse} origin={{ x: W / 2, y: barY + barH / 2 }}>
-        <RoundedRect rect={barFill} color={barColor} />
+      <RoundedRect x={barX} y={barY} width={barW} height={barH} r={11} color={NEUTRAL} opacity={0.94} />
+      <Group transform={barT} origin={{ x: W / 2, y: barY + barH / 2 }}>
+        <RoundedRect rect={fill} color={fillColor} />
+        <RoundedRect rect={ghostR} color={REWARD} opacity={0.55} />
       </Group>
-      {/* Cartoon gloss on the fill */}
-      <RoundedRect x={barX + 8} y={barY + 4} width={barW - 16} height={Math.max(2, barH * 0.22)} r={3} color="#ffffff" opacity={0.45} />
-      <RoundedRect x={barX} y={barY} width={barW} height={barH} r={10} style="stroke" strokeWidth={3} color={INK} />
-      {fontS ? <SkText x={barX + barW - 44} y={barY + 16} text={clockText} font={fontS} color={INK} /> : null}
+      <RoundedRect x={barX + 8} y={barY + 4} width={barW - 16} height={4} r={2} color={NEUTRAL} opacity={0.5} />
+      <Group opacity={tokShow}>
+        {[0, 1, 2].map((i) => (
+          <Group key={i}>
+            <Circle cx={barX + barW - 18 - i * 22} cy={barY + barH / 2} r={8} color={NEUTRAL} opacity={0.8} />
+            <Circle cx={barX + barW - 18 - i * 22} cy={barY + barH / 2} r={8} style="stroke" strokeWidth={2} color={INK} opacity={0.5} />
+            {tokenImg ? <SkImage image={tokenImg} x={barX + barW - 28 - i * 22} y={barY + barH / 2 - 10} width={20} height={20} opacity={tokOps[i]} /> : null}
+          </Group>
+        ))}
+      </Group>
+      <RoundedRect x={barX} y={barY} width={barW} height={barH} r={11} style="stroke" strokeWidth={3} color={INK} />
+      {fontS ? <SkText x={barX + 10} y={barY + 16} text={barLabel} font={fontS} color={INK} /> : null}
+      {fontS ? <SkText x={barX + barW / 2 - 46} y={barY + barH + 16} text="FINAL STRETCH" font={fontS} color={INK} opacity={finalOp} /> : null}
 
       {/* Hearts */}
       {[0, 1, 2].map((i) => (
         <Group key={i}>
-          {/* Empty socket: white heart, so a lost heart reads as a gap, never a tint. */}
-          <Path path={heartPath(28 + i * 34, rowY + 16, 12)} color="#ffffff" opacity={0.85} />
+          <Path path={heartGeo[i]} color={NEUTRAL} opacity={0.85} />
           <Group opacity={heartOps[i]}>
-            <Path path={heartPath(28 + i * 34, rowY + 16, 12)} color="#ff5aa5" />
-            <Circle cx={23 + i * 34} cy={rowY + 11} r={3.2} color="#ffffff" opacity={0.85} />
+            <Path path={heartGeo[i]} color={HEART} />
+            <Circle cx={hx(i) - 5} cy={top + 14} r={3.2} color={NEUTRAL} opacity={0.85} />
           </Group>
-          <Path path={heartPath(28 + i * 34, rowY + 16, 12)} style="stroke" strokeWidth={3} color={INK} />
+          <Path path={heartGeo[i]} style="stroke" strokeWidth={3} color={INK} />
         </Group>
       ))}
+      <Path path={heartShards} color={HEART} opacity={shardOp} />
+      <Path path={heartShards} style="stroke" strokeWidth={2} color={INK} opacity={shardOp} />
       <Group opacity={shieldOp}>
-        <RoundedRect x={10} y={rowY - 2} width={112} height={36} r={18} style="stroke" strokeWidth={3} color="#ffffff" />
+        <RoundedRect x={W - 104} y={top} width={96} height={38} r={19} style="stroke" strokeWidth={3} color={NEUTRAL} />
       </Group>
 
-      {/* Chain pill */}
-      <Group transform={pillScale} origin={{ x: W / 2, y: rowY + 18 }}>
-        <RoundedRect x={pillX} y={rowY} width={pillW} height={38} r={19} color={pillColor} />
-        <RoundedRect x={pillX} y={rowY} width={pillW} height={38} r={19} style="stroke" strokeWidth={3} color={INK} />
-        <RoundedRect x={pillX + 14} y={rowY + 4} width={pillW - 28} height={9} r={4.5} color="#ffffff" opacity={0.35} />
-        <RoundedRect rect={drain} color={INK} opacity={0.55} />
-        {fontS ? <SkText x={chainTextX} y={rowY + 24} text={chainText} font={fontS} color={INK} /> : null}
-      </Group>
-
-      {/* Tokens */}
-      <Group opacity={showTokens}>
-        {[0, 1, 2].map((i) => (
-          <Group key={i}>
-            <Circle cx={W - 102 + i * 34} cy={rowY + 17} r={14} color="#ffffff" opacity={0.75} />
-            <Circle cx={W - 102 + i * 34} cy={rowY + 17} r={14} style="stroke" strokeWidth={2.5} color={INK} opacity={0.6} />
-            {tokenImg ? <SkImage image={tokenImg} x={W - 118 + i * 34} y={rowY + 1} width={32} height={32} opacity={tokOps[i]} /> : null}
-          </Group>
+      {/* Rally rail and placement tag */}
+      <Group opacity={railOp}>
+        <RoundedRect x={20} y={railY - 3} width={W - 40} height={6} r={3} color={NEUTRAL} opacity={0.8} />
+        {[0, 1, 2, 3].map((j) => (
+          <Circle key={j} cx={dotX[j]} cy={railY} r={j === 0 ? 8 : 6} color={j === 0 ? REWARD : rivalColors[j - 1] ?? NEUTRAL} />
         ))}
+        {[0, 1, 2, 3].map((j) => (
+          <Circle key={`o${j}`} cx={dotX[j]} cy={railY} r={j === 0 ? 8 : 6} style="stroke" strokeWidth={2} color={INK} />
+        ))}
+        <Num text={placeText} x={14} y={railY + 42} font={fontScore} color={REWARD} size={30} />
       </Group>
 
-      {/* Race position */}
-      {fontXL ? <SkText x={14} y={rowY + 86} text={place} font={fontXL} color={INK} style="stroke" strokeWidth={8} /> : null}
-      {fontXL ? <SkText x={14} y={rowY + 86} text={place} font={fontXL} color={GOLD} /> : null}
+      {/* Split chip (hero size) */}
+      <Group opacity={chipOp} transform={chipT} origin={{ x: W / 2, y: chipY - 14 }}>
+        <Num text={chipText} x={chipX} y={chipY} font={fontChip} color={chipColor} size={40} />
+      </Group>
 
-      {/* Boost meter */}
-      {showBoost ? (
-        <Group>
-          {[0, 1, 2].map((i) => (
-            <Group key={i}>
-              <RoundedRect x={boostX + i * (segW + 8)} y={sandY} width={segW} height={24} r={10} color="#1f6fa8" opacity={0.35} />
-              <RoundedRect rect={segFill[i]} color={segColor[i]} />
-              <RoundedRect x={boostX + i * (segW + 8)} y={sandY} width={segW} height={24} r={10} style="stroke" strokeWidth={3} color={INK} />
-            </Group>
-          ))}
-          {fontS ? <SkText x={boostLabelX} y={sandY + 46} text={boostLabel} font={fontS} color={INK} /> : null}
-        </Group>
-      ) : null}
-      {fontL ? null : null}
+      {/* Next-sprint postcard */}
+      <Group transform={postT} opacity={postOp}>
+        {farReef ? (
+          <Group clip={Skia.XYWHRect(-PW / 2 + 14, -PH / 2 + 14, PW - 28, PH - 28)}>
+            <SkImage image={farReef} x={-PW / 2} y={-PH / 2 - 20} width={PW * 1.4} height={PH * 1.4} fit="cover" />
+          </Group>
+        ) : null}
+        {postImg ? <SkImage image={postImg} x={-PW / 2} y={-PH / 2} width={PW} height={PH} /> : null}
+        <Num text={postTitle} x={postTitleX} y={PH / 2 - 22} font={fontPost} color={NEUTRAL} size={22} />
+      </Group>
     </Canvas>
   );
 });
 
-export type { SkFont };
+export type { SkImageType };
 void MODE_RIDE;

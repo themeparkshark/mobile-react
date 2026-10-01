@@ -1,11 +1,11 @@
 /**
- * useSprintRace: owns one race transport for the Sprint Race mode.
+ * useRally: owns one rally transport for the live Rally mode (design 11.3).
  * Returns the live room state (lobby, round, results) and the transport.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { INITIAL_RACE_STATE, LabRaceTransport, type RaceState, type RaceTransport } from './raceTransport';
 
-export function useSprintRace(url: string | null, rideId: number, name: string): { transport: RaceTransport | null; state: RaceState } {
+export function useRally(url: string | null, rideId: number, name: string): { transport: RaceTransport | null; state: RaceState } {
   const transport = useMemo(() => (url ? new LabRaceTransport(url) : null), [url]);
   const [state, setState] = useState<RaceState>(INITIAL_RACE_STATE);
   useEffect(() => {
