@@ -6,7 +6,9 @@ import {
   Dimensions,
   Easing,
   ImageBackground,
+  Pressable,
   SafeAreaView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -34,6 +36,7 @@ import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import { useTutorial } from '../components/Tutorial';
 import Item from './StoreScreen/Item';
+import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
@@ -238,8 +241,34 @@ function SingleBubble({
   );
 }
 
+/** Gear (cosmetics for Shark Coins) and Supplies (in-app purchases), on the Shark Shop only. */
+function ShopTabs({ tab, onChange }: { tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void }) {
+  return (
+    <View style={tabStyles.row} accessibilityRole="tablist">
+      {(['gear', 'supplies'] as const).map(key => (
+        <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
+          accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
+          <Text style={[tabStyles.label, tab === key && tabStyles.labelOn]}>{key === 'gear' ? 'GEAR' : 'SUPPLIES'}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+const tabStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 6, padding: 4, marginHorizontal: 16, marginTop: 10, marginBottom: 2,
+    backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999 },
+  tab: { flex: 1, paddingVertical: 7, borderRadius: 999, alignItems: 'center' },
+  tabOn: { backgroundColor: '#ffcf3b' },
+  label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
+  labelOn: { color: '#6a3b00' },
+});
+
 export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store } = route.params as { store: number | 'shark-shop' };
+  const { store, tab: initialTab, focus } = route.params as {
+    store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
+  };
+  const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();
   const [items, setItems] = useState<ItemType[]>([]);
@@ -323,6 +352,9 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  // Supplies sit on the Shark Shop only; secret and park stores stay gear-only.
+  const sharkShop = store === 'shark-shop' || currentStore?.name === 'Shark Shop';
+
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
     loadingMore.current = true;
@@ -348,24 +380,34 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           <BackButton />
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{currentStore?.name}</TopbarText>
+          <TopbarText>{currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
           <InformationModal id={InformationModalEnums.StoreScreen} />
         </TopbarColumn>
       </Topbar>
-      {status !== 'ready' && (
+      {sharkShop && (
+        <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
+          <ShopTabs tab={tab} onChange={setTab} />
+        </View>
+      )}
+      {sharkShop && tab === 'supplies' && (
+        <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
+          <SuppliesShop focus={focus} />
+        </View>
+      )}
+      {(!sharkShop || tab === 'gear') && status !== 'ready' && (
         <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
           <SharkLoader tone="onBlue" state={status === 'error' ? 'error' : 'loading'}
             title={status === 'error' ? 'The Shark Shop couldn’t open' : undefined}
             onRetry={() => setAttempt(a => a + 1)} />
         </View>
       )}
-      {status === 'ready' && (
+      {(!sharkShop || tab === 'gear') && status === 'ready' && (
         <ImageBackground
           style={{
             flex: 1,
-            marginTop: -8,
+            marginTop: sharkShop ? 0 : -8,
           }}
           source={{
             uri: currentStore?.background_url,

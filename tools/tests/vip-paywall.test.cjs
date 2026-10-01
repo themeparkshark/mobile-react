@@ -40,6 +40,10 @@ function harness({ native = true, eligible = true, buy, sync, entitlements = [] 
       NativeModules: native ? { RNIapIos: {}, RNIapIosSk2: {} } : {},
     },
     'react-native-iap': new Proxy(iap, { get(target, key) { if (key === 'setup') calls.required++; return target[key]; } }),
+    '../api/endpoints/me/shop': {
+      redeemShopPurchase: async () => { throw new Error('VIP tests never redeem shop products'); },
+      shopErrorCode: () => null,
+    },
     '../api/endpoints/me/vip-sync': {
       __esModule: true,
       default: async (jws) => { calls.sync.push([...jws]); return sync ? sync(jws) : { subscribed: true, synced: true, expiresAt: null }; },

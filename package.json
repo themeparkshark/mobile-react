@@ -78,7 +78,7 @@
     "react-native-elements": "^3.4.3",
     "react-native-error-boundary": "^1.2.1",
     "react-native-gesture-handler": "~2.20.2",
-    "react-native-google-mobile-ads": "^9.1.0",
+    "react-native-google-mobile-ads": "15.8.3",
     "react-native-iap": "13.0.4",
     "react-native-maps": "1.18.0",
     "react-native-modal": "^13.0.1",

@@ -12,6 +12,16 @@ const LOCATION_WHEN_IN_USE =
   'Theme Park Shark uses your location to show nearby collectibles at home, the rides around you in the park, and the queue games for the line you are in.';
 const LOCATION_ALWAYS =
   'Theme Park Shark uses your location in the background to notice the rides you go on and keep your queue games in sync while your phone is locked.';
+// AdMob (rewarded ads, opt-in). Google's sample app ids until Dustin's AdMob
+// app exists (tps-prime-time-audit/monetization/SETUP.md); mirrored in
+// ios/ThemeParkShark/Info.plist and src/services/adConfig.ts (a test keeps the
+// three equal). No tracking usage string: ads are non-personalized,
+// so there is no App Tracking Transparency prompt and no IDFA.
+const ADMOB_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
+const ADMOB_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
+// Google's own SKAdNetwork id (install attribution without the IDFA).
+const ADMOB_SKADNETWORK_ITEMS = ['cstr6suwn9.skadnetwork'];
+
 const PURPOSE_STRINGS = {
   NSLocationWhenInUseUsageDescription: LOCATION_WHEN_IN_USE,
   NSLocationAlwaysAndWhenInUseUsageDescription: LOCATION_ALWAYS,
@@ -92,6 +102,15 @@ export default {
         ios: {
           deploymentTarget: '16.0',
         },
+      },
+    ],
+    [
+      'react-native-google-mobile-ads',
+      {
+        iosAppId: ADMOB_IOS_APP_ID,
+        androidAppId: ADMOB_ANDROID_APP_ID,
+        skAdNetworkItems: ADMOB_SKADNETWORK_ITEMS,
+        delayAppMeasurementInit: true,
       },
     ],
     // The app never uses biometrics, so no Face ID purpose string at all.

@@ -1,9 +1,10 @@
 /**
- * VIP membership straight through Apple StoreKit 2 (react-native-iap in
- * STOREKIT2_MODE). No third-party account: the paywall loads the products from
- * the App Store, and every purchase, restore and launch sends Apple's signed
- * transactions (JWS) to POST /me/vip/sync, where the server verifies Apple's
- * signature and decides VIP. The client never decides VIP on its own.
+ * VIP membership and the Supplies shop straight through Apple StoreKit 2
+ * (react-native-iap in STOREKIT2_MODE). No third-party account: products load
+ * from the App Store, and every purchase, restore and launch sends Apple's
+ * signed transactions (JWS) to the server, which verifies Apple's signature:
+ * POST /me/vip/sync decides VIP, POST /me/shop/redeem grants a consumable once
+ * per transaction id. The client never decides VIP or a grant on its own.
  *
  * The native module ships in 1.7.0. On an older binary (1.6.0) running this JS
  * the module is missing: nothing here throws, storeAvailable() is false and the
@@ -11,6 +12,7 @@
  */
 import { NativeModules, Platform } from 'react-native';
 import syncVip, { vipSyncErrorCode, type VipSyncResult } from '../api/endpoints/me/vip-sync';
+import { redeemShopPurchase, shopErrorCode, type ShopRedeemResult } from '../api/endpoints/me/shop';
 
 /** App Store Connect: subscription group "VIP" (22421719). Yearly first. */
 export const VIP_PRODUCT_IDS = ['com.themeparkshark.app.vip.yearly', 'com.themeparkshark.app.vip.monthly'] as const;
@@ -18,6 +20,7 @@ export const VIP_SUBSCRIPTION_GROUP_ID = '22421719';
 
 type Iap = typeof import('react-native-iap');
 type StoreSubscription = import('react-native-iap').SubscriptionIOS;
+type StoreProduct = import('react-native-iap').Product;
 type StorePurchase = import('react-native-iap').Purchase;
 
 /** True when this binary has the StoreKit 2 module (1.7.0 and later, iOS only). */
@@ -48,13 +51,17 @@ function connect(): Promise<Iap> {
     connection = (async () => {
       const store = iap();
       store.setup({ storekitMode: 'STOREKIT2_MODE' });
-      await store.initConnection();
       if (!listening) {
         listening = true;
-        // Renewals, Ask to Buy approvals and refunds that arrive while the app
-        // is open (StoreKit's Transaction.updates).
-        store.purchaseUpdatedListener((purchase) => { void deliver(store, [purchase]).catch(() => undefined); });
+        // Renewals, Ask to Buy approvals, refunds, and purchases left
+        // unfinished last run (StoreKit's Transaction.updates replays those
+        // once at launch). Subscribed before initConnection so none is missed.
+        store.purchaseUpdatedListener((purchase) => {
+          void deliver(store, [purchase]).catch(() => undefined);
+          void deliverShop(store, purchase).catch(() => undefined);
+        });
       }
+      await store.initConnection();
       return store;
     })().catch((error) => {
       connection = null;
@@ -228,12 +235,118 @@ async function currentVipEntitlements(store: Iap): Promise<StorePurchase[]> {
   return purchases.filter(isVip);
 }
 
+// ── Supplies shop (consumables) ─────────────────────────────
+
+/** Every Supplies product is ours and not VIP (server config/shop.php owns the list). */
+export function isShopProduct(productId: string | undefined | null): boolean {
+  return typeof productId === 'string' && productId.startsWith('com.themeparkshark.app.')
+    && !(VIP_PRODUCT_IDS as readonly string[]).includes(productId);
+}
+
+const shopDelivered = new Map<string, Promise<ShopRedeemResult>>();
+/** The shop day the player was looking at when they tapped Buy (Daily Deal grace). */
+const shownDayFor = new Map<string, string>();
+type ShopListener = (result: ShopRedeemResult) => void;
+const shopListeners = new Set<ShopListener>();
+
+/** Purchases that land outside a Buy tap (Ask to Buy approved, last run's unfinished). */
+export function onShopDelivered(listener: ShopListener): () => void {
+  shopListeners.add(listener);
+  return () => { shopListeners.delete(listener); };
+}
+
+/**
+ * Sends one consumable to the server, then finishes it with StoreKit. Finished
+ * only after the server granted it (or already had), so a failed delivery is
+ * replayed by StoreKit on the next launch. One server call per transaction even
+ * when StoreKit reports it twice.
+ */
+function deliverShop(store: Iap, purchase: StorePurchase): Promise<ShopRedeemResult | null> {
+  const jws = jwsOf(purchase);
+  if (!isShopProduct(purchase.productId) || !jws) return Promise.resolve(null);
+  const key = keyOf(purchase);
+  const pending = shopDelivered.get(key);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    const result = await redeemShopPurchase(jws, shownDayFor.get(purchase.productId) ?? null);
+    await store.finishTransaction({ purchase, isConsumable: true }).catch(() => undefined);
+    shopListeners.forEach((listener) => { try { listener(result); } catch { /* a screen's problem */ } });
+    return result;
+  })();
+  shopDelivered.set(key, promise);
+  promise.catch(() => { if (shopDelivered.get(key) === promise) shopDelivered.delete(key); });
+  return promise;
+}
+
+export type ShopPrice = {
+  readonly productId: string;
+  /** "$1.99" in the player's storefront currency: what Apple will charge. */
+  readonly price: string;
+  readonly amount: number;
+};
+
+/** Apple's localized prices for the shop products. Missing products are left out. */
+export async function loadShopPrices(productIds: readonly string[]): Promise<Record<string, ShopPrice>> {
+  const ids = productIds.filter(isShopProduct);
+  if (!ids.length) return {};
+  const store = await connect();
+  const products: StoreProduct[] = await store.getProducts({ skus: [...ids] });
+  const prices: Record<string, ShopPrice> = {};
+  for (const product of products) {
+    if (!product?.productId || !product.localizedPrice) continue;
+    prices[product.productId] = { productId: product.productId, price: product.localizedPrice, amount: Number(product.price) || 0 };
+  }
+  return prices;
+}
+
+export type ShopPurchaseOutcome =
+  | { status: 'success'; result: ShopRedeemResult } // granted by the server
+  | { status: 'cancelled' | 'pending' | 'unverified' | 'other_account' | 'unavailable' | 'failed' };
+
+/**
+ * Buys one consumable. accountToken (from GET /me/shop) tags the purchase with
+ * the buyer; shownDay is the shop day on screen, for the Daily Deal.
+ */
+export async function buyShopProduct(
+  productId: string, options: { accountToken?: string | null; shownDay?: string | null } = {},
+): Promise<ShopPurchaseOutcome> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  if (!isShopProduct(productId)) return { status: 'failed' };
+  let store: Iap;
+  let purchase: StorePurchase | null = null;
+  if (options.shownDay) shownDayFor.set(productId, options.shownDay);
+  try {
+    store = await connect();
+    const bought = await store.requestPurchase({
+      sku: productId,
+      andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      ...(options.accountToken ? { appAccountToken: options.accountToken } : {}),
+    });
+    purchase = (Array.isArray(bought) ? bought[0] : bought) ?? null;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'E_USER_CANCELLED') return { status: 'cancelled' };
+    if (code === 'E_DEFERRED_PAYMENT') return { status: 'pending' };
+    return { status: 'failed' };
+  }
+  if (!purchase) return { status: 'pending' };
+  try {
+    const result = await deliverShop(store, purchase);
+    return result ? { status: 'success', result } : { status: 'unverified' };
+  } catch (error) {
+    return shopErrorCode(error) === 'SHOP_PURCHASE_OTHER_PLAYER' ? { status: 'other_account' } : { status: 'unverified' };
+  }
+}
+
 let launchSyncedFor: string | null = null;
 
 /**
  * Once per app run per signed-in player: send the current VIP entitlement so
  * a renewal (or a lapse the server already swept) is reflected without any
- * webhook. Silent; never throws.
+ * webhook. Connecting also starts the update listener, which replays shop
+ * purchases left unfinished last run, so they are delivered now. Silent;
+ * never throws.
  */
 export function syncVipOnLaunch(playerId: number | string | null | undefined): void {
   if (playerId === null || playerId === undefined || !storeAvailable()) return;

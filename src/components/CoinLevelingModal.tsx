@@ -40,6 +40,7 @@ function ridDay(iso: string): string {
   return match ? `${SHORT_MONTHS[Number(match[2]) - 1] ?? ''} ${Number(match[3])}` : '';
 }
 import * as RootNavigation from '../RootNavigation';
+import { storeAvailable } from '../services/purchases';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -122,6 +123,8 @@ export default function CoinLevelingModal({
   const crowningSlot = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
+  // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
+  const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
 
   // Staggered resource bar animations
@@ -348,6 +351,11 @@ export default function CoinLevelingModal({
         if (pendingExploreRef.current) {
           pendingExploreRef.current = false;
           RootNavigation.navigate('Explore');
+        }
+        if (pendingSuppliesRef.current) {
+          const focus = pendingSuppliesRef.current;
+          pendingSuppliesRef.current = null;
+          RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus });
         }
       }}
       onBackdropPress={state !== 'leveling' ? handleClose : undefined}
@@ -787,6 +795,19 @@ export default function CoinLevelingModal({
                             : 'Play a queue adventure in this line to earn Ride Parts.'
                           : 'Energy comes from finds on your home map.'}
                       </Text>
+                    )}
+                    {/* Ride Parts are earned at the ride and never sold. The shop
+                        only helps with what is sold: Tickets for more ride
+                        challenges, or Energy. */}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && (
+                      <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
+                        accessibilityRole="button" hitSlop={8}
+                        accessibilityLabel={!hasParts ? 'Get Park Tickets for more ride challenges' : 'See Supplies packs with Energy'}>
+                        <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#0B5FA8', textAlign: 'center',
+                          marginTop: 6, textDecorationLine: 'underline' }}>
+                          {!hasParts ? 'Out of Tickets for ride challenges? Get Tickets' : 'Short on Energy? Supplies packs include Energy'}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </>
                 )}

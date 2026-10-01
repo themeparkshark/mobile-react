@@ -34,6 +34,7 @@ import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import type { GameIconName } from '../ui/iconNames';
 import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
+import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -65,6 +66,8 @@ interface Props {
   onViewStampBook?: () => void;
   onHidden?: () => void;
   onClose: () => void;
+  /** The won attempt, for the opt-in "double coins" offer. */
+  attemptId?: number | null;
 }
 
 /* ─── Ride Control: what this win did for your team at the ride ─── */
@@ -144,6 +147,51 @@ function RewardChip({ icon, amount, label, index, enter, reduced, started }: {
 }
 
 /* ─── Main component ─── */
+/**
+ * Opt-in "double coins": one rewarded ad for the Shark Coins from this win
+ * again (VIP: no ad). Coins only, never XP or Parts; the server caps it.
+ */
+function DoubleCoinsOffer({ attemptId, vip, coins, onGranted }: {
+  attemptId: number; vip: boolean; coins: number; onGranted: () => void;
+}) {
+  const [state, setState] = useState<'offer' | 'busy' | 'done' | 'gone'>('offer');
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { setState('offer'); setNote(null); }, [attemptId]);
+  if (state === 'gone') return null;
+  const press = async () => {
+    if (state !== 'offer') return;
+    setState('busy');
+    const outcome = await watchForReward('double_coins', attemptId, vip);
+    if (outcome.status === 'granted') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setNote(`${rewardText(outcome.reward.reward)} added`);
+      setState('done');
+      onGranted();
+    } else if (outcome.status === 'checking') {
+      setNote('Thanks for watching. Your coins land in a moment.');
+      setState('done');
+    } else if (outcome.status === 'skipped') {
+      setState('offer');
+    } else if (outcome.status === 'capped') {
+      setNote('Double coins is done for today.');
+      setState('done');
+    } else {
+      setState('gone');
+    }
+  };
+  return (
+    <Pressable style={styles.doubleChip} onPress={() => void press()} disabled={state !== 'offer'}
+      accessibilityRole="button"
+      accessibilityLabel={note ?? (vip ? `Double your coins: plus ${coins} Shark Coins, VIP perk` : `Watch an ad to double your coins: plus ${coins} Shark Coins`)}>
+      <GameIcon name={state === 'done' ? 'check' : 'coins'} size={26} />
+      <Text style={styles.doubleChipText} numberOfLines={2}>
+        {note ?? (state === 'busy' ? 'One moment...' : vip ? `Double coins: +${coins}, VIP perk` : `Watch an ad: double coins, +${coins}`)}
+      </Text>
+      {state === 'offer' && <GameIcon name={vip ? 'member' : 'play'} size={20} />}
+    </Pressable>
+  );
+}
+
 export default function PostWinRewardsModal({
   visible,
   rideName,
@@ -167,8 +215,9 @@ export default function PostWinRewardsModal({
   onViewStampBook,
   onHidden,
   onClose,
+  attemptId = null,
 }: Props) {
-  const { player } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const afterHide = useRef<(() => void) | null>(null);
   useEffect(() => () => { afterHide.current = null; }, []);
   const closeTo = (destination: () => void) => { afterHide.current = destination; onClose(); };
@@ -409,6 +458,11 @@ export default function PostWinRewardsModal({
                 </TouchableOpacity>
               )}
 
+              {attemptId != null && coinsEarned > 0 && (isVip || adsAvailable()) && (
+                <DoubleCoinsOffer attemptId={attemptId} vip={isVip} coins={coinsEarned}
+                  onGranted={() => { void refreshPlayer?.(); }} />
+              )}
+
               {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
@@ -513,6 +567,9 @@ const styles = StyleSheet.create({
   vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, alignSelf: 'center',
     backgroundColor: '#fff4cc', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 6, paddingHorizontal: 12 },
   vipChipText: { fontFamily: 'Knockout', fontSize: 15, color: '#05346e', flexShrink: 1 },
+  doubleChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, alignSelf: 'center',
+    backgroundColor: '#e4f7ff', borderRadius: 14, borderWidth: 2, borderColor: '#4cdcff', paddingVertical: 6, paddingHorizontal: 12 },
+  doubleChipText: { fontFamily: 'Knockout', fontSize: 15, color: '#05346e', flexShrink: 1 },
   hint: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, textAlign: 'center', marginTop: 10,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
   footerPlate: { alignSelf: 'stretch', backgroundColor: '#05346e', borderTopLeftRadius: 22, borderTopRightRadius: 22,
