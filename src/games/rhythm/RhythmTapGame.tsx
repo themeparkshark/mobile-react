@@ -135,6 +135,12 @@ export interface RhythmTapGameProps {
   challenge?: GhostRun;
   /** Ride Assist (design 3.5): granted by the server after a recorded ride loss. */
   assist?: boolean;
+  /**
+   * "Challenge crew" (Ghost Drumline, design 11.2): when the host can deliver
+   * a Line Party challenge, the results card offers it and this receives the
+   * canonical run (stage, difficulty, touch log, March bars) to send.
+   */
+  onChallengeCrew?: (ghost: GhostRun) => void;
   /** Preserved external contract used by MiniGameSelector. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -304,6 +310,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const pausedAt = useRef<number | null>(null);
   const hapticCancel = useRef<(() => void) | null>(null);
   const finished = useRef(false);
+  const lastRun = useRef<GhostRun | null>(null);
   // PB as it stood when the round began (the results card compares against it).
   const pbBefore = useRef<number | undefined>(undefined);
   const perfRunJs = useRef(0);
@@ -909,6 +916,10 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     }
     progressRef.current = next;
     void saveProgress(next);
+    lastRun.current = plan.format === 'queue' && !plan.ftue ? {
+      stage: plan.stage, format: plan.format, difficulty: plan.difficulty, seed: plan.seed, touches: proof.touches,
+      marchBars: proof.march_bars, autoFever: plan.autoFever, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Me', barScores: [], at: Date.now(),
+    } : null;
     const win = plan.format === 'ride' && !plan.ftue ? sum.rideWin : sum.stars > 0;
     const stars = plan.format === 'ride' && !plan.ftue ? (sum.rideWin ? Math.max(1, sum.stars) : 0) : sum.stars;
     if (reason !== 'stall') {
@@ -1058,6 +1069,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       onResume={onResume}
       onWrapUp={onWrapUp}
       onRematch={props.format === 'ride' ? undefined : onRematch}
+      onChallenge={props.onChallengeCrew && result && lastRun.current ? () => lastRun.current && props.onChallengeCrew?.(lastRun.current) : undefined}
       onComplete={onComplete}
       onClose={onClose}
       onQuit={onQuit}

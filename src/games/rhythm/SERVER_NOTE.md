@@ -1,67 +1,78 @@
 # Parade Beat: server change requests (WS7 / multiplayer lead)
 
-The app side of Parade Beat (game key `timing`) is complete on `claude/mg-rhythm`.
-Nothing here was changed in the backend. These are the requests.
+The app side of Parade Beat (game key `timing`, design rhythm.md revision 6) is
+on `claude/mg-rhythm`. Nothing in the backend was changed. These are the
+requests, in priority order.
 
-## 1. Ride proofs keep verifying today
+## 1. Line Party: register `parade_sprint` (the live Same-Minute Race)
+
+The client is done and advertises `parade_sprint` in `/party/play` `games`
+(`DEFAULT_GAMES` in `src/gamekit/net/PartyClient.ts`). The rotation will only
+pick it once the backend knows the key.
+
+- **Sim.** `src/games-registry/partySims.ts` now has `parade_sprint` (v1,
+  `src/games/rhythm/multiplayer/paradeSprint.ts`). `tools/build-sim-bundle.mjs`
+  bundles it. Drop the new `party-sims.<hash>.cjs` into the sidecar's
+  `bundles/` folder.
+- **Driver.** The Parade Beat judge is not integer-only (its beat map is
+  float milliseconds), so there is **no PHP port**. Route `parade_sprint` to the
+  Node sidecar driver only. If the sidecar is down, treat the round as
+  no_contest (never a loss) rather than falling back to PHP.
+- **Golden vectors.** `tools/fixtures/party-sim/parade_sprint.json` holds
+  208 seeds x 4 logs (human, bot, ghost_fill, empty) with exact `{score, hash}`,
+  a prefix resolve and the explain moment. Copy it to the backend's
+  `tests/Fixtures/party-sim/` next to bonk_race and trivia_sprint. The app test
+  `tools/tests/party-sim-bundle.test.cjs` already checks source vs bundle.
+- **Round.** `roundMs` = `ROUND_MS` (27,770 ms: 2 count-in bars, the 12-bar
+  ride sprint, 2 outro bars). `maxTaps` 600. Seeds pick the stage
+  (`seed % 2`: Opening Day, Waiting Room).
+- **Taps.** Rows are `[songMs, code]`, `code = type*100000 + zone*10000 + pointer`
+  (type 0 down, 1 up, 3 Fever launch, 4 MARCH pill). The phone records each
+  input at the exact ms its UI-thread judge used (`PartyClient.recordTapAt`),
+  so the replay lands on the phone's own number (verified on the simulator:
+  "Replay 1355 vs live 1355 MATCH", media/rhythm/parade-sprint-*).
+- **Score.** Duel Points: per playable bar `round(bar accuracy)`, x1.5 in bars
+  under the player's own Fever. Layer-normalised, so a player who taps MARCH
+  while walking is never punished. Ties break on `points` (raw judge score).
+- **HOLD.** A Parade Beat HOLD freezes the song and the board clock together,
+  so the log stays continuous and nothing is voided. The usual 6 s budget and
+  ghost fill apply. `ghostFill` closes any held touch at the drop, then the
+  house drummer plays on.
+- **Walk Hold.** Keep it off for this game (Dustin: the line is always moving).
+
+## 2. Ride proofs keep verifying today
 
 `TaskGameProofService::validate` checks `{game, score, elapsed_ms, seed}`.
-The result meta still carries `score` and `seed` at the top level, and a
-ride sprint lasts about 28-30 s (well over the 12 000 ms floor), so the
-current service accepts Parade Beat results unchanged. `timing` is still
-excluded from `TaskAttemptController::GAMES`. Keep it that way until item 2
-lands.
+The result meta still carries `score` and `seed` at the top level. Rhythm is
+**queue-only** until item 3 lands: `timing` was removed from the client's
+task-attempt fallback in `MiniGameSelector.tsx`, and `TaskAttemptController::GAMES`
+must keep excluding it.
 
-## 2. Proof v4 and exact replay (design rhythm.md 9.2-9.3)
+## 3. Proof v5 and exact replay (design 9.2-9.3)
 
-`meta.rhythmProof` is the v4 proof (`src/games/rhythm/core/proof.ts`):
-- `inputs`: the note-level rows `[noteIndex, signedDeltaMs, kind, zone]`.
-- `touches`: the raw touch log in judged song time. Integer ms, delta-coded
-  base 36: `dt.type.zone.y.pid|...`.
+`meta.rhythmProof` is now v5 (`src/games/rhythm/core/proof.ts`). New since v4:
+`grip`, `assist`, `limp`, `no_fail_until_ms`, `touch_ts`, `march_sections`,
+`fever_deploys` as `[launchMs, dropBar]` pairs, `dares_received`. Removed:
+`walk_source`, `steps_per_march_bar`, `poppers`/`freeze_faults` stay empty at
+launch (those note types are post-launch content drops).
 
-`replayProof()` rebuilds the chart from `(stage, format, difficulty, seed)`.
-It then replays every touch through the same judge and returns the server's
-score, stars and ride win. The judge rounds touch times to integer ms at the
-input boundary. So a replay with 8 ms ticks is bit-exact against a live run
-judged on irregular frames (tested).
+- `replayProof()` rebuilds the canonical chart (`chart_version` `pb-2.0`; the
+  seed no longer changes the chart) and replays the touch log, including
+  type 3 launches, through `core/judge.ts`. The sidecar can run exactly this
+  file; a PHP port is only needed if you want ride verification without Node.
+- **Assist (design 3.5).** Honour `assist: true` only if the server recorded a
+  lost ride sprint by this account at this ride in the last 24 hours.
+- **Plausibility (9.3.3):** offset in [-100, 350]; elapsed vs chart length and
+  `pause_spans`; at most 15 touch-downs per second; delta sd >= 6 ms over 20+
+  hits. Flags hold a leaderboard entry, never reject a ride.
+- **Win (9.1):** never stalled, hit rate >= 75%, strays <= 12. First Parade
+  (`ftue: true`) cannot fail.
 
-What the PHP port needs:
-- **generate.** It reads `src/games/rhythm/stages/<stage>.json`. Ship it as
-  data with the backend and check `beatmap_hash`. The seed draws, in order:
-  1. every `fill` group takes `floor(r*3)`;
-  2. a Fisher-Yates over the `echo` groups, first 2 on;
-  3. the same draw over the `freeze` groups;
-  4. one draw per `either` CYMBAL in note order, where `< 0.5` keeps the CYMBAL.
-  The generator is mulberry32 on the raw seed.
-- **judge.** Port `core/judge.ts` line for line. Every rule is in that one
-  file.
-- **Plausibility checks (9.3.3):**
-  - offset in [-100, 350];
-  - `elapsed_ms` at least the chart length minus 300, allowing for the
-    declared `pause_spans`;
-  - touch rate of at most 15 per second;
-  - delta sd of 6 ms or more over at least 20 hits;
-  - 2-6 steps per March bar.
-- **Round tokens and flags (9.3.4-5).** Round tokens are single use. Flags
-  are the outlier sigma check, lag-1 autocorrelation under 0.02, and a March
-  share outside the park band. Flags hold a run for review. They never
-  reject it.
-- **Win (9.1).** Cleared, hit rate of 75% or more, and 12 or fewer strays.
-  First Parade (`ftue: true`) can never fail.
+## 4. Async challenges (Ghost Drumline)
 
-## 3. Line Party: `parade-beat` in the PartyGames registry
-
-The client already races the same `Rival` shape (`multiplayer/drumline.ts`)
-from local ghosts and house crew. The live room needs these pieces:
-- **Game entry.** Register `parade-beat` with its key, version `pb-1.0`,
-  `roundMs` from the stage, a timeline that returns the chart, and `resolve`
-  as the replayed judge score. Bots use the human model in `core/sim.ts`.
-- **Telemetry.** A 250 ms whisper of `[noteIndex, grade]` pairs per player.
-  The client flashes rival rails at each note's beat-map time, not at packet
-  arrival.
-- **Ghost fill.** A dropped player's seat plays on from their touch log, then
-  the house model.
-- **Async challenges.** Store `touches` + seed + `march_bars` as the ghost
-  run. The client renders it with `ghostRival()`.
-- **Band Mode (design 11.2).** Only the host phone plays the song. This needs
-  the route module from WS9, so every live round is Synced mode until then.
+`RhythmTapGame` takes `onChallengeCrew(ghost)`: when the host can deliver a
+Line Party challenge, the results card shows "Challenge" and hands over the
+canonical run `{stage, format, difficulty, touches, marchBars, autoFever,
+chartVersion, score}`. The receiver passes it back as the `challenge` prop. The
+ghost replays through the judge, races on the rails and its Fever launches
+deliver Hidden Dares (deterministic, logged as `dares_received`).
