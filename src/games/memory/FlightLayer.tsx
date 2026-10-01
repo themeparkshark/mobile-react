@@ -108,8 +108,8 @@ export const FlightLayer = memo(forwardRef<FlightLayerHandle, { reducedMotion: b
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {specs.map((s, i) => (s ? <Flight key={i} spec={s} p={slots[i].p} width={width} reducedMotion={reducedMotion} /> : null))}
-      {tagSpecs.map((t, i) => (t ? <Tag key={t.key} t={t} v={tags[i]} /> : null))}
+      {specs.map((s, i) => (s ? <Flight key={`f${i}`} spec={s} p={slots[i].p} width={width} reducedMotion={reducedMotion} /> : null))}
+      {tagSpecs.map((t, i) => (t ? <Tag key={`t${t.key}`} t={t} v={tags[i]} /> : null))}
     </View>
   );
 }));
