@@ -46,6 +46,8 @@ export interface RuntimeFlags {
   /** Wall clock of the last frame (sub-frame touch stamps, proof v4). */
   frameWall: number;
   hatBounces: number;
+  /** fx time of the last look-up resume (the resume tap shows a soft release ring, never a bonk). */
+  resumedAt: number;
 }
 
 /** Runtime-only event (outside the sim's range): a logged touch-down, for the Line Party tap log. */
@@ -62,7 +64,7 @@ function createFlags(): RuntimeFlags {
   };
   return {
     running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
-    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0,
+    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0, resumedAt: -99999,
   };
 }
 
@@ -76,6 +78,8 @@ function emptySim(): WhackSim {
   return {
     n: 0, evTell: [], evEmerge: [], evDuck: [], evHole: [], evKind: [], evLink: [], aN: 0, aType: [], aTell: [], aLand: [],
     aHole: [], aHole2: [], aRow: [], aState: [], len: 30000, ride: false, butterOn: false, feverOn: false, feverBank: false, feverReady: false, boss: false, lookUpOn: true, seed: 0,
+    rules: 5, perfectOn: false, evUg: [], hExempt: z(0), hStage: z(0), freezeTier: -1, resumeAt: -1,
+    perfects: 0, ripeHits: 0, ripeBolts: 0, ripePoints: 0, lookupDrops: 0,
     t: 0, next: 0, ended: false, frozen: false, hEv: z(-1), hPh: z(0), hAt: z(0), hExt: z(0), hHelm: z(0), hLock: z(0),
     hHitT: z(-99999), hGrade: z(0), hSplat: z(0), hSplatType: z(0), hFade: z(0), hPuffed: z(0), score: 0, streak: 0,
     maxStreak: 0, tier: 0, meter: 0, fever: false, feverLeft: 0, coin: 0, win: false, winAt: -1, hits: 0, legacyHits: 0,
@@ -176,7 +180,12 @@ export function useWhackRuntime(opts: {
     a.tapX[h] = x;
     simTap(s, h, off[0], off[1], sub);
     if (r.logTaps && s.tapCount > logged) s.ev.push(E_TAPLOG, h, 0, 0, s.t);
-    if (wasFrozen && !s.frozen) r.easeT = 0;
+    // v5: the resume touch only resumes (no bonk, no finger); the clock runs at 1x and only
+    // post-resume emerges ease in (in the sim).
+    if (wasFrozen && !s.frozen) {
+      r.resumedAt = a.fxNow;
+      return;
+    }
     if (helmBefore === 1 && s.hHelm[h] === 0) {
       a.helmPopAt[h] = a.local[h];
       a.helmDir[h] = x < L.cx[h] ? 1 : -1;
@@ -194,7 +203,6 @@ export function useWhackRuntime(opts: {
     'worklet';
     if (s.frozen) {
       simUnfreeze(s);
-      r.easeT = 0;
       return;
     }
     for (let h = 0; h < 9; h++) {
@@ -289,23 +297,30 @@ export function useWhackRuntime(opts: {
       const a = an.value;
       const L = geo.value;
       const up: number[] = [];
-      for (let i = 0; i < 9; i++) up.push(s.hPh[i] === P_UP || s.hPh[i] === P_TELL ? 1 : 0);
+      const harm: number[] = [];
+      for (let i = 0; i < 9; i++) {
+        const live = s.hPh[i] === P_UP || s.hPh[i] === P_TELL;
+        up.push(live ? 1 : 0);
+        const k = live && s.hEv[i] >= 0 ? s.evKind[s.hEv[i]] : -1;
+        // v5 5.1: decoys get a core-only hitbox (an angler in fever is a coin bubble: friendly).
+        harm.push((k === K_ANGLER && !s.fever) || k === K_PUFFER ? 1 : 0);
+      }
       for (let k = 0; k < e.changedTouches.length; k++) {
         const t = e.changedTouches[k];
-        const h = hitTest(L, t.x, t.y, up);
+        const h = hitTest(L, t.x, t.y, up, harm);
         if (h >= 0 && s.hSplat[h] === SPLAT_DOWN) {
           r.swipeHole = h;
           r.swipeX0 = t.x;
           if (s.frozen) {
             simUnfreeze(s);
-            r.easeT = 0;
+            r.resumedAt = a.fxNow;
           }
           continue;
         }
         if (h >= 0) tapHole(s, a, r, L, h, t.x, t.y);
         else if (s.frozen) {
           simUnfreeze(s);
-          r.easeT = 0;
+          r.resumedAt = a.fxNow;
         }
       }
       drainTo(s);

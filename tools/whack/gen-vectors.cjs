@@ -1,7 +1,10 @@
 'use strict';
 /**
- * Golden vectors (v4) for the Whack PHP replay port (design 13.3).
+ * Golden vectors (v5) for the Whack PHP replay port (design 13.3).
  *   node tools/whack/gen-vectors.cjs            (writes src/games/whack/__vectors__/vectors.json)
+ * The v4 set is frozen in vectors-v4.json (v4 proofs keep verifying with the v4 rules).
+ * v5 adds Ripe Golden stages and seeded bolts, PERFECT, resume-only look-up taps,
+ * the x2.5 look-up tier cost and the post-resume per-hole ease-in.
  * Timelines: seeds x formats x difficulties x Burst indexes, plus symmetry
  * transforms and walk boosts. Runs: autoplayed tap logs (every profile,
  * including look-up freezes, whiffs and splat swipes) with the resolver's
@@ -29,7 +32,7 @@ for (let seed = 1; seed <= 40; seed++) {
         const input = {
           seed: seed * 2654435761 >>> 0, burstIndex: b, format, difficulty: d, theme: THEMES[seed % 6], unlockLevel: (seed * 7) % 25,
           xform: format === 'lineDay' ? seed % 8 : 0, walkBoost: format === 'queue' && seed % 3 === 0 ? 'golden' : null,
-          runOfDay: seed % 4, feverFired: b > 0 && seed % 5 === 0,
+          runOfDay: seed % 4, feverFired: b > 0 && seed % 5 === 0, rules: 5, bossRuns: seed % 7 === 0,
         };
         timelines.push({ input, sha256: sha(T.timelineFingerprint(T.buildBurst(input))) });
       }
@@ -37,14 +40,14 @@ for (let seed = 1; seed <= 40; seed++) {
   }
 }
 const runs = [];
-const profiles = ['novice', 'median', 'expert', 'onbeat', 'glance', 'walking', 'masher', 'bot', 'jitterbot'];
-for (let k = 0; k < 72; k++) {
+const profiles = ['novice', 'median', 'expert', 'onbeat', 'glance', 'walking', 'masher', 'bot', 'jitterbot', 'greedy', 'cash2', 'lookup'];
+for (let k = 0; k < 96; k++) {
   const format = ['ride', 'queue', 'lineDay', 'raid'][k % 4];
   const burst = format === 'queue' || format === 'lineDay' ? k % 4 : 0;
   const fire = (format === 'queue' || format === 'lineDay') && burst > 0 && k % 3 === 0;
   const input = {
-    seed: (k + 11) * 40503 >>> 0, burstIndex: burst, format, difficulty: 1 + (k % 3), theme: 'pirates', unlockLevel: 12,
-    xform: format === 'lineDay' ? k % 8 : 0, walkBoost: null, runOfDay: k % 3, feverFired: fire,
+    seed: (k + 11) * 40503 >>> 0, burstIndex: burst, format, difficulty: 1 + (k % 3), theme: 'pirates', unlockLevel: k % 8 === 1 ? 5 - burst : 12,
+    xform: format === 'lineDay' ? k % 8 : 0, walkBoost: null, runOfDay: k % 3, feverFired: fire, rules: 5, bossRuns: k % 12 === 3,
   };
   const tl = T.buildBurst(input);
   // Carry a streak into later Bursts so tier drops and x4 show up in the vectors.
@@ -57,10 +60,12 @@ for (let k = 0; k < 72; k++) {
       score: r.result.score, win: r.result.win, hits: r.result.legacyHits, maxStreak: r.result.maxStreak, freezes: r.result.freezes,
       bossDamage: r.result.bossDamage, elapsedMs: r.result.elapsedMs, anticipated: r.result.anticipated, tierDrops: r.result.tierDrops,
       feverReady: r.result.feverReady, flagged: P.verifyProof(proof).flagged ?? null,
+      perfects: r.result.perfects, ripeHits: r.result.ripeHits, ripeBolts: r.result.ripeBolts, ripePoints: r.result.ripePoints,
+      lookupDrops: r.result.lookupDrops,
     },
   });
 }
-const out = { v: 4, generated: 'tools/whack/gen-vectors.cjs', fingerprint: 'timelineFingerprint() in src/games/whack/timeline.ts', timelines, runs };
+const out = { v: 5, generated: 'tools/whack/gen-vectors.cjs', fingerprint: 'timelineFingerprint() in src/games/whack/timeline.ts', timelines, runs };
 const file = path.resolve(__dirname, '../../src/games/whack/__vectors__/vectors.json');
 fs.writeFileSync(file, JSON.stringify(out));
 console.log(`wrote ${timelines.length} timelines, ${runs.length} runs -> ${path.relative(process.cwd(), file)} (${fs.statSync(file).size} bytes)`);

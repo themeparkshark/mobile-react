@@ -1,5 +1,5 @@
 /**
- * proof.ts: Whack-a-Shark proof v4 (design v4 13). One proof per Burst; a Run
+ * proof.ts: Whack-a-Shark proof v5 (design v5 13; v4 proofs still verify with the v4 rules). One proof per Burst; a Run
  * submits an array. The server rebuilds the timeline from the seed, replays
  * the tap log and trusts only its own result (the client's is a checksum).
  *
@@ -32,7 +32,8 @@ export type ProofTap = [number, number, number, number, number, number];
 
 export interface WhackProofV4 {
   game: 'tap';
-  v: 4;
+  /** 5 = current rules (v5 resolver); 4 = a v4 proof, replayed with the v4 rules. */
+  v: 4 | 5;
   seed: number;
   format: WhackFormat;
   burst: number;
@@ -46,6 +47,8 @@ export interface WhackProofV4 {
   fever_fired_burst: number | null;
   /** The Champ (Wave 2): game time of the wake bonk, or null. */
   wake_at: number | null;
+  /** v5: Boss Run finales enabled (Wave 2 flag; false in the Wave 1 build). */
+  boss_runs?: boolean;
   incoming?: { match_seed: number; sender_event_ids: number[] } | null;
   carry: { meter: number; fever_left: number; streak: number; fever_ready: boolean };
   elapsed_ms: number;
@@ -61,8 +64,11 @@ export interface WhackProofV4 {
   client: { build: string; fps_p5: number | null; hz?: number | null; perf_tier?: string; thermal_max?: string; walking?: boolean };
 }
 
-/** Kept as an alias so older imports keep compiling. */
+/** Kept as aliases so older imports keep compiling. */
 export type WhackProofV2 = WhackProofV4;
+export type WhackProofV5 = WhackProofV4;
+/** Proof versions the verifier replays (13.1: the server keeps accepting v4). */
+export const PROOF_VERSIONS = [4, 5] as const;
 
 export function proofInput(p: WhackProofV4): BurstInput {
   return {
@@ -77,6 +83,8 @@ export function proofInput(p: WhackProofV4): BurstInput {
     runOfDay: p.run_of_day ?? 0,
     feverFired: p.fever_fired_burst != null,
     incoming: p.incoming ? { matchSeed: p.incoming.match_seed, senderEventIds: p.incoming.sender_event_ids } : null,
+    rules: p.v === 4 ? 4 : 5,
+    bossRuns: !!p.boss_runs,
   };
 }
 
@@ -111,7 +119,7 @@ export function buildProof(tl: Timeline, carry: BurstCarry, taps: number[], res:
   const inp = tl.input;
   return {
     game: 'tap',
-    v: 4,
+    v: tl.rules === 4 ? 4 : 5,
     seed: inp.seed >>> 0,
     format: inp.format,
     burst: inp.burstIndex,
@@ -123,6 +131,7 @@ export function buildProof(tl: Timeline, carry: BurstCarry, taps: number[], res:
     run_of_day: inp.runOfDay ?? 0,
     fever_fired_burst: tl.feverStart ? inp.burstIndex : null,
     wake_at: null,
+    boss_runs: !!inp.bossRuns,
     incoming: inp.incoming ? { match_seed: inp.incoming.matchSeed, sender_event_ids: inp.incoming.senderEventIds } : null,
     carry: { meter: carry.meter, fever_left: carry.feverLeft, streak: carry.streak, fever_ready: !!carry.feverReady },
     elapsed_ms: res.elapsedMs,
@@ -344,7 +353,7 @@ export function plausibility(p: WhackProofV4, detail: ReplayDetail): Plausibilit
  * board, coin still granted on a ride win).
  */
 export function verifyProof(p: WhackProofV4, ctx: { serverSeed?: number; profileUnlock?: number; attemptAgeMs?: number } = {}): ProofVerdict {
-  if (!p || p.game !== 'tap' || p.v !== 4 || !Array.isArray(p.taps)) return { ok: false, reason: 'shape' };
+  if (!p || p.game !== 'tap' || (p.v !== 4 && p.v !== 5) || !Array.isArray(p.taps)) return { ok: false, reason: 'shape' };
   if (ctx.serverSeed != null && (p.seed >>> 0) !== (ctx.serverSeed >>> 0)) return { ok: false, reason: 'seed' };
   if (ctx.profileUnlock != null && p.unlock_level > ctx.profileUnlock) return { ok: false, reason: 'unlock' };
   if (p.taps.length > MAX_TAPS) return { ok: false, reason: 'taps' };

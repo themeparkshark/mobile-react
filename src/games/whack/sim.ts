@@ -1,5 +1,5 @@
 /**
- * sim.ts: the Bonk Rush resolver (design v4 5-6). One pure state machine runs
+ * sim.ts: the Bonk Rush resolver (design v5 5-6; `rules: 4` replays v4 proofs). One pure state machine runs
  * on the UI thread during play and in node / the server replay afterwards.
  *
  *   const s = createSim(timeline, carry);
@@ -28,7 +28,8 @@ import {
   LOOKUP_IDLE_MS, MAX_TAPS, METER_ANGLER, METER_BUTTER, METER_BY_GRADE, METER_CRIT, METER_DOUBLE, METER_GOLDEN,
   METER_SPRINTER, MULT_CAP, PTS_ANGLER, PTS_BOSS_DEFEAT, PTS_BRUISER_HIT, PTS_BRUISER_KO, PTS_COIN_BUBBLE, PTS_CRIT,
   PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_HELMET_POP, PTS_LAP_PER_SEC, PTS_PUFFER_POKE, PTS_SPRINTER, PTS_TENTACLE,
-  QUICK_FRAC, REBONK_IGNORE_MS, TIER_AT, TIER_MULT, TWIN_WINDOW_MS,
+  QUICK_FRAC, REBONK_IGNORE_MS, TIER_AT, TIER_MULT, TWIN_WINDOW_MS, LOOKUP_TIER_COST_FROM, PERFECT_WINDOW_MS, PTS_PERFECT,
+  RIPE_STAGE_AT, RIPE_VALUE, SIXTEENTH_MS, resumeEaseExtension,
 } from './waves';
 
 // Hole phases
@@ -76,6 +77,11 @@ export const E_COIN_BUBBLE = 24; //  hole, points
 export const E_PUFF = 25; //         hole (inflate started)
 export const E_TIER_DROP = 26; //    newTier, streak (engaged escape at x2+)
 export const E_FEVER_READY = 27; //  banked fever is ready (meter full)
+export const E_RIPE_STAGE = 28; //   hole, stage (1 = 500, 2 = 800): a Ripe Golden ripened (v5)
+export const E_RIPE_BOLT = 29; //    hole: a Ripe Golden bolted (always an engaged escape unless looked-up)
+export const E_PERFECT = 30; //      hole, bonus: an on-beat QUICK (v5 PERFECT pip)
+export const E_LOOKUP_DROP = 31; //  newTier, streak: a look-up that started at x2.5+ cost one tier (v5)
+export const E_RIPE_HIT = 32; //     hole, stage, points: a Ripe Golden cashed out (followed by E_HIT)
 
 export interface BurstCarry {
   /** Bonk Meter % carried from the previous Burst of the Run. */
@@ -117,6 +123,12 @@ export interface WhackSim {
   /** Auto Look-Up enabled (false in live party rounds). */
   lookUpOn: boolean;
   seed: number;
+  /** Resolver rules: 5 current, 4 replays a v4 proof. */
+  rules: number;
+  /** v5 PERFECT pip on on-beat QUICKs. */
+  perfectOn: boolean;
+  /** v5 Ripe Golden U_g per event (0 = flat). */
+  evUg: number[];
   // Clock
   t: number;
   next: number;
@@ -135,6 +147,14 @@ export interface WhackSim {
   hSplatType: number[];
   hFade: number[];
   hPuffed: number[];
+  /** v5: the target was up when a look-up froze the board (its escape never counts as engaged). */
+  hExempt: number[];
+  /** v5 Ripe Golden stage (0-2) on this hole. */
+  hStage: number[];
+  /** v5: tier when the current freeze started (-1 when not frozen). */
+  freezeTier: number;
+  /** v5: game time of the last look-up resume (-1 never). */
+  resumeAt: number;
   // Scoring and meters
   score: number;
   streak: number;
@@ -163,6 +183,12 @@ export interface WhackSim {
   doubles: number;
   anticipated: number;
   tierDrops: number;
+  perfects: number;
+  ripeHits: number;
+  ripeBolts: number;
+  /** Sum of Ripe Golden cash-outs (flat points). */
+  ripePoints: number;
+  lookupDrops: number;
   // Input history
   lastTap: number;
   w0: number;
@@ -224,6 +250,9 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     boss: tl.boss,
     lookUpOn: tl.lookUp !== false,
     seed: tl.burstSeed,
+    rules: tl.rules === 4 ? 4 : 5,
+    perfectOn: !!tl.perfect && tl.rules !== 4,
+    evUg: e.map((x) => x.ug ?? 0),
     t: 0,
     next: 0,
     ended: false,
@@ -240,6 +269,10 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     hSplatType: fill(9, 0),
     hFade: fill(9, 0),
     hPuffed: fill(9, 0),
+    hExempt: fill(9, 0),
+    hStage: fill(9, 0),
+    freezeTier: -1,
+    resumeAt: -1,
     score: 0,
     streak: Math.max(0, carry.streak | 0),
     maxStreak: Math.max(0, carry.streak | 0),
@@ -266,6 +299,11 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     doubles: 0,
     anticipated: 0,
     tierDrops: 0,
+    perfects: 0,
+    ripeHits: 0,
+    ripeBolts: 0,
+    ripePoints: 0,
+    lookupDrops: 0,
     lastTap: 0,
     w0: -99999,
     w1: -99999,
@@ -453,6 +491,8 @@ function activate(s: WhackSim, i: number): void {
   s.hHelm[h] = k === K_HELMET ? 1 : 0;
   s.hPuffed[h] = 0;
   s.hGrade[h] = 0;
+  s.hExempt[h] = 0;
+  s.hStage[h] = 0;
   push(s, E_TELL, h, k, i);
 }
 
@@ -477,6 +517,9 @@ function tick(s: WhackSim): void {
       if (t >= s.evEmerge[s.hEv[h]]) {
         s.hPh[h] = P_UP;
         s.hAt[h] = t;
+        // v5 5.4: an emerge in the 600 ms after a look-up resume eases in on its own hole
+        // clock (0.5x -> 1x), which is the same as granting it the lost up-time.
+        if (s.rules === 5 && s.resumeAt >= 0 && s.evUg[s.hEv[h]] === 0) s.hExt[h] += resumeEaseExtension(t - s.resumeAt);
         push(s, E_EMERGE, h, kindAt(s, h), s.hEv[h]);
       }
     } else if (ph === P_UP) {
@@ -486,6 +529,11 @@ function tick(s: WhackSim): void {
         s.hPuffed[h] = 1;
         push(s, E_PUFF, h, 0, 0);
       }
+      const ug = s.evUg[e];
+      if (ug > 0 && s.hStage[h] < 2 && t - s.evEmerge[e] >= Math.round(ug * RIPE_STAGE_AT[s.hStage[h] + 1])) {
+        s.hStage[h] += 1;
+        push(s, E_RIPE_STAGE, h, s.hStage[h], 0);
+      }
       if (t >= s.evDuck[e] + s.hExt[h]) {
         s.hPh[h] = P_ESCAPE;
         s.hAt[h] = t;
@@ -493,7 +541,13 @@ function tick(s: WhackSim): void {
         let engaged = 0;
         // v4: golden escapes count too (the golden is a gift you can drop); decoys never do.
         const counts = k === K_FINN || k === K_HELMET || k === K_TWIN || k === K_TENTACLE || k === K_BRUISER || k === K_GOLDEN;
-        if (counts && s.hSplat[h] !== SPLAT_DOWN && t - s.lastTap <= ENGAGED_MS) {
+        // v5: a bolted Ripe Golden is always an engaged escape; a target that was up during a look-up never is.
+        const bolt = ug > 0;
+        if (bolt) {
+          s.ripeBolts += 1;
+          push(s, E_RIPE_BOLT, h, s.hStage[h], 0);
+        }
+        if (counts && s.hExempt[h] === 0 && s.hSplat[h] !== SPLAT_DOWN && (bolt || t - s.lastTap <= ENGAGED_MS)) {
           engaged = 1;
           s.engagedEscapes += 1;
           escapeEngaged(s);
@@ -554,6 +608,11 @@ function tick(s: WhackSim): void {
       if (t >= s.evEmerge[e] + Math.ceil(upOf(s, h) * LOOKUP_FRAC)) {
         s.frozen = true;
         s.freezes += 1;
+        if (s.rules === 5) {
+          s.freezeTier = s.tier;
+          // Targets up (or rising) at the freeze peaked while the player looked away: exempt.
+          for (let o = 0; o < 9; o++) if (s.hPh[o] === P_UP || s.hPh[o] === P_TELL) s.hExempt[o] = 1;
+        }
         push(s, E_FREEZE, h, 0, 0);
         break;
       }
@@ -680,8 +739,16 @@ function bonk(s: WhackSim, h: number): void {
     s.goldens += 1;
     s.legacyHits += 1; // v1 proof: golden counts double
     s.hGrade[h] = G_QUICK;
-    addScore(s, PTS_GOLDEN);
-    push(s, E_HIT, h, G_QUICK + 10 * k, PTS_GOLDEN);
+    // v5 Ripe Golden: its stage value, flat (300 / 500 / 800); a pre-emerge tap is stage 1.
+    const ripe = s.evUg[e] > 0;
+    const gp = ripe ? RIPE_VALUE[s.hStage[h]] : PTS_GOLDEN;
+    if (ripe) {
+      s.ripeHits += 1;
+      s.ripePoints += gp;
+      push(s, E_RIPE_HIT, h, s.hStage[h], gp);
+    }
+    addScore(s, gp);
+    push(s, E_HIT, h, G_QUICK + 10 * k, gp);
     addMeter(s, METER_GOLDEN);
     bossDamage(s, 4);
     s.quickRun = 0;
@@ -726,6 +793,15 @@ function bonk(s: WhackSim, h: number): void {
   s.hGrade[h] = grade;
   addScore(s, pts);
   push(s, E_HIT, h, grade + 10 * k, pts);
+  // v5 PERFECT: a QUICK within +-35 ms of a 16th slot of the Burst grid, +20 flat.
+  if (g === G_QUICK && s.perfectOn && !scanned) {
+    const off = t - Math.round(t / SIXTEENTH_MS) * SIXTEENTH_MS;
+    if (off <= PERFECT_WINDOW_MS && off >= -PERFECT_WINDOW_MS) {
+      s.perfects += 1;
+      addScore(s, PTS_PERFECT);
+      push(s, E_PERFECT, h, PTS_PERFECT, 0);
+    }
+  }
   if (!scanned) addMeter(s, METER_BY_GRADE[g]);
   addCoin(s, COIN_BY_GRADE[g]);
 
@@ -757,6 +833,27 @@ function bonk(s: WhackSim, h: number): void {
   }
 }
 
+/**
+ * v5 look-up resume (5.4): the clock resumes at 1x; a freeze that started at
+ * x2.5 or higher costs exactly one tier; emerges in the next 600 ms ease in.
+ */
+function resumeLookUp(s: WhackSim, h: number): void {
+  'worklet';
+  s.frozen = false;
+  push(s, E_RESUME, h, 0, 0);
+  if (s.rules !== 5) return;
+  s.resumeAt = s.t;
+  if (s.freezeTier >= LOOKUP_TIER_COST_FROM && s.tier >= LOOKUP_TIER_COST_FROM) {
+    const nt = s.tier - 1;
+    s.tier = nt;
+    s.streak = TIER_AT[nt];
+    s.quickRun = 0;
+    s.lookupDrops += 1;
+    push(s, E_LOOKUP_DROP, nt, s.streak, 0);
+  }
+  s.freezeTier = -1;
+}
+
 function clampI8(v: number): number {
   'worklet';
   const r = Math.round(v);
@@ -773,9 +870,16 @@ export function simTap(s: WhackSim, h: number, dx = 0, dy = 0, sub = 0): void {
   if (s.ended || s.tapCount >= MAX_TAPS || h < 0 || h > 8) return;
   let flags = 0;
   if (s.frozen) {
-    s.frozen = false;
     flags |= TAP_RESUME;
-    push(s, E_RESUME, h, 0, 0);
+    resumeLookUp(s, h);
+    if (s.rules === 5) {
+      // v5: the touch that ends a freeze only resumes. It never hits anything, wherever it lands.
+      s.taps.push(s.t, h, flags);
+      s.pos.push(clampI8(dx), clampI8(dy), sub < 0 ? 0 : sub > 16 ? 16 : Math.round(sub));
+      s.tapCount += 1;
+      s.lastTap = s.t;
+      return;
+    }
   }
   const ph = s.hPh[h];
   const hidden = s.hSplat[h] === SPLAT_DOWN || s.t < s.hLock[h];
@@ -807,15 +911,16 @@ export function simSwipe(s: WhackSim, h: number): void {
   'worklet';
   if (s.ended || s.tapCount >= MAX_TAPS || h < 0 || h > 8) return;
   let flags = TAP_SWIPE;
+  const resumed = s.frozen;
   if (s.frozen) {
-    s.frozen = false;
     flags |= TAP_RESUME;
-    push(s, E_RESUME, h, 0, 0);
+    resumeLookUp(s, h);
   }
   s.taps.push(s.t, h, flags);
   s.pos.push(0, 0, 0);
   s.tapCount += 1;
   s.lastTap = s.t;
+  if (resumed && s.rules === 5) return; // v5: a resume only resumes
   if (s.hSplat[h] === SPLAT_DOWN) {
     s.hSplat[h] = SPLAT_NONE;
     push(s, E_SPLAT_CLEAR, h, 0, 0);
@@ -827,12 +932,11 @@ export function simUnfreeze(s: WhackSim): void {
   'worklet';
   if (!s.frozen || s.ended || s.tapCount >= MAX_TAPS) return;
   // Logged as a resume tap on hole -1 so the replay unfreezes at the same time.
-  s.frozen = false;
+  resumeLookUp(s, -1);
   s.taps.push(s.t, -1, TAP_RESUME);
   s.pos.push(0, 0, 0);
   s.tapCount += 1;
   s.lastTap = s.t;
-  push(s, E_RESUME, -1, 0, 0);
 }
 
 /** Bank now (line call / BANK & EXIT during play): the Burst ends at the current game time. */
@@ -866,6 +970,11 @@ export interface BurstResult {
   blocked: number;
   anticipated: number;
   tierDrops: number;
+  perfects: number;
+  ripeHits: number;
+  ripeBolts: number;
+  ripePoints: number;
+  lookupDrops: number;
   /** A banked fever is waiting (the breather offers GO FEVER). */
   feverReady: boolean;
   coin: number;
@@ -910,6 +1019,11 @@ export function simResult(s: WhackSim): BurstResult {
     blocked: s.blocked,
     anticipated: s.anticipated,
     tierDrops: s.tierDrops,
+    perfects: s.perfects,
+    ripeHits: s.ripeHits,
+    ripeBolts: s.ripeBolts,
+    ripePoints: s.ripePoints,
+    lookupDrops: s.lookupDrops,
     feverReady: s.feverReady,
     coin: Math.round(s.coin),
     winAt: s.winAt,

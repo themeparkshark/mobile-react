@@ -16,10 +16,11 @@
 import { createRng, mixSeed, rngFloat, rngInt, type Rng } from '../../gamekit/core/rng';
 import { BASIC_FORMATIONS, FORMATIONS, RIDE_FORMATIONS, xformHole } from './formations';
 import {
-  BOSS_CADENCE, BOSS_HP, EIGHTH_MS, FIRST_CALLOUT, FIRST_TELL_MS, GAP_SCALE, HELMET_EXT_MS, K_ANGLER, K_BRUISER,
+  BOSS_CADENCE, BOSS_HP, EIGHTH_MS, FIRST_CALLOUT, FIRST_CALLOUT_V4, FIRST_TELL_MS, GAP_SCALE, HELMET_EXT_MS, K_ANGLER, K_BRUISER,
   K_FINN, K_GOLDEN, K_HELMET, K_TENTACLE, K_TWIN, NORMALIZED_LIFETIME, RIDE_ANGLER_FROM, RIDE_BRUISER_EVERY,
-  RIDE_BRUISER_FROM, SHAPES, SIXTEENTH_MS, TELL_MS, UNLOCK, feverBanked, isBossRun, quantize, quantize16, upTimeFor,
-  type BurstShape, type BurstShapeId, type Difficulty, type WhackFormat,
+  RIDE_BRUISER_FROM, RIPE_BOLT_FROM, RIPE_BOLT_SPAN, RIPE_FIRST_BOLT, SHAPES, SIXTEENTH_MS, TELL_MS, feverBanked, isBossRun,
+  quantize, quantize16, ripeUpMs, unlockFor, upTimeFor,
+  type BurstShape, type BurstShapeId, type Difficulty, type RulesVersion, type UnlockLadder, type WhackFormat,
 } from './waves';
 
 export type WhackThemeId = 'park' | 'pirates' | 'mansion' | 'space' | 'jungle' | 'backlot';
@@ -39,6 +40,8 @@ export interface SpawnEvent {
   formationLead: boolean;
   linkId: number;
   first: boolean;
+  /** v5 Ripe Golden: U_g (ms) when this golden ripens, else 0. Its duckAt is the seeded bolt. */
+  ug: number;
 }
 
 // Attack types (boss and duel sabotage).
@@ -84,6 +87,10 @@ export interface BurstInput {
   feverFired?: boolean;
   /** Duel sabotage queued by the rival's previous Burst (10.2 A). */
   incoming?: { matchSeed: number; senderEventIds: number[] } | null;
+  /** Resolver rules: 5 (default) or 4 (replaying a v4 proof). */
+  rules?: RulesVersion;
+  /** Wave 2 flag (MiniGameTester only): Boss Run finales every 3rd Run. Wave 1 ships Golden Rush only. */
+  bossRuns?: boolean;
 }
 
 export interface Timeline {
@@ -115,6 +122,10 @@ export interface Timeline {
   bossKind: number;
   bossHp: number;
   meterStart: number;
+  /** Resolver rules version (5 current, 4 for v4 proofs). */
+  rules: RulesVersion;
+  /** v5 PERFECT pip on on-beat QUICKs (queue formats from lifetime 6; never ride or live rounds). */
+  perfect: boolean;
   events: SpawnEvent[];
   attacks: Attack[];
 }
@@ -129,6 +140,7 @@ export function lifetimeFor(input: BurstInput): number {
 }
 
 export function shapeFor(input: BurstInput, lifetime: number): BurstShapeId {
+  const rules = input.rules ?? 5;
   const i = input.burstIndex;
   switch (input.format) {
     case 'ride': return 'ride';
@@ -140,7 +152,7 @@ export function shapeFor(input: BurstInput, lifetime: number): BurstShapeId {
       const s = (['b1', 'b2', 'b3'] as const)[i];
       if (s) return s;
       // Finale (exactly one per Run): Boss Run every 3rd Run of the day, else Golden Rush.
-      return isBossRun(input.format, input.runOfDay ?? 0, lifetime) ? 'b5' : 'rush';
+      return isBossRun(input.format, input.runOfDay ?? 0, lifetime, rules, !!input.bossRuns) ? 'b5' : 'rush';
     }
   }
 }
@@ -148,6 +160,7 @@ export function shapeFor(input: BurstInput, lifetime: number): BurstShapeId {
 interface Builder {
   rng: Rng;
   d: Difficulty;
+  unl: UnlockLadder;
   events: SpawnEvent[];
   quiet: [number, number][];
   lengthMs: number;
@@ -174,15 +187,19 @@ function upCount(b: Builder, at: number): number {
 }
 
 /** An event whose pop (`emergeAt`) is on the beat; the tell is the pickup before it. */
-function makeEvent(b: Builder, emergeAt: number, hole: number, kind: number, opts: { first?: boolean; formation?: number; lead?: boolean; link?: number } = {}): SpawnEvent {
+function makeEvent(b: Builder, emergeAt: number, hole: number, kind: number, opts: { first?: boolean; formation?: number; lead?: boolean; link?: number; ripe?: boolean } = {}): SpawnEvent {
   const tell = opts.first ? FIRST_TELL_MS : TELL_MS[kind];
+  // A Ripe Golden holds its well for the longest bolt (0.92 U_g) while the timeline is built;
+  // the seeded bolt is applied once ids are final (step 7).
+  const ug = opts.ripe && kind === K_GOLDEN ? ripeUpMs(b.d) : 0;
+  const up = ug > 0 ? Math.round(ug * RIPE_FIRST_BOLT) : upTimeFor(kind, b.d);
   return {
-    id: 0, tellAt: emergeAt - tell, emergeAt, duckAt: emergeAt + upTimeFor(kind, b.d), hole, kind,
-    formation: opts.formation ?? 0, formationLead: !!opts.lead, linkId: opts.link ?? 0, first: !!opts.first,
+    id: 0, tellAt: emergeAt - tell, emergeAt, duckAt: emergeAt + up, hole, kind,
+    formation: opts.formation ?? 0, formationLead: !!opts.lead, linkId: opts.link ?? 0, first: !!opts.first, ug,
   };
 }
 
-function place(b: Builder, at: number, kind: number, preferred: number[] | null, opts: { first?: boolean; link?: number } = {}): SpawnEvent | null {
+function place(b: Builder, at: number, kind: number, preferred: number[] | null, opts: { first?: boolean; link?: number; ripe?: boolean } = {}): SpawnEvent | null {
   for (let shift = 0; shift < 8; shift++) {
     const t = quantize(at + shift * EIGHTH_MS);
     const probe = makeEvent(b, t, 0, kind, opts);
@@ -206,7 +223,7 @@ function placeFormation(b: Builder, at: number, fid: number, lifetime: number, p
     const [hole, eighths, kindOverride] = f.steps[k];
     const t = quantize(base + eighths * EIGHTH_MS);
     let kind = kindOverride >= 0 ? kindOverride : K_FINN;
-    if (kind === K_FINN && lifetime >= UNLOCK.helmet && f.steps.length <= 3 && k === f.steps.length - 1 && rngFloat(b.rng) < 0.3) kind = K_HELMET;
+    if (kind === K_FINN && lifetime >= b.unl.helmet && f.steps.length <= 3 && k === f.steps.length - 1 && rngFloat(b.rng) < 0.3) kind = K_HELMET;
     const e = makeEvent(b, t, hole, kind, { formation: fid + 1, lead: k === 0 });
     if (e.tellAt < 0 || !holeFree(b, hole, e.tellAt, upWindow(e))) continue;
     b.events.push(e);
@@ -215,9 +232,9 @@ function placeFormation(b: Builder, at: number, fid: number, lifetime: number, p
   b.quiet.push([base - previewMs - 500, last + 700]);
 }
 
-function formationPool(input: BurstInput, lifetime: number): number[] {
+function formationPool(input: BurstInput, lifetime: number, unl: UnlockLadder): number[] {
   if (input.format === 'ride') return RIDE_FORMATIONS;
-  if (lifetime < UNLOCK.allFormations) return BASIC_FORMATIONS;
+  if (lifetime < unl.allFormations) return BASIC_FORMATIONS;
   return FORMATIONS.map((f) => f.id);
 }
 
@@ -231,8 +248,22 @@ export function walkOk(format: WhackFormat): boolean {
 
 const TWIN_PAIRS = [[3, 5], [0, 2], [6, 8], [1, 7], [0, 8], [2, 6]];
 
+/** Ripe Goldens (v5 6.4) ripen in queue formats only: never in the ride round or live/raid rounds. */
+export function ripeFormat(format: WhackFormat): boolean {
+  return format === 'queue' || format === 'lineDay' || format === 'daily' || format === 'weekly' || format === 'duel';
+}
+
+/** Seeded bolt fraction of U_g for a Ripe Golden: 0.72 to 0.92 (the first ever: 0.92). */
+export function ripeBoltFrac(burstSeed: number, eventId: number, first: boolean): number {
+  if (first) return RIPE_FIRST_BOLT;
+  const h = mixSeed(burstSeed >>> 0, (eventId + 1) ^ 0x71be) % 10000;
+  return RIPE_BOLT_FROM + RIPE_BOLT_SPAN * (h / 10000);
+}
+
 export function buildBurst(input: BurstInput): Timeline {
   const d = input.difficulty;
+  const rules: RulesVersion = input.rules === 4 ? 4 : 5;
+  const UNLOCK = unlockFor(rules);
   const lifetime = lifetimeFor(input);
   const shapeId = shapeFor(input, lifetime);
   const base: BurstShape = SHAPES[shapeId];
@@ -240,17 +271,19 @@ export function buildBurst(input: BurstInput): Timeline {
   const finale: Timeline['finale'] = shapeId === 'rush' ? 'rush' : shapeId === 'b5' ? 'boss' : null;
   const burstSeed = mixSeed(input.seed >>> 0, (input.burstIndex + 1) >>> 0);
   const rng = createRng(burstSeed);
-  const b: Builder = { rng, d, events: [], quiet: [], lengthMs };
+  const b: Builder = { rng, d, unl: UNLOCK, events: [], quiet: [], lengthMs };
   const ride = input.format === 'ride';
   const queueFirsts = input.format === 'queue';
   const first = queueFirsts ? lifetime : -1;
   const scale = GAP_SCALE[d];
-  const has = (k: keyof typeof UNLOCK) => ride ? false : lifetime >= UNLOCK[k];
+  const has = (k: keyof UnlockLadder) => ride ? false : lifetime >= UNLOCK[k];
   const anglersOn = ride || has('angler');
+  const ripeOn = rules === 5 && ripeFormat(input.format) && has('ripe');
 
   // 1. First encounters (queue only): one new thing, alone, with a long tell.
   if (first === UNLOCK.angler) { place(b, 2000, K_ANGLER, [4], { first: true }); b.quiet.push([1300, 3600]); }
   if (first === UNLOCK.golden) { place(b, 2400, K_GOLDEN, [4], { first: true }); b.quiet.push([1700, 4000]); }
+  if (ripeOn && first === UNLOCK.ripe) { place(b, 2400, K_GOLDEN, [4], { first: true, ripe: true }); b.quiet.push([1700, 4800]); }
   if (first === UNLOCK.helmet) { place(b, 2000, K_HELMET, [4], { first: true }); b.quiet.push([1300, 4000]); }
   if (first === UNLOCK.twins) {
     place(b, 2000, K_TWIN, [3], { first: true, link: 1 });
@@ -262,7 +295,7 @@ export function buildBurst(input: BurstInput): Timeline {
   const slots = [...base.formations];
   if (first === UNLOCK.formations) slots.unshift(4200);
   if (ride || has('formations') || first === UNLOCK.formations) {
-    const pool = formationPool(input, lifetime);
+    const pool = formationPool(input, lifetime, UNLOCK);
     let lastPick = -1;
     for (const s of slots) {
       let fid = pool[rngInt(rng, 0, pool.length - 1)];
@@ -275,7 +308,7 @@ export function buildBurst(input: BurstInput): Timeline {
   // 3. Goldens (seeded within +-2 beats of the window), walk boost, fever intro.
   const goldenOn = ride || has('golden');
   if (goldenOn) {
-    for (const [from, to] of base.goldens) place(b, from + rngFloat(rng) * (to - from), K_GOLDEN, null);
+    for (const [from, to] of base.goldens) place(b, from + rngFloat(rng) * (to - from), K_GOLDEN, null, { ripe: ripeOn });
   }
   if (first === UNLOCK.fever && !base.goldens.some(([a]) => a < 5000)) place(b, 2600, K_GOLDEN, null);
   if (input.walkBoost === 'golden' && walkOk(input.format)) place(b, 2000 + rngFloat(rng) * 1500, K_GOLDEN, null);
@@ -341,7 +374,9 @@ export function buildBurst(input: BurstInput): Timeline {
   const events = b.events
     .filter((e) => e.emergeAt < lengthMs - 400)
     .sort((a, z) => a.tellAt - z.tellAt || a.hole - z.hole)
-    .map((e, i) => ({ ...e, id: i, hole: xformHole(e.hole, x) }));
+    .map((e, i) => ({ ...e, id: i, hole: xformHole(e.hole, x) }))
+    // Ripe Golden: the seeded bolt (no tell before it; 0.72-0.92 U_g, the first ever at 0.92).
+    .map((e) => (e.ug > 0 ? { ...e, duckAt: e.emergeAt + Math.round(e.ug * ripeBoltFrac(burstSeed, e.id, e.first)) } : e));
 
   // 8. Attacks: boss cadence, or duel sabotage splats.
   const attacks: Attack[] = [];
@@ -370,8 +405,10 @@ export function buildBurst(input: BurstInput): Timeline {
   attacks.forEach((a, i) => { a.id = i; });
 
   let callout: string | null = null;
-  if (first >= 1 && FIRST_CALLOUT[first] && (first !== UNLOCK.boss || base.boss)) callout = FIRST_CALLOUT[first];
+  const callouts = rules === 4 ? FIRST_CALLOUT_V4 : FIRST_CALLOUT;
+  if (first >= 1 && callouts[first] && (first !== UNLOCK.boss || base.boss)) callout = callouts[first];
   if (first === UNLOCK.golden) callout = 'GOLDEN FINN! BONK IT FAST';
+  if (first === UNLOCK.ripe && !ripeOn) callout = null;
 
   return {
     input, burstSeed, shape: shapeId, lengthMs,
@@ -390,6 +427,8 @@ export function buildBurst(input: BurstInput): Timeline {
     bossKind,
     bossHp: base.boss ? (input.format === 'raid' ? BOSS_HP[d] + 8 : BOSS_HP[d]) : 0,
     meterStart: 0,
+    rules,
+    perfect: ripeOn,
     events,
     attacks,
   };
@@ -404,7 +443,8 @@ export function buildRun(base: Omit<BurstInput, 'burstIndex'>, count: number): T
 
 /** Stable text fingerprint of a timeline (golden vectors; the PHP port hashes the same string). */
 export function timelineFingerprint(tl: Timeline): string {
-  const ev = tl.events.map((e) => `${e.id}:${e.tellAt}:${e.emergeAt}:${e.duckAt}:${e.hole}:${e.kind}:${e.formation}:${e.linkId}:${e.first ? 1 : 0}`).join(',');
+  // v5 appends the Ripe Golden's U_g only on ripe events, so every v4 fingerprint is unchanged.
+  const ev = tl.events.map((e) => `${e.id}:${e.tellAt}:${e.emergeAt}:${e.duckAt}:${e.hole}:${e.kind}:${e.formation}:${e.linkId}:${e.first ? 1 : 0}${e.ug > 0 ? `:r${e.ug}` : ''}`).join(',');
   const at = tl.attacks.map((a) => `${a.type}:${a.tellAt}:${a.landAt}:${a.hole}:${a.hole2}:${a.row}`).join(',');
   return `${tl.shape}|${tl.lengthMs}|${tl.bossHp}|${tl.feverStart ? 1 : 0}|${ev}|${at}`;
 }

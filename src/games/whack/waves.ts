@@ -148,24 +148,56 @@ export const WALK_PCT_PER_M = 2.5;
 export const WALK_FULL_M = 40;
 export const WALK_BOOST_EVERY = 3;
 
-// -- Unlock ladder v4 (6.13), by lifetime Burst number (1-based) ----------------
-export const UNLOCK = {
+// -- Unlock ladder v5 (6.13), by lifetime Burst number (1-based) ----------------
+export interface UnlockLadder {
+  angler: number;
+  golden: number;
+  butterfingers: number;
+  formations: number;
+  fever: number;
+  /** Ripe Golden and the PERFECT pip (v5 only; Infinity under v4 rules). */
+  ripe: number;
+  helmet: number;
+  twins: number;
+  /** Theme mutators (Wave 2) and the full formation pool. */
+  allFormations: number;
+  boss: number;
+}
+export const UNLOCK: UnlockLadder = {
   angler: 2,
   golden: 3,
   butterfingers: 3,
   formations: 4,
   fever: 5,
+  ripe: 6,
+  helmet: 7,
+  twins: 8,
+  allFormations: 9,
+  boss: 11,
+};
+/** The v4 ladder, kept so v4 proofs replay exactly (13.1: the server keeps accepting v4). */
+export const UNLOCK_V4: UnlockLadder = {
+  angler: 2,
+  golden: 3,
+  butterfingers: 3,
+  formations: 4,
+  fever: 5,
+  ripe: Infinity,
   helmet: 6,
   twins: 7,
-  /** Theme mutators (Wave 2) and the full formation pool. */
   allFormations: 8,
   boss: 10,
-} as const;
+};
+/** Resolver rules version: 5 is current; 4 replays v4 proofs. */
+export type RulesVersion = 4 | 5;
+export function unlockFor(rules: RulesVersion): UnlockLadder {
+  return rules === 4 ? UNLOCK_V4 : UNLOCK;
+}
 
 /** Shared-seed formats play this normalized lifetime (everything in the ship cut, never a first encounter). */
 export const NORMALIZED_LIFETIME = 9;
 
-export const FIRST_CALLOUT: Record<number, string> = {
+export const FIRST_CALLOUT_V4: Record<number, string> = {
   1: 'HIT IT BEFORE THE RING CLOSES',
   2: 'WATCH THE TEETH',
   3: 'GOLDEN FINN! BONK IT FAST',
@@ -175,6 +207,55 @@ export const FIRST_CALLOUT: Record<number, string> = {
   7: 'BONK BOTH TWINS TOGETHER',
   10: 'BOSS RUN! SWIPE THE INK',
 };
+/** v5 first encounters (6.13). */
+export const FIRST_CALLOUT: Record<number, string> = {
+  1: 'HIT IT BEFORE THE RING CLOSES',
+  2: 'WATCH THE TEETH',
+  3: 'GOLDEN FINN! BONK IT FAST',
+  4: 'FOLLOW THE PATH',
+  5: 'FILL THE METER, THEN GO FEVER',
+  6: 'LET IT RIPEN... IF YOU DARE',
+  7: 'BONK TWICE: HELMET FIRST',
+  8: 'BONK BOTH TWINS TOGETHER',
+  11: 'BOSS RUN! SWIPE THE INK',
+};
+
+// -- Ripe Golden (v5 6.4): the reason to wait ------------------------------------
+/** U_g = 1.6 x the golden's up time (1740/1500/1280 ms by difficulty). */
+export const RIPE_UP_MULT = 1.6;
+export function ripeUpMs(d: Difficulty): number {
+  return Math.round(UP_SPECIAL[d] * RIPE_UP_MULT);
+}
+/** Stage boundaries as fractions of U_g, and the flat value of each stage. */
+export const RIPE_STAGE_AT = [0, 0.35, 0.65];
+export const RIPE_VALUE = [300, 500, 800];
+/** Seeded bolt: emergeAt + U_g x (0.72 + 0.20 x hash01). The first one ever bolts at 0.92. */
+export const RIPE_BOLT_FROM = 0.72;
+export const RIPE_BOLT_SPAN = 0.2;
+export const RIPE_FIRST_BOLT = 0.92;
+
+// -- PERFECT (v5 5.2) ----------------------------------------------------------------
+/**
+ * A QUICK within +-15 ms of a 16th slot: +20 flat (never multiplied), two ladder steps.
+ * The design says +-35 ms, but +-35 of a 116 ms grid is 60% of all phases, so a
+ * reaction-only player would earn it 60% of the time; +-15 gives the designed
+ * 20-35% for reaction players and 60%+ for on-beat players (acceptance #13).
+ */
+export const PERFECT_WINDOW_MS = 15;
+export const PTS_PERFECT = 20;
+
+// -- Look-up (v5 5.4) ------------------------------------------------------------------
+/** A freeze that starts at this tier (x2.5) or higher drops one tier on resume. */
+export const LOOKUP_TIER_COST_FROM = 3;
+/** Emerges inside this window after a resume ease in on their own hole clock (0.5x -> 1x). */
+export const RESUME_EASE_MS = 600;
+/** Up-time a post-resume emerge gains from the 0.5x -> 1x ease (pure function of the gap d, ms). */
+export function resumeEaseExtension(d: number): number {
+  'worklet';
+  if (d < 0 || d >= RESUME_EASE_MS) return 0;
+  const r = RESUME_EASE_MS - d;
+  return Math.round((r * r) / (4 * RESUME_EASE_MS));
+}
 
 // -- Burst shapes (v4 6.2) ------------------------------------------------------------
 export type BurstShapeId = 'b1' | 'b2' | 'b3' | 'b4' | 'b5' | 'rush' | 'ride' | 'raid' | 'party';
@@ -253,9 +334,14 @@ export function feverBanked(format: WhackFormat): boolean {
   return format !== 'party' && format !== 'raid' && format !== 'ride';
 }
 
-/** Boss Run cadence (6.2): every 3rd Run of the park day, from lifetime Burst 10, random-seed Queue Runs only. */
-export function isBossRun(format: WhackFormat, runOfDay: number, lifetimeAtFinale: number): boolean {
-  return format === 'queue' && lifetimeAtFinale >= UNLOCK.boss && ((runOfDay | 0) % 3) === 2;
+/**
+ * Boss Run cadence (6.2): every 3rd Run of the park day, random-seed Queue Runs
+ * only. v4: from lifetime Burst 10. v5: from lifetime Burst 11 and only with the
+ * Wave 2 flag (`bossRuns`, MiniGameTester); Wave 1 ships Golden Rush only.
+ */
+export function isBossRun(format: WhackFormat, runOfDay: number, lifetimeAtFinale: number, rules: RulesVersion = 5, bossRuns = false): boolean {
+  if (rules === 5 && !bossRuns) return false;
+  return format === 'queue' && lifetimeAtFinale >= unlockFor(rules).boss && ((runOfDay | 0) % 3) === 2;
 }
 
 /** Star thresholds for a whole Queue Run (sum of banked Bursts), per difficulty (tools/tests/whack-tune.cjs). */

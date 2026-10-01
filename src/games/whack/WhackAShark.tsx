@@ -568,7 +568,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const ghostLine = lineRun ? ghostDeltaLine(total, target ?? null) : null;
     const meta: Record<string, unknown> = {
       game: 'tap',
-      v: 4,
+      v: 5,
       score: total,
       seed: runSeedRef.current >>> 0,
       hits,
@@ -839,7 +839,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       stars: ride ? 0 : starsFor(total, thresholds),
       thresholds: ride ? undefined : thresholds,
       maxCombo: Math.max(0, ...bankedRef.current.map((b) => b.result.maxStreak)),
-      meta: { game: 'tap', v: 4, score: total, seed: runSeedRef.current >>> 0, format, reason, proof: bankedRef.current.map((b) => b.proof) },
+      meta: { game: 'tap', v: 5, score: total, seed: runSeedRef.current >>> 0, format, reason, proof: bankedRef.current.map((b) => b.proof) },
     };
   }, [runtime, phase, difficulty, ride, format, finisher, liveScoreRef]);
 

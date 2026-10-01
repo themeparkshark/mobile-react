@@ -106,20 +106,22 @@ test('onboarding: a fresh profile sees only Finn, Angler and Golden in its first
   }
 });
 
-test('finale cadence: Boss Run on every 3rd Run of the day from lifetime Burst 10, never in Line of the Day or daily', () => {
-  const fin = (unlock, runOfDay, format = 'queue') => T.buildBurst({ seed: 5, burstIndex: format === 'daily' ? 2 : 3, format, difficulty: 2, theme: 'park', unlockLevel: unlock, runOfDay }).finale;
+test('finale cadence: Wave 1 is Golden Rush only; the Wave 2 flag gives a Boss Run every 3rd Run from lifetime Burst 11', () => {
+  const fin = (unlock, runOfDay, format = 'queue', bossRuns = true, rules = 5) => T.buildBurst({ seed: 5, burstIndex: format === 'daily' ? 2 : 3, format, difficulty: 2, theme: 'park', unlockLevel: unlock, runOfDay, bossRuns, rules }).finale;
+  for (let rod = 0; rod < 6; rod++) assert.equal(fin(20, rod, 'queue', false), 'rush', 'Wave 1 build: Golden Rush only');
   assert.equal(fin(20, 0), 'rush');
   assert.equal(fin(20, 1), 'rush');
   assert.equal(fin(20, 2), 'boss');
   assert.equal(fin(20, 5), 'boss');
-  assert.equal(fin(4, 2), 'rush', 'lifetime 8 at the finale: no boss yet');
-  assert.equal(fin(6, 2), 'boss', 'lifetime 10 at the finale');
+  assert.equal(fin(6, 2), 'rush', 'lifetime 10 at the finale: no boss yet in v5');
+  assert.equal(fin(7, 2), 'boss', 'lifetime 11 at the finale');
+  assert.equal(fin(6, 2, 'queue', false, 4), 'boss', 'v4 rules (old proofs): lifetime 10, no flag');
   assert.equal(fin(20, 2, 'lineDay'), 'rush');
   assert.equal(fin(20, 2, 'daily'), 'rush');
   const rush = q(3, 3, 20);
   assert.equal(rush.lengthMs, 16000);
   assert.ok(rush.events.filter((e) => e.kind === W.K_GOLDEN).length >= 2, 'Golden Rush has 2 goldens');
-  assert.equal(T.buildBurst({ seed: 3, burstIndex: 3, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 20, runOfDay: 2 }).lengthMs, 18000);
+  assert.equal(T.buildBurst({ seed: 3, burstIndex: 3, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 20, runOfDay: 2, bossRuns: true }).lengthMs, 18000);
 });
 
 test('ride: Finn, Golden, Angler, Bruiser only; enough non-decoys before the Bruiser to win cleanly', () => {
@@ -187,7 +189,7 @@ test('whiffs: one bump is free; 3 in 1s is Butterfingers (only once unlocked)', 
   assert.equal(early.s.butters, 0, 'not before lifetime 3');
 });
 
-test('Auto Look-Up: an idle player never loses a target; the board freezes at 0.8U and one tap resumes (graded LATE)', () => {
+test('Auto Look-Up v5: an idle player never loses a target; the resume touch only resumes, frozen targets run on at 1x', () => {
   const tl = q(21, 0, 0);
   const s = S.createSim(tl, undefined, true);
   S.simAdvance(s, 60000);
@@ -199,21 +201,79 @@ test('Auto Look-Up: an idle player never loses a target; the board freezes at 0.
   const h = s.hPh.findIndex((p, i) => p === S.P_UP && s.evKind[s.hEv[i]] !== W.K_ANGLER);
   const e = tl.events[s.hEv[h]];
   assert.ok(s.t >= e.emergeAt + 0.8 * (e.duckAt - e.emergeAt) - 1);
+  assert.equal(s.hExempt[h], 1, 'up at the freeze: exempt from the engaged-escape rule');
+  const hitsBefore = s.hits;
   S.simTap(s, h);
   assert.equal(s.frozen, false);
   assert.equal(s.taps[2] & S.TAP_RESUME, 1, 'resume flag bit');
-  assert.equal(s.late, 1, 'freezing never helps your grade');
+  assert.equal(s.hits, hitsBefore, 'the resume touch never hits, even on the target');
+  assert.equal(s.whiffs, 0, 'and never whiffs');
+  // The frozen target continues at 1x: about 0.2U left, a quick LATE is still possible.
+  S.simAdvance(s, 60);
+  S.simTap(s, h);
+  assert.equal(s.late, 1, 'a follow-up tap grades LATE');
   // Keep idling: every target is either hit or frozen on, never escaped.
   let guard = 0;
-  while (!s.ended && guard++ < 200) {
+  while (!s.ended && guard++ < 400) {
     S.simAdvance(s, 60000);
     if (s.frozen) {
       const hh = s.hPh.findIndex((p, i) => p === S.P_UP && s.evKind[s.hEv[i]] !== W.K_ANGLER);
-      S.simTap(s, hh);
+      S.simTap(s, hh >= 0 ? hh : 4);
     }
   }
   assert.ok(s.ended);
   assert.equal(A.disengagedEscapes(tl, s.taps), 0);
+  assert.equal(s.engagedEscapes, 0, 'targets that peaked during a look-up never count as engaged');
+});
+
+test('look-up v5: a freeze at x2.5+ costs exactly one tier on resume, below x2.5 nothing; post-resume emerges ease in', () => {
+  const tl = q(21, 2, 30);
+  const freezeWith = (streak) => {
+    const s = S.createSim(tl, { meter: 0, feverLeft: 0, streak }, true);
+    S.simAdvance(s, 60000);
+    assert.equal(s.frozen, true);
+    const tier = s.tier;
+    S.simUnfreeze(s);
+    const ev = [];
+    for (let i = 0; i < s.ev.length; i += 5) ev.push(s.ev.slice(i, i + 5));
+    return { s, tier, ev };
+  };
+  const hi = freezeWith(W.TIER_AT[3] + 2); // x2.5
+  assert.equal(hi.s.tier, hi.tier - 1, 'x2.5 drops to x2');
+  assert.equal(hi.s.streak, W.TIER_AT[hi.tier - 1]);
+  assert.equal(hi.s.lookupDrops, 1);
+  assert.ok(hi.ev.some((x) => x[0] === S.E_LOOKUP_DROP));
+  const top = freezeWith(60); // x4
+  assert.equal(top.s.tier, 4, 'x4 drops to x3');
+  const lo = freezeWith(W.TIER_AT[2] + 3); // x2
+  assert.equal(lo.s.tier, 2, 'below x2.5 a look-up costs nothing');
+  assert.equal(lo.s.streak, W.TIER_AT[2] + 3);
+  // Ease-in: an emerge d ms after the resume gains (600-d)^2/2400 ms of up time (0.5x -> 1x on its own clock).
+  assert.equal(W.resumeEaseExtension(0), 150);
+  assert.equal(W.resumeEaseExtension(300), 38);
+  assert.equal(W.resumeEaseExtension(600), 0);
+  const s = hi.s;
+  const resumeT = s.t;
+  const next = tl.events.find((e) => e.emergeAt > resumeT && e.emergeAt < resumeT + 600 && e.kind !== W.K_GOLDEN);
+  if (next) {
+    S.simAdvanceTo(s, next.emergeAt + 1);
+    if (!s.frozen) assert.equal(s.hExt[next.hole] - (next.kind === W.K_HELMET ? 0 : 0), W.resumeEaseExtension(next.emergeAt - resumeT));
+  }
+  // Targets up at the freeze never got the ease (they run on at 1x).
+  const frozenHole = hi.s.hExempt.findIndex((x) => x === 1);
+  assert.ok(frozenHole >= 0);
+});
+
+test('look-ups never pay: the lookup profile scores below the same hands without forced look-ups on 95%+ of seeds', () => {
+  let lower = 0;
+  const n = 20;
+  for (let i = 0; i < n; i++) {
+    const base = { seed: 5000 + i * 104729, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 20 };
+    const lk = A.autoplayRun(base, 4, 'lookup', 91 + i, 'finale', T.buildBurst).total;
+    const ex = A.autoplayRun(base, 4, 'expert', 91 + i, 'finale', T.buildBurst).total;
+    if (lk < ex) lower++;
+  }
+  assert.ok(lower / n >= 0.95, `lookup lower on ${lower}/${n}`);
 });
 
 test('engaged escape at x2+ drops exactly one tier; below x2 resets; decoys reset; idle never decays streak or meter', () => {
@@ -276,10 +336,11 @@ test('tiers: x4 opens at streak 45; fever x2 caps the effective multiplier at x8
   assert.equal(S.multiplier(s), 4);
 });
 
-test('crits are seeded (same event always crits), golden is flat', () => {
-  const tl = q(77, 3, 30);
+test('crits are seeded (same event always crits), the ride golden is flat', () => {
+  const tl = ride(77);
   const g = firstOf(tl, W.K_GOLDEN);
   assert.ok(g, 'the finale has a golden');
+  assert.equal(g.ug, 0, 'the ride golden never ripens');
   const run = S.createSim(tl, { meter: 0, feverLeft: 5000, streak: 50 }, true);
   advanceEngaged(run, g.emergeAt + 100);
   const before = run.score;
@@ -342,7 +403,7 @@ test('interruptions change nothing: game time is the only clock (same taps, same
   assert.equal(again.maxStreak, run.result.maxStreak);
 });
 
-const boss = (seed) => T.buildBurst({ seed, burstIndex: 3, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 30, runOfDay: 2 });
+const boss = (seed) => T.buildBurst({ seed, burstIndex: 3, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 30, runOfDay: 2, bossRuns: true });
 
 test('boss Burst: tentacles and goldens damage the boss; defeat pays out and starts the Victory Lap', () => {
   const tl = boss(2);
@@ -372,13 +433,13 @@ test('splats hide a hole until swiped', () => {
 // ---------------------------------------------------------------- proof
 const proofOf = (tl, run, carry = S.NO_CARRY) => P.buildProof(tl, carry, run.sim.taps, run.result, { wallMs: run.stats.wallMs, pos: run.sim.pos });
 
-test('proof v4: an autoplayed ride win verifies; forged results, wrong seeds and malformed logs are rejected', () => {
+test('proof v5: an autoplayed ride win verifies; forged results, wrong seeds and malformed logs are rejected', () => {
   const tl = ride(123456);
   const run = A.autoplayBurst(tl, 'median', 5);
   assert.ok(run.result.win);
   assert.ok(run.result.legacyHits >= 10, 'v1 server floor still holds');
   const proof = proofOf(tl, run);
-  assert.equal(proof.v, 4);
+  assert.equal(proof.v, 5);
   assert.equal(proof.taps[0].length, 6, '[gt, hole, flags, dx, dy, sub]');
   const ok = P.verifyProof(proof, { serverSeed: 123456 });
   assert.equal(ok.ok, true, JSON.stringify(ok).slice(0, 300));
@@ -388,6 +449,15 @@ test('proof v4: an autoplayed ride win verifies; forged results, wrong seeds and
   assert.equal(P.verifyProof(forged).ok, false);
   assert.equal(P.verifyProof(proof, { serverSeed: 99 }).ok, false);
   assert.equal(P.verifyProof({ ...proof, v: 3 }).ok, false, 'unknown version');
+  // v4 proofs keep verifying, replayed with the v4 rules (13.1).
+  const tl4 = T.buildBurst({ seed: 4242, burstIndex: 1, format: 'queue', difficulty: 2, theme: 'park', unlockLevel: 12, rules: 4 });
+  const run4 = A.autoplayBurst(tl4, 'median', 6);
+  const p4 = proofOf(tl4, run4);
+  assert.equal(p4.v, 4);
+  const v4 = P.verifyProof(p4);
+  assert.equal(v4.ok, true, JSON.stringify(v4).slice(0, 200));
+  assert.equal(v4.result.score, run4.result.score);
+  assert.equal(P.verifyProof({ ...p4, v: 5 }).ok, false, 'a v4 log replayed with v5 rules does not match');
   const bad = JSON.parse(JSON.stringify(proof));
   bad.taps[0][3] = 400;
   assert.equal(P.verifyProof(bad).reason, 'malformed');
@@ -596,12 +666,23 @@ test('skill spread (queue boards): top-1% expert over the median median is 2.0-2
   assert.ok(oneStar >= 0.85, `novice reaches 1+ star in ${oneStar}`);
 });
 
-test('golden vectors (PHP parity): every timeline hash and every recorded run still reproduces', () => {
+test('golden vectors (PHP parity): every v5 and frozen v4 timeline hash and recorded run still reproduces', () => {
   const crypto = require('node:crypto');
-  const V = require('../../src/games/whack/__vectors__/vectors.json');
+  const V5 = require('../../src/games/whack/__vectors__/vectors.json');
+  const V4 = require('../../src/games/whack/__vectors__/vectors-v4.json');
+  assert.equal(V5.v, 5);
+  assert.equal(V4.v, 4);
   const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
-  for (const t of V.timelines) assert.equal(sha(T.timelineFingerprint(T.buildBurst(t.input))), t.sha256, JSON.stringify(t.input));
-  for (const r of V.runs) {
+  for (const t of V5.timelines) assert.equal(sha(T.timelineFingerprint(T.buildBurst(t.input))), t.sha256, JSON.stringify(t.input));
+  for (const t of V4.timelines) assert.equal(sha(T.timelineFingerprint(T.buildBurst({ ...t.input, rules: 4 }))), t.sha256, `v4 ${JSON.stringify(t.input)}`);
+  for (const r of V5.runs) {
+    assert.equal(r.proof.v, 5);
+    const res = P.replayProof(r.proof).result;
+    for (const k of ['perfects', 'ripeHits', 'ripeBolts', 'ripePoints', 'lookupDrops']) assert.equal(res[k], r.expect[k], k);
+  }
+  assert.ok(V5.runs.some((r) => r.expect.perfects > 0) && V5.runs.some((r) => r.expect.ripeBolts > 0) && V5.runs.some((r) => r.expect.lookupDrops > 0),
+    'the v5 set exercises PERFECT, bolts and look-up tier costs');
+  for (const r of [...V5.runs, ...V4.runs]) {
     const v = P.verifyProof(r.proof);
     assert.ok(v.ok, JSON.stringify(v).slice(0, 200));
     assert.equal(v.flagged ?? null, r.expect.flagged, 'plausibility features match');

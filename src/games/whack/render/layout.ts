@@ -109,23 +109,70 @@ export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { t
 }
 
 /**
- * Touch-down hit test (worklet). Prefers a hole whose target is up and whose
- * body contains the touch; otherwise the nearest mouth whose idle box
- * contains it. Returns -1 outside every box.
+ * Decoy core box (v5 5.1, Fruit Ninja bomb rule): the occupant's content box
+ * inset by 10%, no slop, no upward extension. The angler art is about 0.8 as
+ * wide as tall, so the core is +-0.29 sprite heights around the well centre,
+ * from 0.86 sprite heights above the waterline down to the waterline.
  */
-export function hitTest(L: BoardLayout, x: number, y: number, up: number[]): number {
+export const DECOY_CORE_HALF_W = 0.29;
+export const DECOY_CORE_TOP = 0.86;
+
+export function inDecoyCore(L: BoardLayout, i: number, x: number, y: number): boolean {
+  'worklet';
+  const half = L.spriteH[i] * DECOY_CORE_HALF_W;
+  if (x < L.cx[i] - half || x > L.cx[i] + half) return false;
+  return y >= L.my[i] - L.spriteH[i] * DECOY_CORE_TOP && y <= L.my[i];
+}
+
+/**
+ * Touch-down hit test (worklet), v5 5.1.
+ *   up[i]   1 while a target is up or in its tell.
+ *   harm[i] 1 when that target is a decoy (angler, Mimic).
+ * Friendly targets use the cell plus 8pt walk slop, extended up while up.
+ * Decoys use their core box only. Any tap a friendly hitbox contains goes to
+ * the nearest friendly target, even when a decoy is nearer; a decoy is hit
+ * only inside its core and outside every friendly box. A tap in a decoy's
+ * slop but outside its core resolves to the nearest idle well (a free whiff),
+ * else -1 (nothing). Without `harm` it is the v4 nearest-box test.
+ */
+export function hitTest(L: BoardLayout, x: number, y: number, up: number[], harm?: number[]): number {
   'worklet';
   let best = -1;
   let bestD = 1e12;
+  // 1. Friendly targets (and, without kind info, every live target).
   for (let i = 0; i < 9; i++) {
-    if (x < L.hx0[i] || x > L.hx1[i] || y > L.hyBot[i]) continue;
-    const top = up[i] ? L.hyUp[i] : L.hyIdle[i];
-    if (y < top) continue;
-    // Distance to the character centre when up, to the mouth otherwise; up targets win ties.
-    const ty = up[i] ? L.my[i] - L.spriteH[i] * 0.45 : L.my[i];
+    if (!up[i] || (harm && harm[i])) continue;
+    if (x < L.hx0[i] || x > L.hx1[i] || y > L.hyBot[i] || y < L.hyUp[i]) continue;
     const dx = x - L.cx[i];
-    const dy = y - ty;
-    const d = dx * dx + dy * dy * 0.6 - (up[i] ? 4000 : 0);
+    const dy = y - (L.my[i] - L.spriteH[i] * 0.45);
+    const d = dx * dx + dy * dy * 0.6;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  if (best >= 0) return best;
+  // 2. Decoys: core only.
+  if (harm) {
+    for (let i = 0; i < 9; i++) {
+      if (!up[i] || !harm[i] || !inDecoyCore(L, i, x, y)) continue;
+      const dx = x - L.cx[i];
+      const dy = y - (L.my[i] - L.spriteH[i] * 0.45);
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0) return best;
+  }
+  // 3. Idle wells (a whiff on the rim; one whiff is free).
+  for (let i = 0; i < 9; i++) {
+    if (up[i]) continue;
+    if (x < L.hx0[i] || x > L.hx1[i] || y > L.hyBot[i] || y < L.hyIdle[i]) continue;
+    const dx = x - L.cx[i];
+    const dy = y - L.my[i];
+    const d = dx * dx + dy * dy * 0.6;
     if (d < bestD) {
       bestD = d;
       best = i;

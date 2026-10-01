@@ -1,4 +1,27 @@
-# Whack-a-Shark proof v2: server replay note (for WS7)
+# Whack-a-Shark server replay note (for WS7)
+
+## Proof v5 (current; design rev 5, section 13)
+
+The client now sends `v: 5`. The server must keep accepting `v: 4` and replay it with the v4 rules (`buildBurst({..., rules: 4})`; the frozen set is `__vectors__/vectors-v4.json`). The tap tuple and payload shape are unchanged except `v` and one new field, `boss_runs` (the Wave 2 Boss Run flag, always `false` in the Wave 1 build).
+
+What the v5 resolver changes (port these into `App\Domains\Game\Services\Whack\{Timeline,Resolver}.php`):
+
+1. **Unlock ladder** (`UNLOCK` in `waves.ts`): Ripe Golden and PERFECT at lifetime 6, helmet 7, twins 8, all formations 9, Boss Run 11 and only with `boss_runs`. v4 keeps `UNLOCK_V4`.
+2. **Ripe Golden** (queue, lineDay, daily, weekly, duel; never ride, party, raid). A golden placed from the shape's golden windows (and the first-encounter one at lifetime 6) carries `ug = round(UP_SPECIAL[d] * 1.6)`. While the timeline is built its `duckAt` is `emergeAt + round(ug * 0.92)`; after ids are assigned it becomes `emergeAt + round(ug * f)` with `f = 0.92` for the first-encounter one, else `0.72 + 0.20 * ((mixSeed(burstSeed, (id + 1) ^ 0x71be) % 10000) / 10000)`. The fingerprint appends `:r{ug}` to ripe events only.
+   - Each ms tick, a ripe target in `P_UP` advances `stage` 0 -> 1 at `round(ug * 0.35)` and 1 -> 2 at `round(ug * 0.65)` after emerge (before the escape check).
+   - A bonk pays `[300, 500, 800][stage]` flat (pre-emerge taps are stage 0), +35% meter, counts as a golden.
+   - Its escape is the bolt: always an engaged escape unless the hole is look-up exempt.
+3. **PERFECT**: a Finn-class QUICK (not scanned) with `|t - round(t / SIXTEENTH_MS) * SIXTEENTH_MS| <= 15` gets +20 flat, when the timeline's `perfect` is set (rules 5, ripe formats, lifetime >= 6).
+4. **Look-up**: at a freeze, record `freezeTier = tier` and mark every hole in TELL or UP as exempt (its escape never counts as engaged). A resume (any tap, swipe or hole -1 while frozen) unfreezes, sets `resumeAt = t`, and if `freezeTier >= 3 && tier >= 3` drops one tier (streak to that tier's threshold). Under v5 the resume tap is logged and **does nothing else** (no hit, no whiff, no swipe). An emerge `d` ms after `resumeAt` (`0 <= d < 600`, not a ripe golden) adds `round((600 - d)^2 / 2400)` ms to that hole's up-time extension.
+5. Hit testing stays on the client: the log names the hole. The v5 client resolves an ambiguous touch to the friendly target and gives decoys a core-only box, so a decoy entry in the log is always a deliberate one.
+
+Golden vectors: `__vectors__/vectors.json` (v5: 2,040 timelines, 96 runs incl. greedy, cash-at-500 and look-up profiles) and `vectors-v4.json` (frozen). `tools/tests/whack-bonk-rush.test.cjs` checks both.
+
+The live ride check (`TaskGameProofService`: `game`, `score`, `elapsed_ms`, `seed`, `hits >= 10`) is unchanged and still passes.
+
+---
+
+## Proof v2 (history)
 
 The client is done and ships v2 proofs today. The backend change belongs to WS7 (`TaskGameProofService`); this note is the spec. Nothing in the backend was touched by the Whack stream.
 
