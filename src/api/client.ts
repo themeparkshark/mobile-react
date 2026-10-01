@@ -5,6 +5,7 @@ import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
 import { reportReachable, reportUnreachable } from '../services/connectivity';
 import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
+import { withOwnStack } from '../utils/hermesSafeError';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -60,6 +61,9 @@ client.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
+    // axios errors are not real Hermes errors: reading .stack throws. Give
+    // every rejection its own stack before any handler or tracker reads it.
+    withOwnStack(error);
     if (axios.isCancel(error)) return Promise.reject(error);
     // A status of 0 is React Native's "no response" (refused, dropped, offline).
     const status = httpStatus(error);
@@ -77,5 +81,8 @@ client.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// The default axios instance (the News feed) gets the same Hermes-safe stack.
+axios.interceptors.response.use(undefined, (error: unknown) => Promise.reject(withOwnStack(error)));
 
 export default client;

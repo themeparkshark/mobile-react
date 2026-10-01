@@ -45,8 +45,14 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return () => clearTimeout(timeout);
   }, [recentlyAddedComment]);
 
+  // Mounted at the app root, so this runs on every launch, often offline in a
+  // park. A failure keeps the empty list; it must never be an unhandled rejection.
   useAsyncEffect(async () => {
-    setReactionTypes(await all());
+    try {
+      setReactionTypes(await all());
+    } catch {
+      // Reactions simply stay hidden until the next launch.
+    }
   }, []);
 
   return (

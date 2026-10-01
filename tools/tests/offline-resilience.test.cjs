@@ -160,12 +160,14 @@ function realStack(transport) {
   const events = [];
   const captured = [];
   const client = loadTs('src/api/client.ts', {
-    axios: { create: cfg => realAxios.create({ ...cfg, adapter: transport }), isCancel: realAxios.isCancel },
+    axios: { create: cfg => realAxios.create({ ...cfg, adapter: transport }), isCancel: realAxios.isCancel,
+      interceptors: { response: { use() {} } } },
     'expo-device': {},
     '../config': { apiUrl: 'http://api.test/api' },
     '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: (_m, url) => (url === '/core' ? 'queue_play.complete' : null) },
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => captured.push(extra.status) },
     '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts', {}, { setTimeout: fn => { fn(); return 0; } }),
   }).default;
   const broadcasts = [];
@@ -265,12 +267,13 @@ test('React Native network errors (response with status 0) count as no response'
   };
   const statuses = [];
   loadTs('src/api/client.ts', {
-    axios: { create: () => instance, isCancel: () => false },
+    axios: { create: () => instance, isCancel: () => false, interceptors: { response: { use() {} } } },
     'expo-device': {},
     '../config': { apiUrl: 'http://api.test/api' },
     '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => 'queue_play.complete' },
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => statuses.push(extra.status) },
     '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts'),
   }, { setTimeout: (fn) => { fn(); return 0; } });
   await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));

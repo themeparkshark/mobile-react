@@ -19,6 +19,7 @@ function loadTelemetry({ storage = new Map(), channel = 'testflight', globals = 
     'react-native': { Platform: { OS: 'ios' } },
     './sentryEnvelope': envelopeModule,
     './releaseName': loadTs('src/services/telemetry/releaseName.ts'),
+    '../../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
   }, { process: { env: {} }, ...globals });
   return { mod, storage };
 }
@@ -157,7 +158,8 @@ test('the API client records core-loop breadcrumbs and reports server failures',
   const crumbs = [];
   const messages = [];
   const client = loadTs('src/api/client.ts', {
-    axios: { create: () => ({ defaults: { headers: { common: {} } }, interceptors: { response: { use() {} } } }), isCancel: () => false },
+    axios: { create: () => ({ defaults: { headers: { common: {} } }, interceptors: { response: { use() {} } } }), isCancel: () => false,
+      interceptors: { response: { use() {} } } },
     'expo-device': {},
     '../config': { apiUrl: 'https://tps-api.on-forge.com/api' },
     '../services/telemetry/coreLoopEvents': core,
@@ -166,6 +168,7 @@ test('the API client records core-loop breadcrumbs and reports server failures',
       captureMessage: (...args) => messages.push(args),
     },
     '../services/connectivity': { reportReachable() {}, reportUnreachable() {} },
+    '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': { nextGetRetryDelay: () => null },
   });
   client.recordCoreLoopResponse('post', '/me/task-attempts', 201);
