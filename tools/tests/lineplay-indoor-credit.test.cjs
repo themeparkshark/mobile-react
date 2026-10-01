@@ -156,6 +156,7 @@ function sessionHarness({ start, heartbeat, complete, saved = null, steps = null
     './replay': require('./helpers/lineplay-replay.cjs'),
     './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async () => {} },
+    './triviaHistory': { primeTriviaHistory: async () => {} },
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(plain(value)); },
