@@ -233,8 +233,8 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
 const styles = StyleSheet.create({
   root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
-  headline: { fontFamily: 'Shark', fontSize: 30, color: INK, marginTop: 58 },
-  stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end' },
+  headline: { fontFamily: 'Shark', fontSize: 30, color: INK, position: 'absolute', top: 58, zIndex: 2, textShadowColor: NEUTRAL, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
+  stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end', marginTop: 96 },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
   shark: { width: 130, height: 160 },
   dizzyStars: { position: 'absolute', top: -6, width: 56, height: 36 },
