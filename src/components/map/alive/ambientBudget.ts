@@ -123,6 +123,22 @@ export function aliveTier({ reducedMotion, strain }: { reducedMotion: boolean; s
   return strain === 1 ? 'lite' : 'full';
 }
 
+/**
+ * The highest rank any island budget can reach. Ranks past it all behave the
+ * same, so the map clamps them here: walking past distant islands reorders
+ * their ranks constantly, and an unclamped rank re-rendered every far island
+ * on every GPS step.
+ */
+export const ALIVE_RANK_LIMIT = Math.max(...(['full', 'lite', 'calm'] as const).flatMap(tier => {
+  const caps = ALIVE_CAPS[tier];
+  return [caps.pulsingRides, caps.idleCoins, caps.limitedShimmer, caps.sleepyRides];
+}));
+
+/** An island's rank as markers need it: exact inside every budget, one value beyond. */
+export function clampAliveRank(rank: number | undefined): number | undefined {
+  return rank === undefined ? undefined : Math.min(rank, ALIVE_RANK_LIMIT);
+}
+
 /** Only the nearest few islands spend animation; `rank` is the island's distance order (0 = nearest). */
 export function withinBudget(rank: number | undefined, cap: number): boolean {
   return cap > 0 && (rank ?? 0) < cap;

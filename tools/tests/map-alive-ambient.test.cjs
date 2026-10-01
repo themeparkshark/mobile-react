@@ -121,5 +121,21 @@ test('the map shares one ambient clock and pauses it with the screen, the app an
   assert.match(engine, /frame\.setActive\(running\)/);
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /ambientPaused=\{redeemFlowOpen \|\| bossOccluded \|\| adventureOccluded \|\| dailyGiftOccluded\}/);
-  assert.match(explore, /aliveRank=\{aliveRanks\.get\(task\.id\)\}/);
+  assert.match(explore, /aliveRank=\{clampAliveRank\(aliveRanks\.get\(task\.id\)\)\}/);
+});
+
+test('far islands share one clamped rank, so walking past them never re-renders them', () => {
+  assert.equal(budget.ALIVE_RANK_LIMIT, 10);
+  assert.equal(budget.clampAliveRank(3), 3);
+  assert.equal(budget.clampAliveRank(10), 10);
+  assert.equal(budget.clampAliveRank(37), 10);
+  assert.equal(budget.clampAliveRank(undefined), undefined);
+  for (const tier of ['full', 'lite', 'calm']) {
+    const caps = budget.ALIVE_CAPS[tier];
+    for (const cap of [caps.pulsingRides, caps.idleCoins, caps.limitedShimmer, caps.sleepyRides]) {
+      for (const rank of [0, 5, 9, 10, 25]) {
+        assert.equal(budget.withinBudget(budget.clampAliveRank(rank), cap), budget.withinBudget(rank, cap), `${tier} ${cap} ${rank}`);
+      }
+    }
+  }
 });

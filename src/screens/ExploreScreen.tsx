@@ -61,6 +61,7 @@ import useRideControlMap from '../hooks/useRideControlMap';
 import useBossMapMoment from '../hooks/useBossMapMoment';
 import BossMapDeparture from '../components/boss/BossMapDeparture';
 import { Circle } from '../components/map/Circle';
+import { clampAliveRank } from '../components/map/alive/ambientBudget';
 import { crowdHaze } from '../components/map/alive/parkPulse';
 import { ghostSharks } from '../components/map/alive/friendsNearby';
 import { GhostSharks } from '../components/map/alive/GhostSharks';
@@ -1166,7 +1167,7 @@ function ExploreScreen() {
                 (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
-              aliveRank={aliveRanks.get(task.id)}
+              aliveRank={clampAliveRank(aliveRanks.get(task.id))}
               onPress={handleTaskPress}
             />;
           })}
