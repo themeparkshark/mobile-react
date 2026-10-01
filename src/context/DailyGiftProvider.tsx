@@ -4,7 +4,7 @@ import getDailyGift from '../api/endpoints/daily-gifts/create';
 import { ws7Preview } from '../dev/ws7Preview';
 import { DailyGiftType } from '../models/daily-gift-type';
 import * as RootNavigation from '../RootNavigation';
-import { activateVipForPlayer } from '../services/purchases';
+import { syncVipOnLaunch } from '../services/purchases';
 import { AuthContext } from './AuthProvider';
 
 export interface DailyGiftContextType {
@@ -32,11 +32,11 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
     Boolean(isReady && player && player.username)
   );
 
-  // Link the signed-in player to Adapty right away, so renewals, restores and
-  // webhooks carry their id even if they never open the VIP page this run.
-  // This provider mounts at the root for every signed-in player.
+  // Once per launch, send the current App Store VIP entitlement to the server
+  // so renewals and expiry land without webhooks. This provider mounts at the
+  // root for every signed-in player. A no-op on binaries without StoreKit.
   useEffect(() => {
-    if (isReady && player?.id) activateVipForPlayer(player.id);
+    if (isReady && player?.id) syncVipOnLaunch(player.id);
   }, [isReady, player?.id]);
 
   // Dev-only visual QA: jump straight to a WS7 screen once signed in.

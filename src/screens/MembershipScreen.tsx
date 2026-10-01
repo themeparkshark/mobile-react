@@ -1,14 +1,15 @@
 /**
  * VIP membership paywall. Only benefits the game actually delivers, the real
- * App Store price and trial from Adapty, a Restore button (Apple requires one),
- * and the full auto-renew terms. After buying or restoring, we wait for the
- * server (Adapty webhook) to mark the player as VIP before celebrating.
+ * App Store plans, prices and trial (StoreKit 2), a Restore button (Apple
+ * requires one), and the full auto-renew terms. A purchase or restore is sent
+ * to the server, which verifies Apple's signature and switches VIP on before we
+ * celebrate. A binary without the StoreKit module asks for an app update.
  */
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
-import { useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useContext, useEffect, useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
 } from 'react-native-reanimated';
@@ -17,7 +18,9 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
-import { buyVip, legalText, loadVipProduct, priceText, restoreVip, trialText, type VipProduct } from '../services/purchases';
+import {
+  buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, type VipPlan,
+} from '../services/purchases';
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
@@ -33,86 +36,81 @@ export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[]
   { icon: 'member', title: 'VIP badge on your profile', body: 'Show every shark you’re part of the crew.' },
 ];
 
+const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
+
 export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
   const { intro } = route.params ?? {};
   const { labels, urls } = useCrumbs();
   const { player, refreshPlayer } = useContext(AuthContext);
-  const [product, setProduct] = useState<VipProduct | null>(null);
+  const [plans, setPlans] = useState<VipPlan[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
-  const [waiting, setWaiting] = useState(false);
   const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
+  const canBuy = storeAvailable();
   useEffect(() => {
     let live = true;
     getVipPerks().then(next => { if (live && next) setPerks(next); });
     return () => { live = false; };
   }, []);
-  const waitStarted = useRef(0);
 
   useEffect(() => {
-    if (!player) { setLoading(false); return; }
+    if (!player || !canBuy) { setLoading(false); return; }
     let live = true;
     setLoading(true); setLoadFailed(false);
-    loadVipProduct(player.id).then(p => { if (live) setProduct(p); })
-      .catch((e) => { if (__DEV__) console.log('[vip] load failed', e?.adaptyCode ?? e?.code, e?.message ?? String(e)); if (live) { setProduct(null); setLoadFailed(true); } })
-      .finally(() => { if (live) setLoading(false); });
+    loadVipPlans().then((next) => {
+      if (!live) return;
+      setPlans(next);
+      setSelectedId(current => (current && next.some(p => p.productId === current) ? current : next[0]?.productId ?? null));
+    }).catch((e) => {
+      if (__DEV__) console.log('[vip] load failed', e?.code, e?.message ?? String(e));
+      if (live) { setPlans([]); setLoadFailed(true); }
+    }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [player?.id, attempt]);
+  }, [player?.id, attempt, canBuy]);
 
-  // After a purchase/restore: poll until the server marks us VIP (webhook), max ~60 s.
-  useEffect(() => {
-    if (!waiting) return;
-    waitStarted.current = Date.now();
-    const id = setInterval(async () => {
-      try {
-        const me = await refreshPlayer();
-        if (me.is_subscribed) {
-          clearInterval(id);
-          setWaiting(false);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          gameAlert('Welcome to VIP!', labels.payment_complete ?? 'Your VIP perks are live.');
-          RootNavigation.navigate('Profile');
-        } else if (Date.now() - waitStarted.current > 60000) {
-          clearInterval(id);
-          setWaiting(false);
-          gameAlert('Almost there', 'Your purchase went through. VIP will switch on in a moment; you can keep playing.');
-        }
-      } catch { /* keep polling */ }
-    }, 3000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waiting]);
+  const plan = plans.find(p => p.productId === selectedId) ?? plans[0] ?? null;
+
+  const celebrate = async () => {
+    await refreshPlayer().catch(() => undefined);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    gameAlert('Welcome to VIP!', labels.payment_complete ?? 'Your VIP perks are live.');
+    RootNavigation.navigate('Profile');
+  };
+
+  const ownedElsewhere = () => gameAlert('VIP is on another account',
+    'This Apple ID’s VIP is linked to a different Theme Park Shark account. Sign in to that account to use it.');
 
   const buy = async () => {
-    if (!product || busy) return;
+    if (!plan || busy) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setBusy('buy');
-    const outcome = await buyVip(product);
+    const outcome = await buyVip(plan);
     setBusy(null);
-    if (outcome === 'success') setWaiting(true);
+    if (outcome === 'success') await celebrate();
     else if (outcome === 'pending') gameAlert('Waiting for approval', 'Your purchase is pending. VIP switches on once it’s approved.');
+    else if (outcome === 'unverified') gameAlert('Almost there', 'Your purchase went through. VIP switches on as soon as we can confirm it with Apple, at the latest the next time you open the app.');
+    else if (outcome === 'owned_elsewhere') ownedElsewhere();
     else if (outcome === 'failed') gameAlert('Purchase didn’t go through', 'You weren’t charged. Please try again.');
   };
 
   const restore = async () => {
     if (busy) return;
     setBusy('restore');
-    try {
-      const active = await restoreVip();
-      if (active) setWaiting(true);
-      else gameAlert('Nothing to restore', 'We couldn’t find an active VIP membership on this Apple ID.');
-    } catch {
-      gameAlert('Couldn’t restore', 'Check your connection and try again.');
-    } finally {
-      setBusy(null);
-    }
+    const outcome = await restoreVip();
+    setBusy(null);
+    if (outcome === 'restored') await celebrate();
+    else if (outcome === 'nothing') gameAlert('Nothing to restore', 'We couldn’t find an active VIP membership on this Apple ID.');
+    else if (outcome === 'owned_elsewhere') ownedElsewhere();
+    else if (outcome === 'unavailable') gameAlert('Update to restore', 'Update Theme Park Shark in the App Store to restore VIP.');
+    else gameAlert('Couldn’t restore', 'Check your connection and try again.');
   };
 
   const close = () => (intro ? RootNavigation.navigate('Explore') : RootNavigation.goBack());
-  const trial = product ? trialText(product) : null;
-  const price = product ? priceText(product) : '';
+  const trial = plan?.trial ?? null;
+  const savings = savingsText(plans);
 
   return (
     <View style={s.root}>
@@ -145,21 +143,39 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               <Text style={s.guestText}>Sign in to join VIP. Your perks follow your shark to every device.</Text>
               <GameButton label="Sign in to join VIP" onPress={() => RootNavigation.navigate('Login')} />
             </Animated.View>
+          ) : !canBuy ? (
+            // A 1.6.0 binary running this JS has no StoreKit module.
+            <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
+              <Text style={s.guestText}>Update Theme Park Shark to join VIP.</Text>
+              <GameButton label="Update the app" onPress={() => void Linking.openURL(APP_STORE_URL)} />
+            </Animated.View>
           ) : loading ? (
             <SharkLoader compact tone="onBlue" style={{ marginTop: 20 }} />
-          ) : !product ? (
+          ) : !plan ? (
             <SharkLoader compact tone="onBlue" state="error" style={{ marginTop: 20 }}
               title={loadFailed ? 'VIP couldn’t load' : 'VIP isn’t available right now'}
               message="Check your connection and try again." onRetry={() => setAttempt(a => a + 1)} />
           ) : (
             <Animated.View entering={FadeInUp.delay(620)} style={{ width: '100%' }}>
-              <View style={s.priceCard}>
-                {trial && <Text style={s.trial}>{trial.toUpperCase()}</Text>}
-                <Text style={s.price}>{trial ? `then ${price}` : price}</Text>
-                <Text style={s.cancel}>Cancel anytime in your Apple ID settings.</Text>
+              <View style={s.plans}>
+                {plans.map((p) => {
+                  const selected = p.productId === plan.productId;
+                  return (
+                    <Pressable key={p.productId} onPress={() => setSelectedId(p.productId)} disabled={!!busy}
+                      style={[s.planCard, selected && s.planCardSelected]}
+                      accessibilityRole="radio" accessibilityState={{ selected }}
+                      accessibilityLabel={`${p.period === 'year' ? 'Yearly' : 'Monthly'}, ${priceText(p)}`}>
+                      {p.period === 'year' && savings && <Text style={s.planBadge}>{savings}</Text>}
+                      <Text style={[s.planName, selected && s.planNameSelected]}>{p.period === 'year' ? 'YEARLY' : 'MONTHLY'}</Text>
+                      <Text style={[s.planPrice, selected && s.planNameSelected]}>{priceText(p)}</Text>
+                      {p.trial && <Text style={s.planTrial}>{p.trial}</Text>}
+                    </Pressable>
+                  );
+                })}
               </View>
+              <Text style={s.cancel}>Cancel anytime in your Apple ID settings.</Text>
               <Pressable style={({ pressed }) => [s.cta, pressed && s.ctaPressed]} onPress={() => void buy()}
-                disabled={!!busy || waiting} accessibilityRole="button">
+                disabled={!!busy} accessibilityRole="button">
                 <Text style={s.ctaText}>{busy === 'buy' ? 'ONE MOMENT…' : trial ? 'START FREE TRIAL' : 'BECOME VIP'}</Text>
               </Pressable>
             </Animated.View>
@@ -178,17 +194,17 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               <Text style={s.link}>Privacy</Text>
             </Pressable>
           </View>
-          {product && <Text style={s.legal}>{legalText(product)}</Text>}
+          {plan && <Text style={s.legal}>{legalText(plan)}</Text>}
           {intro && (
             <Pressable onPress={close} hitSlop={8}><Text style={s.skip}>{labels?.skip_for_now ?? 'Skip for now'}</Text></Pressable>
           )}
         </ScrollView>
       </SafeAreaView>
 
-      {waiting && (
+      {busy && (
         <View style={s.overlay}>
           <SharkLoader compact tone="onBlue" />
-          <Text style={s.overlayText}>{labels?.processing_payment ?? 'Switching on your VIP perks…'}</Text>
+          <Text style={s.overlayText}>{busy === 'buy' ? (labels?.processing_payment ?? 'Switching on your VIP perks…') : 'Checking your Apple ID…'}</Text>
         </View>
       )}
     </View>
@@ -233,11 +249,17 @@ const s = StyleSheet.create({
   benefitBody: { fontFamily: 'Knockout', fontSize: 14, color: '#dbeafe' },
   guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
   guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
-  priceCard: { marginTop: 18, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, alignItems: 'center',
-    borderWidth: 3, borderColor: '#ffcf3b' },
-  trial: { fontFamily: 'Shark', fontSize: 22, color: BRAND.greenLip },
-  price: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
-  cancel: { fontFamily: 'Knockout', fontSize: 13, color: '#64748b', marginTop: 2 },
+  plans: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  planCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.88)', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 8,
+    alignItems: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)' },
+  planCardSelected: { backgroundColor: '#fff', borderColor: '#ffcf3b' },
+  planBadge: { position: 'absolute', top: -12, backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 12,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden' },
+  planName: { fontFamily: 'Shark', fontSize: 16, color: '#64748b' },
+  planNameSelected: { color: '#09268f' },
+  planPrice: { fontFamily: 'Shark', fontSize: 18, color: '#64748b', marginTop: 2 },
+  planTrial: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.greenLip, marginTop: 2 },
+  cancel: { fontFamily: 'Knockout', fontSize: 13, color: '#dbeafe', marginTop: 8, textAlign: 'center' },
   cta: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 20, paddingVertical: 17, alignItems: 'center',
     borderBottomWidth: 5, borderBottomColor: '#d99a00' },
   ctaPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },

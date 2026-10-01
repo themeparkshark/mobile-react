@@ -1,7 +1,7 @@
 /**
  * Standings tab 4: Home Hunt (spec 5.3). Header card, Near Me | Friends
- * control, podium, rows, a sticky You row, the info sheet, the age question
- * and the Hunter Name settings. Near Me shows Hunter Names only and never opens a profile.
+ * control, podium, rows, a sticky You row, the info sheet and the settings.
+ * Near Me shows the server name and rank only and never opens a profile. There is no age question.
  */
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
@@ -25,13 +25,12 @@ import { presentationQueue } from '../../services/presentation/PresentationQueue
 import { showToast } from '../../utils/toast';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import HomeHuntAgeSheet from './HomeHuntAgeSheet';
 import {
   cachedHomeHuntWeek, loadHomeHuntWeek, setHomeHuntWeek, subscribeHomeHuntWeek,
 } from './homeHuntWeekCache';
 import {
   countdownText, huntMeRow, huntPodium, huntRows, huntSettingsState, rankMovement, settingsErrorMessage,
-  shouldAskAge, tierProgressFraction, tierProgressLine, type HuntBoardView, type HuntRowModel,
+  tierProgressFraction, tierProgressLine, type HuntBoardView, type HuntRowModel,
 } from './homeHuntModel';
 import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsRow } from './StandingsRow';
@@ -167,7 +166,6 @@ export default function HomeHunt() {
   const [reload, setReload] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [infoOpen, setInfoOpen] = useState(false);
-  const [ageHandled, setAgeHandled] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [resultFor, setResultFor] = useState<HomeHuntResult | null>(null);
   const request = useRef(0);
@@ -205,7 +203,7 @@ export default function HomeHunt() {
     try {
       const saved = await saveHomeHuntSettings(body);
       mergeWeek(saved);
-      if (body.home_hunt_visible !== undefined || body.birth_year !== undefined || body.age_skipped) {
+      if (body.home_hunt_visible !== undefined) {
         // Boards depend on visibility, so refetch them next view.
         delete boardCache.zone; delete boardCache.friends;
         setReload(value => value + 1);
@@ -295,16 +293,15 @@ export default function HomeHunt() {
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, letterSpacing: 0.6 }}>YOUR HUNTER NAME</Text>
-                <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy }}>{week.hunter_name || '--'}</Text>
+                <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, letterSpacing: 0.6 }}>{HOME_HUNT_COPY.boardNameLabel}</Text>
+                <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy }}>{settings.boardName}</Text>
+                {settings.namePending && (
+                  <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, marginTop: 2 }}>{HOME_HUNT_COPY.boardNamePending}</Text>
+                )}
               </View>
-              <GameButton label={`${HOME_HUNT_COPY.rerollLabel} (${settings.rerollsLeft})`} variant="secondary" size="compact" fullWidth={false}
-                disabled={!settings.canReroll} loading={savingSettings}
-                onPress={() => void saveSettings({ reroll_name: true }, 'Could not change your Hunter Name.')} />
             </View>
-            <SettingRow title={HOME_HUNT_COPY.visibilityLabel}
-              hint={settings.visibilityEnabled ? undefined : HOME_HUNT_COPY.visibilityLocked}
-              value={settings.visibilityValue} disabled={!settings.visibilityEnabled || savingSettings}
+            <SettingRow title={HOME_HUNT_COPY.visibilityLabel} hint={HOME_HUNT_COPY.visibilityHint}
+              value={settings.visibilityValue} disabled={savingSettings}
               onChange={value => void saveSettings({ home_hunt_visible: value }, 'Could not save that setting.')} />
             {/* Preference only: this wave never asks for notification permission. */}
             <SettingRow title={HOME_HUNT_COPY.nudgeLabel} hint={HOME_HUNT_COPY.nudgeHint}
@@ -323,9 +320,6 @@ export default function HomeHunt() {
 
       <HomeHuntInfoSheet visible={infoOpen} title={HOME_HUNT_COPY.infoTitle} sections={standingsInfoSections(info)}
         loading={!info} error={infoError} onRetry={retryInfo} onClose={() => setInfoOpen(false)} />
-      <HomeHuntAgeSheet visible={shouldAskAge(week, ageHandled)} busy={savingSettings}
-        onSave={year => { void saveSettings({ birth_year: year }, 'Could not save that.').then(ok => { if (ok) setAgeHandled(true); }); }}
-        onSkip={() => { setAgeHandled(true); void saveSettings({ age_skipped: true }, 'Could not save that.'); }} />
       <HomeHuntResultsModal result={resultFor} visible={resultFor != null}
         onClose={() => setResultFor(null)}
         onClaimed={claimed => {

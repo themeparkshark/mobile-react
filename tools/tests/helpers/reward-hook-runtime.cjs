@@ -89,6 +89,10 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (name === 'expo-linear-gradient') return { LinearGradient: 'LinearGradient' };
       if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
       if (name === '../gamekit/SFX') return { playSfx: value => sounds.push(value) };
+      // Shop and rewarded ads behave as on a 1.6.0 binary unless a test stubs them.
+      if (/(^|\/)services\/ads$/.test(name)) return { adsAvailable: () => false, rewardText: () => '',
+        watchForReward: async () => ({ status: 'unavailable' }) };
+      if (/(^|\/)services\/purchases$/.test(name)) return { storeAvailable: () => false };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

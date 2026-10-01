@@ -142,6 +142,8 @@ export interface SessionRecapProps {
   onOpenInventory?: () => void;
   /** Play together (L3): the crew recap, owned by the group components. */
   groupSlot?: ReactNode;
+  /** The opt-in "line snack" offer, shown only once the wait is over. */
+  snackSlot?: ReactNode;
 }
 
 export default function SessionRecap({
@@ -151,7 +153,7 @@ export default function SessionRecap({
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
-  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null,
+  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -393,6 +395,7 @@ export default function SessionRecap({
         </View>
       )}
 
+      {rewardsConfirmed && snackSlot}
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>
   );

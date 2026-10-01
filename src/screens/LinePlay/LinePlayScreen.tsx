@@ -72,6 +72,7 @@ import {
 } from '../../services/lineplay/content';
 import { circuitThemeFor } from '../../services/lineplay/circuitTheme';
 import SessionRecap from './components/SessionRecap';
+import LineSnackOffer from './components/LineSnackOffer';
 import QueueToast, { type QueueToastMessage } from './components/QueueToast';
 import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
@@ -980,6 +981,7 @@ export default function LinePlayScreen() {
         <View style={styles.activityArea}>
           {snapshot.state === 'complete' ? (
             <SessionRecap
+              snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
               elapsedSeconds={snapshot.elapsedSeconds}
               activityCount={completedActivityIds.size}
               activityNames={snapshot.completedActivityIds.map(id => playedActivityName(id, snapshot.playlist, snapshot.chapter))}

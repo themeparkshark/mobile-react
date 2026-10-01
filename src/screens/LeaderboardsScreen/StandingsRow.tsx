@@ -31,7 +31,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
   readonly highlight?: boolean;
   /** When the cascade starts; lists under a podium wait for it to land. */
   readonly enterDelayBase?: number;
-  /** False on Near Me boards, where Hunter Names never open a profile. */
+  /** False on Near Me boards, which never open a profile. */
   readonly interactive?: boolean;
 }) {
   const reduced = useUiReducedMotion();

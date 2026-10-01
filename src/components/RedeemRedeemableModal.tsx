@@ -53,6 +53,9 @@ import {
 } from '../services/task-attempt/checkpoint';
 import { recoverTaskAttempt } from '../services/task-attempt/recovery';
 import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
+import { storeAvailable } from '../services/purchases';
+import { adsAvailable, watchForReward } from '../services/ads';
+import { gameAlert } from '../ui';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
@@ -145,6 +148,9 @@ export default function RedeemRedeemableModal({
   const [lostTicketCost, setLostTicketCost] = useState(0);
   const [usedRescuePass, setUsedRescuePass] = useState(false);
   const [rescueRetryAvailable, setRescueRetryAvailable] = useState(false);
+  // The "one more try" ad offer, shown once per lost challenge.
+  const [adBusy, setAdBusy] = useState(false);
+  const [retryOffered, setRetryOffered] = useState(true);
   const [startError, setStartError] = useState<string | null>(null);
   const [rescueUnavailable, setRescueUnavailable] = useState(false);
   const [proofRejected, setProofRejected] = useState(false);
@@ -168,6 +174,10 @@ export default function RedeemRedeemableModal({
   const hasEnoughTickets = playerTickets >= ticketCost;
   const canUseRescuePass = taskType === 'task' && !hasEnoughTickets && !rescueUnavailable &&
     redeemable?.rescue_pass_available === true;
+  // A held pass (Supplies) instead of the free daily one.
+  const heldRescue = redeemable?.rescue_pass_source === 'held';
+  const heldRescueCount = Number(redeemable?.rescue_passes ?? 0);
+  const vip = !!player?.is_subscribed;
   const taskName = redeemable ? (redeemable.model as TaskType | SecretTaskType).name : '';
   const ribbon = challengeRibbon(taskType, (redeemable?.model as { coin_kind?: string | null } | undefined)?.coin_kind);
   const ticketSources = (redeemable as { ticket_sources?: TicketSources } | undefined)?.ticket_sources;
@@ -213,6 +223,7 @@ export default function RedeemRedeemableModal({
       setMilestones(null);
       setFirstCoinTicketReturned(false);
       setLostTicketCost(0);
+      setRetryOffered(true);
       setUsedRescuePass(false);
       setRescueRetryAvailable(false);
       setStartError(null);
@@ -540,6 +551,38 @@ export default function RedeemRedeemableModal({
     }
   }, [handleStartWheel, location, clearAttemptCheckpoint]);
 
+  // Out of Tickets: the Supplies tab of the Shark Shop, opened on Tickets.
+  const openSupplies = useCallback(() => {
+    close();
+    RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: 'tickets' });
+  }, [close]);
+
+  // "One more try" (opt-in rewarded ad, VIP without one): the Ticket spent on
+  // this loss comes back, and a fresh try starts with it. Only after a loss
+  // that cost a Ticket; never during the game itself.
+  const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass
+    && !firstCoinTicketReturned && !rescueRetryAvailable && (vip || adsAvailable());
+  const handleAdRetry = useCallback(async () => {
+    const attemptId = attemptRef.current?.id;
+    if (adBusy || !attemptId) return;
+    setAdBusy(true);
+    const outcome = await watchForReward('retry', attemptId, vip);
+    setAdBusy(false);
+    if (outcome.status === 'granted') {
+      setRetryOffered(false);
+      await refreshPlayer?.();
+      await handleProtectedRetry();
+      return;
+    }
+    if (outcome.status !== 'skipped') setRetryOffered(false);
+    if (outcome.status === 'checking') gameAlert('Almost there', 'Thanks for watching. Your Ticket comes back in a moment, then tap the ride coin to play.');
+    else if (outcome.status === 'capped') gameAlert('Done for today', 'One more try comes back tomorrow.');
+    else if (outcome.status === 'no_fill') gameAlert('No ad right now', 'There isn’t an ad to show right now.');
+    else if (outcome.status === 'failed' || outcome.status === 'not_eligible' || outcome.status === 'claimed') {
+      gameAlert('Not available', 'One more try isn’t available for this challenge.');
+    }
+  }, [adBusy, vip, refreshPlayer, handleProtectedRetry]);
+
   const handlePostWinClose = useCallback(async () => {
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
@@ -691,9 +734,12 @@ export default function RedeemRedeemableModal({
                         {canUseRescuePass && <View style={styles.rescueCard}>
                           <View style={styles.rescueHead}>
                             <GameIcon name="gift" size={24} />
-                            <Text style={styles.rescueEyebrow}>ONE FREE CHALLENGE TODAY</Text>
+                            <Text style={styles.rescueEyebrow}>{heldRescue
+                              ? `RESCUE PASS · ${heldRescueCount} LEFT` : 'ONE FREE CHALLENGE TODAY'}</Text>
                           </View>
-                          <Text style={styles.rescueCopy}>Out of Tickets? Play this new ride coin challenge free, with one retry if you miss. Win to earn a Ticket for your next ride.</Text>
+                          <Text style={styles.rescueCopy}>{heldRescue
+                            ? 'Out of Tickets? Use one Rescue Pass on this new ride coin, with one retry if you miss.'
+                            : 'Out of Tickets? Play this new ride coin challenge free, with one retry if you miss. Win to earn a Ticket for your next ride.'}</Text>
                         </View>}
                         {/* First ride challenge: how it works, once, right above the button. */}
                         <OneTimeTip id="ride_challenge" ready={open === true && flowState === 'preview' && hasEnoughTickets && !previewOnly}
@@ -711,6 +757,11 @@ export default function RedeemRedeemableModal({
                             <Text style={styles.ticketHelpTitle}>{ticketHelp.title}</Text>
                           </View>
                           <Text style={styles.ticketHelpCopy}>{ticketHelp.body}</Text>
+                          {storeAvailable() && !previewOnly && <Pressable onPress={openSupplies} style={styles.getTickets}
+                            accessibilityRole="button" accessibilityLabel="Get Park Tickets in the Shark Shop">
+                            <GameIcon name="ticket" size={20} />
+                            <Text style={styles.getTicketsText}>Get Tickets in the Shark Shop</Text>
+                          </Pressable>}
                         </View>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
                         <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} Park Ticket${playerTickets === 1 ? '' : 's'}`}>
@@ -811,8 +862,11 @@ export default function RedeemRedeemableModal({
               : 'This one got away. No Ticket was spent.'}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
+              : canOfferRetry
+              ? { label: adBusy ? 'One Moment' : vip ? 'One More Try (VIP)' : 'Watch Ad: One More Try',
+                onPress: () => { void handleAdRetry(); }, disabled: adBusy || !location }
               : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: canOfferRetry ? 'No thanks' : 'Return to map', onPress: handleLostClose } : undefined}
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
@@ -870,6 +924,7 @@ export default function RedeemRedeemableModal({
           next?.();
         }}
         onClose={handlePostWinClose}
+        attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}
       />
     </>
   );
@@ -896,5 +951,8 @@ const styles = StyleSheet.create({
   ticketCount: { color: '#ffffff', fontFamily: 'Shark', fontSize: 18, textShadowColor: '#05346e',
     textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   rescueHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  getTickets: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8,
+    backgroundColor: '#ffcf3b', borderRadius: 12, paddingVertical: 7, borderBottomWidth: 3, borderBottomColor: '#d99a00' },
+  getTicketsText: { color: '#6a3b00', fontFamily: 'Shark', fontSize: 15 },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 });

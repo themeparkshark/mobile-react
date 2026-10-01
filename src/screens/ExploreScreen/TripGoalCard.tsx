@@ -27,13 +27,18 @@ interface Props {
    * the top corner, smaller than the find card, instead of between the finds.
    */
   readonly compact?: boolean;
+  /** Compact chip folded to its coin, so a find under the chip shows through. */
+  readonly collapsed?: boolean;
   readonly style?: StyleProp<ViewStyle>;
 }
+
+/** The folded chip: a round coin button the size of the chip's height. */
+export const TRIP_CHIP_COIN_SIZE = 44;
 
 /** A real, account-backed bridge from home finds to one chosen park coin. */
 export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   saveGoal = setTripGoal, removeGoal = clearTripGoal,
-  loadCollections = getPrepItemSets, compact = false, style }: Props) {
+  loadCollections = getPrepItemSets, compact = false, collapsed = false, style }: Props) {
   const [data, setData] = useState<TripGoalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
@@ -198,15 +203,15 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   const chipStatus = upgradeReady ? 'LEVEL UP READY' : null;
 
   return <>
-    {compact ? <Pressable style={({ pressed }) => [styles.chip, style, pressed && styles.chipPressed]} accessibilityRole="button"
+    {compact ? <Pressable style={({ pressed }) => [styles.chip, collapsed && styles.chipCollapsed, style, pressed && styles.chipPressed]} accessibilityRole="button"
       disabled={busy} accessibilityState={{ disabled: busy, busy }}
       accessibilityLabel={goal ? `Next park goal: ${goal.ride_name}. Open ride choices.` : 'Choose your next park ride coin'}
       onPress={() => { setPickerMode(!goal); setOpen(true); if (stale) void load(); }}>
-      <Image source={require('../../../assets/images/coingold.png')} style={styles.chipCoin} contentFit="contain" />
-      <View style={styles.chipCopy}>
+      <Image source={require('../../../assets/images/coingold.png')} style={[styles.chipCoin, collapsed && styles.chipCoinOnly]} contentFit="contain" />
+      {!collapsed && <View style={styles.chipCopy}>
         <Text style={styles.chipKicker} numberOfLines={1}>{chipStatus ? `NEXT PARK TRIP · ${chipStatus}` : 'NEXT PARK TRIP'}</Text>
         <Text style={styles.chipName} numberOfLines={1}>{chipName}</Text>
-      </View>
+      </View>}
     </Pressable> : <Pressable style={styles.pill} accessibilityRole="button"
       disabled={busy} accessibilityState={{ disabled: busy, busy }}
       accessibilityLabel={goal ? `Next park goal: ${goal.ride_name}. Open ride choices.` : 'Choose your next park ride coin'}
@@ -376,6 +381,9 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 2, borderColor: '#fff', backgroundColor: '#0879ca',
     shadowColor: '#003c7a', shadowOpacity: 0.28, shadowOffset: { width: 0, height: 3 }, shadowRadius: 4, elevation: 5 },
   chipPressed: { transform: [{ scale: 0.97 }] },
+  chipCollapsed: { width: TRIP_CHIP_COIN_SIZE, height: TRIP_CHIP_COIN_SIZE, minHeight: 0, paddingLeft: 0, paddingRight: 0,
+    borderRadius: TRIP_CHIP_COIN_SIZE / 2, justifyContent: 'center' },
+  chipCoinOnly: { marginRight: 0 },
   chipCoin: { width: 28, height: 28, marginRight: 6 },
   chipCopy: { flexShrink: 1, minWidth: 0 },
   chipKicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.4 },
