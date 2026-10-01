@@ -44,9 +44,42 @@ function rr(base: string, opts: { pitch?: number; volume?: number; pan?: number 
   GameAudio.play(pool[k], { ...opts, pitch: (opts.pitch ?? 0) + jitter, volume: Math.min(1, (opts.volume ?? 1) * gain) });
 }
 
+let v7Registered = false;
+
 export const bossSfx = {
   init(): void {
     registerStudioAudio('boss');
+    if (!v7Registered && typeof __DEV__ !== 'undefined' && __DEV__) {
+      // v7 candidates (G minor lane tells, pentatonic POP ladder): dev only until Dustin approves by ear.
+      v7Registered = true;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      GameAudio.registerCues(require('../../assets/games/boss/audio/cues.dev').BOSS_V7_DEV_CUES);
+    }
+  },
+  /**
+   * Lane tell in the loop's key (design 15.3): Kraken G4 / Bb4 / D5 on lanes L / C / R, hard-panned
+   * (ladder index note * 3 + side). Bonus channel only: every tell also reads with the sound off.
+   */
+  tellLane(boss: BossId, lane: number): void {
+    if (boss === 'kraken' && has('tell_kraken_gm')) {
+      GameAudio.playLadder('tell_kraken_gm', lane * 3 + lane, { volume: 1 });
+      return;
+    }
+    this.tell(boss, lane);
+  },
+  /** Fake: a bubbly giggle, no pitch, no haptic. */
+  giggle(): void { GameAudio.play(first('bo_feint_giggle', 'bo_feint_trill', 'ui.tap'), { volume: 0.9 }); },
+  /** PERFECT counter: the deflect clang sits above every other layer (+2 dB). */
+  clang(): void {
+    GameAudio.play(first('bo_perfect_clang', 'bo_perfect', 'fx.reveal'), { volume: 1 });
+    GameAudio.play('fx.reveal', { volume: 0.5 });
+    GameAudio.duck(3, 30, 120, 150);
+  },
+  /** POP: steps up the G minor pentatonic ladder, with the sucker pop layered on. */
+  popLadder(step: number, perfect: boolean): void {
+    if (has('bo_hit_deg')) GameAudio.playLadder('bo_hit_deg', step, { volume: perfect ? 1 : 0.9 });
+    else rr(first('bo_crit', 'fx.hit'), { pitch: step * 0.5 });
+    if (has('bo_pop_sucker')) GameAudio.play('bo_pop_sucker', { volume: perfect ? 0.9 : 0.75 });
   },
   preload(boss: BossId): void {
     const k = BOSS_KEY[boss];

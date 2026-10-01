@@ -1,29 +1,43 @@
 /**
- * BossArena: the whole fight in one Skia canvas, driven on the UI thread.
+ * BossArena v7: the whole Kraken fight in one Skia canvas, driven on the UI
+ * thread (design v7 sections 4, 6.2, 7, 11).
  *
- * Every tell, counter target, crit ring and pose is derived from the sim's
- * published BossView plus the bout clock `t` (integer sim ms) and the fx clock
- * (freezes on hit-stop). Nothing here decides an outcome; it only shows the
- * schedule the sim already fixed, so what you see is exactly what is graded.
+ * Every telegraph, limb pose, sucker ring and fin is derived from the sim's
+ * published BossView plus the bout clock `t` (integer sim ms, music-locked)
+ * and the cosmetic fx clock `fx` (freezes on hit-stop). Nothing here decides
+ * an outcome; it only shows the schedule the sim already fixed.
  *
- * Readability rules (design 9.3): gold = hit now, orange dashed + navy outline
- * = danger coming, white contracting ring = timing, cyan ripple = where
- * something surfaces. Max 2 interactive tells on screen.
+ * Three tell channels that read with the sound off (4.4): the limb rising over
+ * its lane with the body looming (read), the limb's shadow growing on the buoy
+ * (timer), the lime ring with a chevron notch tightening into PERFECT (answer).
+ * Fakes show something: a wink, a sky-blue sheen and a hollow white dashed
+ * outline, no shadow, no ring.
+ *
+ * Colour grammar (11.4): lime = answer now; gold = hit here; sky-blue dashed =
+ * fake; orange = danger; coral = your health; white thin ring = timing.
  */
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  BlendColor, Canvas, Circle, DashPathEffect, Group, Image as SkImage, LinearGradient, Oval, Path, Rect, Skia,
-  vec, type SkImage as SkImageType,
+  BlendColor, Canvas, Circle, DashPathEffect, Group, Image as SkImage, ImageShader, LinearGradient, Oval, Path, Rect,
+  Skia, Vertices, vec, type SkImage as SkImageType,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { ease } from '../../gamekit/core/ease';
-import { viewLane, type ArenaLayout, type BossView } from './view';
+import { rootSide, viewLane, type ArenaLayout, type BossView } from './view';
 import { aspectOf } from './useArenaImages';
+import {
+  bezierChain, bounceAt, chainAt, fractionAtX, lerpChain, newChain, stripIndices, stripVerts, JOINTS, type Pt,
+} from './rig/tentacle';
 
 export interface ArenaImages {
-  bg: SkImageType | null;
+  sky: SkImageType | null;
+  mid: SkImageType | null;
+  fore: SkImageType | null;
+  cloud: SkImageType | null;
+  body: SkImageType | null;
+  hat: SkImageType | null;
   boss: SkImageType | null;
+  strip: SkImageType | null;
   buoy: SkImageType | null;
   lantern: SkImageType | null;
   plate: SkImageType | null;
@@ -33,55 +47,144 @@ export interface ArenaImages {
   sharkBonk: SkImageType | null;
   sharkDizzy: SkImageType | null;
   sharkCheer: SkImageType | null;
+  fin: SkImageType | null;
   anchor: SkImageType | null;
-  splash: SkImageType | null;
-  impact: SkImageType | null;
   star: SkImageType | null;
   starburst: SkImageType | null;
-  cloud: SkImageType | null;
+  fxImpact: SkImageType | null;
+  fxCrown: SkImageType | null;
+  fxPuff: SkImageType | null;
+  fxSwirl: SkImageType | null;
+  fxSparkle: SkImageType | null;
+  fxBubble: SkImageType | null;
+  fxGull: SkImageType | null;
+  matFeather: SkImageType | null;
+  matBarnacle: SkImageType | null;
+  matPearl: SkImageType | null;
+  matScale: SkImageType | null;
 }
 
-/** Shared values the orchestrator animates from sim events (JS side). */
+/** Event-driven timestamps (fx clock ms; -1 = never) the orchestrator sets from sim events. */
 export interface ArenaAnim {
-  flash: SharedValue<number>;
-  squash: SharedValue<number>;
-  knockX: SharedValue<number>;
-  knockY: SharedValue<number>;
-  lunge: SharedValue<number>;
-  pose: SharedValue<number>;
-  buoy0: SharedValue<number>;
-  buoy1: SharedValue<number>;
-  buoy2: SharedValue<number>;
-  splashLane: SharedValue<number>;
-  splashP: SharedValue<number>;
-  impactP: SharedValue<number>;
-  impactX: SharedValue<number>;
-  impactY: SharedValue<number>;
-  frame: SharedValue<number>;
-  exit: SharedValue<number>;
+  entranceAt: SharedValue<number>;
+  exitAt: SharedValue<number>;
+  /** 1 KO, 2 retreat */
   exitKind: SharedValue<number>;
-  entrance: SharedValue<number>;
-  anchorDrop: SharedValue<number>;
+  hurtAt: SharedValue<number>;
+  hurtK: SharedValue<number>;
+  flashAt: SharedValue<number>;
+  rimAt: SharedValue<number>;
+  tauntAt: SharedValue<number>;
+  beadAt: SharedValue<number>;
+  beadLane: SharedValue<number>;
+  hopAt: SharedValue<number>;
+  hopLane: SharedValue<number>;
+  flinchAt: SharedValue<number>;
+  slamAt: SharedValue<number>;
+  getupAt: SharedValue<number>;
+  cheerAt: SharedValue<number>;
   padHeld: SharedValue<number>;
-  intermission: SharedValue<number>;
+  buoyAt0: SharedValue<number>;
+  buoyAt1: SharedValue<number>;
+  buoyAt2: SharedValue<number>;
+  splashAt: SharedValue<number>;
+  splashLane: SharedValue<number>;
+  /** Part-break launch (fx ms), which Break (1..3), and the impact side (-1 / 1). */
+  partAt: SharedValue<number>;
+  partN: SharedValue<number>;
+  partDir: SharedValue<number>;
+  matAt: SharedValue<number>;
+  finalAt: SharedValue<number>;
+  finalGrade: SharedValue<number>;
+  catchAt: SharedValue<number>;
+  catchLane: SharedValue<number>;
+  caughtAt: SharedValue<number>;
+  /** Phase pose: 0 shallows, 1 on the wreck, 2 whirlpool (fx ms of the change in phaseAt). */
+  phase: SharedValue<number>;
+  phaseAt: SharedValue<number>;
 }
 
-// Palette (bright world; gold only means "hit now")
+/** Presentation memory kept by the orchestrator (bout sim time). */
+export interface Pres {
+  /** Last resolved strike: lane, root side, impact, result (1 countered, 2 landed, 3 safe miss), resolved at. */
+  sLane: number;
+  sSide: number;
+  sI: number;
+  sRes: number;
+  sAt: number;
+  /** Pinned limb: side, start, end (sim ms); kind of the opening. */
+  pinSide: number;
+  pinStart: number;
+  pinEnd: number;
+  /** Training wheels (first rounds vs this boss, bout 1). */
+  wheels: boolean;
+  /** Retreat damage overlays: Breaks this round. */
+  breaks: number;
+  /** Walking (wind-ups +1 step, smaller loom, shake x0.3). */
+  walking: boolean;
+}
+
+export function emptyPres(): Pres {
+  return { sLane: -1, sSide: 1, sI: -1e9, sRes: 0, sAt: -1e9, pinSide: -1, pinStart: -1e9, pinEnd: -1e9, wheels: false, breaks: 0, walking: false };
+}
+
+// Palette (design 11.4)
+const LIME = '#7BD94A';
 const GOLD = '#FFCF3B';
+const SKY = '#8FD3FF';
 const ORANGE = '#FF8A1F';
 const NAVY = '#1B2A4A';
-const CYAN = '#7FE9FF';
+const INK = '#0E0C2A';
 const WHITE = '#FFFFFF';
 const CORAL = '#FF6B5C';
+const CREAM = '#FFF1D6';
+const LILAC = '#D7A6E6';
+const LILAC_IN = '#9E6CC6';
+const PURPLE = '#6A44B6';
 
-const POSE_IDLE = 0;
-const POSE_BONK = 2;
-const POSE_DIZZY = 3;
-const POSE_CHEER = 4;
+// Sprite-space anchors on the 600 x 593 Kraken sprite (fractions).
+const SPR_AR = 600 / 593;
+const HAT = { x: 50 / 600, y: 0, w: 262 / 600, h: 196 / 593, px: 175 / 600, py: 150 / 593 };
+const EYE_L = { x: 0.425, y: 0.476 };
+const EYE_R = { x: 0.608, y: 0.481 };
+const STRIP_TIP_U = 1;
 
-function clamp01(x: number): number {
+function c01(x: number): number {
   'worklet';
   return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+function outBack(x: number, s = 1.7): number {
+  'worklet';
+  const t = c01(x) - 1;
+  return 1 + (s + 1) * t * t * t + s * t * t;
+}
+function inBack(x: number, s = 1.7): number {
+  'worklet';
+  const t = c01(x);
+  return (s + 1) * t * t * t - s * t * t;
+}
+function inQuad(x: number): number {
+  'worklet';
+  const t = c01(x);
+  return t * t;
+}
+function outQuad(x: number): number {
+  'worklet';
+  const t = c01(x);
+  return 1 - (1 - t) * (1 - t);
+}
+/** 1 at an event, decaying to 0 over ms (0 when the event never happened or is in the future). */
+function since(now: number, at: number, ms: number): number {
+  'worklet';
+  if (at < 0 || now < at) return 0;
+  const p = (now - at) / ms;
+  return p >= 1 ? 0 : 1 - p;
+}
+/** Beat-locked pulse: 1 on the beat, easing out to 0 by `width` of a beat later. */
+function onBeat(beat: number, width = 0.35): number {
+  'worklet';
+  const f = beat - Math.floor(beat);
+  return f < width ? 1 - f / width : 0;
 }
 
 interface Props {
@@ -89,63 +192,103 @@ interface Props {
   view: SharedValue<BossView>;
   t: SharedValue<number>;
   fx: SharedValue<number>;
+  beat: SharedValue<number>;
   anim: ArenaAnim;
+  pres: SharedValue<Pres>;
   img: ArenaImages;
   bossKind: number;
   reduced: boolean;
   bossArtScale: number;
 }
 
-export const BossArena = React.memo(function BossArena({ L, view, t, fx, anim, img, bossKind, reduced, bossArtScale }: Props) {
+export const BossArena = React.memo(function BossArena(p: Props) {
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Backdrop L={L} fx={fx} img={img} />
-      <Starburst L={L} view={view} fx={fx} img={img} />
-      <BossBody L={L} view={view} t={t} fx={fx} anim={anim} img={img} bossKind={bossKind} reduced={reduced} scaleArt={bossArtScale} />
-      <WaterLip L={L} fx={fx} />
-      <DizzyStars L={L} view={view} t={t} img={img} />
-      <GaugeArc L={L} view={view} fx={fx} />
-      <Telegraphs L={L} view={view} t={t} fx={fx} bossKind={bossKind} />
-      <Targets L={L} view={view} t={t} fx={fx} anim={anim} img={img} bossKind={bossKind} />
-      <Splash L={L} anim={anim} img={img} />
-      <FloatAndShark L={L} view={view} t={t} fx={fx} anim={anim} img={img} />
-      <Impact anim={anim} img={img} />
-      <ImpactFrame L={L} anim={anim} />
+      <Backdrop {...p} />
+      <Starburst {...p} />
+      <Rainbow {...p} />
+      <BossRig {...p} />
+      <WaterLip {...p} />
+      <Limbs {...p} />
+      <Row {...p} />
+      <PinnedSuckers {...p} />
+      <FinalAnchor {...p} />
+      <Fore {...p} />
+      <Splash {...p} />
+      <PlayerFloat {...p} />
+      <PopBead {...p} />
+      <Parts {...p} />
+      <SpeedLines {...p} />
+      <WaterSheet {...p} />
     </Canvas>
   );
 });
 
 // ---------------------------------------------------------------------------
+// Backdrop: Sunny Lagoon Cove (sky + sea, clouds, wreck), everything on the beat.
 
-function Backdrop({ L, fx, img }: { L: ArenaLayout; fx: SharedValue<number>; img: ArenaImages }) {
+function Backdrop({ L, fx, beat, img, anim }: Props) {
+  // Cover the screen with the sky/sea layer, horizon pinned just behind the boss's lower body.
+  const sky = useMemo(() => {
+    const ar = aspectOf(img.sky, 768 / 1152);
+    const horizonFrac = 0.625;
+    const hNeed = Math.max(L.H - L.horizonY + 20, 1) / (1 - horizonFrac);
+    const h = Math.max(hNeed, L.W / ar);
+    const w = h * ar;
+    return { x: (L.W - w) / 2, y: L.horizonY - horizonFrac * h, w, h };
+  }, [L, img.sky]);
   const cloudA = useDerivedValue(() => [{ translateX: ((fx.value * 0.008) % (L.W + 240)) - 200 }]);
   const cloudB = useDerivedValue(() => [{ translateX: ((fx.value * 0.005 + L.W * 0.6) % (L.W + 240)) - 200 }]);
-  // Cover-fit the 9:16 lagoon so the waterline sits behind the boss.
-  const ar = aspectOf(img.bg, 752 / 1344);
-  const s = Math.max(L.W / ar, L.H);
-  const w = ar * s;
-  const h = s;
+  const midW = L.W * 1.25;
+  const midH = midW * (768 / 1152);
+  const midY = L.horizonY - midH * 0.62;
+  const midX = (L.W - midW) / 2 + L.W * 0.08;
+  // The wreck rocks one cycle per bar; on the wreck (phase 1) it leans 4 deg in Fury.
+  const midTr = useDerivedValue(() => {
+    const b = beat.value;
+    const rock = Math.sin((b / 4) * Math.PI * 2) * 0.008;
+    const tilt = anim.phase.value >= 2 ? 0.07 * c01((fx.value - anim.phaseAt.value) / 600) : 0;
+    return [{ rotate: rock + tilt }];
+  });
+  // Seagull on the mast: hops on beat 1 of every 2nd bar.
+  const gullTr = useDerivedValue(() => {
+    const b = beat.value;
+    const bar = Math.floor(b / 4);
+    const hop = bar % 2 === 0 ? onBeat(b - bar * 4, 0.5) * (b - bar * 4 < 1 ? 1 : 0) : 0;
+    return [{ translateX: midX + midW * 0.79 }, { translateY: midY + midH * 0.1 - 10 * hop }];
+  });
   return (
     <Group>
       <Rect x={0} y={0} width={L.W} height={L.H}>
-        <LinearGradient start={vec(0, 0)} end={vec(0, L.H)} colors={['#58C8FF', '#9FF0F5', '#3FD0E8']} />
+        <LinearGradient start={vec(0, 0)} end={vec(0, L.H)} colors={['#4FB6FF', '#9FF0F5', '#3FD0E8']} />
       </Rect>
-      {img.bg ? <SkImage image={img.bg} x={(L.W - w) / 2} y={L.H - h} width={w} height={h} fit="fill" /> : null}
+      {img.sky ? <SkImage image={img.sky} x={sky.x} y={sky.y} width={sky.w} height={sky.h} fit="fill" /> : null}
       {img.cloud ? (
-        <Group opacity={0.9}>
-          <Group transform={cloudA}><SkImage image={img.cloud} x={0} y={L.H * 0.05} width={116} height={78} /></Group>
-          <Group transform={cloudB}><SkImage image={img.cloud} x={0} y={L.H * 0.12} width={84} height={56} /></Group>
+        <Group opacity={0.95}>
+          <Group transform={cloudA}><SkImage image={img.cloud} x={0} y={L.H * 0.06} width={116} height={78} /></Group>
+          <Group transform={cloudB}><SkImage image={img.cloud} x={0} y={L.H * 0.13} width={84} height={56} /></Group>
         </Group>
+      ) : null}
+      {img.mid ? (
+        <Group origin={vec(midX + midW / 2, midY + midH * 0.7)} transform={midTr}>
+          <SkImage image={img.mid} x={midX} y={midY} width={midW} height={midH} fit="fill" />
+        </Group>
+      ) : null}
+      {img.fxGull ? (
+        <Group transform={gullTr}><SkImage image={img.fxGull} x={-18} y={-14} width={36} height={28} /></Group>
       ) : null}
     </Group>
   );
 }
 
-/** Alex's starburst behind the boss: gold during a Break (the reward moment). */
-function Starburst({ L, view, fx, img }: { L: ArenaLayout; view: SharedValue<BossView>; fx: SharedValue<number>; img: ArenaImages }) {
-  const size = L.bossSize * 1.9;
-  const op = useDerivedValue(() => (view.value.oOn && view.value.oKind === 1 ? 0.42 : 0));
-  const tr = useDerivedValue(() => [{ rotate: (fx.value / 1000) * (Math.PI / 6) }]);
+/** Alex's starburst behind the boss during a Break: 1 rev per 4 beats, pulsing 1.0 -> 1.06 on each beat. */
+function Starburst({ L, view, beat, img }: Props) {
+  const size = L.bossSize * 1.25;
+  const op = useDerivedValue(() => (view.value.oOn && view.value.oKind === 1 ? 0.35 : 0));
+  const tr = useDerivedValue(() => {
+    const b = beat.value;
+    return [{ rotate: (b / 4) * Math.PI * 2 }, { scale: 1 + 0.06 * onBeat(b) }];
+  });
   if (!img.starburst) return null;
   return (
     <Group opacity={op} origin={vec(L.bossX, L.bossY)} transform={tr}>
@@ -156,540 +299,995 @@ function Starburst({ L, view, fx, img }: { L: ArenaLayout; view: SharedValue<Bos
   );
 }
 
-function BossBody({ L, view, t, fx, anim, img, bossKind, reduced, scaleArt }: {
-  L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; fx: SharedValue<number>; anim: ArenaAnim;
-  img: ArenaImages; bossKind: number; reduced: boolean; scaleArt: number;
-}) {
-  const S = L.bossSize * scaleArt;
-  const transform = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const f = fx.value;
-    let dx = 0;
-    let dy = reduced ? 0 : Math.sin(f / 650) * 6;
-    let rot = 0;
-    let sx = 1 + (reduced ? 0 : Math.sin(f / 200) * 0.01);
-    let sy = 1 + (reduced ? 0 : Math.sin(f / 200 + 1) * 0.012);
-    const lane = viewLane(v, now);
-    if (v.aOn && lane >= 0) {
-      const I = v.steps[v.step * 3 + 1];
-      const T = Math.max(v.aT, I - v.aW);
-      const dir = lane === 0 ? -1 : lane === 2 ? 1 : 0;
-      if (now >= T && now < I - 60) {
-        // Anticipation: lean away, swell, hold (tells start in the body).
-        const p = clamp01((now - T) / Math.max(1, I - 60 - T));
-        const a = ease('outQuad', p / 0.4);
-        rot = -dir * 0.14 * a;
-        sx *= 1 + 0.06 * a;
-        sy *= 1 + 0.06 * a - 0.03 * a;
-        dx = -dir * 10 * a;
-      } else if (now >= I - 70 && now < I + 260) {
-        // Strike toward the lane: the limb and impact land on the target (hold, then recover).
-        const p = now < I ? (now - (I - 70)) / 70 : now < I + 90 ? 1 : 1 - (now - I - 90) / 170;
-        const a = clamp01(p);
-        dx = (L.laneX[lane] - L.bossX) * 0.42 * a;
-        dy += L.bossSize * 0.24 * a;
-        rot = dir * 0.1 * a;
-        sx *= 1 + 0.12 * a;
-        sy *= 1 - 0.06 * a;
-      }
-      if (v.feintLane >= 0 && now >= v.feintT0 && now < v.feintT1) {
-        // Fake: a 9 Hz tremble, never orange, never pitched.
-        dx += Math.sin((now - v.feintT0) * 0.0565) * 5;
-      }
-    }
-    if (v.oOn) {
-      if (v.oKind === 1) {
-        // Break: dizzy, dropped, wobbling on the beat.
-        dy += 24;
-        rot = reduced ? 0 : Math.sin(now / 180) * 0.1;
-        sx *= 1.04;
-        sy *= 0.96;
-      } else {
-        // Exposed: head dips toward camera.
-        const p = clamp01((now - v.oStart) / 180);
-        const a = ease('outBack', p, 1.6);
-        sx *= 1 + 0.1 * a;
-        sy *= 1 + 0.1 * a;
-        dy += 18 * a;
-      }
-    }
-    // Entrance (bursts through the water lip) and KO / Retreat.
-    const e = anim.entrance.value;
-    dy += (1 - e) * L.bossSize * 0.9;
-    const x = anim.exit.value;
-    if (x > 0) {
-      if (anim.exitKind.value === 1) {
-        dy += L.bossSize * 1.1 * ease('inBack', x, 1.4);
-        rot += x * 0.6;
-      } else {
-        dy += L.bossSize * 0.9 * ease('inQuad', x);
-        rot += Math.sin(x * 20) * 0.08 * (1 - x);
-      }
-    }
-    const sq = anim.squash.value;
-    return [
-      { translateX: L.bossX + dx + anim.knockX.value },
-      { translateY: L.bossY + dy + anim.knockY.value },
-      { rotate: rot },
-      { scaleX: sx * (2 - sq) },
-      { scaleY: sy * sq },
-    ];
+/** KO rainbow behind the sinking boss: 0 -> 0.7 -> 0 over 1 200 ms. */
+function Rainbow({ L, fx, anim }: Props) {
+  const op = useDerivedValue(() => {
+    if (anim.exitKind.value !== 1 || anim.exitAt.value < 0) return 0;
+    const p = (fx.value - anim.exitAt.value - 400) / 1200;
+    if (p <= 0 || p >= 1) return 0;
+    return 0.7 * Math.sin(p * Math.PI);
   });
-  const flashOp = useDerivedValue(() => anim.flash.value);
-  const ghostOp = useDerivedValue(() => {
-    if (bossKind !== 2) return 1;
-    const v = view.value;
-    return v.oOn ? 1 : 0.62;
-  });
-  const decoys = useDerivedValue(() => {
-    const v = view.value;
-    if (bossKind !== 2 || !v.aOn) return [0, 0, 0];
-    const now = t.value;
-    const real = viewLane(v, now);
-    const out = [0, 0, 0];
-    if (v.aKind === 8) {
-      for (let i = 0; i < 3; i++) if (i !== real) out[i] = 1;
-    } else for (const d of v.decoys) out[d] = 1;
-    return out;
-  });
-  // Entrance and KO / Retreat happen behind the water lip: clip the boss to it while they run.
-  const lipY = L.bossY + L.bossSize * 0.34 + 26;
-  const clip = useDerivedValue(() => (anim.exit.value > 0 || anim.entrance.value < 1
-    ? Skia.XYWHRect(-L.W, -L.H, L.W * 3, lipY + L.H)
-    : Skia.XYWHRect(-L.W, -L.H, L.W * 3, L.H * 3)));
-  if (!img.boss) return null;
+  const arcs = useMemo(() => {
+    const cols = ['#FF6B5C', '#FF8A1F', '#FFCF3B', '#7BD94A', '#3FA9FF'];
+    return cols.map((c, i) => {
+      const r = L.W * 0.62 - i * 11;
+      const p = Skia.Path.Make();
+      p.addArc({ x: L.bossX - r, y: L.horizonY - r * 0.7, width: r * 2, height: r * 1.4 }, 180, 180);
+      return { p, c };
+    });
+  }, [L]);
   return (
-    <Group>
-      <Group clip={clip}>
-      <Group transform={transform}>
-        <Group opacity={ghostOp}>
-          <SkImage image={img.boss} x={-S / 2} y={-S / 2} width={S} height={S} />
-        </Group>
-        <Group opacity={flashOp}>
-          <SkImage image={img.boss} x={-S / 2} y={-S / 2} width={S} height={S}>
-            <BlendColor color={WHITE} mode="srcIn" />
-          </SkImage>
-        </Group>
-      </Group>
-      </Group>
-      {bossKind === 2 ? [0, 1, 2].map((i) => (
-        <GhostDecoy key={i} i={i} L={L} img={img.boss!} on={decoys} t={t} />
-      )) : null}
-    </Group>
-  );
-}
-
-/** Ghost decoy afterimage: pale, no rim, trembling at 9 Hz, never sings. */
-function GhostDecoy({ i, L, img, on, t }: { i: number; L: ArenaLayout; img: SkImageType; on: SharedValue<number[]>; t: SharedValue<number> }) {
-  const S = L.bossSize * 0.5;
-  const op = useDerivedValue(() => on.value[i] * 0.45);
-  const tr = useDerivedValue(() => [
-    { translateX: L.laneX[i] + Math.sin(t.value * 0.0565) * 4 },
-    { translateY: L.targetY - L.bossSize * 0.62 },
-  ]);
-  return (
-    <Group opacity={op} transform={tr}>
-      <SkImage image={img} x={-S / 2} y={-S / 2} width={S} height={S}>
-        <BlendColor color="#BFF6FF" mode="modulate" />
-      </SkImage>
-    </Group>
-  );
-}
-
-/** Alex-style dizzy stars orbit the boss during a Break (one revolution per 2 beats). */
-function DizzyStars({ L, view, t, img }: { L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; img: ArenaImages }) {
-  const on = useDerivedValue(() => (view.value.oOn && view.value.oKind === 1 ? 1 : 0));
-  if (!img.star) return null;
-  return (
-    <Group opacity={on}>
-      {[0, 1, 2].map((k) => (
-        <DizzyStar key={k} k={k} L={L} view={view} t={t} star={img.star!} />
-      ))}
-    </Group>
-  );
-}
-
-function DizzyStar({ k, L, view, t, star }: { k: number; L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; star: SkImageType }) {
-  const S = 30;
-  const tr = useDerivedValue(() => {
-    const v = view.value;
-    const period = v.q * 8;
-    const a = ((t.value - v.oStart) / period) * Math.PI * 2 + (k * Math.PI * 2) / 3;
-    const cx = L.bossX + Math.cos(a) * L.bossSize * 0.34;
-    const cy = L.bossY - L.bossSize * 0.28 + Math.sin(a) * L.bossSize * 0.08;
-    return [{ translateX: cx }, { translateY: cy }, { scale: 0.85 + 0.25 * (Math.sin(a) + 1) / 2 }];
-  });
-  return (
-    <Group transform={tr}>
-      <SkImage image={star} x={-S / 2} y={-S / 2} width={S} height={S} />
-    </Group>
-  );
-}
-
-/** Foreground water lip the Kraken is half-submerged behind (cyan, white foam, navy line). */
-function WaterLip({ L, fx }: { L: ArenaLayout; fx: SharedValue<number> }) {
-  const y0 = L.bossY + L.bossSize * 0.34;
-  const path = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const ph = fx.value / 520;
-    p.moveTo(0, y0);
-    for (let x = 0; x <= L.W; x += 12) p.lineTo(x, y0 + Math.sin(x / 38 + ph) * 5 + Math.sin(x / 17 - ph * 1.3) * 2);
-    p.lineTo(L.W, y0 + 60);
-    p.lineTo(0, y0 + 60);
-    p.close();
-    return p;
-  });
-  const foam = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const ph = fx.value / 520;
-    p.moveTo(0, y0);
-    for (let x = 0; x <= L.W; x += 12) p.lineTo(x, y0 + Math.sin(x / 38 + ph) * 5 + Math.sin(x / 17 - ph * 1.3) * 2);
-    return p;
-  });
-  return (
-    <Group>
-      <Path path={path} opacity={0.92}>
-        <LinearGradient start={vec(0, y0)} end={vec(0, y0 + 60)} colors={['#4FD8EC', 'rgba(79,216,236,0)']} />
-      </Path>
-      <Path path={foam} style="stroke" strokeWidth={7} color={NAVY} opacity={0.35} />
-      <Path path={foam} style="stroke" strokeWidth={4} color={WHITE} />
-    </Group>
-  );
-}
-
-/** Break gauge on the boss: a slim gold arc that glows and pulses at 80%+. */
-function GaugeArc({ L, view, fx }: { L: ArenaLayout; view: SharedValue<BossView>; fx: SharedValue<number> }) {
-  const r = L.bossSize * 0.46;
-  const cx = L.bossX;
-  const cy = L.bossY + L.bossSize * 0.05;
-  const track = useMemo(() => {
-    const p = Skia.Path.Make();
-    p.addArc({ x: cx - r, y: cy - r, width: r * 2, height: r * 2 }, 20, 140);
-    return p;
-  }, [cx, cy, r]);
-  const fill = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const g = view.value.gauge / 1000;
-    if (g > 0) p.addArc({ x: cx - r, y: cy - r, width: r * 2, height: r * 2 }, 160, -140 * g);
-    return p;
-  });
-  const glow = useDerivedValue(() => (view.value.gauge >= 800 ? 0.55 + 0.45 * Math.sin(fx.value / 80) : 0));
-  const on = useDerivedValue(() => (view.value.on && !(view.value.oOn && view.value.oKind === 1) ? 1 : 0));
-  return (
-    <Group opacity={on}>
-      <Path path={track} style="stroke" strokeWidth={9} strokeCap="round" color={NAVY} opacity={0.35} />
-      <Path path={fill} style="stroke" strokeWidth={14} strokeCap="round" color={GOLD} opacity={glow} />
-      <Path path={fill} style="stroke" strokeWidth={9} strokeCap="round" color={NAVY} />
-      <Path path={fill} style="stroke" strokeWidth={5} strokeCap="round" color={GOLD} />
+    <Group opacity={op}>
+      {arcs.map((a, i) => <Path key={i} path={a.p} style="stroke" strokeWidth={11} color={a.c} />)}
     </Group>
   );
 }
 
 // ---------------------------------------------------------------------------
+// The Kraken: body, hat (secondary spring), eyes, damage overlays, flashes.
 
-function Telegraphs({ L, view, t, fx, bossKind }: {
-  L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; fx: SharedValue<number>; bossKind: number;
-}) {
-  // Orange dashed danger arc from the boss to the telegraphed target.
-  const arc = useDerivedValue(() => {
-    const p = Skia.Path.Make();
+function BossRig(p: Props) {
+  const { L, view, t, fx, beat, anim, pres, img, reduced, bossArtScale, bossKind } = p;
+  const S = L.bossSize * bossArtScale;
+  const H = S / SPR_AR;
+  const transform = useDerivedValue(() => {
     const v = view.value;
     const now = t.value;
+    const f = fx.value;
+    const b = beat.value;
+    const pr = pres.value;
+    const walk = pr.walking;
+    let dx = 0;
+    let dy = 0;
+    let rot = 0;
+    let sx = 1;
+    let sy = 1;
+    // World on the beat: breath on each downbeat, bob one cycle per bar (low on beat 1), limp after Break 2.
+    if (!reduced) {
+      const breath = 0.02 * onBeat(b, 0.5);
+      sx *= 1 + breath;
+      sy *= 1 + breath;
+      const amp = v.breaks >= 2 ? 4.2 : 6;
+      dy += amp * Math.cos((b / 4) * Math.PI * 2) * -1;
+    }
+    // Phase look: half onto the wreck from bout 2.
+    const ph = anim.phase.value;
+    if (ph >= 1) dy -= 16 * outBack((f - anim.phaseAt.value) / 500);
+    // Tell: lean away, loom 1.0 -> 1.12 through the anticipation hold, snap back on the strike.
     const lane = viewLane(v, now);
-    if (!v.aOn || lane < 0 || bossKind === 1) return p;
-    const I = v.steps[v.step * 3 + 1];
-    if (now < Math.max(v.aT, I - Math.max(400, v.aW * 0.6)) || now > I + 90) return p;
-    const x0 = L.bossX + (L.laneX[lane] - L.bossX) * 0.25;
-    const y0 = L.bossY + L.bossSize * 0.3;
-    const x1 = L.laneX[lane];
-    const y1 = L.targetY - 36;
-    // 12 fps line boil: jitter re-seeded every 83 ms.
-    const seed = Math.floor(fx.value / 83);
-    const j = ((seed * 9301 + 49297) % 233280) / 233280 - 0.5;
-    p.moveTo(x0, y0);
-    p.quadTo((x0 + x1) / 2 + (x1 - L.bossX) * 0.3 + j * 2.4, (y0 + y1) / 2 - 30 + j * 2.4, x1, y1);
-    return p;
-  });
-  const dash = useDerivedValue(() => -(fx.value * 0.12) % 18);
-  // Cyan ripple where the tentacle tip breaks the water above the lane.
-  const ripple = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const lane = viewLane(v, now);
-    if (!v.aOn || lane < 0 || bossKind !== 0) return { x: 0, y: 0, r1: 0, r2: 0, o: 0 };
-    const I = v.steps[v.step * 3 + 1];
-    const T = Math.max(v.aT, I - v.aW);
-    const p = (now - T) / 420;
-    if (p < 0 || p > 1.4) return { x: 0, y: 0, r1: 0, r2: 0, o: 0 };
-    return { x: L.laneX[lane], y: L.targetY - 64, r1: 18 + 46 * clamp01(p), r2: 18 + 46 * clamp01(p - 0.35), o: 1 - clamp01(p - 0.4) };
-  });
-  const rX = useDerivedValue(() => ripple.value.x);
-  const rY = useDerivedValue(() => ripple.value.y);
-  const rR1 = useDerivedValue(() => ripple.value.r1);
-  const rR2 = useDerivedValue(() => ripple.value.r2);
-  const rO = useDerivedValue(() => ripple.value.o);
-  // Feint: a white trembling arc, no orange, no pitch.
-  const feint = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const v = view.value;
-    const now = t.value;
-    if (!v.aOn || v.feintLane < 0 || now < v.feintT0 || now >= v.feintT1) return p;
-    const x1 = L.laneX[v.feintLane] + Math.sin(now * 0.0565) * 4;
-    const y1 = L.targetY - 44;
-    p.moveTo(L.bossX, L.bossY + L.bossSize * 0.3);
-    p.quadTo((L.bossX + x1) / 2, (L.bossY + y1) / 2 - 20, x1, y1);
-    return p;
-  });
-  return (
-    <Group>
-      <Circle cx={rX} cy={rY} r={rR1} style="stroke" strokeWidth={4} color={CYAN} opacity={rO} />
-      <Circle cx={rX} cy={rY} r={rR2} style="stroke" strokeWidth={3} color={WHITE} opacity={rO} />
-      <Path path={arc} style="stroke" strokeWidth={10} strokeCap="round" color={NAVY} opacity={0.8} />
-      <Path path={arc} style="stroke" strokeWidth={6} strokeCap="round" color={ORANGE}>
-        <DashPathEffect intervals={[10, 8]} phase={dash} />
-      </Path>
-      <Path path={feint} style="stroke" strokeWidth={8} strokeCap="round" color={NAVY} opacity={0.4} />
-      <Path path={feint} style="stroke" strokeWidth={5} strokeCap="round" color={WHITE}>
-        <DashPathEffect intervals={[6, 10]} />
-      </Path>
-    </Group>
-  );
-}
-
-function Targets({ L, view, t, fx, anim, img, bossKind }: {
-  L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; fx: SharedValue<number>; anim: ArenaAnim;
-  img: ArenaImages; bossKind: number;
-}) {
-  return (
-    <Group>
-      {[0, 1, 2].map((i) => (
-        <Target key={i} i={i} L={L} view={view} t={t} fx={fx} squash={i === 0 ? anim.buoy0 : i === 1 ? anim.buoy1 : anim.buoy2}
-          img={bossKind === 0 ? img.buoy : bossKind === 2 ? img.lantern : img.plate} bossKind={bossKind} />
-      ))}
-    </Group>
-  );
-}
-
-function Target({ i, L, view, t, fx, squash, img, bossKind }: {
-  i: number; L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; fx: SharedValue<number>;
-  squash: SharedValue<number>; img: SkImageType | null; bossKind: number;
-}) {
-  const x = L.laneX[i];
-  const y = L.targetY;
-  const h = bossKind === 1 ? 26 : 84;
-  const w = aspectOf(img, 1) * h;
-  const tr = useDerivedValue(() => {
-    const bob = bossKind === 0 ? Math.sin(fx.value / 540 + i * 1.7) * 3 : bossKind === 2 ? Math.sin(fx.value / 700 + i) * 0.04 : 0;
-    const s = squash.value;
-    return bossKind === 2
-      ? [{ translateX: x }, { translateY: y - h / 2 }, { rotate: bob }, { scaleX: 2 - s }, { scaleY: s }]
-      : [{ translateX: x }, { translateY: y + bob }, { scaleX: 2 - s }, { scaleY: s }];
-  });
-  const state = useDerivedValue(() => {
-    // 0 idle, 1 telegraphed, 2 perfect window (gold), 3 greyed, 4 hazard bubble, 5 dimmed lane (Kraken bout 1 centre)
-    const v = view.value;
-    const now = t.value;
-    if (now < v.greyUntil[i]) return 3;
-    if (v.aOn && v.hazardLane === i && !v.hazardPopped && now >= v.hazardT0 && now < v.hazardT1) return 4;
-    const lane = viewLane(v, now);
-    if (v.aOn && lane === i) {
+    if (v.aOn && lane >= 0) {
       const I = v.steps[v.step * 3 + 1];
-      const graded = v.steps[v.step * 3 + 2] === 1;
-      if (graded && now >= I - 160 && now <= I + 40) return 2;
-      if (now >= Math.max(v.aT, I - v.aW)) return 1;
-    }
-    if (bossKind === 0 && v.bout === 0 && i === 1) return 5;
-    return 0;
-  });
-  const op = useDerivedValue(() => (state.value === 3 ? 0.4 : state.value === 5 ? 0.55 : 1));
-  const goldOp = useDerivedValue(() => (state.value === 2 ? 0.55 : 0));
-  // White contracting timing ring that closes on the impact frame.
-  const ring = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const lane = viewLane(v, now);
-    if (!v.aOn || lane !== i) return 0;
-    const I = v.steps[v.step * 3 + 1];
-    const T = Math.max(v.aT, I - v.aW);
-    if (now < T || now > I + 90) return 0;
-    const p = clamp01((I - now) / Math.max(1, I - T));
-    return 40 + 70 * p;
-  });
-  const ringOp = useDerivedValue(() => (ring.value > 0 ? 1 : 0));
-  const ringColor = useDerivedValue(() => (state.value === 2 ? GOLD : WHITE));
-  // Shadow of the incoming tentacle grows on the buoy (Kraken).
-  const shadow = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (bossKind !== 0 || !v.aOn || viewLane(v, now) !== i) return 0;
-    const I = v.steps[v.step * 3 + 1];
-    const T = Math.max(v.aT, I - v.aW);
-    return 0.3 + 0.7 * ease('inQuad', (now - T) / Math.max(1, I - T));
-  });
-  const shadowRx = useDerivedValue(() => 46 * shadow.value);
-  const shadowRy = useDerivedValue(() => 16 * shadow.value);
-  const shadowOp = useDerivedValue(() => (shadow.value > 0 ? 0.28 : 0));
-  const bubbleOp = useDerivedValue(() => (state.value === 4 ? 0.85 : 0));
-  const showOp = useDerivedValue(() => {
-    // Robo: this socket's icon flashes during the show phase (white decoy flash = no pitch).
-    const v = view.value;
-    if (bossKind !== 1 || !v.aOn || v.showStart < 0) return 0;
-    const now = t.value;
-    const k = Math.floor((now - v.showStart) / (v.q * 4));
-    if (k < 0 || k >= v.show.length) return 0;
-    const icon = v.show[k] % 3;
-    const phase = ((now - v.showStart) % (v.q * 4)) / (v.q * 4);
-    return icon === i && phase < 0.7 ? 1 : 0;
-  });
-  const showColor = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const k = Math.floor((now - v.showStart) / (v.q * 4));
-    return k >= 0 && k < v.show.length && v.show[k] >= 3 ? WHITE : ORANGE;
-  });
-  return (
-    <Group>
-      <Oval x={x - 46} y={y + 18} width={92} height={24} color={NAVY} opacity={0.12} />
-      <Oval x={useDerivedValue(() => x - shadowRx.value)} y={useDerivedValue(() => y + 24 - shadowRy.value)}
-        width={useDerivedValue(() => shadowRx.value * 2)} height={useDerivedValue(() => shadowRy.value * 2)} color={NAVY} opacity={shadowOp} />
-      <Circle cx={x} cy={y} r={56} color={GOLD} opacity={goldOp} />
-      <Circle cx={x} cy={y} r={Math.min(70, L.W / 6)} color={ORANGE} opacity={useDerivedValue(() => showOp.value * 0.55)} />
-      <Circle cx={x} cy={y} r={Math.min(70, L.W / 6)} color={showColor} opacity={useDerivedValue(() => showOp.value * 0.35)} />
-      <Group opacity={op} transform={tr}>
-        {img ? <SkImage image={img} x={-w / 2} y={-h / 2} width={w} height={h} /> : null}
-      </Group>
-      <Circle cx={x} cy={y} r={ring} style="stroke" strokeWidth={8} color={NAVY} opacity={useDerivedValue(() => ringOp.value * 0.5)} />
-      <Circle cx={x} cy={y} r={ring} style="stroke" strokeWidth={5} color={ringColor} opacity={ringOp} />
-      <Circle cx={x} cy={y - 6} r={38} color="#E8FBFF" opacity={bubbleOp} />
-      <Circle cx={x} cy={y - 6} r={38} style="stroke" strokeWidth={3} color={NAVY} opacity={bubbleOp} />
-      <Circle cx={x - 12} cy={y - 20} r={8} color={WHITE} opacity={bubbleOp} />
-    </Group>
-  );
-}
-
-function Splash({ L, anim, img }: { L: ArenaLayout; anim: ArenaAnim; img: ArenaImages }) {
-  const S = 120;
-  const tr = useDerivedValue(() => {
-    const lane = anim.splashLane.value;
-    const p = anim.splashP.value;
-    const x = lane >= 0 ? L.laneX[lane] : -500;
-    const s = 0.5 + 0.7 * ease('outBack', p * 1.6, 1.4);
-    return [{ translateX: x }, { translateY: L.targetY + 10 }, { scale: s }];
-  });
-  const op = useDerivedValue(() => (anim.splashP.value > 0 ? 1 - clamp01((anim.splashP.value - 0.55) / 0.45) : 0));
-  if (!img.splash) return null;
-  return (
-    <Group transform={tr} opacity={op}>
-      <SkImage image={img.splash} x={-S / 2} y={-S} width={S} height={S} />
-    </Group>
-  );
-}
-
-function FloatAndShark({ L, view, t, fx, anim, img }: {
-  L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; fx: SharedValue<number>; anim: ArenaAnim; img: ArenaImages;
-}) {
-  const R = L.floatR;
-  const fw = R * 2.1;
-  const floatTr = useDerivedValue(() => [{ translateX: L.floatX }, { translateY: L.floatY + Math.sin(fx.value / 600) * 2.5 }]);
-  // Crit rings: gold ring contracts onto the float rim and closes on the beat.
-  const ringInfo = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (!v.oOn || v.heavyDone) return { r: 0, o: 0, hot: 0, r2: 0, o2: 0 };
-    const beat = v.q * 4;
-    let r = 0;
-    let o = 0;
-    let hot = 0;
-    let r2 = 0;
-    let o2 = 0;
-    let n = 0;
-    for (let j = 0; j < v.rings.length; j++) {
-      if (v.used[j] !== 0) continue;
-      const dt = v.rings[j] - now;
-      if (dt < -80) continue;
-      if (dt > beat * 1.1) break;
-      const rr = R + 4 + Math.max(0, dt) / beat * R * 1.1;
-      if (n === 0) {
-        r = rr;
-        o = 1;
-        hot = Math.abs(dt) <= 80 ? 1 : 0;
-      } else {
-        r2 = rr;
-        o2 = 0.55;
+      const T = Math.max(v.aT, I - v.aW);
+      const dir = lane === 0 ? -1 : lane === 2 ? 1 : 0;
+      if (now >= T && now < I - 80) {
+        const k = inQuad((now - T) / Math.max(1, I - 80 - T));
+        const loom = reduced ? 0 : walk ? 0.06 : 0.12;
+        sx *= 1 + loom * k;
+        sy *= 1 + loom * k;
+        rot += -dir * 0.14 * outQuad((now - T) / 300);
+        dx += -dir * 8 * k;
+      } else if (now >= I - 80 && now < I + 220) {
+        const k = now < I ? 1 - (I - now) / 80 : 1 - (now - I) / 220;
+        dx += dir * 14 * c01(k);
+        dy += 10 * c01(k);
+        rot += dir * 0.06 * c01(k);
       }
-      n += 1;
-      if (n > 1) break;
     }
-    return { r, o, hot, r2, o2 };
-  });
-  const rr = useDerivedValue(() => ringInfo.value.r);
-  const ro = useDerivedValue(() => ringInfo.value.o);
-  const rr2 = useDerivedValue(() => ringInfo.value.r2);
-  const ro2 = useDerivedValue(() => ringInfo.value.o2);
-  const hotOp = useDerivedValue(() => ringInfo.value.hot * 0.6);
-  // Opening close telegraph: the rim blinks gold-white-grey in the last 250 ms.
-  const closeOp = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (!v.oOn || v.oKind === 1) return 0;
-    const left = v.oEnd - now;
-    return left <= 250 && left > 0 ? (Math.floor(left / 60) % 2 === 0 ? 0.9 : 0.25) : 0;
-  });
-  // Finisher / Heavy: white timing ring closing on the finisher ring time.
-  const finR = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (!v.finOn || v.finDone) return 0;
-    const p = clamp01((v.finRing - now) / Math.max(1, v.finRing - v.finStart));
-    return R + 6 + p * R * 1.6;
-  });
-  const finOp = useDerivedValue(() => (finR.value > 0 ? 1 : 0));
-  const finColor = useDerivedValue(() => (Math.abs(view.value.finRing - t.value) <= 110 ? GOLD : WHITE));
-  // Anchor rises over the float while the pad is held in the finisher; falls on release.
-  const anchorTr = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const held = anim.padHeld.value > 0 && v.finOn && !v.finDone ? clamp01((now - v.padDownAt) / 400) : 0;
-    const drop = anim.anchorDrop.value;
-    const y = drop > 0
-      ? L.floatY - R * 2.4 - (L.floatY - L.bossY - R * 2.4) * ease('inQuad', drop)
-      : L.floatY - R * 1.4 - R * 1.1 * ease('outBack', held, 1.5);
-    const s = drop > 0 ? 1 + drop * 0.6 : 0.4 + 0.6 * held;
-    return [{ translateX: L.floatX }, { translateY: y }, { scale: s }];
-  });
-  const anchorOp = useDerivedValue(() => {
-    const v = view.value;
-    if (anim.anchorDrop.value > 0 && anim.anchorDrop.value < 1) return 1;
-    return v.finOn && !v.finDone && anim.padHeld.value > 0 ? 1 : 0;
-  });
-  // Heavy charge: holding through an opening glows the shark gold after a beat.
-  const heavyOp = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (!v.oOn || v.oKind === 1 || anim.padHeld.value <= 0 || v.padDownAt < v.oStart) return 0;
-    return now - v.padDownAt >= v.q * 4 ? 0.5 + 0.3 * Math.sin(fx.value / 60) : 0;
-  });
-  // Player shark: crouch as the ring closes, lunge on hits, bonk / dizzy / cheer poses.
-  const SH = R * 1.9;
-  const sharkTr = useDerivedValue(() => {
-    const info = ringInfo.value;
-    const crouch = info.o > 0 && info.r < R * 1.5 ? 0.9 + 0.1 * clamp01((info.r - R) / (R * 0.5)) : 1;
-    const held = anim.padHeld.value > 0 ? 0.93 : 1;
-    const l = anim.lunge.value;
+    // Fake: giggle (3 shakes at 9 Hz with a squash 0.96).
+    if (v.aOn && v.feintLane >= 0 && now >= v.feintT0 && now < v.feintT0 + 340) {
+      const g = (now - v.feintT0) / 1000;
+      dx += Math.sin(g * Math.PI * 2 * 9) * 5;
+      sy *= 0.96;
+      sx *= 1.02;
+    }
+    // Pinned / exposed: the head dips and strains toward the pin.
+    if (v.oOn && v.oKind !== 1) {
+      const k = outBack((now - v.oStart) / 200, 1.4);
+      dy += 14 * k;
+      rot += pr.pinSide * 0.05 * k;
+    }
+    // Break: stunned, dropped, wobbling on the beat.
+    if (v.oOn && v.oKind === 1) {
+      dy += 22;
+      rot += reduced ? 0 : Math.sin((b / 2) * Math.PI * 2) * 0.09;
+      sx *= 1.03;
+      sy *= 0.97;
+    }
+    // Hurt: impact squash 0.88 -> 1.04 -> 1.0 (50 / 120 / 100 ms).
+    const ha = anim.hurtAt.value;
+    if (ha >= 0 && f >= ha && f < ha + 270) {
+      const e = f - ha;
+      const k = anim.hurtK.value;
+      const s = e < 50 ? 1 - 0.12 * k * (e / 50) : e < 170 ? 1 - 0.12 * k + (0.16 * k) * ((e - 50) / 120) : 1 + 0.04 * k * (1 - (e - 170) / 100);
+      sy *= s;
+      sx *= 2 - s;
+      dy -= 6 * k * since(f, ha, 160);
+    }
+    // Taunt (a real tell landed): leans back laughing for 500 ms.
+    const ta = anim.tauntAt.value;
+    if (ta >= 0 && f >= ta && f < ta + 500) {
+      const e = (f - ta) / 500;
+      rot += Math.sin(e * Math.PI * 6) * 0.05 * (1 - e);
+      dy -= 8 * Math.sin(e * Math.PI);
+    }
+    // Entrance = count-in: bursts up on beat 4 (y +160 -> 0, 700 ms out-back).
+    const en = anim.entranceAt.value;
+    if (en < 0) dy += L.bossSize * 1.2;
+    else {
+      const e = f - en - 3 * 464;
+      dy += e < 0 ? L.bossSize * 1.2 : L.bossSize * 1.2 * (1 - outBack(e / 700, 1.4));
+    }
+    // KO sinks (out-back 1 100 ms after a 400 ms defeat hold); Retreat dives sulking.
+    const xa = anim.exitAt.value;
+    if (xa >= 0 && f >= xa) {
+      const e = f - xa;
+      if (anim.exitKind.value === 1) {
+        dy += e < 400 ? 0 : L.bossSize * 1.2 * inBack((e - 400) / 1100, 1.4);
+        rot += e < 400 ? Math.sin(e / 30) * 0.03 : 0.3 * c01((e - 400) / 1100);
+      } else {
+        dy += e < 1500 ? 0 : L.bossSize * 1.15 * inQuad((e - 1500) / 700);
+        rot += e < 1500 ? Math.sin(e / 90) * 0.04 : 0;
+      }
+    }
     return [
-      { translateX: L.floatX + (L.bossX - L.floatX) * 0.1 * l },
-      { translateY: L.floatY - R * 0.35 - 22 * l },
-      { scaleX: 1 / Math.sqrt(crouch * held) },
-      { scaleY: crouch * held },
+      { translateX: L.bossX + dx },
+      { translateY: L.bossY + dy },
+      { rotate: rot },
+      { scaleX: sx },
+      { scaleY: sy },
     ];
   });
-  const poseIdle = useDerivedValue<number>(() => (anim.pose.value === POSE_IDLE && anim.lunge.value < 0.25 ? 1 : 0));
-  const poseStrike = useDerivedValue<number>(() => (anim.pose.value === POSE_IDLE && anim.lunge.value >= 0.25 ? 1 : 0));
-  const poseBonk = useDerivedValue<number>(() => (anim.pose.value === POSE_BONK ? 1 : 0));
-  const poseDizzy = useDerivedValue<number>(() => (anim.pose.value === POSE_DIZZY ? 1 : 0));
-  const poseCheer = useDerivedValue<number>(() => (anim.pose.value === POSE_CHEER ? 1 : 0));
-  const smear = useDerivedValue(() => (anim.lunge.value > 0.3 ? 0.25 : 0));
+  const lipClip = useMemo(() => Skia.XYWHRect(-L.W, -L.H * 2, L.W * 3, L.lipY + 3 + L.H * 2), [L]);
+  const flashOp = useDerivedValue(() => (anim.flashAt.value >= 0 && fx.value - anim.flashAt.value < 40 && fx.value >= anim.flashAt.value ? 0.9 : 0));
+  const rimOp = useDerivedValue(() => since(fx.value, anim.rimAt.value, 160) * 0.9);
+  const hatOn = useDerivedValue(() => (view.value.breaks >= 1 || (anim.partAt.value >= 0 && anim.partN.value >= 1) ? 0 : 1));
+  const baldOn = useDerivedValue(() => 1 - hatOn.value);
+  // Hat jiggle: spring 2-3 deg on every hurt and on the beat.
+  const hatTr = useDerivedValue(() => {
+    const f = fx.value;
+    const ha = anim.hurtAt.value;
+    const e = ha >= 0 && f >= ha ? (f - ha) / 1000 : 9;
+    const spring = Math.exp(-8 * e) * Math.sin(e * 26) * 0.08;
+    return [{ rotate: spring + 0.02 * onBeat(beat.value, 0.5) }];
+  });
+  const hatPivot = vec(-S / 2 + HAT.px * S, -H / 2 + HAT.py * H);
+  const bodyImg = bossKind === 0 ? img.body : img.boss;
+  return (
+    <Group clip={lipClip}>
+      <Group transform={transform}>
+        <Group opacity={rimOp} transform={[{ scale: 1.045 }]}>
+          {bodyImg ? (
+            <SkImage image={bodyImg} x={-S / 2} y={-H / 2} width={S} height={H}>
+              <BlendColor color={GOLD} mode="srcIn" />
+            </SkImage>
+          ) : null}
+        </Group>
+        {bodyImg ? <SkImage image={bodyImg} x={-S / 2} y={-H / 2} width={S} height={H} /> : null}
+        {bossKind === 0 ? <DamageOverlays S={S} H={H} view={view} pres={pres} anim={anim} baldOn={baldOn} /> : null}
+        {bossKind === 0 && img.hat ? (
+          <Group opacity={hatOn} origin={hatPivot} transform={hatTr}>
+            <SkImage image={img.hat} x={-S / 2 + HAT.x * S} y={-H / 2 + HAT.y * H} width={HAT.w * S} height={HAT.h * H} />
+          </Group>
+        ) : null}
+        {bossKind === 0 ? <Eyes {...p} S={S} H={H} /> : null}
+        <Group opacity={flashOp}>
+          {bodyImg ? (
+            <SkImage image={bodyImg} x={-S / 2} y={-H / 2} width={S} height={H}>
+              <BlendColor color={WHITE} mode="srcIn" />
+            </SkImage>
+          ) : null}
+        </Group>
+      </Group>
+    </Group>
+  );
+}
+
+/** Plaster where the hat was (Break 1), tentacle sling (Break 2), cracked dome (Break 3). */
+function DamageOverlays({ S, H, view, pres, anim, baldOn }: {
+  S: number; H: number; view: SharedValue<BossView>; pres: SharedValue<Pres>; anim: ArenaAnim; baldOn: SharedValue<number>;
+}) {
+  const bx = -S / 2;
+  const by = -H / 2;
+  const plaster = useMemo(() => {
+    const cx = bx + 0.33 * S;
+    const cy = by + 0.2 * H;
+    const w = 0.2 * S;
+    const h = 0.065 * S;
+    const mk = (a: number) => {
+      const r = Skia.RRectXY(Skia.XYWHRect(-w / 2, -h / 2, w, h), h * 0.35, h * 0.35);
+      const p = Skia.Path.Make();
+      p.addRRect(r);
+      const m = Skia.Matrix();
+      m.translate(cx, cy);
+      m.rotate(a);
+      p.transform(m);
+      return p;
+    };
+    return [mk(0.6), mk(-0.6)];
+  }, [S, H, bx, by]);
+  const sling = useMemo(() => {
+    const p = Skia.Path.Make();
+    const cx = bx + 0.22 * S;
+    const cy = by + 0.7 * H;
+    const r = Skia.RRectXY(Skia.XYWHRect(-0.09 * S, -0.032 * S, 0.18 * S, 0.064 * S), 0.03 * S, 0.03 * S);
+    p.addRRect(r);
+    const m = Skia.Matrix();
+    m.translate(cx, cy);
+    m.rotate(-0.5);
+    p.transform(m);
+    return p;
+  }, [S, H, bx, by]);
+  const cracks = useMemo(() => {
+    const p = Skia.Path.Make();
+    const x = bx + 0.62 * S;
+    const y = by + 0.16 * H;
+    p.moveTo(x, y);
+    p.lineTo(x + 0.03 * S, y + 0.05 * S);
+    p.lineTo(x + 0.01 * S, y + 0.09 * S);
+    p.lineTo(x + 0.05 * S, y + 0.14 * S);
+    p.moveTo(x + 0.03 * S, y + 0.05 * S);
+    p.lineTo(x + 0.08 * S, y + 0.06 * S);
+    return p;
+  }, [S, H, bx, by]);
+  const slingOn = useDerivedValue(() => (view.value.breaks >= 2 || pres.value.breaks >= 2 ? 1 : 0));
+  const crackOn = useDerivedValue(() => (view.value.breaks >= 3 || pres.value.breaks >= 3 ? 1 : 0));
+  // Retreat with no Break: one bandage pops on.
+  const bandOn = useDerivedValue(() => (anim.exitKind.value === 2 && anim.exitAt.value >= 0 && pres.value.breaks === 0 ? 1 : 0));
+  return (
+    <Group>
+      <Group opacity={baldOn}>
+        {plaster.map((pp, i) => (
+          <Group key={i}>
+            <Path path={pp} color={CREAM} />
+            <Path path={pp} style="stroke" strokeWidth={S * 0.012} color={INK} />
+          </Group>
+        ))}
+      </Group>
+      <Group opacity={slingOn}>
+        <Path path={sling} color={CREAM} />
+        <Path path={sling} style="stroke" strokeWidth={S * 0.012} color={INK} />
+        <Circle cx={bx + 0.22 * S} cy={by + 0.7 * H} r={S * 0.028} color={CREAM} />
+        <Circle cx={bx + 0.22 * S} cy={by + 0.7 * H} r={S * 0.028} style="stroke" strokeWidth={S * 0.01} color={INK} />
+      </Group>
+      <Group opacity={crackOn}>
+        <Path path={cracks} style="stroke" strokeWidth={S * 0.014} strokeCap="round" strokeJoin="round" color={INK} />
+      </Group>
+      <Group opacity={bandOn}>
+        <Path path={sling} color={CREAM} transform={[{ translateX: 0.42 * S }, { translateY: -0.28 * H }, { scale: 0.7 }]} />
+      </Group>
+    </Group>
+  );
+}
+
+/** Eye overlays on the drawn face: commit glint, hurt squeeze, fake wink, stunned / defeated spirals. */
+function Eyes(p: Props & { S: number; H: number }) {
+  const { S, H, view, t, fx, anim, img } = p;
+  const lx = -S / 2 + EYE_L.x * S;
+  const ly = -H / 2 + EYE_L.y * H;
+  const rx = -S / 2 + EYE_R.x * S;
+  const ry = -H / 2 + EYE_R.y * H;
+  const er = 0.05 * S;
+  // 0 open, 1 hurt (> <), 2 wink (left eye), 3 swirl
+  const mode = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const f = fx.value;
+    if (anim.exitAt.value >= 0 && f >= anim.exitAt.value && anim.exitKind.value === 1) return 3;
+    if (v.oOn && v.oKind === 1) return 3;
+    if (anim.hurtAt.value >= 0 && f >= anim.hurtAt.value && f - anim.hurtAt.value < 180) return 1;
+    if (anim.exitAt.value >= 0 && f >= anim.exitAt.value && anim.exitKind.value === 2) return 1;
+    if (v.aOn && v.feintLane >= 0 && now >= v.feintT0 && now < v.feintT0 + 170) return 2;
+    return 0;
+  });
+  const lidL = useDerivedValue(() => (mode.value === 1 || mode.value === 2 ? 1 : 0));
+  const lidR = useDerivedValue(() => (mode.value === 1 ? 1 : 0));
+  const swirlOn = useDerivedValue(() => (mode.value === 3 ? 1 : 0));
+  const hurtOn = useDerivedValue(() => (mode.value === 1 ? 1 : 0));
+  const winkOn = useDerivedValue(() => (mode.value === 2 ? 1 : 0));
+  const shapes = useMemo(() => {
+    const sq = (cx: number, cy: number, dir: number) => {
+      const q = Skia.Path.Make();
+      q.moveTo(cx - dir * er * 0.7, cy - er * 0.55);
+      q.lineTo(cx + dir * er * 0.55, cy);
+      q.lineTo(cx - dir * er * 0.7, cy + er * 0.55);
+      return q;
+    };
+    const wink = Skia.Path.Make();
+    wink.moveTo(lx - er * 0.8, ly);
+    wink.quadTo(lx, ly + er * 0.75, lx + er * 0.8, ly);
+    const spiral = (cx: number, cy: number) => {
+      const q = Skia.Path.Make();
+      for (let i = 0; i <= 40; i++) {
+        const a = i * 0.42;
+        const r = (i / 40) * er * 0.85;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        if (i === 0) q.moveTo(x, y);
+        else q.lineTo(x, y);
+      }
+      return q;
+    };
+    return { hl: sq(lx, ly, 1), hr: sq(rx, ry, -1), wink, sl: spiral(lx, ly), sr: spiral(rx, ry) };
+  }, [er, lx, ly, rx, ry]);
+  // One-frame eye glint at the commit (I - 80) of a real tell.
+  const glintOp = useDerivedValue(() => {
+    const v = view.value;
+    if (!v.aOn) return 0;
+    const I = v.steps[v.step * 3 + 1];
+    const now = t.value;
+    return now >= I - 90 && now < I - 40 ? 1 : 0;
+  });
+  const sw = S * 0.016;
+  return (
+    <Group>
+      <Group opacity={lidL}>
+        <Oval x={lx - er * 1.08} y={ly - er * 0.98} width={er * 2.16} height={er * 1.96} color={PURPLE} />
+      </Group>
+      <Group opacity={lidR}>
+        <Oval x={rx - er * 1.08} y={ry - er * 0.98} width={er * 2.16} height={er * 1.96} color={PURPLE} />
+      </Group>
+      <Group opacity={hurtOn}>
+        <Path path={shapes.hl} style="stroke" strokeWidth={sw} strokeCap="round" strokeJoin="round" color={INK} />
+        <Path path={shapes.hr} style="stroke" strokeWidth={sw} strokeCap="round" strokeJoin="round" color={INK} />
+      </Group>
+      <Group opacity={winkOn}>
+        <Path path={shapes.wink} style="stroke" strokeWidth={sw} strokeCap="round" color={INK} />
+      </Group>
+      <Group opacity={swirlOn}>
+        <Oval x={lx - er} y={ly - er * 0.9} width={er * 2} height={er * 1.8} color={WHITE} />
+        <Oval x={rx - er} y={ry - er * 0.9} width={er * 2} height={er * 1.8} color={WHITE} />
+        <Path path={shapes.sl} style="stroke" strokeWidth={sw * 0.8} strokeCap="round" color={INK} />
+        <Path path={shapes.sr} style="stroke" strokeWidth={sw * 0.8} strokeCap="round" color={INK} />
+      </Group>
+      {img.fxSparkle ? (
+        <Group opacity={glintOp}>
+          <SkImage image={img.fxSparkle} x={rx + er * 0.1} y={ry - er * 1.6} width={er * 1.6} height={er * 1.6} />
+          <SkImage image={img.fxSparkle} x={lx - er * 0.4} y={ly - er * 1.5} width={er * 1.2} height={er * 1.2} />
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
+
+/** Foreground water lip the Kraken rises from (cyan, white foam, navy line); bulges on count-in beat 1. */
+function WaterLip({ L, fx, anim, beat }: Props) {
+  const y0 = L.lipY;
+  const make = (closed: boolean) => {
+    'worklet';
+    const pth = Skia.Path.Make();
+    const ph = fx.value / 520;
+    const en = anim.entranceAt.value;
+    const e = en >= 0 ? fx.value - en : -1;
+    const bulge = e >= 0 && e < 464 * 3 ? 6 * Math.sin(Math.min(1, e / 464) * Math.PI) : 0;
+    const groove = 1.5 * onBeat(beat.value, 0.4);
+    pth.moveTo(0, y0);
+    for (let x = 0; x <= L.W; x += 12) {
+      const near = Math.max(0, 1 - Math.abs(x - L.bossX) / (L.bossSize * 0.6));
+      pth.lineTo(x, y0 + Math.sin(x / 38 + ph) * 5 + Math.sin(x / 17 - ph * 1.3) * 2 - bulge * near - groove);
+    }
+    if (closed) {
+      pth.lineTo(L.W, y0 + 70);
+      pth.lineTo(0, y0 + 70);
+      pth.close();
+    }
+    return pth;
+  };
+  const path = useDerivedValue(() => make(true));
+  const foam = useDerivedValue(() => make(false));
+  // Count-in beat 2: two ripple rings around the boss.
+  const ripR = useDerivedValue(() => {
+    const en = anim.entranceAt.value;
+    const e = en >= 0 ? fx.value - en - 464 : -1;
+    return e >= 0 && e < 900 ? 20 + e * 0.14 : 0;
+  });
+  const ripOp = useDerivedValue(() => (ripR.value > 0 ? 1 - (ripR.value - 20) / 126 : 0));
+  const ripR2 = useDerivedValue(() => Math.max(0, ripR.value - 30));
+  return (
+    <Group>
+      <Path path={path} opacity={0.9}>
+        <LinearGradient start={vec(0, y0)} end={vec(0, y0 + 70)} colors={['#4FD8EC', 'rgba(79,216,236,0)']} />
+      </Path>
+      <Path path={foam} style="stroke" strokeWidth={7} color={NAVY} opacity={0.3} />
+      <Path path={foam} style="stroke" strokeWidth={4} color={WHITE} />
+      <Oval x={useDerivedValue(() => L.bossX - ripR.value * 1.6)} y={useDerivedValue(() => y0 - ripR.value * 0.3)}
+        width={useDerivedValue(() => ripR.value * 3.2)} height={useDerivedValue(() => ripR.value * 0.6)}
+        style="stroke" strokeWidth={3} color={WHITE} opacity={ripOp} />
+      <Oval x={useDerivedValue(() => L.bossX - ripR2.value * 1.6)} y={useDerivedValue(() => y0 - ripR2.value * 0.3)}
+        width={useDerivedValue(() => ripR2.value * 3.2)} height={useDerivedValue(() => ripR2.value * 0.6)}
+        style="stroke" strokeWidth={3} color={WHITE} opacity={ripOp} />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Limbs: the striking tentacle (24-segment textured strip over a navy outline strip).
+
+interface LimbFrame { on: number; chain: number[]; fake: number; sheen: number; flip: boolean; w: number }
+
+/** Root of a limb at the lip on side s. */
+function rootOf(L: ArenaLayout, s: number): Pt {
+  'worklet';
+  return { x: L.bossX + s * L.bossSize * 0.3, y: L.lipY + 8 };
+}
+
+/** Pose chains (design 11.6): hidden, hover (coiled over its lane), slam (tip on the buoy), pinned (across the row), punish (onto the float). */
+function poseChain(L: ArenaLayout, kind: number, s: number, x: number, k: number, out: number[]): void {
+  'worklet';
+  const r = rootOf(L, s);
+  const ty = L.targetY;
+  if (kind === 0) {
+    // Hidden under the lip.
+    bezierChain(out, r.x, r.y + 30, r.x - s * 6, r.y + 34, r.x - s * 10, r.y + 36, r.x - s * 14, r.y + 38, 0);
+  } else if (kind === 1) {
+    // Hover: up from the root, over to the lane, tip coiled back (k = anticipation 0..1 lifts and coils).
+    const top = ty - L.H * 0.2 - 30 * k;
+    bezierChain(out, r.x, r.y, r.x + s * 10, r.y - L.H * 0.16, x + s * 70, top - 40, x + s * 8, top + 28, -s * (0.9 + 1.4 * k));
+  } else if (kind === 2) {
+    // Slam: tip on the buoy.
+    bezierChain(out, r.x, r.y, r.x + s * 4, r.y - 30, x + s * 60, ty - 70, x, ty - 2, s * 0.25);
+  } else if (kind === 3) {
+    // Pinned: down beside the root, then flat across all three buoys, tip beyond the far lane.
+    const near = s > 0 ? L.W * 0.9 : L.W * 0.1;
+    const far = s > 0 ? L.W * 0.03 : L.W * 0.97;
+    bezierChain(out, r.x, r.y, near + s * L.W * 0.02, r.y + (ty - r.y) * 0.45, near + s * L.W * 0.02, ty - 4, far, ty + 2 - 6 * k, s * 0.15);
+  } else {
+    // Punish: smacks the float.
+    bezierChain(out, r.x, r.y, r.x + s * 10, r.y - 20, L.floatX + s * 70, L.floatY - L.floatR * 2.6, L.floatX, L.floatY - L.floatR * 1.1, 0);
+  }
+}
+
+function blendPose(L: ArenaLayout, ka: number, kb: number, s: number, x: number, ca: number, cb: number, w: number, out: number[]): void {
+  'worklet';
+  const a = newChain();
+  const bb = newChain();
+  poseChain(L, ka, s, x, ca, a);
+  poseChain(L, kb, s, x, cb, bb);
+  lerpChain(out, a, bb, w);
+}
+
+function Limbs(p: Props) {
+  const { L, view, t, pres } = p;
+  // Slot A: the active strike (or the pinned / punishing limb); slot B: the previous step of a multi-slam; slot C: a fake.
+  const frames = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const pr = pres.value;
+    const A: LimbFrame = { on: 0, chain: newChain(), fake: 0, sheen: 0, flip: false, w: 1 };
+    const B: LimbFrame = { on: 0, chain: newChain(), fake: 0, sheen: 0, flip: false, w: 1 };
+    const Cf: LimbFrame = { on: 0, chain: newChain(), fake: 1, sheen: 0, flip: false, w: 0.9 };
+    if (v.on && v.aOn) {
+      const lane = viewLane(v, now);
+      const no = v.aNo + v.step;
+      const s = rootSide(lane, no);
+      const I = v.steps[v.step * 3 + 1];
+      const T = v.step === 0 ? Math.max(v.aT, I - v.aW) : I - v.aW;
+      const x = L.laneX[lane];
+      if (now >= T - 60) {
+        A.on = 1;
+        A.flip = s < 0;
+        if (now < I - 80) {
+          const e = outQuad((now - T + 60) / 320);
+          const k = inQuad((now - T) / Math.max(1, I - 80 - T));
+          blendPose(L, 0, 1, s, x, 0, k, e, A.chain);
+        } else {
+          const k = inQuad((now - (I - 80)) / 80);
+          blendPose(L, 1, 2, s, x, 1, 0, k, A.chain);
+        }
+      }
+      // Previous step of a Double / Triple slam stays snagged on its buoy, then sinks.
+      if (v.step > 0) {
+        const pl = v.steps[(v.step - 1) * 3];
+        const pI = v.steps[(v.step - 1) * 3 + 1];
+        const ps = rootSide(pl, v.aNo + v.step - 1);
+        const k = c01((now - pI - 200) / 300);
+        if (k < 1) {
+          B.on = 1;
+          B.flip = ps < 0;
+          blendPose(L, 2, 0, ps, L.laneX[pl], 0, 0, inBack(k), B.chain);
+        }
+      }
+    }
+    // Fake limb: rises over the fake lane with a sky-blue sheen and a hollow dashed outline, curls forward, sinks.
+    if (v.on && v.aOn && v.feintLane >= 0 && now >= v.feintT0 && now < v.feintT1 + 220) {
+      const s = rootSide(v.feintLane, v.aNo + 1);
+      const x = L.laneX[v.feintLane];
+      Cf.on = 1;
+      Cf.flip = s < 0;
+      Cf.sheen = c01((now - v.feintT0 - 80) / 200);
+      if (now < v.feintT1) {
+        blendPose(L, 0, 1, s, x, 0, 0.5, outQuad((now - v.feintT0) / 260), Cf.chain);
+      } else {
+        blendPose(L, 1, 0, s, x, 1.2, 0, inBack((now - v.feintT1) / 220), Cf.chain);
+      }
+    }
+    // Resolved: pinned across the row for the opening; or the landed tell smacks the float.
+    if (!A.on) {
+      const pinOn = now >= pr.pinStart && now < pr.pinEnd + 160;
+      if (pinOn) {
+        const s = pr.pinSide;
+        A.on = 1;
+        A.flip = s > 0;
+        const x = L.laneX[pr.sLane >= 0 ? pr.sLane : 1];
+        if (now < pr.pinStart + 120) {
+          blendPose(L, 2, 3, s, x, 0, 1, outBack((now - pr.pinStart) / 120, 1.2), A.chain);
+        } else if (now < pr.pinEnd - 150) {
+          // Strains on the beat while pinned.
+          const strain = 0.5 + 0.5 * Math.sin((now - pr.pinStart) / (v.q * 4) * Math.PI * 2);
+          poseChain(L, 3, s, x, strain, A.chain);
+        } else {
+          // Closing up: pulls back under the lip (150 ms in-back).
+          blendPose(L, 3, 0, s, x, 0, 0, inBack((now - (pr.pinEnd - 150)) / 300), A.chain);
+        }
+      } else if (pr.sRes === 2 && now >= pr.sAt && now < pr.sAt + 700) {
+        const s = pr.sSide;
+        const x = L.laneX[pr.sLane];
+        A.on = 1;
+        A.flip = s < 0;
+        const e = now - pr.sAt;
+        if (e < 90) blendPose(L, 2, 4, s, x, 0, 0, outQuad(e / 90), A.chain);
+        else if (e < 350) poseChain(L, 4, s, x, 0, A.chain);
+        else blendPose(L, 4, 0, s, x, 0, 0, inQuad((e - 350) / 350), A.chain);
+      } else if ((pr.sRes === 3 || pr.sRes === 1) && now >= pr.sAt && now < pr.sAt + 420) {
+        const s = pr.sSide;
+        A.on = 1;
+        A.flip = s < 0;
+        blendPose(L, 2, 0, s, L.laneX[pr.sLane], 0, 0, inBack((now - pr.sAt - 120) / 300), A.chain);
+      }
+    }
+    return [A, B, Cf];
+  });
+  const idx = useMemo(() => stripIndices(), []);
+  return (
+    <Group>
+      <Limb {...p} frames={frames} slot={1} idx={idx} />
+      <Limb {...p} frames={frames} slot={2} idx={idx} />
+      <Limb {...p} frames={frames} slot={0} idx={idx} />
+    </Group>
+  );
+}
+
+function Limb({ img, frames, slot, idx, L }: Props & { frames: SharedValue<LimbFrame[]>; slot: number; idx: number[] }) {
+  const texW = img.strip ? img.strip.width() : 768;
+  const texH = img.strip ? img.strip.height() : 246;
+  const W0 = Math.max(18, L.bossSize * 0.105);
+  const geo = useDerivedValue(() => {
+    const f = frames.value[slot];
+    const pos: Pt[] = [];
+    const tex: Pt[] = [];
+    const out: Pt[] = [];
+    const otex: Pt[] = [];
+    if (!f.on) {
+      for (let i = 0; i < JOINTS * 2; i++) {
+        pos.push({ x: -100, y: -100 });
+        tex.push({ x: 0, y: 0 });
+        out.push({ x: -100, y: -100 });
+        otex.push({ x: 0, y: 0 });
+      }
+      return { pos, tex, out, otex, on: 0, fake: 0, sheen: 0, dash: Skia.Path.Make() };
+    }
+    stripVerts(f.chain, W0 * f.w, 0, 0, f.flip, texW, texH, STRIP_TIP_U, pos, tex);
+    stripVerts(f.chain, W0 * f.w, 1.5, 1.5, f.flip, texW, texH, STRIP_TIP_U, out, otex);
+    // Fake: hollow white dashed outline along both edges.
+    const dash = Skia.Path.Make();
+    if (f.fake) {
+      for (let side = 0; side < 2; side++) {
+        for (let j = 0; j < JOINTS; j++) {
+          const q = pos[j * 2 + side];
+          if (j === 0) dash.moveTo(q.x, q.y);
+          else dash.lineTo(q.x, q.y);
+        }
+      }
+    }
+    return { pos, tex, out, otex, on: 1, fake: f.fake, sheen: f.sheen, dash };
+  });
+  const verts = useDerivedValue(() => geo.value.pos);
+  const texs = useDerivedValue(() => geo.value.tex);
+  const outVerts = useDerivedValue(() => geo.value.out);
+  const op = useDerivedValue(() => geo.value.on);
+  const outlineOp = useDerivedValue(() => (geo.value.on && !geo.value.fake ? 1 : 0));
+  const sheenOp = useDerivedValue(() => (geo.value.fake ? 0.35 + 0.35 * Math.sin(geo.value.sheen * Math.PI) : 0));
+  const dash = useDerivedValue(() => geo.value.dash);
+  const dashOp = useDerivedValue(() => (geo.value.fake ? 1 : 0));
+  const rect = useMemo(() => ({ x: 0, y: 0, width: texW, height: texH }), [texW, texH]);
+  return (
+    <Group opacity={op}>
+      <Group opacity={outlineOp}>
+        <Vertices vertices={outVerts} indices={idx} mode="triangles" color={INK} />
+      </Group>
+      {img.strip ? (
+        <Vertices vertices={verts} textures={texs} indices={idx} mode="triangles">
+          <ImageShader image={img.strip} tx="clamp" ty="clamp" fit="none" rect={rect} />
+        </Vertices>
+      ) : (
+        <Vertices vertices={verts} indices={idx} mode="triangles" color={PURPLE} />
+      )}
+      <Group opacity={sheenOp}>
+        <Vertices vertices={verts} indices={idx} mode="triangles" color={SKY} />
+      </Group>
+      <Group opacity={dashOp}>
+        <Path path={dash} style="stroke" strokeWidth={3} strokeCap="round" color={WHITE}>
+          <DashPathEffect intervals={[8, 6]} />
+        </Path>
+      </Group>
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The row: three buoys, the shadow (timer), the lime ring with a chevron notch (answer), the bubble.
+
+function Row(p: Props) {
+  return (
+    <Group>
+      {[0, 1, 2].map((i) => <Buoy key={i} i={i} {...p} />)}
+    </Group>
+  );
+}
+
+function Buoy({ i, L, view, t, fx, beat, anim, img, bossKind, pres }: Props & { i: number }) {
+  const x = L.laneX[i];
+  const y = L.targetY;
+  const src = bossKind === 0 ? img.buoy : bossKind === 2 ? img.lantern : img.plate;
+  const h = bossKind === 1 ? 30 : 74;
+  const w = aspectOf(src, 317 / 384) * h;
+  const tapAt = i === 0 ? anim.buoyAt0 : i === 1 ? anim.buoyAt1 : anim.buoyAt2;
+  const tr = useDerivedValue(() => {
+    const b = beat.value;
+    const ph = b % 4;
+    // Bob 3 pt on beats 2 and 4.
+    const bump = (ph >= 1 && ph < 1.4 ? 1 - (ph - 1) / 0.4 : 0) + (ph >= 3 && ph < 3.4 ? 1 - (ph - 3) / 0.4 : 0);
+    const k = since(fx.value, tapAt.value, 220);
+    const s = 1 - 0.16 * Math.sin(k * Math.PI);
+    return [{ translateX: x }, { translateY: y - 3 * bump }, { scaleX: 2 - s }, { scaleY: s }];
+  });
+  // 0 idle, 1 telegraphed, 3 greyed, 5 dimmed (bout 1 centre)
+  const tele = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const lane = viewLane(v, now);
+    if (!v.aOn || lane !== i) return { on: 0, p: 0, perfect: 0, I: 0 };
+    const I = v.steps[v.step * 3 + 1];
+    const T = v.step === 0 ? Math.max(v.aT, I - v.aW) : I - v.aW;
+    if (now < T || now > I + 90) return { on: 0, p: 0, perfect: 0, I };
+    return { on: 1, p: c01((now - T) / Math.max(1, I - T)), perfect: now >= I - 160 && now <= I + 40 ? 1 : 0, I };
+  });
+  const op = useDerivedValue(() => {
+    const v = view.value;
+    // Pinned: the limb lies across the buoys, the suckers are the targets now.
+    if (v.oOn && t.value >= pres.value.pinStart + 100) return 0.35;
+    if (t.value < v.greyUntil[i]) return 0.4;
+    if (bossKind === 0 && v.bout === 0 && i === 1 && v.on && !v.oOn) return 0.55;
+    return 1;
+  });
+  const shS = useDerivedValue(() => (tele.value.on ? 0.3 + 0.7 * inQuad(tele.value.p) : 0));
+  const shOp = useDerivedValue(() => (tele.value.on ? 0.42 : 0));
+  // Lime ring: tightens from 1.9x to 1x into the PERFECT window, pulses inside it.
+  const ringR = useDerivedValue(() => {
+    const tv = tele.value;
+    if (!tv.on) return 0;
+    const R0 = 42;
+    const pp = c01(tv.p / Math.max(0.01, 1 - 160 / Math.max(1, view.value.aW)));
+    return R0 * (1 + 0.9 * (1 - pp)) * (tv.perfect ? 1 + 0.05 * Math.sin(fx.value / 40) : 1);
+  });
+  const ringOp = useDerivedValue(() => (tele.value.on ? 1 : 0));
+  const notch = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const r = ringR.value;
+    if (r <= 0) return pth;
+    pth.moveTo(x - 10, y - r - 10);
+    pth.lineTo(x + 10, y - r - 10);
+    pth.lineTo(x, y - r + 4);
+    pth.close();
+    return pth;
+  });
+  // Training wheels: orange dashed arc from the limb tip to the buoy (first rounds, bout 1).
+  const arc = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const tv = tele.value;
+    if (!tv.on || !pres.value.wheels || view.value.bout !== 0) return pth;
+    const top = y - L.H * 0.2 - 10;
+    pth.moveTo(x + 8, top + 40);
+    pth.quadTo(x + 40, (top + y) / 2, x, y - 46);
+    return pth;
+  });
+  const dashPh = useDerivedValue(() => -(fx.value * 0.12) % 18);
+  // Foam bubble: rides in on a wave, wobbles, blocks the buoy until tapped.
+  const bub = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    if (v.bubLane !== i || v.bubPopped || now < v.bubT0 || now >= v.bubT1) return { op: 0, x, s: 1 };
+    const e = (now - v.bubT0) / 300;
+    const from = i === 0 ? -60 : L.W + 60;
+    return { op: 1, x: e < 1 ? from + (x - from) * outQuad(e) : x + Math.sin(now / 120) * 2, s: 1 + 0.06 * onBeat(beat.value) };
+  });
+  const bubTr = useDerivedValue(() => [{ translateX: bub.value.x }, { translateY: y - 6 }, { scale: bub.value.s }]);
+  const bubOp = useDerivedValue(() => bub.value.op);
+  return (
+    <Group>
+      <Oval x={x - 44} y={y + 22} width={88} height={20} color={NAVY} opacity={0.12} />
+      <Oval x={useDerivedValue(() => x - 46 * shS.value)} y={useDerivedValue(() => y + 30 - 15 * shS.value)}
+        width={useDerivedValue(() => 92 * shS.value)} height={useDerivedValue(() => 30 * shS.value)} color={NAVY} opacity={shOp} />
+      <Group opacity={op} transform={tr}>
+        {src ? <SkImage image={src} x={-w / 2} y={-h / 2} width={w} height={h} /> : null}
+      </Group>
+      <Path path={arc} style="stroke" strokeWidth={9} strokeCap="round" color={NAVY} opacity={0.5} />
+      <Path path={arc} style="stroke" strokeWidth={5} strokeCap="round" color={ORANGE}>
+        <DashPathEffect intervals={[10, 8]} phase={dashPh} />
+      </Path>
+      <Group opacity={ringOp}>
+        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={11} color={NAVY} />
+        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={6} color={LIME} />
+        <Circle cx={x} cy={y} r={useDerivedValue(() => Math.max(0, ringR.value - 4))} style="stroke" strokeWidth={2} color={WHITE} />
+        <Path path={notch} color={LIME} />
+        <Path path={notch} style="stroke" strokeWidth={3} strokeJoin="round" color={NAVY} />
+      </Group>
+      {img.fxBubble ? (
+        <Group opacity={bubOp} transform={bubTr}>
+          <SkImage image={img.fxBubble} x={-36} y={-36} width={72} height={72} />
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pin and Pop: suckers over the lanes on the pinned limb; gold = hit here.
+
+function PinnedSuckers(p: Props) {
+  return (
+    <Group>
+      {[0, 1, 2].map((i) => <Sucker key={i} i={i} {...p} />)}
+    </Group>
+  );
+}
+
+function Sucker({ i, L, view, t, fx, beat, anim, pres }: Props & { i: number }) {
+  const x = L.laneX[i];
+  const y = L.targetY - 4;
+  const R = 15;
+  const st = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const pr = pres.value;
+    const off = { on: 0, lit: 0, look: 0, ring: 0, appr: 0, used: 0 };
+    if (!v.oOn || now < pr.pinStart + 100 || now > v.oEnd - 120) return off;
+    const out = { on: 1, lit: 0, look: 0, ring: 0, appr: 0, used: 0 };
+    const look = v.look * v.q;
+    for (let j = 0; j < v.rings.length; j++) {
+      const r = v.rings[j];
+      const isLane = v.lanes[j] === i;
+      const breakAll = v.oKind === 1;
+      if (!isLane && !breakAll) continue;
+      if (v.used[j] !== 0) {
+        if (isLane && now < r + 200) out.used = 1;
+        continue;
+      }
+      if (now > r + v.popMs) continue;
+      if (now >= r - look) {
+        if (isLane) {
+          out.look = 1;
+          out.appr = Math.max(out.appr, 1 + c01((r - now) / look));
+          if (now >= r - 2 * v.q) {
+            out.lit = 1;
+            out.ring = 1 + 1.2 * c01((r - now) / (2 * v.q));
+          }
+        }
+        if (breakAll) out.lit = 1;
+        break;
+      }
+      if (breakAll) out.lit = Math.max(out.lit, 0.6);
+    }
+    return out;
+  });
+  const onOp = useDerivedValue(() => st.value.on);
+  const pulse = useDerivedValue(() => 0.85 + 0.15 * onBeat(beat.value));
+  const litOp = useDerivedValue(() => st.value.lit * pulse.value);
+  const lookOp = useDerivedValue(() => st.value.look);
+  const apprR = useDerivedValue(() => (st.value.appr > 0 ? R * 1.25 * st.value.appr : 0));
+  const ringR = useDerivedValue(() => (st.value.ring > 0 ? R * 1.35 * st.value.ring : 0));
+  const ringOp = useDerivedValue(() => (st.value.ring > 0 ? 1 : 0));
+  const ticks = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const r = ringR.value;
+    if (r <= 0) return pth;
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2 + fx.value / 900;
+      pth.moveTo(x + Math.cos(a) * (r + 3), y + Math.sin(a) * (r + 3));
+      pth.lineTo(x + Math.cos(a) * (r + 9), y + Math.sin(a) * (r + 9));
+    }
+    return pth;
+  });
+  const splat = useDerivedValue(() => {
+    const k = anim.beadLane.value === i ? since(fx.value, anim.beadAt.value, 200) : 0;
+    return k;
+  });
+  const sq = useDerivedValue(() => [{ translateX: x }, { translateY: y }, { scaleX: 1 + 0.35 * splat.value }, { scaleY: 1 - 0.35 * splat.value }]);
+  return (
+    <Group opacity={onOp}>
+      <Circle cx={x} cy={y} r={R * 2.1} color={GOLD} opacity={useDerivedValue(() => litOp.value * 0.45)} />
+      <Group transform={sq}>
+        <Circle cx={0} cy={0} r={R + 2.5} color={INK} />
+        <Circle cx={0} cy={0} r={R} color={LILAC} />
+        <Circle cx={0} cy={0} r={R * 0.55} style="stroke" strokeWidth={3} color={LILAC_IN} />
+        <Circle cx={0} cy={0} r={R} color={GOLD} opacity={useDerivedValue(() => litOp.value * 0.75)} />
+      </Group>
+      <Group opacity={lookOp}>
+        <Circle cx={x} cy={y} r={R + 4} style="stroke" strokeWidth={4} color={GOLD} />
+        <Circle cx={x} cy={y} r={apprR} style="stroke" strokeWidth={5} color={NAVY} opacity={0.5} />
+        <Circle cx={x} cy={y} r={apprR} style="stroke" strokeWidth={2.5} color={WHITE} />
+      </Group>
+      <Group opacity={ringOp}>
+        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={8} color={NAVY} />
+        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={5} color={GOLD} />
+        <Path path={ticks} style="stroke" strokeWidth={6} strokeCap="round" color={NAVY} />
+        <Path path={ticks} style="stroke" strokeWidth={3} strokeCap="round" color={GOLD} />
+      </Group>
+      <Circle cx={x} cy={y} r={useDerivedValue(() => R + 30 * (1 - splat.value))} style="stroke" strokeWidth={4} color={LILAC}
+        opacity={splat} />
+    </Group>
+  );
+}
+
+/** Final Pop: the gold anchor rises over the lit sucker with its Anchor Star sockets, then drops on the tap. */
+function FinalAnchor({ L, view, t, fx, anim, img }: Props) {
+  const AW = 70;
+  const AH = AW * 1.12;
+  const st = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const f = fx.value;
+    const fa = anim.finalAt.value;
+    if (fa >= 0 && f >= fa && f < fa + 600) {
+      // Drop onto the sucker (220 ms in-quad) then hold for the freeze.
+      const k = inQuad((f - fa) / 220);
+      const lane = anim.beadLane.value >= 0 ? anim.beadLane.value : 1;
+      return { op: 1, x: L.laneX[lane], y: L.targetY - 140 + 110 * k, s: 1 + 0.2 * k, stars: v.stars };
+    }
+    if (!v.oOn || v.finalIdx < 0 || v.used[v.finalIdx] !== 0) return { op: 0, x: 0, y: 0, s: 1, stars: 0 };
+    const r = v.rings[v.finalIdx];
+    const lane = v.lanes[v.finalIdx];
+    const start = r - 8 * v.q;
+    if (now < start) return { op: 0, x: 0, y: 0, s: 1, stars: 0 };
+    const k = outBack((now - start) / (4 * v.q), 1.3);
+    return { op: 1, x: L.laneX[lane], y: L.targetY - 30 - 110 * k, s: 0.7 + 0.3 * k, stars: v.stars };
+  });
+  const tr = useDerivedValue(() => [{ translateX: st.value.x }, { translateY: st.value.y }, { scale: st.value.s }]);
+  const op = useDerivedValue(() => st.value.op);
+  const starOp = (k: number) => useDerivedValue(() => (st.value.stars > k ? 1 : 0.25)); // eslint-disable-line react-hooks/rules-of-hooks
+  const s0 = starOp(0);
+  const s1 = starOp(1);
+  const s2 = starOp(2);
+  return (
+    <Group opacity={op} transform={tr}>
+      {img.anchor ? <SkImage image={img.anchor} x={-AW / 2} y={-AH / 2} width={AW} height={AH} /> : null}
+      {img.star ? (
+        <Group>
+          <Group opacity={s0}><SkImage image={img.star} x={-37} y={AH / 2 - 2} width={22} height={22} /></Group>
+          <Group opacity={s1}><SkImage image={img.star} x={-11} y={AH / 2 + 4} width={22} height={22} /></Group>
+          <Group opacity={s2}><SkImage image={img.star} x={15} y={AH / 2 - 2} width={22} height={22} /></Group>
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
+
+/** Sand bar foreground at the bottom edge (the hat floats here after Break 1). */
+function Fore({ L, img }: Props) {
+  if (!img.fore) return null;
+  const w = L.W * 1.2;
+  const h = Math.min(w * (768 / 1152), L.H * 0.34);
+  return <SkImage image={img.fore} x={(L.W - w) / 2} y={L.H - h + h * 0.18} width={w} height={h} fit="fill" opacity={0.95} />;
+}
+
+/** Splash crown where a slam or punish lands. */
+function Splash({ L, fx, anim, img }: Props) {
+  const tr = useDerivedValue(() => {
+    const lane = anim.splashLane.value;
+    const k = 1 - since(fx.value, anim.splashAt.value, 520);
+    const x = lane >= 0 && lane <= 2 ? L.laneX[lane] : L.floatX;
+    const y = lane >= 0 && lane <= 2 ? L.targetY + 8 : L.floatY - 10;
+    return [{ translateX: x }, { translateY: y }, { scale: 0.5 + 0.8 * outBack(k * 1.6, 1.4) }];
+  });
+  const op = useDerivedValue(() => {
+    const k = since(fx.value, anim.splashAt.value, 520);
+    return k > 0 ? Math.min(1, k * 2) : 0;
+  });
+  if (!img.fxCrown) return null;
+  return (
+    <Group transform={tr} opacity={op}>
+      <SkImage image={img.fxCrown} x={-55} y={-80} width={110} height={90} />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The player: float, shark, Grit fins, Knockdown, Easy Slam.
+
+function PlayerFloat({ L, view, t, fx, beat, anim, img, reduced }: Props) {
+  const R = L.floatR;
+  const fw = R * 2.15;
+  const SH = R * 1.95;
+  const floatTr = useDerivedValue(() => [{ translateX: L.floatX }, { translateY: L.floatY + Math.sin((beat.value / 4) * Math.PI * 2) * 2.5 }]);
+  const sh = useDerivedValue(() => {
+    const v = view.value;
+    const now = t.value;
+    const f = fx.value;
+    const b = beat.value;
+    let dx = 0;
+    let dy = 0;
+    let rot = 0;
+    let sy = 1;
+    // Head-bob on each beat; crouch as each sucker ring closes.
+    dy += reduced ? 0 : 2 * onBeat(b, 0.3);
+    if (v.oOn) {
+      for (let j = 0; j < v.rings.length; j++) {
+        const d = v.rings[j] - now;
+        if (d >= 0 && d < 2 * v.q && v.used[j] === 0) sy = Math.min(sy, 0.9 + 0.1 * (d / (2 * v.q)));
+      }
+    }
+    // Hop toward the lit lane on a POP (60 ms out, 140 ms back).
+    const ha = anim.hopAt.value;
+    if (ha >= 0 && f >= ha && f < ha + 200) {
+      const e = f - ha;
+      const k = e < 60 ? outQuad(e / 60) : 1 - (e - 60) / 140;
+      const dir = anim.hopLane.value === 0 ? -1 : anim.hopLane.value === 2 ? 1 : 0;
+      dx += dir * 40 * k;
+      dy -= 26 * k;
+    }
+    // Easy Slam: crouched while held (charging), leaps onto the limb when it fires.
+    if (anim.padHeld.value > 0 && v.slamArmed) sy = Math.min(sy, 0.86);
+    const sa = anim.slamAt.value;
+    if (sa >= 0 && f >= sa && f < sa + 360) {
+      const e = (f - sa) / 360;
+      dy -= Math.sin(e * Math.PI) * L.H * 0.14;
+      rot += Math.sin(e * Math.PI * 2) * 0.4;
+    }
+    // Flinch on a Grit loss: squash 0.8 with 3 wobbles.
+    const fl = anim.flinchAt.value;
+    if (fl >= 0 && f >= fl && f < fl + 600) {
+      const e = (f - fl) / 600;
+      sy = Math.min(sy, 0.8 + 0.2 * e + Math.sin(e * Math.PI * 6) * 0.05 * (1 - e));
+      rot += Math.sin(e * Math.PI * 6) * 0.08 * (1 - e);
+    }
+    // Knockdown: flopped on the float.
+    if (v.downOn) {
+      rot = -1.35;
+      dy += R * 0.55;
+      dx -= R * 0.2;
+      sy = 1;
+    }
+    const ga = anim.getupAt.value;
+    if (ga >= 0 && f >= ga && f < ga + 400) {
+      const e = (f - ga) / 400;
+      sy *= 1 + 0.2 * Math.sin(e * Math.PI);
+    }
+    return { dx, dy, rot, sy };
+  });
+  const sharkTr = useDerivedValue(() => [
+    { translateX: L.floatX + sh.value.dx },
+    { translateY: L.floatY - R * 0.32 + sh.value.dy },
+    { rotate: sh.value.rot },
+    { scaleX: 1 / Math.sqrt(sh.value.sy) },
+    { scaleY: sh.value.sy },
+  ]);
+  // Pose: 0 idle, 1 strike (hop / slam), 2 bonk (flinch / down), 3 dizzy (DIZZY), 4 cheer
+  const pose = useDerivedValue(() => {
+    const v = view.value;
+    const f = fx.value;
+    if (v.downOn) return 2;
+    if (anim.flinchAt.value >= 0 && f >= anim.flinchAt.value && f < anim.flinchAt.value + 600) return 2;
+    if (v.on && t.value < v.lockUntil && v.lockUntil - t.value > 700) return 3;
+    if (anim.cheerAt.value >= 0 && f >= anim.cheerAt.value && f < anim.cheerAt.value + 1400) return 4;
+    if ((anim.hopAt.value >= 0 && f >= anim.hopAt.value && f < anim.hopAt.value + 180) ||
+      (anim.slamAt.value >= 0 && f >= anim.slamAt.value && f < anim.slamAt.value + 360)) return 1;
+    return 0;
+  });
+  const po = (k: number) => useDerivedValue<number>(() => (pose.value === k ? 1 : 0)); // eslint-disable-line react-hooks/rules-of-hooks
+  const p0 = po(0);
+  const p1 = po(1);
+  const p2 = po(2);
+  const p3 = po(3);
+  const p4 = po(4);
   const sharkImg = (im: SkImageType | null, op: SharedValue<number>) => {
     if (!im) return null;
     const w = aspectOf(im, 0.75) * SH;
@@ -699,58 +1297,289 @@ function FloatAndShark({ L, view, t, fx, anim, img }: {
       </Group>
     );
   };
+  // Easy Slam charge glow under the shark while the float is held.
+  const glow = useDerivedValue(() => (anim.padHeld.value > 0 && view.value.slamArmed ? 0.45 + 0.25 * Math.sin(fx.value / 60) : 0));
+  // Knockdown stars orbit (Alex's star) and the 8 get-up pips are on the HUD.
+  const downOp = useDerivedValue(() => (view.value.downOn ? 1 : 0));
   return (
     <Group>
-      <Circle cx={L.floatX} cy={L.floatY} r={rr2} style="stroke" strokeWidth={4} color={GOLD} opacity={ro2} />
-      <Circle cx={L.floatX} cy={L.floatY} r={rr} style="stroke" strokeWidth={10} color={NAVY} opacity={useDerivedValue(() => ro.value * 0.55)} />
-      <Circle cx={L.floatX} cy={L.floatY} r={rr} style="stroke" strokeWidth={6} color={GOLD} opacity={ro} />
-      <Circle cx={L.floatX} cy={L.floatY} r={R * 1.05} color={GOLD} opacity={hotOp} />
-      <Circle cx={L.floatX} cy={L.floatY} r={finR} style="stroke" strokeWidth={9} color={NAVY} opacity={useDerivedValue(() => finOp.value * 0.5)} />
-      <Circle cx={L.floatX} cy={L.floatY} r={finR} style="stroke" strokeWidth={5} color={finColor} opacity={finOp} />
       <Group transform={floatTr}>
         {img.float ? <SkImage image={img.float} x={-fw / 2} y={-fw / 2 * 0.62} width={fw} height={fw * 0.62} fit="fill" /> : null}
       </Group>
-      <Circle cx={L.floatX} cy={L.floatY} r={R * 1.02} style="stroke" strokeWidth={5} color={CORAL} opacity={closeOp} />
-      <Circle cx={L.floatX} cy={L.floatY - R * 0.6} r={R * 0.9} color={GOLD} opacity={heavyOp} />
+      <Circle cx={L.floatX} cy={L.floatY - R * 0.7} r={R * 0.95} color={GOLD} opacity={glow} />
       <Group transform={sharkTr}>
-        <Group opacity={smear} transform={[{ translateY: 16 }]}>
-          {img.sharkStrike ? <SkImage image={img.sharkStrike} x={-SH * 0.37} y={-SH * 0.82} width={SH * 0.73} height={SH} /> : null}
-        </Group>
-        {sharkImg(img.shark, poseIdle)}
-        {sharkImg(img.sharkStrike, poseStrike)}
-        {sharkImg(img.sharkBonk, poseBonk)}
-        {sharkImg(img.sharkDizzy, poseDizzy)}
-        {sharkImg(img.sharkCheer, poseCheer)}
+        {sharkImg(img.shark, p0)}
+        {sharkImg(img.sharkStrike, p1)}
+        {sharkImg(img.sharkBonk, p2)}
+        {sharkImg(img.sharkDizzy, p3)}
+        {sharkImg(img.sharkCheer, p4)}
       </Group>
-      <Group transform={anchorTr} opacity={anchorOp}>
-        {img.anchor ? <SkImage image={img.anchor} x={-30} y={-45} width={60} height={90} /> : null}
+      <GritFins L={L} view={view} fx={fx} beat={beat} anim={anim} img={img} SH={SH} />
+      <Group opacity={downOp}>
+        {img.star ? [0, 1, 2].map((k) => <DownStar key={k} k={k} L={L} fx={fx} star={img.star!} />) : null}
       </Group>
     </Group>
   );
 }
 
-function Impact({ anim, img }: { anim: ArenaAnim; img: ArenaImages }) {
+function DownStar({ k, L, fx, star }: { k: number; L: ArenaLayout; fx: SharedValue<number>; star: SkImageType }) {
   const tr = useDerivedValue(() => {
-    const p = anim.impactP.value;
-    return [{ translateX: anim.impactX.value }, { translateY: anim.impactY.value }, { scale: 0.4 + 0.9 * ease('outBack', p * 2, 2) }];
+    const a = fx.value / 280 + (k * Math.PI * 2) / 3;
+    return [{ translateX: L.floatX - L.floatR * 0.2 + Math.cos(a) * 34 }, { translateY: L.floatY - L.floatR * 0.6 + Math.sin(a) * 10 }];
   });
-  const op = useDerivedValue(() => (anim.impactP.value > 0 ? 1 - clamp01((anim.impactP.value - 0.4) / 0.6) : 0));
-  if (!img.impact) return null;
+  return <Group transform={tr}><SkImage image={star} x={-11} y={-11} width={22} height={22} /></Group>;
+}
+
+/** Grit: 3 fins (4 with Extra Fin) on a badge above your shark; the last one pulses coral on every beat. */
+function GritFins({ L, view, fx, beat, anim, img, SH }: {
+  L: ArenaLayout; view: SharedValue<BossView>; fx: SharedValue<number>; beat: SharedValue<number>; anim: ArenaAnim;
+  img: ArenaImages; SH: number;
+}) {
+  const y = L.floatY - SH * 0.95 - 22;
+  const badge = useDerivedValue(() => {
+    const v = view.value;
+    const n = v.on ? v.gritMax : 3;
+    const w = n * 26 + 14;
+    const p = Skia.Path.Make();
+    p.addRRect(Skia.RRectXY(Skia.XYWHRect(L.floatX - w / 2, y - 17, w, 34), 17, 17));
+    return p;
+  });
+  const badgeOp = useDerivedValue(() => (view.value.on && !view.value.downOn ? 1 : 0));
+  if (!img.fin) return null;
   return (
-    <Group transform={tr} opacity={op}>
-      <SkImage image={img.impact} x={-48} y={-52} width={96} height={104} />
+    <Group opacity={badgeOp}>
+      <Path path={badge} color="rgba(255,255,255,0.92)" />
+      <Path path={badge} style="stroke" strokeWidth={3} color={NAVY} />
+      {[0, 1, 2, 3].map((k) => <Fin key={k} k={k} L={L} y={y} view={view} fx={fx} beat={beat} anim={anim} fin={img.fin!} />)}
     </Group>
   );
 }
 
-/** 2-frame white-and-gold impact frame on Break and Finisher (kept bright). */
-function ImpactFrame({ L, anim }: { L: ArenaLayout; anim: ArenaAnim }) {
-  const white = useDerivedValue(() => (anim.frame.value === 2 ? 0.85 : 0));
-  const gold = useDerivedValue(() => (anim.frame.value === 1 ? 0.45 : 0));
+function Fin({ k, L, y, view, fx, beat, anim, fin }: {
+  k: number; L: ArenaLayout; y: number; view: SharedValue<BossView>; fx: SharedValue<number>; beat: SharedValue<number>; anim: ArenaAnim;
+  fin: SkImageType;
+}) {
+  const FH = 26;
+  const FW = FH * (145 / 194);
+  const st = useDerivedValue(() => {
+    const v = view.value;
+    const n = v.on ? v.gritMax : 3;
+    if (k >= n || !v.on) return { op: 0, x: 0, y: 0, s: 1, coral: 0 };
+    const x = L.floatX + (k - (n - 1) / 2) * 26;
+    const has = k < v.grit;
+    // A lost fin pops up and off; the slot stays as a faint outline.
+    const last = v.grit === 1 && k === 0;
+    const pulse = last ? onBeat(beat.value, 0.45) : 0;
+    const pop = has ? 0 : since(fx.value, anim.flinchAt.value, 320);
+    return { op: has ? 1 : 0.18 + pop * 0.8, x, y: y - pop * 22, s: has ? 1 + 0.2 * pulse : 0.85 + pop * 0.5, coral: last ? 0.4 + 0.5 * pulse : 0 };
+  });
+  const tr = useDerivedValue(() => [{ translateX: st.value.x }, { translateY: st.value.y }, { scale: st.value.s }]);
+  const op = useDerivedValue(() => st.value.op);
+  const coral = useDerivedValue(() => st.value.coral);
+  return (
+    <Group transform={tr}>
+      <Circle cx={0} cy={1} r={13} color={CORAL} opacity={coral} />
+      <Group opacity={op}>
+        <SkImage image={fin} x={-FW / 2} y={-FH / 2} width={FW} height={FH} />
+      </Group>
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POP: a gold bead travels up the pinned limb to the face in 90 ms (the payoff goes up, not under the thumb).
+
+function PopBead({ L, fx, anim, pres, view, t }: Props) {
+  const pos = useDerivedValue(() => {
+    const k = 1 - since(fx.value, anim.beadAt.value, 140);
+    const at = anim.beadAt.value;
+    if (at < 0 || fx.value < at || k >= 1) return { op: 0, x: 0, y: 0, x1: 0, y1: 0 };
+    const pr = pres.value;
+    const lane = anim.beadLane.value;
+    const chain = newChain();
+    const s = pr.pinSide;
+    poseChain(L, 3, s, L.laneX[lane >= 0 ? lane : 1], 0.5, chain);
+    const f0 = fractionAtX(chain, L.laneX[lane >= 0 ? lane : 1]);
+    const face = { x: L.bossX, y: L.bossY + L.bossSize * 0.1 };
+    const pAt = (q: number) => {
+      if (q < 0.7) return chainAt(chain, f0 * (1 - q / 0.7));
+      const r = chainAt(chain, 0);
+      const u = (q - 0.7) / 0.3;
+      return { x: r.x + (face.x - r.x) * u, y: r.y + (face.y - r.y) * u };
+    };
+    const kk = c01(k / 0.65);
+    const a = pAt(kk);
+    const b = pAt(Math.max(0, kk - 0.12));
+    return { op: view.value.on && t.value >= 0 ? 1 : 0, x: a.x, y: a.y, x1: b.x, y1: b.y };
+  });
+  const op = useDerivedValue(() => pos.value.op);
+  const cx = useDerivedValue(() => pos.value.x);
+  const cy = useDerivedValue(() => pos.value.y);
+  const tx = useDerivedValue(() => pos.value.x1);
+  const ty = useDerivedValue(() => pos.value.y1);
+  return (
+    <Group opacity={op}>
+      <Circle cx={tx} cy={ty} r={6} color={GOLD} opacity={0.6} />
+      <Circle cx={cx} cy={cy} r={11} color={NAVY} />
+      <Circle cx={cx} cy={cy} r={8} color={GOLD} />
+      <Circle cx={useDerivedValue(() => cx.value - 3)} cy={useDerivedValue(() => cy.value - 3)} r={2.5} color={WHITE} />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Part-breaks: the hat flies, bounces twice on the water, settles as a decal; its material flies to the HUD.
+
+export const PART_G = 2200;
+export const PART_E = 0.45;
+
+/** Launch state of a part-break (screen space), shared with the orchestrator's timing helper. */
+export function partLaunch(L: ArenaLayout, n: number, dir: number): { x: number; y: number; vx: number; vy: number; floor: number } {
+  'worklet';
+  const S = L.bossSize;
+  const H = S / SPR_AR;
+  if (n === 1) {
+    return {
+      x: L.bossX - S / 2 + (HAT.x + HAT.w / 2) * S, y: L.bossY - H / 2 + (HAT.y + HAT.h / 2) * H,
+      vx: 64, vy: -840, floor: L.lipY + 34,
+    };
+  }
+  return { x: L.bossX + S * 0.1 * dir, y: L.bossY - S * 0.2, vx: 220 * (dir === 0 ? 1 : dir), vy: -700, floor: L.lipY + 30 };
+}
+
+/** Time (ms) from launch until a part comes to rest (2 bounces). */
+export function partRestMs(L: ArenaLayout, n: number, dir: number): number {
+  const l = partLaunch(L, n, dir);
+  for (let ms = 0; ms < 4000; ms += 10) if (bounceAt(ms / 1000, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2).rest) return ms;
+  return 4000;
+}
+
+function Parts(p: Props) {
+  const { L, fx, anim, img, beat, view } = p;
+  const S = L.bossSize;
+  const H = S / SPR_AR;
+  const hat = useDerivedValue(() => {
+    const at = anim.partAt.value;
+    const f = fx.value;
+    if (at < 0 || anim.partN.value < 1 || f < at) return { op: 0, x: 0, y: 0, r: 0 };
+    const l = partLaunch(L, 1, anim.partDir.value);
+    const e = (f - at) / 1000;
+    const b = bounceAt(e, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2);
+    const spin = b.rest ? 0.15 : Math.min(e, 1.2) * (Math.PI * 4) / 0.9 * (anim.partDir.value < 0 ? -1 : 1);
+    const bob = b.rest ? Math.sin((beat.value / 4) * Math.PI * 2) * 3 : 0;
+    // The decal fades while the boss leaves at the end of the round.
+    return { op: view.value.on || anim.exitAt.value < 0 ? 1 : 0.9, x: b.x, y: b.y - 10 + bob, r: spin };
+  });
+  const hatTr = useDerivedValue(() => [{ translateX: hat.value.x }, { translateY: hat.value.y }, { rotate: hat.value.r }]);
+  const hatOp = useDerivedValue(() => hat.value.op);
+  // Break 3: six shell shards bounce out of the dome.
+  const shards = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const at = anim.partAt.value;
+    const f = fx.value;
+    if (at < 0 || anim.partN.value !== 3 || f < at || f > at + 2600) return pth;
+    const e = (f - at) / 1000;
+    for (let k = 0; k < 6; k++) {
+      const dir = k % 2 === 0 ? -1 : 1;
+      const b = bounceAt(e, L.bossX + (k - 2.5) * 12, L.bossY - S * 0.25, dir * (90 + k * 40), -600 - k * 50, L.lipY + 28 + k * 4, PART_G, PART_E, 2);
+      const a = e * 8 + k;
+      const s = 9;
+      pth.moveTo(b.x + Math.cos(a) * s, b.y + Math.sin(a) * s);
+      pth.lineTo(b.x + Math.cos(a + 2.2) * s, b.y + Math.sin(a + 2.2) * s);
+      pth.lineTo(b.x + Math.cos(a + 4.1) * s, b.y + Math.sin(a + 4.1) * s);
+      pth.close();
+    }
+    return pth;
+  });
+  // Material icon flies to the HUD slot on a 420 ms Bezier (Clash Royale crown).
+  const mat = useDerivedValue(() => {
+    const at = anim.matAt.value;
+    const f = fx.value;
+    if (at < 0 || f < at || f > at + 520) return { op: 0, x: 0, y: 0, s: 1, n: 0 };
+    const n = anim.partN.value;
+    const l = partLaunch(L, n, anim.partDir.value);
+    const restMs = 0;
+    const b0 = n === 1 ? bounceAt(9, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2) : { x: L.bossX, y: L.bossY };
+    const k = c01((f - at - restMs) / 420);
+    const tx = 34;
+    const ty = 58;
+    const cx = (b0.x + tx) / 2;
+    const cy = Math.min(b0.y, ty) - 120;
+    const u = 1 - k;
+    return {
+      op: k < 1 ? 1 : 0, x: u * u * b0.x + 2 * u * k * cx + k * k * tx, y: u * u * b0.y + 2 * u * k * cy + k * k * ty,
+      s: 1.3 - 0.6 * k, n,
+    };
+  });
+  const matTr = useDerivedValue(() => [{ translateX: mat.value.x }, { translateY: mat.value.y }, { scale: mat.value.s }]);
+  const matOp = (n: number) => useDerivedValue(() => (mat.value.n === n ? mat.value.op : 0)); // eslint-disable-line react-hooks/rules-of-hooks
+  const m1 = matOp(1);
+  const m2 = matOp(2);
+  const m3 = matOp(3);
+  const hw = HAT.w * S;
+  const hh = HAT.h * H;
   return (
     <Group>
-      <Rect x={0} y={0} width={L.W} height={L.H} color={WHITE} opacity={white} />
-      <Rect x={0} y={0} width={L.W} height={L.H} color={GOLD} opacity={gold} />
+      {img.hat ? (
+        <Group opacity={hatOp} transform={hatTr}>
+          <SkImage image={img.hat} x={-hw / 2} y={-hh / 2} width={hw} height={hh} />
+        </Group>
+      ) : null}
+      <Path path={shards} color="#C9B6F2" />
+      <Path path={shards} style="stroke" strokeWidth={2.5} strokeJoin="round" color={INK} />
+      <Group transform={matTr}>
+        {img.matFeather ? <Group opacity={m1}><SkImage image={img.matFeather} x={-22} y={-22} width={44} height={44} /></Group> : null}
+        {img.matBarnacle ? <Group opacity={m2}><SkImage image={img.matBarnacle} x={-22} y={-22} width={44} height={44} /></Group> : null}
+        {img.matPearl ? <Group opacity={m3}><SkImage image={img.matPearl} x={-22} y={-22} width={44} height={44} /></Group> : null}
+      </Group>
+    </Group>
+  );
+}
+
+/** Final Pop / Break: white-on-sky radial speed lines from the impact for 300 ms. */
+function SpeedLines({ L, fx, anim }: Props) {
+  const lines = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const fa = anim.finalAt.value;
+    const f = fx.value;
+    if (fa < 0 || anim.finalGrade.value < 2 || f < fa + 200 || f > fa + 560) return pth;
+    const cx = L.bossX;
+    const cy = L.bossY;
+    const k = (f - fa - 200) / 360;
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + i * 0.37;
+      const r0 = L.W * (0.35 + 0.15 * ((i * 7) % 5) / 5) + k * 40;
+      pth.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      pth.lineTo(cx + Math.cos(a) * (r0 + 70), cy + Math.sin(a) * (r0 + 70));
+    }
+    return pth;
+  });
+  const op = useDerivedValue(() => {
+    const fa = anim.finalAt.value;
+    const f = fx.value;
+    return fa >= 0 && f >= fa + 200 && f <= fa + 560 ? 1 - (f - fa - 200) / 360 : 0;
+  });
+  return (
+    <Group opacity={op}>
+      <Path path={lines} style="stroke" strokeWidth={7} strokeCap="round" color={NAVY} opacity={0.35} />
+      <Path path={lines} style="stroke" strokeWidth={4} strokeCap="round" color={WHITE} />
+    </Group>
+  );
+}
+
+/** SPLASHED: a water sheet wipes 30% of the screen at 30% white when a real tell lands. */
+function WaterSheet({ L, t, pres, reduced }: Props) {
+  const y = useDerivedValue(() => {
+    const pr = pres.value;
+    if (pr.sRes !== 2) return -L.H;
+    const e = (t.value - pr.sAt) / 420;
+    if (e < 0 || e > 1) return -L.H;
+    return -L.H * 0.3 + L.H * 1.0 * e;
+  });
+  if (reduced) return null;
+  return (
+    <Group opacity={0.3}>
+      <Rect x={0} y={y} width={L.W} height={L.H * 0.3} color={WHITE} />
     </Group>
   );
 }
