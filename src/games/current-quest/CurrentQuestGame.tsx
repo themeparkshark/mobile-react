@@ -177,9 +177,10 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const layoutFor = useCallback((rows: number): BoardLayout | null => {
     if (!field) return null;
     const rail = showdown ? 46 : ghost ? 42 : 0;
-    const reserved = 58 + 36 + rail + (walking ? 106 : 98) + (arrows ? (walking ? 68 : 64) : 0) + 6;
+    // Always reserve the walking sizes: walking toggles every few steps and must never re-lay the board.
+    const reserved = 58 + 36 + rail + 106 + (arrows ? 68 : 0) + 6;
     return boardLayout(field.w, field.h - reserved, rows);
-  }, [field, arrows, walking, showdown, ghost]);
+  }, [field, arrows, showdown, ghost]);
   const layout = useMemo(() => layoutFor(rowsNow), [layoutFor, rowsNow]);
   const layoutRef = useRef<BoardLayout | null>(layout);
   layoutRef.current = layout;
