@@ -1337,7 +1337,40 @@ export default function CurrentQuestGame({
     // Finale scaled by stars (9.8). 2+ stars: the leftover strokes become bubbles the shark gobbles (Sugar Crush).
     const leftover = Math.max(0, lastResult.limit - lastResult.spent);
     burst('coins', b.chest, { count: reducedMotion ? 8 : stars >= 3 ? 26 : stars >= 2 ? 20 : 12 }, -cell * 0.3);
-    if (stars >= 2 && leftover > 0) later(500, () => { sfxLeftover(Math.min(10, leftover)); cqSchedule(Array.from({ length: Math.min(4, leftover) }, (_, k) => ({ at: k * 180, p: 'selection' as const }))); });
+    if (stars >= 2 && leftover > 0) {
+      // Sugar Crush gobble: each leftover stroke pops up as a bubble on open water near the chest and the
+      // shark gobbles them in a fast chain (90 ms apart, bubble pops on the ladder) while the strokes badge rattles down.
+      const n = Math.min(8, leftover);
+      const open: number[] = [];
+      const H = heightOf(b);
+      const seen = new Set<number>([b.chest]);
+      let frontier = [b.chest];
+      while (frontier.length && open.length < n) {
+        const next: number[] = [];
+        for (const c of frontier) {
+          for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const r = Math.floor(c / 5) + dr; const q = (c % 5) + dc;
+            if (r < 0 || r >= H || q < 0 || q > 4) continue;
+            const i = r * 5 + q;
+            if (seen.has(i)) continue;
+            seen.add(i);
+            next.push(i);
+            if (b.tiles[i] !== '#' && open.length < n) open.push(i);
+          }
+        }
+        frontier = next;
+      }
+      const shark = toField(chestC.x, chestC.y - cell * 0.35);
+      open.forEach((c, k) => {
+        later(420 + k * 30, () => burst('bubbles', c, { count: 3 }));
+        later(620 + k * 90, () => {
+          const p = toField(center(c).x, center(c).y);
+          fx.current?.burst('glints', p.x, p.y, { count: 4, tx: shark.x, ty: shark.y, magnetDelay: 0.02, magnetDur: 0.22 });
+          setHud((h) => (h ? { ...h, left: Math.max(0, leftover - k - 1) } : h));
+        });
+      });
+      later(620, () => { sfxLeftover(n); cqSchedule(Array.from({ length: Math.min(4, n) }, (_, k) => ({ at: k * 180, p: 'selection' as const }))); });
+    }
     s.plan.value = { ...idlePlan(chestC.x, chestC.y - cell * 0.35, 1), kind: PLAN_CHEER, t0: -1 };
     s.breath.value = withSequence(withTiming(0.06, { duration: 250 }), withTiming(0, { duration: 250 }));
     if (stars >= 3) {
@@ -1410,7 +1443,7 @@ export default function CurrentQuestGame({
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center, burst, later, reducedMotion, camera, banner, context, knobs.profile, knobs.rings, runSeed, attempt, ghost, tier.tierJs, progress, runKey, today, chartNodeId, node, trial, challenge, parkName, themeId]);
+  }, [center, burst, later, reducedMotion, camera, banner, context, knobs.profile, knobs.rings, runSeed, attempt, ghost, tier.tierJs, progress, runKey, today, chartNodeId, node, trial, challenge, parkName, themeId, toField]);
 
   /** Results: your final-voyage route beside the par route (non-sealed Puzzle contexts only; 0.A.14). */
   const compareRoutes = (run: RunState, last: VoyageResult): RouteCompare | null => {
