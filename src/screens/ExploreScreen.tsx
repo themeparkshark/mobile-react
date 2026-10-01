@@ -83,6 +83,7 @@ import DwellCard from './ExploreScreen/DwellCard';
 import MapSuggestionStub from './ExploreScreen/MapSuggestionStub';
 import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
 import useQueueDwell from './ExploreScreen/useQueueDwell';
+import useSwapTapGuard from './ExploreScreen/useSwapTapGuard';
 import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
 import VaultMarker from './ExploreScreen/VaultMarker';
@@ -721,6 +722,13 @@ function ExploreScreen() {
     queueRide: !!(selectedTask && queueRide), adventure: !!adventure, goal: !!tripGoal, project: !!activeParkProject,
     adventureSlam: !!adventureMoment.slam?.length,
   });
+  // The left chip can turn from the Adventure Ticket into "In line at X?" under
+  // a finger; swallow taps on that slot for a moment after any swap.
+  const leftSlotKey = suggestionSlots.left == null ? null : [suggestionSlots.left,
+    suggestionSlots.leftStub ? 'stub' : 'full',
+    suggestionSlots.left === 'dwell' ? queueDwell?.rideId : suggestionSlots.left === 'adventure' ? adventure?.id : tripGoal?.ride_name,
+  ].join(':');
+  const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   const chestReady = chestMayPresent({
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
@@ -1022,6 +1030,9 @@ function ExploreScreen() {
               }} />}
           </View>
         )}
+        {leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder={() => true}
+          accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          style={{ position: 'absolute', top: slotTop, left: 0, width: '52%', height: 120, zIndex: 40 }} />}
         {suggestionSlots.left === 'dwell' && suggestionSlots.leftStub && queueDwell && <MapSuggestionStub side="left" top={slotTop}
           label={`In line at ${queueDwell.rideName}? Show queue games`} onPress={() => setSelectedTask(null)}>
           <GameIcon name="queue" size={32} />
