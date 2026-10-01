@@ -516,7 +516,7 @@ test('golden vectors: all 30 verify in node, tampering is caught', () => {
   assert.equal(verify.verifySwimProof(fast).reason, 'too_fast');
   const old = { ...golden.vectors[3].proof, sim_version: 'swim-000000000000' };
   assert.equal(verify.verifySwimProof(old).reason, 'unknown_sim_version');
-  const spam = { ...golden.vectors[3].proof, inputs: core.encodeInputs(Array.from({ length: 40 }, (_, i) => ({ step: 10 + i, kind: i % 2, sub: 0, arg: 0 }))) };
+  const spam = { ...golden.vectors[3].proof, inputs: core.encodeInputs(Array.from({ length: 70 }, (_, i) => ({ step: 10 + i, kind: i % 2, sub: 0, arg: 0 }))) };
   assert.equal(verify.verifySwimProof(spam).reason, 'input_rate');
 });
 
@@ -604,4 +604,27 @@ test('missions: 3 active, sum and best-in-run progress, 3 completions rank up; u
   assert.equal(p.unlockCard(5, 6), null);
   assert.equal(p.unlockTier(40), 12);
   assert.equal(p.ratedDifficulty({ ...p.EMPTY_PROGRESS, recentStars: [0, 3, 1] }), 2);
+});
+
+test('input cap (11e): expert feathering at 8 taps/s plus Dashes passes; 31 events/s over 2s is rejected', () => {
+  // 8 taps/s = 16 press/release events/s, plus a Dash every 0.5s = 18 events/s.
+  const expert = [];
+  for (let st = 10; st < 60 * 20; st += 7.5) {
+    const at = Math.round(st);
+    expert.push({ step: at, kind: core.IN_PRESS, sub: 0, arg: 0 });
+    expert.push({ step: at + 3, kind: core.IN_RELEASE, sub: 0, arg: 0 });
+    if (at % 30 < 8) expert.push({ step: at + 2, kind: core.IN_DASH, sub: 0, arg: 0 });
+  }
+  expert.sort((a, b) => a.step - b.step);
+  assert.ok(verify.inputRateOk(expert), 'an 18 events/s expert log must pass');
+  // 31 events/s sustained for 2s: 62 events inside 120 steps.
+  const spam = [];
+  for (let k = 0; k < 62; k++) spam.push({ step: 100 + Math.floor((k * 119) / 61), kind: k % 2 ? core.IN_RELEASE : core.IN_PRESS, sub: 0, arg: 0 });
+  assert.equal(verify.inputRateOk(spam), false);
+  // Exactly 30/s (60 events in 2s) is still allowed.
+  assert.ok(verify.inputRateOk(spam.slice(0, 60)));
+  // Through the full verifier: a spam log is rejected before any replay.
+  const golden = JSON.parse(fs.readFileSync(path.join(root, 'tools/fixtures/swim/golden.json'), 'utf8'));
+  const p = { ...golden.vectors[0].proof, inputs: core.encodeInputs(spam), steps_total: Math.max(golden.vectors[0].proof.steps_total, 300) };
+  assert.equal(verify.verifySwimProof(p).reason, 'input_rate');
 });

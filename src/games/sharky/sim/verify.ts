@@ -75,6 +75,17 @@ export interface SwimVerdict {
   sim_version: string;
 }
 
+/** Max input events in any 2s (120-step) window: 30/s (design 11.3). */
+export const INPUT_RATE_MAX_PER_2S = 60;
+
+export function inputRateOk(entries: InputEntry[]): boolean {
+  for (let i = 0, j = 0; i < entries.length; i++) {
+    while (entries[i].step - entries[j].step >= 120) j++;
+    if (i - j + 1 > INPUT_RATE_MAX_PER_2S) return false;
+  }
+  return true;
+}
+
 const MODES: Record<string, number> = { queue: 0, ride: 1, race: 2, ghost: 3, practice: 4 };
 
 /** Replay a proof and compare every claimed field. Never trusts the client. */
@@ -95,11 +106,10 @@ export function verifySwimProof(p: SwimProof): SwimVerdict {
   } catch {
     return fail('bad_inputs');
   }
-  // At most 14 input events per second over any 2s window.
-  for (let i = 0, j = 0; i < entries.length; i++) {
-    while (entries[i].step - entries[j].step > 120) j++;
-    if (i - j + 1 > 28) return fail('input_rate');
-  }
+  // Design v5 (11.3): at most 30 input events per second over any 2s window.
+  // Expert feathering at 7-8 taps/s is 14-16 events/s plus Dashes; the replay
+  // proves physical plausibility and 11.4 catches bots.
+  if (!inputRateOk(entries)) return fail('input_rate');
   if (entries.length && entries[entries.length - 1].step > p.steps_total) return fail('input_after_end');
   const cfg: SimConfig = { seed: p.seed | 0, mode, difficulty: p.difficulty | 0, tier: p.unlock_tier | 0, runs: p.runs | 0 };
   const s = replay(cfg, entries, p.steps_total);
