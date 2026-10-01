@@ -11,6 +11,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parseAlbum, type Album } from './modes/album';
 import { EMPTY_STREAK, type StreakState } from './modes/daily';
+import { EMPTY_LEDGER, NO_HEAT, type HeatToggles, type UnlockLedger } from './modes/unlocks';
+import type { CoinEdition } from './engine';
 
 const KEY_PREFIX = 'tps.memorymatch.best.v1';
 
@@ -192,4 +194,79 @@ export async function loadPlayerKey(): Promise<string> {
   } catch {
     return 'local';
   }
+}
+
+// -----------------------------------------------------------------------------
+// v8: Time Attack unlock ledger, Memory Rank history, glint runs, Heat,
+// Ride Sprint PB (charged time) and coin edition, first-of-day intro.
+// All local and cosmetic; ranked and paid results live on the server.
+// -----------------------------------------------------------------------------
+
+
+const V8_PREFIX = 'tps.memorymatch.v8';
+
+async function readJson<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const raw = await AsyncStorage.getItem(`${V8_PREFIX}.${key}`);
+    if (!raw) return fallback;
+    const v = JSON.parse(raw) as T;
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeJson(key: string, value: unknown): Promise<void> {
+  try {
+    await AsyncStorage.setItem(`${V8_PREFIX}.${key}`, JSON.stringify(value));
+  } catch {
+    // Cosmetic only.
+  }
+}
+
+export async function loadLedger(): Promise<UnlockLedger> {
+  const l = await readJson<UnlockLedger>('ledger', EMPTY_LEDGER);
+  return { ...EMPTY_LEDGER, ...l };
+}
+export const saveLedger = (l: UnlockLedger) => writeJson('ledger', l);
+
+/** Best board reached per Time Attack run, newest last (Memory Rank uses the last 10). */
+export async function loadRankHistory(): Promise<number[]> {
+  const h = await readJson<number[]>('rank', []);
+  return Array.isArray(h) ? h.filter((x) => Number.isFinite(x)).slice(-10) : [];
+}
+export async function pushRankHistory(board: number): Promise<number[]> {
+  const h = [...(await loadRankHistory()), board].slice(-10);
+  await writeJson('rank', h);
+  return h;
+}
+
+/** Finished Time Attack runs (the promise glint shows in the first 3). */
+export async function loadTaRuns(): Promise<number> {
+  const n = await readJson<number>('taRuns', 0);
+  return Number.isFinite(n) ? n : 0;
+}
+export const saveTaRuns = (n: number) => writeJson('taRuns', n);
+
+export const loadHeat = () => readJson<HeatToggles>('heat', NO_HEAT);
+export const saveHeat = (h: HeatToggles) => writeJson('heat', h);
+
+export interface RideRecord {
+  /** Best charged clear time (ms). */
+  bestMs: number | null;
+  edition: CoinEdition;
+}
+
+export async function loadRideRecord(rideKey: string): Promise<RideRecord> {
+  const r = await readJson<RideRecord>(`ride.${rideKey}`, { bestMs: null, edition: 'none' });
+  return { bestMs: Number.isFinite(r.bestMs) ? r.bestMs : null, edition: r.edition ?? 'none' };
+}
+export const saveRideRecord = (rideKey: string, r: RideRecord) => writeJson(`ride.${rideKey}`, r);
+
+/** The barker's intro card plays on the first play of the day only. */
+export async function takeDailyIntro(day: string): Promise<boolean> {
+  const last = await readJson<string>('intro', '');
+  if (last === day) return false;
+  await writeJson('intro', day);
+  return true;
 }

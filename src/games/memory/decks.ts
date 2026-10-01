@@ -60,8 +60,8 @@ const OCEAN: Deck = {
   id: 'ocean',
   label: 'Ocean',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/ocean-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/ocean-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/ocean-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/ocean-extra-faces-v2.jpg'),
   symbols: [
     {
       id: 'ocean-shark',
@@ -91,8 +91,8 @@ const PARK: Deck = {
   id: 'park',
   label: 'Theme Park',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/park-ride-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/park-ride-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/park-ride-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/park-ride-extra-faces-v2.jpg'),
   symbols: [
     {
       id: 'park-coaster',
@@ -106,7 +106,7 @@ const PARK: Deck = {
       tint: GAME_COLORS.blue,
       sheetSlot: 1,
     },
-    { id: 'park-castle', tint: '#a78bfa', sheetSlot: 2 },
+    { id: 'park-balloon', tint: '#fb923c', sheetSlot: 2 },
     { id: 'park-rocket', tint: GAME_COLORS.gold, sheetSlot: 3 },
     { id: 'park-carousel', tint: '#fda4af', sheetSlot: 4 },
     { id: 'park-show', tint: '#f9a8d4', sheetSlot: 5 },
@@ -122,8 +122,8 @@ const SPACE: Deck = {
   id: 'space',
   label: 'Star Chart',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/star-chart-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/star-chart-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/star-chart-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/star-chart-extra-faces-v2.jpg'),
   symbols: [
     { id: 'space-star', tint: '#fbbf24', sheetSlot: 0 },
     { id: 'space-moon', tint: '#c4b5fd', sheetSlot: 1 },
@@ -145,8 +145,8 @@ const PIRATES: Deck = {
   id: 'pirates',
   label: 'Vanishing Compass',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/pirates-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/pirates-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/pirates-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/pirates-extra-faces-v2.jpg'),
   symbols: [
     { id: 'pirates-compass', tint: '#fbbf24', sheetSlot: 0 },
     { id: 'pirates-map', tint: '#d6b88a', sheetSlot: 1 },
@@ -166,8 +166,8 @@ const JUNGLE: Deck = {
   id: 'jungle',
   label: 'Skipper’s Log',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/jungle-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/jungle-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/jungle-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/jungle-extra-faces-v2.jpg'),
   symbols: [
     { id: 'jungle-log', tint: '#b77b4b', sheetSlot: 0 },
     { id: 'jungle-boat', tint: '#fbbf24', sheetSlot: 1 },
@@ -187,8 +187,8 @@ const RAINBOW_RIDGE: Deck = {
   id: 'rainbow-ridge',
   label: 'Rainbow Ridge Dispatch',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/rainbow-ridge-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/rainbow-ridge-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/rainbow-ridge-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/rainbow-ridge-extra-faces-v2.jpg'),
   symbols: [
     { id: 'ridge-dispatch', tint: '#dfac65', sheetSlot: 0 },
     { id: 'ridge-train', tint: '#c27743', sheetSlot: 1 },
@@ -209,8 +209,8 @@ const MANSION: Deck = {
   label: 'Missing Guest Book',
   back: CARD_BACK,
   faceFrame: require('../../assets/games/memory/deck-mansion-face-frame.png'),
-  faceSheet: require('../../assets/games/memory/mansion-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/mansion-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/mansion-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/mansion-extra-faces-v2.jpg'),
   symbols: [
     { id: 'mansion-book', tint: '#a78bfa', sheetSlot: 0 },
     { id: 'mansion-key', tint: '#fbbf24', sheetSlot: 1 },
@@ -231,8 +231,8 @@ const BACKLOT: Deck = {
   label: 'Missing Backlot Reel',
   back: CARD_BACK,
   faceFrame: require('../../assets/games/memory/deck-backlot-face-frame.png'),
-  faceSheet: require('../../assets/games/memory/backlot-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/backlot-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/backlot-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/backlot-extra-faces-v2.jpg'),
   symbols: [
     { id: 'backlot-camera', tint: '#60a5fa', sheetSlot: 0 },
     { id: 'backlot-clapper', tint: '#fbbf24', sheetSlot: 1 },
@@ -251,8 +251,8 @@ const WIZARD: Deck = {
   id: 'wizard',
   label: 'Enchanted Keepsakes',
   back: CARD_BACK,
-  faceSheet: require('../../assets/games/memory/wizard-faces-v1.png'),
-  extraFaceSheet: require('../../assets/games/memory/wizard-extra-faces-v1.png'),
+  faceSheet: require('../../assets/games/memory/v8/faces/wizard-faces-v2.jpg'),
+  extraFaceSheet: require('../../assets/games/memory/v8/faces/wizard-extra-faces-v2.jpg'),
   symbols: [
     { id: 'wizard-wand', tint: '#c4b5fd', sheetSlot: 0 },
     { id: 'wizard-book', tint: '#a78bfa', sheetSlot: 1 },

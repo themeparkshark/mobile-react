@@ -1,259 +1,470 @@
 /**
- * MemoryBooth.tsx: the public Memory Match component (keeps MemoryGame's props).
+ * MemoryBooth.tsx: the booth wrap around the board (design v8 6.1, 6.7, 6.8, 5.2).
  *
- * Ride Challenge (difficulty 0), Line Party and fixed-mode callers go straight
- * into the game. Queue callers that pass `menu` get the barker's booth menu
- * first: Time Attack, the Daily Deck (streak, ranked try, friend or par ghost)
- * and Pass & Play for 2-4 sharks on one phone. Everything sits in the bottom
- * thumb zone with 64pt+ targets, so it works one-handed while the line moves.
- * Closing a game comes back to the booth; the booth's X leaves.
+ * Built from the pipeline's 9-slice kit (Alex style): the striped awning whose
+ * scalloped lip overlaps the felt's top gutter, two bulb-lined wooden posts as
+ * the side borders and the prize counter as the bottom border. Laid out by
+ * layout.ts around the measured grid rect, so it always hugs the board.
+ *
+ *   Marquee      the bulbs ARE the chain readout: chain 1 lights segment 1,
+ *                chain 2 segments 1-2, chain 3+ every bulb chasing on 8ths;
+ *                a slip fizzles them to the 40% floor; Showtime holds 100%;
+ *                one Skia canvas, 12 groups, never off, under 3 Hz per bulb
+ *   Counter      one prize slot per pair (the pair lands with a squash), the
+ *                Showtime pot at the centre, the rail token on its top edge
+ *   Callouts     Medium: a gold ribbon unfurling across the awning lip.
+ *                Large: SHOWTIME letters dropping into the awning.
+ *
+ * The whole front sits in the scene layer: camera beats move it, never the
+ * board inside it.
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GameAudio, Haptic } from '../../gamekit';
-import GameIcon from '../../ui/GameIcon';
-import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import MemoryGame, { type DailySetup, type MemoryGameProps } from './MemoryGame';
-import PassPlayGame from './PassPlayGame';
-import { deckById, deckIdForRideName } from './decks';
-import { faceFor } from './faces';
-import { FaceThumb, AlbumSheet } from './MemoryExtras';
+
+import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { Image, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { Canvas, Circle, Group, Image as SkImage, useImage } from '@shopify/react-native-skia';
+import type { BoothGeo, Rect, TileStrip } from './layout';
 import { MM } from './theme';
-import { dailyDeckId, dailyFaceSeed, dailyLayoutSeed, dayKey, liveStreak, parGhost } from './modes/daily';
-import { fetchDailyGhosts, pickGhost } from './modes/dailyApi';
-import { emptyAlbum, type Album } from './modes/album';
-import { loadAlbum, loadDaily, loadPersonalBest, loadPlayerKey, loadStreak, type DailyRecord } from './storage';
+import type { CardFace } from './MemoryCard';
+import { FaceThumb } from './MemoryExtras';
 
-const BARKER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
-const BOOTH = require('../../assets/games/memory/studio/booth_frame.png');
-const STREAK = require('../../assets/games/memory/studio/streak.png');
-const STOPWATCH = require('../../assets/games/memory/studio/stopwatch.png');
-const CARD_BACK = require('../../assets/games/memory/card-back.png');
+const KIT = {
+  awningCapL: require('../../assets/games/memory/v8/booth/awning_capL.png'),
+  awningTile: require('../../assets/games/memory/v8/booth/awning_tile.png'),
+  awningCapR: require('../../assets/games/memory/v8/booth/awning_capR.png'),
+  postCapT: require('../../assets/games/memory/v8/booth/post_capT.png'),
+  postTile: require('../../assets/games/memory/v8/booth/post_tile.png'),
+  postCapB: require('../../assets/games/memory/v8/booth/post_capB.png'),
+  counterCapL: require('../../assets/games/memory/v8/booth/counter_capL.png'),
+  counterTile: require('../../assets/games/memory/v8/booth/counter_tile.png'),
+  counterCapR: require('../../assets/games/memory/v8/booth/counter_capR.png'),
+};
+const HALO = require('../../assets/games/memory/v8/fx/glow_halo_1.png');
+const RIBBON = require('../../assets/games/memory/v8/results_banner.png');
 
-export interface MemoryMatchProps extends MemoryGameProps {
-  /** Queue entry: show the booth menu (Time Attack, Daily Deck, Pass & Play). */
-  menu?: boolean;
+// -----------------------------------------------------------------------------
+// Marquee state (shared values the game drives)
+// -----------------------------------------------------------------------------
+
+export interface Marquee {
+  /** Lit level per segment, 0 (floor) .. 1 (100%). */
+  seg: [SharedValue<number>, SharedValue<number>, SharedValue<number>];
+  /** Chase amount (chain 3+). */
+  chase: SharedValue<number>;
+  /** Every bulb at 100% (Showtime world state, Sudden Death). */
+  all: SharedValue<number>;
+  /** Flash-all pulse (Showtime matches). */
+  flash: SharedValue<number>;
+  /** Rim/awning dim (Time Attack line bleed). */
+  dim: SharedValue<number>;
 }
 
-type Pick = { kind: 'timeAttack' } | { kind: 'daily'; setup: DailySetup } | { kind: 'passPlay'; players: number };
-
-export default function MemoryMatch(props: MemoryMatchProps) {
-  const { visible, onClose, mode, party, difficulty } = props;
-  // Dev capture: EXPO_PUBLIC_MEMORY_MENU=1 opens the booth from any entry.
-  const devMenu = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_MEMORY_MENU === '1';
-  const menu = props.menu || devMenu;
-  const direct = !menu || !!party || (!devMenu && (!!mode || difficulty === 0));
-  const [pick, setPick] = useState<Pick | null>(null);
-  useEffect(() => { if (!visible) setPick(null); }, [visible]);
-
-  if (direct) return <MemoryGame {...props} />;
-  if (!visible) return null;
-  if (pick?.kind === 'timeAttack') return <MemoryGame {...props} mode="timeAttack" onClose={() => setPick(null)} />;
-  if (pick?.kind === 'daily') return <MemoryGame {...props} mode="daily" daily={pick.setup} onClose={() => setPick(null)} />;
-  if (pick?.kind === 'passPlay') {
-    return <PassPlayGame visible players={pick.players} deckId={props.deckId ?? deckIdForRideName(props.taskName)} seed={props.seed}
-      onClose={() => setPick(null)} onQuit={props.onQuit} />;
-  }
-  return <BoothMenu taskName={props.taskName} deckId={props.deckId} onPick={setPick} onClose={onClose} />;
+export function useMarquee(): Marquee {
+  const s0 = useSharedValue(0);
+  const s1 = useSharedValue(0);
+  const s2 = useSharedValue(0);
+  const chase = useSharedValue(0);
+  const all = useSharedValue(0);
+  const flash = useSharedValue(0);
+  const dim = useSharedValue(0);
+  return useMemo(() => ({ seg: [s0, s1, s2], chase, all, flash, dim }), [s0, s1, s2, chase, all, flash, dim]);
 }
 
-function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; deckId?: string; onPick: (p: Pick) => void; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
-  const reducedMotion = useReducedGameMotion();
-  const [best, setBest] = useState(0);
-  const [today] = useState(() => dayKey(new Date()));
-  const [rec, setRec] = useState<DailyRecord | null>(null);
-  const [streak, setStreak] = useState<Awaited<ReturnType<typeof loadStreak>> | null>(null);
-  const [player, setPlayer] = useState<string | null>(null);
-  const [ghost, setGhost] = useState<DailySetup['ghost']>(null);
-  const [album, setAlbum] = useState<Album>(emptyAlbum());
-  const [albumOpen, setAlbumOpen] = useState(false);
-  const [players, setPlayers] = useState(2);
-  const rideDeck = taskName ? deckId ?? deckIdForRideName(taskName) : deckId ?? null;
-  const dailyDeck = deckById(dailyDeckId(today, rideDeck)) ?? deckById('park')!;
+/** Light segments for a chain (6.7). */
+export function marqueeChain(m: Marquee, chain: number, reducedMotion: boolean): void {
+  const on = [chain >= 1, chain >= 2, chain >= 3];
+  m.seg.forEach((sv, i) => {
+    sv.value = withTiming(on[i] ? 1 : 0, { duration: on[i] ? 120 : 260 });
+  });
+  m.chase.value = withTiming(chain >= 3 && !reducedMotion ? 1 : 0, { duration: 200 });
+}
 
-  useEffect(() => {
-    let live = true;
-    void loadPersonalBest(1).then((b) => live && setBest(b));
-    void loadDaily(today).then((r) => live && setRec(r));
-    void loadStreak().then((s) => live && setStreak(s));
-    void loadPlayerKey().then((k) => live && setPlayer(k));
-    void loadAlbum().then((a) => live && setAlbum(a));
-    void fetchDailyGhosts(today).then((g) => live && setGhost(pickGhost(g)));
-    return () => { live = false; };
-  }, [today]);
+/** A slip fizzles lit segments down to the floor over 300ms with at most 2 dips. */
+export function marqueeFizzle(m: Marquee): void {
+  m.chase.value = withTiming(0, { duration: 120 });
+  m.seg.forEach((sv) => {
+    if (sv.value < 0.05) return;
+    cancelAnimation(sv);
+    sv.value = withSequence(
+      withTiming(0.25, { duration: 60 }),
+      withTiming(0.7, { duration: 50 }),
+      withTiming(0.1, { duration: 70 }),
+      withTiming(0.45, { duration: 40 }),
+      withTiming(0, { duration: 80 }),
+    );
+  });
+}
 
-  // Entry: shark squash-pops in, the three booth cards slide up 70ms apart.
-  const enter = useSharedValue(reducedMotion ? 1 : 0);
-  const bob = useSharedValue(0);
-  useEffect(() => {
-    if (reducedMotion) return;
-    enter.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
-    bob.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }), -1, true);
-    GameAudio.play('fx.whoosh', { volume: 0.5 });
-  }, [enter, bob, reducedMotion]);
-  const sharkStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, enter.value * 2),
-    transform: [{ translateY: (1 - enter.value) * 40 - bob.value * 3 }, { scaleY: 0.92 + 0.08 * enter.value + bob.value * 0.015 }],
-  }));
+/** Showtime match: every bulb to 100% for 80ms, ease back over 200ms. */
+export function marqueeFlash(m: Marquee): void {
+  m.flash.value = withSequence(withTiming(1, { duration: 16 }), withTiming(1, { duration: 80 }), withTiming(0, { duration: 200 }));
+}
 
-  const streakNow = streak ? liveStreak(streak, today) : 0;
-  const go = useCallback((p: Pick) => {
-    Haptic.hitMedium();
-    GameAudio.play('mm_flip');
-    onPick(p);
-  }, [onPick]);
+// -----------------------------------------------------------------------------
+// Booth front
+// -----------------------------------------------------------------------------
 
-  const startDaily = () => {
-    if (!streak || !player) return;
-    go({
-      kind: 'daily',
-      setup: {
-        day: today,
-        deckId: dailyDeck.id,
-        layoutSeed: dailyLayoutSeed(today, player, rec ? 1 : 0),
-        faceSeed: dailyFaceSeed(today, dailyDeck.id),
-        ranked: !rec,
-        ghost: ghost ?? parGhost(8),
-        streak,
-      },
-    });
-  };
+export interface PrizeEntry {
+  face: CardFace;
+  /** 'gold' for Golden Coin, 'pot' while a pair waits in the Showtime pot. */
+  tint?: 'gold';
+}
 
+export interface BoothFrontProps {
+  geo: BoothGeo;
+  marquee: Marquee;
+  beat: SharedValue<number>;
+  reducedMotion: boolean;
+  /** Prize slots filled so far (index = slot). */
+  prizes: (PrizeEntry | null)[];
+  /** Pairs stacked in the Showtime pot and its running value. */
+  pot: { faces: CardFace[]; value: number } | null;
+  /** Rail token (Daily ghost, Line Duel rival). */
+  rail: { art: ImageSourcePropType; slot: number; delta: string | null; ahead: boolean; label: string } | null;
+  /** Counter bounce (board clear beat 2), bumped to retrigger. */
+  bounceKey: number;
+}
+
+export const BoothFront = memo(function BoothFront({ geo, marquee, beat, reducedMotion, prizes, pot, rail, bounceKey }: BoothFrontProps) {
+  const g = geo;
   return (
-    <Modal visible transparent={false} animationType={reducedMotion ? 'none' : 'fade'} onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.root}>
-        <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />
-        <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
-          <Pressable onPress={onClose} style={styles.close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-            <GameIcon name="close" size={24} />
-          </Pressable>
-          <Text style={styles.title}>Memory Match</Text>
-          <Pressable onPress={() => setAlbumOpen(true)} style={styles.albumBtn} accessibilityRole="button" accessibilityLabel="Card album" hitSlop={8}>
-            <Image source={CARD_BACK} style={styles.albumIcon} resizeMode="cover" />
-            <Text style={styles.albumText}>ALBUM</Text>
-          </Pressable>
-        </View>
-        <View style={styles.stage}>
-          <View style={styles.scene}>
-            <View style={styles.sun} />
-            <View style={styles.ground} />
-            <Image source={BOOTH} style={styles.booth} resizeMode="contain" />
-            <Animated.Image source={BARKER_WAVE} style={[styles.barker, sharkStyle]} resizeMode="contain" />
-            <View style={styles.bubble}><Text style={styles.bubbleText}>Step right up! Pick your game.</Text></View>
-          </View>
-        </View>
-        <View style={[styles.cards, { paddingBottom: insets.bottom + 14 }]}>
-          <BoothCard index={0} reducedMotion={reducedMotion} onPress={() => go({ kind: 'timeAttack' })}
-            title="Time Attack" body="Race the clock. Every clean board grows." icon={STOPWATCH}
-            right={best > 0 ? <Stat label="BEST" value={best.toLocaleString()} /> : null} />
-          <BoothCard index={1} reducedMotion={reducedMotion} onPress={startDaily} gold
-            title="Daily Deck" body={rec ? (rec.cleared ? `Cleared in ${rec.turns} turns. Practice runs are open.` : 'Ranked try played. Practice runs are open.') : `Two slips and you're out. ${ghost ? `Race ${ghost.name}.` : 'Beat the par shark.'}`}
-            icon={STREAK}
-            right={<View style={{ alignItems: 'flex-end' }}>
-              <View style={{ flexDirection: 'row' }}>
-                {[0, 1, 2].map((f) => <View key={f} style={{ marginLeft: f ? -8 : 0, transform: [{ rotateZ: `${(f - 1) * 8}deg` }] }}><FaceThumb face={faceFor(dailyDeck, f)} w={24} h={30} radius={4} /></View>)}
-              </View>
-              <Text style={styles.badge}>{rec ? 'PRACTICE' : 'RANKED'}{streakNow ? ` · ${streakNow} DAY${streakNow === 1 ? '' : 'S'}` : ''}</Text>
-            </View>} />
-          <BoothCard index={2} reducedMotion={reducedMotion} onPress={() => go({ kind: 'passPlay', players })}
-            title="Pass & Play" body="One phone, up to 4 sharks. Match and go again." icon={CARD_BACK}
-            right={<Stepper value={players} onChange={(v) => { Haptic.tickSelection(); setPlayers(v); }} />} />
-        </View>
-        <AlbumSheet visible={albumOpen} album={album} onClose={() => setAlbumOpen(false)} />
-      </View>
-    </Modal>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ alignItems: 'flex-end' }}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* Posts first: the awning's band and the counter rail sit over their ends. */}
+      <VStrip strip={g.postStrips[0]} />
+      <VStrip strip={g.postStrips[1]} />
+      <HStrip strip={g.counterStrip} capA={KIT.counterCapL} tile={KIT.counterTile} capB={KIT.counterCapR} clipTop={-20} />
+      <Prizes geo={g} prizes={prizes} bounceKey={bounceKey} reducedMotion={reducedMotion} />
+      {pot ? <Pot geo={g} pot={pot} reducedMotion={reducedMotion} /> : null}
+      {rail ? <RailToken geo={g} rail={rail} reducedMotion={reducedMotion} /> : null}
+      <HStrip strip={g.awningStrip} capA={KIT.awningCapL} tile={KIT.awningTile} capB={KIT.awningCapR} clipTop={0} />
+      <MarqueeLights geo={g} marquee={marquee} beat={beat} still={reducedMotion} />
     </View>
   );
-}
+});
 
-function Stepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <View style={styles.stepper}>
-      {[2, 3, 4].map((n) => (
-        <Pressable key={n} onPress={() => onChange(n)} style={[styles.stepBtn, value === n && styles.stepOn]} hitSlop={4}
-          accessibilityRole="button" accessibilityLabel={`${n} players`} accessibilityState={{ selected: value === n }}>
-          <Text style={[styles.stepText, value === n && styles.stepTextOn]}>{n}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function BoothCard({ index, title, body, icon, right, onPress, gold, reducedMotion }: {
-  index: number; title: string; body: string; icon: number; right: React.ReactNode; onPress: () => void; gold?: boolean; reducedMotion: boolean;
+/** capA + clipped repeating tiles + capB (awning, counter). */
+const HStrip = memo(function HStrip({ strip, capA, tile, capB, clipTop }: {
+  strip: TileStrip; capA: ImageSourcePropType; tile: ImageSourcePropType; capB: ImageSourcePropType; clipTop: number;
 }) {
-  const t = useSharedValue(reducedMotion ? 1 : 0);
-  const press = useSharedValue(1);
+  const a = strip.capA;
+  const b = strip.capB;
+  const x0 = a.x + a.w - 1;
+  const x1 = b.x + 1;
+  return (
+    <>
+      <View style={{ position: 'absolute', left: x0, top: a.y + clipTop, width: Math.max(0, x1 - x0), height: a.h - clipTop, overflow: 'hidden' }}>
+        {strip.tiles.map((t, i) => (
+          <Image key={i} source={tile} style={{ position: 'absolute', left: t.x - x0, top: -clipTop, width: t.w + 0.5, height: t.h }} resizeMode="stretch" />
+        ))}
+      </View>
+      <Image source={capA} style={{ position: 'absolute', left: a.x, top: a.y, width: a.w, height: a.h }} resizeMode="stretch" />
+      <Image source={capB} style={{ position: 'absolute', left: b.x, top: b.y, width: b.w, height: b.h }} resizeMode="stretch" />
+    </>
+  );
+});
+
+/** capT + clipped repeating tiles + capB (posts). */
+const VStrip = memo(function VStrip({ strip }: { strip: TileStrip }) {
+  const a = strip.capA;
+  const b = strip.capB;
+  const y0 = a.y + a.h - 1;
+  const y1 = b.y + 1;
+  return (
+    <>
+      <View style={{ position: 'absolute', left: a.x, top: y0, width: a.w, height: Math.max(0, y1 - y0), overflow: 'hidden' }}>
+        {strip.tiles.map((t, i) => (
+          <Image key={i} source={KIT.postTile} style={{ position: 'absolute', left: 0, top: t.y - y0, width: t.w, height: t.h + 0.5 }} resizeMode="stretch" />
+        ))}
+      </View>
+      <Image source={KIT.postCapT} style={{ position: 'absolute', left: a.x, top: a.y, width: a.w, height: a.h }} resizeMode="stretch" />
+      <Image source={KIT.postCapB} style={{ position: 'absolute', left: b.x, top: b.y, width: b.w, height: b.h }} resizeMode="stretch" />
+    </>
+  );
+});
+
+// -----------------------------------------------------------------------------
+// Marquee lights: one Skia canvas, bulbs grouped by (segment, chase phase)
+// -----------------------------------------------------------------------------
+
+const CHASE_GROUPS = 4;
+
+const MarqueeLights = memo(function MarqueeLights({ geo, marquee, beat, still }: {
+  geo: BoothGeo; marquee: Marquee; beat: SharedValue<number>; still: boolean;
+}) {
+  const halo = useImage(HALO);
+  const groups = useMemo(() => {
+    const out: { seg: number; phase: number; bulbs: BoothGeo['bulbs'] }[] = [];
+    for (let seg = 0; seg < 3; seg++) {
+      for (let phase = 0; phase < CHASE_GROUPS; phase++) {
+        out.push({ seg, phase, bulbs: geo.bulbs.filter((b) => b.seg === seg && b.order % CHASE_GROUPS === phase) });
+      }
+    }
+    return out.filter((x) => x.bulbs.length);
+  }, [geo.bulbs]);
+  return (
+    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      {groups.map((gr) => (
+        <BulbGroup key={`${gr.seg}-${gr.phase}`} seg={gr.seg} phase={gr.phase} bulbs={gr.bulbs} marquee={marquee} beat={beat} still={still} halo={halo} />
+      ))}
+    </Canvas>
+  );
+});
+
+function BulbGroup({ seg, phase, bulbs, marquee, beat, still, halo }: {
+  seg: number; phase: number; bulbs: BoothGeo['bulbs']; marquee: Marquee; beat: SharedValue<number>; still: boolean;
+  halo: ReturnType<typeof useImage>;
+}) {
+  const level = marquee.seg[seg];
+  const { chase, all, flash, dim } = marquee;
+  const opacity = useDerivedValue(() => {
+    const b = beat.value;
+    // 0.5 Hz breathe on the 40% floor (38-45%), driven by the bar clock (129 BPM ~ 2.15 beats/s).
+    const floor = still ? 0.4 : 0.415 + 0.035 * Math.sin((b * Math.PI * 2) / 4.3);
+    const lit = floor + (1 - floor) * level.value;
+    // Chase on 8ths: 4 groups, a smooth 40-100% envelope, each bulb peaks ~1 Hz.
+    const head = (b * 2) % CHASE_GROUPS;
+    let d = Math.abs(head - phase);
+    d = Math.min(d, CHASE_GROUPS - d);
+    const env = 0.4 + 0.6 * Math.max(0, 1 - d / 1.6) ** 2;
+    const chased = lit * (1 - chase.value) + env * chase.value;
+    const v = Math.max(chased, all.value, flash.value);
+    return v * (1 - dim.value * 0.3);
+  });
+  return (
+    <Group opacity={opacity}>
+      {bulbs.map((b, i) => (
+        <Group key={i}>
+          {halo ? <SkImage image={halo} x={b.x - b.r * 3} y={b.y - b.r * 3} width={b.r * 6} height={b.r * 6} fit="contain" /> : null}
+          <Circle cx={b.x} cy={b.y} r={b.r * 0.82} color="#fff7cf" />
+          <Circle cx={b.x - b.r * 0.25} cy={b.y - b.r * 0.25} r={b.r * 0.3} color="#ffffff" />
+        </Group>
+      ))}
+    </Group>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Prize counter
+// -----------------------------------------------------------------------------
+
+const Prizes = memo(function Prizes({ geo, prizes, bounceKey, reducedMotion }: { geo: BoothGeo; prizes: (PrizeEntry | null)[]; bounceKey: number; reducedMotion: boolean }) {
+  return (
+    <>
+      {geo.prize.map((r, i) => (
+        <PrizeSlot key={i} r={r} index={i} entry={prizes[i] ?? null} bounceKey={bounceKey} reducedMotion={reducedMotion} />
+      ))}
+    </>
+  );
+});
+
+function PrizeSlot({ r, index, entry, bounceKey, reducedMotion }: { r: Rect; index: number; entry: PrizeEntry | null; bounceKey: number; reducedMotion: boolean }) {
+  const sq = useSharedValue(1);
+  const bounce = useSharedValue(0);
+  useEffect(() => {
+    if (!entry || reducedMotion) return;
+    // 90ms landing squash.
+    sq.value = withSequence(withTiming(0.86, { duration: 40 }), withTiming(1.06, { duration: 30 }), withTiming(1, { duration: 20 }));
+  }, [entry, reducedMotion, sq]);
+  useEffect(() => {
+    if (!bounceKey || reducedMotion) return;
+    bounce.value = withDelay(index * 20, withSequence(withTiming(-7, { duration: 80, easing: Easing.out(Easing.quad) }), withSpring(0, { damping: 9, stiffness: 300 })));
+  }, [bounceKey, index, reducedMotion, bounce]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }, { scaleY: sq.value }, { scaleX: 2 - sq.value }] }));
+  const w = r.w * 0.82;
+  const h = r.h * 0.86;
+  return (
+    <Animated.View style={[styles.slot, { left: r.x, top: r.y, width: r.w, height: r.h }, entry && styles.slotFull, st]}>
+      {entry ? (
+        <>
+          <View style={[styles.mini, { left: -1, top: 1, transform: [{ rotateZ: '-6deg' }] }]}>
+            <FaceThumb face={entry.face} w={w} h={h} radius={3} foil={entry.tint === 'gold'} />
+          </View>
+          <View style={[styles.mini, { left: r.w - w + 1, top: 0, transform: [{ rotateZ: '5deg' }] }]}>
+            <FaceThumb face={entry.face} w={w} h={h} radius={3} foil={entry.tint === 'gold'} />
+          </View>
+        </>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+function Pot({ geo, pot, reducedMotion }: { geo: BoothGeo; pot: { faces: CardFace[]; value: number }; reducedMotion: boolean }) {
+  const pulse = useSharedValue(1);
   useEffect(() => {
     if (reducedMotion) return;
-    t.value = withDelay(180 + index * 70, withTiming(1, { duration: 360, easing: Easing.out(Easing.back(1.3)) }));
-  }, [index, reducedMotion, t]);
-  const st = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 1.5), transform: [{ translateY: (1 - t.value) * 60 }, { scale: press.value }] }));
+    pulse.value = withSequence(withTiming(1.12, { duration: 60 }), withTiming(1, { duration: 120 }));
+  }, [pot.value, pot.faces.length, reducedMotion, pulse]);
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+  const cw = geo.prize[0]?.w ?? 26;
+  const chh = geo.prize[0]?.h ?? 32;
   return (
-    <Animated.View style={st}>
-      <Pressable onPress={onPress}
-        onPressIn={() => { press.value = withTiming(0.96, { duration: 60 }); }}
-        onPressOut={() => { press.value = withSequence(withTiming(1.02, { duration: 80 }), withTiming(1, { duration: 80 })); }}
-        style={[styles.card, gold && styles.cardGold]} accessibilityRole="button" accessibilityLabel={`${title}. ${body}`}>
-        <View style={[styles.iconWell, gold && styles.iconWellGold]}>
-          <Image source={icon} style={styles.icon} resizeMode="contain" />
-        </View>
-        <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          <Text style={styles.cardBody} numberOfLines={2}>{body}</Text>
-        </View>
-        {right}
-      </Pressable>
+    <Animated.View style={[styles.pot, { left: geo.pot.x - 60, top: geo.counter.y - chh * 0.65, width: 120, height: chh + 26 }, st]}>
+      <View style={styles.potStack}>
+        {pot.faces.map((f, i) => (
+          <View key={i} style={{ position: 'absolute', left: 60 - cw / 2 + (i % 2 ? 4 : -4), top: 4 - i * 6, transform: [{ rotateZ: `${(i % 2 ? 1 : -1) * 6}deg` }] }}>
+            <FaceThumb face={f} w={cw} h={chh * 0.9} radius={3} />
+          </View>
+        ))}
+      </View>
+      <View style={styles.potTag}>
+        <Text style={styles.potText}>{pot.value.toLocaleString('en-US')}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function RailToken({ geo, rail, reducedMotion }: { geo: BoothGeo; rail: NonNullable<BoothFrontProps['rail']>; reducedMotion: boolean }) {
+  const slot = Math.max(0, Math.min(geo.prize.length - 1, rail.slot));
+  const target = geo.prize[slot] ? geo.prize[slot].x + geo.prize[slot].w / 2 : geo.pot.x;
+  const x = useSharedValue(target);
+  const spin = useSharedValue(0);
+  const [prevAhead, setPrevAhead] = useState(rail.ahead);
+  useEffect(() => {
+    x.value = reducedMotion ? target : withSpring(target, { damping: 16, stiffness: 140 });
+  }, [target, reducedMotion, x]);
+  useEffect(() => {
+    if (rail.ahead && !prevAhead && !reducedMotion) {
+      spin.value = 0;
+      spin.value = withTiming(1, { duration: 360, easing: Easing.out(Easing.back(1.4)) });
+    }
+    setPrevAhead(rail.ahead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rail.ahead]);
+  const size = 40;
+  const st = useAnimatedStyle(() => ({ transform: [{ translateX: x.value - size / 2 }, { rotateY: `${spin.value * 360}deg` }] }));
+  return (
+    <Animated.View style={[styles.token, { top: geo.railY - size * 0.95, width: size }, st]}>
+      <Image source={rail.art} style={{ width: size, height: size, opacity: 0.6 }} resizeMode="contain" />
+      <View style={[styles.railChip, rail.ahead ? styles.railChipAhead : null]}>
+        <Text style={[styles.railChipText, rail.ahead && { color: MM.navyText }]} numberOfLines={1}>{rail.delta ?? rail.label}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Awning callouts: Medium ribbon and Large sign letters
+// -----------------------------------------------------------------------------
+
+export interface AwningCalloutsHandle {
+  ribbon: (text: string) => void;
+  sign: (text: string) => void;
+}
+
+export const AwningCallouts = forwardRef<AwningCalloutsHandle, { geo: BoothGeo; reducedMotion: boolean }>(function AwningCallouts({ geo, reducedMotion }, ref) {
+  const [ribbonText, setRibbonText] = useState('');
+  const [signText, setSignText] = useState('');
+  const [signKey, setSignKey] = useState(0);
+  const unfurl = useSharedValue(0);
+  useImperativeHandle(ref, () => ({
+    ribbon(text) {
+      setRibbonText(text);
+      cancelAnimation(unfurl);
+      unfurl.value = 0;
+      // Unfurl 180ms from centre, hold 600ms, roll up 160ms.
+      unfurl.value = withSequence(
+        withTiming(1, { duration: reducedMotion ? 60 : 180, easing: Easing.out(Easing.back(1.2)) }),
+        withDelay(600, withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) })),
+      );
+    },
+    sign(text) {
+      setSignText(text);
+      setSignKey((k) => k + 1);
+    },
+  }), [reducedMotion, unfurl]);
+  const rw = Math.min(geo.W * 0.66, 270);
+  const rh = rw * (74 / 192);
+  const ribbonStyle = useAnimatedStyle(() => ({ opacity: unfurl.value > 0.02 ? 1 : 0, transform: [{ scaleX: unfurl.value }, { scaleY: 0.85 + 0.15 * unfurl.value }] }));
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Animated.View style={[styles.ribbon, { left: geo.W / 2 - rw / 2, top: geo.ribbonY - rh * 0.55, width: rw, height: rh }, ribbonStyle]}>
+        <Image source={RIBBON} style={{ position: 'absolute', width: rw, height: rh }} resizeMode="stretch" />
+        <Text style={[styles.ribbonText, { fontSize: Math.round(rh * 0.36), marginTop: -rh * 0.08 }]} numberOfLines={1} adjustsFontSizeToFit>{ribbonText}</Text>
+      </Animated.View>
+      {signText ? <SignLetters key={signKey} text={signText} geo={geo} reducedMotion={reducedMotion} onDone={() => setSignText('')} /> : null}
+    </View>
+  );
+});
+
+function SignLetters({ text, geo, reducedMotion, onDone }: { text: string; geo: BoothGeo; reducedMotion: boolean; onDone: () => void }) {
+  const letters = text.split('');
+  const span = geo.W * 0.8;
+  const step = span / letters.length;
+  useEffect(() => {
+    const t = setTimeout(onDone, 30 * letters.length + 1300);
+    return () => clearTimeout(t);
+  }, [letters.length, onDone]);
+  return (
+    <>
+      {letters.map((ch, i) => (
+        <SignLetter key={i} ch={ch} x={geo.W * 0.1 + i * step} w={step} y={geo.awning.y + geo.awning.h * 0.1} size={Math.min(geo.awning.h * 0.62, step * 1.25)} delay={i * 30} reducedMotion={reducedMotion} />
+      ))}
+    </>
+  );
+}
+
+function SignLetter({ ch, x, w, y, size, delay, reducedMotion }: { ch: string; x: number; w: number; y: number; size: number; delay: number; reducedMotion: boolean }) {
+  const drop = useSharedValue(reducedMotion ? 1 : 0);
+  const sq = useSharedValue(1);
+  const out = useSharedValue(0);
+  useEffect(() => {
+    if (!reducedMotion) {
+      drop.value = withDelay(delay, withTiming(1, { duration: 140, easing: Easing.in(Easing.quad) }));
+      sq.value = withDelay(delay + 140, withSequence(withTiming(1.12, { duration: 50 }), withTiming(1, { duration: 80 })));
+    }
+    out.value = withDelay(delay + 1100, withTiming(1, { duration: 180 }));
+  }, [delay, reducedMotion, drop, sq, out]);
+  const st = useAnimatedStyle(() => ({
+    opacity: Math.min(1, drop.value * 3) * (1 - out.value),
+    transform: [{ translateY: (drop.value - 1) * 60 - out.value * 12 }, { scaleY: 2 - sq.value }, { scaleX: sq.value }],
+  }));
+  return (
+    <Animated.View style={[{ position: 'absolute', left: x, top: y, width: w, alignItems: 'center' }, st]}>
+      <View style={styles.signTile}>
+        <Text style={[styles.signLetter, { fontSize: size }]}>{ch}</Text>
+      </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#35a8e6' },
-  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  close: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#05346e', alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontFamily: 'Shark', fontSize: 30, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  albumBtn: { alignItems: 'center', width: 52 },
-  albumIcon: { width: 30, height: 38, borderRadius: 5, borderWidth: 2, borderColor: '#ffffff' },
-  albumText: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff', marginTop: 2 },
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', minHeight: 200 },
-  scene: { width: 340, height: 270, maxHeight: '100%' },
-  sun: { position: 'absolute', left: 40, right: 40, top: 10, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,255,255,0.22)' },
-  ground: { position: 'absolute', left: 10, right: 10, bottom: 0, height: 34, borderRadius: 170, backgroundColor: 'rgba(5,52,110,0.18)' },
-  booth: { position: 'absolute', bottom: 8, right: 16, height: 250, width: 250 * 299 / 384 },
-  barker: { position: 'absolute', bottom: 2, left: 18, height: 220, width: 220 * 581 / 768 },
-  bubble: { position: 'absolute', top: 0, left: 140, maxWidth: 150, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6 },
-  bubbleText: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, textAlign: 'center' },
-  cards: { paddingHorizontal: 16, gap: 12, paddingTop: 12 },
-  card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 22, borderWidth: 3, borderColor: MM.ink,
-    paddingHorizontal: 12, paddingVertical: 12, minHeight: 84,
-    shadowColor: '#064375', shadowOpacity: 0.3, shadowRadius: 0, shadowOffset: { width: 0, height: 5 },
+  slot: {
+    position: 'absolute', borderRadius: 5, borderWidth: 1.5, borderColor: 'rgba(254,201,14,0.9)', borderStyle: 'dashed',
+    backgroundColor: 'rgba(90,46,14,0.35)',
   },
-  cardGold: { backgroundColor: MM.cream, borderColor: MM.goldDeep },
-  iconWell: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#dff1ff', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  iconWellGold: { backgroundColor: '#ffe9a6' },
-  icon: { width: 40, height: 44 },
-  cardTitle: { fontFamily: 'Shark', fontSize: 24, color: MM.navyText },
-  cardBody: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink },
-  statLabel: { fontFamily: 'Knockout', fontSize: 11, color: MM.ink },
-  statValue: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
-  badge: { fontFamily: 'Knockout', fontSize: 11, color: MM.goldDeep, marginTop: 4 },
-  stepper: { flexDirection: 'row', gap: 4 },
-  stepBtn: { width: 34, height: 44, borderRadius: 10, borderWidth: 2, borderColor: MM.ink, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
-  stepOn: { backgroundColor: MM.gold, borderColor: MM.goldDeep },
-  stepText: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
-  stepTextOn: { color: '#075083' },
+  slotFull: { borderStyle: 'solid', borderColor: 'transparent', backgroundColor: 'transparent' },
+  mini: { position: 'absolute' },
+  pot: { position: 'absolute', alignItems: 'center' },
+  potStack: { position: 'absolute', left: 0, top: 0, width: 120, height: 40 },
+  potTag: {
+    position: 'absolute', bottom: 0, paddingHorizontal: 8, paddingVertical: 1, borderRadius: 9, backgroundColor: MM.gold,
+    borderWidth: 2, borderColor: '#ffffff',
+  },
+  potText: { fontFamily: 'Shark', fontSize: 15, color: MM.navyText },
+  token: { position: 'absolute', left: 0, alignItems: 'center' },
+  railChip: { marginTop: -6, paddingHorizontal: 5, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1.5, borderColor: MM.ink, maxWidth: 88 },
+  railChipAhead: { backgroundColor: MM.gold, borderColor: '#ffffff' },
+  railChipText: { fontFamily: 'Shark', fontSize: 11, color: MM.ink },
+  ribbon: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  ribbonText: {
+    fontFamily: 'Shark', color: '#ffffff', textShadowColor: MM.ink, textShadowOffset: { width: 1.5, height: 2 }, textShadowRadius: 1,
+    paddingHorizontal: 30,
+  },
+  signTile: {
+    backgroundColor: '#fff8e4', borderRadius: 6, borderWidth: 2.5, borderColor: MM.ink, paddingHorizontal: 2,
+  },
+  signLetter: {
+    fontFamily: 'Shark', color: MM.goldDeep, textShadowColor: MM.ink, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0.5,
+  },
 });

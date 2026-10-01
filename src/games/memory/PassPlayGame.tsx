@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FxStage, GameAudio, GameShellV2, Haptic, useGameMusic, useMusicBeat, useStudioAudio, type FxStageHandle, type GameResult } from '../../gamekit';
 import { SHARKS } from '../../gamekit/party/partyArt';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { MemoryCard, type MemoryCardHandle } from './MemoryCard';
+import { MemoryCard, makeCardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
 import { SharkStage, type SharkStageHandle } from './SharkStage';
 import { deckById, type Deck } from './decks';
 import { faceFor } from './faces';
@@ -92,6 +92,9 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = useCallback((ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); }, []);
+  const shimmer = useSharedValue<ShimmerState>({ id: -1, p: 0 });
+  const [say, setSay] = useState<{ text: string; color: string; key: number } | null>(null);
+  const sayIt = useCallback((text: string, color: string) => setSay({ text, color, key: Date.now() }), []);
   const ring = useSharedValue(1);
   const nudge = useSharedValue(0);
   const warmth = useSharedValue(0);
@@ -100,6 +103,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
   useGameMusic(bed, { at: 'bar' });
   useStudioAudio('memory', ['mm_flip', 'mm_match', 'mm_scout_tick', 'mm_board_clear', 'ui_tick', 'sh_whistle']);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cardValues = useMemo(() => Array.from({ length: 16 }, (_, i) => makeCardValues(g ? slotXY(g, i).x : 0, g ? slotXY(g, i).y : 0)), [round, g == null]);
   const onFieldLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setField((f) => (Math.abs(f.w - width) < 1 && Math.abs(f.h - height) < 1 ? f : { w: width, h: height }));
@@ -153,7 +158,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
   const nudgeTurn = useCallback(() => {
     if (!playing.current) return;
     nudge.value = withSequence(...[0, 1, 2, 3].map((i) => withTiming(i % 2 ? -1 : 1, { duration: 70 })), withTiming(0, { duration: 70 }));
-    stage.current?.say('YOUR TURN!', '#ffffff', 'right');
+    sayIt('YOUR TURN!', '#ffffff');
     Haptic.tickSelection();
   }, [nudge]);
 
@@ -161,7 +166,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
     playing.current = true;
     setBed('mm_loop_main');
     stage.current?.pose('wave', 900);
-    stage.current?.say('PLAYER 1', PLAYER_COLORS[0], 'right');
+    sayIt('PLAYER 1', PLAYER_COLORS[0]);
     startRing();
   }, [startRing]);
 
@@ -215,8 +220,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
         case 'match': {
           const { a, b, player, run } = ev;
           later(FLIP_MS, () => {
-            cards.current[a]?.pop(0.12 * 20, 50, run >= 3);
-            cards.current[b]?.pop(-0.12 * 20, 50, run >= 3);
+            cards.current[a]?.stamp(50, run >= 3);
+            cards.current[b]?.stamp(50, run >= 3);
             GameAudio.playLadder('mm_match', ladderStep(run));
             if (ev.recall) GameAudio.playLadder('mm_sharp_twinkle', ladderStep(run), { volume: 0.6 });
             Haptic.hitMedium();
@@ -224,13 +229,16 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
             const pb = slotXY(gg, b);
             fx.current?.burst('stars', (pa.x + pb.x) / 2 + gg.cw / 2, (pa.y + pb.y) / 2 + gg.ch / 2, { count: run >= 3 ? 16 : run === 2 ? 12 : 8 });
             stage.current?.pose(run >= 2 ? 'fist' : 'hmm', 700);
-            if (run >= 3) stage.current?.say('ON A ROLL!', MM.gold, 'right');
+            if (run >= 3) sayIt('ON A ROLL!', MM.gold);
             warmth.value = withTiming(Math.min(3, run) * 0.06, { duration: 300 });
             // Pair flies to the player's token.
             const tx = tokenX(gg.W, s.players.length, player) - gg.cw * 0.25;
             later(260, () => {
-              cards.current[a]?.flyTo(tx, 8, 0.3, 0, () => cards.current[a]?.hide());
-              cards.current[b]?.flyTo(tx, 8, 0.3, 40, () => { cards.current[b]?.hide(); sync(); });
+              cards.current[a]?.moveTo(tx, 8, 280, gg.cw * 0.6);
+              cards.current[b]?.moveTo(tx, 8, 280, gg.cw * 0.6, 40);
+              cards.current[a]?.hide(320);
+              cards.current[b]?.hide(360);
+              later(380, sync);
             });
           });
           break;
@@ -303,7 +311,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
     setCurtain(null);
     playing.current = true;
     const who = stateRef.current.current;
-    stage.current?.say(`PLAYER ${who + 1}`, PLAYER_COLORS[who], 'right');
+    sayIt(`PLAYER ${who + 1}`, PLAYER_COLORS[who]);
     stage.current?.pose('wave', 700);
     startRing();
   }, [startRing]);
@@ -370,7 +378,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
               ))}
             </View>
             <View style={{ position: 'absolute', left: 0, top: g.stageY, width: g.W, height: g.stageH }} pointerEvents="none">
-              <SharkStage ref={stage} height={g.stageH} width={g.W} beat={beat.beat} showtime={false} warmth={warmth} reducedMotion={reducedMotion} calm={reducedMotion} />
+              <SharkStage ref={stage} x={8} y={0} height={g.stageH} beat={beat.beat} reducedMotion={reducedMotion} calm={reducedMotion} />
+              {say ? <Text key={say.key} style={[styles.say, { color: say.color }]}>{say.text}</Text> : null}
             </View>
             <View style={[styles.panel, { left: g.panel.x, top: g.panel.y, width: g.panel.w, height: g.panel.h }]}>
               <View style={[styles.felt, { borderColor: PLAYER_COLORS[view.current] }]}>
@@ -387,7 +396,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
               {layout.faces.map((f, s) => {
                 const p = slotXY(g, s);
                 return (
-                  <MemoryCard key={`c${round}-${s}`} ref={(h) => { cards.current[s] = h; }} x0={p.x} y0={p.y} w={g.cw} h={g.ch}
+                  <MemoryCard key={`c${round}-${s}`} ref={(h) => { cards.current[s] = h; }} sv={cardValues[s] ?? makeCardValues(p.x, p.y)} id={s} shimmer={shimmer} w={g.cw} h={g.ch}
                     back={CARD_BACK} face={faceFor(deck, f)} reducedMotion={reducedMotion} />
                 );
               })}
@@ -496,6 +505,7 @@ const styles = StyleSheet.create({
   blocked: { position: 'absolute', borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.55)', borderWidth: 2, borderColor: 'rgba(11,92,173,0.4)' },
   hint: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: MM.gold, paddingHorizontal: 14, paddingVertical: 4 },
   hintText: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
+  say: { position: 'absolute', right: 16, top: 18, fontFamily: 'Shark', fontSize: 28, textShadowColor: MM.ink, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
   curtainBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   curtainShark: { width: 150, height: 150, borderRadius: 75, borderWidth: 5, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   curtainKicker: { fontFamily: 'Knockout', fontSize: 18, color: MM.ink, letterSpacing: 1 },

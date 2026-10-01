@@ -10,7 +10,7 @@
  *   - the share grid rows (one cell per turn, coloured and shaped by verdict).
  */
 
-import { parFor } from '../engine';
+import { fairParFor, fairPerfectFor } from '../engine';
 
 /** Rotation for the deck of the day when no ride deck applies. */
 export const DAILY_DECKS = ['park', 'ocean', 'space', 'pirates', 'mansion', 'backlot', 'jungle', 'rainbow-ridge'] as const;
@@ -116,12 +116,13 @@ export function liveStreak(st: StreakState, today: string): number {
 // Ghosts (turn based, never on the board)
 // -----------------------------------------------------------------------------
 
-/** Verdict codes as recorded by the engine: 0 recall 1 lucky 2 scout 3 slip 4 gull. */
+/** Verdict codes as recorded by the engine: 0 recall 1 lucky 2 scout 3 slip 4 gull 5 glimpse. */
 export const V_RECALL = 0;
 export const V_LUCKY = 1;
 export const V_SCOUT = 2;
 export const V_SLIP = 3;
 export const V_GULL = 4;
+export const V_GLIMPSE = 5;
 
 export interface DailyGhost {
   name: string;
@@ -131,7 +132,7 @@ export interface DailyGhost {
 }
 
 export function isMatchVerdict(v: number): boolean {
-  return v === V_RECALL || v === V_LUCKY;
+  return v === V_RECALL || v === V_LUCKY || v === V_GLIMPSE;
 }
 
 /** Pairs a verdict log holds after its first k turns. */
@@ -153,21 +154,33 @@ export function turnsToPairs(verdicts: readonly number[], p: number): number {
 }
 
 /**
- * The par shark: a clean player who clears exactly on par. It scouts the
- * first half of the board, then cashes in, which is what a real clean run
- * looks like turn by turn.
+ * The par shark: a clean player who clears exactly on the Fair Deck par
+ * (PERFECT + 2). On a Fair Deck nothing is ever lucky: it scouts the opening
+ * ceil(n/2) turns, cashes in with recalls, and spends its two spare turns as
+ * scouts early on, which is what a real clean Daily looks like turn by turn.
  */
 export function parGhost(pairs = 8): DailyGhost {
-  const par = parFor(pairs);
-  let scouts = par - pairs;
-  let matches = pairs;
+  const par = fairParFor(pairs);
+  const opening = fairPerfectFor(pairs) - pairs;
   const verdicts: number[] = [];
-  // Two opening scouts, a lucky first pair, then scout / recall until the scouts run out.
-  for (let t = 0; t < par; t++) {
-    const wantScout = t < 2 || (t > 2 && t % 2 === 1);
-    if ((wantScout && scouts > 0) || matches === 0) { verdicts.push(V_SCOUT); scouts--; } else { verdicts.push(t === 2 ? V_LUCKY : V_RECALL); matches--; }
+  for (let t = 0; t < opening; t++) verdicts.push(V_SCOUT);
+  let spare = par - fairPerfectFor(pairs);
+  let matches = pairs;
+  for (let t = opening; t < par; t++) {
+    if (spare > 0 && t % 3 === 1) { verdicts.push(V_SCOUT); spare--; } else if (matches > 0) { verdicts.push(V_RECALL); matches--; } else { verdicts.push(V_SCOUT); spare--; }
   }
   return { name: 'PAR', verdicts, kind: 'par' };
+}
+
+/** Pair delta at my turn count: positive = I hold more pairs than the ghost did at the same turn (6.8). */
+export function railDelta(ghost: readonly number[], myTurns: number, myPairs: number): number {
+  return myPairs - pairsAfter(ghost, myTurns);
+}
+
+export function railDeltaLabel(delta: number, name: string): string {
+  if (delta === 0) return `even ${name}`;
+  const n = Math.abs(delta);
+  return `${delta > 0 ? '+' : '-'}${n} ${n === 1 ? 'pair' : 'pairs'} vs ${name}`;
 }
 
 /**
@@ -194,7 +207,7 @@ export function ghostDeltaLabel(delta: number | null, name: string): string | nu
 
 export type ShareCell = 'recall' | 'lucky' | 'scout' | 'slip' | 'gull';
 
-const CELL: Record<number, ShareCell> = { 0: 'recall', 1: 'lucky', 2: 'scout', 3: 'slip', 4: 'gull' };
+const CELL: Record<number, ShareCell> = { 0: 'recall', 1: 'lucky', 2: 'scout', 3: 'slip', 4: 'gull', 5: 'lucky' };
 
 /** One small square per turn, wrapped into rows of `perRow`. */
 export function shareRows(verdicts: readonly number[], perRow = 8): ShareCell[][] {
@@ -206,7 +219,7 @@ export function shareRows(verdicts: readonly number[], perRow = 8): ShareCell[][
   return rows;
 }
 
-/** A ride stamp lands on an at-or-under-par clear of that ride's deck. */
+/** A ride stamp lands on an at-or-under-par (Fair Deck par) clear of that ride's deck. */
 export function earnsStamp(cleared: boolean, turns: number, pairs: number, rideKey: string | null): boolean {
-  return !!rideKey && cleared && turns <= parFor(pairs);
+  return !!rideKey && cleared && turns <= fairParFor(pairs);
 }

@@ -77,20 +77,21 @@ test('streak: consecutive days grow, a gap resets, a freeze covers one missed da
   assert.equal(s2.freezes, 1);
 });
 
-test('turn ghosts: pairs after k turns and a signed delta chip', () => {
+test('rail ghost (Fair Deck par shark): pairs after k turns and a pair delta chip (6.8)', () => {
   const g = D.parGhost(8);
-  assert.equal(g.verdicts.length, E.parFor(8));
+  assert.equal(g.verdicts.length, E.fairParFor(8), 'the par shark clears exactly on the Fair Deck par (14)');
   assert.equal(D.pairsAfter(g.verdicts, g.verdicts.length), 8);
-  assert.equal(D.turnsToPairs(g.verdicts, 8), E.parFor(8));
-  // I hold 3 pairs after 4 turns: the par shark needed more, so I lead.
-  const lead = D.ghostDelta(g.verdicts, 4, 3);
+  assert.equal(D.turnsToPairs(g.verdicts, 8), E.fairParFor(8));
+  assert.equal(g.verdicts.filter((v) => v === D.V_LUCKY).length, 0, 'nothing is lucky on a Fair Deck');
+  assert.equal(D.pairsAfter(g.verdicts, 4), 0, 'it scouts the opening ceil(n/2) turns');
+  // I hold 3 pairs after 6 turns: the par shark had fewer, so I lead.
+  const lead = D.railDelta(g.verdicts, 6, 3);
   assert.ok(lead > 0);
-  assert.match(D.ghostDeltaLabel(lead, 'PAR'), /^\+\d+ turns? vs PAR$/);
-  const behind = D.ghostDelta([1, 1, 1, 1], 6, 3);
-  assert.equal(behind, -3);
-  assert.equal(D.ghostDeltaLabel(-1, 'Jake'), '-1 turn vs Jake');
-  assert.equal(D.ghostDeltaLabel(0, 'Jake'), 'Even with Jake');
-  assert.equal(D.ghostDelta(g.verdicts, 1, 0), null);
+  assert.match(D.railDeltaLabel(lead, 'PAR'), /^\+\d+ pairs? vs PAR$/);
+  assert.equal(D.railDelta([1, 1, 1, 1], 4, 1), -3);
+  assert.equal(D.railDeltaLabel(-1, 'JAKE'), '-1 pair vs JAKE');
+  assert.equal(D.railDeltaLabel(0, 'JAKE'), 'even JAKE');
+  assert.ok(D.isMatchVerdict(D.V_GLIMPSE));
 });
 
 test('share grid: one cell per turn, coloured and shaped by verdict', () => {
@@ -100,9 +101,9 @@ test('share grid: one cell per turn, coloured and shaped by verdict', () => {
   eq(rows[1], ['lucky']);
 });
 
-test('ride stamps land only on at-or-under-par clears of a ride deck', () => {
-  assert.equal(D.earnsStamp(true, 13, 8, 'coaster'), true);
-  assert.equal(D.earnsStamp(true, 14, 8, 'coaster'), false);
+test('ride stamps land only on at-or-under-par (Fair Deck par 14) clears of a ride deck', () => {
+  assert.equal(D.earnsStamp(true, 14, 8, 'coaster'), true);
+  assert.equal(D.earnsStamp(true, 15, 8, 'coaster'), false);
   assert.equal(D.earnsStamp(false, 10, 8, 'coaster'), false);
   assert.equal(D.earnsStamp(true, 10, 8, null), false);
 });

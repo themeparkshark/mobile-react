@@ -6,5 +6,5 @@
  * barker's booth menu (Time Attack, Daily Deck, Pass & Play) first.
  */
 
-export { default as MemoryGame } from './MemoryBooth';
-export type { MemoryMatchProps as MemoryGameProps } from './MemoryBooth';
+export { default as MemoryGame } from './MemoryMenu';
+export type { MemoryMatchProps as MemoryGameProps } from './MemoryMenu';

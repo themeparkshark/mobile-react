@@ -2,12 +2,12 @@
  * MemoryExtras.tsx: everything under the results card (design 4.3, 4.4, 5.6, 6.10).
  *
  *   FaceThumb       one face of a deck sheet at any size (shelf, album, chips)
- *   ResultsExtras   NEW CARD / NEW FOIL / NEW STAMP flips, then ALBUM, SHARE,
- *                   CHALLENGE buttons (each sheet opens only on its own tap)
- *   ShareSheet      the Wordle-style grid as an image (view-shot), shared only
- *                   on the SHARE tap through the system share sheet
- *   AlbumSheet      deck pages with collected, foil and perfect states, ride stamps
- *   ChallengeSheet  friend picker; SEND is the only thing that posts
+ *   NewChip         NEW CARD / NEW FOIL / NEW STAMP card flips (results rewards row)
+ *   ShareBack       the back of the results card: the Wordle-style grid as an
+ *                   image (view-shot), shared only on the SHARE NOW tap
+ *   AlbumBody       deck pages with collected, foil and perfect states, ride stamps
+ *                   (inline on results; AlbumSheet wraps it for the booth menu)
+ *   ChallengeBody   inline friend picker; SEND is the only thing that posts
  *
  * Bright surfaces only: cream and white sheets, blue ink, gold actions. No emoji.
  */
@@ -27,7 +27,7 @@ import type { CardFace } from './MemoryCard';
 import { MM } from './theme';
 import { FOIL_AT, collected, foils, isFoil, type Album } from './modes/album';
 import { shareRows, type ShareCell } from './modes/daily';
-import { parFor } from './engine';
+import { fairPerfectFor } from './engine';
 
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const STAMP = require('../../assets/games/memory/studio/match_stamp.png');
@@ -94,41 +94,11 @@ export interface DailySummary {
   streak: number;
   verdicts: number[];
   deckId: string;
+  /** RECALL % headline. */
+  recall: number;
 }
 
-export function ResultsExtras({ rewards, daily, reducedMotion }: { rewards: RunRewards | null; daily: DailySummary | null; reducedMotion: boolean }) {
-  const [sheet, setSheet] = useState<'album' | 'share' | 'challenge' | null>(null);
-  const deck = rewards ? deckById(rewards.deckId) : null;
-  const chips: { key: string; label: string; face?: number; stamp?: boolean }[] = [];
-  if (rewards && deck) {
-    rewards.newFoils.slice(0, 3).forEach((f) => chips.push({ key: `f${f}`, label: 'NEW FOIL', face: f }));
-    rewards.newCards.slice(0, Math.max(0, 4 - chips.length)).forEach((f) => chips.push({ key: `c${f}`, label: 'NEW CARD', face: f }));
-    if (rewards.newStamp) chips.unshift({ key: 'stamp', label: 'NEW STAMP', stamp: true });
-  }
-  return (
-    <View style={styles.extras}>
-      {chips.length ? (
-        <View style={styles.chipRow}>
-          {chips.slice(0, 4).map((c, i) => (
-            <NewChip key={c.key} index={i} label={c.label} reducedMotion={reducedMotion}
-              face={c.face != null && deck ? faceFor(deck, c.face) : null} foil={c.label === 'NEW FOIL'} stamp={!!c.stamp} />
-          ))}
-        </View>
-      ) : null}
-      {rewards?.foilDeckDone ? <Text style={styles.foilDone}>FULL FOIL DECK: gold card back unlocked</Text> : null}
-      <View style={styles.btnRow}>
-        {rewards ? <SmallBtn label="ALBUM" onPress={() => setSheet('album')} /> : null}
-        {daily ? <SmallBtn label="SHARE" onPress={() => setSheet('share')} /> : null}
-        {daily && daily.ranked ? <SmallBtn label="CHALLENGE" onPress={() => setSheet('challenge')} /> : null}
-      </View>
-      {rewards ? <AlbumSheet visible={sheet === 'album'} album={rewards.album} focusDeck={rewards.deckId} onClose={() => setSheet(null)} /> : null}
-      {daily ? <ShareSheet visible={sheet === 'share'} daily={daily} onClose={() => setSheet(null)} /> : null}
-      {daily ? <ChallengeSheet visible={sheet === 'challenge'} daily={daily} onClose={() => setSheet(null)} /> : null}
-    </View>
-  );
-}
-
-function NewChip({ index, label, face, foil, stamp, reducedMotion }: { index: number; label: string; face: CardFace | null; foil: boolean; stamp: boolean; reducedMotion: boolean }) {
+export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark }: { index: number; label: string; face: CardFace | null; foil: boolean; stamp: boolean; reducedMotion: boolean; dark?: boolean }) {
   // Card flip in, 180ms apart, with the twinkle (design 5.6).
   const r = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
@@ -136,8 +106,8 @@ function NewChip({ index, label, face, foil, stamp, reducedMotion }: { index: nu
     const t = setTimeout(() => {
       GameAudio.playLadder('mm_sharp_twinkle', Math.min(7, 3 + index), { volume: 0.6 });
       Haptic.tickSelection();
-    }, 700 + index * 180);
-    r.value = withDelay(700 + index * 180, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.4)) }));
+    }, 120 + index * 180);
+    r.value = withDelay(120 + index * 180, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.4)) }));
     return () => clearTimeout(t);
   }, [index, r, reducedMotion]);
   const back = useAnimatedStyle(() => ({ opacity: r.value < 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180}deg` }] }));
@@ -151,17 +121,8 @@ function NewChip({ index, label, face, foil, stamp, reducedMotion }: { index: nu
             : face ? <FaceThumb face={face} w={40} h={50} foil={foil} /> : null}
         </Animated.View>
       </View>
-      <Text style={[styles.newLabel, foil && { color: MM.goldDeep }]}>{label}</Text>
+      <Text style={[styles.newLabel, dark && { color: MM.navyText }, foil && { color: MM.goldDeep }]}>{label}</Text>
     </View>
-  );
-}
-
-function SmallBtn({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={() => { Haptic.tapLight(); onPress(); }} style={({ pressed }) => [styles.smallBtn, pressed && { transform: [{ scale: 0.96 }] }]}
-      accessibilityRole="button" accessibilityLabel={label.toLowerCase()} hitSlop={6}>
-      <Text style={styles.smallBtnText}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -213,7 +174,7 @@ function Glyph({ kind, size }: { kind: 'check' | 'star' | 'mag' | 'crack' | 'gul
 export function ShareCard({ daily }: { daily: DailySummary }) {
   const deck = deckById(daily.deckId) ?? DECKS[0];
   const rows = shareRows(daily.verdicts, 8);
-  const par = parFor(daily.pairs);
+  const perfect = fairPerfectFor(daily.pairs);
   return (
     <View style={styles.shareCard} collapsable={false}>
       <View style={styles.shareHead}>
@@ -222,7 +183,7 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
         </View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.shareTitle}>Memory Match Daily</Text>
-          <Text style={styles.shareSub}>{`${deck.label} · ${daily.day}`}</Text>
+          <Text style={styles.shareSub}>{`${deck.label} · ${daily.day} · RECALL ${daily.recall}%`}</Text>
         </View>
       </View>
       <View style={styles.gridWrap}>
@@ -237,7 +198,7 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
         ))}
       </View>
       <View style={styles.shareFoot}>
-        <Text style={styles.shareStat}>{daily.cleared ? `${daily.turns} TURNS · PAR ${par}` : `OUT AT ${daily.turns} TURNS`}</Text>
+        <Text style={styles.shareStat}>{daily.cleared ? `${daily.turns} TURNS · PERFECT ${perfect}` : `OUT AT ${daily.turns} TURNS`}</Text>
         <View style={styles.shareStars}>
           {[0, 1, 2].map((i) => <Image key={i} source={CROWN} style={[styles.shareCrown, i >= daily.stars && { opacity: 0.25 }]} resizeMode="contain" />)}
         </View>
@@ -252,7 +213,8 @@ export function ShareCard({ daily }: { daily: DailySummary }) {
   );
 }
 
-function ShareSheet({ visible, daily, onClose }: { visible: boolean; daily: DailySummary; onClose: () => void }) {
+/** The back of the results card: the share grid, SHARE NOW and BACK (6.10). Shared only on the tap. */
+export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () => void }) {
   const ref = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const share = async () => {
@@ -268,21 +230,16 @@ function ShareSheet({ visible, daily, onClose }: { visible: boolean; daily: Dail
     }
   };
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
-          <Text style={styles.sheetTitle}>Share your Daily</Text>
-          <View ref={ref} collapsable={false} style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
-            <ShareCard daily={daily} />
-          </View>
-          <Text style={styles.sheetHint}>Only your verdicts go in the picture, never the board.</Text>
-          <Pressable style={styles.bigBtn} onPress={share} accessibilityRole="button">
-            {busy ? <ActivityIndicator color={MM.navyText} /> : <Text style={styles.bigBtnText}>SHARE</Text>}
-          </Pressable>
-          <Pressable onPress={onClose} hitSlop={10}><Text style={styles.sheetClose}>Close</Text></Pressable>
-        </Pressable>
+    <View style={{ alignItems: 'center', alignSelf: 'stretch' }}>
+      <View ref={ref} collapsable={false} style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
+        <ShareCard daily={daily} />
+      </View>
+      <Text style={styles.sheetHint}>Only your verdicts go in the picture, never the board.</Text>
+      <Pressable style={styles.bigBtn} onPress={share} accessibilityRole="button">
+        {busy ? <ActivityIndicator color={MM.navyText} /> : <Text style={styles.bigBtnText}>SHARE NOW</Text>}
       </Pressable>
-    </Modal>
+      <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button"><Text style={styles.sheetClose}>Back</Text></Pressable>
+    </View>
   );
 }
 
@@ -290,18 +247,32 @@ function ShareSheet({ visible, daily, onClose }: { visible: boolean; daily: Dail
 // Album
 // -----------------------------------------------------------------------------
 
+/** Booth menu: the album as its own sheet (the results card uses AlbumBody inline). */
 export function AlbumSheet({ visible, album, focusDeck, onClose }: { visible: boolean; album: Album; focusDeck?: string; onClose: () => void }) {
-  const [deckId, setDeckId] = useState(focusDeck ?? DECKS[0].id);
-  useEffect(() => { if (visible && focusDeck) setDeckId(focusDeck); }, [visible, focusDeck]);
-  const deck: Deck = deckById(deckId) ?? DECKS[0];
-  const page = album.decks[deck.id];
-  const size = deck.symbols.length;
-  const stamps = useMemo(() => Object.entries(album.stamps), [album.stamps]);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.scrim}>
         <View style={[styles.sheet, styles.albumSheet]}>
           <Text style={styles.sheetTitle}>Card Album</Text>
+          <AlbumBody album={album} focusDeck={focusDeck} compact={false} />
+          <Pressable style={styles.bigBtn} onPress={onClose} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+export function AlbumBody({ album, focusDeck, compact }: { album: Album; focusDeck?: string; compact: boolean }) {
+  const [deckId, setDeckId] = useState(focusDeck ?? DECKS[0].id);
+  useEffect(() => { if (focusDeck) setDeckId(focusDeck); }, [focusDeck]);
+  const deck: Deck = deckById(deckId) ?? DECKS[0];
+  const page = album.decks[deck.id];
+  const size = deck.symbols.length;
+  const stamps = useMemo(() => Object.entries(album.stamps), [album.stamps]);
+  const thumbW = compact ? 44 : 56;
+  const thumbH = compact ? 55 : 70;
+  return (
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.tabs}>
             {DECKS.map((d) => {
               const on = d.id === deck.id;
@@ -321,8 +292,8 @@ export function AlbumSheet({ visible, album, focusDeck, onClose }: { visible: bo
               const have = (f?.m ?? 0) > 0;
               return (
                 <View key={i} style={[styles.albumSlot, page?.perfect && have && styles.albumPerfect]}>
-                  {have ? <FaceThumb face={faceFor(deck, i)} w={56} h={70} foil={isFoil(f)} radius={7} />
-                    : <Image source={CARD_BACK} style={{ width: 56, height: 70, borderRadius: 7, opacity: 0.35 }} resizeMode="cover" />}
+                  {have ? <FaceThumb face={faceFor(deck, i)} w={thumbW} h={thumbH} foil={isFoil(f)} radius={7} />
+                    : <Image source={CARD_BACK} style={{ width: thumbW, height: thumbH, borderRadius: 7, opacity: 0.35 }} resizeMode="cover" />}
                   <View style={styles.foilBar}>
                     <View style={[styles.foilFill, { width: `${Math.min(1, (f?.r ?? 0) / FOIL_AT) * 100}%` }]} />
                   </View>
@@ -342,10 +313,7 @@ export function AlbumSheet({ visible, album, focusDeck, onClose }: { visible: bo
               ))}
             </ScrollView>
           ) : <Text style={styles.sheetHint}>Clear a ride's Daily Deck at or under par to stamp its page.</Text>}
-          <Pressable style={styles.bigBtn} onPress={onClose} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
-        </View>
-      </View>
-    </Modal>
+    </View>
   );
 }
 
@@ -353,7 +321,9 @@ export function AlbumSheet({ visible, album, focusDeck, onClose }: { visible: bo
 // Challenge (friend picker; SEND is the only post)
 // -----------------------------------------------------------------------------
 
-function ChallengeSheet({ visible, daily, onClose }: { visible: boolean; daily: DailySummary; onClose: () => void }) {
+/** Inline friend picker (replaces the results action row). SEND is the only thing that posts. */
+export function ChallengeBody({ daily, onDone }: { daily: DailySummary; onDone: () => void }) {
+  const visible = true;
   const [friends, setFriends] = useState<PlayerType[] | null>(null);
   const [picked, setPicked] = useState<number[]>([]);
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'unavailable'>('idle');
@@ -376,15 +346,13 @@ function ChallengeSheet({ visible, daily, onClose }: { visible: boolean; daily: 
     }
   };
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.scrim}>
-        <View style={[styles.sheet, { maxHeight: '75%' }]}>
-          <Text style={styles.sheetTitle}>Challenge friends</Text>
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+          <Text style={styles.panelTitle}>Challenge friends</Text>
           <Text style={styles.sheetHint}>{`They play today's Daily with your ghost. ${daily.cleared ? `You cleared in ${daily.turns} turns.` : ''}`}</Text>
           {friends == null ? <ActivityIndicator color={MM.ink} style={{ marginVertical: 20 }} /> : friends.length === 0 ? (
             <Text style={styles.sheetHint}>Add friends to send them challenges.</Text>
           ) : (
-            <ScrollView style={{ maxHeight: 280, alignSelf: 'stretch' }}>
+            <ScrollView style={{ maxHeight: 200, alignSelf: 'stretch' }}>
               {friends.map((f) => {
                 const on = picked.indexOf(f.id) >= 0;
                 return (
@@ -400,10 +368,8 @@ function ChallengeSheet({ visible, daily, onClose }: { visible: boolean; daily: 
           <Pressable style={[styles.bigBtn, (!picked.length || state === 'sent') && { opacity: 0.5 }]} onPress={send} disabled={!picked.length || state === 'sent'} accessibilityRole="button">
             {state === 'sending' ? <ActivityIndicator color={MM.navyText} /> : <Text style={styles.bigBtnText}>{picked.length ? `SEND (${picked.length})` : 'SEND'}</Text>}
           </Pressable>
-          <Pressable onPress={onClose} hitSlop={10}><Text style={styles.sheetClose}>Close</Text></Pressable>
-        </View>
-      </View>
-    </Modal>
+          <Pressable onPress={onDone} hitSlop={10} accessibilityRole="button"><Text style={styles.sheetClose}>Done</Text></Pressable>
+    </View>
   );
 }
 
@@ -424,6 +390,7 @@ const styles = StyleSheet.create({
   sheet: { width: '100%', maxWidth: 420, backgroundColor: MM.cream, borderRadius: 24, borderWidth: 3, borderColor: MM.ink, padding: 16, alignItems: 'center' },
   albumSheet: { maxHeight: '88%' },
   sheetTitle: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText, marginBottom: 8 },
+  panelTitle: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText, marginBottom: 2 },
   sheetHint: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, textAlign: 'center', marginVertical: 8 },
   sheetClose: { fontFamily: 'Knockout', fontSize: 15, color: MM.ink, marginTop: 10, textDecorationLine: 'underline' },
   bigBtn: { alignSelf: 'stretch', backgroundColor: MM.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: MM.goldDeep, marginTop: 10, minHeight: 52 },

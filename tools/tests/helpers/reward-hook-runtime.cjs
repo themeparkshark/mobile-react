@@ -58,7 +58,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return native;
       if (name === 'react-native-reanimated') { const transition = { duration() { return this; }, delay() { return this; } }; return { default: { View: 'ReanimatedView', createAnimatedComponent: type => type }, FadeIn: transition, FadeOut: transition, SlideOutDown: transition,
-        useSharedValue: value => react.useRef({ value }).current, useAnimatedStyle: fn => fn(),
+        useSharedValue: value => react.useRef({ value }).current, makeMutable: value => ({ value }), useAnimatedStyle: fn => fn(),
         useDerivedValue: fn => react.useEffect(fn),
         Easing: native.Easing, cancelAnimation: value => cancelled.push(value),
         runOnJS: fn => (...args) => { jsCalls.push({ fn, args }); return fn(...args); },
