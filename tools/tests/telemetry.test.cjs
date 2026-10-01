@@ -167,6 +167,7 @@ test('the API client records core-loop breadcrumbs and reports server failures',
     },
     '../services/connectivity': { reportReachable() {}, reportUnreachable() {} },
     './getRetry': { nextGetRetryDelay: () => null },
+    './dedupeGet': loadTs('src/api/dedupeGet.ts'),
   });
   client.recordCoreLoopResponse('post', '/me/task-attempts', 201);
   client.recordCoreLoopResponse('post', '/raids/3/attack', 503);

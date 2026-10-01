@@ -131,7 +131,7 @@ test('the client reports reachability from real responses and retries GETs in th
   assert.match(source, /reportReachable\(\)/);
   assert.match(source, /isNetworkFailure\(error\)/);
   assert.doesNotMatch(source, /if \(!?error\.response\)/, "RN network errors carry a status-0 response");
-  assert.match(source, /client\.defaults\.adapter = withGetRetry\(/);
+  assert.match(source, /client\.defaults\.adapter = withInflightDedupe\(withGetRetry\(/);
   assert.doesNotMatch(source, /client\.request\(/, 'never retry from inside an interceptor');
 });
 
@@ -167,6 +167,7 @@ function realStack(transport) {
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => captured.push(extra.status) },
     '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
     './getRetry': loadTs('src/api/getRetry.ts', {}, { setTimeout: fn => { fn(); return 0; } }),
+    './dedupeGet': loadTs('src/api/dedupeGet.ts'),
   }).default;
   const broadcasts = [];
   const toasts = [];
@@ -272,6 +273,7 @@ test('React Native network errors (response with status 0) count as no response'
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => statuses.push(extra.status) },
     '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
     './getRetry': loadTs('src/api/getRetry.ts'),
+    './dedupeGet': loadTs('src/api/dedupeGet.ts'),
   }, { setTimeout: (fn) => { fn(); return 0; } });
   await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));
   assert.deepEqual(events, ['unreachable'], 'status 0 shows the offline banner instead of marking the API reachable');

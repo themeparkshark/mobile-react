@@ -5,6 +5,7 @@ import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
 import { reportReachable, reportUnreachable } from '../services/connectivity';
 import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
+import { withInflightDedupe } from './dedupeGet';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -41,8 +42,9 @@ export function recordCoreLoopResponse(
 
 // GET retry lives in the transport, below the interceptors, so every
 // interceptor (here and in useAxiosSetup) runs once per logical request.
+// Identical GETs already in flight share one request (dedupeGet.ts).
 if (client.defaults.adapter) {
-  client.defaults.adapter = withGetRetry(client.defaults.adapter as AxiosAdapter) as AxiosAdapter;
+  client.defaults.adapter = withInflightDedupe(withGetRetry(client.defaults.adapter as AxiosAdapter)) as AxiosAdapter;
 }
 
 /**
