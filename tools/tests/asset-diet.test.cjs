@@ -59,3 +59,13 @@ test('the JS splash and the native launch screen use the same art', () => {
   assert.match(read('src/screens/SplashScreen.tsx'), /assets\/images\/splash-bg\.png/);
   assert.ok(!fs.existsSync(path.join(root, 'assets/splash.png')), 'the old black 1-bit splash.png is gone');
 });
+
+// Battery pass: map sprites decode at 3x their on-screen size, not 10x.
+test('map sprites are sized for their marker (3x the largest display size)', () => {
+  const dims = file => { const h = fs.readFileSync(path.join(root, file)); return file.endsWith('.gif')
+    ? [h.readUInt16LE(6), h.readUInt16LE(8)] : [h.readUInt32BE(16), h.readUInt32BE(20)]; };
+  for (const [file, maxSide] of [['assets/images/arena.png', 300], ['assets/images/sword-icon.png', 384],
+    ['assets/images/sword-marker.gif', 160], ['assets/images/screens/explore/vault_animation.gif', 210]]) {
+    assert.ok(Math.max(...dims(file)) <= maxSide, `${file} is ${dims(file).join('x')}`);
+  }
+});
