@@ -153,3 +153,16 @@ export function hash01(seed: number): number {
   const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
   return s - Math.floor(s);
 }
+
+/** Grace for frame jitter: a 60 Hz display still lands every second frame at 30 Hz. */
+export const CLOCK_STEP_GRACE_S = 0.002;
+
+/**
+ * Whether the ambient clock advances on this frame, given the seconds since
+ * its last update and the seconds per update (1 / hz). Time based, so the rate
+ * holds on a 120 Hz ProMotion display as well as at 60 Hz. Runs on the UI thread.
+ */
+export function clockStepDue(sinceS: number, stepS: number): boolean {
+  'worklet';
+  return stepS > 0 && sinceS + CLOCK_STEP_GRACE_S >= stepS;
+}

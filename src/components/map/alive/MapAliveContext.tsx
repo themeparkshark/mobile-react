@@ -14,7 +14,7 @@ import { AppState } from 'react-native';
 import { makeMutable, runOnJS, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import {
-  ALIVE_CAPS, aliveTier, governFrames, governIdle, GOVERNOR_START,
+  ALIVE_CAPS, aliveTier, clockStepDue, governFrames, governIdle, GOVERNOR_START,
   type AliveCaps, type AliveTier, type FrameGovernor,
 } from './ambientBudget';
 import { DAYLIGHT, type SkyLight } from './skyLight';
@@ -87,19 +87,28 @@ export function useMapAliveEngine({ focused, paused, light }: {
   const clock = useSharedValue(0);
   const elapsed = useSharedValue(0);
   const frames = useSharedValue(0);
-  const halfRate = useSharedValue(caps.hz === 30);
+  // Seconds between clock updates. Time based, not frame counted: with
+  // ProMotion enabled (CADisableMinimumFrameDurationOnPhone) frames arrive at
+  // 120 Hz, and "every other frame" would still be 60 updates a second.
+  const stepS = useSharedValue(caps.hz > 0 ? 1 / caps.hz : 0);
+  const sinceStep = useSharedValue(0);
   const windowSum = useSharedValue(0);
   const windowFrames = useSharedValue(0);
-  useEffect(() => { halfRate.value = caps.hz === 30; }, [caps.hz, halfRate]);
+  useEffect(() => { stepS.value = caps.hz > 0 ? 1 / caps.hz : 0; }, [caps.hz, stepS]);
 
   const frame = useFrameCallback(info => {
     'worklet';
     const dt = info.timeSincePreviousFrame;
     if (dt === null || dt <= 0) return;
     // A long gap means the loop was paused: never jump the scene forward.
-    elapsed.value += Math.min(dt, 100) / 1000;
+    const step = Math.min(dt, 100) / 1000;
+    elapsed.value += step;
     frames.value += 1;
-    if (!halfRate.value || frames.value % 2 === 0) clock.value = elapsed.value;
+    sinceStep.value += step;
+    if (clockStepDue(sinceStep.value, stepS.value)) {
+      sinceStep.value = 0;
+      clock.value = elapsed.value;
+    }
     if (dt < 250) {
       windowSum.value += dt;
       windowFrames.value += 1;

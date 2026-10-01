@@ -139,3 +139,20 @@ test('far islands share one clamped rank, so walking past them never re-renders 
     }
   }
 });
+
+test('the ambient clock rate is time based: 30 updates a second at 60 Hz and on 120 Hz ProMotion', () => {
+  const run = (displayHz, clockHz, seconds = 2) => {
+    let since = 0, updates = 0;
+    for (let f = 0; f < displayHz * seconds; f++) {
+      since += 1 / displayHz;
+      if (budget.clockStepDue(since, 1 / clockHz)) { since = 0; updates++; }
+    }
+    return updates / seconds;
+  };
+  assert.equal(run(60, 30), 30);
+  assert.equal(run(120, 30), 30);
+  assert.equal(run(120, 60), 60);
+  assert.equal(budget.clockStepDue(1, 0), false, 'calm (0 Hz) never ticks');
+  const engine = read('src/components/map/alive/MapAliveContext.tsx');
+  assert.match(engine, /if \(clockStepDue\(sinceStep\.value, stepS\.value\)\) \{\s*sinceStep\.value = 0;\s*clock\.value = elapsed\.value;/);
+});
