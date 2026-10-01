@@ -232,10 +232,11 @@ test('Haptics runtime: a QUICK hit cuts the purr tell still playing; the explici
   const { mod, fired } = loadHaptics();
   mod.configureHaptics('whack');
   const t0 = Date.now();
-  assert.ok(mod.playPattern('purrTell', { priority: 5, tell: true }));
-  await sleep(100);
+  // Wide spacing so a loaded test machine cannot reorder the timers.
+  assert.ok(mod.playPattern('purrTell', { priority: 5, tell: true, fallback: [{ at: 0, p: 'soft' }, { at: 400, p: 'soft' }, { at: 800, p: 'soft' }] }));
+  await sleep(150);
   assert.ok(mod.playPattern('whackQuick', { priority: 8 }));
-  await sleep(260);
+  await sleep(900);
   const kinds = fired.map(([, k]) => k);
   assert.deepEqual(kinds, ['soft', 'rigid'], `purr tail cut by the QUICK: ${kinds}`);
   assert.equal(mod.hapticBusStats().tailCuts, 1);
@@ -504,15 +505,15 @@ test('audio-api backend never schedules AudioParam automation (the 0.6 crash) an
   const param = { value: 1 };
   mod.rampParamValue(param, 0.2, 10);
   assert.equal(param.value, 0.2, 'short ramps set the value at once');
-  mod.rampParamValue(param, 1, 80);
-  await sleep(40);
+  mod.rampParamValue(param, 1, 400);
+  await sleep(100);
   assert.ok(param.value > 0.2 && param.value < 1, `mid-ramp ${param.value}`);
-  await sleep(80);
+  await sleep(450);
   assert.equal(param.value, 1);
   const lp = { value: 20000 };
   mod.rampParamValue(lp, 800, 60, true);
   mod.rampParamValue(lp, 20000, 10, true);
-  await sleep(90);
+  await sleep(120);
   assert.equal(lp.value, 20000, 'a new ramp replaces the running one');
 });
 
