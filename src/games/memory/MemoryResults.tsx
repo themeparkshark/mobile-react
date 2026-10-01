@@ -54,6 +54,8 @@ export interface MemoryResultsData {
   banner: string;
   won: boolean;
   recallPct: number;
+  /** Replaces the RECALL % plate (duels show points). */
+  headline?: { label: string; value: string };
   edition: CoinEdition | null;
   upgraded: boolean;
   stars: number;
@@ -243,8 +245,8 @@ function Headline({ data, reducedMotion }: { data: MemoryResultsData; reducedMot
         </Animated.View>
       ) : null}
       <View style={styles.recallPlate}>
-        <Text style={styles.recallLabel}>RECALL</Text>
-        <Text style={styles.recallValue}>{`${data.recallPct}%`}</Text>
+        <Text style={styles.recallLabel}>{data.headline?.label ?? 'RECALL'}</Text>
+        <Text style={styles.recallValue}>{data.headline?.value ?? `${data.recallPct}%`}</Text>
       </View>
       {ed ? <Text style={styles.editionText}>{`${ed.toUpperCase()} EDITION${data.upgraded ? ' · UPGRADED' : ''}`}</Text> : null}
     </Animated.View>

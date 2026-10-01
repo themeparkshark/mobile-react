@@ -92,9 +92,10 @@ export const FlightLayer = memo(forwardRef<FlightLayerHandle, { reducedMotion: b
       const i = nextTag.current++ % TAGS;
       const w = Math.min(maxW, Math.max(44, text.length * 9 + 14));
       keyRef.current += 1;
+      const key = keyRef.current;
       setTagSpecs((s) => {
         const c = s.slice();
-        c[i] = { text, x: cx - w / 2, y: top, w, tone, key: keyRef.current };
+        c[i] = { text, x: cx - w / 2, y: top, w, tone, key };
         return c;
       });
       tags[i].value = 0;

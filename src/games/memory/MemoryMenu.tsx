@@ -18,6 +18,9 @@ import GameIcon from '../../ui/GameIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import MemoryGame, { type DailySetup, type MemoryGameProps } from './MemoryGame';
 import PassPlayGame from './PassPlayGame';
+import StealDuelGame from './StealDuelGame';
+import { LOBBY_POLL_MS, fetchLobby, lobbyLine, secondsToTick } from './modes/stealApi';
+import { RANK_LABEL, memoryRank, type MemoryRank } from './modes/unlocks';
 import { deckById, deckIdForRideName } from './decks';
 import { faceFor } from './faces';
 import { FaceThumb, AlbumSheet } from './MemoryExtras';
@@ -25,20 +28,21 @@ import { MM } from './theme';
 import { dailyDeckId, dailyFaceSeed, dailyLayoutSeed, dayKey, liveStreak, parGhost } from './modes/daily';
 import { fetchDailyGhosts, pickGhost } from './modes/dailyApi';
 import { emptyAlbum, type Album } from './modes/album';
-import { loadAlbum, loadDaily, loadPersonalBest, loadPlayerKey, loadStreak, type DailyRecord } from './storage';
+import { loadAlbum, loadDaily, loadPersonalBest, loadPlayerKey, loadRankHistory, loadStreak, type DailyRecord } from './storage';
 
 const BARKER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
 const BOOTH = require('../../assets/games/memory/studio/booth_frame.png');
 const STREAK = require('../../assets/games/memory/studio/streak.png');
 const STOPWATCH = require('../../assets/games/memory/studio/stopwatch.png');
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
+const SHARK_TOKEN = require('../../assets/games/memory/studio/shark_fist_pump.png');
 
 export interface MemoryMatchProps extends MemoryGameProps {
   /** Queue entry: show the booth menu (Time Attack, Daily Deck, Pass & Play). */
   menu?: boolean;
 }
 
-type Pick = { kind: 'timeAttack' } | { kind: 'daily'; setup: DailySetup } | { kind: 'passPlay'; players: number };
+type Pick = { kind: 'timeAttack' } | { kind: 'daily'; setup: DailySetup } | { kind: 'passPlay'; players: number } | { kind: 'steal' };
 
 export default function MemoryMatch(props: MemoryMatchProps) {
   const { visible, onClose, mode, party, difficulty } = props;
@@ -53,6 +57,9 @@ export default function MemoryMatch(props: MemoryMatchProps) {
   if (!visible) return null;
   if (pick?.kind === 'timeAttack') return <MemoryGame {...props} mode="timeAttack" onClose={() => setPick(null)} />;
   if (pick?.kind === 'daily') return <MemoryGame {...props} mode="daily" daily={pick.setup} onClose={() => setPick(null)} />;
+  if (pick?.kind === 'steal') {
+    return <StealDuelGame visible deckId={props.deckId ?? deckIdForRideName(props.taskName)} seed={props.seed} onClose={() => setPick(null)} onQuit={props.onQuit} />;
+  }
   if (pick?.kind === 'passPlay') {
     return <PassPlayGame visible players={pick.players} deckId={props.deckId ?? deckIdForRideName(props.taskName)} seed={props.seed}
       onClose={() => setPick(null)} onQuit={props.onQuit} />;
@@ -72,6 +79,10 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
   const [album, setAlbum] = useState<Album>(emptyAlbum());
   const [albumOpen, setAlbumOpen] = useState(false);
   const [players, setPlayers] = useState(2);
+  const [rank, setRank] = useState<MemoryRank>('none');
+  const [sharks, setSharks] = useState(0);
+  const [lobbyOnline, setLobbyOnline] = useState(false);
+  const [tick, setTick] = useState(() => secondsToTick(Date.now()));
   const rideDeck = taskName ? deckId ?? deckIdForRideName(taskName) : deckId ?? null;
   const dailyDeck = deckById(dailyDeckId(today, rideDeck)) ?? deckById('park')!;
 
@@ -83,8 +94,24 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
     void loadPlayerKey().then((k) => live && setPlayer(k));
     void loadAlbum().then((a) => live && setAlbum(a));
     void fetchDailyGhosts(today).then((g) => live && setGhost(pickGhost(g)));
+    void loadRankHistory().then((h) => live && setRank(memoryRank(h)));
     return () => { live = false; };
   }, [today]);
+
+  // Lobby: short-poll every 3s while the booth is open (no sockets); a 1s countdown to the 30s tick.
+  useEffect(() => {
+    let live = true;
+    const poll = async () => {
+      const l = await fetchLobby(null);
+      if (!live) return;
+      setLobbyOnline(!!l);
+      setSharks(l ? l.waiting ?? l.tokens.length : 0);
+    };
+    void poll();
+    const p = setInterval(poll, LOBBY_POLL_MS);
+    const c = setInterval(() => setTick(secondsToTick(Date.now())), 1000);
+    return () => { live = false; clearInterval(p); clearInterval(c); };
+  }, []);
 
   // Entry: shark squash-pops in, the three booth cards slide up 70ms apart.
   const enter = useSharedValue(reducedMotion ? 1 : 0);
@@ -149,8 +176,12 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
         <View style={[styles.cards, { paddingBottom: insets.bottom + 14 }]}>
           <BoothCard index={0} reducedMotion={reducedMotion} onPress={() => go({ kind: 'timeAttack' })}
             title="Time Attack" body="Race the clock. Every clean board grows." icon={STOPWATCH}
-            right={best > 0 ? <Stat label="BEST" value={best.toLocaleString()} /> : null} />
-          <BoothCard index={1} reducedMotion={reducedMotion} onPress={startDaily} gold
+            right={best > 0 || rank !== 'none' ? <Stat label={RANK_LABEL[rank]} value={best > 0 ? best.toLocaleString() : '-'} /> : null} />
+          <BoothCard index={1} reducedMotion={reducedMotion} onPress={() => go({ kind: 'steal' })}
+            title="Steal Duel" body={lobbyOnline ? lobbyLine(tick, sharks) : 'One shared board. Steal pairs your rival reveals. Practice vs the house shark.'}
+            icon={SHARK_TOKEN}
+            right={<Text style={styles.badge}>{lobbyOnline ? `0:${String(tick).padStart(2, '0')}` : 'PRACTICE'}</Text>} />
+          <BoothCard index={2} reducedMotion={reducedMotion} onPress={startDaily} gold
             title="Daily Deck" body={rec ? (rec.cleared ? `Cleared in ${rec.turns} turns. Practice runs are open.` : 'Ranked try played. Practice runs are open.') : `Two slips and you're out. ${ghost ? `Race ${ghost.name}.` : 'Beat the par shark.'}`}
             icon={STREAK}
             right={<View style={{ alignItems: 'flex-end' }}>
@@ -159,7 +190,7 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
               </View>
               <Text style={styles.badge}>{rec ? 'PRACTICE' : 'RANKED'}{streakNow ? ` · ${streakNow} DAY${streakNow === 1 ? '' : 'S'}` : ''}</Text>
             </View>} />
-          <BoothCard index={2} reducedMotion={reducedMotion} onPress={() => go({ kind: 'passPlay', players })}
+          <BoothCard index={3} reducedMotion={reducedMotion} onPress={() => go({ kind: 'passPlay', players })}
             title="Pass & Play" body="One phone, up to 4 sharks. Match and go again." icon={CARD_BACK}
             right={<Stepper value={players} onChange={(v) => { Haptic.tickSelection(); setPlayers(v); }} />} />
         </View>
@@ -228,7 +259,7 @@ const styles = StyleSheet.create({
   albumBtn: { alignItems: 'center', width: 52 },
   albumIcon: { width: 30, height: 38, borderRadius: 5, borderWidth: 2, borderColor: '#ffffff' },
   albumText: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff', marginTop: 2 },
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', minHeight: 200 },
+  stage: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', minHeight: 120 },
   scene: { width: 340, height: 270, maxHeight: '100%' },
   sun: { position: 'absolute', left: 40, right: 40, top: 10, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,255,255,0.22)' },
   ground: { position: 'absolute', left: 10, right: 10, bottom: 0, height: 34, borderRadius: 170, backgroundColor: 'rgba(5,52,110,0.18)' },
@@ -236,10 +267,10 @@ const styles = StyleSheet.create({
   barker: { position: 'absolute', bottom: 2, left: 18, height: 220, width: 220 * 581 / 768 },
   bubble: { position: 'absolute', top: 0, left: 140, maxWidth: 150, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6 },
   bubbleText: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, textAlign: 'center' },
-  cards: { paddingHorizontal: 16, gap: 12, paddingTop: 12 },
+  cards: { paddingHorizontal: 16, gap: 10, paddingTop: 10 },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 22, borderWidth: 3, borderColor: MM.ink,
-    paddingHorizontal: 12, paddingVertical: 12, minHeight: 84, borderBottomWidth: 7,
+    paddingHorizontal: 12, paddingVertical: 10, minHeight: 76, borderBottomWidth: 7,
   },
   cardGold: { backgroundColor: MM.cream, borderColor: MM.goldDeep },
   iconWell: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#dff1ff', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
