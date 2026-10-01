@@ -15,6 +15,7 @@ import { preferFreshProjectSnapshot, projectLiveUpdate, projectNextMilestone, pr
 import ProjectRippleFeed from './ProjectRippleFeed';
 import MapSuggestionStub from './MapSuggestionStub';
 import { GameIcon, GameRichText } from '../../ui';
+import useUserIdle, { idlePollInterval } from '../../hooks/useUserIdle';
 
 interface Props {
   readonly parkId: number | null;
@@ -126,12 +127,15 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
     }
   }, [open, parkId, onActiveProjectChange, loadProjects]);
 
+  // Closed widget on an idle map: 45 s -> 135 s. Open, it keeps 20 s.
+  const idle = useUserIdle();
+  const pollMs = open ? 20_000 : idlePollInterval(45_000, idle);
   useFocusEffect(useCallback(() => {
     focused.current = true;
     void load();
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void load();
-    }, open ? 20_000 : 45_000);
+    }, pollMs);
     const appStateSubscription = AppState.addEventListener('change', state => {
       if (state === 'active') void load();
     });
@@ -141,7 +145,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       clearInterval(interval);
       appStateSubscription.remove();
     };
-  }, [load, refreshVersion, parkId, open]));
+  }, [load, refreshVersion, parkId, open, pollMs]));
 
   const active = parkId == null ? projects : projects.filter((project) => project.park_id === parkId);
   const archived = parkId == null ? history : history.filter((project) => project.park_id === parkId);
