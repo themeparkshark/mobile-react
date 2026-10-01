@@ -23,6 +23,7 @@ import deletePlayer from '../api/endpoints/me/delete';
 import deleteAccountNow from '../api/endpoints/me/delete-account';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
+import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -32,6 +33,7 @@ import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { useTutorial } from '../components/Tutorial';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
+import { FEEDBACK_COPY } from '../services/feedback/model';
 import { syncBackgroundRideDetection } from '../services/RideDetectionService';
 import { BRAND, confirmGame, GameIcon, gameAlert, RADIUS, SHADOW, SharkLoader, showGameDialog, textPreset, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -386,7 +388,8 @@ export default function SettingsScreen() {
           <SettingsRow art="info" title="Terms of Service" onPress={() => WebBrowser.openBrowserAsync(urls.terms)} />
           <SettingsRow art="lock" title="Privacy Policy" onPress={() => WebBrowser.openBrowserAsync(urls.privacy_policy)} />
           <SettingsRow art="mail" title="Need Help?" detail={SUPPORT_EMAIL} onPress={() => { void openSupport('help'); }} />
-          <SettingsRow art="wrench" title="Found a Bug?" detail="Tell us what happened" isLast onPress={() => { void openSupport('bug'); }} />
+          <SettingsRow art="wrench" title={FEEDBACK_COPY.settingsTitle} detail={FEEDBACK_COPY.settingsDetail} isLast
+            onPress={() => openFeedbackReport('settings')} />
         </Section>
 
         <Section title="Account" index={5}>

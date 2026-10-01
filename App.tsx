@@ -5,11 +5,14 @@ import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
 import { holdNativeSplash } from './src/nativeSplash';
 import { captureException, captureMessage, initTelemetry } from './src/services/telemetry';
+import { installConsoleRing } from './src/services/feedback/consoleRing';
 import { BRAND, FONT, GameButton, OUTLINE, SHADOW } from './src/ui';
 
 // Must run at module scope, before the first render, or the native launch
 // screen may already be gone.
 holdNativeSplash();
+// Tester reports carry the recent console warnings and errors from launch on.
+installConsoleRing();
 // Crash reporting starts before any provider can throw.
 if (initTelemetry() && __DEV__ && process.env.EXPO_PUBLIC_TELEMETRY_TEST === '1') {
   captureMessage('Telemetry test event', 'info', { test: 'true' });

@@ -65,6 +65,7 @@ import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
+import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
@@ -335,6 +336,8 @@ export default function App() {
     <OfflineBanner />
     {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}
     <GameDialogHost />
+    {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
+    {!isStandalonePreview && <FeedbackHost />}
     {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
       <DevJoystick
         onMove={handleJoystickMove}
