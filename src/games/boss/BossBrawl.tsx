@@ -59,8 +59,11 @@ import { boonOffer, pickVariant } from './sim/patterns';
 import { boutProof, legacyDamage, summarize, timingReadout, toLegacyProof, type RoundSummary } from './sim/round';
 import { tauntFor } from './taunts';
 import { useArenaImages } from './useArenaImages';
-import { CrewLayer, type CrewLayerHandle } from './multiplayer/CrewLayer';
-import { ghostAt, ghostTimeline, type GhostTimeline } from './multiplayer/crew';
+import { CrewLayer, type CrewLayerHandle, type CrewMate } from './multiplayer/CrewLayer';
+import {
+  CREW_CAUGHT, CREW_LUNGE, CREW_STRIKE, TogetherCrew, ghostAt, ghostTimeline, type GhostTimeline,
+} from './multiplayer/crew';
+import { mergeTeamStrike, TEAM_STRIKE_ATTACK, type StrikeWhisper } from './multiplayer/teamStrike';
 import { loadGhost, saveGhostIfBest } from './multiplayer/ghostStore';
 
 export const BOSS_ART: Record<BossId, number> = {
@@ -161,8 +164,12 @@ export interface BossBrawlProps {
   readonly autoplay?: boolean;
   /** Race a ghost on the same seed and variant: 'auto' = this week's local best. */
   readonly ghost?: 'auto' | { name: string; log: import('./sim/round').RoundLog } | null;
-  /** Kept for older call sites (live co-op is tier 2, behind a flag). */
-  readonly crew?: unknown;
+  /**
+   * Live co-op (tier 2): 'house' starts every bout together with the labelled
+   * house crew (TEAM STRIKE on attack #2). A Reverb presence adapter (netcode
+   * stream) plugs into the same TogetherCrew event shape. Null = solo.
+   */
+  readonly crew?: 'house' | null;
 }
 
 interface InterState { bout: number; dmg: number; offer: [number, number]; picked: number }
@@ -214,6 +221,17 @@ export function BossBrawl(props: BossBrawlProps) {
   const slamSeen = useRef('');
   const pauseWall = useRef(0);
   const ghostRef = useRef<GhostTimeline | null>(null);
+  const ghostHop = useRef(0);
+  const crewRef = useRef<TogetherCrew | null>(null);
+  const [mates, setMates] = useState<CrewMate[]>([]);
+  const whispers = useRef<(StrikeWhisper & { used: boolean })[]>([]);
+  const myStrike = useRef<{ at: number; bout: number; done: boolean } | null>(null);
+  const boutWall = useRef(0);
+  /** The attack (index and step) the sim was on before the input/advance that produced the current events. */
+  const atkCtx = useRef({ no: -1, step: 0 });
+  const noteAttack = (b: Bout) => {
+    if (b.attack) atkCtx.current = { no: b.attack.no, step: b.step };
+  };
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
 
@@ -316,6 +334,10 @@ export function BossBrawl(props: BossBrawlProps) {
     anim.partN.value = 0;
     anim.phase.value = 0;
     ghostRef.current = null;
+    crewRef.current = null;
+    whispers.current = [];
+    myStrike.current = null;
+    setMates([]);
     setGhostLine(null);
     // Local history: first 3 rounds vs this boss are novice rounds (Grit floor, training wheels);
     // fakes appear only after the first 1-star clear (A0 until then, the server picks in production).
@@ -372,12 +394,17 @@ export function BossBrawl(props: BossBrawlProps) {
     });
     if (n > 0) input(b, { t: 0, k: IN_BOON, a: boon });
     boutRef.current = b;
+    boutWall.current = Date.now();
+    atkCtx.current = { no: -1, step: 0 };
+    ghostHop.current = 0;
+    myStrike.current = null;
+    crewRef.current?.startBout(n, boutWall.current);
     evIdx.current = 0;
     pending.current = [];
     popsInOpening.current = 0;
     slamSeen.current = '';
     view.value = buildView(b);
-    pres.value = { ...emptyPres(), wheels: r.novice, breaks: r.carry.breaks, walking };
+    pres.value = { ...emptyPres(), wheels: r.novice, breaks: r.carry.breaks, walking, team: !!crewRef.current };
     qSv.value = STEP[boss][n];
     setBoutNo(n);
     setGrit({ n: b.grit, max: b.gritMax });
@@ -402,6 +429,13 @@ export function BossBrawl(props: BossBrawlProps) {
     const f = fxNow();
     anim.entranceAt.value = f;
     beatOrigin.value = f;
+    const crewOn = props.crew === 'house' || (__DEV__ && process.env.EXPO_PUBLIC_BOSS_CREW === '1' && props.crew !== null);
+    if (crewOn) {
+      crewRef.current = new TogetherCrew(boss, round.current.seed, round.current.variant, 2);
+      setMates(crewRef.current.roster().filter((m) => m.id !== 'me').map((m) => ({ id: m.id, name: m.name, house: true })));
+    } else if (ghostRef.current) {
+      setMates([{ id: 'ghost', name: ghostRef.current.name, ghost: true }]);
+    }
     setStageBoth('intro');
     playBed(beds.main, 0);
     showRibbon(bossName.toUpperCase(), FIGHT_NAME[boss], 1700);
@@ -635,6 +669,21 @@ export function BossBrawl(props: BossBrawlProps) {
   const headY = L.bossY - L.bossSize * 0.3;
   const popTrauma = useRef(1);
 
+  const teamStrike = (who: string[], mult: number) => {
+    crewLayer.current?.strike(who);
+    later(150, () => {
+      clock.hitStop(120, { force: true });
+      bossHurt(2, true);
+      anim.rimAt.value = fxNow();
+      GameAudio.play(GameAudio.hasCue('bo_team_strike') ? 'bo_team_strike' : 'fx.hit');
+      playPattern([{ t: 0, kind: 'transient', i: 0.8, s: 0.6 }, { t: 100, kind: 'transient', i: 0.8, s: 0.6 }], { priority: HP.critical });
+      fxRef.current?.burst('stars', L.bossX, faceY, { count: 30 });
+      fxRef.current?.ring(L.bossX, faceY, { color: '#FFCF3B', to: 130, ms: 320 });
+      if (!reduced) camera.punch(0.08);
+      showRibbon(`TEAM STRIKE x${mult}`, undefined, 1100);
+    });
+  };
+
   const onEvent = (e: SimEvent) => {
     const b = boutRef.current;
     const bx = L.bossX;
@@ -684,8 +733,7 @@ export function BossBrawl(props: BossBrawlProps) {
       case E_PERFECT:
       case E_GOOD: {
         const perfect = e.code === E_PERFECT;
-        const a = b?.attack;
-        const side = rootSide(e.a, a ? a.no + b!.step : 0);
+        const side = rootSide(e.a, atkCtx.current.no + atkCtx.current.step);
         pres.value = { ...pres.value, sLane: e.a, sSide: side, sI: e.t, sRes: 1, sAt: e.t, pinSide: side };
         bossSfx.snag(boss);
         if (perfect) bossSfx.clang();
@@ -701,13 +749,25 @@ export function BossBrawl(props: BossBrawlProps) {
         fxRef.current?.flyUp(perfect ? 'PERFECT' : 'GOOD', bx, headY, { size: perfect ? 'xl' : 'lg', color: perfect ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
         if (perfect && !reduced) camera.punch(0.06);
         if (hint === COUNTER_HINT[boss]) setHint(null);
+        if (perfect && crewRef.current && b && atkCtx.current.no === TEAM_STRIKE_ATTACK && !myStrike.current) {
+          const n = b.cfg.bout;
+          myStrike.current = { at: Date.now(), bout: n, done: false };
+          later(160, () => {
+            const ms = myStrike.current;
+            if (!ms || ms.done) return;
+            ms.done = true;
+            const m = mergeTeamStrike(ms.at, ms.bout, whispers.current.filter((w) => !w.used));
+            if (__DEV__) console.log(`[boss] team strike bout ${ms.bout}: merged ${m.merged.join(',') || '-'} echoes ${m.echoes.join(',') || '-'} whispers ${whispers.current.map((w) => `${w.who}@${w.at - ms.at}`).join(' ')}`);
+            whispers.current.forEach((w) => { if (m.merged.indexOf(w.who) >= 0 && w.bout === ms.bout) w.used = true; });
+            if (m.merged.length > 0) teamStrike(m.merged, m.multiplier);
+          });
+        }
         break;
       }
       case E_PUNISH:
       case E_SAFE_MISS: {
         const safe = e.code === E_SAFE_MISS;
-        const a = b?.attack;
-        const side = rootSide(e.a, a ? a.no + (b ? b.step : 0) : 0);
+        const side = rootSide(e.a, atkCtx.current.no + atkCtx.current.step);
         pres.value = { ...pres.value, sLane: e.a, sSide: side, sI: e.t, sRes: safe ? 3 : 2, sAt: e.t };
         if (!safe) {
           bossSfx.punish(boss);
@@ -956,20 +1016,50 @@ export function BossBrawl(props: BossBrawlProps) {
     }
   };
 
-  // ---- ghost race readout (wall clock; never pauses anyone) -------------------
+  // ---- crew and ghost tick (wall clock; nobody ever waits for anyone) -----------
   useEffect(() => {
-    if (!visible || stage !== 'bout' || !ghostRef.current) return undefined;
+    if (!visible || (stage !== 'bout' && stage !== 'inter')) return undefined;
     const id = setInterval(() => {
+      const crew = crewRef.current;
+      if (crew) {
+        for (const ev of crew.drain(Date.now())) {
+          if (ev.kind === CREW_LUNGE) crewLayer.current?.hop(ev.who);
+          else if (ev.kind === CREW_CAUGHT) crewLayer.current?.caught(ev.who);
+          else if (ev.kind === CREW_STRIKE) {
+            const w = { who: ev.who, bout: ev.a ?? 0, attack: TEAM_STRIKE_ATTACK, grade: 2, at: ev.at, used: false };
+            if (__DEV__) console.log(`[boss] whisper ${w.who} bout ${w.bout} at +${ev.at - boutWall.current}`);
+            whispers.current.push(w);
+            // Hold it for the merge window: if your own PERFECT lands with it, it becomes one combined hit;
+            // otherwise their strike still lands on your screen as a small "+ALLY" echo.
+            const echo = () => {
+              if (w.used) return;
+              w.used = true;
+              crewLayer.current?.strike([w.who]);
+              later(150, () => fxRef.current?.flyUp('+ALLY', L.bossX + 40, faceY - 20, { size: 'md', color: '#FFCF3B' }));
+            };
+            const ms = myStrike.current;
+            if (ms && ms.done) echo();
+            else later(420, echo);
+          }
+        }
+      }
       const g = ghostRef.current;
       const b = boutRef.current;
-      if (!g || !b) return;
-      const theirs = ghostAt(g, b.cfg.bout, boutT.value);
-      const mine = round.current.bouts.reduce((sum, x) => sum + scoreBout(x), 0) + scoreBout(b);
-      const d = mine - theirs;
-      setGhostLine(`vs ${g.name}: ${d >= 0 ? '+' : ''}${d}`);
-    }, 150);
+      if (g && b && stageRef.current === 'bout') {
+        const t = boutT.value;
+        const theirs = ghostAt(g, b.cfg.bout, t);
+        const mine = round.current.bouts.reduce((sum, x) => sum + scoreBout(x), 0) + scoreBout(b);
+        const d = mine - theirs;
+        setGhostLine(d >= 0 ? `Beating ${g.name}: +${d}` : `Beat ${g.name}: ${(-d).toLocaleString()} to go`);
+        const lunges = g.bouts[b.cfg.bout]?.lunges ?? [];
+        while (ghostHop.current < lunges.length && lunges[ghostHop.current] <= t) {
+          ghostHop.current += 1;
+          if (!crew) crewLayer.current?.hop('ghost');
+        }
+      }
+    }, 80);
     return () => clearInterval(id);
-  }, [visible, stage, boutT]);
+  }, [visible, stage, boutT]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- JS sim loop: advance (with a small lag), fire due events, publish ----
   useEffect(() => {
@@ -980,6 +1070,7 @@ export function BossBrawl(props: BossBrawlProps) {
       if (!b) return;
       const now = boutT.value;
       const before = b.events.length;
+      noteAttack(b);
       advance(b, now - SIM_LAG_MS);
       if (b.events.length !== before || evIdx.current !== b.events.length) {
         for (let i = evIdx.current; i < b.events.length; i++) pending.current.push(b.events[i]);
@@ -1024,6 +1115,7 @@ export function BossBrawl(props: BossBrawlProps) {
     if (!b || stageRef.current !== 'bout' || b.phase === P_DONE) return;
     const before = b.events.length;
     if (k === IN_TARGET) b.lastLane = a;
+    noteAttack(b);
     input(b, k === IN_TARGET ? { t, k, a } : { t, k });
     if (k === IN_TARGET) {
       buoyTap(a);
@@ -1391,7 +1483,7 @@ export function BossBrawl(props: BossBrawlProps) {
           </View>
         )}
 
-        {ghostRef.current && inBout && <CrewLayer ref={crewLayer} L={L} mates={[]} surge={0} surgeOn={false} meLure={false} ghostLine={null} />}
+        {mates.length > 0 && (inBout || stage === 'inter' || stage === 'intro') && <CrewLayer ref={crewLayer} L={L} mates={mates} />}
         <FxStage ref={fxRef} width={L.W} height={L.H} timeScale={clock.fxScale} reducedMotion={reduced} />
       </GestureHandlerRootView>
     </GameShellV2>

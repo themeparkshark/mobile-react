@@ -122,10 +122,12 @@ export interface Pres {
   breaks: number;
   /** Walking (wind-ups +1 step, smaller loom, shake x0.3). */
   walking: boolean;
+  /** Crew started this bout together: attack #2's lime ring wears crew pennants (TEAM STRIKE). */
+  team: boolean;
 }
 
 export function emptyPres(): Pres {
-  return { sLane: -1, sSide: 1, sI: -1e9, sRes: 0, sAt: -1e9, pinSide: -1, pinStart: -1e9, pinEnd: -1e9, wheels: false, breaks: 0, walking: false };
+  return { sLane: -1, sSide: 1, sI: -1e9, sRes: 0, sAt: -1e9, pinSide: -1, pinStart: -1e9, pinEnd: -1e9, wheels: false, breaks: 0, walking: false, team: false };
 }
 
 // Palette (design 11.4)
@@ -209,7 +211,7 @@ export const BossArena = React.memo(function BossArena(p: Props) {
       <Rainbow {...p} />
       <BossRig {...p} />
       <WaterLip {...p} />
-      <Limbs {...p} />
+      {p.bossKind === 0 ? <Limbs {...p} /> : null}
       <Row {...p} />
       <PinnedSuckers {...p} />
       <FinalAnchor {...p} />
@@ -980,6 +982,21 @@ function Buoy({ i, L, view, t, fx, beat, anim, img, bossKind, pres }: Props & { 
     pth.close();
     return pth;
   });
+  // TEAM STRIKE: attack #2's ring wears small white crew pennants.
+  const pennants = useDerivedValue(() => {
+    const pth = Skia.Path.Make();
+    const r = ringR.value;
+    if (r <= 0 || !pres.value.team || view.value.aNo !== 1) return pth;
+    for (const a of [-2.3, -0.84]) {
+      const px = x + Math.cos(a) * (r + 4);
+      const py = y + Math.sin(a) * (r + 4);
+      pth.moveTo(px, py);
+      pth.lineTo(px, py - 18);
+      pth.lineTo(px + 13, py - 13);
+      pth.lineTo(px, py - 8);
+    }
+    return pth;
+  });
   // Training wheels: orange dashed arc from the limb tip to the buoy (first rounds, bout 1).
   const arc = useDerivedValue(() => {
     const pth = Skia.Path.Make();
@@ -1020,6 +1037,8 @@ function Buoy({ i, L, view, t, fx, beat, anim, img, bossKind, pres }: Props & { 
         <Circle cx={x} cy={y} r={useDerivedValue(() => Math.max(0, ringR.value - 4))} style="stroke" strokeWidth={2} color={WHITE} />
         <Path path={notch} color={LIME} />
         <Path path={notch} style="stroke" strokeWidth={3} strokeJoin="round" color={NAVY} />
+        <Path path={pennants} color={WHITE} />
+        <Path path={pennants} style="stroke" strokeWidth={2.5} strokeJoin="round" color={NAVY} />
       </Group>
       {img.fxBubble ? (
         <Group opacity={bubOp} transform={bubTr}>

@@ -14,9 +14,9 @@
  *   presence, WS6) plugs into. Same event shape as the house crew.
  */
 import { replayRound, type RoundLog } from '../sim/round';
-import { runBotRound, BOTS } from '../sim/bots';
+import { runBotBout, runBotRound, BOTS } from '../sim/bots';
 import {
-  E_BREAK, E_BREAK_END, E_PERFECT, E_POP, E_POP_PERFECT, E_PUNISH, E_SLAM, UNIT_POINTS, type Bout,
+  E_BREAK, E_BREAK_END, E_PERFECT, E_POP, E_POP_PERFECT, E_PUNISH, E_SLAM, E_TELL, UNIT_POINTS, carryOut, freshCarry, type Bout,
 } from '../sim/encounter';
 import type { BossId } from '../sim/constants';
 import { mixSeed } from '../../../gamekit/core/rng';
@@ -170,4 +170,71 @@ export function ghostAt(g: GhostTimeline, bout: number, t: number): number {
     v = cur.steps[i + 1];
   }
   return sum + v;
+}
+
+// ---- TEAM STRIKE crew (tier 2: a Rally that starts every bout together) -------
+
+export const CREW_STRIKE = 8;
+const HOUSE = [
+  { name: 'Captain Fin', skill: 'median' },
+  { name: 'Bubbles', skill: 'kid' },
+  { name: 'Chomps', skill: 'median' },
+  { name: 'Coral', skill: 'kid' },
+];
+
+/**
+ * A crew that starts each bout together with you (TOGETHER, design 13.3), so
+ * everyone's attack #2 is the same Team Strike on the same beat. Live, a
+ * Reverb presence adapter produces the same CrewEvents from teammates'
+ * whispers; with nobody in the queue the labelled house crew fills the seats
+ * (bots on the team seed at about half a median player, never on boards).
+ * Whisper arrival is jittered 40-160 ms like a real channel.
+ */
+export class TogetherCrew implements CrewTransport {
+  private mates: Teammate[];
+  private carries: ReturnType<typeof freshCarry>[];
+  private queue: CrewEvent[] = [];
+  readonly published: CrewEvent[] = [];
+
+  constructor(private boss: BossId, private teamSeed: number, private variant: number, count = 2) {
+    this.mates = HOUSE.slice(0, count).map((h, i) => ({ id: `house${i}`, name: h.name, order: i + 1, bot: true }));
+    this.carries = this.mates.map(() => freshCarry());
+  }
+
+  roster(): Teammate[] {
+    return [{ id: 'me', name: 'You', order: 0 }, ...this.mates];
+  }
+
+  /** Everyone starts bout n on the same downbeat at wall time `wallAt`. */
+  startBout(n: number, wallAt: number): void {
+    this.mates.forEach((m, i) => {
+      const bot = BOTS[HOUSE[i].skill] ?? BOTS.median;
+      const b = runBotBout({ boss: this.boss, seed: this.teamSeed, bout: n, carry: this.carries[i], variant: this.variant },
+        bot, mixSeed(this.teamSeed, 0x7e + i * 31 + n), -1);
+      this.carries[i] = carryOut(b);
+      let attack = -1;
+      for (const e of b.events) {
+        if (e.code === E_TELL && e.b === 0) attack += 1;
+        const lag = 40 + (mixSeed(this.teamSeed ^ e.t, i + 1) % 121);
+        const at = wallAt + e.t + lag;
+        if (e.code === E_POP || e.code === E_POP_PERFECT || e.code === E_SLAM) this.queue.push({ kind: CREW_LUNGE, who: m.id, at });
+        else if (e.code === E_PERFECT) {
+          this.queue.push({ kind: CREW_PERFECT, who: m.id, at });
+          if (attack === 1) this.queue.push({ kind: CREW_STRIKE, who: m.id, at, a: n });
+        } else if (e.code === E_BREAK) this.queue.push({ kind: CREW_BREAK, who: m.id, at });
+        else if (e.code === E_PUNISH) this.queue.push({ kind: CREW_CAUGHT, who: m.id, at });
+      }
+    });
+    this.queue.sort((a, b) => a.at - b.at);
+  }
+
+  drain(nowWall: number): CrewEvent[] {
+    const out: CrewEvent[] = [];
+    while (this.queue.length && this.queue[0].at <= nowWall) out.push(this.queue.shift()!);
+    return out;
+  }
+
+  publish(ev: CrewEvent): void {
+    this.published.push(ev);
+  }
 }
