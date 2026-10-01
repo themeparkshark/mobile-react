@@ -1,59 +1,100 @@
 /**
- * Boss Brawl v4 encounter sim: pure, integer-only, deterministic.
+ * Boss Brawl v7 encounter sim: pure, integer-only, deterministic.
  *
- *   const b = createBout({ boss, seed, bout: 0, carry, walk, tide, offset });
+ *   const b = createBout({ boss, seed, bout: 0, carry, walk, offset, variant, novice });
  *   input(b, { t, k: IN_TARGET, a: lane });   // taps, stamped in bout simT
  *   advance(b, simT);                         // timeouts, openings, the end
  *   b.events                                  // presentation events, in order
  *   scoreBout(b)                              // integer points, one floor
  *
+ * Two verbs (design v7 4.1): tap a lane (counter at the impact, POP the lit
+ * sucker on the pinned limb, pop the foam bubble, get up) and hold the float
+ * (Easy Slam). The boss can hurt you: a real tell landing costs a Grit fin;
+ * 0 fins is a Knockdown (8 taps in 1.5 s to get up), a 2nd Knockdown or a
+ * failed get-up is a TKO.
+ *
  * Time only moves forward through `advance` and `input`, and every transition
  * happens at its own scheduled integer time (never at a frame time), so the
  * same input log gives the same bout on the phone, in node and in the server
- * replay (PHP port, WS6). No floats, Math.random, Date or easing in here.
+ * replay (sim-runner, {game: 'boss', sim_version: 7}). No floats, Math.random,
+ * Date or easing in here.
+ *
+ * Beat-absorbed freezes (Break, Final Pop, KO): sim time is music time. The
+ * sim leaves the freeze as a gap and starts the next thing on the next step,
+ * so every later onset stays on the music grid; the client freezes only its
+ * cosmetic clock (rig, particles, camera) for the same ms.
  */
 import { mixSeed, createRng, type Rng } from '../../../gamekit/core/rng';
 import {
-  ATTACKS, BONUS_ATTACK_CAP, BREAK_FREEZE, BREAK_MAX, BREAK_Q, BREAK_RING_Q, BUFFER_MS, CLOSE_GRACE_MS, COYOTE_MS, DIZZY_MS,
-  FINISHER_FREEZE, FINISHER_GAUGE_MIN, FINISHER_GOOD_MS, FINISHER_HOLD_MS, FINISHER_PERFECT_MS, FINISHER_Q, GAIN,
-  COUNTER_PCT, GAUGE_MAX, GUARD_SWAT_MS, GUARD_TAPS, GUARD_WINDOW_MS, HEAVY_WINDOW_MS, IN_ALLY, IN_END, IN_PAD_DOWN, IN_PAD_UP,
-  IN_PAUSE, IN_RESCUE, IN_RESUME, IN_SURGE, IN_TARGET, KO_FREEZE, LEAD_Q, LOSS, MULT, OFFSET_CLAMP, OPENING_Q,
-  PERFECT_EARLY, PERFECT_LATE, PTS, PUNISH_MS, QUARTER, RECOVER_Q, RING_CRIT_MS, RINGS, UNIT, comboPct, type BossId,
+  ANCHOR_STARS_MAX, ATTACKS, BONUS_ATTACK_CAP, BOON_FIN, BOON_LOOK, BOON_NONE, BOON_POLISH, BOON_TIDE, BREAK_FREEZE,
+  BREAK_MAX, BREAK_Q, BREAK_RING_Q, BUFFER_MS, CLOSE_GRACE_MS, COUNTER_PCT, COYOTE_MS, DEBOUNCE_MS, DIZZY_MS, FINAL_FREEZE,
+  FINAL_Q, GAIN, GAUGE_MAX, GETUP_MIN_GAP, GETUP_MS, GETUP_TAPS, GRIT, GRIT_EXTRA, GUARD_SWAT_MS, GUARD_TAPS,
+  GUARD_WARN_TAPS, GUARD_WINDOW_MS, IN_ALLY, IN_BOON, IN_END, IN_GETUP, IN_PAD_DOWN, IN_PAD_UP, IN_PAUSE, IN_RESCUE,
+  IN_RESUME, IN_SURGE, IN_TARGET, KO_FREEZE, LEAD_Q, LOOK_Q, LOOK_WALK_Q, LOSS, MULT, NOVICE_GRIT_FLOOR, OFFSET_CLAMP,
+  OPENING_Q, READ_GRACE_MS, PERFECT_EARLY, PERFECT_LATE, POP_LONG_MS, POP_MS, POP_PERFECT_MS, PTS, PUNISH_MS, RECOVER_Q, RINGS, STEP,
+  UNIT, comboPct, type BossId,
 } from './constants';
-import { freshRoundFlags, laneAt, planAttack, type Attack, type RoundFlags } from './patterns';
+import {
+  VARIANT_A0, boonOffer, freshRoundFlags, laneAt, planAttack, popLanes, type Attack, type RoundFlags,
+} from './patterns';
+import { rngU32 } from '../../../gamekit/core/rng';
 
 // Presentation events (b.events). a/b/v meanings noted per code.
-export const E_FEINT = 1; //         a lane
+export const E_FAKE = 1; //          a lane, b safe(1)
 export const E_TELL = 2; //          a lane, b step
 export const E_SHOW = 3; //          a icon (3+ decoy), b index
 export const E_SHUFFLE = 4;
-export const E_HAZARD = 5; //        a lane
-export const E_POP = 6; //           a lane
-export const E_GREY = 7; //          a lane (feint tapped; safe or greyed)
+export const E_BUBBLE = 5; //        a lane (foam bubble rides in)
+export const E_BUBBLE_POP = 6; //    a lane, v points
+export const E_GREY = 7; //          a lane (first fake tapped: greyed, safe)
 export const E_EARLY = 8; //         a lane (too early, soft tick)
 export const E_LOCK = 9; //          a lane (Robo node locked, untimed)
 export const E_PERFECT = 10; //      a lane, b error ms (signed), v points
 export const E_GOOD = 11; //         a lane, b error ms, v points
 export const E_PUNISH = 12; //       a lane, b reason (0 wrong, 1 late, 2 decoy)
-export const E_SAFE_MISS = 13; //    a lane
-export const E_OPEN = 14; //         a kind (0 normal, 1 break, 2 ally), b ring count
-export const E_HIT = 15; //          a slot, b combo pct, v points
-export const E_CRIT = 16; //         a slot, b combo pct, v points
-export const E_CLANK = 17; //        a guard count
-export const E_GUARD_COUNTER = 18;
-export const E_HEAVY = 19; //        v points
-export const E_HEAVY_MISS = 20; //   v points
+export const E_SAFE_MISS = 13; //    a lane, b reason
+export const E_OPEN = 14; //         a kind (0 pin, 1 break, 2 ally, 3 final), b slot count
+export const E_HIT = 15; //          a slot, b lane, v points
+export const E_POP = 16; //          a slot, b lane, v points
+export const E_CLANK = 17; //        a stray count, b reason (0 unlit lane, 1 second tap in a slot, 2 boss guarded)
+export const E_GUARD_COUNTER = 18; // DIZZY
+export const E_SLAM = 19; //         v points (Easy Slam)
+export const E_SLAM_CANCEL = 20;
 export const E_CLOSE = 21; //        a kind
 export const E_BREAK = 22; //        a break number (1..3), v points
 export const E_BREAK_END = 23;
-export const E_FINISHER = 24; //     finisher starts
-export const E_FINISH = 25; //       a grade (2 perfect, 1 good, 0 miss), b error, v points
-export const E_END = 26; //          a reason (0 attacks done, 1 finisher, 2 paintball)
+export const E_FINAL_READY = 24; //  a lane, b ring time
+export const E_FINAL = 25; //        a grade (3 perfect pop, 2 pop, 1 hit, 0 miss), b lane, v points
+export const E_END = 26; //          a reason (0 attacks done, 1 Final Pop, 2 paintball, 3 got up, 4 TKO)
 export const E_TIER = 27; //         a combo pct
 export const E_GAUGE_HOT = 28;
 export const E_ALLY_ARRIVE = 29;
 export const E_SURGE = 30;
 export const E_COMBO_RESET = 31; //  a chain lost
+export const E_POP_PERFECT = 32; //  a slot, b lane, v points
+export const E_GUARD_WARN = 33;
+export const E_GRIT = 35; //         a fins left, b fins max
+export const E_KNOCKDOWN = 36; //    a knockdowns this round
+export const E_GETUP_TAP = 37; //    a taps so far
+export const E_GETUP = 38;
+export const E_TKO = 39;
+export const E_STAR = 40; //         a anchor stars lit
+export const E_STAR_OUT = 41; //     a anchor stars lit
+export const E_SKILL_STAR = 42; //   v points
+export const E_FAKE_TAP = 43; //     a lane (a fake bitten: SPLASHED, no Grit)
+export const E_BOON = 45; //         a boon id
+
+export const END_ATTACKS = 0;
+export const END_FINAL = 1;
+export const END_PAINTBALL = 2;
+export const END_GOT_UP = 3;
+export const END_TKO = 4;
+
+/** Opening kinds. */
+export const O_PIN = 0;
+export const O_BREAK = 1;
+export const O_ALLY = 2;
+export const O_FINAL = 3;
 
 export interface SimEvent { code: number; t: number; a: number; b: number; v: number }
 
@@ -64,10 +105,19 @@ export interface Carry {
   breaks: number;
   bonusAttacks: number;
   flags: RoundFlags;
+  knockdowns: number;
+  tko: boolean;
+  /** Anchor Stars lit for the Final Pop (bout 3). */
+  stars: number;
+  finalDone: boolean;
+  skillStar: boolean;
 }
 
 export function freshCarry(): Carry {
-  return { chain: 0, maxChain: 0, gauge: 0, breaks: 0, bonusAttacks: 0, flags: freshRoundFlags() };
+  return {
+    chain: 0, maxChain: 0, gauge: 0, breaks: 0, bonusAttacks: 0, flags: freshRoundFlags(), knockdowns: 0, tko: false,
+    stars: 0, finalDone: false, skillStar: false,
+  };
 }
 
 export interface BoutConfig {
@@ -76,11 +126,12 @@ export interface BoutConfig {
   bout: number;
   carry?: Carry;
   walk?: boolean;
-  tide?: boolean;
   offset?: number;
   variant?: number;
-  /** Solo players never get ally openings; the team layer sets this. */
+  /** Solo players never get ally openings; the team layer sets this (parked). */
   team?: boolean;
+  /** One of the player's first 3 rounds vs this boss: Grit cannot drop below 1 in bout 1. */
+  novice?: boolean;
 }
 
 export interface Opening {
@@ -88,21 +139,31 @@ export interface Opening {
   kind: number;
   start: number;
   end: number;
+  /** Ring close time per slot. */
   rings: number[];
+  /** Lit lane per slot (Break: the lane whose ring closes; the other two are lit too). */
+  lanes: number[];
+  /** 0 open, 1 hit, 2 pop, 3 perfect pop, 4 slammed, 5 missed (final). */
   used: number[];
   mult: number;
-  heavyDone: boolean;
+  /** Index of the Final Pop slot, -1 when none. */
+  finalIdx: number;
+  slamDone: boolean;
   crits: number;
 }
-
-export interface Finisher { start: number; ring: number; done: boolean }
 
 export interface InputEvent { t: number; k: number; a?: number }
 
 export interface BoutStats {
-  perfect: number; good: number; crit: number; hit: number; heavy: number; punish: number; clank: number;
-  guard: number; breaks: number; hazards: number; allyCrits: number; finisher: number; counterErr: number[];
+  perfect: number; good: number; popPerfect: number; pop: number; hit: number; slam: number; clank: number; punish: number;
+  guard: number; breaks: number; hazards: number; allyCrits: number; final: number; fakes: number; knockdown: number;
+  getup: number; counterErr: number[]; popErr: number[];
 }
+
+export interface Down { start: number; open: number; end: number; taps: number; last: number }
+
+/** The bout's foam bubble: blocks its buoy until tapped once (design 6.4). */
+export interface Bubble { lane: number; t0: number; t1: number; popped: boolean }
 
 export interface Bout {
   cfg: Required<Omit<BoutConfig, 'carry'>>;
@@ -121,34 +182,51 @@ export interface Bout {
   lockUntil: number;
   nextAt: number;
   greyUntil: number[];
-  guardTaps: number[];
+  strays: number[];
+  warned: boolean;
   padDownAt: number;
   padOpening: number;
-  finisher: Finisher | null;
   pendingAlly: number;
   pauses: number;
   sum: number;
   stats: BoutStats;
   events: SimEvent[];
   endT: number;
+  endReason: number;
   log: InputEvent[];
   gaugeHot: boolean;
+  grit: number;
+  gritMax: number;
+  boon: number;
+  /** Look-ahead in steps before each slot's ring close. */
+  look: number;
+  popMs: number;
+  /** Attack index in bout 2 that carries the foam bubble (-1 none). */
+  bubbleNo: number;
+  down: Down | null;
+  bubble: Bubble | null;
+  lastTap: number[];
+  lastLane: number;
 }
 
-/** Scoring units per point (points x combo pct x mult pct). */
 export const UNIT_POINTS = UNIT;
 
 export const P_LEAD = 0;
 export const P_ATTACK = 1;
 export const P_OPEN = 2;
-export const P_FINISHER = 3;
+export const P_DOWN = 3;
 export const P_DONE = 4;
+/** Kept for older call sites: the standalone Final Pop is an O_FINAL opening. */
+export const P_FINISHER = -1;
+
+/** Flop before the get-up window opens (taps ignored while the shark lands). */
+export const DOWN_FLOP_MS = 400;
 
 function clampOffset(o: number): number {
   return o > OFFSET_CLAMP ? OFFSET_CLAMP : o < -OFFSET_CLAMP ? -OFFSET_CLAMP : Math.trunc(o);
 }
 
-/** Next quarter-beat grid point at or after t. */
+/** Next step-grid point at or after t. */
 export function ceilQ(t: number, q: number): number {
   return Math.floor((t + q - 1) / q) * q;
 }
@@ -164,22 +242,29 @@ function cloneCarry(c: Carry): Carry {
 export function createBout(cfg: BoutConfig): Bout {
   const bout = cfg.bout;
   const carry = cloneCarry(cfg.carry ?? freshCarry());
-  const q = QUARTER[cfg.boss][bout];
+  const q = STEP[cfg.boss][bout];
+  const walk = !!cfg.walk;
+  const rng = createRng(boutSeed(cfg.seed, bout));
+  // The bout's one foam bubble rides on one of bout 2's plain slams (attack 1 or 3), Kraken only.
+  const bubbleNo = cfg.boss === 'kraken' && bout === 1 ? 1 + 2 * (rngU32(rng) % 2) : -1;
   const b: Bout = {
     cfg: {
-      boss: cfg.boss, seed: cfg.seed >>> 0, bout, walk: !!cfg.walk, tide: !!cfg.tide,
-      offset: clampOffset(cfg.offset ?? 0), variant: cfg.variant ?? 0, team: !!cfg.team,
+      boss: cfg.boss, seed: cfg.seed >>> 0, bout, walk, offset: clampOffset(cfg.offset ?? 0), variant: cfg.variant ?? 0,
+      team: !!cfg.team, novice: !!cfg.novice,
     },
-    q, t: 0, phase: P_LEAD, rng: createRng(boutSeed(cfg.seed, bout)), carry,
+    q, t: 0, phase: P_LEAD, rng, carry,
     attacksTotal: ATTACKS[bout] + (bout === 2 ? Math.min(BONUS_ATTACK_CAP, carry.bonusAttacks) : 0),
     attacksDone: 0, attack: null, step: 0, opening: null, openingSeq: 0, lastCloseAt: -1e9, lockUntil: 0,
-    nextAt: LEAD_Q * q, greyUntil: [0, 0, 0], guardTaps: [], padDownAt: -1, padOpening: -1, finisher: null,
+    nextAt: LEAD_Q * q, greyUntil: [0, 0, 0], strays: [], warned: false, padDownAt: -1, padOpening: -1,
     pendingAlly: 0, pauses: 0, sum: 0,
-    stats: { perfect: 0, good: 0, crit: 0, hit: 0, heavy: 0, punish: 0, clank: 0, guard: 0, breaks: 0, hazards: 0,
-      allyCrits: 0, finisher: -1, counterErr: [] },
-    events: [], endT: -1, log: [], gaugeHot: carry.gauge >= 800,
+    stats: {
+      perfect: 0, good: 0, popPerfect: 0, pop: 0, hit: 0, slam: 0, clank: 0, punish: 0, guard: 0, breaks: 0, hazards: 0,
+      allyCrits: 0, final: -1, fakes: 0, knockdown: 0, getup: 0, counterErr: [], popErr: [],
+    },
+    events: [], endT: -1, endReason: -1, log: [], gaugeHot: carry.gauge >= 800,
+    grit: GRIT, gritMax: GRIT, boon: BOON_NONE, look: walk ? LOOK_WALK_Q : LOOK_Q, popMs: POP_MS, bubbleNo,
+    down: null, bubble: null, lastTap: [-1e9, -1e9, -1e9], lastLane: -1,
   };
-  if (b.cfg.tide) addGauge(b, GAIN.tide, 0);
   return b;
 }
 
@@ -220,7 +305,21 @@ function breakReady(b: Bout): boolean {
   return b.carry.gauge >= GAUGE_MAX && b.carry.breaks < BREAK_MAX;
 }
 
+/** Guard Counter is off in bout 1 and on A0 rounds (design 4.8). */
+function guardOn(b: Bout): boolean {
+  return b.cfg.bout > 0 && b.cfg.variant !== VARIANT_A0;
+}
+
 // ---- scheduling -----------------------------------------------------------
+
+function slamAt(o: Opening): number {
+  const last = o.finalIdx >= 0 ? o.finalIdx - 1 : o.rings.length - 1;
+  return last >= 0 ? o.rings[last] : -1;
+}
+
+function slamArmed(b: Bout, o: Opening): boolean {
+  return b.padOpening === o.id && b.padDownAt >= 0 && !o.slamDone && o.kind !== O_FINAL && slamAt(o) >= 0;
+}
 
 /** Time of the next scheduled transition in the current phase. */
 function nextTransition(b: Bout): number {
@@ -230,8 +329,15 @@ function nextTransition(b: Bout): number {
       const a = b.attack!;
       return a.steps[b.step].I + COYOTE_MS + 1;
     }
-    case P_OPEN: return b.opening!.end;
-    case P_FINISHER: return b.finisher!.ring + FINISHER_GOOD_MS + 1;
+    case P_OPEN: {
+      const o = b.opening!;
+      if (slamArmed(b, o)) {
+        const s = slamAt(o);
+        if (s < o.end) return s;
+      }
+      return o.end;
+    }
+    case P_DOWN: return b.down!.end;
     default: return Number.MAX_SAFE_INTEGER;
   }
 }
@@ -244,15 +350,18 @@ function recoverThen(b: Bout, from: number): void {
 function startAttack(b: Bout, at: number): void {
   const a = planAttack({
     boss: b.cfg.boss, bout: b.cfg.bout, no: b.attacksDone, at, q: b.q, walk: b.cfg.walk,
-    variant: b.cfg.variant, rng: b.rng, flags: b.carry.flags,
+    variant: b.cfg.variant, rng: b.rng, flags: b.carry.flags, bubble: b.attacksDone === b.bubbleNo,
   });
   b.attack = a;
   b.step = 0;
   b.phase = P_ATTACK;
-  if (a.feintLane >= 0) emit(b, E_FEINT, a.feintT0, a.feintLane, a.feintSafe ? 1 : 0);
+  if (a.feintLane >= 0) emit(b, E_FAKE, a.feintT0, a.feintLane, a.feintSafe ? 1 : 0);
   for (let i = 0; i < a.show.length; i++) emit(b, E_SHOW, a.showStart + i * 4 * b.q, a.show[i], i);
   if (a.shuffleAt >= 0) emit(b, E_SHUFFLE, a.shuffleAt);
-  if (a.hazardLane >= 0) emit(b, E_HAZARD, a.hazardT0, a.hazardLane);
+  if (a.hazardLane >= 0) {
+    b.bubble = { lane: a.hazardLane, t0: a.hazardT0, t1: a.hazardT1, popped: false };
+    emit(b, E_BUBBLE, a.hazardT0, a.hazardLane);
+  }
   emit(b, E_TELL, a.T, laneAt(a, 0, a.T), 0);
   for (let i = 0; i < a.swaps.length; i += 2) emit(b, E_TELL, a.swaps[i], a.swaps[i + 1], 0);
   for (let k = 1; k < a.steps.length; k++) {
@@ -263,9 +372,15 @@ function startAttack(b: Bout, at: number): void {
 function endBout(b: Bout, t: number, reason: number): void {
   b.phase = P_DONE;
   b.endT = t;
+  b.endReason = reason;
   b.attack = null;
   b.opening = null;
+  b.down = null;
   emit(b, E_END, t, reason);
+}
+
+function isLastAttack(b: Bout): boolean {
+  return b.cfg.bout === 2 && b.attacksDone >= b.attacksTotal && !b.carry.finalDone;
 }
 
 function onLead(b: Bout): void {
@@ -279,14 +394,12 @@ function onLead(b: Bout): void {
     startAttack(b, t);
     return;
   }
-  const c = b.carry;
-  if (b.cfg.bout === 2 && !b.finisher && (c.breaks >= 1 || c.gauge >= FINISHER_GAUGE_MIN)) {
-    b.finisher = { start: t, ring: t + FINISHER_Q * b.q, done: false };
-    b.phase = P_FINISHER;
-    emit(b, E_FINISHER, t);
+  if (b.cfg.bout === 2 && !b.carry.finalDone) {
+    // The last attack was not converted: the winded boss still offers the Final Pop.
+    openFinal(b, t);
     return;
   }
-  endBout(b, t + (b.cfg.bout === 2 ? KO_FREEZE : 0), 0);
+  endBout(b, t, END_ATTACKS);
 }
 
 function attackResolved(b: Bout): void {
@@ -294,10 +407,34 @@ function attackResolved(b: Bout): void {
   b.attack = null;
 }
 
+function loseGrit(b: Bout, t: number): boolean {
+  const floor = b.cfg.novice && b.cfg.bout === 0 ? NOVICE_GRIT_FLOOR : 0;
+  if (b.grit > floor) b.grit -= 1;
+  emit(b, E_GRIT, t, b.grit, b.gritMax);
+  return b.grit <= 0;
+}
+
+function knockdown(b: Bout, t: number): void {
+  const c = b.carry;
+  c.knockdowns += 1;
+  b.stats.knockdown += 1;
+  b.attack = null;
+  b.opening = null;
+  emit(b, E_KNOCKDOWN, t, c.knockdowns);
+  if (c.knockdowns >= 2) {
+    c.tko = true;
+    emit(b, E_TKO, t);
+    endBout(b, t + PUNISH_MS, END_TKO);
+    return;
+  }
+  b.phase = P_DOWN;
+  b.down = { start: t, open: t + DOWN_FLOP_MS, end: t + DOWN_FLOP_MS + GETUP_MS, taps: 0, last: -1e9 };
+}
+
 function punish(b: Bout, t: number, lane: number, reason: number): void {
   const a = b.attack!;
   if (a.safe) {
-    // First appearance of a new idea never punishes.
+    // First appearance of a new idea never punishes or costs Grit.
     emit(b, E_SAFE_MISS, t, lane, reason);
     attackResolved(b);
     recoverThen(b, t);
@@ -307,14 +444,30 @@ function punish(b: Bout, t: number, lane: number, reason: number): void {
   chainReset(b, t);
   addGauge(b, -LOSS.punish, t);
   if (reason === 1) {
-    // Sekiro drain: an unanswered attack drains to the last full 20-point segment.
+    // An unanswered attack drains to the last full 200 segment.
     b.carry.gauge = Math.floor(b.carry.gauge / 200) * 200;
     b.gaugeHot = b.carry.gauge >= 800;
   }
   emit(b, E_PUNISH, t, lane, reason);
-  b.lockUntil = t + PUNISH_MS;
+  if (b.cfg.bout === 2 && b.carry.stars > 0) {
+    b.carry.stars -= 1;
+    emit(b, E_STAR_OUT, t, b.carry.stars);
+  }
   attackResolved(b);
+  if (loseGrit(b, t)) {
+    knockdown(b, t);
+    return;
+  }
+  b.lockUntil = t + PUNISH_MS;
   recoverThen(b, t + PUNISH_MS);
+}
+
+/** A fake bitten (Kraken wink, Ghost decoy): SPLASHED and combo reset, never Grit. */
+function fakeBite(b: Bout, t: number, lane: number): void {
+  b.stats.fakes += 1;
+  chainReset(b, t);
+  b.lockUntil = t + PUNISH_MS;
+  emit(b, E_FAKE_TAP, t, lane);
 }
 
 function openOpening(b: Bout, I: number, perfect: boolean): void {
@@ -327,20 +480,42 @@ function openOpening(b: Bout, I: number, perfect: boolean): void {
   const rings: number[] = [];
   if (perfect) rings.push(I + 2 * q);
   for (let k = 1; k <= RINGS[bout]; k++) rings.push(I + k * 4 * q);
-  pushOpening(b, 0, I, I + OPENING_Q[bout] * q, rings, MULT.normal);
+  const lanes = popLanes(b.rng, rings.length, -1);
+  let end = I + OPENING_Q[bout] * q;
+  let finalIdx = -1;
+  if (isLastAttack(b)) {
+    // The last opening of the round carries one extra slot: the Final Pop (2-beat approach).
+    const fr = rings[rings.length - 1] + FINAL_Q * q;
+    finalIdx = rings.length;
+    rings.push(fr);
+    lanes.push(popLanes(b.rng, 1, lanes[lanes.length - 1])[0]);
+    end = Math.max(end, fr + 2 * q);
+  }
+  pushOpening(b, O_PIN, I, end, rings, lanes, MULT.normal, finalIdx);
 }
 
-function pushOpening(b: Bout, kind: number, start: number, end: number, rings: number[], mult: number): void {
+function pushOpening(b: Bout, kind: number, start: number, end: number, rings: number[], lanes: number[], mult: number, finalIdx: number): void {
   b.openingSeq += 1;
-  b.opening = { id: b.openingSeq, kind, start, end, rings, used: rings.map(() => 0), mult, heavyDone: false, crits: 0 };
+  b.opening = {
+    id: b.openingSeq, kind, start, end, rings, lanes, used: rings.map(() => 0), mult, finalIdx, slamDone: false, crits: 0,
+  };
   b.phase = P_OPEN;
   emit(b, E_OPEN, start, kind, rings.length);
+  if (finalIdx >= 0) emit(b, E_FINAL_READY, start, lanes[finalIdx], rings[finalIdx]);
+}
+
+function openFinal(b: Bout, t: number): void {
+  const q = b.q;
+  const ring = t + FINAL_Q * q;
+  const lane = popLanes(b.rng, 1, -1)[0];
+  pushOpening(b, O_FINAL, t, ring + 2 * q, [ring], [lane], MULT.normal, 0);
 }
 
 function openAlly(b: Bout, t: number): void {
   const q = b.q;
   emit(b, E_ALLY_ARRIVE, t);
-  pushOpening(b, 2, t, t + 8 * q, [t + 2 * q, t + 6 * q], MULT.ally);
+  const rings = [t + 2 * q, t + 6 * q];
+  pushOpening(b, O_ALLY, t, t + 8 * q, rings, popLanes(b.rng, 2, -1), MULT.ally, -1);
 }
 
 function startBreak(b: Bout, t: number): void {
@@ -357,28 +532,60 @@ function startBreak(b: Bout, t: number): void {
   c.gauge = 0;
   b.gaugeHot = false;
   const q = b.q;
+  // Beat-absorbed freeze: the Break opening starts on the first step after the freeze.
   const d0 = ceilQ(t + BREAK_FREEZE[Math.min(n, 3) - 1], q);
   const rings: number[] = [];
-  for (let k = 1; k <= BREAK_Q / BREAK_RING_Q; k++) rings.push(d0 + k * BREAK_RING_Q * q);
+  const lanes: number[] = [];
+  const first = rngU32(b.rng) % 3;
+  for (let k = 1; k <= BREAK_Q / BREAK_RING_Q; k++) {
+    rings.push(d0 + k * BREAK_RING_Q * q);
+    lanes.push((first + k - 1) % 3);
+  }
   if (b.attack) attackResolved(b);
-  pushOpening(b, 1, d0, d0 + BREAK_Q * q, rings, MULT.break);
+  pushOpening(b, O_BREAK, d0, d0 + BREAK_Q * q, rings, lanes, MULT.break, -1);
 }
 
 function closeOpening(b: Bout, t: number): void {
   const o = b.opening!;
-  emit(b, o.kind === 1 ? E_BREAK_END : E_CLOSE, t, o.kind);
-  if (o.kind === 2 && o.crits > 0) b.stats.allyCrits += 1;
+  if (o.finalIdx >= 0 && o.used[o.finalIdx] === 0) {
+    // Final Pop missed: the boss shrugs, the round ends.
+    o.used[o.finalIdx] = 5;
+    b.carry.finalDone = true;
+    b.stats.final = 0;
+    emit(b, E_FINAL, t, 0, o.lanes[o.finalIdx], 0);
+    endBout(b, t + KO_FREEZE, END_FINAL);
+    return;
+  }
+  emit(b, o.kind === O_BREAK ? E_BREAK_END : E_CLOSE, t, o.kind);
+  if (o.kind === O_ALLY && o.crits > 0) b.stats.allyCrits += 1;
   b.opening = null;
   b.lastCloseAt = t;
+  if (b.padOpening === o.id) b.padOpening = -1;
   recoverThen(b, t);
 }
 
-function finisherMiss(b: Bout, t: number): void {
-  const f = b.finisher!;
-  f.done = true;
-  b.stats.finisher = 0;
-  emit(b, E_FINISH, t, 0, 0, 0);
-  endBout(b, t + KO_FREEZE, 1);
+function fireSlam(b: Bout, t: number): void {
+  const o = b.opening!;
+  o.slamDone = true;
+  for (let j = 0; j < o.used.length; j++) if (o.used[j] === 0 && j !== o.finalIdx) o.used[j] = 4;
+  b.stats.slam += 1;
+  const pct = comboPct(b.carry.chain);
+  const v = score(b, PTS.slam, pct, o.mult);
+  emit(b, E_SLAM, t, 0, pct, v);
+  chainUp(b, t);
+  if (o.kind !== O_BREAK) addGauge(b, GAIN.slam, t);
+  b.padOpening = -1;
+  if (o.kind !== O_BREAK && o.finalIdx < 0 && breakReady(b)) {
+    emit(b, E_CLOSE, t, o.kind);
+    b.opening = null;
+    startBreak(b, t);
+  }
+}
+
+function getupFail(b: Bout, t: number): void {
+  b.carry.tko = true;
+  emit(b, E_TKO, t);
+  endBout(b, t, END_TKO);
 }
 
 /** Process every scheduled transition up to and including time `to`. */
@@ -392,38 +599,70 @@ export function advance(b: Bout, to: number): void {
     else if (b.phase === P_ATTACK) {
       const a = b.attack!;
       punish(b, tt, laneAt(a, b.step, tt), 1);
-    } else if (b.phase === P_OPEN) closeOpening(b, tt);
-    else if (b.phase === P_FINISHER) finisherMiss(b, tt);
+    } else if (b.phase === P_OPEN) {
+      const o = b.opening!;
+      if (slamArmed(b, o) && slamAt(o) === tt && tt < o.end) fireSlam(b, tt);
+      else closeOpening(b, tt);
+    } else if (b.phase === P_DOWN) getupFail(b, tt);
   }
   if (to > b.t) b.t = to;
 }
 
 // ---- input ----------------------------------------------------------------
 
+function strayTap(b: Bout, t: number, reason: number): void {
+  b.stats.clank += 1;
+  if (reason !== 2) chainReset(b, t);
+  const taps = b.strays.filter((x) => t - x < GUARD_WINDOW_MS);
+  taps.push(t);
+  b.strays = taps;
+  emit(b, E_CLANK, t, taps.length, reason);
+  if (!guardOn(b)) return;
+  if (taps.length >= GUARD_WARN_TAPS && !b.warned) {
+    b.warned = true;
+    emit(b, E_GUARD_WARN, t);
+  }
+  if (taps.length >= GUARD_TAPS) {
+    b.strays = [];
+    b.warned = false;
+    b.stats.guard += 1;
+    chainReset(b, t);
+    addGauge(b, -LOSS.guard, t);
+    b.lockUntil = t + GUARD_SWAT_MS + DIZZY_MS;
+    emit(b, E_GUARD_COUNTER, t);
+  }
+}
+
 function counterPress(b: Bout, t: number, lane: number): void {
   const a = b.attack!;
   if (t < a.T) {
-    // Feint prefix or Robo show phase: tapping the feint lane greys it; anything else is early.
+    // Fake prefix or Robo show phase: biting the fake; anything else is early.
     if (a.feintLane >= 0 && t >= a.feintT0 && t < a.feintT1 && lane === a.feintLane) {
-      b.greyUntil[lane] = t + 4 * b.q;
-      emit(b, E_GREY, t, lane, a.feintSafe ? 1 : 0);
+      if (a.feintSafe) {
+        b.greyUntil[lane] = t + 4 * b.q;
+        emit(b, E_GREY, t, lane, 1);
+      } else fakeBite(b, t, lane);
       return;
     }
     emit(b, E_EARLY, t, lane);
     return;
   }
-  if (a.hazardLane === lane && !a.hazardPopped && t >= a.hazardT0 && t < a.hazardT1) {
-    a.hazardPopped = true;
-    b.stats.hazards += 1;
-    const v = score(b, PTS.hazard, 100, 100);
-    addGauge(b, GAIN.hazard, t);
-    emit(b, E_POP, t, lane, 0, v);
+  if (bubbleOn(b, t, lane)) {
+    popBubble(b, t, lane);
     return;
   }
   const step = a.steps[b.step];
+  if (t < a.T + READ_GRACE_MS && b.step === 0) {
+    emit(b, E_EARLY, t, lane);
+    return;
+  }
   const want = laneAt(a, b.step, t);
   if (lane !== want) {
-    punish(b, t, want, a.decoys.indexOf(lane) >= 0 ? 2 : 0);
+    if (a.decoys.indexOf(lane) >= 0) fakeBite(b, t, lane);
+    // A wrong lane only lands the tell inside the counter window; earlier it is a soft early tick
+    // (a walking bump in the wind-up never costs a fin).
+    else if (step.graded && t - b.cfg.offset < step.I - a.G - BUFFER_MS) emit(b, E_EARLY, t, lane);
+    else punish(b, t, want, 0);
     return;
   }
   if (!step.graded) {
@@ -443,16 +682,23 @@ function counterPress(b: Bout, t: number, lane: number): void {
     return;
   }
   b.stats.counterErr.push(err);
+  const w = COUNTER_PCT[b.cfg.boss];
   let v: number;
   if (perfect) {
     b.stats.perfect += 1;
-    const w = COUNTER_PCT[b.cfg.boss];
     v = score(b, PTS.perfect, w, 100);
     addGauge(b, Math.floor((GAIN.perfect * w) / 100), t);
     emit(b, E_PERFECT, t, lane, err, v);
+    if (b.cfg.bout === 2 && b.carry.stars < ANCHOR_STARS_MAX) {
+      b.carry.stars += 1;
+      emit(b, E_STAR, t, b.carry.stars);
+    }
+    if (a.call && b.step === a.steps.length - 1) {
+      b.carry.skillStar = true;
+      emit(b, E_SKILL_STAR, t, 0, 0, score(b, PTS.skillStar, 100, 100));
+    }
   } else {
     b.stats.good += 1;
-    const w = COUNTER_PCT[b.cfg.boss];
     v = score(b, PTS.good, w, 100);
     addGauge(b, Math.floor((GAIN.good * w) / 100), t);
     emit(b, E_GOOD, t, lane, err, v);
@@ -467,20 +713,18 @@ function counterPress(b: Bout, t: number, lane: number): void {
   openOpening(b, I, perfect);
 }
 
-function guardTap(b: Bout, t: number): void {
-  b.stats.clank += 1;
-  const taps = b.guardTaps.filter((x) => t - x < GUARD_WINDOW_MS);
-  taps.push(t);
-  b.guardTaps = taps;
-  emit(b, E_CLANK, t, taps.length);
-  if (taps.length >= GUARD_TAPS) {
-    b.guardTaps = [];
-    b.stats.guard += 1;
-    chainReset(b, t);
-    addGauge(b, -LOSS.guard, t);
-    b.lockUntil = t + GUARD_SWAT_MS + DIZZY_MS;
-    emit(b, E_GUARD_COUNTER, t);
-  }
+function bubbleOn(b: Bout, t: number, lane: number): boolean {
+  const u = b.bubble;
+  return !!u && !u.popped && u.lane === lane && t >= u.t0 && t < u.t1;
+}
+
+function popBubble(b: Bout, t: number, lane: number): void {
+  b.bubble!.popped = true;
+  if (b.attack && b.attack.hazardLane === lane) b.attack.hazardPopped = true;
+  b.stats.hazards += 1;
+  const v = score(b, PTS.hazard, 100, 100);
+  addGauge(b, GAIN.hazard, t);
+  emit(b, E_BUBBLE_POP, t, lane, 0, v);
 }
 
 function slotOf(o: Opening, t: number): number {
@@ -491,102 +735,146 @@ function slotOf(o: Opening, t: number): number {
   return o.rings.length - 1;
 }
 
+function popTap(b: Bout, o: Opening, t: number, lane: number): void {
+  if (t < o.start) return;
+  // The bubble (if still afloat) blocks its buoy until popped.
+  if (bubbleOn(b, t, lane)) {
+    popBubble(b, t, lane);
+    return;
+  }
+  // Lane taps while the float is held for an Easy Slam are ignored.
+  if (slamArmed(b, o)) return;
+  const j = slotOf(o, t);
+  const isBreak = o.kind === O_BREAK;
+  if (o.used[j] !== 0) {
+    if (isBreak) return; // Break: extra taps are just ignored
+    strayTap(b, t, 1);
+    return;
+  }
+  const lit = o.lanes[j] === lane;
+  if (!lit && !isBreak) {
+    strayTap(b, t, 0);
+    return;
+  }
+  const tj = t - b.cfg.offset;
+  const err = tj - o.rings[j];
+  const abs = err < 0 ? -err : err;
+  const pct = comboPct(b.carry.chain);
+  if (j === o.finalIdx) {
+    finalPop(b, o, t, lane, abs);
+    return;
+  }
+  if (lit && abs <= POP_PERFECT_MS) {
+    o.used[j] = 3;
+    o.crits += 1;
+    b.stats.popPerfect += 1;
+    b.stats.popErr.push(err);
+    const v = score(b, PTS.popPerfect, pct, o.mult);
+    emit(b, E_POP_PERFECT, t, j, lane, v);
+    chainUp(b, t);
+    if (!isBreak) addGauge(b, GAIN.popPerfect, t);
+  } else if (lit && abs <= b.popMs) {
+    o.used[j] = 2;
+    o.crits += 1;
+    b.stats.pop += 1;
+    b.stats.popErr.push(err);
+    const v = score(b, PTS.pop, pct, o.mult);
+    emit(b, E_POP, t, j, lane, v);
+    chainUp(b, t);
+    if (!isBreak) addGauge(b, GAIN.pop, t);
+  } else {
+    o.used[j] = 1;
+    b.stats.hit += 1;
+    const v = score(b, PTS.hit, pct, o.mult);
+    emit(b, E_HIT, t, j, lane, v);
+    if (!isBreak) addGauge(b, GAIN.hit, t);
+  }
+  if (!isBreak && o.finalIdx < 0 && breakReady(b)) {
+    emit(b, E_CLOSE, t, o.kind);
+    b.opening = null;
+    startBreak(b, t);
+  }
+}
+
+function finalPop(b: Bout, o: Opening, t: number, lane: number, abs: number): void {
+  const c = b.carry;
+  const grade = abs <= POP_PERFECT_MS ? 3 : abs <= b.popMs ? 2 : 1;
+  const base = grade === 3 ? PTS.finalPerfect : grade === 2 ? PTS.finalPop : PTS.finalHit;
+  o.used[o.finalIdx] = grade === 3 ? 3 : grade === 2 ? 2 : 1;
+  c.finalDone = true;
+  b.stats.final = grade;
+  const v = score(b, base, 100 + 25 * c.stars, 100);
+  emit(b, E_FINAL, t, grade, lane, v);
+  if (grade >= 2) chainUp(b, t);
+  endBout(b, t + (grade >= 2 ? FINAL_FREEZE : 0) + KO_FREEZE, END_FINAL);
+}
+
+function laneTap(b: Bout, t: number, lane: number): void {
+  if (t - b.lastTap[lane] < DEBOUNCE_MS) return; // one bump, not two taps
+  b.lastTap[lane] = t;
+  if (b.phase === P_ATTACK) {
+    counterPress(b, t, lane);
+    return;
+  }
+  if (b.phase === P_OPEN) {
+    popTap(b, b.opening!, t, lane);
+    return;
+  }
+  if (b.phase === P_LEAD) {
+    // Between attacks the boss is guarded; taps in the close grace never count.
+    if (t - b.lastCloseAt < CLOSE_GRACE_MS && t >= b.lastCloseAt) return;
+    if (b.attacksDone === 0) return;
+    strayTap(b, t, 2);
+  }
+}
+
 function padDown(b: Bout, t: number): void {
-  if (t < b.lockUntil) return;
-  if (b.phase === P_FINISHER) {
-    b.padDownAt = t;
-    return;
-  }
   const o = b.opening;
-  if (b.phase === P_OPEN && o && t < o.start) return; // counter landed early; opening not open yet
-  if (b.phase === P_OPEN && o && t >= o.start && t < o.end) {
-    b.padDownAt = t;
-    b.padOpening = o.id;
-    if (o.heavyDone) return;
-    const j = slotOf(o, t);
-    if (o.used[j] !== 0) {
-      if (o.kind === 1) return; // Break: extra taps are just ignored
-      guardTap(b, t);
-      return;
-    }
-    const tj = t - b.cfg.offset;
-    const crit = Math.abs(tj - o.rings[j]) <= RING_CRIT_MS;
-    const pct = comboPct(b.carry.chain);
-    if (crit) {
-      o.used[j] = 2;
-      o.crits += 1;
-      b.stats.crit += 1;
-      const v = score(b, PTS.crit, pct, o.mult);
-      emit(b, E_CRIT, t, j, pct, v);
-      chainUp(b, t);
-      if (o.kind !== 1) addGauge(b, GAIN.crit, t);
-    } else {
-      o.used[j] = 1;
-      b.stats.hit += 1;
-      const v = score(b, PTS.hit, pct, o.mult);
-      emit(b, E_HIT, t, j, pct, v);
-      if (o.kind !== 1) addGauge(b, GAIN.hit, t);
-    }
-    if (o.kind !== 1 && breakReady(b)) {
-      emit(b, E_CLOSE, t, o.kind);
-      b.opening = null;
-      startBreak(b, t);
-    }
-    return;
-  }
-  if (t - b.lastCloseAt < CLOSE_GRACE_MS && t >= b.lastCloseAt) return;
+  if (b.phase !== P_OPEN || !o || t < o.start || o.slamDone || o.kind === O_FINAL) return;
   b.padDownAt = t;
-  b.padOpening = -1;
-  guardTap(b, t);
+  // Easy Slam arms only when the float goes down before the first ring closes.
+  const first = o.rings[0];
+  if (t - b.cfg.offset <= first && o.used[0] === 0) b.padOpening = o.id;
 }
 
 function padUp(b: Bout, t: number): void {
   const down = b.padDownAt;
   b.padDownAt = -1;
   if (down < 0) return;
-  const held = t - down;
-  if (b.phase === P_FINISHER && b.finisher && !b.finisher.done) {
-    if (held < FINISHER_HOLD_MS) return;
-    const f = b.finisher;
-    const err = t - b.cfg.offset - f.ring;
-    const abs = Math.abs(err);
-    if (abs > FINISHER_GOOD_MS) {
-      if (err < 0) return; // released way early: hold again
-      finisherMiss(b, t);
-      return;
-    }
-    f.done = true;
-    const perfect = abs <= FINISHER_PERFECT_MS;
-    const v = score(b, perfect ? PTS.finisherPerfect : PTS.finisherGood, 100, 100);
-    b.stats.finisher = perfect ? 2 : 1;
-    emit(b, E_FINISH, t, perfect ? 2 : 1, err, v);
-    endBout(b, t + FINISHER_FREEZE + KO_FREEZE, 1);
-    return;
-  }
   const o = b.opening;
-  if (b.phase !== P_OPEN || !o || o.kind === 1 || o.id !== b.padOpening || o.heavyDone) return;
-  if (held < 4 * b.q || t >= o.end) return;
-  o.heavyDone = true;
-  for (let j = 0; j < o.used.length; j++) if (o.used[j] === 0) o.used[j] = 1;
-  const last = o.rings[o.rings.length - 1];
-  const pct = comboPct(b.carry.chain);
-  if (Math.abs(t - b.cfg.offset - last) <= HEAVY_WINDOW_MS) {
-    b.stats.heavy += 1;
-    const v = score(b, PTS.heavy, pct, o.mult);
-    emit(b, E_HEAVY, t, 0, pct, v);
-    chainUp(b, t);
-    addGauge(b, GAIN.heavy, t);
-    if (breakReady(b)) {
-      emit(b, E_CLOSE, t, o.kind);
-      b.opening = null;
-      startBreak(b, t);
-    }
-  } else {
-    b.stats.hit += 1;
-    const v = score(b, PTS.hit, pct, o.mult);
-    emit(b, E_HEAVY_MISS, t, 0, pct, v);
-    addGauge(b, GAIN.hit, t);
+  if (o && b.padOpening === o.id && !o.slamDone) emit(b, E_SLAM_CANCEL, t);
+  b.padOpening = -1;
+}
+
+function getupTap(b: Bout, t: number): void {
+  const d = b.down!;
+  if (t < d.open || t - d.last < GETUP_MIN_GAP) return;
+  d.last = t;
+  d.taps += 1;
+  emit(b, E_GETUP_TAP, t, d.taps);
+  if (d.taps >= GETUP_TAPS) {
+    b.stats.getup += 1;
+    emit(b, E_GETUP, t);
+    endBout(b, t, END_GOT_UP);
   }
+}
+
+function applyBoon(b: Bout, t: number, id: number): void {
+  if (b.boon !== BOON_NONE || t > 0 || b.cfg.bout === 0) return;
+  const offer = boonOffer(b.cfg.seed, b.cfg.bout);
+  if (offer[0] !== id && offer[1] !== id) return;
+  b.boon = id;
+  if (id === BOON_TIDE) addGauge(b, GAIN.tide, t);
+  else if (id === BOON_FIN) {
+    b.grit = GRIT_EXTRA;
+    b.gritMax = GRIT_EXTRA;
+  } else if (id === BOON_LOOK) {
+    b.look = LOOK_WALK_Q;
+    b.popMs = POP_LONG_MS;
+  } else if (id === BOON_POLISH) {
+    if (b.carry.stars < ANCHOR_STARS_MAX) b.carry.stars += 1;
+  }
+  emit(b, E_BOON, t, id);
 }
 
 /** Apply one logged input. Inputs must arrive in non-decreasing t. */
@@ -598,25 +886,30 @@ export function input(b: Bout, ev: InputEvent): void {
   switch (ev.k) {
     case IN_TARGET: {
       const lane = ev.a ?? -1;
-      if (lane < 0 || lane > 2 || t < b.lockUntil || t < b.greyUntil[lane]) return;
-      if (b.phase === P_ATTACK) counterPress(b, t, lane);
+      if (lane < 0 || lane > 2 || b.phase === P_DOWN || t < b.lockUntil || t < b.greyUntil[lane]) return;
+      laneTap(b, t, lane);
       return;
     }
-    case IN_PAD_DOWN: padDown(b, t); return;
+    case IN_GETUP:
+      if (b.phase === P_DOWN) getupTap(b, t);
+      return;
+    case IN_PAD_DOWN: if (t >= b.lockUntil) padDown(b, t); return;
     case IN_PAD_UP: padUp(b, t); return;
+    case IN_BOON: applyBoon(b, t, ev.a ?? -1); return;
     case IN_PAUSE:
       b.pauses += 1;
       // A third pause in a bout paintballs it: it ends here and its damage counts.
-      if (b.pauses >= 3) endBout(b, t, 2);
+      if (b.pauses >= 3) endBout(b, t, END_PAINTBALL);
       return;
     case IN_RESUME: return;
-    case IN_END: endBout(b, t, 2); return;
+    case IN_END: endBout(b, t, END_PAINTBALL); return;
     case IN_ALLY: if (b.cfg.team) b.pendingAlly = 1; return;
     case IN_SURGE:
+      if (!b.cfg.team) return;
       emit(b, E_SURGE, t);
       addGauge(b, GAIN.surge, t);
       return;
-    case IN_RESCUE: addGauge(b, GAIN.rescue, t); return;
+    case IN_RESCUE: if (b.cfg.team) addGauge(b, GAIN.rescue, t); return;
     default:
   }
 }
@@ -634,14 +927,19 @@ export function scoreBout(b: Bout, rateBp = 10000): number {
   return Math.floor((b.sum * rateBp) / (UNIT * 10000));
 }
 
-/** Carry for the next bout (combo, gauge, Breaks, bonus attacks, first-instance flags). */
+/** Carry for the next bout (combo, gauge, Breaks, bonus attacks, Knockdowns, stars, first-instance flags). */
 export function carryOut(b: Bout): Carry {
   return cloneCarry(b.carry);
 }
 
-/** Median signed counter error (ms) for the results readout ("You were 42 ms early"). */
+/** Median signed error (ms) for the results readout ("You were 42 ms early"). */
 export function medianError(errs: readonly number[]): number {
   if (errs.length === 0) return 0;
   const s = [...errs].sort((x, y) => x - y);
   return s[Math.floor(s.length / 2)];
+}
+
+/** Look-ahead lead (ms) before each slot's ring close for this bout. */
+export function lookAheadMs(b: Bout): number {
+  return b.look * b.q;
 }

@@ -1,17 +1,21 @@
 /**
- * Boss Brawl v4 sim constants. Integer-only (design 10.8): every time is an
- * int ms, every value an int, and the beat grid is a quarter-beat table per
- * boss and bout, locked to Chris's loop edits (Kraken 129.2 BPM, Robo 136,
- * Ghost 117.5; Fury loops run x1.06).
+ * Boss Brawl v7 sim constants (design: studio/design/boss.md v7). Integer-only:
+ * every time is an int ms, every value an int, and the grid is a step table
+ * (one step = a 1/16 note) per boss and bout, locked to Chris's loop edits
+ * (Kraken 129.2 BPM, Robo 136, Ghost 117.5; Fury loops run x1.06).
  *
- * The server replay (WS6, PHP) mirrors this file one to one.
+ * The server replays the same file through the netcode sim bundle
+ * (`tools/build-sim-bundle.mjs`, routed by {game: 'boss', sim_version}).
  */
 
 export type BossId = 'kraken' | 'robo_shark' | 'ghost_squid';
 export const BOSS_IDS: readonly BossId[] = ['kraken', 'robo_shark', 'ghost_squid'];
 
-/** Quarter-beat (ms) per boss per bout. Bout 3 plays the x1.06 Fury loop. */
-export const QUARTER: Record<BossId, readonly [number, number, number]> = {
+/** Rule-set version carried in every proof. v4 proofs replay with their own bundle. */
+export const SIM_VERSION = 7;
+
+/** One step (1/16 note, ms) per boss per bout. Bout 3 plays the x1.06 Fury loop. 1 beat = 4 steps. */
+export const STEP: Record<BossId, readonly [number, number, number]> = {
   kraken: [116, 116, 110],
   robo_shark: [110, 110, 104],
   ghost_squid: [128, 128, 120],
@@ -20,75 +24,97 @@ export const QUARTER: Record<BossId, readonly [number, number, number]> = {
 export const BOUTS = 3;
 /** Attacks per bout (bout 3 gets +1 per Break this round, cap +2). */
 export const ATTACKS = [3, 4, 4] as const;
-/** Wind-up in quarter beats (2 / 1.5 / 1.25 beats). Walking adds one sixteenth. */
+/** Wind-up in steps (2 / 1.5 / 1.25 beats). Walking adds one step. */
 export const WINDUP_Q = [8, 6, 5] as const;
-/** Opening length in quarter beats (4 / 3.5 / 3 beats). */
+/** Opening (Pin and Pop) length in steps (4 / 3.5 / 3 beats). */
 export const OPENING_Q = [16, 14, 12] as const;
-/** Crit rings in an opening after a GOOD counter; PERFECT adds a half-beat ring. */
+/** Pop slots per opening; a PERFECT counter adds a half-beat slot. */
 export const RINGS = [3, 3, 2] as const;
-/** Recover after an opening, in quarter beats (2 / 1 / 0.75 beats). */
+/** Recover after an opening, in steps (2 / 1 / 0.75 beats). */
 export const RECOVER_Q = [8, 4, 3] as const;
 /** Lead-in before the first tell of a bout (2 beats). */
 export const LEAD_Q = 8;
 
-// Timing windows (ms, relative to the impact frame I, after the device offset)
+// Counter windows (ms, relative to the impact frame I, after the device offset)
 export const GOOD_MAX = 600;
 export const BUFFER_MS = 120;
 export const PERFECT_EARLY = 160;
 export const PERFECT_LATE = 40;
 export const COYOTE_MS = 90;
-export const RING_CRIT_MS = 80;
-export const HEAVY_WINDOW_MS = 100;
-export const FINISHER_PERFECT_MS = 110;
-export const FINISHER_GOOD_MS = 250;
-export const FINISHER_HOLD_MS = 400;
 export const OFFSET_CLAMP = 120;
+/**
+ * Reflex grace: taps in the first 250 ms after a tell starts are reflexes, not
+ * reads (a kid's panic burst, a walking bump). They are soft early ticks on any
+ * lane and never land the tell or count as a counter.
+ */
+export const READ_GRACE_MS = 250;
+
+// Pin and Pop windows (relative to a slot's ring close)
+export const POP_MS = 110;
+export const POP_PERFECT_MS = 50;
+/** Long Look boon widens POP. */
+export const POP_LONG_MS = 130;
+/** Look-ahead (steps before a slot's ring close): 1 beat, 2 while walking or with Long Look. */
+export const LOOK_Q = 4;
+export const LOOK_WALK_Q = 8;
+/** Final Pop ring approaches over 2 beats after the last slot. */
+export const FINAL_Q = 8;
 
 // Lockouts and guard
 export const PUNISH_MS = 800;
 export const CLOSE_GRACE_MS = 250;
 export const CLOSE_WARN_MS = 250;
+export const GUARD_WARN_TAPS = 3;
 export const GUARD_TAPS = 5;
 export const GUARD_WINDOW_MS = 1000;
 export const GUARD_SWAT_MS = 250;
 export const DIZZY_MS = 900;
 export const HAZARD_MS = 1500;
+/** Taps closer than this to the previous one are one bounce (walk bump), not two inputs. */
+export const DEBOUNCE_MS = 40;
+
+// Grit, Knockdown, TKO (design 6.1)
+export const GRIT = 3;
+export const GRIT_EXTRA = 4;
+export const GETUP_TAPS = 8;
+export const GETUP_MS = 1500;
+/** Get-up taps faster than 14/s are bounces. */
+export const GETUP_MIN_GAP = 71;
+/** First rounds vs a boss: Grit cannot drop below this in bout 1. */
+export const NOVICE_GRIT_FLOOR = 1;
 
 // Break (gauge in tenths: 0..1000)
 export const GAUGE_MAX = 1000;
+/** Beat-absorbed Break freezes: the sim leaves this gap, the next onset stays on the step grid. */
 export const BREAK_FREEZE = [140, 160, 180] as const;
 export const BREAK_Q = 24; // 6 beats of dizzy
-/** Break crit rings close every beat (tuned from every half beat: see balance test). */
 export const BREAK_RING_Q = 4;
 export const BREAK_MAX = 3;
 export const BONUS_ATTACK_CAP = 2;
 export const GAIN = {
-  perfect: 220, good: 140, crit: 60, hit: 15, heavy: 120, hazard: 60, tide: 300, surge: 200, rescue: 60,
+  perfect: 220, good: 140, popPerfect: 80, pop: 60, hit: 15, slam: 140, hazard: 60, tide: 300, surge: 200, rescue: 60,
 } as const;
 export const LOSS = { punish: 80, guard: 100 } as const;
 
-// Finisher
-export const FINISHER_Q = 24;
-export const FINISHER_FREEZE = 220;
+// Final Pop / KO
+export const FINAL_FREEZE = 220;
 export const KO_FREEZE = 300;
-export const FINISHER_GAUGE_MIN = 600;
+export const ANCHOR_STARS_MAX = 3;
 
 /**
- * Points. Design 7.1 ratios, scaled by the node balance sim (tools/tests/boss-sim.test.cjs)
- * so the median bot lands near 1 150 and mastery near 3 000, inside what the live raid
- * endpoint can encode (26 s x 7 hits/s). Crit vs hit widened so ring timing, not tap
- * speed, is the biggest term between median and mastery.
+ * Points (design 5.1, starting values, lock after Gate H). Scaled by the node
+ * balance sim (tools/tests/boss-encounter.test.cjs) so the median bot lands
+ * near 1 050 and mastery near 3 000.
  */
 export const PTS = {
-  hit: 4, crit: 23, heavy: 58, perfect: 16, good: 6, hazard: 3, breakLump: 70,
-  finisherPerfect: 200, finisherGood: 120,
+  perfect: 14, good: 5, popPerfect: 24, pop: 11, hit: 2, slam: 40, hazard: 3, breakLump: 40,
+  finalPerfect: 200, finalPop: 120, finalHit: 40, skillStar: 50,
 } as const;
 /**
  * Counter weight per boss (integer percent on a counter's points and Break gauge).
  * A Robo circuit counter is 2-3 ordered presses and a Ghost counter is a
  * which-one read, and neither boss gets Kraken's multi-step attacks, so each
- * counter carries more: the median bot lands within 8% of the Kraken median
- * on every boss (balance test "every boss within 8% of the Kraken median").
+ * counter carries more.
  */
 export const COUNTER_PCT: Record<BossId, number> = { kraken: 100, robo_shark: 140, ghost_squid: 170 };
 /** Multipliers as integer percents. */
@@ -107,13 +133,22 @@ export function comboPct(chain: number): number {
 /** Star thresholds (display only; rewards stay server-side). */
 export const STAR_POINTS = { one: 300, two: 1000, three: 2600 } as const;
 
+// Boons (design 6.3): one of two seeded cards at each intermission.
+export const BOON_NONE = 0;
+export const BOON_TIDE = 1; // Rising Tide: start at +300 Break
+export const BOON_FIN = 2; // Extra Fin: start with 4 Grit
+export const BOON_LOOK = 3; // Long Look: 2-beat look-ahead, POP +-130
+export const BOON_POLISH = 4; // Anchor Polish (bout 3 only): 1 Anchor Star lit
+
 // Input kinds (the proof's `k`)
 export const IN_TARGET = 0;
 export const IN_PAD_DOWN = 1;
 export const IN_PAD_UP = 2;
 export const IN_PAUSE = 3;
 export const IN_RESUME = 4;
-export const IN_ALLY = 5;
+export const IN_ALLY = 5; // parked (flag)
 export const IN_END = 6;
-export const IN_SURGE = 7;
-export const IN_RESCUE = 8;
+export const IN_SURGE = 7; // parked (flag)
+export const IN_RESCUE = 8; // parked (flag)
+export const IN_GETUP = 9;
+export const IN_BOON = 10;

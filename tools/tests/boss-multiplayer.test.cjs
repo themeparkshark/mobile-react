@@ -73,10 +73,10 @@ test('sim: an Ally Opening only exists in team play, arrives at the next recover
   assert.equal(duo.opening.kind, 2);
   assert.equal(duo.opening.mult, C.MULT.ally);
   const r = duo.opening.rings[0];
-  enc.input(duo, { t: r, k: C.IN_PAD_DOWN });
-  const crit = duo.events[duo.events.length - 1];
-  assert.equal(crit.code, enc.E_CRIT);
-  assert.equal(crit.v, C.PTS.crit * 100 * 125);
+  enc.input(duo, { t: r, k: C.IN_TARGET, a: duo.opening.lanes[0] });
+  const pop = duo.events[duo.events.length - 1];
+  assert.equal(pop.code, enc.E_POP_PERFECT);
+  assert.equal(pop.v, C.PTS.popPerfect * 100 * 125);
 });
 
 test('duel tug-of-war and lead changes', () => {
@@ -105,7 +105,7 @@ test('house crew: deterministic per team seed, joined apart, emits lunges, PERFE
 
 test('ghost race: timeline replays a stored round exactly; running delta by bout and time', () => {
   const bs = bots.runBotRound('kraken', 555, bots.BOTS.median);
-  const log = { boss: 'kraken', seed: 555, variant: 0, bouts: bs.map(round.boutProof) };
+  const log = { boss: 'kraken', seed: 555, variant: 1, bouts: bs.map(round.boutProof) };
   const g = crew.ghostTimeline(log, 'Maya');
   const totals = bs.map((b) => enc.scoreBout(b));
   assert.equal(JSON.stringify(g.bouts.map((x) => x.total)), JSON.stringify(totals));

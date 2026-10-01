@@ -1,16 +1,16 @@
 /**
  * A Boss Brawl round = 3 bouts with free intermissions. This module turns a
  * round's bout logs into:
- *   - the v4 bout proofs WS6's replay endpoint will verify (design 16.1),
+ *   - the v7 bout proofs WS6's replay endpoint will verify (design 18.1),
  *   - the legacy raid proof the live endpoint verifies today
  *     ({hits, weak_hits, duration_ms}: damage = 10 x hits + 20 x weak_hits,
  *     weak_hits <= hits / 3, hits <= 7 per second), encoded so the server's
  *     own formula gives exactly the replayed damage (rounded down to 10),
  *   - stars, NEXT STAR in actions and the results readout.
  */
-import { STAR_POINTS, type BossId } from './constants';
+import { SIM_VERSION, STAR_POINTS, type BossId } from './constants';
 import {
-  carryOut, freshCarry, medianError, replayBout, scoreBout, type Bout, type BoutConfig, type Carry, type InputEvent,
+  END_TKO, carryOut, freshCarry, medianError, replayBout, scoreBout, type Bout, type BoutConfig, type Carry, type InputEvent,
 } from './encounter';
 
 export const LEGACY_MIN_MS = 12000;
@@ -22,10 +22,12 @@ export interface BoutProof {
   events: InputEvent[];
   sim_ms: number;
   walk: boolean;
-  tide: boolean;
   input_offset_ms: number;
   pauses: number;
   team: boolean;
+  /** First 3 rounds vs this boss (Grit floor in bout 1); the server checks it against history. */
+  novice: boolean;
+  sim_version: number;
   damage: number;
 }
 
@@ -73,14 +75,26 @@ export interface RoundSummary {
   stars: 0 | 1 | 2 | 3;
   perfect: number;
   good: number;
-  crits: number;
+  popPerfect: number;
+  pops: number;
   hits: number;
-  heavies: number;
+  slams: number;
   breaks: number;
   punishes: number;
+  knockdowns: number;
+  getups: number;
+  tko: boolean;
+  /** TKO'd before bout 3 (the Ride Challenge win rule needs bout 3). */
+  tkoEarly: boolean;
+  fakes: number;
+  dizzy: number;
   maxChain: number;
-  finisher: number;
+  /** Final Pop grade: 3 perfect pop, 2 pop, 1 hit, 0 miss, -1 never reached. */
+  final: number;
+  anchorStars: number;
+  skillStar: boolean;
   medianErr: number;
+  popErr: number;
   simMs: number;
   converted: boolean;
   nextStar: string | null;
@@ -93,19 +107,30 @@ export function summarize(bouts: readonly Bout[]): RoundSummary {
   const errs = bouts.flatMap((b) => b.stats.counterErr);
   const perfect = sum((b) => b.stats.perfect);
   const good = sum((b) => b.stats.good);
-  const crits = sum((b) => b.stats.crit);
+  const popPerfect = sum((b) => b.stats.popPerfect);
+  const pops = sum((b) => b.stats.pop);
   const hits = sum((b) => b.stats.hit);
-  const heavies = sum((b) => b.stats.heavy);
-  const converted = perfect + good > 0 && crits + hits + heavies > 0;
+  const slams = sum((b) => b.stats.slam);
+  const converted = perfect + good > 0 && popPerfect + pops + hits + slams > 0;
   const stars = starsFor(damage, converted);
   const last = bouts[bouts.length - 1];
+  const tkoAt = bouts.findIndex((b) => b.endReason === END_TKO);
   const s: RoundSummary = {
-    damage, perBout, stars, perfect, good, crits, hits, heavies,
+    damage, perBout, stars, perfect, good, popPerfect, pops, hits, slams,
     breaks: last ? last.carry.breaks : 0,
     punishes: sum((b) => b.stats.punish),
+    knockdowns: last ? last.carry.knockdowns : 0,
+    getups: sum((b) => b.stats.getup),
+    tko: tkoAt >= 0,
+    tkoEarly: tkoAt >= 0 && tkoAt < 2,
+    fakes: sum((b) => b.stats.fakes),
+    dizzy: sum((b) => b.stats.guard),
     maxChain: last ? last.carry.maxChain : 0,
-    finisher: last ? last.stats.finisher : -1,
+    final: bouts.length >= 3 ? bouts[2].stats.final : -1,
+    anchorStars: last ? last.carry.stars : 0,
+    skillStar: last ? last.carry.skillStar : false,
     medianErr: medianError(errs),
+    popErr: medianError(bouts.flatMap((b) => b.stats.popErr)),
     simMs: sum((b) => Math.max(0, b.endT)),
     converted,
     nextStar: null,
@@ -114,17 +139,23 @@ export function summarize(bouts: readonly Bout[]): RoundSummary {
   return s;
 }
 
-/** NEXT STAR in actions, computed from the player's own round (design 7.2). */
+/** Ride Challenge rule (design 9.5): 2 stars under replay and not TKO'd before bout 3. */
+export function rideChallengeWin(s: RoundSummary): boolean {
+  return s.stars >= 2 && !s.tkoEarly;
+}
+
+/** NEXT STAR in actions, computed from the player's own round (design 5.3, 8.2). */
 export function nextStarHint(s: RoundSummary): string | null {
   if (s.stars === 3) return null;
-  if (!s.converted) return 'Tap the buoy as the tentacle lands';
+  if (!s.converted) return 'Tap the buoy under the shadow as it lands';
+  if (s.tkoEarly) return 'Watch the shadow, tap its buoy';
   const target = s.stars === 0 ? STAR_POINTS.one : s.stars === 1 ? STAR_POINTS.two : STAR_POINTS.three;
   const need = target - s.damage;
   if (need <= 0) return null;
+  if (s.slams > 0 && s.slams >= s.popPerfect + s.pops) return 'Pop instead of slam: about +20%';
   if (s.breaks < 3 && need <= 200) return '+1 Break';
-  if (need <= 25 * 4) return `+${Math.max(1, Math.ceil(need / 25))} PERFECTs`;
-  const crits = Math.ceil(need / 42);
-  return `Land ${crits} more ring crits`;
+  if (need <= 16 * 6) return `+${Math.max(1, Math.ceil(need / 16))} PERFECTs`;
+  return `Land ${Math.ceil(need / 34)} more POPs`;
 }
 
 export function timingReadout(medianErr: number): string {
@@ -145,8 +176,8 @@ export function replayRound(log: RoundLog): Bout[] {
   const out: Bout[] = [];
   log.bouts.forEach((p, n) => {
     const cfg: BoutConfig = {
-      boss: log.boss, seed: log.seed, bout: n, carry, walk: p.walk, tide: p.tide, offset: p.input_offset_ms,
-      variant: log.variant, team: p.team,
+      boss: log.boss, seed: log.seed, bout: n, carry, walk: p.walk, offset: p.input_offset_ms,
+      variant: log.variant, team: p.team, novice: !!p.novice,
     };
     const b = replayBout(cfg, p.events, p.sim_ms);
     out.push(b);
@@ -158,6 +189,7 @@ export function replayRound(log: RoundLog): Bout[] {
 export function boutProof(b: Bout): BoutProof {
   return {
     n: b.cfg.bout + 1, events: b.log.map((e) => ({ ...e })), sim_ms: Math.max(0, b.endT), walk: b.cfg.walk,
-    tide: b.cfg.tide, input_offset_ms: b.cfg.offset, pauses: b.pauses, team: b.cfg.team, damage: scoreBout(b),
+    input_offset_ms: b.cfg.offset, pauses: b.pauses, team: b.cfg.team, novice: b.cfg.novice, sim_version: SIM_VERSION,
+    damage: scoreBout(b),
   };
 }

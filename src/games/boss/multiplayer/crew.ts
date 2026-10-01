@@ -15,7 +15,9 @@
  */
 import { replayRound, type RoundLog } from '../sim/round';
 import { runBotRound, BOTS } from '../sim/bots';
-import { E_BREAK, E_BREAK_END, E_CRIT, E_HEAVY, E_PERFECT, E_PUNISH, UNIT_POINTS, type Bout } from '../sim/encounter';
+import {
+  E_BREAK, E_BREAK_END, E_PERFECT, E_POP, E_POP_PERFECT, E_PUNISH, E_SLAM, UNIT_POINTS, type Bout,
+} from '../sim/encounter';
 import type { BossId } from '../sim/constants';
 import { mixSeed } from '../../../gamekit/core/rng';
 import { lureFor, type Teammate } from './strikeTeam';
@@ -59,7 +61,7 @@ function scriptFor(mate: Teammate, boss: BossId, seed: number, teamSeed: number,
     out.push({ at: boutStart, ev: { kind: CREW_BOUT, who: mate.id, at: boutStart, a: n } });
     for (const e of b.events) {
       const at = boutStart + e.t;
-      if (e.code === E_CRIT || e.code === E_HEAVY) out.push({ at, ev: { kind: CREW_LUNGE, who: mate.id, at } });
+      if (e.code === E_POP || e.code === E_POP_PERFECT || e.code === E_SLAM) out.push({ at, ev: { kind: CREW_LUNGE, who: mate.id, at } });
       else if (e.code === E_PERFECT) out.push({ at, ev: { kind: CREW_PERFECT, who: mate.id, at } });
       else if (e.code === E_BREAK) out.push({ at, ev: { kind: CREW_BREAK, who: mate.id, at } });
       else if (e.code === E_BREAK_END) out.push({ at, ev: { kind: CREW_BREAK_END, who: mate.id, at } });
@@ -149,7 +151,7 @@ export function ghostTimeline(log: RoundLog, name: string): GhostTimeline {
           units += e.v;
           steps.push(e.t, Math.floor(units / UNIT_POINTS));
         }
-        if (e.code === E_CRIT || e.code === E_HEAVY) lunges.push(e.t);
+        if (e.code === E_POP || e.code === E_POP_PERFECT || e.code === E_SLAM) lunges.push(e.t);
       }
       return { steps, total: Math.floor(b.sum / UNIT_POINTS), lunges };
     }),
