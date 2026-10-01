@@ -17,6 +17,13 @@ const HEADING_THRESHOLD = 2; // small dead zone for jitter
 // Fast turn threshold - if turning quickly, be more responsive
 const FAST_TURN_THRESHOLD = 8; // triggers fast mode quickly
 const FAST_TURN_SMOOTHING = 0.75; // very responsive when turning
+// iOS sends a compass sample for every 1 degree of turn (30+ a second while
+// the phone moves). Each one re-renders the whole map, so cap the rate; the
+// trailing sample is always delivered so the final heading is exact.
+export const HEADING_MIN_INTERVAL_MS = 80;
+// A watcher killed by an OS error (kCLErrorLocationUnknown indoors, right after
+// the permission grant, a paused stream) is restarted after this delay.
+export const WATCH_RESTART_DELAY_MS = 2000;
 
 export interface LocationContextType {
   readonly location: LocationType | undefined;
@@ -111,8 +118,29 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, [devMode]);
 
   // Heading state for compass-based map rotation
-  const [heading, setHeading] = useState<number | null>(null);
-  const [headingEnabled, setHeadingEnabled] = useState<boolean>(false);
+  const [heading, setHeadingState] = useState<number | null>(null);
+  // Every map that wants the compass holds a claim; the sensor runs only while
+  // at least one is mounted and focused.
+  const [headingClaims, setHeadingClaims] = useState(0);
+  const headingEnabled = headingClaims > 0;
+  const setHeadingEnabled = useCallback((enabled: boolean) => {
+    setHeadingClaims(count => Math.max(0, count + (enabled ? 1 : -1)));
+  }, []);
+  const lastHeadingEmitRef = useRef(0);
+  const pendingHeadingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setHeading = (value: number | null) => {
+    if (pendingHeadingRef.current) { clearTimeout(pendingHeadingRef.current); pendingHeadingRef.current = null; }
+    if (value === null) { setHeadingState(null); return; }
+    const wait = lastHeadingEmitRef.current + HEADING_MIN_INTERVAL_MS - Date.now();
+    if (wait <= 0) { lastHeadingEmitRef.current = Date.now(); setHeadingState(value); return; }
+    pendingHeadingRef.current = setTimeout(() => {
+      pendingHeadingRef.current = null;
+      lastHeadingEmitRef.current = Date.now();
+      setHeadingState(value);
+    }, wait);
+  };
+  // Bumped to tear down and restart the GPS watcher (OS error, back to foreground).
+  const [watchEpoch, setWatchEpoch] = useState(0);
   const smoothedHeadingRef = useRef<number | null>(null);
   const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const positionSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -195,6 +223,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     startHeadingSubscription();
 
     return () => {
+      if (pendingHeadingRef.current) { clearTimeout(pendingHeadingRef.current); pendingHeadingRef.current = null; }
       if (headingSubscriptionRef.current) {
         headingSubscriptionRef.current.remove();
         headingSubscriptionRef.current = null;
@@ -335,6 +364,21 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
 
     let cancelled = false;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    // iOS ends the stream for good on any CoreLocation error (expo-location
+    // finishes it and only reports through the error callback). Without this
+    // the subscription looked alive, the fallback poll stayed off, and the
+    // shark froze until the app was force-closed.
+    const restartAfterError = (reason: unknown) => {
+      if (cancelled || restartTimer) return;
+      console.warn('Position watcher stopped, restarting:', reason);
+      positionSubscriptionRef.current?.remove();
+      positionSubscriptionRef.current = null;
+      restartTimer = setTimeout(() => {
+        restartTimer = null;
+        if (!cancelled) setWatchEpoch(value => value + 1);
+      }, WATCH_RESTART_DELAY_MS);
+    };
 
     const startWatching = async () => {
       try {
@@ -374,7 +418,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
             lastLocationRef.current = newLoc;
             debouncedSetLocation(newLoc);
-          }
+          },
+          restartAfterError,
         );
         // The mode or screen can change while the native watcher starts.
         // Never leave that older subscription alive after effect cleanup.
@@ -382,6 +427,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         else positionSubscriptionRef.current = subscription;
       } catch (error) {
         console.error('Failed to start position watcher:', error);
+        restartAfterError(error);
       }
     };
 
@@ -389,12 +435,13 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     return () => {
       cancelled = true;
+      if (restartTimer) clearTimeout(restartTimer);
       if (positionSubscriptionRef.current) {
         positionSubscriptionRef.current.remove();
         positionSubscriptionRef.current = null;
       }
     };
-  }, [devMode, permissionGranted, player?.username, accuracyMode]);
+  }, [devMode, permissionGranted, player?.username, accuracyMode, watchEpoch]);
 
   // Fallback poll — only fires if watchPositionAsync somehow stalls
   // (some Android devices throttle background location callbacks)
@@ -430,11 +477,17 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return status === 'granted';
   }, []);
 
-  // Coming back from Settings: pick up a permission granted there.
+  // Coming back from Settings: pick up a permission granted there. Coming
+  // back from anywhere: restart the GPS watcher, since iOS may have paused or
+  // ended it while the app was in the background.
   useEffect(() => {
+    let lastState = AppState.currentState;
     const sub = AppState.addEventListener('change', (state) => {
+      const wasAway = lastState === 'background' || lastState === 'inactive';
+      lastState = state;
       if (state !== 'active') return;
       void Location.getForegroundPermissionsAsync().then(({ status }) => setPermissionGranted(status === 'granted'));
+      if (wasAway) setWatchEpoch(value => value + 1);
     });
     return () => sub.remove();
   }, []);
@@ -482,7 +535,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }), [permissionChecked, requestPermission, location, stableRequestLocation, stableRequestPark, stableReset,
     park, parkLoaded, parkLookupRecord, permissionGranted, devMode, moveDevLocation]);
   const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled }),
-    [heading, headingEnabled]);
+    [heading, headingEnabled, setHeadingEnabled]);
 
   return (
     <LocationContext.Provider value={value}>

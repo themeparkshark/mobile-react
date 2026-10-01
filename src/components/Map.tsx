@@ -13,6 +13,7 @@ import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations'
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { useFocusEffect } from '@react-navigation/native';
 import { outfitLayerUrls } from '../helpers/wardrobe';
 
 type LatLng = { latitude: number; longitude: number };
@@ -44,18 +45,26 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
   const { player } = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
+  // A map on a tab the player left stays mounted. Its compass, camera pushes
+  // and idle loops would keep the GPU and sensors busy, so pause them off screen.
+  const [screenFocused, setScreenFocused] = useState(true);
+  useFocusEffect(useCallback(() => {
+    setScreenFocused(true);
+    setHeadingEnabled(true);
+    return () => { setScreenFocused(false); setHeadingEnabled(false); };
+  }, [setHeadingEnabled]));
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
   useEffect(() => {
-    if (reducedMotion) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
     idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
     sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
-  }, [reducedMotion, idle, sway, glow]);
+  }, [reducedMotion, screenFocused, idle, sway, glow]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -8 * idle.value }, { rotate: `${3 * sway.value}deg` }, { scale: 1 + 0.04 * idle.value }],
   }));
@@ -210,11 +219,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
   const lastUserHeadingRef = useRef<number>(0);
-
-  // Always enable heading on mount
-  useEffect(() => {
-    setHeadingEnabled(true);
-  }, []);
 
   // Single recenter button
   const recenterOnPlayer = () => {

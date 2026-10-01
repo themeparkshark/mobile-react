@@ -28,6 +28,10 @@ test('heading ticks update only the heading context; the location value keeps it
   assert.ok(onHeading, 'heading subscription started');
   onHeading({ trueHeading: 90, magHeading: 88 }); app.render();
   onHeading({ trueHeading: 140, magHeading: 138 }); app.render();
+  assert.equal(inner().props.value.heading, 90, 'a sample inside the 80 ms window waits instead of re-rendering the map');
+  assert.equal(app.timers.size, 1, 'the trailing sample is scheduled, not dropped');
+  for (const [id, fn] of [...app.timers]) { app.timers.delete(id); fn(); }
+  app.render();
   assert.equal(outer().props.value, before, 'location consumers do not re-render per heading sample');
   assert.ok(inner().props.value.heading > 90);
   assert.equal('heading' in before, false);
