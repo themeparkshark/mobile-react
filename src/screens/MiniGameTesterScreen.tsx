@@ -20,6 +20,7 @@ import { CoinUpgradeDemoScreen } from '../components/CoinUpgradeDemo';
 import AnimatedShark from '../components/AnimatedShark';
 import Wrapper from '../components/Wrapper';
 import EngineDemo from '../gamekit/demo/EngineDemo';
+import FxLab from '../gamekit/demo/FxLab';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -52,6 +53,9 @@ export default function MiniGameTesterScreen() {
   // scripted autoplay tour (used to capture the engine demo video).
   const engineDemoAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === '1';
   const [engineDemo, setEngineDemo] = useState(engineDemoAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=fxlab opens the FX Lab bench with its tour.
+  const fxLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'fxlab';
+  const [fxLab, setFxLab] = useState(fxLabAuto);
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);
@@ -150,6 +154,13 @@ export default function MiniGameTesterScreen() {
                 onPress={() => setEngineDemo(true)}
               />
               <Cell
+                title="Studio Engine Lab: FX Lab"
+                cellStyle="Subtitle"
+                detail="Ribbon trails, brush strokes, FX governor, card flips, nearest taps, perf tiers"
+                accessory="DisclosureIndicator"
+                onPress={() => setFxLab(true)}
+              />
+              <Cell
                 title="[GYM]  GameKit Gym"
                 cellStyle="Subtitle"
                 detail="Particles, shake, combo, FPS counter — engine stress test"
@@ -219,6 +230,7 @@ export default function MiniGameTesterScreen() {
       {engineDemo ? (
         <EngineDemo visible={engineDemo} autoplay={engineDemoAuto} onClose={() => setEngineDemo(false)} />
       ) : null}
+      {fxLab ? <FxLab visible={fxLab} autoplay={fxLabAuto} onClose={() => setFxLab(false)} /> : null}
 
       {/* Post-Win Modal */}
       <PostWinRewardsModal

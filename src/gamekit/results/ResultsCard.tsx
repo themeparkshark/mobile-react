@@ -34,6 +34,7 @@ import Animated, {
 import { Image } from 'expo-image';
 import GameIcon from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
+import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
@@ -58,6 +59,8 @@ export interface ResultsCardProps {
   reducedMotion?: boolean;
   /** Called when the reveal (stars + count-up) has finished. */
   onRevealed?: () => void;
+  /** Ghost / rival to compare against: drives the near-miss line. */
+  rival?: { name: string; score: number } | null;
 }
 
 const STAR_BASE_DELAY = 260;
@@ -71,11 +74,14 @@ export function defaultMessage(stars: number, near: boolean): string {
 }
 
 export function ResultsCard({
-  score, stars, message, thresholds, personalBest, maxCombo, stats = [], note, reducedMotion = false, onRevealed,
+  score, stars, message, thresholds, personalBest, maxCombo, stats = [], note, reducedMotion = false, onRevealed, rival,
 }: ResultsCardProps) {
   const goal = useMemo(() => (thresholds ? nextStarGoal(score, thresholds) : null), [score, thresholds]);
   const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
   const title = message ?? defaultMessage(stars, !!goal?.near);
+  // The one line that sells "one more run" (beat a ghost, so close to a star).
+  const near = useMemo(() => nearMissLine({ score, thresholds, best: personalBest, rival }), [score, thresholds, personalBest, rival]);
+  const showNear = near.text && near.kind !== 'newBest' && near.kind !== 'nextStar';
   const countDelay = reducedMotion ? 0 : STAR_BASE_DELAY + STAR_STEP * 3;
 
   const ribbon = useSharedValue(reducedMotion ? 1 : 0);
@@ -148,6 +154,14 @@ export function ResultsCard({
           <Text style={styles.bestQuiet}>{`BEST ${formatScore(personalBest)}`}</Text>
         ) : null}
       </Animated.View>
+
+      {showNear ? (
+        <Animated.View style={[styles.nearLine, near.kind === 'beatRival' && styles.nearWin, bestStyle]}>
+          <Text style={[styles.nearText, near.kind === 'beatRival' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
+            {near.text.toUpperCase()}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       {goal ? (
         <View style={styles.goal} accessible accessibilityLabel={goal.nextStar
@@ -277,5 +291,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4, margin: 4, alignItems: 'center', minWidth: 86 },
   chipValue: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c', letterSpacing: 1 },
+  nearLine: { borderRadius: 999, borderWidth: 3, borderColor: '#05346e', backgroundColor: '#e4f7ff', paddingHorizontal: 14,
+    paddingVertical: 3, marginBottom: 4, maxWidth: '100%' },
+  nearWin: { backgroundColor: '#ffcf3b' },
+  nearText: { fontFamily: 'Knockout', fontSize: 16, color: '#05346e', letterSpacing: 1 },
+  nearWinText: { color: '#05346e' },
   note: { fontFamily: 'Knockout', fontSize: 15, color: '#ffffff', marginTop: 10, textAlign: 'center' },
 });

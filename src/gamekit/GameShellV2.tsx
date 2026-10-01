@@ -92,6 +92,8 @@ export interface GameResult {
   thresholds?: StarThresholds;
   /** Extra stat chips (accuracy, time, pearls...). */
   stats?: ResultStat[];
+  /** Ghost / rival / crew mate to compare against (near-miss line on the card). */
+  rival?: { name: string; score: number } | null;
   /**
    * Extra metadata forwarded verbatim as the 2nd arg of onComplete. This is
    * what carries {score, duration, seed, proof} to the server-authoritative
@@ -692,6 +694,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   personalBest={personalBest}
                   maxCombo={effectiveResult?.maxCombo}
                   stats={effectiveResult?.stats}
+                  rival={effectiveResult?.rival}
                   note={wrap ? WRAP_UP_COPY[wrap.reason].body : undefined}
                   reducedMotion={reducedMotion}
                 />
