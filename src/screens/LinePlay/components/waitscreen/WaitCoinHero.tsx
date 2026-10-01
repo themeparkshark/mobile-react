@@ -20,7 +20,7 @@ import { GameIcon } from '../../../../ui';
 import useReducedGameMotion from '../../../../hooks/useReducedGameMotion';
 import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-timer/types';
 import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
-import { inLineLabel, partsThisWait, sharksInLine, waitCoinProgress, waitEstimate,
+import { inLineLabel, partsThisWait, sharksInLine, waitCoinProgress, waitEstimate, waitHeroLayout,
   waitStamps } from '../../../../services/lineplay/waitScreen';
 import useWaitScreenCoin from './useWaitScreenCoin';
 import WaitCoinStage from './WaitCoinStage';
@@ -101,25 +101,42 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
   const minute = Math.floor(elapsedSeconds / 60);
   const stamps = useMemo(() => waitStamps(elapsedSeconds, new Date().getHours()), [minute]);
 
+  const signStat = <Stat align="left" value={estimate.posted != null ? String(estimate.posted) : '--'}
+    label={estimate.posted != null ? 'SIGN SAYS (MIN)' : 'NO SIGN TIME'}
+    accessibilityLabel={estimate.accessibilityLabel} icon="queue" />;
+  const trackingLine = estimate.posted != null
+    ? <Text style={styles.tracking} numberOfLines={2}>{estimate.detail}</Text> : null;
+  const inLineStat = <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
+    accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />;
+  const sharksStat = sharks ? <Stat align="right" value={sharks.value} label={sharks.label}
+    accessibilityLabel={sharks.accessibilityLabel} icon="queue" /> : null;
+
+  // No server rewards: no coin, so no hole for one. One short row of stats.
+  if (waitHeroLayout(rewardsOn) === 'strip') {
+    return (
+      <View style={styles.strip} testID="wait-hero-strip">
+        <View style={styles.stripCell}>{signStat}{estimate.posted != null &&
+          <Text style={[styles.tracking, styles.trackingStrip]} numberOfLines={1}>{estimate.detail}</Text>}</View>
+        <View style={styles.stripCell}>{inLineStat}</View>
+        {sharksStat && <View style={[styles.stripCell, styles.sideRight]}>{sharksStat}</View>}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.row}>
       <View style={styles.side}>
-        <Stat align="left" value={estimate.posted != null ? String(estimate.posted) : '--'} label={estimate.posted != null ? 'SIGN SAYS (MIN)' : 'NO SIGN TIME'}
-          accessibilityLabel={estimate.accessibilityLabel} icon="queue" />
-        {estimate.posted != null && <Text style={styles.tracking} numberOfLines={2}>{estimate.detail}</Text>}
-        <Stat align="left" value={inLineLabel(elapsedSeconds)} label="IN LINE"
-          accessibilityLabel={`In line ${inLineLabel(elapsedSeconds)}.`} icon="timer" />
+        {signStat}
+        {trackingLine}
+        {inLineStat}
       </View>
-      {rewardsOn ? (
-        <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
-          stamps={stamps} active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
-          autoLevel={previewAutoLevel} />
-      ) : <View style={{ width: coinSize }} />}
+      <WaitCoinStage size={coinSize} coin={wait.coin} owned={owned} progress={progress} partsBanked={wait.partsBanked}
+        stamps={stamps} active={active} reducedMotion={reducedMotion} onLevelUp={wait.levelUp} onLeveled={onLeveled}
+        autoLevel={previewAutoLevel} />
       <View style={[styles.side, styles.sideRight]}>
-        {sharks ? <Stat align="right" value={sharks.value} label={sharks.label}
-          accessibilityLabel={sharks.accessibilityLabel} icon="queue" /> : <View style={styles.statSpacer} />}
-        {rewardsOn && <Stat align="right" value={`+${earned}`} label={earned === 1 ? 'PART THIS WAIT' : 'PARTS THIS WAIT'}
-          accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />}
+        {sharksStat ?? <View style={styles.statSpacer} />}
+        <Stat align="right" value={`+${earned}`} label={earned === 1 ? 'PART THIS WAIT' : 'PARTS THIS WAIT'}
+          accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`} icon="parts" />
       </View>
     </View>
   );
@@ -127,6 +144,9 @@ function WaitCoinHeroBody({ rideId, waitScreen, creditedParts, bonusParts = 0, e
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  strip: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginTop: 6, marginBottom: 2 },
+  stripCell: { flexShrink: 1, minWidth: 0 },
+  trackingStrip: { marginTop: 2 },
   side: { flex: 1, minWidth: 0, gap: 6 },
   sideRight: { alignItems: 'flex-end' },
   stat: { minWidth: 0 },

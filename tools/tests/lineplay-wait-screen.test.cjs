@@ -115,3 +115,16 @@ test('copy: no em dashes and no emoji in the wait screen files; preview is dev-o
   }
   assert.match(read(DIR + 'waitScreenPreview.ts'), /__DEV__ && process\.env\.EXPO_PUBLIC_LINEPLAY_WAIT_PREVIEW === '1'/);
 });
+
+test('no server rewards: the coin space collapses into one stat strip, no empty hole', () => {
+  const m = model();
+  assert.equal(m.waitHeroLayout(true), 'coin');
+  assert.equal(m.waitHeroLayout(false), 'strip');
+  const hero = read(DIR + 'WaitCoinHero.tsx');
+  const strip = hero.slice(hero.indexOf("if (waitHeroLayout(rewardsOn) === 'strip')"), hero.indexOf('  return (\n    <View style={styles.row}>'));
+  assert.ok(strip.length > 0, 'the strip branch returns before the coin row');
+  assert.match(strip, /testID="wait-hero-strip"/);
+  assert.doesNotMatch(strip, /WaitCoinStage|coinSize|statSpacer|PARTS THIS WAIT/, 'no coin, no placeholder, no Parts stat');
+  assert.doesNotMatch(hero, /<View style=\{\{ width: coinSize \}\} \/>/, 'the old coin-sized placeholder is gone');
+  assert.match(strip, /\{signStat\}/); assert.match(strip, /styles\.trackingStrip/); assert.match(strip, /\{inLineStat\}/);
+});

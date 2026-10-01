@@ -176,3 +176,15 @@ export function livePartsBanked(input: {
   const base = Math.max(0, input.cachedBanked ?? 0);
   return base + Math.max(0, input.creditedNow - input.creditedAtCache);
 }
+
+/**
+ * 'coin': the ride's coin center stage between two stat columns.
+ * 'strip': no server rewards this session (offline start, a ride that pays no
+ * Parts, sign-in needed). No coin, so the stats collapse into one short row
+ * instead of leaving an empty hole where the coin would sit.
+ */
+export type WaitHeroLayout = 'coin' | 'strip';
+
+export function waitHeroLayout(rewardsOn: boolean): WaitHeroLayout {
+  return rewardsOn ? 'coin' : 'strip';
+}
