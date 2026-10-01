@@ -151,6 +151,8 @@ function Slot({ k, clock, sync, times, bursts, water, sparks }: {
   );
 }
 
+const NIGHT_SHOW_POP_ENABLED = false;
+
 export const NightShowLayer = memo(function NightShowLayer({ show, live }: { readonly show: NightShow; readonly live: boolean }) {
   const { clock, caps, running } = useMapAlive();
   const { playSound } = useContext(SoundEffectContext);
@@ -163,10 +165,11 @@ export const NightShowLayer = memo(function NightShowLayer({ show, live }: { rea
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sync = useMemo(() => ({ showT: (Date.now() - startMs) / 1000, clock: clock.value }), [on, startMs]);
 
-  // Our own soft pop for the bigger bursts, at most one every 1.6 s.
+  // Our own soft pop for the bigger bursts, at most one every 1.6 s. Off by
+  // default (Dustin): guests can already hear the real show around them.
   const lastPop = useRef(0);
   useEffect(() => {
-    if (!on || show.kind === 'projection') return;
+    if (!NIGHT_SHOW_POP_ENABLED || !on || show.kind === 'projection') return;
     const timer = setInterval(() => {
       const t = showSecond(show, Date.now());
       const now = Date.now();
