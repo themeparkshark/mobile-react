@@ -1,13 +1,14 @@
 /**
- * The walking shark leaves a short trail of gold sparkles on the ground: one
- * every few metres of real walking, each popping in and fading out over a
- * couple of seconds (see pushTrail). They are map markers, so they stay where
- * the shark was while the map glides under it. Calm (Reduce Motion) and a
+ * The walking shark leaves a trail of gold sparkles on the ground: one every
+ * few metres of real walking, each popping in, twinkling, then fading after
+ * about 40 s, so the path you walked peeks out behind the shark (see
+ * pushTrail). They are map markers, so they stay where the shark was while
+ * the map glides under it. Calm (Reduce Motion) and a
  * paused map leave no trail.
  */
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Marker } from '../Marker';
 import { hash01 } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
@@ -16,23 +17,24 @@ import { pushTrail, TRAIL_LIFE_MS, type TrailPoint } from './presence';
 const SPARKLE = require('../../../../assets/images/map/fx/sparkle.png');
 
 function TrailSparkle({ seed }: { readonly seed: number }) {
-  const p = useSharedValue(0);
+  const { clock } = useMapAlive();
+  // Life: pop in, twinkle on the shared clock, fade over the last third.
+  const life = useSharedValue(0);
   useEffect(() => {
-    p.value = withTiming(1, { duration: TRAIL_LIFE_MS - 100, easing: Easing.linear });
-  }, [p]);
-  const drift = (hash01(seed) - 0.5) * 10;
-  const spin = 40 + hash01(seed + 1) * 80;
+    life.value = withTiming(1, { duration: TRAIL_LIFE_MS - 200, easing: Easing.linear });
+  }, [life]);
+  const phase = hash01(seed);
   const big = useAnimatedStyle(() => {
-    const pop = Math.min(1, p.value / 0.08);
-    const fade = p.value > 0.45 ? Math.max(0, (1 - p.value) / 0.55) : 1;
-    return { opacity: fade, transform: [{ translateX: drift * p.value }, { translateY: -8 * p.value },
-      { scale: (0.3 + pop * 0.7) * (0.75 + 0.25 * fade) }, { rotate: `${p.value * spin}deg` }] };
+    const pop = Math.min(1, life.value / 0.004);
+    const fade = life.value > 0.66 ? Math.max(0, (1 - life.value) / 0.34) : 1;
+    const twinkle = 0.65 + 0.35 * Math.sin((clock.value / 1.7 + phase) * Math.PI * 2);
+    return { opacity: fade * twinkle, transform: [{ scale: (0.4 + pop * 0.6) * (0.8 + 0.25 * twinkle) }, { rotate: `${(clock.value * 20 + phase * 90) % 360}deg` }] };
   });
-  const dot = useAnimatedStyle(() => ({ opacity: p.value < 0.6 ? 1 - p.value / 0.6 : 0, transform: [{ translateY: 4 + p.value * 6 }] }));
+  const dot = useAnimatedStyle(() => ({ opacity: life.value > 0.66 ? Math.max(0, (1 - life.value) / 0.34) * 0.9 : 0.9 }));
   return (
     <View style={styles.box}>
       <Animated.View style={[styles.dot, dot]} />
-      <Animated.Image source={SPARKLE} tintColor="#ffe27a" resizeMode="contain" style={[styles.sparkle, big]} />
+      <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.sparkle, big]} />
     </View>
   );
 }
@@ -48,12 +50,14 @@ export const SharkTrail = memo(function SharkTrail({ latitude, longitude }: {
       setPoints(current => (current.length ? [] : current));
       return;
     }
-    setPoints(current => pushTrail(current, { latitude, longitude }, Date.now(), { cap: caps.trail }));
+    setPoints(current => pushTrail(current, { latitude, longitude }, Date.now(), { cap: caps.trail, minMeters: 7 }));
   }, [latitude, longitude, running, caps.trail]);
-  // Clear the trail once the newest sparkle has faded.
+  // Drop each sparkle once it has faded.
   useEffect(() => {
     if (!points.length) return;
-    const timer = setTimeout(() => setPoints(current => current.filter(point => Date.now() - point.at < TRAIL_LIFE_MS)), TRAIL_LIFE_MS + 50);
+    const oldest = points[0].at;
+    const timer = setTimeout(() => setPoints(current => current.filter(point => Date.now() - point.at < TRAIL_LIFE_MS)),
+      Math.max(500, oldest + TRAIL_LIFE_MS - Date.now() + 50));
     return () => clearTimeout(timer);
   }, [points]);
   return <>
@@ -65,6 +69,35 @@ export const SharkTrail = memo(function SharkTrail({ latitude, longitude }: {
 
 const styles = StyleSheet.create({
   box: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  sparkle: { position: 'absolute', width: 18, height: 18 },
+  sparkle: { position: 'absolute', width: 16, height: 16 },
   dot: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#fff6cf' },
+  wake: { position: 'absolute', bottom: -6, width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
+  wakeSparkle: { position: 'absolute', width: 17, height: 17, marginLeft: -8.5, marginTop: -8.5 },
 });
+
+/**
+ * The shark's wake while it walks: gold sparkles spill from under its feet and
+ * drift back down the screen, fading. Screen space (it rides with the shark),
+ * so it reads at any zoom, where the ground trail above can sit under the
+ * shark. `moving` eases to 1 on each step and back to 0 when the shark stops.
+ */
+export const SharkWake = memo(function SharkWake({ moving }: { readonly moving: SharedValue<number> }) {
+  const { clock, caps, running } = useMapAlive();
+  if (!running || caps.trail <= 0) return null;
+  return <View pointerEvents="none" style={styles.wake}>
+    {Array.from({ length: Math.min(6, caps.trail) }, (_, k) => <WakeSparkle key={k} k={k} n={Math.min(6, caps.trail)} clock={clock} moving={moving} />)}
+  </View>;
+});
+
+function WakeSparkle({ k, n, clock, moving }: { k: number; n: number; clock: SharedValue<number>; moving: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => {
+    const cycle = clock.value / 1.3 + k / n;
+    const p = cycle - Math.floor(cycle);
+    const lane = hash01(Math.floor(cycle) * 7 + k) - 0.5;
+    return {
+      opacity: moving.value * (p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85),
+      transform: [{ translateX: lane * 34 }, { translateY: p * 34 }, { scale: 0.9 - p * 0.5 }, { rotate: `${p * 140}deg` }],
+    };
+  });
+  return <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.wakeSparkle, style]} />;
+}

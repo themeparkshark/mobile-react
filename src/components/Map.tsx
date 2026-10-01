@@ -3,7 +3,7 @@ import { createContext, type MutableRefObject, ReactNode, useCallback, useContex
 import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
@@ -13,7 +13,7 @@ import { buildDecorations, buildLampPoints, buildWaterGlints, DECO_ICONS, decora
 import { MapAliveProvider, useMapAliveEngine } from './map/alive/MapAliveContext';
 import { MapLightOverlay, MapSkyOverlay } from './map/alive/MapSkyOverlay';
 import { WaterGlints } from './map/alive/WaterGlints';
-import { SharkTrail } from './map/alive/SharkTrail';
+import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
@@ -91,6 +91,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
+  const wake = useSharedValue(0);
   useEffect(() => {
     if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
@@ -155,6 +156,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
     glideRef.current = glideDuration;
     pushCamera(glideDuration);
+    // A real step (not GPS wobble) stirs the shark's wake for the glide, then it settles.
+    if (distMeters >= 1 && distMeters < 60) {
+      wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(glideDuration + 600, withTiming(0, { duration: 700 })));
+    }
   }, [location?.latitude, location?.longitude]);
 
   const cameraRef = useRef<CameraRef>(null);
@@ -327,6 +332,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
         {/* Inner blue ring (ground indicator) */}
         <View style={styles.groundRing} />
+        {/* Wake: sparkles spill from under the shark while it walks. */}
+        <SharkWake moving={wake} />
         {/* Animated shadow — shrinks when shark bobs up */}
         <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}

@@ -14,8 +14,9 @@ const north = meters => ({ latitude: BASE.latitude + meters / 111320, longitude:
 
 test('the trail drops a sparkle every few metres of real walking, capped', () => {
   let trail = [];
-  for (let m = 0, t = 0; m <= 40; m += 5, t += 1000) trail = presence.pushTrail(trail, north(m), t, { cap: 6 });
-  assert.equal(trail.length, 3, 'only the sparkles still glowing (2.6 s life at 1 s a step)');
+  for (let m = 0, t = 0; m <= 40; m += 5, t += 10_000) trail = presence.pushTrail(trail, north(m), t, { cap: 6 });
+  assert.equal(trail.length, 4, 'only the sparkles still glowing (40 s life at 10 s a step)');
+  assert.ok(presence.TRAIL_LIFE_MS >= 30_000, 'lingers long enough to peek out from under the shark');
   trail = [];
   for (let m = 0; m <= 40; m += 5) trail = presence.pushTrail(trail, north(m), 0, { cap: 6 });
   assert.equal(trail.length, 6, 'capped at the tier budget');
@@ -60,6 +61,8 @@ test('the collected coin arcs above both ends and lands exactly on the shelf but
 
 test('presence is wired: trail under the islands, arrival burst on entering range, flight after the reward closes', () => {
   const map = read('src/components/Map.tsx');
+  assert.match(map, /<SharkWake moving=\{wake\} \/>/, 'the wake rides with the shark while it walks');
+  assert.match(map, /if \(distMeters >= 1 && distMeters < 60\)/, 'GPS wobble and jumps do not stir the wake');
   const trail = map.indexOf('<SharkTrail');
   assert.ok(trail > 0 && trail < map.indexOf('{children}</MapQueryContext.Provider>'));
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');

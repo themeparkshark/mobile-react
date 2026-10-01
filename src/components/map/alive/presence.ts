@@ -12,7 +12,11 @@ export interface TrailPoint {
   readonly at: number;
 }
 
-export const TRAIL_LIFE_MS = 2600;
+/**
+ * How long a sparkle stays. At follow zoom the shark covers ~30 m of ground, so
+ * a trail has to linger for a stretch of walking to peek out behind it.
+ */
+export const TRAIL_LIFE_MS = 40_000;
 
 export function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
   const k = Math.cos(((a.latitude + b.latitude) / 2) * (Math.PI / 180));
@@ -25,7 +29,7 @@ export function metersBetween(a: { latitude: number; longitude: number }, b: { l
  * jump clears the trail instead of drawing sparkles across the park.
  */
 export function pushTrail(points: readonly TrailPoint[], next: { latitude: number; longitude: number }, now: number, {
-  cap, minMeters = 4, maxJumpMeters = 60, lifeMs = TRAIL_LIFE_MS,
+  cap, minMeters = 5, maxJumpMeters = 60, lifeMs = TRAIL_LIFE_MS,
 }: { cap: number; minMeters?: number; maxJumpMeters?: number; lifeMs?: number }): readonly TrailPoint[] {
   if (cap <= 0 || !Number.isFinite(next.latitude) || !Number.isFinite(next.longitude)) return points.length ? [] : points;
   const live = points.filter(point => now - point.at < lifeMs);

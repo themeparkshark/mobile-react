@@ -19,9 +19,9 @@ import TaskMarker from './TaskMarker';
  * flight, so a simulator can be screenshotted or recorded without taps.
  * EXPO_PUBLIC_MAP_ALIVE_SCENE pins one scene. Never shipped in release.
  */
-export const MAP_ALIVE_SCENES = ['day', 'golden', 'dusk', 'night', 'arrival', 'collect', 'show', 'water'] as const;
+export const MAP_ALIVE_SCENES = ['day', 'golden', 'dusk', 'night', 'arrival', 'collect', 'walk', 'show', 'water'] as const;
 type Scene = typeof MAP_ALIVE_SCENES[number];
-const SUN: Record<Scene, number> = { day: 50, golden: 4, dusk: -4, night: -16, arrival: 50, collect: 50, show: -16, water: -16 };
+const SUN: Record<Scene, number> = { day: 50, golden: 4, dusk: -4, night: -16, arrival: 50, collect: 50, show: -16, water: -16, walk: 50 };
 const HOLD_MS = 9000;
 
 const at = (base: { latitude: number; longitude: number }, north: number, east: number) => ({
@@ -34,7 +34,8 @@ const task = (id: number, name: string, spot: { latitude: string; longitude: str
 const noop = () => undefined;
 
 export default function MapAlivePreviewScreen() {
-  const { location } = useContext(LocationContext);
+  const locationContext = useContext(LocationContext);
+  const { location } = locationContext;
   // The first known spot (Disneyland by default) anchors every fixture, even if location blinks out.
   const baseRef = useRef<{ latitude: number; longitude: number } | null>(null);
   if (!baseRef.current && location) baseRef.current = { latitude: location.latitude, longitude: location.longitude };
@@ -95,8 +96,19 @@ export default function MapAlivePreviewScreen() {
     { id: 1, name: 'Ava', latitude: base.latitude - 30 / 111320, longitude: base.longitude - 40 / 92000, seen_at: '', fade: 1, meters: 40 },
     { id: 2, name: 'Marco', latitude: base.latitude + 40 / 111320, longitude: base.longitude + 50 / 92000, seen_at: '', fade: 0.6, meters: 60 },
   ] : [], [scene, base.latitude, base.longitude]);
+  // The walk scene moves the shark ~2 m every 0.8 s (a stroll), so the sparkle trail shows.
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    setStep(0);
+    if (scene !== 'walk') return;
+    const timer = setInterval(() => setStep(value => value + 1), 800);
+    return () => clearInterval(timer);
+  }, [scene]);
+  const walking = scene === 'walk' ? { ...(location ?? {}), latitude: base.latitude + (step * 1.6) / 111320,
+    longitude: base.longitude + (step * 1.2) / 92000 } : null;
   const [size, setSize] = useState({ width: 0, height: 0 });
-  return <View style={styles.root} onLayout={event => setSize(event.nativeEvent.layout)}>
+  return <LocationContext.Provider value={walking ? { ...locationContext, location: walking as typeof location } : locationContext}>
+  <View style={styles.root} onLayout={event => setSize(event.nativeEvent.layout)}>
     <Map sunOverride={SUN[scene]} crowdHaze={fixtures.haze}
       focusCoordinate={showFixture ? { latitude: base.latitude + 90 / 111320, longitude: base.longitude, zoom: 17.2, requestId: index } : null}>
       {showFixture && <NightShowLayer show={showFixture} live />}
@@ -110,7 +122,8 @@ export default function MapAlivePreviewScreen() {
     {showFixture && <View style={styles.pill}><NightShowPill show={{ ...showFixture, starts_at: '2026-10-05T21:30:00-07:00' }}
       phase={scene === 'show' ? 'live' : 'teaser'} onSee={noop} /></View>}
     <View pointerEvents="none" style={styles.label}><Text style={styles.labelText}>MAP ALIVE {scene}</Text></View>
-  </View>;
+  </View>
+  </LocationContext.Provider>;
 }
 
 const styles = StyleSheet.create({
