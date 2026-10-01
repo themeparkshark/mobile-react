@@ -35,7 +35,26 @@ function shuffled<T>(values: T[], seed: number): T[] {
   return result;
 }
 
-export function makeCurrentBoard(seed: number, stage: number): CurrentBoard {
+/**
+ * Queue bonus difficulty tiers (queue-bonus.md 6.1). The server picks the
+ * tier and replays the proof at it; these numbers mirror
+ * LinePlayCurrentQuest::TIERS on the backend exactly.
+ */
+export type CurrentTier = 'standard' | 'easy' | 'breeze';
+
+export const CURRENT_TIERS: Readonly<Record<CurrentTier, { voyages: number; rockScale: number; moveAllowance: number }>> = {
+  standard: { voyages: 3, rockScale: 1, moveAllowance: 0 },
+  easy: { voyages: 3, rockScale: 0.6, moveAllowance: 1 },
+  breeze: { voyages: 2, rockScale: 0.4, moveAllowance: 2 },
+};
+
+export function currentRockCount(level: number, tier: CurrentTier = 'standard'): number {
+  const base = 2 + level * 2;
+  const scale = CURRENT_TIERS[tier]?.rockScale ?? 1;
+  return scale >= 1 ? base : Math.floor(base * scale + 0.5);
+}
+
+export function makeCurrentBoard(seed: number, stage: number, tier: CurrentTier = 'standard'): CurrentBoard {
   const level = Math.max(0, Math.min(2, Math.floor(stage)));
   const size = level === 0 ? 4 : 5;
   const moves = shuffled([
@@ -54,9 +73,9 @@ export function makeCurrentBoard(seed: number, stage: number): CurrentBoard {
   const rocks = shuffled(
     Array.from({ length: size * size }, (_, index) => index).filter(index => !routeCells.has(index)),
     (seed + 997 * (level + 1)) >>> 0,
-  ).slice(0, 2 + level * 2).sort((a, b) => a - b);
+  ).slice(0, currentRockCount(level, tier)).sort((a, b) => a - b);
   return { size, start: 0, goal: size * size - 1, pearls, rocks,
-    guaranteedRoute: route, routeMoves: route.length - 1 };
+    guaranteedRoute: route, routeMoves: route.length - 1 + (CURRENT_TIERS[tier]?.moveAllowance ?? 0) };
 }
 
 export function beginCurrentBoard(board: CurrentBoard): CurrentProgress {
@@ -97,7 +116,7 @@ export function scoreCurrentBoard(board: CurrentBoard, progress: CurrentProgress
 }
 
 export function currentStars(boards: readonly CurrentBoard[], rounds: readonly CurrentProgress[]): number {
-  if (boards.length !== 3 || rounds.length !== 3 ||
+  if (boards.length < 2 || boards.length > 3 || rounds.length !== boards.length ||
       boards.some((board, index) => scoreCurrentBoard(board, rounds[index]) === 0)) return 0;
   const detours = boards.reduce((total, board, index) =>
     total + Math.max(0, rounds[index].moves - board.routeMoves), 0);

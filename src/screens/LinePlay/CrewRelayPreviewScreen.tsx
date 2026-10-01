@@ -197,7 +197,7 @@ export default function CrewRelayPreviewScreen() {
           paused={paused} completed={epilogueDone}
           onPlayGame={() => setGameOpen(true)} onPredict={() => {}} onActivityCompleted={() => {}} />
         : <CrewRelayCard chapter={chapter} progress={progress} paused={paused} onChange={setProgress} />}
-      <LinePlayMovementContext.Provider value={{ moving: paused, onResume: () => setPaused(false) }}>
+      <LinePlayMovementContext.Provider value={{ moving: paused, onResume: () => setPaused(false), lineMovePolicy: 'pause' }}>
         {gameOpen && view === 'finale' && finaleItem.kind === 'minigame' && finaleItem.gameId === 'memory' &&
           <MemoryGame visible seed={finaleItem.seed}
           deckId={chapter.finale.memoryDeckId} taskName={previewCoin.ride_name}

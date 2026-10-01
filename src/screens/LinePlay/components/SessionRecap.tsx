@@ -21,6 +21,10 @@ import { crewRelayScore, type CrewRelayProgress } from '../../../services/linepl
 import type { EndReason } from '../../../services/lineplay/LinePlaySession';
 import type { RideCoinLevelType } from '../../../models/ride-coin-level-type';
 import type { LinePlayFeedback, WaitRating, FavoriteLinePlayActivity } from '../../../api/endpoints/me/inline-timer/feedback';
+import Playercard from '../../../components/Playercard';
+import type { InventoryType } from '../../../models/inventory-type';
+import { coinTierName } from '../../../constants/coinTiers';
+import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../services/lineplay/bonusRounds';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -65,6 +69,20 @@ function RecapStat({ icon, value, prefix = '', label, index, reducedMotion }: {
     <Text style={styles.recapStatLabel}>{label}</Text>
   </Animated.View>;
 }
+
+/** One recap row ticking in on a 180 ms stagger (queue-bonus.md 7.6). */
+function TickRow({ icon, label, value, index, reducedMotion }: {
+  icon: GameIconName; label: string; value: string; index: number; reducedMotion: boolean;
+}) {
+  return <Animated.View entering={reducedMotion ? undefined : FadeInDown.delay(300 + index * 180).springify().damping(14)}
+    style={styles.tickRow} accessible accessibilityLabel={`${label} ${value}`}>
+    <GameIcon name={icon} size={26} />
+    <Text style={styles.tickLabel}>{label}</Text>
+    <Text style={styles.tickValue}>{value}</Text>
+  </Animated.View>;
+}
+
+const ROW_ICONS: Record<string, GameIconName> = { wait: 'timer', bonus: 'parts', mastery: 'star', encore: 'xp' };
 
 function BonusLine({ icon, children }: { icon: GameIconName; children: string }) {
   return <View style={styles.bonusLine}>
@@ -116,6 +134,12 @@ export interface SessionRecapProps {
   onStillInLine?: () => void;
   doneLabel?: string;
   onDone: () => void;
+  /** Queue Bonus Rounds recap rows (null on older servers). */
+  bonusRecap?: RecapRewardsInput | null;
+  /** The player's currently equipped look for the hero pose. */
+  heroInventory?: InventoryType | null;
+  /** Tap the hero: the existing Inventory screen (no new route). */
+  onOpenInventory?: () => void;
 }
 
 export default function SessionRecap({
@@ -125,8 +149,11 @@ export default function SessionRecap({
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
-  doneLabel = 'Done', onDone,
+  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory,
 }: SessionRecapProps) {
+  const bonusMode = rewardsConfirmed && bonusRecap != null;
+  const rows = bonusMode ? recapRows(bonusRecap) : [];
+  const parkDay = bonusMode ? parkDayLine(bonusRecap) : null;
   const reducedMotion = useReducedGameMotion();
   const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
   const secs = elapsedSeconds % 60;
@@ -148,10 +175,17 @@ export default function SessionRecap({
             {minutes}m {secs}s</Text>
           <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of queue play, all saved' : 'session time'}</Text>
         </View>
-        <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
-          <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain"
-            accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
-        </Animated.View>
+        {heroInventory && onOpenInventory ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Your shark. Open Inventory"
+            onPress={onOpenInventory} style={styles.recapSharkWrap}>
+            <Playercard inventory={heroInventory} showBackground={false} style={styles.heroCard} />
+          </Pressable>
+        ) : (
+          <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
+            <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain"
+              accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
+          </Animated.View>
+        )}
       </LinearGradient>
 
       {leftQueue && onStillInLine && (
@@ -194,13 +228,19 @@ export default function SessionRecap({
         </Animated.View>
       )}
 
-      {rewardsConfirmed && masteryBonusParts > 0 && (
+      {bonusMode && <View style={styles.tickRows}>
+        {rows.map((row, index) => <TickRow key={row.key} icon={ROW_ICONS[row.key]} label={row.label}
+          value={row.value} index={index} reducedMotion={reducedMotion} />)}
+        {parkDay && <Text style={styles.parkDayLine}>{parkDay}</Text>}
+      </View>}
+
+      {!bonusMode && rewardsConfirmed && masteryBonusParts > 0 && (
         <BonusLine icon="star">{`Coin mastery added ${masteryBonusParts} Ride Part to this verified session.`}</BonusLine>
       )}
-      {rewardsConfirmed && crewPuzzleBonusParts > 0 && (
+      {!bonusMode && rewardsConfirmed && crewPuzzleBonusParts > 0 && (
         <BonusLine icon="lock">{`Your Crew Codebreaker guess added ${crewPuzzleBonusParts} Ride Part.`}</BonusLine>
       )}
-      {rewardsConfirmed && currentQuestBonusParts > 0 && (
+      {!bonusMode && rewardsConfirmed && currentQuestBonusParts > 0 && (
         <BonusLine icon="shark">{`Current Quest added ${currentQuestBonusParts} Ride Part to this verified wait.`}</BonusLine>
       )}
 
@@ -287,8 +327,14 @@ export default function SessionRecap({
               )}
             </>
           )}
-          <GameButton label={upgradeReady ? 'Upgrade coin' : 'View this coin'} icon="coin" variant="secondary"
-            onPress={onOpenCoin} style={styles.coinNextButton} />
+          {bonusMode && coin.current_level < coin.max_level && <Text style={styles.progressLine}>
+            {`${coin.available_parts ?? 0}/${coin.parts_to_next_level} to ${coinTierName(coin.current_level + 1)}`}
+          </Text>}
+          {bonusMode && upgradeReady
+            ? <GameButton label="LEVEL UP" icon="coin" onPress={onOpenCoin} style={styles.coinNextButton}
+              accessibilityLabel="Level up this ride coin" />
+            : <GameButton label={upgradeReady ? 'Upgrade coin' : 'View this coin'} icon="coin" variant="secondary"
+              onPress={onOpenCoin} style={styles.coinNextButton} />}
         </Animated.View>
       )}
       {rewardsConfirmed && coinState === 'unowned' && (
@@ -348,6 +394,14 @@ export default function SessionRecap({
 }
 
 const styles = StyleSheet.create({
+  heroCard: { width: 130, height: 180 },
+  tickRows: { marginHorizontal: spacing.lg, marginTop: spacing.sm, gap: 6 },
+  tickRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12,
+    borderWidth: 2, borderColor: '#89cafa', paddingHorizontal: 12, minHeight: 44 },
+  tickLabel: { flex: 1, fontFamily: 'Shark', fontSize: 16, color: '#083f7c' },
+  tickValue: { fontFamily: 'Shark', fontSize: 18, color: '#b07800' },
+  parkDayLine: { fontFamily: 'Knockout', fontSize: 12, color: '#416b8f', textAlign: 'center', marginTop: 2 },
+  progressLine: { fontFamily: 'Shark', fontSize: 16, color: '#b07800', marginTop: 4 },
   recapCard: {
     marginHorizontal: spacing.lg, backgroundColor: '#ddf5ff', borderRadius: borderRadius.xxl,
     padding: spacing.md, borderWidth: 3, borderColor: '#ffffff', ...shadows.lg,

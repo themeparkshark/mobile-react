@@ -3,8 +3,8 @@ import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { GameShellV2, Haptic, playSfx, type GameResult } from '../../gamekit';
 import {
-  beginCurrentBoard, currentStars, makeCurrentBoard, moveCurrent, scoreCurrentBoard,
-  type CurrentProgress,
+  beginCurrentBoard, CURRENT_TIERS, currentStars, makeCurrentBoard, moveCurrent, scoreCurrentBoard,
+  type CurrentProgress, type CurrentTier,
 } from './logic';
 
 const BOARD_WIDTH = Math.min(Dimensions.get('window').width - 42, 350);
@@ -23,17 +23,21 @@ export interface CurrentQuestGameProps {
   visible: boolean;
   seed?: number;
   taskName?: string;
+  /** Queue bonus tier from the server attempt (Standard 3 voyages, Easy, Breeze 2). */
+  tier?: CurrentTier;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
 }
 
 /** Three short route puzzles. Completing them records play only; queue rewards stay server-owned. */
-export default function CurrentQuestGame({ visible, seed, taskName, onClose, onQuit,
+export default function CurrentQuestGame({ visible, seed, taskName, tier = 'standard', onClose, onQuit,
   onComplete }: CurrentQuestGameProps) {
+  const voyages = CURRENT_TIERS[tier]?.voyages ?? 3;
   const roundSeed = useMemo(() => seed == null ? (Math.random() * 0xffffffff) >>> 0 : seed >>> 0,
     [visible, seed]);
-  const boards = useMemo(() => [0, 1, 2].map(stage => makeCurrentBoard(roundSeed, stage)), [roundSeed]);
+  const boards = useMemo(() => Array.from({ length: voyages }, (_, stage) => makeCurrentBoard(roundSeed, stage, tier)),
+    [roundSeed, voyages, tier]);
   const [stage, setStage] = useState(0);
   const [progress, setProgress] = useState<CurrentProgress>(() => beginCurrentBoard(boards[0]));
   const [score, setScore] = useState(0);
@@ -113,7 +117,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, onClose, onQ
     setScore(nextScore);
     Haptic.success();
     playSfx('star', 0.65);
-    if (stage < 2) {
+    if (stage < voyages - 1) {
       setStageClear(true);
       setHint(`Current ${stage + 1} cleared. A new route is ready.`);
       return;
@@ -122,9 +126,9 @@ export default function CurrentQuestGame({ visible, seed, taskName, onClose, onQ
       (Date.now() - startedAtRef.current - pausedTotalRef.current) / 1000));
     setResult({ score: nextScore, stars: currentStars(boards, completedRef.current),
       message: 'Treasure found!', meta: { score: nextScore, duration: durationSeconds,
-        seed: roundSeed, moves: completedRef.current.map(item => item.moves),
+        seed: roundSeed, tier, moves: completedRef.current.map(item => item.moves),
         paths: completedRef.current.map(item => item.history) } });
-  }, [board, boards, result, roundSeed, score, stage]);
+  }, [board, boards, result, roundSeed, score, stage, voyages, tier]);
 
   const nextStage = useCallback(() => {
     if (!playingRef.current || !stageClear || stage >= 2) return;
@@ -162,14 +166,14 @@ export default function CurrentQuestGame({ visible, seed, taskName, onClose, onQ
         <Image source={SHARK} resizeMode="contain" style={styles.heroShark}
           accessibilityLabel="Theme Park Shark mascot" />
       </View>
-      <View style={styles.stageRail} accessibilityLabel={`Voyage ${stage + 1} of 3`}>
-        {[0, 1, 2].map(index => <View key={index}
+      <View style={styles.stageRail} accessibilityLabel={`Voyage ${stage + 1} of ${voyages}`}>
+        {boards.map((_, index) => <View key={index}
           style={[styles.stageBadge, index <= stage && styles.stageBadgeActive]}>
           <Text style={[styles.stageText, index <= stage && styles.stageTextActive]}>{index + 1}</Text>
         </View>)}
       </View>
       <Text style={styles.counter} accessibilityLiveRegion="polite">
-        VOYAGE {stage + 1}/3  ·  {remaining} PEARL{remaining === 1 ? '' : 'S'} LEFT
+        VOYAGE {stage + 1}/{voyages}  ·  {remaining} PEARL{remaining === 1 ? '' : 'S'} LEFT
       </Text>
       <View style={[styles.board, { width: BOARD_WIDTH }]}>
         {Array.from({ length: board.size * board.size }, (_, index) => {
