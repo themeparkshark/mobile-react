@@ -23,7 +23,7 @@ import {
   type BurstResult, type WhackSim,
 } from './sim';
 import { K_ANGLER, K_BRUISER, K_HELMET, K_PUFFER } from './waves';
-import { hitTest, type BoardLayout } from './render/layout';
+import { hitTest, touchOffset, type BoardLayout } from './render/layout';
 import { computeRender, createHoleAnim, createRenderState, type HoleAnim, type RenderState } from './render/renderState';
 
 export interface RuntimeFlags {
@@ -43,10 +43,15 @@ export interface RuntimeFlags {
   wallMs: number;
   /** Live party round: every logged touch-down is echoed to JS as E_TAPLOG [hole, 0, 0, gameTime]. */
   logTaps: boolean;
+  /** Wall clock of the last frame (sub-frame touch stamps, proof v4). */
+  frameWall: number;
+  hatBounces: number;
 }
 
 /** Runtime-only event (outside the sim's range): a logged touch-down, for the Line Party tap log. */
 export const E_TAPLOG = 90;
+/** Runtime-only event: a knocked-off hat hit the deck. */
+export const E_HAT_BOUNCE = 91;
 
 function createFlags(): RuntimeFlags {
   'worklet';
@@ -57,7 +62,7 @@ function createFlags(): RuntimeFlags {
   };
   return {
     running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
-    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false,
+    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0,
   };
 }
 
@@ -108,15 +113,17 @@ export interface WhackRuntime {
   /** Snapshot of the live sim for the JS side (score, taps, time). */
   mirror: () => Promise<SimMirror>;
   /** Final result + tap log (after E_END). */
-  final: () => Promise<{ result: BurstResult; taps: number[]; wallMs: number }>;
+  final: () => Promise<{ result: BurstResult; taps: number[]; pos: number[]; wallMs: number }>;
 }
 
 export function useWhackRuntime(opts: {
   geo: SharedValue<BoardLayout>;
   boxes: SharedValue<number[][]>;
+  /** Key-pose size multipliers per frame code (render/boxes.ts poseScaleFor). */
+  poseScale?: SharedValue<number[]>;
   onEvents: (batch: number[]) => void;
 }): WhackRuntime {
-  const { geo, boxes, onEvents } = opts;
+  const { geo, boxes, poseScale, onEvents } = opts;
   const sim = useSharedValue<WhackSim>(emptySim());
   const rs = useSharedValue<RenderState>(createRenderState());
   const an = useSharedValue<HoleAnim>(createHoleAnim());
@@ -125,13 +132,13 @@ export function useWhackRuntime(opts: {
   const bridge = useEventBridge(onEvents, 512);
   // UI -> JS replies go through stable JS callbacks (never a Promise resolver).
   const mirrorWaiters = useRef<((m: SimMirror) => void)[]>([]);
-  const finalWaiters = useRef<((f: { result: BurstResult; taps: number[]; wallMs: number }) => void)[]>([]);
+  const finalWaiters = useRef<((f: { result: BurstResult; taps: number[]; pos: number[]; wallMs: number }) => void)[]>([]);
   const onMirror = useCallback((m: SimMirror) => {
     const q = mirrorWaiters.current;
     mirrorWaiters.current = [];
     q.forEach((f) => f(m));
   }, []);
-  const onFinal = useCallback((f: { result: BurstResult; taps: number[]; wallMs: number }) => {
+  const onFinal = useCallback((f: { result: BurstResult; taps: number[]; pos: number[]; wallMs: number }) => {
     const q = finalWaiters.current;
     finalWaiters.current = [];
     q.forEach((cb) => cb(f));
@@ -161,7 +168,13 @@ export function useWhackRuntime(opts: {
     const helmBefore = s.hHelm[h];
     const wasFrozen = s.frozen;
     const logged = s.tapCount;
-    simTap(s, h);
+    const up = s.hPh[h] === P_UP || s.hPh[h] === P_TELL;
+    const off = touchOffset(L, h, x, y, up);
+    let sub = Date.now() - r.frameWall;
+    if (sub < 0) sub = 0;
+    if (sub > 16) sub = sub % 17;
+    a.tapX[h] = x;
+    simTap(s, h, off[0], off[1], sub);
     if (r.logTaps && s.tapCount > logged) s.ev.push(E_TAPLOG, h, 0, 0, s.t);
     if (wasFrozen && !s.frozen) r.easeT = 0;
     if (helmBefore === 1 && s.hHelm[h] === 0) {
@@ -206,7 +219,7 @@ export function useWhackRuntime(opts: {
         r.botHits[h] = 0;
       }
       if (s.t >= r.botAt[h]) {
-        tapHole(s, a, r, L, h, L.cx[h] + 6, L.my[h] - L.spriteH[h] * 0.5);
+        tapHole(s, a, r, L, h, L.cx[h] + ((s.t * 7 + h * 13) % 23) - 11, L.my[h] - L.spriteH[h] * (0.4 + ((s.t * 3) % 17) / 100));
         r.botHits[h] += 1;
         r.botAt[h] = s.t + (k === K_BRUISER ? 210 : k === K_HELMET ? 190 : 100000);
       }
@@ -221,6 +234,7 @@ export function useWhackRuntime(opts: {
       const r = rt.value;
       const a = an.value;
       const L = geo.value;
+      r.frameWall = Date.now();
       if (r.running && !s.ended) {
         let f = 1;
         if (r.easeT < 600) {
@@ -255,7 +269,12 @@ export function useWhackRuntime(opts: {
       drainTo(s);
       const locals: number[] = [];
       for (let i = 0; i < 9; i++) locals.push(slotDt(c, i));
-      computeRender(rs.value, a, s, L, boxes.value, fxDt, locals, r.reducedMotion);
+      const R = rs.value;
+      computeRender(R, a, s, L, boxes.value, fxDt, locals, r.reducedMotion, poseScale ? poseScale.value : undefined);
+      if (R.hatBounces !== r.hatBounces) {
+        r.hatBounces = R.hatBounces;
+        pushEvent(ring.value, E_HAT_BOUNCE, 0, 0, 0, s.t);
+      }
       tick.value = tick.value + 1;
       bridge.flush();
     },
@@ -376,7 +395,7 @@ export function useWhackRuntime(opts: {
       runOnUI(() => {
         'worklet';
         const s = sim.value;
-        runOnJS(onFinal)({ result: simResult(s), taps: s.taps.slice(), wallMs: rt.value.wallMs });
+        runOnJS(onFinal)({ result: simResult(s), taps: s.taps.slice(), pos: s.pos.slice(), wallMs: rt.value.wallMs });
       })();
     }),
   }), [sim, rs, an, tick, rt, clock, gesture, onMirror, onFinal]);

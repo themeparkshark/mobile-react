@@ -1,10 +1,15 @@
 /**
- * WhackAShark: "Bonk Rush" (design: tps-prime-time-audit/studio/design/whack.md).
+ * WhackAShark: "Bonk Rush" v4 (design: tps-prime-time-audit/studio/design/whack.md).
  *
  * A glance-safe arcade whack built from short authored Bursts:
- *   - Queue Run: 5 Bursts of 12-18s with open breathers (bank any time).
- *   - Ride Challenge: one 30s Burst with a Coin Meter; the proof replays.
- *   - Daily / weekly shared seeds with ghosts, Bonk Battle duels, Crew Raids.
+ *   - Queue Run: 4 Bursts (12/13/14s, then the finale: Golden Rush, or a Boss
+ *     Run every 3rd Run of the park day) with open breathers. A full Bonk
+ *     Meter banks ("FEVER READY") and is fired from the breather (GO FEVER).
+ *   - Line of the Day: the same 4-Burst Run on today's seed for this ride's
+ *     line, racing the named ghosts just above your best rank.
+ *   - Ride Challenge: one 30s Burst with a 13-notch Coin Meter; the proof
+ *     replays server-side; a win plays the Final Bonk cam and a Coin Rush.
+ *   - Daily Bonk, Bonk Battle duels and Crew Raids on shared seeds.
  *
  * Walk-safe: movement is never an input. Auto Look-Up freezes the board
  * before a target can escape a player who looked up at the line; one tap
@@ -23,38 +28,46 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
+import { StampLayer, type StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useCamera } from '../../gamekit/fx/useCamera';
+import { useFinisher } from '../../gamekit/fx/useFinisher';
 import { TIER_NAMES, TIER_SCALES } from '../../gamekit/core/perfTier';
 import { usePerfTier } from '../../gamekit/perf/usePerfTier';
+import { useThermal } from '../../gamekit/perf/useThermal';
+import { THERMAL_NAMES, THERMAL_SCALES } from '../../gamekit/core/thermal';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
-import { playHaptic } from '../../gamekit/Haptics';
+import { playPattern } from '../../gamekit/Haptics';
+import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
 import { forEachEvent } from '../../gamekit/core/eventRing';
 import { starsFor, nextStarGoal } from '../../gamekit/core/scoring';
-import { deriveRunSeed, mixSeed } from '../../gamekit/core/rng';
+import { deriveRunSeed } from '../../gamekit/core/rng';
 import { useWhackCues, useWhackJuice, pickCue as pick } from './useWhackJuice';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
-import { usePerfProbe } from '../../gamekit/perf/PerfOverlay';
+import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from './assets';
 import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
 import {
-  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, NO_CARRY, createSim, type BurstCarry, type BurstResult,
+  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
 } from './sim';
-import { buildProof, type WhackProofV2 } from './proof';
+import { buildProof, type WhackProofV4 } from './proof';
 import {
-  RIDE_WIN_NOTCHES, RUN_STARS, WALK_PCT_PER_M, burstCount, type Difficulty, type WhackFormat,
+  PTS_CRIT, PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, RIDE_WIN_NOTCHES, RUN_STARS, WALK_BOOST_EVERY, WALK_PCT_PER_M, burstCount, isBossRun,
+  type Difficulty, type WhackFormat,
 } from './waves';
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
-import { boxesFor } from './render/boxes';
+import { boxesFor, poseScaleFor } from './render/boxes';
 import { WhackBoard, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
-import { ghostFromRun, paceAt, pbGhostKey } from './net/ghost';
+import { ghostFromRun, ghostHitsBetween, paceAt, pbGhostKey } from './net/ghost';
 import { createLocalNetAdapter } from './net/localAdapter';
+import { ghostDeltaLine, lineDaySeed, lineDayXform, parkLocalDate, type LineDayEntry } from './net/lineDay';
+import { applyMastery, applyRunToBook, cardTitle, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
 import type { DuelReveal, WhackDuelConfig, WhackGhost, WhackNetAdapter, WhackRaidConfig } from './net/types';
 
 registerStudioAudio(['whack', 'boss']);
@@ -65,24 +78,31 @@ export interface BurstBanked {
   index: number;
   score: number;
   result: BurstResult;
-  proof: WhackProofV2;
+  proof: WhackProofV4;
 }
 
 export interface WhackASharkProps {
   visible: boolean;
-  /** 'ride' = paid Ride Challenge (one 30s Burst); 'queue' = LinePlay Run. */
+  /** 'ride' = paid Ride Challenge (one 30s Burst); 'queue' = LinePlay Run; 'lineDay' = Line of the Day. */
   format?: WhackFormat;
   /** Resolved ride theme (queue passes it); otherwise derived from taskName. */
   theme?: WhackTheme;
   taskName?: string;
+  /** The ride whose line this is (Line of the Day seed, Finn cards, mastery). */
+  rideId?: string | number;
+  userId?: number | string;
   difficulty?: Difficulty;
   /** Server-issued seed (ride attempt seed). */
   seed?: number;
   /** Lifetime Bursts from the server profile (local cache when absent). */
   unlockLevel?: number;
+  /** Run of the park day (server profile); drives the Boss Run cadence. Local count when absent. */
+  runOfDay?: number;
   /** WS5: meters walked in line (GPS + pedometer). Falls back to local step sense. */
   walkMeters?: SharedValue<number> | number;
   ghost?: WhackGhost | null;
+  /** Line of the Day rivals (the 3 just above your best), each with one verified ghost per Burst. */
+  lineDay?: { rivals: LineDayEntry[]; myBest?: number | null } | null;
   duel?: WhackDuelConfig | null;
   raid?: WhackRaidConfig | null;
   net?: WhackNetAdapter | null;
@@ -99,16 +119,30 @@ export interface WhackHandle {
 }
 
 const LIFETIME_KEY = '@whack/lifetime_bursts';
+const RUN_OF_DAY_KEY = '@whack/run_of_day';
+const CARDS_KEY = '@whack/finn_cards';
+const MASTERY_KEY = '@whack/mastery';
 const PB_KEY = '@whack_a_shark/best';
 const pbKeyFor = (f: WhackFormat) => (f === 'ride' ? '@whack_a_shark/ride_best' : f === 'queue' ? PB_KEY : `@whack_a_shark/best_${f}`);
 const GOLD = '#ffcf3b';
+/** Star slams on the win stinger's beat (129.2 BPM quarter notes). */
+const STAR_STEP_MS = 464;
+const GHOST_COLORS = ['#ff9f1c', '#1fc8b8', '#ff6b5c'];
 
 type Phase = 'play' | 'finish' | 'breather' | 'done';
 
-
-
 function formatName(f: WhackFormat): string {
-  return f === 'ride' ? 'Ride Challenge' : f === 'duel' ? 'Bonk Battle' : f === 'raid' ? 'Crew Raid' : f === 'daily' ? 'Daily Bonk' : f === 'weekly' ? 'Weekly Ride Seed' : 'Bonk Rush';
+  return f === 'ride' ? 'Ride Challenge' : f === 'duel' ? 'Bonk Battle' : f === 'raid' ? 'Crew Raid' : f === 'daily' ? 'Daily Bonk'
+    : f === 'lineDay' || f === 'weekly' ? 'Line of the Day' : 'Bonk Rush';
+}
+
+async function readJson<T>(key: string): Promise<T | null> {
+  try {
+    const v = await AsyncStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : null;
+  } catch {
+    return null;
+  }
 }
 
 export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function WhackAShark(props, ref) {
@@ -117,9 +151,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   } = props;
   const format: WhackFormat = props.format ?? 'queue';
   const ride = format === 'ride';
+  const lineRun = format === 'lineDay' || format === 'weekly';
   const devAuto = __DEV__ && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1';
   const autoplay = !!props.autoplay || devAuto;
   const difficulty: Difficulty = props.difficulty ?? 2;
+  const rideKey = props.rideId != null ? String(props.rideId) : (taskName ?? null);
   const theme: WhackTheme = useMemo(() => {
     if (props.theme) return props.theme;
     const deck = deckIdForRideName(taskName);
@@ -128,23 +164,31 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const reducedMotion = useReducedGameMotion();
   const shellRef = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
+  const stamps = useRef<StampLayerHandle>(null);
   const perf = usePerfProbe(visible);
-  // Perf tier (full / lite / min): an older phone keeps 60fps by thinning particles, never by dropping a tell.
+  // Perf tier (full / lite / min) and the thermal ladder: an older or hot phone keeps 60fps by thinning particles, never by dropping a tell.
   const perfTier = usePerfTier({ active: visible });
   const tierScale = TIER_SCALES[perfTier.tierJs] ?? TIER_SCALES[0];
+  const thermal = useThermal({ active: visible });
+  const thermalScale = THERMAL_SCALES[thermal.levelJs] ?? THERMAL_SCALES[0];
+  const thermalMax = useRef(0);
+  thermalMax.current = Math.max(thermalMax.current, thermal.levelJs);
   const net = useMemo(() => props.net ?? ((format === 'duel' || format === 'raid') ? createLocalNetAdapter({ rivalName: duel?.rival.name ?? 'Captain Fin' }) : null), [props.net, format, duel?.rival.name]);
+  const today = useMemo(() => parkLocalDate(Date.now()), []);
 
   // ---------------------------------------------------------------- layout
   const [field, setField] = useState<{ w: number; h: number } | null>(null);
   const L: BoardLayout | null = useMemo(() => (field ? computeLayout(field.w, field.h, theme) : null), [field, theme]);
   const geo = useSharedValue<BoardLayout>(computeLayout(390, 700, theme));
   const boxes = useSharedValue<number[][]>(boxesFor(theme));
+  const poseScale = useSharedValue<number[]>(poseScaleFor(theme));
   useEffect(() => {
     if (L) geo.value = L;
   }, [L, geo]);
   useEffect(() => {
     boxes.value = boxesFor(theme);
-  }, [theme, boxes]);
+    poseScale.value = poseScaleFor(theme);
+  }, [theme, boxes, poseScale]);
   const onFieldLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width > 0 && height > 0) setField((f) => (f && Math.abs(f.w - width) < 1 && Math.abs(f.h - height) < 1 ? f : { w: width, h: height }));
@@ -163,15 +207,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
     burstScore: number; runScore: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
-    duelLine: string | null; incoming: number;
+    duelLine: string | null; incoming: number; feverReady: boolean; bossNext: boolean; boost: boolean;
   }>(null);
   const [readyOn, setReadyOn] = useState(false);
   const [reveal, setReveal] = useState<DuelReveal | null>(null);
   const [lifetime, setLifetime] = useState<number | null>(props.unlockLevel ?? null);
   const [best, setBest] = useState(0);
-  const [bossIntro, setBossIntro] = useState(false);
 
   const runSeedRef = useRef(0);
+  const runOfDayRef = useRef(props.runOfDay ?? 0);
   const bankedRef = useRef<BurstBanked[]>([]);
   const carryRef = useRef<BurstCarry>(NO_CARRY);
   const interrupts = useRef<[number, number, string][]>([]);
@@ -183,14 +227,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const rivalTotalRef = useRef(0);
   const walkBaseRef = useRef(0);
   const lastBoostRef = useRef(-9);
-  const boostAltRef = useRef<WalkBoost>('golden');
+  const boostedRunRef = useRef(false);
   const pendingBoost = useRef<WalkBoost>(null);
   const startWall = useRef(Date.now());
   const ghostRef = useRef<WhackGhost | null>(ghostProp ?? null);
   const finishing = useRef(false);
   const raidRef = useRef<{ hpNow: number; hpMax: number; defeated: boolean } | null>(null);
+  const winRef = useRef<{ at: number; ms: number } | null>(null);
 
-  // Lifetime Bursts (unlock ladder), personal best.
+  // Lifetime Bursts (unlock ladder) and the personal best.
   useEffect(() => {
     let alive = true;
     if (props.unlockLevel == null) {
@@ -198,22 +243,37 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
     AsyncStorage.getItem(pbKeyFor(format)).then((v) => { if (alive && v) setBest(parseInt(v, 10) || 0); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [props.unlockLevel, ride]);
+  }, [props.unlockLevel, format]);
+
+  /** Run of the park day: the server's when given, else a local count per park-local date. */
+  const claimRunOfDay = useCallback(async () => {
+    if (props.runOfDay != null) { runOfDayRef.current = props.runOfDay; return; }
+    if (ride) return;
+    const stored = await readJson<{ date: string; n: number }>(RUN_OF_DAY_KEY);
+    const next = nextRunOfDay(stored, today);
+    runOfDayRef.current = next.runOfDay;
+    AsyncStorage.setItem(RUN_OF_DAY_KEY, JSON.stringify({ date: next.date, n: next.n })).catch(() => undefined);
+  }, [props.runOfDay, ride, today]);
 
   const totalBursts = burstCount(format);
   const baseSeed = props.seed ?? 20260930;
+  const lineSeed = useMemo(() => lineDaySeed(rideKey ?? 'ride', today), [rideKey, today]);
+  const lineXform = useMemo(() => lineDayXform(lineSeed, props.userId ?? 0), [lineSeed, props.userId]);
 
-  const buildTimeline = useCallback((bi: number, runIdx: number): Timeline => {
+  const buildTimeline = useCallback((bi: number, runIdx: number, feverFired = false): Timeline => {
     if (format === 'duel' && duel) return duelTimeline(duel.matchSeed, bi, difficulty, theme, lifetime ?? 0, incomingRef.current);
     if (format === 'duel') return duelTimeline(baseSeed, bi, difficulty, theme, lifetime ?? 0, incomingRef.current);
-    const seed = ride || format === 'daily' || format === 'weekly' || format === 'raid' ? (raid ? raid.raidSeed : baseSeed) : deriveRunSeed(baseSeed, runIdx);
+    const seed = lineRun ? (props.seed ?? lineSeed)
+      : ride || format === 'daily' || format === 'raid' ? (raid ? raid.raidSeed : baseSeed) : deriveRunSeed(baseSeed, runIdx);
     runSeedRef.current = seed;
     return buildBurst({
       seed, burstIndex: bi, format, difficulty, theme, unlockLevel: lifetime ?? 0,
-      xform: format === 'weekly' ? mixSeed(seed, 0x57ee) % 8 : 0,
+      xform: lineRun ? lineXform : 0,
       walkBoost: walkOk(format) ? pendingBoost.current : null,
+      runOfDay: runOfDayRef.current,
+      feverFired,
     });
-  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid]);
+  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid, lineRun, props.seed, lineSeed, lineXform]);
 
   // ---------------------------------------------------------------- audio
   const cues = useWhackCues(visible);
@@ -241,23 +301,56 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // ---------------------------------------------------------------- sim events (JS)
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
   const onEvents = useCallback((batch: number[]) => onEventsRef.current(batch), []);
-  const runtime = useWhackRuntime({ geo, boxes, onEvents });
+  const runtime = useWhackRuntime({ geo, boxes, poseScale, onEvents });
   const bossFx = useSharedValue({ rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 });
   const pace = useSharedValue(0);
-  // The shared Bonk Rush feel layer (tells, grades, crits, goldens, flurry, tiers, fever).
+  const finisher = useFinisher({
+    clock: runtime.clock, camera, fx, stamps, width: field?.w ?? 390, height: field?.h ?? 700,
+    stinger: ride ? cues.stingWin : cues.stingBoss, reducedMotion,
+  });
+  // The shared Bonk Rush feel layer (tells, grades, crits, goldens, combo slab, tiers, fever).
   const juice = useWhackJuice({
-    fx, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever,
+    fx, stamps, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever,
   });
   const feel = juice.fire;
   const HUD = juice.hud;
   const holeXY = juice.holeXY;
   const liveScoreRef = juice.liveScore;
 
+  // Ride Coin Rush overflow (6.3): remaining whole seconds become a cosmetic coin cascade.
+  const coinRush = useCallback((secs: number, delay: number) => {
+    const G = Lref.current;
+    if (!G || secs <= 0) return;
+    const order = [4, 0, 8, 2, 6, 1, 7, 3, 5];
+    for (let k = 0; k < secs; k++) {
+      setTimeout(() => {
+        const h = order[k % 9];
+        const x = G.cx[h];
+        const y = G.my[h] - G.spriteH[h] * 0.45;
+        fx.current?.ring(x, y, { color: GOLD, from: 10, to: 60, ms: 220 });
+        fx.current?.burst('coins', x, y, { count: 6 });
+        fx.current?.burst('stars', x, y, { count: 4 });
+        GameAudio.playLadder(cues.coinTick, Math.min(12, k * 2));
+      }, delay + k * 200);
+    }
+  }, [cues.coinTick]);
+
   const bumpShellScore = useRef(0);
   onEventsRef.current = (batch) => {
     const G = Lref.current;
     const now = Date.now();
     forEachEvent(batch, (kind, a, b, c) => {
+      if (kind === E_WIN && G) {
+        // Final Bonk cam (8.9) on the winning hit: freeze, 0.25x, push-in, rings, confetti, stinger.
+        const t = tlRef.current;
+        const ms = finisher.run('rideWin', { x: G.w / 2, y: G.deckTop + (G.h - G.deckTop) * 0.45, text: 'COIN CAUGHT!', stampColor: GOLD });
+        winRef.current = { at: now, ms: ms + 300 };
+        void runtime.mirror().then((m) => {
+          const secs = Math.min(6, Math.floor(((t ? t.lengthMs : 30000) - m.t) / 1000));
+          coinRush(secs, Math.round(ms * 0.55));
+          winRef.current = { at: now, ms: Math.max(ms, Math.round(ms * 0.55) + secs * 200) + 300 };
+        });
+      }
       if (juice.handle(kind, a, b, c, now)) return;
       switch (kind) {
         case E_ATTACK: {
@@ -281,7 +374,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           break;
         case E_BLOCKED:
           GameAudio.play(cues.blocked);
-          if (G) fx.current?.flyUp('BLOCKED!', G.w / 2, G.topH * 0.8, { size: 'lg', color: '#7fd6ff' });
+          if (G) fx.current?.flyUp('BLOCKED!', G.w / 2, G.deckTop - 20, { size: 'lg', color: '#7fd6ff' });
           break;
         case E_BOSS_DMG: {
           const cur = bossFx.value;
@@ -292,19 +385,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             const s = tlRef.current;
             if (s && s.bossHp > 0) bossFx.value = { ...bossFx.value, ghost: b / s.bossHp };
           }, 250);
-          if (G) feel('bossHit', { x: G.w * 0.72, y: G.topH * 0.5 });
+          if (G) feel('bossHit', { x: G.w * 0.74, y: G.deckTop - 60 });
           break;
         }
         case E_BOSS_DOWN: {
           liveScoreRef.current += a;
           const s = tlRef.current;
           if (G) {
-            feel('bossDown', { x: G.w * 0.72, y: G.topH * 0.5, text: 'BOSS BONKED!', magnetTo: HUD });
-            runtime.clock.hitStop(160, { holdSim: true, force: true });
-            if (!reducedMotion) runtime.clock.slowMo(0.3, 500, 200);
+            finisher.run('bossDefeat', { x: G.w * 0.74, y: G.deckTop - 60, text: 'BOSS BONKED!', stampColor: GOLD });
+            feel('bossDown', { x: G.w * 0.74, y: G.deckTop - 60, text: `+${a}`, magnetTo: HUD });
           }
           GameAudio.play(cues.bossKo[s?.bossKind ?? 0]);
-          setTimeout(() => GameAudio.play(cues.stingBoss), 300);
           bossFx.value = { ...bossFx.value, sink: 0 };
           const t0 = Date.now();
           const sinkIv = setInterval(() => {
@@ -312,7 +403,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             bossFx.value = { ...bossFx.value, sink: k * k };
             if (k >= 1) clearInterval(sinkIv);
           }, 16);
-          flash('BOSS BONKED!', 'VICTORY LAP!', GOLD, 1600);
+          setTimeout(() => flash('VICTORY LAP!', 'EVERY BONK IS QUICK', GOLD, 1400), 1400);
           break;
         }
         case E_END:
@@ -330,31 +421,46 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   };
   const splatHint = useRef(false);
 
-  // Pace line + last-3s pips (4 Hz, JS). The runtime handle changes identity every
-  // render, so the interval reads it through a ref and survives re-renders.
+  // Pace line, Line of the Day ghost pucks and last-3s pips (4 Hz, JS). The runtime
+  // handle changes identity every render, so the interval reads it through a ref.
   const runtimeRef = useRef(runtime);
   runtimeRef.current = runtime;
+  const ghostT = useRef(0);
+  const busyRef = juice.busy;
   useEffect(() => {
     if (!visible) return undefined;
     let lastPip = -1;
     const iv = setInterval(() => {
-      const now = Date.now();
       if (phase !== 'play') return;
       void runtimeRef.current.mirror().then((m) => {
         const t = tlRef.current;
+        const G = Lref.current;
         if (!t || m.ended) return;
         const left = Math.ceil((t.lengthMs - m.t) / 1000);
         if (left <= 3 && left >= 1 && left !== lastPip && !m.frozen) {
           lastPip = left;
           GameAudio.play(cues.tick, { volume: 0.6 });
-          playHaptic('tick');
+          // Countdown ticks never buzz while targets are up (11.2).
+          if (busyRef.current.size === 0) playPattern('lookUpResume', { priority: WHACK_PRIO.flow });
         }
         const g = ghostRef.current;
         if (g) pace.value = m.score - paceAt(g, m.t);
+        // Line of the Day: named ghost pucks flash on the wells they hit (mapped through mine o theirs^-1).
+        const rivals = props.lineDay?.rivals ?? [];
+        if (G && rivals.length && m.t > ghostT.current) {
+          rivals.slice(0, 3).forEach((r, i) => {
+            const gb = r.ghosts?.[t.input.burstIndex];
+            if (!gb) return;
+            for (const h of ghostHitsBetween(gb, ghostT.current, m.t, (t.input.xform ?? 0) & 7)) {
+              fx.current?.flyUp(r.name.split(' ')[0].toUpperCase(), G.cx[h] + (i - 1) * 14, G.my[h] - G.spriteH[h] * 0.2, { size: 'sm', color: GHOST_COLORS[i] });
+            }
+          });
+        }
+        ghostT.current = m.t;
       });
     }, 250);
     return () => clearInterval(iv);
-  }, [visible, phase, cues, pace]);
+  }, [visible, phase, cues, pace, props.lineDay, busyRef]);
 
   // ---------------------------------------------------------------- flow
   const flash = useCallback((text: string, sub: string | null = null, color = '#ffffff', ms = 1100) => {
@@ -362,15 +468,18 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     setTimeout(() => setBanner((b) => (b.text === text ? { ...b, text: null, sub: null } : b)), ms);
   }, []);
 
-  const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean) => {
-    const t = buildTimeline(bi, runIdx);
+  const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean, feverFired = false) => {
+    if (feverFired) carryRef.current = { ...carryRef.current, feverReady: false, meter: 0 };
+    const t = buildTimeline(bi, runIdx, feverFired);
     tlRef.current = t;
     setTl(t);
     setBurstIdx(bi);
     splatHint.current = false;
+    ghostT.current = 0;
+    winRef.current = null;
     const sim = createSim(t, carryRef.current);
     juice.reset(carryRef.current.streak);
-    setFever(carryRef.current.feverLeft > 0 && t.fever);
+    setFever(t.feverStart || (carryRef.current.feverLeft > 0 && t.fever));
     bossFx.value = { rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 };
     setPhase('play');
     const go = () => {
@@ -378,11 +487,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       startWall.current = Date.now();
       interrupts.current = [];
       if (t.boss) {
-        setBossIntro(true);
         const roar = cues.bossRoar[t.bossKind] ?? cues.bossRoar[0];
         GameAudio.play(roar);
-        playHaptic('tierUp');
-        setTimeout(() => playHaptic('tierUp'), 180);
+        playPattern('champSlam', { priority: WHACK_PRIO.golden });
         const t0 = Date.now();
         const iv = setInterval(() => {
           const k = Math.min(1, (Date.now() - t0) / 800);
@@ -399,27 +506,30 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       flash('READY...', null, '#ffffff', 450);
       GameAudio.play(cues.pip);
       setTimeout(() => {
-        flash('GO!', null, GOLD, 450);
+        flash(feverFired ? 'GO FEVER!' : 'GO!', null, GOLD, 450);
         GameAudio.play(cues.pip, { pitch: 7 });
-        playHaptic('tick');
+        playPattern('lookUpResume', { priority: WHACK_PRIO.flow });
       }, 450);
       setTimeout(go, 900);
     } else {
       go();
     }
-  }, [buildTimeline, runtime, autoplay, cues, flash, bossFx]);
+  }, [buildTimeline, runtime, autoplay, cues, flash, bossFx, juice]);
 
   const finishRun = useCallback((reason?: string) => {
     if (finishing.current) return;
     finishing.current = true;
+    thermal.runEnd();
     const banked = bankedRef.current;
     const total = banked.reduce((s, b) => s + b.score, 0);
     const last = banked[banked.length - 1];
     const allResults = banked.map((b) => b.result);
+    const sum = (f: (r: BurstResult) => number) => allResults.reduce((s, r) => s + f(r), 0);
     const maxStreak = Math.max(0, ...allResults.map((r) => r.maxStreak));
-    const hits = allResults.reduce((s, r) => s + r.legacyHits, 0);
-    const quick = allResults.reduce((s, r) => s + r.quick, 0);
-    const judged = allResults.reduce((s, r) => s + r.quick + r.good + r.late, 0);
+    const hits = sum((r) => r.legacyHits);
+    const quick = sum((r) => r.quick);
+    const judged = sum((r) => r.quick + r.good + r.late);
+    const goldens = sum((r) => r.goldens);
     const thresholds = RUN_STARS[difficulty];
     let stars: number;
     let message: string | undefined;
@@ -438,16 +548,24 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     } else {
       stars = starsFor(total, thresholds);
     }
-    const isNewBest = total > best;
+    // Walk Boosted Runs never set a ranked personal best (6.12).
+    const isNewBest = total > best && !boostedRunRef.current;
     if (isNewBest) {
       setBest(total);
       AsyncStorage.setItem(pbKeyFor(format), String(total)).catch(() => undefined);
     }
+    // Buckets (8.9): HITS (base grade points), COMBO (what the multiplier added), BONUS (flat).
+    const base = sum((r) => r.quick * PTS_FINN[2] + r.good * PTS_FINN[1] + r.late * PTS_FINN[0]);
+    const bonus = sum((r) => r.goldens * PTS_GOLDEN + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT);
+    const combo = Math.max(0, total - base - bonus);
+    const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8);
     const goal = ride ? null : nextStarGoal(total, thresholds);
-    GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+    const rivals = props.lineDay?.rivals ?? [];
+    const target = rivals.length ? [...rivals].sort((a, b) => a.score - b.score).find((r) => r.score > total) ?? rivals[rivals.length - 1] : null;
+    const ghostLine = lineRun ? ghostDeltaLine(total, target ?? null) : null;
     const meta: Record<string, unknown> = {
       game: 'tap',
-      v: 2,
+      v: 4,
       score: total,
       seed: runSeedRef.current >>> 0,
       hits,
@@ -456,57 +574,85 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       difficulty,
       format,
       theme,
+      rideId: rideKey,
+      runOfDay: runOfDayRef.current,
       isNewBest,
+      walkBoost: boostedRunRef.current,
       bursts: banked.length,
       proof: ride ? last?.proof : banked.map((b) => b.proof),
       fps_p5: perf.summary().fpsP5,
       perf_tier: TIER_NAMES[perfTier.tierJs],
+      thermal_max: THERMAL_NAMES[thermalMax.current],
+      finaleShown: false,
       ...(reason ? { reason } : {}),
     };
-    setResult({
-      score: total,
-      stars,
-      message,
-      maxCombo: maxStreak,
-      thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
-      // Duel: "You beat Captain Fin by 600" or "Only 120 behind Captain Fin", always a positive next goal.
-      // (Queue runs get the "off your best" line from the shell's personal best.)
-      rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current } : null,
-      stats: [
-        { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
-        { label: 'BEST STREAK', value: `${maxStreak}` },
-        ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
-          : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
-            : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
-        ...(goal && goal.remaining > 0 && format !== 'raid' && format !== 'duel' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
-      ],
-      meta,
+    let unlocked: FinnCard | null = null;
+    const collect = (async () => {
+      if (!rideKey) return;
+      const book = (await readJson<CardBook>(CARDS_KEY)) ?? {};
+      const applied = applyRunToBook(book, { rideId: rideKey, theme, format, goldens, date: today, rank: null });
+      if (applied.unlocked) {
+        unlocked = applied.unlocked;
+        AsyncStorage.setItem(CARDS_KEY, JSON.stringify(applied.book)).catch(() => undefined);
+      }
+      const mastery = applyMastery((await readJson<MasteryBook>(MASTERY_KEY)) ?? {}, rideKey, stars);
+      AsyncStorage.setItem(MASTERY_KEY, JSON.stringify(mastery)).catch(() => undefined);
+      meta.mastery = mastery;
+    })();
+    void collect.catch(() => undefined).finally(() => {
+      meta.cardsUnlocked = unlocked ? [unlocked] : [];
+      if (!(ride && last?.result.win)) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+      setResult({
+        score: total,
+        stars,
+        message: unlocked ? `NEW FINN: ${cardTitle(theme)}` : message,
+        maxCombo: maxStreak,
+        thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
+        rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
+          : target ? { name: target.name.split(' ')[0], score: target.score } : null,
+        buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${combo.toLocaleString()}` }, { label: 'BONUS', value: `+${bonus.toLocaleString()}` }],
+        bucketValues: ride ? undefined : [base, combo, bonus],
+        starStepMs: STAR_STEP_MS,
+        stats: [
+          { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
+          { label: 'BEST STREAK', value: `${maxStreak}` },
+          ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
+            : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
+              : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
+          ...(ghostLine ? [{ label: 'LINE OF THE DAY', value: ghostLine }] : []),
+          ...(nextBoss ? [{ label: 'NEXT', value: 'BOSS RUN' }]
+            : goal && goal.remaining > 0 && format !== 'raid' && format !== 'duel' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
+          ...(boostedRunRef.current ? [{ label: 'WALK BOOST', value: 'ON' }] : []),
+        ],
+        meta,
+      });
+      setPhase('done');
     });
-    setPhase('done');
-  }, [best, cues, difficulty, format, perf, perfTier.tierJs, ride, theme, totalBursts, duel?.rival.name]);
+  }, [best, cues, difficulty, format, perf, perfTier.tierJs, ride, theme, totalBursts, duel?.rival.name, thermal, lifetime, props.lineDay, lineRun, rideKey, today]);
 
   const bankBurst = useCallback(async (): Promise<BurstBanked | null> => {
     const t = tlRef.current;
     if (!t) return null;
-    const { result: res, taps, wallMs } = await runtime.final();
-    const proof = buildProof(t, carryRef.current, taps, res, {
-      wallMs: Math.max(wallMs, Date.now() - startWall.current), interrupts: interrupts.current, build: 'dev',
-      fpsP5: perf.summary().fpsP5, walking: walk.walking,
+    const carryIn = carryRef.current;
+    const { result: res, taps, pos, wallMs } = await runtime.final();
+    const proof = buildProof(t, carryIn, taps, res, {
+      wallMs: Math.max(wallMs, Date.now() - startWall.current), pos, interrupts: interrupts.current, build: 'dev',
+      fpsP5: perf.summary().fpsP5, hz: thermal.hz(), perfTier: TIER_NAMES[perfTier.tierJs], thermalMax: THERMAL_NAMES[thermalMax.current], walking: walk.walking,
     });
     const banked: BurstBanked = { index: t.input.burstIndex, score: res.score, result: res, proof };
     bankedRef.current = [...bankedRef.current, banked];
     carryRef.current = res.carry;
     onBurstBanked?.(banked);
-    // Lifetime Bursts (local cache of the server profile) and the pace ghost.
     if (!ride && format !== 'duel') {
       const lt = (lifetime ?? 0) + 1;
       AsyncStorage.setItem(LIFETIME_KEY, String(lt)).catch(() => undefined);
     }
     try {
-      const key = pbGhostKey(format, t.input.burstIndex, format === 'daily' || format === 'weekly' ? t.input.seed : undefined);
+      const shared = format === 'daily' || lineRun;
+      const key = pbGhostKey(format, t.input.burstIndex, shared ? t.input.seed : undefined);
       const prev = await AsyncStorage.getItem(key);
       const prevScore = prev ? (JSON.parse(prev) as WhackGhost).score : -1;
-      if (res.score > prevScore) {
+      if (res.score > prevScore && !boostedRunRef.current) {
         const triples: number[][] = [];
         for (let i = 0; i + 2 < taps.length; i += 3) triples.push([taps[i], taps[i + 1], taps[i + 2]]);
         const g = ghostFromRun(t, triples, 'Your best', res.elapsedMs);
@@ -516,21 +662,28 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       // Ghost storage is a convenience; never block the run.
     }
     return banked;
-  }, [runtime, perf, walk.walking, onBurstBanked, ride, format, lifetime]);
+  }, [runtime, perf, walk.walking, onBurstBanked, ride, format, lifetime, lineRun, thermal, perfTier.tierJs]);
 
   const onBurstEnd = useCallback(async (bankedEarly: boolean) => {
     const t = tlRef.current;
     if (!t) return;
     setPhase('finish');
-    GameAudio.play(cues.whistle, { volume: 0.8 });
     const b = await bankBurst();
     if (!b) return;
     const won = b.result.win;
     if (ride) {
-      flash(won ? 'COIN CAUGHT!' : 'TIME!', won ? null : `SO CLOSE! ${Math.max(1, 100 - b.result.coin)}% TO GO`, won ? GOLD : '#ffffff', 1200);
-      setTimeout(() => finishRun(), 1100);
+      if (won) {
+        const w = winRef.current;
+        const wait = w ? Math.max(600, w.ms - (Date.now() - w.at)) : 1400;
+        setTimeout(() => finishRun(), wait);
+      } else {
+        GameAudio.play(cues.whistle, { volume: 0.8 });
+        flash('TIME!', `SO CLOSE! ${Math.max(1, 100 - b.result.coin)}% TO GO`, '#ffffff', 1200);
+        setTimeout(() => finishRun(), 1100);
+      }
       return;
     }
+    GameAudio.play(cues.whistle, { volume: 0.8 });
     flash('FINISH!', null, GOLD, 900);
     if (bankedEarly) {
       setTimeout(() => finishRun('banked'), 700);
@@ -556,15 +709,16 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
     const next = t.input.burstIndex + 1;
     if (next >= totalBursts) {
-      setTimeout(() => finishRun(), 900);
+      // The finale's own cam (boss) already played; leave a beat for it.
+      setTimeout(() => finishRun(), t.boss && b.result.bossDown ? 1600 : 900);
       return;
     }
-    // Walk Charge: +2.5%/m, full at 40m, at most one boost per 3 Bursts.
+    // Walk Boost: +2.5%/m, full at 40m, a Golden Start at most once per 3 Bursts, random-seed solo Runs only.
     const m = metersNow() - walkBaseRef.current;
     const pct = Math.min(1, (m * WALK_PCT_PER_M) / 100);
-    if (walkOk(format) && pct >= 1 && next - lastBoostRef.current >= 3) {
-      pendingBoost.current = boostAltRef.current;
-      boostAltRef.current = boostAltRef.current === 'golden' ? 'meter' : 'golden';
+    if (walkOk(format) && pct >= 1 && next - lastBoostRef.current >= WALK_BOOST_EVERY) {
+      pendingBoost.current = 'golden';
+      boostedRunRef.current = true;
       lastBoostRef.current = next;
       walkBaseRef.current = metersNow();
     } else {
@@ -573,6 +727,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const total = bankedRef.current.reduce((s, x) => s + x.score, 0);
     const nextTl = buildTimeline(next, runIndex);
     const g = nextStarGoal(total, RUN_STARS[difficulty]);
+    const feverReady = !!carryRef.current.feverReady;
     setTimeout(() => {
       setBreather({
         burstScore: b.score,
@@ -588,19 +743,23 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         goal: g.remaining > 0 ? `NEXT STAR AT ${g.target.toLocaleString()}` : 'THREE STARS! GO FOR A BEST',
         duelLine,
         incoming: incomingRef.current.length,
+        feverReady,
+        bossNext: nextTl.boss,
+        boost: pendingBoost.current === 'golden',
       });
       setReadyOn(false);
       setPhase('breather');
       setTimeout(() => setReadyOn(true), 1200);
-      if (autoplay) setTimeout(() => onReadyRef.current(), 3500);
+      // Autoplay saves a banked fever for the finale (the expert line).
+      if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), 3500);
     }, 800);
   }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
 
-  const onReady = useCallback(() => {
+  const onReady = useCallback((goFever: boolean) => {
     if (phase !== 'breather') return;
     setBreather(null);
     setReveal(null);
-    startBurst(burstIdx + 1, runIndex, true);
+    startBurst(burstIdx + 1, runIndex, true, goFever && !!carryRef.current.feverReady);
   }, [phase, startBurst, burstIdx, runIndex]);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -615,19 +774,22 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     finishing.current = false;
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
+    boostedRunRef.current = false;
+    lastBoostRef.current = -9;
     walkBaseRef.current = metersNow();
     setResult(null);
     setShellScore(0);
     startWall.current = Date.now();
     if (autoplay) LogBox.ignoreAllLogs(true);
-    startBurst(0, runIndex, false);
-  }, [metersNow, autoplay, startBurst, runIndex]);
+    void claimRunOfDay().finally(() => startBurst(0, runIndex, false));
+  }, [metersNow, autoplay, startBurst, runIndex, claimRunOfDay]);
 
   const handlePause = useCallback((reason?: string) => {
     runtime.setRunning(false);
     runtime.clock.pause();
+    finisher.cancel();
     void runtime.mirror().then((m) => { pauseAt.current = { wall: Date.now(), gt: m.t, reason: reason ?? 'pause' }; });
-  }, [runtime]);
+  }, [runtime, finisher]);
 
   const handleResume = useCallback(() => {
     const p = pauseAt.current;
@@ -647,11 +809,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     setRunIndex(nextRun);
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
+    boostedRunRef.current = false;
     setResult(null);
     setShellScore(0);
     setBreather(null);
-    startBurst(0, nextRun, true);
-  }, [runIndex, startBurst]);
+    void claimRunOfDay().finally(() => startBurst(0, nextRun, true));
+  }, [runIndex, startBurst, claimRunOfDay]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);
@@ -662,6 +825,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   }, [visible, phase]);
   const onWrapUp = useCallback((reason: string): GameResult | null => {
     runtime.bank();
+    finisher.cancel();
     const live = phase === 'play' ? wrapMirror.current?.score ?? Math.max(0, liveScoreRef.current) : 0;
     const total = bankedRef.current.reduce((s, b) => s + b.score, 0) + live;
     const thresholds = RUN_STARS[difficulty];
@@ -670,9 +834,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       stars: ride ? 0 : starsFor(total, thresholds),
       thresholds: ride ? undefined : thresholds,
       maxCombo: Math.max(0, ...bankedRef.current.map((b) => b.result.maxStreak)),
-      meta: { game: 'tap', v: 2, score: total, seed: runSeedRef.current >>> 0, format, reason, proof: bankedRef.current.map((b) => b.proof) },
+      meta: { game: 'tap', v: 4, score: total, seed: runSeedRef.current >>> 0, format, reason, proof: bankedRef.current.map((b) => b.proof) },
     };
-  }, [runtime, phase, difficulty, ride, format]);
+  }, [runtime, phase, difficulty, ride, format, finisher, liveScoreRef]);
 
   useImperativeHandle(ref, () => ({
     bankAndExit: () => {
@@ -681,19 +845,22 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     },
   }), [phase, runtime, onBankExit]);
 
-  // Ghost for shared seeds (PB by default).
+  // Ghost for shared seeds (PB by default); Line of the Day races the nearest named rival.
   useEffect(() => {
     if (ghostProp) { ghostRef.current = ghostProp; return; }
     if (!tl || ride) return;
-    const key = pbGhostKey(format, tl.input.burstIndex, format === 'daily' || format === 'weekly' ? tl.input.seed : undefined);
+    const rivals = props.lineDay?.rivals ?? [];
+    const rg = rivals.length ? rivals[rivals.length - 1].ghosts?.[tl.input.burstIndex] : null;
+    if (rg) { ghostRef.current = rg; return; }
+    const key = pbGhostKey(format, tl.input.burstIndex, format === 'daily' || lineRun ? tl.input.seed : undefined);
     AsyncStorage.getItem(key).then((v) => { ghostRef.current = v ? (JSON.parse(v) as WhackGhost) : null; }).catch(() => undefined);
-  }, [tl, ghostProp, ride, format]);
+  }, [tl, ghostProp, ride, format, lineRun, props.lineDay]);
 
   // ---------------------------------------------------------------- render
   const bossSrc = tl?.boss ? BOSS_ART[tl.bossKind].src : null;
   const images = useBoardImages(theme, bossSrc);
   const hud = useMemo(() => ({
-    burstLabel: ride ? 'RIDE CHALLENGE' : format === 'raid' ? 'CREW RAID' : `BURST ${burstIdx + 1}/${totalBursts}`,
+    burstLabel: ride ? 'RIDE' : format === 'raid' ? 'RAID' : `BURST ${burstIdx + 1}/${totalBursts}`,
     ride,
     feverOn: !!tl?.fever,
     boss: !!tl?.boss,
@@ -703,11 +870,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     runtime.rt.value.reducedMotion = reducedMotion;
   }, [reducedMotion, runtime.rt]);
 
+  const rivalName = props.lineDay?.rivals?.length ? props.lineDay.rivals[props.lineDay.rivals.length - 1].name.split(' ')[0].toUpperCase() : null;
   const objective = ride
-    ? `Bonk ${RIDE_WIN_NOTCHES} sharks to fill the Coin Meter. Skip the anglerfish. Bonk before the ring closes for QUICK!`
+    ? `Bonk ${RIDE_WIN_NOTCHES} sharks to fill the Coin Meter. Skip anything with teeth. Bonk before the ring closes for QUICK!`
     : format === 'duel' ? `Bonk Battle vs ${duel?.rival.name ?? 'Captain Fin'}: best of 3 Bursts. Goldens send candy splats!`
       : format === 'raid' ? 'Crew Raid: bonk the tentacles, swipe the ink, take the boss down together.'
-        : 'Bonk the sharks, skip the anglerfish. Look up at the line any time: the board waits for you.';
+        : lineRun ? 'Line of the Day: everyone in this line today plays this board. Beat the sharks just above you!'
+          : 'Bonk the sharks, skip anything with teeth. Fill the meter, then GO FEVER. Look up any time: the board waits.';
+  const capacity = Math.min(Math.max(48, Math.round(140 * tierScale.particles)), thermalScale.particleCap);
 
   return (
     <GameShellV2
@@ -740,14 +910,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {L ? (
             <GestureDetector gesture={runtime.gesture}>
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]}>
-                <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} />
+                <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
               </Animated.View>
             </GestureDetector>
           ) : null}
-          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={Math.max(48, Math.round(140 * tierScale.particles))}
-            onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); playHaptic('tick'); }} /> : null}
-          {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.topH + (L.h - L.topH) * 0.18} /> : null}
+          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}
+            onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); }} /> : null}
+          {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} /> : null}
+          {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.hudH + (L.deckTop - L.hudH) * 0.18} /> : null}
           {phase === 'breather' && breather ? (
             <Breather
               burstNumber={burstIdx + 1}
@@ -758,16 +929,21 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               nextBanner={breather.next}
               walkPct={Math.min(1, ((metersNow() - walkBaseRef.current) * WALK_PCT_PER_M) / 100)}
               walkMeters={metersNow() - walkBaseRef.current}
-              boostReady={pendingBoost.current === 'golden' ? 'GOLDEN START' : pendingBoost.current === 'meter' ? 'METER START' : null}
+              boostReady={breather.boost ? 'GOLDEN START' : null}
+              showWalk={walkOk(format)}
               incomingSplats={breather.incoming}
               readyEnabled={readyOn}
               goal={breather.goal}
-              onReady={onReady}
+              feverReady={breather.feverReady}
+              bossNext={breather.bossNext}
+              onReady={() => onReady(false)}
+              onFever={() => onReady(true)}
               onBank={onBankExit}
               canBank={format !== 'duel'}
               duelLine={breather.duelLine}
             />
           ) : null}
+          {__DEV__ && process.env.EXPO_PUBLIC_WHACK_PERF === '1' ? <PerfOverlay probe={perf} /> : null}
           {phase === 'breather' && reveal && reveal.me && reveal.rival ? (
             <View style={styles.revealWrap} pointerEvents="box-none">
               <DuelCard me={reveal.me.score} rival={reveal.rival.score} rivalName={duel?.rival.name ?? 'Captain Fin'} winner={reveal.winner}

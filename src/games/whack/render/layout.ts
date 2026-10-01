@@ -1,21 +1,34 @@
 /**
- * layout.ts: Bonk Rush screen geometry (design 6.1). Pure numbers, built once
- * per field size and theme, read by the UI-thread renderer and the touch-down
- * hit test.
+ * layout.ts: Bonk Rush screen geometry (design v4 8.1). Pure numbers, built
+ * once per field size and theme, read by the UI-thread renderer and the
+ * touch-down hit test.
  *
- *   Top zone (about 28%): timer, combo badge, meter, boss, banners, prompts.
- *   Board: a 3-row perspective ground plane (back 0.8, middle 0.9, front 1.0).
- *   Rows overlap slightly so front rims occlude back-row bodies.
+ *   HUD plate (64pt): timer ring, combo medallion, meter bar. Never moves.
+ *   Stage band (about 30% of the rest): the lifted, desaturated backdrop as
+ *     distant haze, theme props, the boss, banners and prompts.
+ *   Deck (the rest, ending at the bottom inset + 14pt): the themed floor with
+ *     9 splash wells. Columns at 22/50/78% of the width; rows at 24/54/84% of
+ *     the deck height; rims 112/102/92pt front to back (390pt reference).
  */
 
 import { RIM_GEO, type WhackTheme } from '../assets';
 
-export const ROW_SCALE = [0.8, 0.9, 1.0];
+export const ROW_SCALE = [0.82, 0.91, 1.0];
+/** v4 rim widths (pt on a 390pt-wide phone), back to front. */
+export const RIM_PT = [92, 102, 112];
+export const COLS = [0.22, 0.5, 0.78];
+export const ROWS = [0.24, 0.54, 0.84];
+export const HUD_H = 64;
 
 export interface BoardLayout {
   w: number;
   h: number;
+  /** Bottom of the HUD plate. */
+  hudH: number;
+  /** Bottom of the stage band = top of the deck. Kept as `topH` for older callers. */
   topH: number;
+  deckTop: number;
+  deckBottom: number;
   /** Per hole (row-major, 0 = back left). */
   cx: number[];
   /** Mouth centre (water line) y. */
@@ -30,7 +43,7 @@ export interface BoardLayout {
   rimH: number[];
   /** Row scale per hole. */
   sc: number[];
-  /** Character content height when fully up (front row). */
+  /** Character content height when fully up. */
   spriteH: number[];
   /** Touch boxes: x0, x1, yTopIdle, yTopUp, yBottom. */
   hx0: number[];
@@ -41,36 +54,35 @@ export interface BoardLayout {
   cellW: number;
 }
 
-export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { topFrac?: number } = {}): BoardLayout {
+export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { topFrac?: number; compact?: boolean; bottomInset?: number } = {}): BoardLayout {
   const geo = RIM_GEO[theme];
   const [mcx, mcy, mrxF, mryF] = geo.mouth;
-  // Solo boards stage the boss, banners and prompts up top; a live party board only needs the combo badge and meter.
-  const topH = Math.round(h * (opts.topFrac ?? 0.27));
-  const boardTop = topH;
-  const boardBottom = h - 8;
-  const boardH = boardBottom - boardTop;
-  const cellW = Math.min(w / 3.02, boardH / 2.15);
+  // The live party board has its own room HUD: no plate, a short stage.
+  const hudH = opts.compact ? 8 : HUD_H + 6;
+  const rest = h - hudH;
+  const stageFrac = opts.topFrac ?? (opts.compact ? 0.08 : 0.3);
+  const deckTop = Math.round(hudH + rest * stageFrac);
+  const deckBottom = h - (opts.bottomInset ?? 14);
+  const deckH = deckBottom - deckTop;
+  const colGap = (COLS[1] - COLS[0]) * w;
+  const k = w / 390;
+  const cellW = Math.min(colGap, deckH * 0.32);
   const L: BoardLayout = {
-    w, h, topH, cx: [], my: [], mrx: [], mry: [], rimX: [], rimY: [], rimW: [], rimH: [], sc: [], spriteH: [],
+    w, h, hudH, topH: deckTop, deckTop, deckBottom, cx: [], my: [], mrx: [], mry: [], rimX: [], rimY: [], rimW: [], rimH: [], sc: [], spriteH: [],
     hx0: [], hx1: [], hyIdle: [], hyUp: [], hyBot: [], cellW,
   };
-  const rimWOf = (r: number) => cellW * 0.9 * ROW_SCALE[r];
-  const rimHOf = (r: number) => rimWOf(r) / geo.aspect;
-  // Front row: rim bottom sits on the board bottom.
-  const frontMouth = boardBottom - rimHOf(2) * (1 - mcy) - 2;
-  const sprite = (r: number) => rimWOf(r) * 1.3;
-  // Back row mouth leaves room for its character to rise into the top zone edge.
-  const backMouth = Math.max(boardTop + sprite(0) * 0.62, frontMouth - boardH * 0.66);
-  const midMouth = backMouth + (frontMouth - backMouth) * 0.49;
-  const rowMouth = [backMouth, midMouth, frontMouth];
   for (let r = 0; r < 3; r++) {
     const s = ROW_SCALE[r];
-    const spread = Math.min(w * 0.33, cellW * 1.04) * (0.86 + 0.14 * s);
-    const rw = rimWOf(r);
-    const rh = rimHOf(r);
+    const rw = Math.min(RIM_PT[r] * k, colGap * 0.98, cellW * 0.95 * (RIM_PT[r] / RIM_PT[2]));
+    const rh = rw / geo.aspect;
+    // Rim bottom never leaves the deck: the front row sits on deckBottom.
+    let my = deckTop + deckH * ROWS[r];
+    const maxMy = deckBottom - rh * (1 - mcy) - 2;
+    if (my > maxMy) my = maxMy;
+    const sprite = rw * 1.28;
     for (let c = 0; c < 3; c++) {
-      const x = w / 2 + (c - 1) * spread;
-      const my = rowMouth[r];
+      // Back rows pull in a touch (perspective) so the board reads as a floor.
+      const x = w / 2 + (COLS[c] - 0.5) * w * (0.9 + 0.1 * s);
       const rimX = x - rw * mcx;
       const rimY = my - rh * mcy;
       L.cx.push(x);
@@ -82,13 +94,13 @@ export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { t
       L.rimW.push(rw);
       L.rimH.push(rh);
       L.sc.push(s);
-      L.spriteH.push(sprite(r));
-      // Walk-safe hitboxes: the whole cell plus 8pt slop, extended upward while a target is up.
-      const half = Math.min(spread / 2, rw * 0.58) + 8;
+      L.spriteH.push(sprite);
+      // Walk-safe hitboxes: the cell plus 8pt slop, extended upward while a target is up.
+      const half = Math.min(colGap * (0.9 + 0.1 * s) / 2, rw * 0.62) + 8;
       L.hx0.push(x - half);
       L.hx1.push(x + half);
       L.hyIdle.push(my - rh * 0.55 - 8);
-      L.hyUp.push(my - sprite(r) * 0.95 - 8);
+      L.hyUp.push(my - sprite * 0.95 - 8);
       L.hyBot.push(rimY + rh + 8);
     }
   }
@@ -119,4 +131,32 @@ export function hitTest(L: BoardLayout, x: number, y: number, up: number[]): num
     }
   }
   return best;
+}
+
+/**
+ * Touch offset of a hit (proof v4 5.1): touch minus the hole's body centre
+ * in 1/32 cell units, clamped to int8 (worklet).
+ */
+export function touchOffset(L: BoardLayout, h: number, x: number, y: number, up: boolean): [number, number] {
+  'worklet';
+  const cy = up ? L.my[h] - L.spriteH[h] * 0.45 : L.my[h];
+  const unit = L.cellW / 32;
+  let dx = Math.round((x - L.cx[h]) / unit);
+  let dy = Math.round((y - cy) / unit);
+  if (dx < -128) dx = -128;
+  if (dx > 127) dx = 127;
+  if (dy < -128) dy = -128;
+  if (dy > 127) dy = 127;
+  return [dx, dy];
+}
+
+/**
+ * Inverse of the board camera (5.1): maps a screen point back into board
+ * space through translate(tx, ty) . scaleAbout(ox, oy, s). The renderer and
+ * the hit test read the same values on the same frame (worklet).
+ */
+export function invertBoardPoint(x: number, y: number, tx: number, ty: number, s: number, ox: number, oy: number): [number, number] {
+  'worklet';
+  const sc = s > 0.0001 ? s : 1;
+  return [(x - tx - ox) / sc + ox, (y - ty - oy) / sc + oy];
 }

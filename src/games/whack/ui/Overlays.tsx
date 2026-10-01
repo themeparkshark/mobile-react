@@ -3,7 +3,8 @@
  * These render only at Burst boundaries, never per hit.
  *
  *   <Banner>    READY... GO! / FINISH! / callouts: slam 2.2 -> 1.0, Easing.out(back(2))
- *   <Breather>  banked count-up, stats, Walk Charge, next Burst, READY pad, BANK & EXIT
+ *   <Breather>  banked count-up, stats, Walk Boost, next Burst, the GO pad (split into GO and
+ *               GO FEVER when fever is banked, v4 6.5), BANK & EXIT
  *   <DuelCard>  Bonk Battle reveal: both scores, tug-of-war bar, winner, stickers
  */
 
@@ -84,7 +85,14 @@ export interface BreatherProps {
   incomingSplats: number;
   readyEnabled: boolean;
   goal: string | null;
+  /** Show the Walk Boost row (random-seed solo Queue Runs only). */
+  showWalk?: boolean;
+  /** A banked fever: the pad splits into GO and GO FEVER. */
+  feverReady?: boolean;
+  /** The next Burst is the Boss Run. */
+  bossNext?: boolean;
   onReady: () => void;
+  onFever?: () => void;
   onBank: () => void;
   canBank: boolean;
   duelLine?: string | null;
@@ -120,26 +128,46 @@ export function Breather(p: BreatherProps) {
         </View>
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
         {p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
-        <View style={styles.walkRow}>
-          <Ring pct={p.walkPct} size={58} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.walkTitle}>{p.boostReady ? `WALK BOOST: ${p.boostReady}` : 'WALK CHARGE'}</Text>
-            <Text style={styles.walkSub}>{p.boostReady ? 'Your steps in line powered up the next Burst' : `+${Math.round(p.walkMeters)}m walked. Keep shuffling!`}</Text>
+        {p.showWalk !== false ? (
+          <View style={styles.walkRow}>
+            <Ring pct={p.walkPct} size={52} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.walkTitle}>{p.boostReady ? `WALK BOOST: ${p.boostReady}` : 'WALK BOOST'}</Text>
+              <Text style={styles.walkSub}>{p.boostReady ? 'Your steps in line put a golden in the next Burst' : `+${Math.round(p.walkMeters)}m walked. Keep shuffling!`}</Text>
+            </View>
           </View>
-        </View>
+        ) : null}
         {p.incomingSplats > 0 ? (
           <Text style={styles.incoming}>{`INCOMING: ${p.incomingSplats} CANDY SPLAT${p.incomingSplats > 1 ? 'S' : ''}. 3 QUICKS IN A ROW BLOCK ONE`}</Text>
         ) : null}
-        <Text style={styles.next}>{`NEXT: ${p.nextBanner}`}</Text>
+        <Text style={[styles.next, p.bossNext && { color: CORAL }]}>{p.bossNext ? `BOSS RUN: ${p.nextBanner}` : `NEXT: ${p.nextBanner}`}</Text>
+        {p.feverReady ? <Text style={styles.feverHint}>FEVER READY: SAVE IT FOR THE FINALE FOR UP TO x8</Text> : null}
       </Animated.View>
       <View style={styles.thumbZone}>
-        <Animated.View style={padStyle}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
-            style={[styles.ready, !p.readyEnabled && styles.readyOff]}>
-            <Text style={styles.readyText}>READY</Text>
-            <Text style={styles.readySub}>tap when you're set</Text>
-          </Pressable>
-        </Animated.View>
+        {p.feverReady && p.onFever ? (
+          <View style={styles.split}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Go without fever" onPress={p.readyEnabled ? p.onReady : undefined}
+              style={[styles.go, !p.readyEnabled && styles.readyOff]}>
+              <Text style={styles.goText}>GO</Text>
+              <Text style={styles.readySub}>save fever</Text>
+            </Pressable>
+            <Animated.View style={padStyle}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Go with fever" onPress={p.readyEnabled ? p.onFever : undefined}
+                style={[styles.goFever, !p.readyEnabled && styles.readyOff]}>
+                <Text style={styles.goText}>GO FEVER</Text>
+                <Text style={styles.readySub}>7s of x2</Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+        ) : (
+          <Animated.View style={padStyle}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
+              style={[styles.ready, !p.readyEnabled && styles.readyOff]}>
+              <Text style={styles.readyText}>GO</Text>
+              <Text style={styles.readySub}>tap when you're set</Text>
+            </Pressable>
+          </Animated.View>
+        )}
         {p.canBank ? (
           <Pressable accessibilityRole="button" onPress={p.onBank} style={styles.bank} hitSlop={10}>
             <Text style={styles.bankText}>BANK &amp; EXIT</Text>
@@ -212,6 +240,17 @@ const styles = StyleSheet.create({
   walkSub: { fontFamily: 'Knockout', fontSize: 13, color: BLUE },
   incoming: { fontFamily: 'Knockout', fontSize: 13, color: CORAL, marginTop: 8, textAlign: 'center' },
   next: { fontFamily: 'Shark', fontSize: 18, color: BLUE, marginTop: 10 },
+  feverHint: { fontFamily: 'Knockout', fontSize: 13, color: NAVY, marginTop: 4, textAlign: 'center' },
+  split: { flexDirection: 'row', alignItems: 'center' },
+  go: {
+    width: 128, height: 88, borderRadius: 44, backgroundColor: '#ffffff', borderWidth: 4, borderColor: NAVY,
+    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center', marginRight: 12,
+  },
+  goFever: {
+    width: 196, height: 96, borderRadius: 48, backgroundColor: GOLD, borderWidth: 4, borderColor: NAVY,
+    borderBottomWidth: 9, alignItems: 'center', justifyContent: 'center',
+  },
+  goText: { fontFamily: 'Shark', fontSize: 30, color: NAVY },
   thumbZone: { position: 'absolute', left: 0, right: 0, bottom: 26, alignItems: 'center' },
   ready: {
     width: 240, height: 92, borderRadius: 46, backgroundColor: GOLD, borderWidth: 4, borderColor: NAVY,
