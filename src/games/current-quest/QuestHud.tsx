@@ -20,12 +20,13 @@
 import React, { useEffect, useMemo } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  Canvas, Circle, Group, Image as SkiaImage, Path, Skia, Text as SkiaText, useFont, useImage,
+  Canvas, Circle, Group, Image as SkiaImage, Path, Skia, Text as SkiaText, useFont,
 } from '@shopify/react-native-skia';
 import Animated, {
   Easing, cancelAnimation, useAnimatedStyle, useDerivedValue, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { CQ } from './theme';
+import { useCqImage } from './cqImages';
 
 const RING_ART = require('../../assets/games/current-quest/life_ring_v2.png');
 const SOCKET_ART = require('../../assets/games/current-quest/shell_socket.png');
@@ -84,7 +85,7 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number) {
 export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit, par, spentPar, trial, rings, ringsMax }: {
   left: number; limit: number; par: number; spentPar: number; trial: boolean; rings: number; ringsMax: number;
 }) {
-  const art = useImage(RING_ART);
+  const art = useCqImage(RING_ART);
   const font = useFont(SHARK_FONT, 24);
   const hot = left <= 3;
   const pop = useSharedValue(1);
@@ -209,7 +210,7 @@ function moundGlyph(cx: number, cy: number, s: number) {
 export const TideMedallion = React.memo(function TideMedallion({ low, P, movesToTurn, tag, onHold }: {
   low: boolean; P: number; movesToTurn: number; tag: boolean; onHold?: (on: boolean) => void;
 }) {
-  const art = useImage(MEDALLION_ART);
+  const art = useCqImage(MEDALLION_ART);
   const flip = useSharedValue(1);
   const first = React.useRef(true);
   useEffect(() => {

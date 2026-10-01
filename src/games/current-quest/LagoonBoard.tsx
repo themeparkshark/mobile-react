@@ -455,12 +455,14 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     if (!foamTex) return 1;
     return (l.cell * 0.66) / foamTex.height();
   }, [foamTex, l.cell]);
+  // Plain number for the worklet: the UI thread never calls into an SkImage.
+  const foamTileW = foamTex ? foamTex.width() * foamScale : l.cell * 3;
   const runScroll = runs.map((run, ri) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
       const flare = sv.flareRun.value === ri ? Math.max(0, 1 - (sv.fxT.value - sv.flareT.value) / 400) : 0;
       const speed = 0.5 * (1 + sv.surge.value) * (1 + flare * 2);
-      const tileW = foamTex ? foamTex.width() * foamScale : l.cell * 3;
+      const tileW = foamTileW;
       const off = ((sv.fxT.value / 1000) * speed * l.cell) % tileW;
       return [{ translateX: -run.len / 2 + off - tileW }, { translateY: -run.th / 2 }, { scale: foamScale }];
     }));

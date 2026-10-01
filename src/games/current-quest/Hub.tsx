@@ -10,6 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { CQ_RUN_ART, preloadCqImages } from './cqImages';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { CQ } from './theme';
@@ -39,6 +40,7 @@ export function CurrentQuestHub({ onPlay, liveHumans = 1, today = localDate(), r
 }) {
   const [p, setP] = useState<CqProgress | null>(null);
   useEffect(() => { void loadProgress().then((x) => setP({ ...x })); }, [refreshKey]);
+  useEffect(() => { void preloadCqImages(CQ_RUN_ART); }, []);
   const streak = p ? liveStreak(p, today) : 0;
   const playedToday = !!p?.daily[today];
   const n = dailyNumber(today);

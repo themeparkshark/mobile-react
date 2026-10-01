@@ -12,7 +12,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useFont, useImage } from '@shopify/react-native-skia';
+import { useFont } from '@shopify/react-native-skia';
+import { useCqImage } from '../cqImages';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useSharedValue, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
 import GameIcon from '../../../ui/GameIcon';
@@ -58,23 +59,23 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
   layoutRef.current = layout;
 
   const images: BoardImages = {
-    idle: useImage(require('../../../assets/games/current-quest/cq_shark_idle_swim.png')),
-    dash: useImage(require('../../../assets/games/current-quest/cq_shark_swim_dash.png')),
-    surf: useImage(require('../../../assets/games/current-quest/cq_shark_surf_ride.png')),
-    ouch: useImage(require('../../../assets/games/current-quest/cq_shark_bump_ouch.png')),
-    cheer: useImage(require('../../../assets/games/current-quest/cq_shark_cheer.png')),
-    coralA: useImage(require('../../../assets/games/current-quest/coral_a.png')),
-    coralB: useImage(require('../../../assets/games/current-quest/coral_b.png')),
-    coralC: useImage(require('../../../assets/games/current-quest/coral_c.png')),
-    sand: useImage(require('../../../assets/games/current-quest/sandbar.png')),
-    sandWet: useImage(require('../../../assets/games/current-quest/sandbar_wet.png')),
-    foam: useImage(require('../../../assets/games/current-quest/foam_strip.png')),
-    pearl: useImage(require('../../../assets/games/current-quest/pearl.png')),
-    golden: useImage(require('../../../assets/games/current-quest/golden_pearl.png')),
-    chestClosed: useImage(require('../../../assets/games/current-quest/chest_closed.png')),
-    chestOpen: useImage(require('../../../assets/games/current-quest/chest_open.png')),
-    padlock: useImage(require('../../../assets/games/current-quest/padlock.png')),
-    chevron: useImage(require('../../../assets/games/current-quest/current_chevron.png')),
+    idle: useCqImage(require('../../../assets/games/current-quest/cq_shark_idle_swim.png')),
+    dash: useCqImage(require('../../../assets/games/current-quest/cq_shark_swim_dash.png')),
+    surf: useCqImage(require('../../../assets/games/current-quest/cq_shark_surf_ride.png')),
+    ouch: useCqImage(require('../../../assets/games/current-quest/cq_shark_bump_ouch.png')),
+    cheer: useCqImage(require('../../../assets/games/current-quest/cq_shark_cheer.png')),
+    coralA: useCqImage(require('../../../assets/games/current-quest/coral_a.png')),
+    coralB: useCqImage(require('../../../assets/games/current-quest/coral_b.png')),
+    coralC: useCqImage(require('../../../assets/games/current-quest/coral_c.png')),
+    sand: useCqImage(require('../../../assets/games/current-quest/sandbar.png')),
+    sandWet: useCqImage(require('../../../assets/games/current-quest/sandbar_wet.png')),
+    foam: useCqImage(require('../../../assets/games/current-quest/foam_strip.png')),
+    pearl: useCqImage(require('../../../assets/games/current-quest/pearl.png')),
+    golden: useCqImage(require('../../../assets/games/current-quest/golden_pearl.png')),
+    chestClosed: useCqImage(require('../../../assets/games/current-quest/chest_closed.png')),
+    chestOpen: useCqImage(require('../../../assets/games/current-quest/chest_open.png')),
+    padlock: useCqImage(require('../../../assets/games/current-quest/padlock.png')),
+    chevron: useCqImage(require('../../../assets/games/current-quest/current_chevron.png')),
   };
   const ready = Object.values(images).every(Boolean);
   // eslint-disable-next-line react-hooks/exhaustive-deps
