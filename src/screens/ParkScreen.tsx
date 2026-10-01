@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { goalCoinKind } from '../services/collection/nextCoinCopy';
 import { chunk } from 'lodash';
-import { useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
@@ -35,7 +35,9 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import { prefetchRideCatalog, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { loadParkRides, prefetchRideCatalog, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { splitParkShelf } from '../services/collection/limitedCoins';
+import type { RideType } from '../api/endpoints/rides';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -70,6 +72,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   >([]);
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
   const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
+  const [limitedTasks, setLimitedTasks] = useState<TaskType[]>([]);
+  const [catalogRides, setCatalogRides] = useState<RideType[]>([]);
   const [completedSecretTasks, setCompletedSecretTasks] = useState<
     SecretTaskType[]
   >([]);
@@ -85,6 +89,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const checklistOffset = useRef(0);
   const guideOffset = useRef(0);
   const secretShelfOffset = useRef(0);
+  const limitedShelfOffset = useRef(0);
   const reducedMotion = useReducedGameMotion();
   useEffect(() => { setRideOnly(false); }, [park]);
   const { park: locationPark, location } = useContext(LocationContext);
@@ -94,9 +99,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const canChooseGoal = viewer?.id === Number(player);
   const requestKey = canChooseGoal && isEarnedShelfArrival(earnedCoin)
     ? `${player}:${park}:${earnedCoin.attemptId}` : null;
+  // Coin Map 2.0: permanent coins keep the Ride Coins row; limited coins get their own.
+  const { permanent: permanentTasks, limited: limitedShelf, allLimited } = useMemo(
+    () => splitParkShelf(tasks, limitedTasks, completedTasks), [tasks, limitedTasks, completedTasks]);
   const arrivalSlot = requestKey && !loading && !progressStale ? resolveEarnedShelfSlot(earnedCoin, {
-    normal: tasks, normalCompleted: completedTasks, secret: secretTasks, secretCompleted: completedSecretTasks,
+    normal: permanentTasks, normalCompleted: completedTasks, secret: secretTasks, secretCompleted: completedSecretTasks,
     archived: archivedTasks, archivedCompleted: completedArchivedTasks,
+    limited: limitedShelf, limitedCompleted: completedTasks,
   }) : null;
   const arrival = useEarnedShelfArrival({ requestKey,
     enabled: isFocused && !!arrivalSlot && closedKey !== requestKey,
@@ -128,8 +137,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const handledFocus = useRef<number | null>(null);
   const focusAssetId = typeof focusCoin?.assetId === 'number' ? focusCoin.assetId : null;
   const focusSlot = focusAssetId && !loading ? ((): { section: ShelfSection; task: TaskType | SecretTaskType } | null => {
-    for (const [section, done] of [['normal', completedTasks], ['secret', completedSecretTasks], ['archived', completedArchivedTasks]] as const) {
-      const task = (done as ReadonlyArray<TaskType | SecretTaskType>).find(item => item.asset_id === focusAssetId);
+    for (const [section, shelf, done] of [['normal', permanentTasks, completedTasks], ['limited', limitedShelf, completedTasks],
+      ['secret', secretTasks, completedSecretTasks], ['archived', archivedTasks, completedArchivedTasks]] as const) {
+      // The coin's own row: an owned limited coin sits on the Limited shelf, not Ride Coins.
+      const task = (done as ReadonlyArray<TaskType | SecretTaskType>).find(item => item.asset_id === focusAssetId &&
+        (shelf as ReadonlyArray<TaskType | SecretTaskType>).some(slot => slot.id === item.id));
       if (task) return { section, task };
     }
     return null;
@@ -164,6 +176,19 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     void resolveRideContextOrOffline(Number(park), task.name).then(ride => {
       RootNavigation.navigate('LinePlay', { ride });
     });
+  }, [park]);
+  // A cataloged ride with no coin still plays in line (Coin Guide, Coin Map 2.0).
+  const openCatalogRideLinePlay = useCallback((catalogRide: RideType) => {
+    void resolveRideContextOrOffline(Number(park), catalogRide.name).then(ride => {
+      RootNavigation.navigate('LinePlay', { ride });
+    });
+  }, [park]);
+  useEffect(() => {
+    let active = true;
+    setCatalogRides([]);
+    // The same cached catalog request Line Play uses; the guide simply has no Line Play rows without it.
+    loadParkRides(Number(park)).then(rides => { if (active) setCatalogRides(rides); }).catch(() => undefined);
+    return () => { active = false; };
   }, [park]);
   const freshWaitEntries = waitSnapshot?.parkId === Number(park) &&
     Date.now() - waitSnapshot.checkedAt < 120_000 ? waitSnapshot.entries : null;
@@ -216,11 +241,12 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     let active = true;
     void (async () => {
       try {
-        const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived } =
+        const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited } =
           await loadParkShelf(Number(park), Number(player));
         if (!active) return;
         setCurrentPark(visitedPark);
         setTasks(available);
+        setLimitedTasks(limited);
         setSecretTasks(secret);
         setCompletedTasks(completed);
         setCompletedSecretTasks(completedSecret);
@@ -274,12 +300,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 } as const;
   const completedFor = (section: ShelfSection) => (section === 'secret' ? completedSecretTasks
     : section === 'archived' ? completedArchivedTasks : completedTasks) as ReadonlyArray<TaskType | SecretTaskType>;
+  const shelfArt = (section: ShelfSection) => section === 'limited' ? 'normal' : section;
   const rideKind = (taskId: number): 'ride' | 'coin' | undefined => currentPark?.ride_passport_task_ids?.length
     ? currentPark.ride_passport_task_ids.includes(taskId) ? 'ride' : 'coin' : undefined;
   const shelfRows = (section: ShelfSection, list: ReadonlyArray<TaskType | SecretTaskType>) => chunk(list, 5).map((row, rowIndex) => (
     <View key={rowIndex} style={{ paddingBottom: 14 }}>
       <View style={{ position: 'relative', height: coinSize + 43 }}>
-        <ParkShelfArtwork variant={section} height={55} />
+        <ParkShelfArtwork variant={shelfArt(section)} height={55} />
         <View style={{ flexDirection: 'row', justifyContent: 'center', position: 'absolute', top: 4, width: '100%' }}>
           {row.map((task, index) => {
             const owned = completedFor(section).find(done => done.id === task.id);
@@ -308,8 +335,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     readOnly={!canChooseGoal}
                   />
                 </View>
-              ) : section === 'normal' ? (
+              ) : section === 'normal' || section === 'limited' ? (
                 <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
+                  limited={(task as TaskType).limited}
                   isGoal={parkTripGoal?.task_id === task.id}
                   onPlayInLine={canChooseGoal && inThisPark &&
                     currentPark?.ride_passport_task_ids?.includes(task.id)
@@ -394,6 +422,12 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     tickKey={landedKey && landedKey === requestKey && earnedCoin?.firstCollection ? landedKey : null}
                     ridePassportCollected={currentPark.ride_passport_collected}
                     ridePassportAvailable={currentPark.ride_passport_available}
+                    limitedCollected={currentPark.limited_coins_collected}
+                    limitedAvailable={currentPark.limited_coins_available}
+                    limitedEndsOn={currentPark.limited_ends_on}
+                    onBrowseLimited={limitedShelf.length > 0 ? () => scrollRef.current?.scrollTo({
+                      y: Math.max(0, checklistOffset.current + limitedShelfOffset.current - 12), animated: !reducedMotion,
+                    }) : undefined}
                     onOpenRidePassport={currentPark.ride_passport_task_ids?.length
                       ? () => {
                         setRideOnly(true);
@@ -429,10 +463,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                       </View>
                       <View style={shelfPanel}>
                         {shelfRows('normal', passportMode
-                          ? tasks.filter(task => currentPark.ride_passport_task_ids?.includes(task.id)) : tasks)}
+                          ? permanentTasks.filter(task => currentPark.ride_passport_task_ids?.includes(task.id)) : permanentTasks)}
                         <View onLayout={event => { guideOffset.current = event.nativeEvent.layout.y; }}>
                           <ParkRideDirectory
-                            rides={tasks}
+                            rides={permanentTasks}
+                            limited={allLimited}
+                            catalogRides={catalogRides}
+                            parkId={Number(park)}
                             completed={completedTasks}
                             isOwnPark={canChooseGoal}
                             goalTaskId={parkTripGoal?.task_id}
@@ -450,9 +487,19 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                 focusRide: { parkId: Number(park), task },
                               }) : undefined}
                             onPlayInLine={canChooseGoal && inThisPark ? openRideLinePlay : undefined}
+                            onPlayRideInLine={canChooseGoal && inThisPark ? openCatalogRideLinePlay : undefined}
                           />
                         </View>
                       </View>
+                    </View>
+                  )}
+                  {limitedShelf.length > 0 && (
+                    <View onLayout={event => { limitedShelfOffset.current = event.nativeEvent.layout.y; }}
+                      style={{ marginBottom: 16 }}>
+                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
+                        <Ribbon text="Limited Coins" />
+                      </View>
+                      <View style={shelfPanel}>{shelfRows('limited', limitedShelf)}</View>
                     </View>
                   )}
                   {secretTasks.length > 0 && (

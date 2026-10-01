@@ -9,7 +9,7 @@ export interface EarnedShelfArrival {
   readonly taskType: 'task' | 'secret_task';
   readonly firstCollection: boolean;
 }
-export type ShelfSection = 'normal' | 'secret' | 'archived';
+export type ShelfSection = 'normal' | 'limited' | 'secret' | 'archived';
 export interface EarnedShelfSlot {
   readonly section: ShelfSection;
   readonly task: TaskType | SecretTaskType;
@@ -43,12 +43,14 @@ export function resolveEarnedShelfSlot(request: unknown, lists: {
   normal: readonly TaskType[]; normalCompleted: readonly TaskType[];
   secret: readonly SecretTaskType[]; secretCompleted: readonly SecretTaskType[];
   archived: readonly TaskType[]; archivedCompleted: readonly TaskType[];
+  /** The Limited row (Coin Map 2.0); absent before rotations existed. */
+  limited?: readonly TaskType[]; limitedCompleted?: readonly TaskType[];
 }): EarnedShelfSlot | null {
   if (!isEarnedShelfArrival(request)) return null;
-  const sections: ShelfSection[] = request.taskType === 'secret_task' ? ['secret'] : ['normal', 'archived'];
+  const sections: ShelfSection[] = request.taskType === 'secret_task' ? ['secret'] : ['normal', 'limited', 'archived'];
   for (const section of sections) {
-    const tasks = lists[section];
-    const completed = lists[`${section}Completed` as 'normalCompleted' | 'secretCompleted' | 'archivedCompleted'];
+    const tasks = lists[section] ?? [];
+    const completed = lists[`${section}Completed` as 'normalCompleted' | 'limitedCompleted' | 'secretCompleted' | 'archivedCompleted'] ?? [];
     const index = tasks.findIndex(task => task.id === request.taskId && task.asset_id === request.assetId);
     if (index < 0 || !completed.some(task => task.id === request.taskId &&
         (task.asset_id === undefined || task.asset_id === request.assetId) && (task.times_completed ?? 0) > 0)) continue;
