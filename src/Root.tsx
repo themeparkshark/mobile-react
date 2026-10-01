@@ -32,6 +32,7 @@ import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
+import { markUserActivity } from './hooks/useUserIdle';
 
 const Stack = createNativeStackNavigator();
 
@@ -84,7 +85,7 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onTouchStart={onAnyTouch}>
     {/* Keep ride detection alive as the guest moves between map, queue, and profile,
         but only at a park: away from one, background GPS is battery drain and an
         unexplained location indicator. Park presence is sticky, so this never flaps.
@@ -302,6 +303,9 @@ export default function App() {
     </View>
   );
 }
+
+/** Any touch in the app counts as activity for idle-aware polls (useUserIdle). */
+const onAnyTouch = () => markUserActivity();
 
 /** Runs ride detection. Its own component, so a GPS step re-renders only this. */
 function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; readonly parkId: number | null }) {

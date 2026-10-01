@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getRideControl, type RideControlPark } from '../api/endpoints/parks/rideControl';
 import { isRideControlFrame, preferFreshRideControl } from '../services/boss/mapImpact';
 import useLivePoll from './useLivePoll';
+import { idlePollInterval } from './useUserIdle';
 
 /** Every response belongs to its player/park; explicit result refreshes supersede older polls. */
-export default function useRideControlMap({ playerId, parkId, focused = true }: { playerId: number | null; parkId: number | null; focused?: boolean }) {
+export default function useRideControlMap({ playerId, parkId, focused = true, idle = false }: {
+  playerId: number | null; parkId: number | null; focused?: boolean;
+  /** The player is idle: poll 3x slower; the first touch catches up. */
+  idle?: boolean;
+}) {
   const key = `${playerId}:${parkId}`;
   const current = useRef(key), mounted = useRef(false), request = useRef(0);
   const frame = useRef<{ key: string; control: RideControlPark } | null>(null);
@@ -27,7 +32,7 @@ export default function useRideControlMap({ playerId, parkId, focused = true }: 
     request.current += 1;
     return () => { request.current += 1; };
   }, [key]);
-  // Every 20 s while the map is on screen; paused in the background.
-  useLivePoll(refresh, 20000, { enabled: !!parkId && !!playerId, focused, key });
+  // Every 20 s while the map is on screen (60 s while idle); paused in the background.
+  useLivePoll(refresh, idlePollInterval(20000, idle), { enabled: !!parkId && !!playerId, focused, key });
   return { control: selection?.key === key ? selection.control : null, refresh };
 }

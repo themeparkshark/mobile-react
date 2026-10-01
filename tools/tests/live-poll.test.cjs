@@ -97,11 +97,11 @@ test('app-wide and map polls go through useLivePoll instead of a raw setInterval
     assert.doesNotMatch(src, /setInterval\((load|refresh|fetchGym|async)/, file);
   }
   const raid = read('src/components/boss/BossRaidFlow.tsx');
-  assert.match(raid, /useLivePoll\(refresh, 20000, \{ enabled: !!parkId && !!player\?\.id, focused, key: scope \}\)/);
+  assert.match(raid, /useLivePoll\(refresh, idlePollInterval\(20000, idle && !raidRunning\), \{ enabled: !!parkId && !!player\?\.id, focused, key: scope \}\)/);
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /useLivePoll\(loadLivePark, 60000, \{ enabled: !!park\?\.id, focused: mapFocused/);
-  assert.match(explore, /useLivePoll\(fetchGymData, 30000, \{ enabled: !!park\?\.id, focused: mapFocused/);
-  assert.match(explore, /useParkRaid\(park\?\.id, \{ focused: mapFocused \}\)/);
+  assert.match(explore, /useLivePoll\(loadLivePark, idlePollInterval\(60000, mapIdle, 2\), \{ enabled: !!park\?\.id, focused: mapFocused/);
+  assert.match(explore, /useLivePoll\(fetchGymData, idlePollInterval\(30000, mapIdle\), \{ enabled: !!park\?\.id, focused: mapFocused/);
+  assert.match(explore, /useParkRaid\(park\?\.id, \{ focused: mapFocused, idle: mapIdle \}\)/);
   assert.doesNotMatch(read('src/components/GymBattle/GymMarker.tsx'), /getGym\(/, 'the gym marker reads the map\'s gym data instead of polling it again');
 });
 
@@ -156,4 +156,26 @@ test('only the launch path loads with the app; other screens load on first visit
   assert.deepEqual(eager, ['ExploreScreen', 'LoadingScreen', 'LoginScreen', 'SplashScreen', 'WelcomeScreen']);
   assert.match(root, /name="LinePlay"\s*getComponent=\{\(\) => require\('\.\/screens\/LinePlay\/LinePlayScreen'\)\.default\}/);
   assert.ok((root.match(/getComponent=\{\(\) => require\(/g) ?? []).length >= 40);
+});
+
+
+test('an idle map polls 3x slower; touches and steps count as activity', () => {
+  const idleMod = loadTs('src/hooks/useUserIdle.ts', { react: {} });
+  assert.equal(idleMod.idlePollInterval(30000, false), 30000);
+  assert.equal(idleMod.idlePollInterval(30000, true), 90000);
+  assert.equal(idleMod.idlePollInterval(60000, true, 2), 120000);
+
+  let now = 1_000_000;
+  const view = runtime('src/hooks/useUserIdle.ts', {}, {}, { Date: { now: () => now } }, { arguments: () => [120000] });
+  const flush = () => { for (const [id, fn] of [...view.timers]) { view.timers.delete(id); fn(); } view.render(); };
+  assert.equal(view.tree, false, 'active at launch');
+  now += 60000; flush();
+  assert.equal(view.tree, false, 'one minute quiet is not idle');
+  now += 61000; flush();
+  assert.equal(view.tree, true, 'two quiet minutes: idle');
+  assert.equal(view.timers.size, 0, 'no timers while idle');
+  const raid = read('src/components/boss/BossRaidFlow.tsx');
+  assert.match(raid, /idle && !raidRunning/, 'an active raid keeps its 20 s cadence even when idle');
+  assert.match(read('src/Root.tsx'), /<View style=\{\{ flex: 1 \}\} onTouchStart=\{onAnyTouch\}>/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /useEffect\(\(\) => \{ if \(playerLat != null\) markUserActivity\(\); \}, \[playerLat, playerLng\]\);/);
 });

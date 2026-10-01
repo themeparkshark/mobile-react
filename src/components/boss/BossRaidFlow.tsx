@@ -22,9 +22,14 @@ import { AttackPips, BossHpBar, BossSheetSkeleton, TeamDamage, TopFighters } fro
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
+import { idlePollInterval } from '../../hooks/useUserIdle';
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
-export function useParkRaid(parkId: number | null | undefined, { focused = true }: { readonly focused?: boolean } = {}) {
+export function useParkRaid(parkId: number | null | undefined, { focused = true, idle = false }: {
+  readonly focused?: boolean;
+  /** The player is idle: poll 3x slower, except during an active raid. */
+  readonly idle?: boolean;
+} = {}) {
   const { player } = useContext(AuthContext);
   const scope = `${player?.id ?? 'guest'}:${parkId ?? 'none'}`;
   const current = useRef(scope), generation = useRef(0), mounted = useRef(false);
@@ -50,8 +55,10 @@ export function useParkRaid(parkId: number | null | undefined, { focused = true 
     generation.current += 1;
     return () => { generation.current += 1; };
   }, [scope]);
-  // Every 20 s while the raid is on screen; paused in the background.
-  useLivePoll(refresh, 20000, { enabled: !!parkId && !!player?.id, focused, key: scope });
+  // Every 20 s while the raid is on screen (60 s on an idle map with no raid
+  // running); paused in the background.
+  const raidRunning = selection?.scope === scope && selection.state.raid?.status === 'active';
+  useLivePoll(refresh, idlePollInterval(20000, idle && !raidRunning), { enabled: !!parkId && !!player?.id, focused, key: scope });
   const state = selection?.scope === scope ? selection.state : null;
   const names = state?.raid?.team_names;
   useEffect(() => applyTeamNames(names), [names]);

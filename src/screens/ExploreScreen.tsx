@@ -8,6 +8,7 @@ import { Text, View, Pressable } from 'react-native';
 import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
+import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
 import { opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
@@ -123,6 +124,8 @@ const GHOST_CAP = 5;
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
+  // Idle (no touch, no walking for 2 min): the map's live polls slow down.
+  const mapIdle = useUserIdle();
   const route = useRoute();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
@@ -393,9 +396,9 @@ function ExploreScreen() {
   }, [communityCenter, location]);
 
   // Ride Control: poll the park's team map while at a park, and after wins.
-  const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused });
+  const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused, idle: mapIdle });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
-  const { raid, setState: setRaidState } = useParkRaid(park?.id, { focused: mapFocused });
+  const { raid, setState: setRaidState } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
   const [bossOpen, setBossOpen] = useState(false);
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
@@ -417,7 +420,7 @@ function ExploreScreen() {
   }, [park?.id]);
   // Posted waits refresh each minute while the map is on screen; paused under
   // another screen or in the background, caught up on return.
-  useLivePoll(loadLivePark, 60000, { enabled: !!park?.id, focused: mapFocused, key: park?.id ?? null });
+  useLivePoll(loadLivePark, idlePollInterval(60000, mapIdle, 2), { enabled: !!park?.id, focused: mapFocused, key: park?.id ?? null });
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
   // Park pulse: a warm haze over the busiest rides on today's map.
@@ -507,6 +510,7 @@ function ExploreScreen() {
   const [mapZoom, setMapZoom] = useState(17.6);
   const onMapZoom = useCallback((zoom: number) => setMapZoom(Math.round(zoom * 4) / 4), []);
   const playerLat = location?.latitude, playerLng = location?.longitude;
+  useEffect(() => { if (playerLat != null) markUserActivity(); }, [playerLat, playerLng]);
   const taskDistance = useMemo(() => {
     const out = new globalThis.Map<number, number>();
     if (playerLat == null || playerLng == null) return out;
@@ -644,7 +648,7 @@ function ExploreScreen() {
     return () => { gymGeneration.current++; };
   }, [park?.id, fetchGymData]);
   // Every 30 s while the map is on screen (the gym marker reads this same data).
-  useLivePoll(fetchGymData, 30000, { enabled: !!park?.id, focused: mapFocused, key: gymOwner });
+  useLivePoll(fetchGymData, idlePollInterval(30000, mapIdle), { enabled: !!park?.id, focused: mapFocused, key: gymOwner });
 
   // Handle gym marker press
   // Gym range in meters; separate from the community center and home pickup radii.
