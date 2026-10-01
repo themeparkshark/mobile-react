@@ -102,7 +102,7 @@ const RARITY: Record<number, string> = {
   1: '#4CAF50', 2: config.secondary, 3: '#9C27B0', 4: '#FF9800', 5: '#FFD700',
 };
 
-/** "leaves in 21m": re-renders when the label changes, and only while the map is on screen. */
+/** "leaves in 21 min": re-renders when the label changes, and only while the map is on screen. */
 function useLeavesIn(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
   const endsAt = activeTo ? Date.parse(activeTo) : NaN;
   const [label, setLabel] = useState(() => Number.isFinite(endsAt) ? formatLeavesIn(endsAt - Date.now()) : null);

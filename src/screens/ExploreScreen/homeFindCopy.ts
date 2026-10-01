@@ -20,7 +20,7 @@ export function formatFindDistance(distanceMeters: number): string {
 }
 
 /**
- * "leaves in 21m", "leaves in 1h 5m", "leaves in 40s". Null once it is gone.
+ * "leaves in 21 min", "leaves in 1h 5 min", "leaves in 40s". Null once it is gone.
  * Minutes round up so a find never says "leaves in 0m" while it is still there.
  */
 export function formatLeavesIn(msRemaining: number): string | null {
@@ -28,10 +28,10 @@ export function formatLeavesIn(msRemaining: number): string | null {
   const seconds = Math.ceil(msRemaining / 1000);
   if (seconds < 60) return `leaves in ${seconds}s`;
   const minutes = Math.ceil(seconds / 60);
-  if (minutes < 60) return `leaves in ${minutes}m`;
+  if (minutes < 60) return `leaves in ${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `leaves in ${hours}h ${rest}m` : `leaves in ${hours}h`;
+  return rest ? `leaves in ${hours}h ${rest} min` : `leaves in ${hours}h`;
 }
 
 /**

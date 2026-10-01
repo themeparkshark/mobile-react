@@ -21,7 +21,7 @@ export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
     title: 'Finds pop up near you',
     body: 'Treats appear on the map around you, even at home. Each one leaves after a while, so watch its timer.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
-    badge: 'leaves in 21m',
+    badge: 'leaves in 21 min',
   },
   {
     title: 'Walk close, then tap',

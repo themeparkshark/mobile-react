@@ -28,10 +28,10 @@ test('in range exactly at the pickup radius, out just past it, never for unknown
 });
 
 test('timers read "leaves in", round up, and vanish when gone', () => {
-  assert.equal(copy.formatLeavesIn(21 * 60_000), 'leaves in 21m');
-  assert.equal(copy.formatLeavesIn(20 * 60_000 + 1), 'leaves in 21m');
+  assert.equal(copy.formatLeavesIn(21 * 60_000), 'leaves in 21 min');
+  assert.equal(copy.formatLeavesIn(20 * 60_000 + 1), 'leaves in 21 min');
   assert.equal(copy.formatLeavesIn(40_000), 'leaves in 40s');
-  assert.equal(copy.formatLeavesIn(65 * 60_000), 'leaves in 1h 5m');
+  assert.equal(copy.formatLeavesIn(65 * 60_000), 'leaves in 1h 5 min');
   assert.equal(copy.formatLeavesIn(0), null);
   assert.ok(!/0m/.test(copy.formatLeavesIn(30_000)));
 });
