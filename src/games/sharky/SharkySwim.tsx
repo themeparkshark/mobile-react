@@ -27,6 +27,7 @@ import { registerStudioAudio, useStudioAudio } from '../../gamekit/audio/studioL
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { usePerfProbe, PerfOverlay } from '../../gamekit/perf/PerfOverlay';
+import { usePerfTier } from '../../gamekit/perf/usePerfTier';
 import { starsFor } from '../../gamekit/core/scoring';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
@@ -113,6 +114,12 @@ export function SharkySwim({
   const pausedMs = useRef(0);
   const endedRef = useRef(false);
   const perf = usePerfProbe(visible && !result);
+  // Quality tier (full / lite / min): picked from the first second of real
+  // frames, then only steps down. Lite drops the caustic shader and halves FX;
+  // min also drops the far reef, god rays and the near strip.
+  const perfTier = usePerfTier({ active: visible && !result });
+  const qualityRef = useRef(0);
+  qualityRef.current = perfTier.tierJs;
 
   // --- live Sprint Race (Line Party semantics; lab transport in dev) ----------------
   const liveUrl = raceUrl ?? (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_RACE_URL : undefined) ?? null;
@@ -154,9 +161,11 @@ export function SharkySwim({
 
   // --- engine ---------------------------------------------------------------------
   const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
-  const autoplay = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1';
+  // Dev: AUTOPLAY=1 runs the lookahead planner bot, AUTOPLAY=2 a cheap line-follower (perf captures).
+  const autoplay = __DEV__ && (process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
+  const autoCheap = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2';
   const autoSalt = autoplay ? ((process.env.EXPO_PUBLIC_SHARKY_NAME ?? '').length % 5) : 0;
-  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt);
+  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt, autoCheap);
   const walk = useWalkSense({ active: visible && !result });
   const L = layout ?? layoutRef.current;
   const camera = useCamera({ width: L.w, height: L.h, timeScale: engine.clock.fxScale, reducedMotion, walking: walk.walking });
@@ -244,6 +253,7 @@ export function SharkySwim({
     layout: () => layoutRef.current,
     calm: reducedMotion,
     tier: () => cfg.tier,
+    quality: () => qualityRef.current,
     hooks: {
       onScore: (sc) => setScore(sc),
       onGate: (_bonus, kind, _step, g) => {
@@ -577,6 +587,7 @@ export function SharkySwim({
                     alpha={engine.alpha}
                     rivalColors={RIVAL_COLORS}
                     reducedMotion={reducedMotion}
+                    quality={perfTier.tierJs}
                   />
                 </Animated.View>
                 <SharkyHud layout={layout} sim={engine.sim} rivals={engine.rivals} tick={engine.tick} showBoost={showBoost} boostHint={!prog.boostHintSeen} />

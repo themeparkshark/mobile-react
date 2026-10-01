@@ -23,6 +23,9 @@ export const SHARKY_ART = {
   pylonSegment: require('../../assets/games/sharky/tide/pylon_segment.png'),
   pylonCap: require('../../assets/games/sharky/tide/pylon_cap.png'),
   gatePole: require('../../assets/games/sharky/tide/gate_pole.png'),
+  // Gate set pieces (gate-passed sk_tide_gate / sk_ride_gate: different art per design 4.3).
+  tideGate: require('../../assets/games/sharky/tide/tide_gate.png'),
+  rideGate: require('../../assets/games/sharky/tide/ride_gate.png'),
   // Pickups (Alex originals: coin slice87, gift slice41, token rims slice88-90).
   coin: require('../../assets/games/sharky/tide/coin.png'),
   prizeBox: require('../../assets/games/sharky/tide/prize_box.png'),
@@ -32,7 +35,12 @@ export const SHARKY_ART = {
   ring: require('../../assets/games/sharky/tide/ring.png'),
   bubble: require('../../assets/games/sharky/tide/fx_small_bubble.png'),
   // Backgrounds: lagoon sky band (pilot bg_lagoon, needs Dustin's OK), reef strips.
-  sky: require('../../assets/games/sharky/tide/sky_lagoon.jpg'),
+  // Theme-park skyline sky band (gate-passed sk_sky_band, background pilot: needs Dustin's OK).
+  sky: require('../../assets/games/sharky/tide/sky_band.png'),
+  // Far layer: sunken carnival reef with bunting and a toppled ticket booth (sk_mid_layer).
+  farReef: require('../../assets/games/sharky/tide/far_reef.png'),
+  // Near strip: kelp and rocks, floor band only (sk_near_layer).
+  nearKelp: require('../../assets/games/sharky/tide/near_kelp.png'),
   reefMid: require('../../assets/games/sharky/ocean-layer-mid.png'),
   reefNear: require('../../assets/games/sharky/ocean-layer-front.png'),
   font: require('../../../assets/fonts/knockout.otf'),

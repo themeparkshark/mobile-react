@@ -212,6 +212,8 @@ export function useSharkyEngine(
   onEvents: (batch: number[]) => void,
   autoplay = false,
   autoSalt = 0,
+  /** Dev perf runs: 'cheap' steers by the target line only (no lookahead planner on the UI thread). */
+  autoCheap = false,
 ): SharkyEngine {
   const sim = useSharedValue<SimState>(createSim(initial));
   const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
@@ -249,7 +251,7 @@ export function useSharkyEngine(
         const prefer = (s.y >> 8) > ty ? 1 : 0;
         // Per-device salt so two lab phones don't play identical races.
         const pref = autoSalt > 0 && ((s.step / 6) | 0) % 7 === autoSalt % 7 ? 1 - prefer : prefer;
-        let c = planHold(s, autoSalt > 0 ? 7 : 6, 12, 400, pref);
+        let c = autoCheap ? prefer : planHold(s, autoSalt > 0 ? 7 : 6, 12, 400, pref);
         if (c < 0) c = prefer;
         if (c === 1 && !s.holding) inp.q.push(IN_PRESS, 0, 0);
         if (c === 0 && s.holding) inp.q.push(IN_RELEASE, 0, 0);

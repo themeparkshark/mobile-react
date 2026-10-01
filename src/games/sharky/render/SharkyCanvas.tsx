@@ -103,6 +103,8 @@ export interface SharkyCanvasProps {
   /** Rival tint colours (player colours). */
   rivalColors: string[];
   reducedMotion: boolean;
+  /** Perf tier: 0 full, 1 lite (no caustic shader), 2 min (also no far reef, rays, near strip). */
+  quality?: number;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -168,7 +170,7 @@ function sharkPose(s: SimState, a: number): SharkPose {
 }
 
 export const SharkyCanvas = React.memo(function SharkyCanvas({
-  layout, sim, rivals, ambient, tick, alpha, rivalColors, reducedMotion,
+  layout, sim, rivals, ambient, tick, alpha, rivalColors, reducedMotion, quality = 0,
 }: SharkyCanvasProps) {
   const L = layout;
   // --- art ------------------------------------------------------------------
@@ -193,7 +195,10 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const cheer = useImage(SHARKY_ART.cheer);
   const sky = useImage(SHARKY_ART.sky);
   const reefMid = useImage(SHARKY_ART.reefMid);
-  const reefNear = useImage(SHARKY_ART.reefNear);
+  const reefNear = useImage(SHARKY_ART.nearKelp);
+  const farReef = useImage(SHARKY_ART.farReef);
+  const tideGate = useImage(SHARKY_ART.tideGate);
+  const rideGate = useImage(SHARKY_ART.rideGate);
   const font = useFont(SHARKY_ART.font, 44);
 
   const atlas = useSpriteAtlas([coin, tokenG, box, jelly, puff, puffed, boat, bubble, tokenO, tokenB, seg, cap, pole], { cell: 256 });
@@ -268,7 +273,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
       if (et === E_GATE) {
         if (s.ep1[i] === G_SPLIT) continue;
         const big = s.ep1[i] === G_RIDE || s.ep1[i] === G_FINISH;
-        const h = big ? 360 : 300;
+        if (!big) continue; // Tide Gates are the bubble arch + bunting (Gates layer).
+        const h = 360;
         const w = h * rects[SPR_POLE * 4 + 2] / Math.max(1, rects[SPR_POLE * 4 + 3]);
         put(SPR_POLE, vx, FLOOR_Y + 10 - h / 2, w, 0, 1);
         put(SPR_POLE, vx, SURFACE_Y - 10 + h / 2, w, Math.PI, 1);
@@ -389,9 +395,13 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   // --- parallax -------------------------------------------------------------
   const SKY_TILE = useMemo(() => {
     // Sky band art (mirror-tiled so it scrolls forever), in field pt.
-    const hPt = Math.max(1, L.offY + SURFACE_Y * L.k + 6);
-    const wPt = hPt * (752 / 620);
-    return { w: wPt, h: hPt };
+    // sk_sky_band: 2048 x 768. Its painted lagoon water spans rows 404-480, so
+    // row 470 lands on the surface line and the skyline fills the band above.
+    const band = Math.max(1, L.offY + SURFACE_Y * L.k + 6);
+    const R = 470 / 768;
+    const hPt = Math.max(band / R, 160);
+    const wPt = hPt * (2048 / 768);
+    return { w: wPt, h: hPt, y: band - hPt * R };
   }, [L]);
   const skyX = useDerivedValue(() => {
     tick.value;
@@ -400,6 +410,13 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const px = (d * 0.06 * L.k) % (SKY_TILE.w * 2);
     return [{ translateX: -px }];
   });
+  const FAR = { w: 1020, h: 680 };
+  const farX = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const d = lerp(s.pdist, s.dist, alpha.value) / 256;
+    return [{ translateX: -((d * 0.2) % (FAR.w * 2)) }];
+  });
   const REEF = { w: 620, h: 310 };
   const reefX = useDerivedValue(() => {
     tick.value;
@@ -407,7 +424,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const d = lerp(s.pdist, s.dist, alpha.value) / 256;
     return [{ translateX: -((d * 0.5) % REEF.w) }];
   });
-  const NEAR = { w: 520, h: 347 };
+  const NEAR = { w: 880, h: 330 };
   const nearX = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -474,15 +491,26 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
 
       <Group transform={worldTransform}>
         {/* God rays and caustics: far layer only, never over gameplay sprites. */}
-        <Group transform={rayTransform} origin={vec(480, SURFACE_Y)}>
+        {quality < 2 ? <Group transform={rayTransform} origin={vec(480, SURFACE_Y)}>
           {rayPaths.map((p, i) => (
             <Path key={i} path={p} color="#ffffff" opacity={0.07 + (i % 2) * 0.03} />
           ))}
-        </Group>
-        {caustic ? (
+        </Group> : null}
+        {caustic && quality === 0 ? (
           <Rect x={-60} y={SURFACE_Y} width={VIEW_W + 120} height={560}>
             <Shader source={caustic} uniforms={causticUniforms} />
           </Rect>
+        ) : null}
+
+        {/* Far layer (0.2x): the sunken carnival reef, low contrast behind everything. */}
+        {farReef && quality < 2 ? (
+          <Group transform={farX} opacity={0.42}>
+            {[0, 1, 2, 3].map((k) => (
+              <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * FAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * FAR.w }]}>
+                <SkImage image={farReef} x={0} y={FLOOR_Y + 30 - FAR.h} width={FAR.w} height={FAR.h} />
+              </Group>
+            ))}
+          </Group>
         ) : null}
 
         {/* Coral floor strip (mid layer, 0.5x), bottom band only. */}
@@ -499,7 +527,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         <Rect x={-200} y={FLOOR_Y - 6} width={VIEW_W + 400} height={5} color={INK} opacity={0.55} />
 
         <Rivals sim={sim} rivals={rivals} tick={tick} alpha={alpha} swim={swim} colors={rivalColors} />
-        <Gates sim={sim} tick={tick} alpha={alpha} font={font} />
+        <Gates sim={sim} tick={tick} alpha={alpha} font={font} tideArt={tideGate} rideArt={rideGate} />
         <Rings sim={sim} tick={tick} alpha={alpha} image={ringImg} half="back" />
 
         {atlas ? (
@@ -513,9 +541,13 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         <FrenzyPot sim={sim} tick={tick} alpha={alpha} font={font} />
 
         {/* Near strip: 40% alpha (25% in Storm Surge), floor band only. */}
-        <Group transform={nearX} opacity={0.4}>
+        <Group transform={nearX} opacity={0.5}>
           {[0, 1, 2, 3].map((k) => (
-            reefNear ? <SkImage key={k} image={reefNear} x={-60 + k * NEAR.w} y={FLOOR_Y + 70 - NEAR.h} width={NEAR.w} height={NEAR.h} /> : null
+            reefNear && quality < 2 ? (
+              <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * NEAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * NEAR.w }]}>
+                <SkImage image={reefNear} x={0} y={FLOOR_Y + 110 - NEAR.h} width={NEAR.w} height={NEAR.h} />
+              </Group>
+            ) : null
           ))}
         </Group>
 
@@ -536,7 +568,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
 // ---------------------------------------------------------------------------
 const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surface, tiles }: {
   sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>;
-  sky: SkImageType | null; layout: SharkyLayout; tile: { w: number; h: number };
+  sky: SkImageType | null; layout: SharkyLayout; tile: { w: number; h: number; y: number };
   skyX: SharedValue<{ translateX: number }[]>; surface: SharedValue<ReturnType<typeof Skia.Path.Make>>; tiles: number[];
 }) {
   const clipPath = useDerivedValue(() => {
@@ -548,11 +580,13 @@ const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surfac
   return (
     <Group>
       <Group clip={clipPath}>
-        <Rect x={0} y={0} width={L.w} height={tile.h} color="#7fd3ff" />
+        <Rect x={0} y={0} width={L.w} height={tile.y + tile.h}>
+          <LinearGradient start={vec(0, 0)} end={vec(0, tile.y + tile.h * 0.8)} colors={['#6cc9ff', '#bfe9ff', '#e8f8ff']} />
+        </Rect>
         <Group transform={skyX}>
           {sky ? tiles.map((k) => (
             <Group key={k} transform={k % 2 === 1 ? [{ translateX: (k + 1) * tile.w }, { scaleX: -1 }] : [{ translateX: k * tile.w }]}>
-              <SkImage image={sky} x={0} y={0} width={tile.w} height={tile.h} fit="cover" />
+              <SkImage image={sky} x={0} y={tile.y} width={tile.w} height={tile.h} fit="fill" />
             </Group>
           )) : null}
         </Group>
@@ -718,7 +752,10 @@ const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, b
 // ---------------------------------------------------------------------------
 // Gates: Tide Gate (bunting arch), race split line, Ride Gate / finish.
 // ---------------------------------------------------------------------------
-const Gates = React.memo(function Gates({ sim, tick, alpha, font }: { sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null }) {
+const Gates = React.memo(function Gates({ sim, tick, alpha, font, tideArt, rideArt }: {
+  sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null;
+  tideArt: SkImageType | null; rideArt: SkImageType | null;
+}) {
   const list = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -729,18 +766,54 @@ const Gates = React.memo(function Gates({ sim, tick, alpha, font }: { sim: Share
     for (let i = 0; i < ENT_CAP && out.length < 6; i++) {
       if (s.et[i] !== E_GATE) continue;
       const vx = anc + (s.ex[i] - dist);
-      if (vx < -200 || vx > VIEW_W + 200) continue;
+      // Wide window: the arch set piece is ~1100u across.
+      if (vx < -300 || vx > VIEW_W + 900) continue;
       out.push(vx, s.ep1[i], (s.worldT + a) / 60);
     }
     return out;
   });
   return (
     <Group>
+      <GateArch i={0} list={list} tide={tideArt} ride={rideArt} />
+      <GateArch i={1} list={list} tide={tideArt} ride={rideArt} />
       <Gate i={0} list={list} font={font} />
       <Gate i={1} list={list} font={font} />
     </Group>
   );
 });
+
+/**
+ * The gate set piece: a huge front-view arch (Tide Gate: bubble-and-bunting arch
+ * with the tide clock; Ride Gate: the bulb-lit grand entrance) framing the whole
+ * water column, so crossing a gate reads as swimming through it. Drawn behind
+ * every gameplay sprite. A Tide Gate arch is centred 300u before the bunting
+ * line so it has fully passed before the sim culls the gate entity.
+ */
+const ARCH_H = 1010;
+const ARCH_W = (ARCH_H * 384) / 351;
+function GateArch({ i, list, tide, ride }: { i: number; list: SharedValue<number[]>; tide: SkImageType | null; ride: SkImageType | null }) {
+  const st = useDerivedValue(() => {
+    const l = list.value;
+    const o = i * 3;
+    if (o >= l.length || l[o + 1] === G_SPLIT) return { x: -9999, ride: 0, t: 0 };
+    const big = l[o + 1] === G_RIDE || l[o + 1] === G_FINISH;
+    return { x: l[o] + (big ? 0 : -300), ride: big ? 1 : 0, t: l[o + 2] };
+  });
+  const tr = useDerivedValue(() => {
+    const v = st.value;
+    // A slow 1.5% breathe so the arch feels alive (bubbles / bulbs).
+    const b = 1 + 0.015 * Math.sin(v.t * 3.1);
+    return [{ translateX: v.x }, { translateY: FLOOR_Y + 40 }, { scale: b }];
+  });
+  const tideOp = useDerivedValue(() => (st.value.x < -9000 || st.value.ride ? 0 : 0.72));
+  const rideOp = useDerivedValue(() => (st.value.x < -9000 || !st.value.ride ? 0 : 1));
+  return (
+    <Group transform={tr}>
+      {tide ? <SkImage image={tide} x={-ARCH_W / 2} y={-ARCH_H} width={ARCH_W} height={ARCH_H} opacity={tideOp} /> : null}
+      {ride ? <SkImage image={ride} x={-ARCH_W / 2} y={-ARCH_H} width={ARCH_W} height={ARCH_H} opacity={rideOp} /> : null}
+    </Group>
+  );
+}
 
 function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font: SkFont | null }) {
   const paths = useDerivedValue(() => {

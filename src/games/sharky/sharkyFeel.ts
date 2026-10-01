@@ -8,6 +8,7 @@ import type { RefObject } from 'react';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { playHaptic } from '../../gamekit/Haptics';
 import { forEachEvent } from '../../gamekit/core/eventRing';
+import { tierCount } from '../../gamekit/core/perfTier';
 import type { FxStageHandle } from '../../gamekit/fx/FxStage';
 import type { CameraRig } from '../../gamekit/fx/useCamera';
 import type { GameClockHandle } from '../../gamekit/useGameClock';
@@ -50,6 +51,8 @@ export interface FeelDeps {
   layout: () => SharkyLayout;
   calm: boolean;
   tier: () => number;
+  /** Perf quality tier (0 full, 1 lite, 2 min): scales particle counts. */
+  quality?: () => number;
   hooks: FeelHooks;
 }
 
@@ -104,8 +107,18 @@ export function createSharkyFeel(deps: FeelDeps) {
   };
   const sharkPos = () => pos(cam.du, cam.y);
 
+  // Particle budgets follow the perf tier; everything else (rings, text, flashes) is unchanged.
+  const scaled = (raw: FxStageHandle | null): FxStageHandle | null => {
+    const q = deps.quality ? deps.quality() : 0;
+    if (!raw || q <= 0) return raw;
+    return {
+      ...raw,
+      burst: (name, x, y, params) => raw.burst(name, x, y, params && params.count ? { ...params, count: tierCount(q, params.count) } : params),
+    };
+  };
+
   const handle = (batch: number[]) => {
-    const fx = deps.fx.current;
+    const fx = scaled(deps.fx.current);
     const { camera, clock, hooks } = deps;
     forEachEvent(batch, (kind, a, b, c, d) => {
       switch (kind) {
@@ -275,7 +288,11 @@ export function createSharkyFeel(deps: FeelDeps) {
           const s = sharkPos();
           GameAudio.play(C.feverStart);
           playHaptic('feverStart');
-          fx?.flash({ color: '#ffffff', peak: 0.3, ms: 120 });
+          // Gold ring wipe from the shark (design 7.3): never a white full-screen flash.
+          const span = Math.hypot(Math.max(s.x, deps.layout().w - s.x), Math.max(s.y, deps.layout().h - s.y));
+          fx?.ring(s.x, s.y, { color: GOLD, from: 20, to: span, ms: 280 });
+          fx?.ring(s.x, s.y, { color: '#ffffff', from: 10, to: span * 0.6, ms: 240 });
+          fx?.bloom(s.x, s.y, { color: GOLD, radius: 160, peak: 0.45, ms: 320 });
           fx?.burst('impact', s.x, s.y, { count: 1, size: 1.5 });
           fx?.burst('confetti', s.x, s.y, { count: 30 });
           fx?.flyUp('FRENZY!', deps.layout().w / 2, s.y - 90, { size: 'xl', color: GOLD, ms: 1200 });
