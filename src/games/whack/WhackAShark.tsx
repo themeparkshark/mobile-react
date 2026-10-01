@@ -225,6 +225,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   /** Ghost split (6.11): this Run's banked total minus the PB ghosts' totals over the same Bursts. */
   const splitRef = useRef({ mine: 0, best: 0, known: true });
   const tilesRef = useRef<number[]>([]);
+  const pendingBest = useRef<number | null>(null);
   const [readyOn, setReadyOn] = useState(false);
   const [reveal, setReveal] = useState<DuelReveal | null>(null);
   const [lifetime, setLifetime] = useState<number | null>(props.unlockLevel ?? null);
@@ -590,7 +591,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     // Walk Boosted Runs never set a ranked personal best (6.12).
     const isNewBest = total > best && !boostedRunRef.current;
     if (isNewBest) {
-      setBest(total);
+      // The shell compares this Run with the best from before it; the new best shows from the next Run.
+      pendingBest.current = total;
       AsyncStorage.setItem(pbKeyFor(format), String(total)).catch(() => undefined);
     }
     // Buckets (8.9): HITS (base grade points), COMBO (what the multiplier added), BONUS (flat).
@@ -828,6 +830,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     lastBoostRef.current = -9;
     walkBaseRef.current = metersNow();
     setResult(null);
+    if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     startWall.current = Date.now();
     if (autoplay) LogBox.ignoreAllLogs(true);
@@ -861,6 +864,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
     setResult(null);
+    if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
     void claimRunOfDay().finally(() => startBurst(0, nextRun, true));
