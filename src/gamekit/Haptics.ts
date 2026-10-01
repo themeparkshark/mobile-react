@@ -8,6 +8,12 @@
  *
  * Enable/disable is respected via setHapticsEnabled — wire this to the
  * player's setting from wherever the shell mounts.
+ *
+ * App-wide moments outside a game (dressing room, Duels, queue bonus, reward
+ * sheets) use queueHaptic(): one shared gate, at most 1 haptic per 120ms, and
+ * a higher-priority haptic replaces a lower one waiting for its turn (a land
+ * replaces a queued selection). haptic() keeps its per-intent debounce only,
+ * so in-game feel is unchanged (economy review K16).
  */
 
 import * as Haptics from 'expo-haptics';
@@ -105,3 +111,91 @@ export const Haptic: Record<HapticIntent, () => void> = {
   success: () => haptic('success'),
   warning: () => haptic('warning'),
 };
+
+/** Minimum spacing between two gated haptics, app-wide. */
+export const HAPTIC_GATE_MS = 120;
+
+/** Higher wins a contested 120ms window. */
+export const HAPTIC_PRIORITY: Record<HapticIntent, number> = {
+  tickSelection: 0,
+  tapLight: 1,
+  hitMedium: 2,
+  warning: 2,
+  comboHeavy: 3,
+  success: 3,
+  failBuzz: 3,
+};
+
+export interface HapticGate {
+  /** Fire now, wait for the window (keeping the higher priority), or drop. */
+  request(intent: HapticIntent, priority?: number): 'fired' | 'queued' | 'dropped';
+  /** The intent waiting for the window, if any. */
+  pending(): HapticIntent | null;
+}
+
+/**
+ * One haptic per `spacingMs`, priority-aware. Pure apart from the injected
+ * clock, timer and fire function, so tools/tests can drive it.
+ */
+export function createHapticGate(options: {
+  fire: (intent: HapticIntent) => void;
+  now?: () => number;
+  schedule?: (fn: () => void, ms: number) => unknown;
+  spacingMs?: number;
+}): HapticGate {
+  const now = options.now ?? (() => Date.now());
+  const schedule = options.schedule ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const spacing = options.spacingMs ?? HAPTIC_GATE_MS;
+  let lastAt = -Infinity;
+  let waiting: { intent: HapticIntent; priority: number } | null = null;
+
+  const fireNow = (intent: HapticIntent) => {
+    lastAt = now();
+    options.fire(intent);
+  };
+
+  const flush = () => {
+    const next = waiting;
+    waiting = null;
+    if (next) fireNow(next.intent);
+  };
+
+  return {
+    request(intent, priority = HAPTIC_PRIORITY[intent]) {
+      const wait = lastAt + spacing - now();
+      if (wait <= 0 && !waiting) {
+        fireNow(intent);
+        return 'fired';
+      }
+      if (waiting) {
+        if (priority < waiting.priority) return 'dropped';
+        waiting = { intent, priority };
+        return 'queued';
+      }
+      waiting = { intent, priority };
+      schedule(flush, Math.max(0, wait));
+      return 'queued';
+    },
+    pending: () => waiting?.intent ?? null,
+  };
+}
+
+const appGate = createHapticGate({
+  fire: intent => {
+    if (!enabled) return;
+    try {
+      run(intent);
+    } catch {
+      // Taptic engine unavailable (e.g. simulator): silently ignore.
+    }
+  },
+});
+
+/**
+ * App-wide gated haptic: at most 1 per 120ms across every caller, and a
+ * stronger haptic replaces a weaker one waiting for its turn.
+ */
+export function queueHaptic(intent: HapticIntent, priority?: number): void {
+  if (!enabled) return;
+  appGate.request(intent, priority);
+}
