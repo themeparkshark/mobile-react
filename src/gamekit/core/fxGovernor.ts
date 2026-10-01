@@ -13,6 +13,10 @@
  *   - Hit-stop budget (Sharky): at most `hitStopBudgetMs` of global freeze per
  *     `hitStopWindowMs`, and at most one global stop per "stroke" key
  *     (Current Quest: one per player move).
+ *   - Screen-event cap (Banana 7.0): at most `screenEventsPerWindow` screen-space
+ *     moments (big flash, stamp, kick, zoom, vignette, banner) per
+ *     `screenWindowMs`. A denied moment keeps its in-place particles, audio and
+ *     haptic. 0 turns the cap off (the default).
  *   - Priority (Current Quest: golden > unlock > Riptide > pearl bank > tide):
  *     inside `mergeMs`, a lower-priority moment cannot take a flash, stop or
  *     punch that a higher one already took.
@@ -35,6 +39,9 @@ export interface GovernorConfig {
   mergeMs: number;
   /** Walking or reduced motion: flashes and camera are softened further. */
   calm: boolean;
+  /** Screen-space moments allowed per window (0 = no cap). */
+  screenEventsPerWindow: number;
+  screenWindowMs: number;
 }
 
 export const DEFAULT_GOVERNOR: GovernorConfig = {
@@ -48,6 +55,8 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   hitStopMaxMs: 160,
   mergeMs: 120,
   calm: false,
+  screenEventsPerWindow: 0,
+  screenWindowMs: 250,
 };
 
 export interface FxGovernor {
@@ -66,6 +75,8 @@ export interface FxGovernor {
   beatAt: number;
   beatPrio: number;
   beatTook: number;
+  /** Recent screen-space moments (cap window). */
+  screenTimes: number[];
   /** Counters for the dev overlay. */
   denied: number;
 }
@@ -89,6 +100,7 @@ export function createFxGovernor(cfg: Partial<GovernorConfig> = {}): FxGovernor 
     beatAt: -1e9,
     beatPrio: -1,
     beatTook: 0,
+    screenTimes: [],
     denied: 0,
   };
 }
@@ -203,4 +215,27 @@ export function govPunch(g: FxGovernor, now: number, prio = 0, force = false): b
 export function flashRateHz(onOffPeriodMs: number): number {
   'worklet';
   return onOffPeriodMs > 0 ? 1000 / onOffPeriodMs : Infinity;
+}
+
+/**
+ * Ask for a screen-space moment (Banana: at most 2 per 250 ms). Returns false
+ * when the cap is full: skip the flash, stamp, kick, zoom and vignette, but
+ * keep the in-place particles, audio and haptic. Higher-priority moments
+ * should be offered first inside a frame (puffer hit > Golden Hour > TIME! >
+ * tier-up > BONK > POP > CLOSE CALL > PERFECT > coin). `force` always passes
+ * and still counts.
+ */
+export function govScreenEvent(g: FxGovernor, now: number, force = false): boolean {
+  'worklet';
+  const c = g.cfg;
+  if (c.screenEventsPerWindow <= 0) return true;
+  const keep: number[] = [];
+  for (let i = 0; i < g.screenTimes.length; i++) if (now - g.screenTimes[i] < c.screenWindowMs) keep.push(g.screenTimes[i]);
+  g.screenTimes = keep;
+  if (!force && keep.length >= c.screenEventsPerWindow) {
+    g.denied += 1;
+    return false;
+  }
+  g.screenTimes.push(now);
+  return true;
 }

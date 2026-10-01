@@ -26,6 +26,7 @@ import {
   duckGainAt,
   nextGridMs,
   pitchVariance,
+  quantizeDelayMs,
   semitonesToRate,
   type BeatClock,
   type Bus,
@@ -83,6 +84,7 @@ class GameAudioEngine {
   private ducks: Duck[] = [];
   private duckTimer: ReturnType<typeof setInterval> | null = null;
   globalVoices = DEFAULT_GLOBAL_VOICES;
+  private groupCaps = new Map<string, number>();
   /** Dev overlay / tests: every accepted play. */
   onPlay: ((name: string, info: { voices: number; backend: string }) => void) | null = null;
   readonly music: MusicDirector;
@@ -276,6 +278,8 @@ class GameAudioEngine {
       maxVoicesForCue: def.maxVoices ?? 3,
       cooldownMs: def.cooldownMs ?? 0,
       lastPlayedAt: this.lastPlayed.get(name) ?? -1e9,
+      group: def.group,
+      groupCap: def.group ? this.groupCaps.get(def.group) ?? 0 : 0,
     }, this.globalVoices);
     if (decision.action === 'drop') return 0;
     if (decision.action === 'steal') this.stop(decision.victimId);
@@ -304,12 +308,39 @@ class GameAudioEngine {
     if (!token) return 0;
     const id = this.nextId++;
     const len = def.durationMs ?? (durationMs || 1200);
-    this.active.push({ id, token, cue: name, priority: def.priority ?? 1, startedAt: now, endsAt: now + (opts.delayMs ?? 0) + len });
+    this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: now + (opts.delayMs ?? 0) + len });
     this.lastPlayed.set(name, now);
     this.prune(now);
     if (def.duck) this.duck(def.duck.db, def.duck.attackMs ?? 60, def.duck.holdMs ?? len, def.duck.releaseMs ?? 300);
     this.onPlay?.(name, { voices: this.active.length, backend: backend.name });
     return id;
+  }
+
+  /**
+   * Voice caps per group, shared by every cue in the group (Trivia: tick 3,
+   * babble 1, crowd 1; Banana buses: ladder 2, body 4, ball 2, hazard 2,
+   * crowd 1, ui 2). A new voice steals the group's oldest.
+   */
+  setGroupCaps(caps: Record<string, number>): void {
+    for (const [g, n] of Object.entries(caps)) this.groupCaps.set(g, n);
+  }
+
+  /** Put a cue in a group at runtime (studio cues come from the library without one). */
+  setCueGroup(name: string, group: string): void {
+    const def = this.cues.get(name);
+    if (def) this.cues.set(name, { ...def, group });
+  }
+
+  /**
+   * Rez quantization: delay this sound to the next grid point of the bed
+   * (16ths by default) when that is at most `maxSnapMs` away. Audio only:
+   * never use it for scoring. Core hits stay unquantized.
+   */
+  playQuantized(name: string, opts: PlayOptions & { subdivision?: number; maxSnapMs?: number; step?: number } = {}): number {
+    const clock = this.music.clock();
+    const delay = clock ? quantizeDelayMs(clock, this.music.elapsedMs(), opts.subdivision ?? 0.25, opts.maxSnapMs ?? 50) : 0;
+    const o = { ...opts, delayMs: (opts.delayMs ?? 0) + delay };
+    return opts.step !== undefined ? this.playLadder(name, opts.step, o) : this.play(name, o);
   }
 
   stop(id: number): void {
