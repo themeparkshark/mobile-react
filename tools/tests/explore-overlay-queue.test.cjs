@@ -29,7 +29,9 @@ test('one suggestion per slot: boss > ride > adventure > project', () => {
 });
 
 test('avatar falls back to the bundled TPS shark instead of an empty ring', () => {
-  const app = runtime('src/components/Avatar.tsx', { '../config': { default: { primary: '#0768b9' } } },
+  const app = runtime('src/components/Avatar.tsx', { '../config': { default: { primary: '#0768b9' } },
+    '../context/AuthProvider': { AuthContext: { value: { player: null } } },
+    '../helpers/wardrobe': loadTs('src/helpers/wardrobe.ts') },
     { player: { avatar_url: null, inventory: null } });
   const image = app.find(n => n.type === 'Image');
   assert.match(String(image.props.source), /pin-collections\/shark\.png/);
