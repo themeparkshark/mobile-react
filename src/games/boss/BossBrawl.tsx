@@ -879,9 +879,12 @@ export function BossBrawl(props: BossBrawlProps) {
       case E_OPEN: {
         popsInOpening.current = 0;
         if (drill.current.on) {
-          clock.slowMo(1, 0, 0, false);
           drill.current.opens += 1;
-          setHint(drill.current.opens === 1 ? 'Now tap each glowing sucker as its ring closes' : 'Too busy? Hold the float: EASY SLAM');
+          // The first opening runs at full speed (each sucker waits for its tap); the second at half
+          // speed, so there is time to try the Easy Slam hold.
+          if (drill.current.opens === 1) clock.slowMo(1, 0, 0, false);
+          else clock.slowMo(0.5, 600000, 100, true);
+          setHint(drill.current.opens === 1 ? 'Now tap each glowing sucker as its ring closes' : 'Too busy? Hold the float with your thumb: EASY SLAM');
         }
         popTrauma.current = 1;
         const side = pres.value.sRes === 1 ? pres.value.sSide : -1;
@@ -1162,13 +1165,6 @@ export function BossBrawl(props: BossBrawlProps) {
             clock.pause();
             setHint('Tap the glowing sucker!');
           }
-        } else if (o && dd.opens === 2 && dd.slot !== -2 && now >= o.start + 60) {
-          // Second opening: wait for the float to be held (Easy Slam).
-          dd.frozen = true;
-          dd.slot = -2;
-          dd.want = -2;
-          clock.pause();
-          setHint('Hold the float with your thumb: EASY SLAM');
         }
       }
       // The slam lands on an unanswered buoy at the impact frame (sound and splash on time).
