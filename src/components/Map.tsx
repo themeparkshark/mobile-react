@@ -1,15 +1,20 @@
 import { Image } from 'expo-image';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
 import { HeadingContext, LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
-import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations';
+import { buildDecorations, buildLampPoints, buildWaterGlints, DECO_ICONS, decorationBand } from './map/decorations';
+import { MapAliveProvider, useMapAliveEngine } from './map/alive/MapAliveContext';
+import { MapLightOverlay, MapSkyOverlay } from './map/alive/MapSkyOverlay';
+import { WaterGlints } from './map/alive/WaterGlints';
+import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
+import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -17,6 +22,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { outfitLayerUrls } from '../helpers/wardrobe';
 
 type LatLng = { latitude: number; longitude: number };
+
+/** Where a map coordinate is on screen, in window points (null when off the map or not ready). */
+export type MapProjector = (latitude: number, longitude: number) => Promise<{ x: number; y: number } | null>;
 
 /** Lets map pins ask about the rendered map (e.g. where the nearest water is). */
 export const MapQueryContext = createContext<{
@@ -28,9 +36,12 @@ export const MapQueryContext = createContext<{
 // eases under it (Pokemon GO style); panned away, it becomes a map marker.
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
+// The whole map, for the time-of-day tint layer.
+const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
+  geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -40,6 +51,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onZoomChange?: (zoom: number) => void;
   /** After "Find": a dashed path for 4 s, and an edge arrow while the target is off screen. */
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
+  /** A full-screen flow covers the map: hold every ambient loop still (battery). */
+  readonly ambientPaused?: boolean;
+  /** Park pulse: busy rides as weighted points; a soft warm haze gathers over them. */
+  readonly crowdHaze?: GeoJSON.FeatureCollection | null;
+  /** Development previews: pin the sun at this elevation (degrees) instead of the real sky. */
+  readonly sunOverride?: number;
+  /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
+  readonly projector?: MutableRefObject<MapProjector | null>;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -53,10 +72,26 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     setHeadingEnabled(true);
     return () => { setScreenFocused(false); setHeadingEnabled(false); };
   }, [setHeadingEnabled]));
+  // Time of day: the real sun over the player, rechecked each minute while the map is on screen.
+  const [skyNow, setSkyNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!screenFocused) return;
+    setSkyNow(Date.now());
+    const timer = setInterval(() => setSkyNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [screenFocused]);
+  const skyLat = location ? Math.round(location.latitude * 100) / 100 : null;
+  const skyLng = location ? Math.round(location.longitude * 100) / 100 : null;
+  const devSun = __DEV__ ? Number(process.env.EXPO_PUBLIC_MAP_SUN ?? NaN) : NaN;
+  const pinnedSun = sunOverride ?? (Number.isFinite(devSun) ? devSun : undefined);
+  const sun = pinnedSun ?? (skyLat === null || skyLng === null ? 45 : Math.round(sunElevation(skyNow, skyLat, skyLng) * 2) / 2);
+  const light = useMemo(() => lightForElevation(sun), [sun]);
+  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
+  const wake = useSharedValue(0);
   useEffect(() => {
     if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
@@ -121,6 +156,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
     glideRef.current = glideDuration;
     pushCamera(glideDuration);
+    // A real step (not GPS wobble) stirs the shark's wake for the glide, then it settles.
+    if (distMeters >= 1 && distMeters < 60) {
+      wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(glideDuration + 600, withTiming(0, { duration: 700 })));
+    }
   }, [location?.latitude, location?.longitude]);
 
   const cameraRef = useRef<CameraRef>(null);
@@ -141,6 +180,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
+  const rootRef = useRef<View>(null);
+  useEffect(() => {
+    if (!projector) return;
+    projector.current = async (latitude, longitude) => {
+      const point = await mapViewRef.current?.getPointInView([longitude, latitude]).catch(() => null);
+      if (!point) return null;
+      const origin = await new Promise<{ x: number; y: number } | null>(resolve => {
+        if (!rootRef.current) { resolve(null); return; }
+        rootRef.current.measureInWindow((x, y) => resolve(Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null));
+      });
+      return origin ? { x: origin.x + point[0], y: origin.y + point[1] } : null;
+    };
+    return () => { projector.current = null; };
+  }, [projector]);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
@@ -154,6 +207,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Trees, bushes and ripples are planted as icons for what's on screen.
   const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
+  const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(EMPTY);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
   const refreshDecorations = useCallback(() => {
@@ -179,6 +234,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features,
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
+        setGlints(buildWaterGlints(water.features, { north, south, east, west }, zoom, 6));
+        const lamps = buildLampPoints(roads.features, { north, south, east, west }, zoom);
+        setLampPoints(lamps);
       } catch { /* map not ready yet; the next camera change retries */ }
     }, 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,6 +332,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
         {/* Inner blue ring (ground indicator) */}
         <View style={styles.groundRing} />
+        {/* Wake: sparkles spill from under the shark while it walks. */}
+        <SharkWake moving={wake} />
         {/* Animated shadow — shrinks when shark bobs up */}
         <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}
@@ -311,7 +371,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   );
 
   return (
+    <MapAliveProvider value={alive}>
     <View
+      ref={rootRef}
       style={{
         position: 'relative',
         flex: 1,
@@ -396,12 +458,47 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             symbolSortKey: ['get', 'k'],
           }} />
         </ShapeSource>
+        {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
+        <ShapeSource id="tps-sky-tint" shape={WORLD}>
+          <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
+            fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
+        </ShapeSource>
+        {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
+        {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
+          <ShapeSource id="tps-lamps" shape={lampPoints}>
+            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
+              circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
+            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fff3c4', circleBlur: 0.4,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1, 17, 1.6, 19, 3.6],
+              circleOpacity: 0.9 * light.lamps }} />
+          </ShapeSource>
+        )}
+        {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
+        {crowdHaze && crowdHaze.features.length > 0 && (
+          <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
+            <HeatmapLayer id="tps-crowd-haze" style={{
+              heatmapWeight: ['get', 'w'],
+              heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.5, 19, 0.9],
+              heatmapRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 15, 16, 17, 38, 19, 100],
+              // Barely there at the edge, a warm shimmer in the middle: air over a crowd, not a warning.
+              heatmapColor: ['interpolate', ['linear'], ['heatmap-density'],
+                0, 'rgba(255,214,120,0)', 0.3, 'rgba(255,214,120,0.06)', 0.6, 'rgba(255,186,96,0.16)',
+                0.85, 'rgba(255,150,84,0.24)', 1, 'rgba(255,124,84,0.3)'],
+              heatmapOpacity: 0.8,
+              heatmapOpacityTransition: { duration: 1200, delay: 0 },
+            }} />
+          </ShapeSource>
+        )}
         {guideTarget && location && pathShown && (
           <ShapeSource id="tps-guide" shape={guideLine(location, guideTarget)}>
             <LineLayer id="tps-guide-casing" style={{ lineColor: BRAND.navy, lineWidth: 7, lineCap: 'round', lineOpacity: 0.85 }} />
             <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
           </ShapeSource>
         )}
+        <WaterGlints spots={glints} />
+        {/* Sparkles where the shark walked: on the ground, under the islands. */}
+        <SharkTrail latitude={location?.latitude ?? null} longitude={location?.longitude ?? null} />
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
         {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
             order, so it comes after the ride islands and is never hidden under one. */}
@@ -411,6 +508,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </Marker>
         )}
       </MapView>
+      {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
+      {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
+      {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
       <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
@@ -431,6 +531,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         </View>
       )}
     </View>
+    </MapAliveProvider>
   );
 }
 

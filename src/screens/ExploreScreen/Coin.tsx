@@ -3,13 +3,20 @@ import { Image } from 'expo-image';
 import { useContext } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import { Text, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useTimeoutWhen } from 'rooks';
+import { hash01 } from '../../components/map/alive/ambientBudget';
+import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { CurrencyContext } from '../../context/CurrencyProvider';
 import { CoinType } from '../../models/coin-type';
 
+const SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+
 /**
- * Coin — 100% STATIC layout (rendered inside <Marker>).
- * No Animated transforms — prevents teleporting on react-native-maps.
+ * A timed coin on the map. The marker pins the outer view by its anchor
+ * (MapLibre), so the coin itself may move: it bobs on the map's ambient clock
+ * with a shadow that tightens as it rises and a glint every few seconds.
+ * Calm (Reduce Motion) keeps it still.
  */
 export default function Coin({
   coin,
@@ -19,6 +26,21 @@ export default function Coin({
   readonly onExpire: () => void;
 }) {
   const { currencies } = useContext(CurrencyContext);
+  const { clock, tier } = useMapAlive();
+  const moving = tier !== 'calm';
+  const phase = hash01(coin.id);
+  const bob = useAnimatedStyle(() => ({
+    transform: [{ translateY: moving ? -3 + Math.sin((clock.value / 2.2 + phase) * Math.PI * 2) * 4 : 0 }],
+  }));
+  const shadow = useAnimatedStyle(() => {
+    const rise = moving ? (Math.sin((clock.value / 2.2 + phase) * Math.PI * 2) + 1) / 2 : 0.5;
+    return { opacity: 0.32 - rise * 0.14, transform: [{ scaleX: 1 - rise * 0.3 }] };
+  });
+  const glint = useAnimatedStyle(() => {
+    const p = moving ? (clock.value / 3.1 + phase) % 1 : 0.5;
+    const k = p < 0.16 ? Math.sin((p / 0.16) * Math.PI) : 0;
+    return { opacity: k, transform: [{ scale: 0.3 + k * 0.8 }, { rotate: `${p * 120}deg` }] };
+  });
 
   useTimeoutWhen(
     () => {
@@ -60,8 +82,10 @@ export default function Coin({
         />
       </View>
 
-      {/* Coin with static glow */}
-      <View>
+      {/* The coin floats over its shadow, with a soft glow and a glint. */}
+      <Animated.View style={[{ position: 'absolute', bottom: -6, width: 24, height: 6, borderRadius: 12,
+        backgroundColor: 'rgba(5,52,110,0.9)' }, shadow]} />
+      <Animated.View style={bob}>
         <View style={{
           position: 'absolute',
           top: -4,
@@ -80,7 +104,9 @@ export default function Coin({
           }}
           contentFit="contain"
         />
-      </View>
+        <Animated.Image source={SPARKLE} tintColor="#ffffff" resizeMode="contain"
+          style={[{ position: 'absolute', top: -5, right: -7, width: 14, height: 14 }, glint]} />
+      </Animated.View>
     </View>
   );
 }

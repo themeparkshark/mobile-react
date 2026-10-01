@@ -14,7 +14,10 @@ import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import Map from '../components/Map';
+import Map, { type MapProjector } from '../components/Map';
+import { CoinCollectFlight } from '../components/map/alive/CoinCollectFlight';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import RedeemModal from '../components/RedeemModal';
 import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
@@ -57,6 +60,12 @@ import useRideControlMap from '../hooks/useRideControlMap';
 import useBossMapMoment from '../hooks/useBossMapMoment';
 import BossMapDeparture from '../components/boss/BossMapDeparture';
 import { Circle } from '../components/map/Circle';
+import { crowdHaze } from '../components/map/alive/parkPulse';
+import { ghostSharks } from '../components/map/alive/friendsNearby';
+import { GhostSharks } from '../components/map/alive/GhostSharks';
+import { NightShowLayer } from '../components/map/alive/NightShowLayer';
+import NightShowPill from '../components/map/alive/NightShowPill';
+import useNightShow from '../components/map/alive/useNightShow';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
@@ -105,6 +114,8 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
+// Friends drawn as ghost sharks at most (the closest).
+const GHOST_CAP = 5;
 
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -274,6 +285,39 @@ function ExploreScreen() {
   const [caughtThisSession, setCaughtThisSession] = useState(false);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
+  // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
+  const mapProjector = useRef<MapProjector | null>(null);
+  const avatarRef = useRef<View>(null);
+  const flightLayerRef = useRef<View>(null);
+  const reducedMotion = useReducedGameMotion();
+  const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
+  const [collectFlight, setCollectFlight] = useState<{ key: number; from: { x: number; y: number }; to: { x: number; y: number };
+    coinUrl: string | null; label: string | null } | null>(null);
+  const avatarPop = useSharedValue(1);
+  const avatarPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarPop.value }] }));
+  const mapFocusedRef = useRef(mapFocused); mapFocusedRef.current = mapFocused;
+  useEffect(() => {
+    if (!pendingCollect || redeemFlowOpen) return;
+    // Let the reward sheet finish sliding away; "View coin" navigates off the map instead.
+    const timer = setTimeout(async () => {
+      const collect = pendingCollect;
+      setPendingCollect(null);
+      if (!mapFocusedRef.current) return;
+      const measure = (ref: { current: View | null }) => new Promise<{ x: number; y: number; width: number; height: number } | null>(resolve => {
+        if (!ref.current) { resolve(null); return; }
+        ref.current.measureInWindow((x, y, width, height) => resolve(Number.isFinite(x) ? { x, y, width, height } : null));
+      });
+      const [start, avatar, layer] = await Promise.all([
+        mapProjector.current?.(collect.latitude, collect.longitude) ?? null, measure(avatarRef), measure(flightLayerRef)]);
+      if (!avatar || !layer || !mapFocusedRef.current) return;
+      const from = start ?? { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+      setCollectFlight({ key: Date.now(), coinUrl: collect.coinUrl, label: collect.first ? 'New coin on your shelf!' : null,
+        from: { x: from.x - layer.x, y: from.y - layer.y },
+        to: { x: avatar.x + avatar.width / 2 - layer.x, y: avatar.y + avatar.height / 2 - layer.y } });
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [pendingCollect, redeemFlowOpen]);
+
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
     if (!homeLocationConfirmed || !parkLoaded) return;
@@ -372,6 +416,11 @@ function ExploreScreen() {
   }, [park?.id]);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
+  // Park pulse: a warm haze over the busiest rides on today's map.
+  const parkHaze = useMemo(() => crowdHaze((redeemables?.tasks ?? []).flatMap(task => {
+    const live = liveByTask.get(task.id);
+    return live ? [{ ...live, latitude: Number(task.latitude), longitude: Number(task.longitude) }] : [];
+  })), [redeemables?.tasks, liveByTask]);
 
   // Easter-egg scenes only play for the closest themed rides, so the map
   // wakes up around you as you walk and stays light on the phone.
@@ -402,8 +451,15 @@ function ExploreScreen() {
       return live?.rush && live.status === 'OPERATING' ? [{ task, rush: live.rush, wait: live.wait ?? live.rush.wait }] : [];
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
-  const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  // Tonight's night show: real showtimes; the pill takes the live slot only when nothing else needs it.
+  const nightShow = useNightShow(park?.id ?? null, mapFocused && !!player);
+  const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
+  const hasLiveEvents = busyLiveSlot || nightPill;
   const slotTop = suggestionSlotTop(hasLiveEvents);
+  // Friends who share their spot in this park, as ghost sharks (only if the live feed carries them).
+  const ghosts = useMemo(() => ghostSharks(livePark?.friends_nearby, location ?? null, Date.now(), GHOST_CAP),
+    [livePark, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -468,6 +524,10 @@ function ExploreScreen() {
       ((taskDistance.get(task.id) ?? Infinity) <= 60 ? 10 : 0) + (restingTasks.includes(task) ? -5 : 0),
   })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)), mapZoom),
   [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom, bossMap.flag?.asset_id]);
+  // Living map budget: only the nearest islands spend animation (see ambientBudget).
+  const aliveRanks = useMemo(() => new globalThis.Map(rideClusters.map(cluster => cluster.lead.id)
+    .sort((a, b) => (taskDistance.get(a) ?? Infinity) - (taskDistance.get(b) ?? Infinity))
+    .map((id, index) => [id, index])), [rideClusters, taskDistance]);
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
@@ -884,6 +944,11 @@ function ExploreScreen() {
                 setActiveRedeemable(undefined);
               }}
               onTaskCompleted={(taskId, isSecretTask) => {
+                const won = isSecretTask ? undefined : redeemables?.tasks.find(t => t.id === taskId);
+                if (won && Number.isFinite(Number(won.latitude)) && Number.isFinite(Number(won.longitude))) {
+                  setPendingCollect({ latitude: Number(won.latitude), longitude: Number(won.longitude),
+                    coinUrl: won.coin_url || null, first: (won.times_completed ?? 0) === 0 });
+                }
                 // Remove completed task from local state immediately
                 setRedeemables((prev) => {
                   if (!prev) return prev;
@@ -916,13 +981,15 @@ function ExploreScreen() {
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
-              <Button
-                onPress={() => {
-                  RootNavigation.navigate('Park', { park: park.id, player: player.id });
-                }}
-              >
-                <Avatar player={player} size="lg" />
-              </Button>
+              <Animated.View ref={avatarRef} collapsable={false} style={avatarPopStyle}>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Park', { park: park.id, player: player.id });
+                  }}
+                >
+                  <Avatar player={player} size="lg" />
+                </Button>
+              </Animated.View>
             )}
           </View>
         </>
@@ -948,6 +1015,11 @@ function ExploreScreen() {
               }}
               pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
               onRush={(task) => setSelectedTask(task)} />
+            {nightPill && nightShow.show && <NightShowPill show={nightShow.show} phase={nightShow.phase}
+              onSee={() => {
+                const anchor = nightShow.show?.anchor;
+                if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
+              }} />}
           </View>
         )}
         {suggestionSlots.left === 'dwell' && suggestionSlots.leftStub && queueDwell && <MapSuggestionStub side="left" top={slotTop}
@@ -1040,7 +1112,10 @@ function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          projector={mapProjector}
           onZoomChange={onMapZoom}
+          ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
+          crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
@@ -1078,9 +1153,12 @@ function ExploreScreen() {
                 (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
+              aliveRank={aliveRanks.get(task.id)}
               onPress={handleTaskPress}
             />;
           })}
+          <GhostSharks ghosts={ghosts} />
+          {nightShow.show && <NightShowLayer show={nightShow.show} live={nightShow.phase === 'live'} />}
           {/* After the ride islands so their ambience never prints over the label; it settles clear of them. */}
           {activeParkProject?.park_id === park.id && (
             <ParkProjectMapBeacon project={activeParkProject} avoid={beaconAvoid}
@@ -1210,6 +1288,14 @@ function ExploreScreen() {
         onAction={refreshCommunityCenter}
       />
       
+      {/* The collect moment flies over everything on the map screen. */}
+      <View ref={flightLayerRef} collapsable={false} pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60 }}>
+        {collectFlight && <CoinCollectFlight key={collectFlight.key} from={collectFlight.from} to={collectFlight.to}
+          coinUrl={collectFlight.coinUrl} label={collectFlight.label} reducedMotion={reducedMotion}
+          onLand={() => { avatarPop.value = reducedMotion ? 1 : withSequence(withTiming(1.22, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 })); }}
+          onDone={() => setCollectFlight(null)} />}
+      </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
         homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />

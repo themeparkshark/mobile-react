@@ -1,4 +1,5 @@
 import client from '../../client';
+import type { FriendPresence } from '../../../components/map/alive/friendsNearby';
 
 export type LiveRideStatus = 'OPERATING' | 'DOWN' | 'CLOSED' | 'REFURBISHMENT' | string;
 
@@ -21,6 +22,8 @@ export interface LiveRide {
 export interface LivePark {
   readonly rides: readonly LiveRide[];
   readonly fetched_at: string | null;
+  /** Friends in this park who share their spot (optional; drawn as ghost sharks when present). */
+  readonly friends_nearby?: readonly FriendPresence[];
 }
 
 export async function getParkLive(parkId: number): Promise<LivePark> {

@@ -1,7 +1,12 @@
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMapAlive } from '../../components/map/alive/MapAliveContext';
+import { hash01, withinBudget } from '../../components/map/alive/ambientBudget';
+import { waitGlow, type WaitGlow as WaitGlowLook } from '../../components/map/alive/parkPulse';
+import { arrivalBurstAllowed } from '../../components/map/alive/presence';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -74,18 +79,180 @@ function useWaterSpot(kind: string | undefined, latitude: number, longitude: num
   return spot;
 }
 
-/** The ride's coin hovering over its landmark: slow spin and bob. */
-function FloatingCoin({ reducedMotion }: { readonly reducedMotion: boolean }) {
+const SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+const COIN_TURN = 3.2; // seconds per coin turn
+
+/**
+ * The ride's coin hovering over its landmark: a slow turn and bob on the map's
+ * ambient clock, a soft shadow on the roof that tightens as it rises, and a
+ * glint across its face every other turn. Calm (Reduce Motion) holds it face on.
+ */
+function FloatingCoin({ seed, moving }: { readonly seed: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed);
+  const coin = useAnimatedStyle(() => {
+    if (!moving) return { transform: [{ translateY: 0 }, { scaleX: 1 }] };
+    const a = (clock.value / COIN_TURN + phase) * Math.PI * 2;
+    return { transform: [{ translateY: -2 + Math.sin(a) * 4 }, { scaleX: Math.cos(a) }] };
+  });
+  const shadow = useAnimatedStyle(() => {
+    const rise = moving ? (Math.sin((clock.value / COIN_TURN + phase) * Math.PI * 2) + 1) / 2 : 0.5;
+    return { opacity: 0.3 - rise * 0.12, transform: [{ scaleX: 1 - rise * 0.25 }] };
+  });
+  const glint = useAnimatedStyle(() => {
+    if (!moving) return { opacity: 0 };
+    const turns = clock.value / COIN_TURN + phase;
+    const face = Math.cos(turns * Math.PI * 2);
+    const k = Math.floor(turns) % 2 === 0 && face > 0 ? face ** 14 : 0;
+    return { opacity: k, transform: [{ translateY: -2 + Math.sin(turns * Math.PI * 2) * 4 }, { scale: 0.3 + k * 0.8 }, { rotate: `${k * 45}deg` }] };
+  });
+  return <>
+    <Animated.View style={[styles.coinShadow, shadow]} />
+    <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, coin]} />
+    <Animated.Image source={SPARKLE} tintColor="#ffffff" resizeMode="contain" style={[styles.coinGlint, glint]} />
+  </>;
+}
+
+const GLOW = require('../../../assets/images/map/fx/glow.png');
+
+/** A soft pool of light: one tinted radial texture (GPU composited; motion comes from the wrapping view). */
+function GlowPool({ color, width, height }: { color: string; width: number; height: number }) {
+  return <Image source={GLOW} tintColor={color} style={{ width, height }} contentFit="fill" />;
+}
+
+/**
+ * Park pulse: the island breathes a glow from the live wait. Walk-ons glow cool
+ * mint, a normal line gold, a slammed ride warm coral and quicker. Islands past
+ * the animation budget (or calm) hold the same glow still.
+ */
+function WaitGlow({ id, glow, moving }: { readonly id: number; readonly glow: WaitGlowLook; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(id + 0.25);
+  const style = useAnimatedStyle(() => {
+    const k = moving ? (Math.sin((clock.value / glow.period + phase) * Math.PI * 2) + 1) / 2 : 0.7;
+    return { opacity: glow.strength * (0.6 + 0.4 * k), transform: [{ scaleX: 0.92 + 0.1 * k }, { scaleY: 0.92 + 0.1 * k }] };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.waitGlow, style]}>
+      <GlowPool color={glow.color} width={104} height={40} />
+    </Animated.View>
+  );
+}
+
+/**
+ * After sunset each island stands in a warm pool of lamp light, so the pins
+ * glow against the darker map. The nearest few flicker very slightly.
+ */
+function LampGlow({ id, level, moving }: { readonly id: number; readonly level: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(id + 0.75) * 10;
+  const style = useAnimatedStyle(() => {
+    const flicker = moving ? Math.sin(clock.value * 7.3 + phase) * Math.sin(clock.value * 3.1 + phase) * 0.06 : 0;
+    return { opacity: level * (0.78 + flicker) };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.lampGlow, style]}>
+      <GlowPool color="#ffcf72" width={124} height={64} />
+    </Animated.View>
+  );
+}
+
+const FLECKS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ff8a6b', '#8fe8c6', '#ffcf3b', '#ffffff', '#c9a6ff', '#7cc6f5', '#ffcf3b'];
+
+function Fleck({ p, i }: { p: SharedValue<number>; i: number }) {
+  const angle = Math.PI * (0.12 + (i / (FLECKS.length - 1)) * 0.76) + (hash01(i) - 0.5) * 0.3;
+  const speed = 70 + hash01(i + 9) * 55;
+  const style = useAnimatedStyle(() => {
+    const t = p.value;
+    return {
+      opacity: t < 0.7 ? 1 : (1 - t) / 0.3,
+      transform: [{ translateX: Math.cos(angle) * speed * t }, { translateY: -Math.sin(angle) * speed * t + 90 * t * t },
+        { rotate: `${(i % 2 ? 1 : -1) * t * 540}deg` }, { scaleY: 0.5 + 0.5 * Math.abs(Math.cos(t * 12 + i)) }],
+    };
+  });
+  return <Animated.View style={[styles.fleck, { backgroundColor: FLECKS[i] }, style]} />;
+}
+
+/**
+ * Arrival: stepping into a ride's range pops a gold ring off the island's base
+ * and a puff of confetti flecks, once per ride per stretch of play.
+ */
+function ArrivalBurst({ onDone }: { readonly onDone: () => void }) {
   const p = useSharedValue(0);
   useEffect(() => {
-    p.value = 0;
-    if (!reducedMotion) p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(p);
-  }, [p, reducedMotion]);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.sin(p.value * Math.PI * 2) * 4 }, { scaleX: Math.cos(p.value * Math.PI * 2) }],
+    p.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.quad) });
+    const timer = setTimeout(onDone, 1000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const ring = useAnimatedStyle(() => ({ opacity: 1 - p.value, transform: [{ scaleX: 0.7 + p.value * 1.9 }, { scaleY: 0.7 + p.value * 1.9 }] }));
+  const star = useAnimatedStyle(() => {
+    const k = Math.sin(Math.min(1, p.value / 0.6) * Math.PI);
+    return { opacity: k, transform: [{ translateY: -48 - p.value * 16 }, { scale: 0.4 + k * 0.9 }, { rotate: `${p.value * 120}deg` }] };
+  });
+  return (
+    <View pointerEvents="none" style={styles.burst}>
+      <Animated.View style={[styles.burstRing, ring]} />
+      <View style={styles.burstOrigin}>{FLECKS.map((_, i) => <Fleck key={i} p={p} i={i} />)}</View>
+      <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.burstStar, star]} />
+    </View>
+  );
+}
+
+// Last arrival burst per ride, kept across re-mounts (islands remount as clusters change).
+const lastArrival = new Map<number, number>();
+
+/** A sleeping island: little "z" float up and fade, one after another. */
+function SleepyZ({ i, moving, seed }: { readonly i: number; readonly moving: boolean; readonly seed: number }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed + 7);
+  const style = useAnimatedStyle(() => {
+    if (!moving) return { opacity: i === 2 ? 0 : 0.9, transform: [{ translateX: i * 8 }, { translateY: -i * 9 }, { rotate: '-12deg' }] };
+    const p = (clock.value / 3.3 + phase + i / 3) % 1;
+    return {
+      opacity: p < 0.15 ? p / 0.15 : p > 0.7 ? (1 - p) / 0.3 : 1,
+      transform: [{ translateX: p * 18 + Math.sin(p * Math.PI * 2) * 3 }, { translateY: -p * 30 }, { rotate: '-12deg' }, { scale: 0.7 + p * 0.6 }],
+    };
+  });
+  return <Animated.Text style={[styles.sleepyZ, style]}>z</Animated.Text>;
+}
+
+const LIMITED_COLORS = ['#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff'] as const;
+const LIMITED_BAND = 128; // px of one colour cycle in the halo
+
+/** A twinkle on the limited island, timed off the shared clock. */
+function LimitedTwinkle({ seed, x, y, tint }: { seed: number; x: number; y: number; tint: string }) {
+  const { clock } = useMapAlive();
+  const period = 1.9 + hash01(seed) * 0.9;
+  const phase = hash01(seed + 3);
+  const style = useAnimatedStyle(() => {
+    const p = (clock.value / period + phase) % 1;
+    const k = Math.sin(p * Math.PI) ** 2;
+    return { opacity: k, transform: [{ scale: 0.3 + k * 0.7 }, { rotate: `${p * 90}deg` }] };
+  });
+  return <Animated.Image source={SPARKLE} tintColor={tint} resizeMode="contain" style={[styles.limitedTwinkle, { left: x, top: y }, style]} />;
+}
+
+/**
+ * Limited coins shimmer: an iridescent halo flows around the island's base and
+ * two pastel twinkles wink over it, so a coin that is leaving reads as special
+ * from across the map. Over budget or calm, the halo holds still.
+ */
+function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed + 11) * LIMITED_BAND;
+  const flow = useAnimatedStyle(() => ({
+    transform: [{ translateX: moving ? -((clock.value * 26 + phase) % LIMITED_BAND) : -LIMITED_BAND / 3 }],
   }));
-  return <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, style]} />;
+  return <>
+    <View pointerEvents="none" style={styles.limitedHalo}>
+      <Animated.View style={[styles.limitedFlow, flow]}>
+        <LinearGradient colors={LIMITED_COLORS} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+    </View>
+    {moving && <LimitedTwinkle seed={seed} x={4} y={30} tint="#e3ccff" />}
+    {moving && <LimitedTwinkle seed={seed + 1} x={52} y={18} tint="#fff1a3" />}
+  </>;
 }
 
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
@@ -128,6 +295,8 @@ export interface TaskMarkerProps {
   readonly ticketCost?: number;
   /** First reveal: drop in after this many ms (stagger). */
   readonly revealDelay?: number;
+  /** Distance order among the islands on the map (0 = nearest): only the nearest few spend animation. */
+  readonly aliveRank?: number;
   readonly onPress: (task: TaskType) => void;
 }
 
@@ -141,9 +310,11 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
-  distanceMeters = null, ticketCost = 1, revealDelay,
+  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
+  const alive = useMapAlive();
+  const calm = alive.tier === 'calm';
   const expiresAt = gameTimestamp(task.active_to);
   const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
 
@@ -174,6 +345,7 @@ function TaskMarker({
   }, [kinds]);
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
+  const glow = useMemo(() => resting ? null : waitGlow(live), [live, resting]);
   const waterSpot = useWaterSpot(waterKind, latitude, longitude);
 
   // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
@@ -202,6 +374,18 @@ function TaskMarker({
     opacity: Math.min(1, drop.value * 2),
     transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],
   }));
+
+  // Entering the ride's range: a burst (motion permitting) and a happy buzz, once in a while.
+  const [burst, setBurst] = useState(0);
+  const wasPlayable = useRef(playable);
+  useEffect(() => {
+    if (playable && !wasPlayable.current && arrivalBurstAllowed(lastArrival.get(task.id), Date.now())) {
+      lastArrival.set(task.id, Date.now());
+      haptic('success');
+      if (!calm) setBurst(value => value + 1);
+    }
+    wasPlayable.current = playable;
+  }, [playable, task.id, calm]);
 
   const press = () => onPress(task);
   const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`
@@ -274,6 +458,9 @@ function TaskMarker({
           </View>
         )}
 
+        {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
+        {glow && <WaitGlow id={task.id} glow={glow} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
+        {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
         <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
         {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion} />}
@@ -289,16 +476,20 @@ function TaskMarker({
         {/* The ride's landmark: themed art, or the classic shark tower. */}
         <Animated.View style={[styles.buildingContainer, liftStyle]}>
           <View style={[styles.landmarkWrap, resting && styles.landmarkResting]}>
-            {(isSelected || near) && !resting && <FloatingCoin reducedMotion={reducedMotion} />}
+            {(isSelected || near) && !resting && <FloatingCoin seed={task.id} moving={!calm && (isSelected || withinBudget(aliveRank, alive.caps.idleCoins))} />}
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
           {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}
+          {resting && <View pointerEvents="none" style={styles.sleepy}>
+            {[0, 1, 2].map(i => <SleepyZ key={i} i={i} seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.sleepyRides)} />)}
+          </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
           {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
           {clusterCount > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{clusterCount}</Text></View>}
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
+        {burst > 0 && <ArrivalBurst key={burst} onDone={() => setBurst(0)} />}
       </Animated.View>
     </Marker>
   </>);
@@ -362,4 +553,20 @@ const styles = StyleSheet.create({
   rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   landmarkImage: { width: 64, height: 64 },
   floatingCoin: { position: 'absolute', top: 0, width: 20, height: 20 },
+  coinShadow: { position: 'absolute', top: 23, width: 14, height: 4, borderRadius: 7, backgroundColor: 'rgba(5,52,110,0.9)' },
+  coinGlint: { position: 'absolute', top: -2, marginLeft: 12, width: 12, height: 12 },
+  limitedHalo: { position: 'absolute', bottom: 7, width: 68, height: 26, borderRadius: 34, overflow: 'hidden', opacity: 0.7 },
+  // Two full colour cycles (9 stops), so sliding one band left loops seamlessly.
+  limitedFlow: { position: 'absolute', left: 0, top: 0, bottom: 0, width: LIMITED_BAND * 2 },
+  waitGlow: { position: 'absolute', bottom: 0, width: 104, height: 40 },
+  burst: { position: 'absolute', left: 0, right: 0, bottom: 10, height: 24, alignItems: 'center', justifyContent: 'center', zIndex: 30 },
+  burstRing: { position: 'absolute', width: 60, height: 22, borderRadius: 30, borderWidth: 4, borderColor: BRAND.gold },
+  burstOrigin: { position: 'absolute', width: 0, height: 0 },
+  burstStar: { position: 'absolute', width: 26, height: 26 },
+  fleck: { position: 'absolute', left: -3, top: -2, width: 6, height: 4, borderRadius: 1 },
+  lampGlow: { position: 'absolute', bottom: -8, width: 124, height: 64 },
+  sleepy: { position: 'absolute', top: 14, right: 4, width: 30, height: 40, zIndex: 6 },
+  sleepyZ: { position: 'absolute', left: 0, bottom: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy,
+    textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
+  limitedTwinkle: { position: 'absolute', width: 13, height: 13, zIndex: 9 },
 });
