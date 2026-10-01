@@ -7,7 +7,7 @@
  *
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -140,6 +140,8 @@ export interface SessionRecapProps {
   heroInventory?: InventoryType | null;
   /** Tap the hero: the existing Inventory screen (no new route). */
   onOpenInventory?: () => void;
+  /** Play together (L3): the crew recap, owned by the group components. */
+  groupSlot?: ReactNode;
 }
 
 export default function SessionRecap({
@@ -149,7 +151,7 @@ export default function SessionRecap({
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
-  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory,
+  doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -201,6 +203,8 @@ export default function SessionRecap({
             accessibilityLabel="Still in line. Keep playing this wait." />
         </Animated.View>
       )}
+
+      {groupSlot}
 
       <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'YOUR VERIFIED HAUL' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       <View style={styles.recapStats}>
