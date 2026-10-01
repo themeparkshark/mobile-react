@@ -1157,3 +1157,20 @@ test('author route (0.A.1): an optimal Gold route carrying the board\'s authorRi
   }
   assert.ok(checked >= 20, `checked ${checked}`);
 });
+
+test('friend challenge link (0.A.11): round-trips the exact boards (transforms included) and rejects junk', () => {
+  const C = loadTs('src/games/current-quest/challengeLink.ts');
+  const run = L.pickRun(1234567, 'quick', { runsCompleted: 5, tideSeen: true });
+  const url = C.challengeUrl({ seed: 1234567, boards: run.map((b) => b.id), shells: 5, strokes: 11 });
+  const c = C.parseChallengeUrl(url);
+  assert.ok(c, 'parses');
+  assert.equal(c.shells, 5);
+  assert.equal(c.strokes, 11);
+  assert.equal(c.name, 'Your friend');
+  const boards = C.boardsOf(c.boards);
+  assert.deepEqual(plain(boards.map((b) => [b.id, b.tiles, b.start, b.chest])), plain(run.map((b) => [b.id, b.tiles, b.start, b.chest])));
+  assert.equal(C.parseChallengeUrl('themeparkshark://drop?code=1'), null);
+  assert.equal(C.parseChallengeUrl(`${url.split('&b=')[0]}&b=nope~0&s=1&k=2`), null);
+  assert.equal(C.parseChallengeUrl(url.replace('s=5', 's=99')), null);
+  assert.equal(C.parseChallengeUrl(`${url}&n=${encodeURIComponent('<Maya>')}`).name, 'Maya');
+});

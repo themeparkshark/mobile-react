@@ -90,7 +90,7 @@ export default function MiniGameTesterScreen() {
           {cqPick ? (
             <CurrentQuestGame key={`${cqRound}:${cqPick.context}:${cqPick.chartNodeId ?? ''}`} visible context={cqPick.context} chartNodeId={cqPick.chartNodeId}
               parkName="Lagoon Park" seed={cqPick.context === 'quick' || cqPick.context === 'daily' ? undefined : 424242 + cqRound}
-              challenge={cqPick.context === 'challenge' && process.env.EXPO_PUBLIC_CQ_FRIEND === '1' ? { seed: 424242, name: 'Maya', shells: 5, strokes: 11 } : null}
+              challenge={cqPick.challenge ?? (cqPick.context === 'challenge' && process.env.EXPO_PUBLIC_CQ_FRIEND === '1' ? { seed: 424242, name: 'Maya', shells: 5, strokes: 11 } : null)}
               onClose={() => { setTimeout(back, 300); }}
               onComplete={() => { setTimeout(back, 300); }} />
           ) : null}

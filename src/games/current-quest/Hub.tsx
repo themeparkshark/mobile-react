@@ -18,6 +18,8 @@ import { CARD_CREAM } from './ResultsCard';
 import { CHART_V0, chapterOpen, markOf, nodeOpen, type ChartNode } from './chart';
 import { dailyNumber, liveStreak, loadProgress, localDate, type CqProgress } from './progress';
 import type { RunContext } from './library';
+import * as Linking from 'expo-linking';
+import { parseChallengeUrl, type ChallengeLink } from './challengeLink';
 
 const BACKDROP = require('../../assets/games/current-quest/backdrop.jpg');
 const SHARK = require('../../assets/games/current-quest/cq_shark_cheer.png');
@@ -29,6 +31,8 @@ const CREW = require('../../assets/games/current-quest/avatar_blue.png');
 export interface HubPick {
   context: RunContext;
   chartNodeId?: string;
+  /** A friend's challenge opened from a link (0.A.11). */
+  challenge?: ChallengeLink;
 }
 
 export function CurrentQuestHub({ onPlay, liveHumans = 1, today = localDate(), refreshKey = 0 }: {
@@ -41,6 +45,14 @@ export function CurrentQuestHub({ onPlay, liveHumans = 1, today = localDate(), r
   const [p, setP] = useState<CqProgress | null>(null);
   useEffect(() => { void loadProgress().then((x) => setP({ ...x })); }, [refreshKey]);
   useEffect(() => { void preloadCqImages(CQ_RUN_ART); }, []);
+  // A friend's challenge link (opened from the share sheet message) becomes the top tile.
+  const [incoming, setIncoming] = useState<ChallengeLink | null>(null);
+  useEffect(() => {
+    const take = (url: string | null) => { const c = parseChallengeUrl(url); if (c) setIncoming(c); };
+    void Linking.getInitialURL().then(take).catch(() => undefined);
+    const sub = Linking.addEventListener('url', ({ url }) => take(url));
+    return () => sub.remove();
+  }, []);
   const streak = p ? liveStreak(p, today) : 0;
   const playedToday = !!p?.daily[today];
   const n = dailyNumber(today);
@@ -51,6 +63,18 @@ export function CurrentQuestHub({ onPlay, liveHumans = 1, today = localDate(), r
       <Image source={BACKDROP} style={StyleSheet.absoluteFill} resizeMode="cover" />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Current Quest</Text>
+        {incoming ? (
+          <Animated.View entering={ZoomIn.springify().damping(12)}>
+            <Pressable onPress={() => onPlay({ context: 'challenge', challenge: incoming })} style={({ pressed }) => [styles.daily, styles.friend, pressed && styles.pressed]}
+              accessibilityRole="button" accessibilityLabel={`${incoming.name} challenged you: ${incoming.shells} shells in ${incoming.strokes} strokes`}>
+              <Image source={SOCKET} style={styles.friendImg} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dailyTitle}>{`${incoming.name} challenged you`}</Text>
+                <Text style={styles.dailySub}>{`Beat ${incoming.shells} shells in ${incoming.strokes} strokes. Same boards.`}</Text>
+              </View>
+            </Pressable>
+          </Animated.View>
+        ) : null}
         <Animated.View entering={ZoomIn.springify().damping(12)}>
           <Pressable onPress={() => onPlay({ context: 'daily' })} style={({ pressed }) => [styles.daily, pressed && styles.pressed]}
             accessibilityRole="button" accessibilityLabel={`Daily Tide number ${n}${streak ? `, streak ${streak}` : ''}`}>
@@ -135,6 +159,8 @@ function ChartPath({ nodes, medals, onPick }: { nodes: readonly ChartNode[]; med
 }
 
 const styles = StyleSheet.create({
+  friend: { backgroundColor: '#fff3c2', marginBottom: 10 },
+  friendImg: { width: 56, height: 56, resizeMode: 'contain', marginRight: 10 },
   root: { flex: 1, backgroundColor: CQ.water },
   scroll: { padding: 14, paddingTop: 54, paddingBottom: 60, gap: 10 },
   title: { fontFamily: 'Shark', fontSize: 34, color: '#ffffff', textAlign: 'center', textShadowColor: CQ.ink, textShadowRadius: 1, textShadowOffset: { width: 2, height: 2 } },

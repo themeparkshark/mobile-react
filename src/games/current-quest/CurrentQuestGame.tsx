@@ -49,6 +49,7 @@ import {
 } from './rules';
 import { canClear, distanceFrom, firstDeadState, hintFrom, solveBoard } from './solver';
 import { authorRoute } from './author';
+import { boardsOf, challengeUrl } from './challengeLink';
 import { boardById, boardRefs, dailySeed, isScored, knobsFor, pickRun, voyagesFor, type RunContext } from './library';
 import {
   addGhost, dailyNumber, ghostFor, hintOf, isNewBest, liveStreak, loadProgress, localDate, recordDaily, saveProgress, withBest,
@@ -91,6 +92,8 @@ export interface FriendChallenge {
   readonly name: string;
   readonly shells: number;
   readonly strokes: number;
+  /** Exact board refs (`id~tf`) from the link, so both players sail the same voyages. */
+  readonly boards?: readonly string[];
 }
 
 export interface CurrentQuestGameProps {
@@ -162,6 +165,18 @@ function parState(b: Board, v: RunState['voyage']): { lost: boolean; target: num
   return { lost, target: v.golden || (!plainOk && goldOk) ? v.parGoldT : v.parT };
 }
 
+/** The challenge card names the margin (0.A.11): "You beat Maya by 1 stroke", never a time. */
+function challengeMargin(c: FriendChallenge, shells: number, strokes: number): string {
+  const ds = shells - c.shells;
+  const dk = c.strokes - strokes;
+  const by = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (ds > 0) return `You beat ${c.name} by ${by(ds, 'shell')}`;
+  if (ds < 0) return `${c.name} wins by ${by(-ds, 'shell')}. Try again?`;
+  if (dk > 0) return `You beat ${c.name} by ${by(dk, 'stroke')}`;
+  if (dk < 0) return `${c.name} wins by ${by(-dk, 'stroke')}. Try again?`;
+  return `Dead even with ${c.name}`;
+}
+
 function emptyShells(n: number): boolean[][] { return Array.from({ length: n }, () => [false, false, false]); }
 
 /** Which shell to name in the NEXT STAR tease ("Par on the Deep board = 3 stars"). */
@@ -228,6 +243,10 @@ export default function CurrentQuestGame({
   const boards = useMemo<Board[] | null>(() => {
     if (!progress) return null;
     if (context === 'chart') { const b = node ? boardById(node.boardId) : undefined; return b ? [b] : pickRun(runSeed, 'quick', hintOf(progress)).slice(0, 1); }
+    if (context === 'challenge' && challenge?.boards && attempt === 0) {
+      const exact = boardsOf(challenge.boards);
+      if (exact) return exact;
+    }
     return pickRun(runSeed, context, hintOf(progress));
   },
   // Progress is read once per run so a finished run never reshuffles the next boards mid-play.
@@ -722,6 +741,11 @@ export default function CurrentQuestGame({
     const deep = b.slot === 'treasure';
     const label = SLOT_LABEL[b.slot] ?? 'Voyage';
     const objective = run.index === 0 ? (trial ? 'Every stroke counts.' : 'Beat par, find the gold.') : null;
+    if (challenge && context === 'challenge' && run.index === 0) {
+      setRibbon({ title: `Beat ${challenge.name}`, sub: `${challenge.shells} shells in ${challenge.strokes} strokes`, key: Date.now(), gold: true });
+      later(2200, () => setRibbon(null));
+      return;
+    }
     if (authorActs.length) {
       const rip = b.authorRiptide;
       setRibbon({ title: 'Race the Author', sub: `Author: Gold${rip ? ` + ${rip} Riptide${rip === 1 ? '' : 's'}` : ''}, ${authorActs.length} strokes`, key: Date.now(), gold: true });
@@ -730,7 +754,7 @@ export default function CurrentQuestGame({
     }
     setRibbon({ title: `${label}: ${b.title ?? b.name}`, sub: b.teach ?? objective, key: Date.now(), gold: deep });
     later(b.teach ? 2600 : 900, () => setRibbon(null));
-  }, [later, trial, authorActs]);
+  }, [later, trial, authorActs, challenge, context]);
 
   const beginVoyage = useCallback((run: RunState, rise: boolean) => {
     const s = svRef.current;
@@ -1369,8 +1393,7 @@ export default function CurrentQuestGame({
       sfxTally(shells);
       setSummary({
         title, grid, stars, failed: false, newBest, nextStar: tease, stamp, coinPour: trial ? [0, 4, 7, 10][stars] : 0,
-        line: challenge ? (shells > challenge.shells || (shells === challenge.shells && strokes.reduce((a, x) => a + x, 0) < challenge.strokes)
-          ? `You beat ${challenge.name}!` : `${challenge.name}: ${challenge.shells} shells, ${challenge.strokes} strokes`) : strokesLine,
+        line: challenge ? challengeMargin(challenge, shells, strokes.reduce((a, x) => a + x, 0)) : strokesLine,
         podium: null,
         shareLabel: context === 'daily' ? 'Share Daily' : trial ? 'Share ride' : null,
         routes: compareRoutes(run, lastResult),
@@ -2018,9 +2041,10 @@ export default function CurrentQuestGame({
     if (!run) return;
     const shells = totalShells(run.results);
     const strokes = run.results.reduce((a, r) => a + r.strokes, 0);
-    const url = `themeparkshark://current-quest/challenge?seed=${runSeed}&ctx=${context === 'daily' ? 'daily' : 'challenge'}&s=${shells}&k=${strokes}`;
+    // Player-initiated, system share sheet only; the link names the exact boards (0.A.11).
+    const url = challengeUrl({ seed: runSeed, boards: run.boards.map((b) => b.id), shells, strokes });
     void Share.share({ message: `Beat my Current Quest run: ${shells} shells in ${strokes} strokes. ${url}`, url });
-  }, [runSeed, context]);
+  }, [runSeed]);
   const onShareCard = useCallback(() => {
     if (!share) return;
     void shareRef.current?.share(`${share.heading}: ${share.grid.flat().filter(Boolean).length} shells`);
