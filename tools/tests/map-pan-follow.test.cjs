@@ -13,7 +13,7 @@ test('a finger on the map drops follow at gesture start, so GPS ticks cannot yan
 });
 
 test('a pinch that leaves the shark centered resumes following; a real pan does not', () => {
-  const didChange = source.slice(source.indexOf('onRegionDidChange='), source.indexOf('<Camera'));
+  const didChange = source.slice(source.indexOf('onRegionDidChange='), source.indexOf('<Camera', source.indexOf('onRegionDidChange=')));
   assert.match(didChange, /followRef\.current = true/);
   assert.match(didChange, /0\.00007/);
   assert.doesNotMatch(didChange, /> 0\.0005/);
