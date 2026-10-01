@@ -88,10 +88,12 @@ export default function App() {
   const { setCrumbs } = useContext(CrumbContext);
   const { retrieveCurrencies } = useContext(CurrencyContext);
   const { retrieveTheme } = useContext(ThemeContext);
-  const { devMode, setDevMode, moveDevLocation, location: currentLocation, permissionGranted } = useContext(LocationContext);
-  // Keep ride detection alive as the guest moves between map, queue, and profile.
+  const { devMode, setDevMode, moveDevLocation, location: currentLocation, permissionGranted, park: currentPark } = useContext(LocationContext);
+  // Keep ride detection alive as the guest moves between map, queue, and profile,
+  // but only at a park: away from one, background GPS is battery drain and an
+  // unexplained location indicator. Park presence is sticky, so this never flaps.
   // The service itself never asks for Always permission during app startup.
-  useRideDetection(!isStandalonePreview && !!player && permissionGranted);
+  useRideDetection(!isStandalonePreview && !!player && permissionGranted && !!currentPark);
   const [fontsReady, fontError] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),

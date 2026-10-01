@@ -253,7 +253,9 @@ class RideDetectionService {
       distanceInterval: 10,
       // The foreground watcher handles active-screen ride detection.
       pausesUpdatesAutomatically: true,
-      showsBackgroundLocationIndicator: true,
+      // Always access is granted, so iOS does not need the blue status-bar
+      // pill; it sat over other apps (streams, video) and tapping it opened us.
+      showsBackgroundLocationIndicator: false,
       foregroundService: {
         notificationTitle: 'Theme Park Shark',
         notificationBody: 'Tracking your rides',

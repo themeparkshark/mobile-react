@@ -80,7 +80,9 @@ export function activateQueueBackgroundHeartbeat(sessionId: string, playerId: nu
           timeInterval: 30_000,
           distanceInterval: 0,
           pausesUpdatesAutomatically: false,
-          showsBackgroundLocationIndicator: true,
+          // Always access is granted, so iOS does not need the blue status-bar
+      // pill; it sat over other apps (streams, video) and tapping it opened us.
+      showsBackgroundLocationIndicator: false,
           foregroundService: {
             notificationTitle: 'Theme Park Shark LinePlay',
             notificationBody: 'Checking queue progress while you wait',
