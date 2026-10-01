@@ -8,6 +8,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import Animated, {
+  interpolateColor,
   Easing, useAnimatedProps, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -67,21 +68,22 @@ export const QuestionCard = React.memo(function QuestionCard({
   }));
 
   const tickText = useAnimatedProps(() => ({ text: `+${Math.round(ticker.value)}` } as never));
+  // D9: a continuous colour drain (gold -> amber -> blue -> navy) as speed falls, and
+  // a blip only when the value crosses a tier edge (95 / 70 / 35), never every 5 points.
   const tickerColor = useDerivedValue(() => {
     const s = ticker.value - 100;
-    if (s >= 95) return C.goldDeep;
-    if (s >= 70) return '#e8a800';
-    if (s >= 35) return C.blue;
-    return C.navy;
+    return interpolateColor(s, [0, 35, 70, 95, 100], [C.navy, C.blue, '#e8a800', C.goldDeep, C.goldDeep]);
   });
   const tickStyle = useAnimatedStyle(() => ({ color: tickerColor.value }));
   const blip = useSharedValue(1);
-  const lastTick = useSharedValue(0);
+  const lastTier = useSharedValue(-1);
   useDerivedValue(() => {
-    const v = Math.round(ticker.value);
-    if (v !== lastTick.value) {
-      lastTick.value = v;
-      blip.value = withSequence(withTiming(1.08, { duration: 30 }), withTiming(1, { duration: 30 }));
+    const s = Math.round(ticker.value) - 100;
+    const tier = s >= 95 ? 3 : s >= 70 ? 2 : s >= 35 ? 1 : 0;
+    if (tier !== lastTier.value) {
+      const crossed = lastTier.value >= 0;
+      lastTier.value = tier;
+      if (crossed) blip.value = withSequence(withTiming(1.08, { duration: 30 }), withTiming(1, { duration: 30 }));
     }
   });
   const blipStyle = useAnimatedStyle(() => ({ transform: [{ scale: blip.value }] }));

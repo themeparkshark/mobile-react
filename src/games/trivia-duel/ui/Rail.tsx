@@ -83,7 +83,7 @@ function Side({ side, align, reducedMotion, onTick }: { side: RailSide; align: '
   const score = (
     <View style={[styles.scoreCol, align === 'right' && { alignItems: 'flex-end' }]}>
       <Text style={styles.name} numberOfLines={1}>{side.name}</Text>
-      <CountUpText value={side.score} style={styles.score} reducedMotion={reducedMotion} tickEvery={align === 'left' ? 25 : 0} onTick={onTick} />
+      <CountUpText value={side.score} style={[styles.score, { textAlign: align === 'right' ? 'right' : 'left' }]} reducedMotion={reducedMotion} tickEvery={align === 'left' ? 25 : 0} onTick={onTick} />
     </View>
   );
   return (
@@ -164,7 +164,8 @@ const styles = StyleSheet.create({
   portraitImg: { width: 52, height: 52, marginTop: 8 },
   scoreCol: { marginHorizontal: 6, flexShrink: 1 },
   name: { fontFamily: 'Knockout', fontSize: 13, color: C.navy },
-  score: { fontFamily: 'Shark', fontSize: 26, color: C.navy, padding: 0, margin: 0 },
+  // Fixed width: the count-up writes text natively, so its box never re-measures (a growing number would clip).
+  score: { fontFamily: 'Shark', fontSize: 24, color: C.navy, padding: 0, margin: 0, width: 70 },
   mid: { width: 108, alignItems: 'center' },
   pips: { flexDirection: 'row', marginBottom: 4 },
   pip: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: C.ink, marginHorizontal: 2.5 },

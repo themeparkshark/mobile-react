@@ -284,6 +284,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const crowdLean = useSharedValue(0);
   const sunburst = useSharedValue(0.35);
   const bulbFast = useSharedValue(0);
+  const heat = useSharedValue(0);
+  const urgency = useSharedValue(0);
+  // D10: the whole stage reads "on fire" from arm's length at Hot Streak and Blazing.
+  useEffect(() => {
+    const target = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0;
+    heat.value = reducedMotion ? target : withTiming(target, { duration: 300 });
+  }, [streakView.streak, heat, reducedMotion]);
   const spot = useSharedValue(0);
   const push = useSharedValue(1);
   const pushX = useSharedValue(0);
@@ -293,8 +300,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const music = useMusicBeat(visible);
   const actors: StageActors = useMemo(() => ({
     finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst,
-    beat: music.beat, bulbFast, spot, push, pushX, t: stageT, podMe, podOpp,
-  }), [finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst, music.beat, bulbFast, spot, push, pushX, stageT, podMe, podOpp]);
+    beat: music.beat, bulbFast, spot, push, pushX, t: stageT, podMe, podOpp, heat, urgency,
+  }), [heat, urgency, finPose, finSX, finSY, finY, finRot, hatRot, hatY, meSX, meSY, meY, meRot, shades, cheer, crowdLean, sunburst, music.beat, bulbFast, spot, push, pushX, stageT, podMe, podOpp]);
   const baseFinPose = useRef<FinPose>('idle');
   const talking = useRef(false);
 
@@ -401,6 +408,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const q = qc.value;
       const prev = q.lastSim;
       q.lastSim = c.simMs;
+      if (q.phase !== PH_LIVE && urgency.value !== 0) urgency.value = 0;
       if (prev < 0 || q.phase === PH_IDLE) return;
       let dt = c.simMs - prev;
       if (dt <= 0) return;
@@ -454,6 +462,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           }
           const left = q.windowMs - my;
           remain.value = left / q.windowMs;
+          urgency.value = left <= 1000 ? 1 : left <= 3000 ? 0.6 : 0;
           const sec = Math.ceil(left / 1000);
           if (sec <= 3 && sec > 0 && sec < q.lastSec) {
             q.lastSec = sec;
@@ -939,6 +948,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       }
       case EV_TICK: {
         sfx(CUE.tickHeavy);
+        // D7: a soft heartbeat under the last 3 seconds (warm, never scary).
+        sfx(CUE.heartbeat, { volume: 0.55 });
         Haptic.warning();
         return;
       }

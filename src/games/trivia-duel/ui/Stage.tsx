@@ -52,6 +52,10 @@ export interface StageActors {
   /** Winner podium rise (results): me, opp. */
   podMe: SharedValue<number>;
   podOpp: SharedValue<number>;
+  /** D10 world change: 0 normal, 1 Hot Streak (gold bulbs, crowd jumps, podium flame), 2 Blazing (+ warm sky). */
+  heat: SharedValue<number>;
+  /** D7 window life: 0 calm, 0.6 last 3s (8th bulbs, crowd leans in), 1 last second (16ths). */
+  urgency: SharedValue<number>;
 }
 
 interface Props {
@@ -110,6 +114,7 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   const podiumImg = useImage(STAGE_ART.podium);
   const shades = useImage(ART.sunglasses);
   const finger = useImage(ART.foamFinger);
+  const flameImg = useImage(ART.flame);
   const meImg = useImage(SHARKS[meLook]);
   const oppImg = useImage(opponent === 'fin' ? SHARKS.blue : SHARKS[opponent]);
   const crowdImgs = [useImage(SHARKS.pink), useImage(SHARKS.green), useImage(SHARKS.orange), useImage(SHARKS.blue), useImage(SHARKS.red), useImage(SHARKS.classic)];
@@ -209,10 +214,22 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
     return p;
   });
 
+  // Bulbs idle on quarter notes, 8ths in the last 3s, 16ths in the last second and the drum-roll.
   const bulbLit = useDerivedValue(() => {
-    const div = a.bulbFast.value > 0.5 ? 4 : 2;
+    const u = a.urgency.value;
+    const div = a.bulbFast.value > 0.5 || u > 0.9 ? 4 : u > 0.5 ? 2 : 1;
     return Math.floor(a.beat.value * div) % 4;
   });
+  const heatGlow = useDerivedValue(() => (a.heat.value >= 1 ? 0.55 : a.heat.value * 0.55));
+  const skyTint = useDerivedValue(() => Math.max(0, a.heat.value - 1) * 0.1);
+  // Podium flame (Alex's streak flame) flickers on twos at Hot Streak.
+  const flameTr = useDerivedValue(() => {
+    const t = Math.floor(a.t.value / 83);
+    const f = 1 + ((t * 7) % 5) * 0.025;
+    const s = Math.min(1, a.heat.value) * (a.heat.value >= 2 ? 1.15 : 1);
+    return [{ translateX: meX + podW * 0.36 }, { translateY: podTop - 4 }, { scale: s * f }];
+  });
+  const flameOpacity = useDerivedValue(() => Math.min(1, a.heat.value));
 
   // Camera rig: push toward the podiums, lateral whip.
   const rig = useDerivedValue(() => [
@@ -281,11 +298,13 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
           <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55} radius={W * 0.8} intensity={a.sunburst} rays={14} width={W} height={H * 0.62} speed={sunburstSpeed} />
         </Group>
         <Path path={shimmer} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} strokeCap="round" />
+        {/* Blazing: a warm 10% gold sky tint (never dark) */}
+        <Rect x={-40} y={-20} width={W + 80} height={H * 0.62} color={C.gold} opacity={skyTint} />
 
         {/* L2 marquee arch: bulbs glow on the beat (8ths, 16ths in the drum-roll) */}
         {marquee ? <SkImage image={marquee} x={marq.x} y={marq.y} width={marq.w} height={marq.h} /> : null}
         {MARQUEE_BULBS.map((b, i) => (
-          <Bulb key={i} x={marq.x + b[0] * marq.w} y={marq.y + b[1] * marq.h} r={marq.w * 0.045} index={i} lit={bulbLit} />
+          <Bulb key={i} x={marq.x + b[0] * marq.w} y={marq.y + b[1] * marq.h} r={marq.w * 0.045} index={i} lit={bulbLit} heat={heatGlow} />
         ))}
 
         {/* Final spotlights */}
@@ -297,6 +316,13 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
         {/* L3 podiums */}
         <Podium img={podiumImg} cx={meX} top={podTop - 8} w={podW} rise={a.podMe} />
         <Podium img={podiumImg} cx={oppX} top={podTop - 8} w={podW} rise={a.podOpp} />
+
+        {/* Hot Streak: the flame moves onto your podium */}
+        {flameImg ? (
+          <Group transform={flameTr} opacity={flameOpacity}>
+            <SkImage image={flameImg} x={-15} y={-38} width={30} height={38} />
+          </Group>
+        ) : null}
 
         {/* You */}
         {meImg ? (
@@ -354,11 +380,12 @@ function cone(x0: number, y0: number, x1: number, y1: number, spread: number) {
   return p;
 }
 
-const Bulb = React.memo(function Bulb({ x, y, r, index, lit }: { x: number; y: number; r: number; index: number; lit: SharedValue<number> }) {
-  const glow = useDerivedValue(() => (index % 4 === lit.value ? 0.95 : 0));
+const Bulb = React.memo(function Bulb({ x, y, r, index, lit, heat }: { x: number; y: number; r: number; index: number; lit: SharedValue<number>; heat: SharedValue<number> }) {
+  const glow = useDerivedValue(() => (index % 4 === lit.value ? 0.95 : heat.value));
+  const gold = useDerivedValue(() => (heat.value > 0.3 ? 'rgba(254,201,14,0.65)' : 'rgba(255,236,120,0.55)'));
   return (
     <Group opacity={glow}>
-      <Circle cx={x} cy={y} r={r * 2.1} color="rgba(255,236,120,0.55)" />
+      <Circle cx={x} cy={y} r={r * 2.1} color={gold} />
       <Circle cx={x} cy={y} r={r * 0.95} color="#fffbe0" />
     </Group>
   );
@@ -383,9 +410,14 @@ const CrowdShark = React.memo(function CrowdShark({ i, n, W, H, size, img, finge
   const flip = i < n / 2 ? -1 : 1;
   const tr = useDerivedValue(() => {
     const bob = Math.abs(Math.sin((a.beat.value + i * 0.25) * Math.PI)) * 2;
+    // Hot Streak: everyone jumps on the downbeat (8pt, quick fall).
+    const ph = a.beat.value - Math.floor(a.beat.value);
+    const jump = a.heat.value >= 1 ? Math.max(0, 1 - ph * 2.5) * 8 : 0;
+    // Last 3 seconds: lean in toward the stage.
+    const lean = a.urgency.value > 0.5 ? 3 : 0;
     return [
-      { translateX: x + a.crowdLean.value * flip * -3 },
-      { translateY: baseY - bob - a.cheer.value * 5 },
+      { translateX: x + a.crowdLean.value * flip * -3 - lean * flip },
+      { translateY: baseY - bob - jump - a.cheer.value * 5 },
       { rotate: a.crowdLean.value * flip * 0.12 },
       { scaleX: flip },
     ];

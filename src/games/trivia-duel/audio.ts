@@ -43,6 +43,7 @@ export const CUE = {
   bonk: 'tv_head_bonk',
   babble: 'tv_babble',
   chip: 'tv_wager_chip',
+  heartbeat: 'tv_heartbeat_soft',
   win: 'sting_trivia_win',
   lose: 'sting_trivia_lose',
 } as const;
