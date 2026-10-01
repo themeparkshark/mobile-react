@@ -6,6 +6,7 @@
  * the TPS shark loader.
  */
 import { Image } from 'expo-image';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import Ribbon from '../Ribbon';
@@ -21,9 +22,16 @@ export interface ChallengeStatusAction {
   readonly disabled?: boolean;
 }
 
+/**
+ * A paid retry right after a game's own result panel: the guest's second tap
+ * on that panel's Close must not land on Try Again. The safe action takes the
+ * spot under the message and the retry wakes up after this guard.
+ */
+export const RETRY_TAP_GUARD_MS = 800;
+
 export const SO_CLOSE_SHARK = require('../../../assets/images/screens/redeem/so-close-shark.png');
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary, secondary, quiet }: {
+export default function ChallengeStatusCard({ title, message, art = 'none', primary, secondary, quiet, guardRetry = false }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
@@ -31,8 +39,24 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   readonly secondary?: ChallengeStatusAction;
   /** A quiet text action at the bottom ("Return to map"). */
   readonly quiet?: ChallengeStatusAction;
+  /**
+   * The primary spends a Ticket or a retry: put the quiet action above it and
+   * ignore the primary for RETRY_TAP_GUARD_MS after the card appears.
+   */
+  readonly guardRetry?: boolean;
 }) {
   const reduced = useReducedGameMotion();
+  const [armed, setArmed] = useState(!guardRetry);
+  useEffect(() => {
+    if (!guardRetry) { setArmed(true); return; }
+    setArmed(false);
+    const timer = setTimeout(() => setArmed(true), RETRY_TAP_GUARD_MS);
+    return () => clearTimeout(timer);
+  }, [guardRetry]);
+  const quietAction = quiet && <Pressable accessibilityRole="button" onPress={quiet.onPress}
+    style={guardRetry ? styles.quietAbove : styles.quiet} hitSlop={8}>
+    <Text style={styles.quietText}>{quiet.label}</Text>
+  </Pressable>;
   return (
     <Animated.View entering={reduced ? FadeIn.duration(120) : ZoomIn.springify().damping(14).stiffness(220)}
       style={styles.wrap} accessibilityRole="alert">
@@ -42,16 +66,15 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
           accessibilityLabel="The shark just missed the coin" />}
         {art === 'loading' && <View style={styles.loader}><SharkLoader compact tone="onBlue" /></View>}
         <Text style={styles.message}>{message}</Text>
+        {guardRetry && quietAction}
         {primary && <View style={styles.primary}>
-          <YellowButton text={primary.label} onPress={primary.onPress} disabled={primary.disabled} />
+          <YellowButton text={primary.label} onPress={primary.onPress} disabled={primary.disabled || !armed} />
         </View>}
         {secondary && <Pressable accessibilityRole="button" onPress={secondary.onPress} disabled={secondary.disabled}
           style={[styles.secondary, secondary.disabled && { opacity: 0.5 }]}>
           <Text style={styles.secondaryText}>{secondary.label}</Text>
         </Pressable>}
-        {quiet && <Pressable accessibilityRole="button" onPress={quiet.onPress} style={styles.quiet} hitSlop={8}>
-          <Text style={styles.quietText}>{quiet.label}</Text>
-        </Pressable>}
+        {!guardRetry && quietAction}
       </View>
     </Animated.View>
   );
@@ -72,5 +95,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4, borderBottomColor: '#9ccbe9', borderRadius: 14, paddingVertical: 11, marginTop: 8 },
   secondaryText: { fontFamily: 'Shark', fontSize: 17, color: '#05346e' },
   quiet: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  quietAbove: { minHeight: 56, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
   quietText: { fontFamily: 'Shark', fontSize: 16, color: '#dff4ff' },
 });

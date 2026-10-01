@@ -773,7 +773,8 @@ export default function RedeemRedeemableModal({
                 : 'This Rescue Pass try timed out. No Ticket was spent.'
               : 'This challenge was not finished, so your Ticket came back to you.'}
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
-            quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined} />}
+            quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
+            guardRetry={rescueRetryAvailable} />}
           {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Result Pending'}
             art={proofRejected ? 'none' : 'loading'}
             message={proofRejected
@@ -801,7 +802,8 @@ export default function RedeemRedeemableModal({
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined} />}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
+            guardRetry={firstCoinTicketReturned || rescueRetryAvailable} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
           {selectedGame && flowState === 'minigame' && (
