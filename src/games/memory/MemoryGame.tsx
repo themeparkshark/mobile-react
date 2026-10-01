@@ -1057,6 +1057,7 @@ export default function MemoryGame({
     const my = (ca.y + cb.y) / 2;
     const stars = r.mode === 'ride' ? rideStars(r.eng) : 3;
     setMergeEdition(r.mode === 'ride' ? editionForStars(stars) : 'gold');
+    setWells((w) => [...w, a, b]);
     cards.current[r.eng.ids[a]]?.moveTo(mx - g.cw / 2, my - g.ch / 2, 240, 0);
     cards.current[r.eng.ids[b]]?.moveTo(mx - g.cw / 2, my - g.ch / 2, 240, 0);
     cards.current[r.eng.ids[a]]?.hide(240);

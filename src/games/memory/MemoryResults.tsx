@@ -19,7 +19,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -106,6 +106,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   again?: () => void;
   reducedMotion: boolean;
 }) {
+  const win = useWindowDimensions();
   const sched = useMemo(() => revealSchedule(data.stars), [data.stars]);
   const [step, setStep] = useState(reducedMotion ? 99 : 0);
   const [panel, setPanel] = useState<ResultsPanel>('actions');
@@ -138,9 +139,9 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const canChallenge = !!data.daily?.ranked;
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
       <View style={styles.scrim} />
-      <Animated.View style={[styles.card, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
+      <Animated.View style={[styles.card, { maxHeight: win.height * 0.84 }, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
         <ScrollView contentContainerStyle={styles.cardInner} showsVerticalScrollIndicator={false} bounces={false}>
           <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
           {step >= 2 ? <Headline data={data} reducedMotion={reducedMotion} /> : <View style={styles.headlineSlot} />}
@@ -189,7 +190,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
         </ScrollView>
       </Animated.View>
       {data.daily ? (
-        <Animated.View style={[styles.card, styles.cardBack, backSt]} pointerEvents={flipped ? 'auto' : 'none'}>
+        <Animated.View style={[styles.card, styles.cardBack, { maxHeight: win.height * 0.84 }, backSt]} pointerEvents={flipped ? 'auto' : 'none'}>
           {flipped ? <ShareBack daily={data.daily} onBack={() => doFlip(false)} /> : null}
         </Animated.View>
       ) : null}
@@ -372,10 +373,10 @@ function IconBtn({ icon, label, onPress }: { icon: 'chest' | 'camera' | 'swords'
 }
 
 const styles = StyleSheet.create({
-  wrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  wrap: { alignItems: 'center', justifyContent: 'center' },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)' },
   card: {
-    width: '90%', maxWidth: 400, maxHeight: '92%', backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
+    width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',
   },
   cardBack: { position: 'absolute', padding: 16, alignItems: 'center' },

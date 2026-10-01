@@ -172,7 +172,8 @@ function boothGeoAt(W: number, H: number, cols: number, rows: number, opts: GeoO
   const feltW = W - feltX * 2;
   const [tw, th] = CARD_TARGET[rows] ?? CARD_TARGET[4];
   const ratio = th / tw;
-  let cw = Math.min(tw, (feltW - SIDE_GUTTER * 2 - gap * (cols - 1)) / cols);
+  // Design sizes are the floor on a 375pt phone; bigger phones grow the cards (walk-safe targets), up to +15%.
+  let cw = Math.min(tw * 1.15, (feltW - SIDE_GUTTER * 2 - gap * (cols - 1)) / cols);
   let ch = cw * ratio;
 
   const counterBottom = H - bottomInset;
@@ -251,8 +252,9 @@ function boothGeoAt(W: number, H: number, cols: number, rows: number, opts: GeoO
   }
   const pot = { x: W / 2, y: counterTop + COUNTER_H * 0.5 };
   const band = { x: 0, y: 0, w: W, h: Math.max(0, awning.y) };
-  const hud = { x: W * 0.4, y: 6, w: W * 0.6 - 8, h: 48 };
-  const barkerH = Math.max(96, Math.min(176, awning.y + awnH * 0.55 - 2));
+  // HUD plates sit just above the awning (glanceable next to the board), the barker beside them.
+  const hud = { x: W * 0.4, y: Math.max(6, awning.y - 56), w: W * 0.6 - 8, h: 48 };
+  const barkerH = Math.max(96, Math.min(210, awning.y + awnH * 0.55 - 2));
   const barker = { x: 4, y: awning.y + awnH * 0.55 - barkerH, w: barkerH * 0.79, h: barkerH };
   return {
     W, H, cols, rows, cw, ch, gap, grid, felt, rope, awning, awningStrip, posts, postStrips, counter, counterStrip,
