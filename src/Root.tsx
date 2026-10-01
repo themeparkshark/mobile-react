@@ -134,6 +134,7 @@ export default function App() {
           getComponent={() => require('./screens/InventoryScreen').default}
         />
         <Stack.Screen name="Settings" getComponent={() => require('./screens/SettingsScreen').default} />
+        <Stack.Screen name="HowToPlay" getComponent={() => require('./screens/HowToPlayScreen').default} />
         <Stack.Screen name="QueueTimes" getComponent={() => require('./screens/QueueTimesScreen').default} />
         <Stack.Screen
           name="LinePlay"

@@ -37,6 +37,7 @@ import getCollectionMilestones, { type CollectionMilestones } from '../api/endpo
 import GameIcon from '../ui/GameIcon';
 import { createEarnedShelfArrival } from '../services/collection/earnedShelf';
 import { RideChallengeContext } from '../gamekit/RideChallengeContext';
+import OneTimeTip from './help/OneTimeTip';
 import {
   TaskAttempt,
   TaskGameProof,
@@ -694,6 +695,9 @@ export default function RedeemRedeemableModal({
                           </View>
                           <Text style={styles.rescueCopy}>Out of Tickets? Play this new ride coin challenge free, with one retry if you miss. Win to earn a Ticket for your next ride.</Text>
                         </View>}
+                        {/* First ride challenge: how it works, once, right above the button. */}
+                        <OneTimeTip id="ride_challenge" ready={open === true && flowState === 'preview' && hasEnoughTickets && !previewOnly}
+                          compact style={{ marginBottom: 8 }} />
                         <YellowButton
                           text={hasEnoughTickets ? `Spend ${ticketCost} Ticket${ticketCost > 1 ? 's' : ''} to Play!`
                             : canUseRescuePass ? 'Use Rescue Pass to Play!' : 'Refresh Tickets'}

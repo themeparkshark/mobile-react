@@ -195,7 +195,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   const chipName = busy ? 'Saving…' : loading && !data ? 'Loading…' : goal ? goal.ride_name
     : data?.goal_unavailable ? 'Pick a new ride' : data ? 'Pick a ride' : 'Tap to retry';
   // Only the actionable state earns words on the chip; the planner explains the rest.
-  const chipStatus = upgradeReady ? 'UPGRADE READY' : null;
+  const chipStatus = upgradeReady ? 'LEVEL UP READY' : null;
 
   return <>
     {compact ? <Pressable style={({ pressed }) => [styles.chip, style, pressed && styles.chipPressed]} accessibilityRole="button"
@@ -218,7 +218,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
       </Text>
       <Text style={styles.pillDetail} numberOfLines={1}>
         {goal && wallet ? plan?.maxed ? 'PARK GOAL · MAX LEVEL'
-          : upgradeReady ? 'PARK GOAL · UPGRADE READY'
+          : upgradeReady ? 'PARK GOAL · LEVEL UP READY'
           : goal.coin_owned && plan ? plan.parts_needed
             ? `LV ${plan.current_level} · ${plan.parts_needed} ${plan.parts_needed === 1 ? 'PART' : 'PARTS'} TO GO`
             : `LV ${plan.current_level} · ${plan.energy_needed} ENERGY TO GO`

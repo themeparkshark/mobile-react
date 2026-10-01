@@ -165,7 +165,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const ownedGoalHint = goalPlan
     ? goalPlan.maxed ? 'Current max reached. Choose another ride coin.'
       : goalPlan.parts_needed === 0 && goalPlan.energy_needed === 0
-        ? 'Upgrade ready. Open this coin on your shelf.'
+        ? 'Ready to level up. Open this coin on your shelf.'
         : `${goalPlan.parts_needed ?? 0} Parts for this coin · ${goalPlan.energy_needed} Energy to upgrade.`
     : null;
   const inThisPark = Number(locationPark?.id) === Number(park);

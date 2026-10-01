@@ -72,7 +72,7 @@ export default function Experience() {
   const copy = STANDINGS_EMPTY_COPY.xp;
 
   return (
-    <ScrollView>
+    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
       <FloatingParticles count={10} />
       <StandingsPodium
         podium={slots.podium}

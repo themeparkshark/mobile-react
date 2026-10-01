@@ -52,7 +52,7 @@ export default function PermissionsNotGranted() {
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} />)}
         </View>
         <Text style={styles.body}>
-          Treats and park gear pop up around you, even at home. At the park, walk up to a ride to catch its coin.
+          Finds pop up around you, even at home. At the park, walk up to a ride to catch its coin.
         </Text>
         <Text style={styles.small}>Your location is only used to place items and rides near you.</Text>
         <View style={{ width: '82%', marginTop: 16 }}>

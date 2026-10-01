@@ -5,7 +5,7 @@
 
 /** Ticket sources the server reports (WS7 wallet flag). Missing means unknown. */
 export interface TicketSources {
-  /** Queue adventures pay Tickets right now (the queue Ticket faucet). */
+  /** LinePlay pays Tickets right now (the queue Ticket faucet). */
   readonly line?: boolean;
   /** Home finds pay Tickets. */
   readonly home?: boolean;
@@ -25,12 +25,12 @@ export function outOfTicketsCopy({ sources, rescuePassUsedToday }: {
 }): { title: string; body: string } {
   const lead = rescuePassUsedToday ? 'Today’s Rescue Pass is used. ' : '';
   if (!sources) {
-    return { title: 'NEED A PARK TICKET?', body: `${lead}Queue adventures and home finds can earn Tickets. Refresh once you have one.` };
+    return { title: 'NEED A PARK TICKET?', body: `${lead}LinePlay and home finds can earn Tickets. Refresh once you have one.` };
   }
   const lineOpen = !!sources.line && (sources.line_remaining_today === undefined || sources.line_remaining_today === null
     || sources.line_remaining_today > 0);
   if (lineOpen) {
-    return { title: 'EARN ONE IN LINE', body: `${lead}Play a queue adventure while you wait to earn a Ticket.${sources.home ? ' Home finds earn them too.' : ''}` };
+    return { title: 'EARN ONE IN LINE', body: `${lead}Play LinePlay while you wait to earn a Ticket.${sources.home ? ' Home finds earn them too.' : ''}` };
   }
   if (sources.home) {
     return { title: 'NEED A PARK TICKET?', body: `${lead}${sources.line ? 'Today’s queue Tickets are collected. ' : ''}Home finds earn Tickets for your next park day.` };

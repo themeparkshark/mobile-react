@@ -74,6 +74,7 @@ import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { ThemeProvider } from './src/context/ThemeProvider';
 import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
 import { TutorialProvider } from './src/components/Tutorial';
+import HelpProvider from './src/components/help/HelpProvider';
 import LinePlayRewardRecovery from './src/services/lineplay/LinePlayRewardRecovery';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
 
@@ -99,11 +100,13 @@ export default function App() {
                           <CurrencyProvider>
                             <CurrencyFlyProvider>
                               <TutorialProvider>
-                                <ToastProvider>
-                                  <Root />
-                                  {/* Progression v2: the one-time re-mint card, through the PresentationQueue. */}
-                                  <RemintNoticeModal />
-                                </ToastProvider>
+                                <HelpProvider>
+                                  <ToastProvider>
+                                    <Root />
+                                    {/* Progression v2: the one-time re-mint card, through the PresentationQueue. */}
+                                    <RemintNoticeModal />
+                                  </ToastProvider>
+                                </HelpProvider>
                               </TutorialProvider>
                             </CurrencyFlyProvider>
                           </CurrencyProvider>

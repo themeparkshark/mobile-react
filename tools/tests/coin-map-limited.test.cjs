@@ -81,7 +81,7 @@ test('the guide plays a coinless ride in line, badges limited coins and searches
   assert.match(directory, /buildCoinGuide\(\{ parkId: parkId \?\? 0, coins: \[\.\.\.rides, \.\.\.limited\]/,
     'rides match against every coin, even in the RIDES view');
   assert.match(directory, /row\.search\.includes\(normalizedQuery\)/);
-  assert.match(directory, /LINE PLAY · GAMES WHILE YOU WAIT/);
+  assert.match(directory, /LINEPLAY · GAMES WHILE YOU WAIT/);
   assert.match(directory, /onPlayRideInLine\?\.\(ride\)/);
   assert.match(directory, /limitedLabel\(task\.limited\)/);
   assert.match(directory, /onChooseGoal && !resting/, 'an out-of-rotation coin offers no goal or play');

@@ -190,7 +190,9 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   }): ReactNode => isPassAndPlay(group) && group.rounds.length > 0
     ? <GroupRecapCard group={group} {...args} /> : null;
 
-  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot };
+  /** The crew opener or a pass-the-phone card is up: one-time tips wait. */
+  const sheetOpen = (openerVisible && !mode) || !!mode;
+  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot, sheetOpen };
 }
 
 export type { MiniGameId };

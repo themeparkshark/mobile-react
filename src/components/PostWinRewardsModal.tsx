@@ -383,7 +383,7 @@ export default function PostWinRewardsModal({
                   <View style={styles.readyLip}>
                     <View style={styles.readyBadge}>
                       <GameIcon name="sparkle" size={20} />
-                      <Text style={styles.readyText} numberOfLines={1}>READY TO POWER UP</Text>
+                      <Text style={styles.readyText} numberOfLines={1}>READY TO LEVEL UP</Text>
                     </View>
                   </View>
                 </Animated.View>}

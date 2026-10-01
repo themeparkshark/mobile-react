@@ -15,7 +15,7 @@ import { TutorialStep, TutorialSequence } from './types';
 const homeOnboardingSteps: TutorialStep[] = [
   {
     id: 'welcome', sequence: 'onboarding',
-    text: "Hey, new shark! I'm Finn. Treats pop up around you, even at home.",
+    text: "Hey, new shark! I'm Finn. Finds pop up around you, even at home.",
     subtitle: 'One just landed right next to you. Let’s grab it!',
     sharkPosition: 'bottom-center', sharkMood: 'waving', nextText: 'Grab it!', delay: 400,
   },
@@ -44,12 +44,12 @@ const parkOnboardingSteps: TutorialStep[] = [
     id: 'park_ride', sequence: 'onboarding', title: 'Start your collection',
     // Copy stands on its own: it must read right whether or not the card is spotlit.
     text: 'Choose a ride coin you are missing on the map. Win its ride challenge to earn it.',
-    subtitle: 'Later: Profile, scroll to your parks, tap a park.',
+    subtitle: 'Tap your shark in the corner to see your coins.',
     // Spotlights the "YOUR NEXT PARK COIN" card once ParkCollectionHeader calls
     // registerRef('next_park_coin') (change request filed with its owner). Until then
     // there is no spotlight and Finn keeps his default spot.
     spotlightRef: 'next_park_coin', placement: 'above-spotlight',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Find a ride coin',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Let’s go!',
   },
 ];
 
@@ -80,8 +80,8 @@ const storeSteps: TutorialStep[] = [
   {
     id: 'store_intro',
     sequence: 'store',
-    text: 'Welcome to the Shark Store! Spend your coins on items to customize your profile.',
-    subtitle: 'The store rotates, so check back for new stuff!',
+    text: 'Welcome to the Shark Shop! Spend your Shark Coins on gear for your shark.',
+    subtitle: 'The shop restocks on a timer, so check back for new gear!',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',
     nextText: 'Cool!',
@@ -140,7 +140,7 @@ const pinSteps: TutorialStep[] = [
   {
     id: 'pin_collections_intro',
     sequence: 'pins',
-    text: 'Pin Collections! Collect pins at the parks and trade them with other sharks.',
+    text: 'Pins! Open Pin Packs to collect them, and swap with other sharks in Pin Trading.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Sweet!',

@@ -8,6 +8,8 @@ import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { ws7Preview } from '../dev/ws7Preview';
+import { useHelp } from './help/HelpProvider';
+import type { GlossaryKey } from '../services/help/glossary';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
 export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
@@ -70,6 +72,7 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
+  const { explain } = useHelp();
   const [isOpen, setIsOpen] = useState(false);
   // Dev visual QA only.
   useEffect(() => {
@@ -145,10 +148,12 @@ export default function RadialStatsMenu() {
     }).start();
   };
 
+  // Each stat opens its "What's this?" sheet with the balance.
+  const explainStat = (key: GlossaryKey, count: number) => { closeMenu(); explain(key, { count }); };
   const items = [
-    { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => showTooltip(ENERGY_RULE) },
-    { icon: 'ticket' as const, label: 'Park Tickets', value: formatNumber(tickets), onPress: () => showTooltip(TICKET_RULE) },
-    { icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: undefined },
+    { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => explainStat('energy', energy) },
+    { icon: 'ticket' as const, label: 'Park Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
+    { icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat('day_streak', streak) },
   ];
 
   return (

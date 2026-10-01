@@ -97,7 +97,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
       <View style={styles.statStrip}>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.distinct_rides_won}</Text><Text style={styles.statLabel}>RIDES WON</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>UPGRADES</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
       </View>
       {recap.line_play_sessions > 0 && <Text style={styles.copy}>
         {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Part{recap.ride_parts_earned === 1 ? '' : 's'}

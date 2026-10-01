@@ -294,14 +294,15 @@ export default function SessionRecap({
         </View>
       )}
 
-      {rewardsPending && (
+      {/* One message, never two that disagree: offline sync only applies when this wait could earn. */}
+      {rewardsPending && rewardTrackingAvailable && (
         <Text style={styles.recapPending}>Rewards will sync when you&apos;re back online.</Text>
       )}
       {rewardTrackingAvailable && !rewardsConfirmed && !rewardsPending && (
         <Text style={styles.recapPending}>Checking eligible nearby time...</Text>
       )}
       {!rewardTrackingAvailable && (
-        <Text style={styles.recapPending}>Games completed. Queue rewards are unavailable for this session.</Text>
+        <Text style={styles.recapPending}>Games done! This session earned no Ride Parts. They count only near a ride that pays them.</Text>
       )}
 
       {rewardsConfirmed && coinState === 'loading' && (
@@ -323,7 +324,7 @@ export default function SessionRecap({
                 {'\n'}{playerEnergy == null
                   ? energyUnavailable ? 'Check this coin when you are connected.' : 'Checking your next upgrade.'
                   : upgradeReady
-                    ? 'Upgrade ready now.'
+                    ? 'Ready to level up now.'
                     : `Next upgrade needs ${Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0))} more Parts and ${Math.max(0, coin.energy_to_next_level - playerEnergy)} more Energy.`}
               </Text>
               {coin.next_level_perks.length > 0 && (
