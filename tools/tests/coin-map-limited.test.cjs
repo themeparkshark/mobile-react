@@ -78,7 +78,8 @@ test('the Coin Guide lists every cataloged ride once: a coin row, else a Line Pl
 
 test('the guide plays a coinless ride in line, badges limited coins and searches every row', () => {
   const directory = fs.readFileSync('src/screens/ParkRideDirectory.tsx', 'utf8');
-  assert.match(directory, /buildCoinGuide\(/);
+  assert.match(directory, /buildCoinGuide\(\{ parkId: parkId \?\? 0, coins: \[\.\.\.rides, \.\.\.limited\]/,
+    'rides match against every coin, even in the RIDES view');
   assert.match(directory, /row\.search\.includes\(normalizedQuery\)/);
   assert.match(directory, /LINE PLAY · GAMES WHILE YOU WAIT/);
   assert.match(directory, /onPlayRideInLine\?\.\(ride\)/);

@@ -48,8 +48,13 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
   const rideIds = useMemo(() => new Set(rideTaskIds ?? []), [rideTaskIds]);
   const filtered = useMemo(() => rideOnly && rideIds.size > 0 ? rides.filter(task => rideIds.has(task.id)) : rides,
     [rides, rideOnly, rideIds]);
-  const rows = useMemo(() => buildCoinGuide({ parkId: parkId ?? 0, coins: [...filtered, ...limited],
-    rides: parkId ? catalogRides : [] }), [filtered, limited, catalogRides, parkId]);
+  // Match rides against every coin, so a ride whose coin is not a passport ride
+  // never turns into a Line Play row in the RIDES view.
+  const rows = useMemo(() => {
+    const all = buildCoinGuide({ parkId: parkId ?? 0, coins: [...rides, ...limited], rides: parkId ? catalogRides : [] });
+    const shown = new Set([...filtered, ...limited].map(task => task.id));
+    return all.filter(row => row.kind === 'line' || shown.has(row.task.id));
+  }, [rides, filtered, limited, catalogRides, parkId]);
   const ordered = useMemo(() => [...rows].sort((a, b) => {
     // Goal, nearest, coins to find, owned coins, limited coins out of rotation, then Line Play rides.
     const rank = (row: CoinGuideRow) => row.kind === 'line' ? 5 : row.task.id === goalTaskId
