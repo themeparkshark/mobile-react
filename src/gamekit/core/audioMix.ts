@@ -28,6 +28,8 @@ export interface VoiceInfo {
   startedAt: number;
   /** Expected end (startedAt + duration); 0 if unknown. */
   endsAt: number;
+  /** Voice group (Trivia: 'tick' max 3, 'babble' max 1, 'crowd' max 1). */
+  group?: string;
 }
 
 export interface AllocRequest {
@@ -37,6 +39,9 @@ export interface AllocRequest {
   maxVoicesForCue: number;
   cooldownMs: number;
   lastPlayedAt: number;
+  /** Voice group and its cap (0 / undefined = no group cap). */
+  group?: string;
+  groupCap?: number;
 }
 
 export type AllocDecision =
@@ -56,6 +61,13 @@ export function allocateVoice(active: readonly VoiceInfo[], req: AllocRequest, g
   if (req.maxVoicesForCue > 0 && same.length >= req.maxVoicesForCue) {
     const oldest = same.reduce((a, b) => (b.startedAt < a.startedAt ? b : a));
     return { action: 'steal', victimId: oldest.id };
+  }
+  if (req.group && req.groupCap && req.groupCap > 0) {
+    const inGroup = live.filter((v) => v.group === req.group);
+    if (inGroup.length >= req.groupCap) {
+      const oldest = inGroup.reduce((a, b) => (b.startedAt < a.startedAt ? b : a));
+      return { action: 'steal', victimId: oldest.id };
+    }
   }
   if (live.length >= globalCap) {
     let victim: VoiceInfo | null = null;
@@ -145,4 +157,20 @@ export function loopPosition(positionMs: number, loopMs: number): number {
 export function equalPower(progress: number): [number, number] {
   const p = progress < 0 ? 0 : progress > 1 ? 1 : progress;
   return [Math.cos((p * Math.PI) / 2), Math.sin((p * Math.PI) / 2)];
+}
+
+/**
+ * Rez-style hit quantization (Line Party, Banana tambourine): delay a
+ * decorative/own-hit sound to the next grid point when that point is at most
+ * `maxSnapMs` away; otherwise play now (0). Audio only: score and sim time
+ * never move. `subdivision` is in beats (0.25 = 16th notes).
+ */
+export function quantizeDelayMs(c: BeatClock, positionMs: number, subdivision = 0.25, maxSnapMs = 50): number {
+  const step = beatMs(c) * subdivision;
+  if (step <= 0) return 0;
+  const rel = positionMs - c.offsetMs;
+  const phase = ((rel % step) + step) % step;
+  if (phase < 0.5) return 0;
+  const wait = step - phase;
+  return wait <= maxSnapMs ? wait : 0;
 }

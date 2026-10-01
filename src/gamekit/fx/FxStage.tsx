@@ -56,6 +56,8 @@ import {
   particleAlpha,
   particleSize,
   particleSprite,
+  particleTwosRot,
+  particleTwosScale,
   stepParticles,
   takeArrivals,
   type EmitParams,
@@ -65,6 +67,7 @@ import {
 } from '../core/particles';
 import { FX_CELL, FX_COLS, useFxAtlas } from './FxAtlas';
 import { Shaders, rgba } from './shaders';
+import { flyToPose } from '../core/scoreFx';
 
 const TEXT_SLOTS = 8;
 const FLY_FONT_PX = 32;
@@ -105,6 +108,16 @@ export interface FxState {
   txtColor: string[];
   /** Optional key: a new fly-up with the same key replaces the live one. */
   txtKey: string[];
+  /** Fly-to-score (Whack v5): target (txtTo 1), hold and travel ms, tilt (rad), overshoot. */
+  txtTo: number[];
+  txtTx: number[];
+  txtTy: number[];
+  txtHold: number[];
+  txtTravel: number[];
+  txtTilt: number[];
+  txtOver: number[];
+  /** Fly-ups that reached their target since the last read (the score digit-roll trigger). */
+  flyArrivals: number;
   txtNext: number;
   /** Reduced motion: fewer particles, softer flashes. */
   reduced: boolean;
@@ -131,6 +144,8 @@ export function createFxState(cap: number, layerBudget?: number[]): FxState {
     vigT: -1e9, vigIn: 0, vigHold: 0, vigOut: 0, vigPeak: 0, vigColor: [1, 0.81, 0.23, 1],
     txtAlive: a0.slice(), txtStr: s0.slice(), txtX: a0.slice(), txtY: a0.slice(), txtW: a0.slice(),
     txtT: a0.slice(), txtDur: a0.slice(), txtScale: a0.slice(), txtRise: a0.slice(), txtColor: s0.slice(), txtKey: s0.slice(),
+    txtTo: a0.slice(), txtTx: a0.slice(), txtTy: a0.slice(), txtHold: a0.slice(), txtTravel: a0.slice(),
+    txtTilt: a0.slice(), txtOver: a0.slice(), flyArrivals: 0,
     txtNext: 0,
     reduced: false,
     flashCap: 0.6,
@@ -155,7 +170,7 @@ export function fxEmitUI(s: FxState, def: EmitterDef, x: number, y: number, p: E
 export function fxFlyUpUI(
   s: FxState, text: string, x: number, y: number, scale: number, color: string,
   width = -1, rise = 48, durMs = 520, key = '',
-): void {
+): number {
   'worklet';
   let i = -1;
   if (key !== '') {
@@ -178,7 +193,34 @@ export function fxFlyUpUI(
   s.txtScale[i] = scale;
   s.txtRise[i] = s.reduced ? rise * 0.5 : rise;
   s.txtColor[i] = color;
+  s.txtTo[i] = 0;
+  return i;
 }
+
+/**
+ * Fly-to-score (Whack v5): pop to `overshoot` (1.3) with a tilt (+/-6 deg),
+ * hold `holdMs` (250), then curve to (tx, ty) over `travelMs` (350) while
+ * shrinking. Arrival bumps `flyArrivals` (FxStage calls onFlyUpArrive), which
+ * is the cue for the header score's digit roll.
+ */
+export function fxFlyToUI(
+  s: FxState, text: string, x: number, y: number, scale: number, color: string, width: number,
+  tx: number, ty: number, holdMs = 250, travelMs = 350, tiltDeg = 6, overshoot = 1.3, key = '',
+): void {
+  'worklet';
+  const i = fxFlyUpUI(s, text, x, y, scale, color, width, 0, 140 + holdMs + travelMs, key);
+  s.txtTo[i] = 1;
+  s.txtTx[i] = tx;
+  s.txtTy[i] = ty;
+  s.txtHold[i] = holdMs;
+  s.txtTravel[i] = s.reduced ? Math.min(travelMs, 200) : travelMs;
+  // Alternate the tilt sign so consecutive fly-ups lean apart.
+  const sign = (s.txtNext & 1) === 0 ? 1 : -1;
+  s.txtTilt[i] = s.reduced ? 0 : (sign * tiltDeg * Math.PI) / 180;
+  s.txtOver[i] = s.reduced ? 1 : overshoot;
+}
+
+
 
 export function fxFlashUI(s: FxState, color: number[], peak: number, durMs: number): void {
   'worklet';
@@ -231,6 +273,12 @@ export interface FlyUpOptions {
   ms?: number;
   /** Replace the live fly-up with the same key (running tallies, one per hole). */
   key?: string;
+  /** Fly to the score (Whack v5): overshoot, tilt, hold, then curve here. */
+  to?: { x: number; y: number };
+  holdMs?: number;
+  travelMs?: number;
+  tiltDeg?: number;
+  overshoot?: number;
 }
 
 export interface FxStageHandle {
@@ -263,13 +311,15 @@ export interface FxStageProps {
   flashCap?: number;
   /** Called with the number of magnetized coins that just arrived. */
   onArrive?: (count: number) => void;
+  /** Called when fly-to-score labels land (digit-roll the header score, tick). */
+  onFlyUpArrive?: (count: number) => void;
   style?: StyleProp<ViewStyle>;
 }
 
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
 export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
-  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, style },
+  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, style },
   ref,
 ) {
   const state = useSharedValue<FxState>(createFxState(capacity, layerBudget));
@@ -282,12 +332,14 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     runOnUI((reduced: boolean, cap: number, w: number) => {
       'worklet';
       state.value.reduced = reduced;
+      state.value.pool.twosOn = !reduced;
       state.value.flashCap = cap;
       state.value.viewW = w;
     })(reducedMotion, flashCap, width);
   }, [reducedMotion, flashCap, width, state]);
 
   const notifyArrive = useMemo(() => (n: number) => onArrive?.(n), [onArrive]);
+  const notifyFly = useMemo(() => (n: number) => onFlyUpArrive?.(n), [onFlyUpArrive]);
 
   useFrameCallback((info) => {
     'worklet';
@@ -303,13 +355,21 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     let busy = hadLive || s.pool.live > 0;
     for (let i = 0; i < TEXT_SLOTS; i++) {
       if (s.txtAlive[i] === 1) {
-        if (s.t - s.txtT[i] > s.txtDur[i]) s.txtAlive[i] = 0;
+        if (s.t - s.txtT[i] > s.txtDur[i]) {
+          s.txtAlive[i] = 0;
+          if (s.txtTo[i] === 1) s.flyArrivals += 1;
+        }
         busy = true;
       }
     }
     if (s.t - s.flashT < s.flashDur + 32 || s.t - s.bloomT < s.bloomDur + 32) busy = true;
     if (s.t - s.vigT < s.vigIn + s.vigHold + s.vigOut + 32) busy = true;
     if (s.pool.arrivals > 0) runOnJS(notifyArrive)(takeArrivals(s.pool));
+    if (s.flyArrivals > 0) {
+      const n = s.flyArrivals;
+      s.flyArrivals = 0;
+      runOnJS(notifyFly)(n);
+    }
     if (busy) tick.value = tick.value + 1;
   });
 
@@ -319,20 +379,23 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     'worklet';
     tick.value;
     const s = state.value;
-    const idx = s.pool.alive[i] === 1 ? particleSprite(s.pool, i) : 0;
+    const idx = s.pool.alive[i] === 1 ? particleSprite(s.pool, i, s.t) : 0;
     rect.setXYWH((idx % FX_COLS) * FX_CELL, Math.floor(idx / FX_COLS) * FX_CELL, FX_CELL, FX_CELL);
   });
   const transforms = useRSXformBuffer(cap, (xf, i) => {
     'worklet';
     tick.value;
-    const p = state.value.pool;
+    const st = state.value;
+    const p = st.pool;
     if (p.alive[i] !== 1) {
       xf.set(0, 0, -4000, -4000);
       return;
     }
-    const scale = (particleSize(p, i) * 2) / FX_CELL;
-    const c = Math.cos(p.rot[i]) * scale;
-    const sn = Math.sin(p.rot[i]) * scale;
+    // On twos: the drawing re-picks rotation and scale every 83 ms; the position stays smooth.
+    const scale = ((particleSize(p, i) * 2) / FX_CELL) * particleTwosScale(p, i, st.t);
+    const rot = p.rot[i] + particleTwosRot(p, i, st.t);
+    const c = Math.cos(rot) * scale;
+    const sn = Math.sin(rot) * scale;
     const h = FX_CELL / 2;
     xf.set(c, sn, p.x[i] - (c * h - sn * h), p.y[i] - (sn * h + c * h));
   });
@@ -435,6 +498,15 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
       flyUp: (text, x, y, opts = {}) => {
         const scale = SIZE_SCALE[opts.size ?? 'md'];
         const w = measure(font, text);
+        if (opts.to) {
+          runOnUI((t: string, fx: number, fy: number, sc: number, color: string, width: number, tx: number, ty: number,
+            hold: number, travel: number, tilt: number, over: number, key: string) => {
+            'worklet';
+            fxFlyToUI(state.value, t, fx, fy, sc, color, width, tx, ty, hold, travel, tilt, over, key);
+          })(text, x, y, scale, opts.color ?? '#ffffff', w, opts.to.x, opts.to.y, opts.holdMs ?? 250, opts.travelMs ?? 350,
+            opts.tiltDeg ?? 6, opts.overshoot ?? 1.3, opts.key ?? '');
+          return;
+        }
         runOnUI((t: string, fx: number, fy: number, sc: number, color: string, width: number, rise: number, ms: number, key: string) => {
           'worklet';
           fxFlyUpUI(state.value, t, fx, fy, sc, color, width, rise, ms, key);
@@ -505,6 +577,7 @@ function FlyUpSlot({ index, state, tick, font }: {
     if (s.txtAlive[index] !== 1) return 0;
     const t = s.t - s.txtT[index];
     const d = s.txtDur[index];
+    if (s.txtTo[index] === 1) return 1;
     const fadeFrom = d - 180;
     return t < fadeFrom ? 1 : Math.max(0, 1 - (t - fadeFrom) / 180);
   });
@@ -512,6 +585,20 @@ function FlyUpSlot({ index, state, tick, font }: {
     tick.value;
     const s = state.value;
     const t = s.t - s.txtT[index];
+    if (s.txtTo[index] === 1) {
+      const p = flyToPose(t, s.txtX[index], s.txtY[index], s.txtTx[index], s.txtTy[index], s.txtHold[index],
+        s.txtTravel[index], s.txtTilt[index], s.txtOver[index]);
+      const sc0 = s.txtScale[index] * p[2];
+      const w0 = s.txtW[index];
+      // Rotate and scale about the label centre.
+      return [
+        { translateX: p[0] },
+        { translateY: p[1] },
+        { rotate: p[3] },
+        { scale: sc0 },
+        { translateX: -w0 / 2 },
+      ];
+    }
     // Pop 0.6 -> 1.15 over 80ms, spring-ish settle, rise with outCubic.
     let k = 1;
     if (t < 80) k = 0.6 + 0.55 * (t / 80);

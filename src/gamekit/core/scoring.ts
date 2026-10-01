@@ -153,3 +153,28 @@ export function flurryResolve(f: FlurryState, now: number, holdMs = 300): boolea
   }
   return false;
 }
+
+/**
+ * Bucket tally ticks (Whack: HITS, COMBO, BONUS fill "with accelerating
+ * ticks"; tick pitch climbs 0 -> +12 semitones). Returns `n` tick times over
+ * `durMs`, each gap shorter than the last (accel > 1 speeds up harder), and
+ * the pitch (semitones) for each tick.
+ */
+export function tallySchedule(n: number, durMs: number, accel = 2, maxPitch = 12): { at: number[]; pitch: number[] } {
+  const at: number[] = [];
+  const pitch: number[] = [];
+  if (n <= 0) return { at, pitch };
+  for (let k = 0; k < n; k++) {
+    const u = n === 1 ? 1 : k / (n - 1);
+    // Ease-in on time: early ticks are spread out, late ones bunch up.
+    at.push(Math.round(durMs * (1 - Math.pow(1 - u, accel))));
+    pitch.push(Math.round(u * maxPitch));
+  }
+  return { at, pitch };
+}
+
+/** How many ticks a tally of `value` should play (one per chunk, 3..14). */
+export function tallyTickCount(value: number): number {
+  if (value <= 0) return 0;
+  return Math.max(3, Math.min(14, Math.ceil(Math.log10(value + 1) * 4)));
+}
