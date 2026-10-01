@@ -47,7 +47,7 @@ import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS } from '../../services/
 import { crewLivePrompt } from '../../services/lineplay/livePrompt';
 import LinePlayLiveRail from './components/LinePlayLiveRail';
 import getWikiTimes from '../../api/endpoints/parks/queue-times/getWikiTimes';
-import { LocationContext } from '../../context/LocationProvider';
+import { LocationContext, LocationStatusContext } from '../../context/LocationProvider';
 import { AuthContext } from '../../context/AuthProvider';
 import getRideCoins from '../../api/endpoints/me/ride-coins';
 import { getStamps } from '../../api/endpoints/me/stamps';
@@ -161,7 +161,7 @@ export default function LinePlayScreen() {
   const ride: RideContext | undefined = route.params?.ride;
 
   const { session, snapshot } = useLinePlaySession();
-  const { latestLocationSampleRef } = useContext(LocationContext);
+  const { latestLocationSampleRef } = useContext(LocationStatusContext);
   const { player, refreshPlayer } = useContext(AuthContext);
   const prediction = snapshot.prediction;
   const completedActivityIds = useMemo(() => new Set(snapshot.completedActivityIds), [snapshot.completedActivityIds]);

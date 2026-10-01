@@ -20,7 +20,8 @@ test('heading ticks update only the heading context; the location value keeps it
     './parkLookupPolicy': { shouldRefreshParkLookup: () => false },
   }, { children: 'map' }, { AppState: undefined }, { exportName: 'LocationProvider' });
   const outer = () => app.tree;
-  const inner = () => app.tree.props.children;
+  const status = () => app.tree.props.children;
+  const inner = () => app.tree.props.children.props.children;
   // Permission arrives through the AppState path in the app; grant it through the requester here.
   await outer().props.value.requestPermission(); app.render(); await app.settle();
   inner().props.value.setHeadingEnabled(true); app.render(); await app.settle();
@@ -35,6 +36,7 @@ test('heading ticks update only the heading context; the location value keeps it
   assert.equal(outer().props.value, before, 'location consumers do not re-render per heading sample');
   assert.ok(inner().props.value.heading > 90);
   assert.equal('heading' in before, false);
+  assert.equal('location' in status().props.value, false, 'the status context never carries the moving position');
   assert.equal(watchOptions.accuracy, Location.Accuracy.High);
   assert.equal(watchOptions.distanceInterval, 3);
 });

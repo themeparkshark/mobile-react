@@ -7,7 +7,7 @@ import allParks from '../../api/endpoints/parks/allParks';
 import rideStandings from '../../api/endpoints/leaderboards/rideStandings';
 import StandingsPicker from '../../components/StandingsPicker';
 import { AuthContext } from '../../context/AuthProvider';
-import { LocationContext } from '../../context/LocationProvider';
+import { LocationStatusContext } from '../../context/LocationProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ParkType } from '../../models/park-type';
 import { PlayerType } from '../../models/player-type';
@@ -71,7 +71,7 @@ function MetricPills({ value, onChange, metrics }: { readonly value: RideMetric;
 
 export default function RideStandings() {
   const { player } = useContext(AuthContext);
-  const { park: currentPark } = useContext(LocationContext);
+  const { park: currentPark } = useContext(LocationStatusContext);
   const [parks, setParks] = useState<ParkType[]>([]);
   const [chosenParkId, setChosenParkId] = useState<number | undefined>();
   const [metric, setMetric] = useState<RideMetric>('today');

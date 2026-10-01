@@ -5,7 +5,7 @@ import Animated, {
   Easing, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming,
 } from 'react-native-reanimated';
 import YellowButton from '../../components/YellowButton';
-import { LocationContext } from '../../context/LocationProvider';
+import { LocationStatusContext } from '../../context/LocationProvider';
 
 const FINDS = [
   require('../../../assets/images/prep-items/churros/churro_01.png'),
@@ -37,7 +37,7 @@ function Find({ source, i }: { source: number; i: number }) {
  * does the button open Settings.
  */
 export default function PermissionsNotGranted() {
-  const { requestPermission } = useContext(LocationContext);
+  const { requestPermission } = useContext(LocationStatusContext);
   const [asking, setAsking] = useState(false);
 
   return (

@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { useContext, useCallback, useEffect } from 'react';
 import { View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
-import { LocationContext } from './context/LocationProvider';
+import { LocationContext, LocationStatusContext } from './context/LocationProvider';
 import { useAsyncEffect } from 'rooks';
 import { flushPendingNavigation, navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
@@ -89,12 +89,10 @@ export default function App() {
   const { setCrumbs } = useContext(CrumbContext);
   const { retrieveCurrencies } = useContext(CurrencyContext);
   const { retrieveTheme } = useContext(ThemeContext);
-  const { devMode, setDevMode, moveDevLocation, location: currentLocation, permissionGranted, park: currentPark } = useContext(LocationContext);
-  // Keep ride detection alive as the guest moves between map, queue, and profile,
-  // but only at a park: away from one, background GPS is battery drain and an
-  // unexplained location indicator. Park presence is sticky, so this never flaps.
-  // The service itself never asks for Always permission during app startup.
-  useRideDetection(!isStandalonePreview && !!player && permissionGranted && !!currentPark, currentPark?.id ?? null);
+  // The app shell reads park presence, not the moving position: a GPS step
+  // must not re-render the navigator and every overlay (see RideDetectionDriver
+  // and DevJoystickHost, which take the position themselves).
+  const { devMode, permissionGranted, park: currentPark } = useContext(LocationStatusContext);
   const [fontsReady, fontError] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
@@ -106,11 +104,6 @@ export default function App() {
   }, [fontsLoaded]);
   useAxiosSetup();
 
-  const handleJoystickMove = useCallback((dx: number, dy: number, speed: number) => {
-    moveDevLocation(dx, dy, speed);
-  }, [moveDevLocation]);
-
-  const handleJoystickStop = useCallback(() => {}, []);
 
   useAsyncEffect(async () => {
     if (isStandalonePreview) return;
@@ -131,6 +124,12 @@ export default function App() {
 
   return (
     <View style={{ flex: 1 }}>
+    {/* Keep ride detection alive as the guest moves between map, queue, and profile,
+        but only at a park: away from one, background GPS is battery drain and an
+        unexplained location indicator. Park presence is sticky, so this never flaps.
+        The service itself never asks for Always permission during app startup. */}
+    <RideDetectionDriver enabled={!isStandalonePreview && !!player && permissionGranted && !!currentPark}
+      parkId={currentPark?.id ?? null} />
     <NavigationContainer
       ref={navigationRef}
       onReady={flushPendingNavigation}
@@ -338,14 +337,22 @@ export default function App() {
     <GameDialogHost />
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
-    {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
-      <DevJoystick
-        onMove={handleJoystickMove}
-        onStop={handleJoystickStop}
-        currentLat={currentLocation.latitude}
-        currentLng={currentLocation.longitude}
-      />
-    )}
+    {__DEV__ && !isStandalonePreview && player && devMode && <DevJoystickHost />}
     </View>
   );
+}
+
+/** Runs ride detection. Its own component, so a GPS step re-renders only this. */
+function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; readonly parkId: number | null }) {
+  useRideDetection(enabled, parkId);
+  return null;
+}
+
+/** Dev builds: the location joystick, which needs the live position. */
+function DevJoystickHost() {
+  const { location, moveDevLocation } = useContext(LocationContext);
+  const onMove = useCallback((dx: number, dy: number, speed: number) => moveDevLocation(dx, dy, speed), [moveDevLocation]);
+  const onStop = useCallback(() => {}, []);
+  if (!location) return null;
+  return <DevJoystick onMove={onMove} onStop={onStop} currentLat={location.latitude} currentLng={location.longitude} />;
 }

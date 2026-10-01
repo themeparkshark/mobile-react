@@ -15,7 +15,7 @@ test('a won coin makes the Park Coins tab fetch a fresh board', async () => {
     '../../api/endpoints/parks/leaderboards/get': { default: async () => [{ id: 1, name: 'Today' }] },
     '../../api/endpoints/leaderboards/players': { default: async () => { fetches++; return board; } },
     '../../context/AuthProvider': { AuthContext: { value: { player: { id: 10, current_park_id: 8 } } } },
-    '../../context/LocationProvider': { LocationContext: { value: { park: { id: 8 } } } },
+    '../../context/LocationProvider': { LocationContext: { value: { park: { id: 8 } } }, LocationStatusContext: { value: { park: { id: 8 } } } },
     './standingsModel': model,
     './standingsCache': standingsCache,
   };

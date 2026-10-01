@@ -109,7 +109,7 @@ test('ride detection polls posted waits for the current park only, slower in the
   const src = read('src/hooks/useRideDetection.ts');
   assert.match(src, /useLivePoll\(refreshWaitTimes, WAIT_TIMES_FOREGROUND_MS, \{\s*enabled: enabled && ridesLoaded, backgroundMs: WAIT_TIMES_BACKGROUND_MS/);
   assert.doesNotMatch(src, /setInterval/);
-  assert.match(read('src/Root.tsx'), /useRideDetection\([^;]*currentPark\?\.id \?\? null\)/);
+  assert.match(read('src/Root.tsx'), /<RideDetectionDriver enabled=\{[^}]*\}\s*parkId=\{currentPark\?\.id \?\? null\} \/>/);
   const ids = loadTs('src/hooks/useRideDetection.ts', {
     react: {}, 'react-native': { AppState: {} },
     '../api/endpoints/rides': {}, '../api/endpoints/parks/queue-times/getWikiTimes': { default: () => [] },

@@ -111,7 +111,7 @@ import { useAsyncEffect, useEffectOnceWhen, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import Progress from '../components/Progress';
 import { AuthContext } from '../context/AuthProvider';
-import { LocationContext } from '../context/LocationProvider';
+import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
@@ -129,7 +129,7 @@ export default function LoadingScreen() {
 
   const { isReady, player } = useContext(AuthContext);
   const { requestPark, parkLoaded, permissionGranted } =
-    useContext(LocationContext);
+    useContext(LocationStatusContext);
   const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const [progress, setProgress] = useState<number>(0);

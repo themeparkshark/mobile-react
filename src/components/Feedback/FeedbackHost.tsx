@@ -18,7 +18,7 @@ import { AppState, Dimensions, Image, PixelRatio, Platform, Pressable, StyleShee
 import { captureScreen } from 'react-native-view-shot';
 import sendTesterFeedback from '../../api/endpoints/me/tester-feedback';
 import { AuthContext } from '../../context/AuthProvider';
-import { LocationContext } from '../../context/LocationProvider';
+import { LocationStatusContext } from '../../context/LocationProvider';
 import { navigationRef } from '../../RootNavigation';
 import { recentLogLines } from '../../services/feedback/consoleRing';
 import {
@@ -46,7 +46,7 @@ type Draft = {
 
 export default function FeedbackHost() {
   const { player } = useContext(AuthContext);
-  const { park, latestLocationSampleRef } = useContext(LocationContext);
+  const { park, latestLocationSampleRef } = useContext(LocationStatusContext);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [visible, setVisible] = useState(false);
   const [note, setNote] = useState('');

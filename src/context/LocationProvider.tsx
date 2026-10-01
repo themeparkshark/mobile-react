@@ -9,6 +9,7 @@ import { AuthContext } from './AuthProvider';
 import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../helpers/dev-location-store';
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
+import { gpsWatchSettings } from './gpsWatchPolicy';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -51,6 +52,19 @@ export interface LocationContextType {
 
 export const LocationContext = createContext<LocationContextType>(
   {} as LocationContextType
+);
+
+/**
+ * Everything in LocationContext except the moving position. Park presence,
+ * permission and the actions change rarely; `location` changes on every GPS
+ * step. Screens and hosts that never read `location` subscribe here, so a
+ * walk across the park no longer re-renders the app shell, Settings, the
+ * standings or the feedback host on every fix. Read the newest fix through
+ * `latestLocationSampleRef` when a handler needs it.
+ */
+export type LocationStatusContextType = Omit<LocationContextType, 'location'>;
+export const LocationStatusContext = createContext<LocationStatusContextType>(
+  {} as LocationStatusContextType
 );
 
 /**
@@ -378,6 +392,16 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return () => clearInterval(timer);
   }, [player?.id, permissionGranted, location?.latitude, location?.longitude]);
 
+  // How hard the watcher works depends on what is on screen (gpsWatchPolicy):
+  // full precision for a map or a queue, coarser steps elsewhere in a park,
+  // neighbourhood accuracy away from every park with no map showing.
+  const watch = gpsWatchSettings({
+    mapOnScreen: headingEnabled,
+    queueTracking: accuracyMode === 'queue',
+    inPark: !!park,
+    confirmedOutside: !park && parkLookupRecord?.outcome === 'outside',
+  });
+
   // Continuous position watcher — streams GPS updates from the OS
   // instead of polling with getCurrentPositionAsync every 5s.
   // This is what makes the shark actively follow you as you walk.
@@ -408,13 +432,12 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       try {
         const subscription = await Location.watchPositionAsync(
           {
-            // High (not BestForNavigation) with a 3 m step: the shark still
-            // glides as you walk, and the GPS radio is not flooded. Queue play
-            // keeps the same step for its server heartbeats.
-            accuracy: Location.Accuracy.High,
-            distanceInterval: 3,
-            ...(Platform.OS === 'android'
-              ? { timeInterval: accuracyMode === 'queue' ? 3000 : 500 } : {}),
+            // High (not BestForNavigation) with a 3 m step on a map: the shark
+            // still glides as you walk, and the GPS radio is not flooded. Queue
+            // play keeps the same step for its server heartbeats.
+            accuracy: watch.accuracy === 'high' ? Location.Accuracy.High : Location.Accuracy.Balanced,
+            distanceInterval: watch.distanceInterval,
+            ...(Platform.OS === 'android' ? { timeInterval: watch.timeInterval } : {}),
           },
           (locationUpdate) => {
             if (cancelled) return;
@@ -465,7 +488,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         positionSubscriptionRef.current = null;
       }
     };
-  }, [devMode, permissionGranted, player?.username, accuracyMode, watchEpoch]);
+  }, [devMode, permissionGranted, player?.username, watch.accuracy, watch.distanceInterval, watch.timeInterval, watchEpoch]);
 
   // Fallback poll — only fires if watchPositionAsync somehow stalls
   // (some Android devices throttle background location callbacks)
@@ -540,10 +563,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const stableRequestPark = useCallback(() => { void latest.current.requestPark(); }, []);
   const stableReset = useCallback(() => latest.current.reset(), []);
 
-  const value = useMemo<LocationContextType>(() => ({
+  const statusValue = useMemo<LocationStatusContextType>(() => ({
     permissionChecked,
     requestPermission,
-    location,
     latestLocationSampleRef,
     requestLocation: stableRequestLocation,
     requestPark: stableRequestPark,
@@ -556,16 +578,19 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     devMode,
     setDevMode,
     moveDevLocation,
-  }), [permissionChecked, requestPermission, location, stableRequestLocation, stableRequestPark, stableReset,
+  }), [permissionChecked, requestPermission, stableRequestLocation, stableRequestPark, stableReset,
     park, parkLoaded, parkLookupRecord, permissionGranted, devMode, moveDevLocation]);
+  const value = useMemo<LocationContextType>(() => ({ ...statusValue, location }), [statusValue, location]);
   const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled }),
     [heading, headingEnabled, setHeadingEnabled]);
 
   return (
     <LocationContext.Provider value={value}>
-      <HeadingContext.Provider value={headingValue}>
-        {children}
-      </HeadingContext.Provider>
+      <LocationStatusContext.Provider value={statusValue}>
+        <HeadingContext.Provider value={headingValue}>
+          {children}
+        </HeadingContext.Provider>
+      </LocationStatusContext.Provider>
     </LocationContext.Provider>
   );
 };

@@ -644,6 +644,10 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     return;
   }
 
+  // On screen, useRideDetection already feeds every foreground fix (3-10 m
+  // steps). The background stream would only run the same detection twice.
+  if (AppState.currentState === 'active' && rideDetectionService.onForegroundDetection) return;
+
   // BUG 3 fix: load rides from cache if not already loaded
   await rideDetectionService.loadRidesFromCache();
   await rideDetectionService.loadLinePlayFromCache();

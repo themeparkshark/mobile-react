@@ -22,6 +22,21 @@ const MIN_SEND_GAP_MS = 20_000;
  * abandoned Autopia session did exactly that all evening).
  */
 export const MAX_AWAY_MS = 20 * 60 * 1000;
+/**
+ * iOS delivers a fix about every second while this task runs (no distance
+ * filter, so a guest standing in line still gets samples). In the background
+ * those fixes are batched natively and handed to JS this often, just over the
+ * send gap, so every batch can send: the JS runtime wakes about twice a minute
+ * instead of sixty times. The newest fix in a batch is at most a second old.
+ */
+export const BACKGROUND_BATCH_MS = MIN_SEND_GAP_MS + 5_000;
+
+/**
+ * In-memory copy of the last send attempt. Foreground fixes are not batched,
+ * so without this every 1 Hz fix read AsyncStorage just to learn it was too
+ * soon. Storage stays the source of truth after an app kill (this resets to 0).
+ */
+let lastAttemptAt = 0;
 
 interface ActiveQueueSession {
   sessionId: string;
@@ -68,6 +83,7 @@ export function activateQueueBackgroundHeartbeat(sessionId: string, playerId: nu
       return false;
     }
     const previous = await readActive();
+    lastAttemptAt = 0;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
       sessionId, playerId,
       startedAt: previous?.sessionId === sessionId ? previous.startedAt : Date.now(),
@@ -79,6 +95,7 @@ export function activateQueueBackgroundHeartbeat(sessionId: string, playerId: nu
           accuracy: Location.Accuracy.High,
           timeInterval: 30_000,
           distanceInterval: 0,
+          deferredUpdatesInterval: BACKGROUND_BATCH_MS,
           pausesUpdatesAutomatically: false,
           // Always access is granted, so iOS does not need the blue status-bar
       // pill; it sat over other apps (streams, video) and tapping it opened us.
@@ -103,6 +120,7 @@ export function deactivateQueueBackgroundHeartbeat(sessionId: string): Promise<v
   return serialize(async () => {
     const active = await readActive();
     if (active?.sessionId !== sessionId) return;
+    lastAttemptAt = 0;
     await AsyncStorage.removeItem(STORAGE_KEY);
     await stopTask();
   });
@@ -110,6 +128,7 @@ export function deactivateQueueBackgroundHeartbeat(sessionId: string): Promise<v
 
 export function clearQueueBackgroundHeartbeat(): Promise<void> {
   return serialize(async () => {
+    lastAttemptAt = 0;
     await AsyncStorage.removeItem(STORAGE_KEY);
     await stopTask();
   });
@@ -123,6 +142,8 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
   const locations = (data as { locations?: Location.LocationObject[] } | undefined)?.locations;
   const sample = locations?.[locations.length - 1];
   if (!sample) return;
+  // Too soon after the last attempt: skip without touching storage.
+  if (lastAttemptAt && Date.now() - lastAttemptAt >= 0 && Date.now() - lastAttemptAt < MIN_SEND_GAP_MS) return;
 
   await serialize(async () => {
     const active = await readActive();
@@ -155,6 +176,7 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
     // Throttle attempts as well as successes. A far sample or network outage
     // must not trigger a request for every noisy GPS callback.
     active.lastSentAt = now;
+    lastAttemptAt = now;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
     try {
       const response = await client.post(`/me/line-sessions/${active.sessionId}/heartbeat`, {

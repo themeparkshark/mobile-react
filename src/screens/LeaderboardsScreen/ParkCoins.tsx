@@ -7,7 +7,7 @@ import getLeaderboards from '../../api/endpoints/parks/leaderboards/get';
 import FloatingParticles from '../../components/FloatingParticles';
 import StandingsPicker from '../../components/StandingsPicker';
 import { AuthContext } from '../../context/AuthProvider';
-import { LocationContext } from '../../context/LocationProvider';
+import { LocationStatusContext } from '../../context/LocationProvider';
 import { LeaderboardType } from '../../models/leaderboard-type';
 import { ParkType } from '../../models/park-type';
 import { PlayerType } from '../../models/player-type';
@@ -29,7 +29,7 @@ const coinScore = (player: PlayerType) => Number(player.park_coins) || 0;
 
 export default function ParkCoins() {
   const { player } = useContext(AuthContext);
-  const { park: currentPark } = useContext(LocationContext);
+  const { park: currentPark } = useContext(LocationStatusContext);
   const [parks, setParks] = useState<ParkType[]>(cache.parks);
   const [chosenParkId, setChosenParkId] = useState<number | undefined>(cache.parkId);
   const [chosenBoardId, setChosenBoardId] = useState<number | undefined>();

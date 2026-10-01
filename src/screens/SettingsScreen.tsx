@@ -29,7 +29,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
-import { LocationContext } from '../context/LocationProvider';
+import { LocationStatusContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { useTutorial } from '../components/Tutorial';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const accountAction = useRef(false);
   const { urls, labels } = useCrumbs();
-  const { reset, devMode, setDevMode } = useContext(LocationContext);
+  const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
   const { resetAll: resetTutorials } = useTutorial();
 
   useEffect(() => {
