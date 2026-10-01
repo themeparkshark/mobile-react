@@ -42,6 +42,8 @@ export interface CueDef {
   maxVoices?: number;
   /** Merge repeats inside this window (default 0). */
   cooldownMs?: number;
+  /** Voice group shared with other cues (caps set with GameAudio.setGroupCaps). */
+  group?: string;
   /** 0 ambient, 1 normal, 2 impact, 3 critical (default 1). */
   priority?: number;
   /** Random pitch variance in semitones (+/-). Runtime rate change. */
@@ -104,6 +106,9 @@ const S = {
   redeemOpen: require('../../../assets/sounds/redeem_modal_open.mp3'),
   redeemClose: require('../../../assets/sounds/redeem_modal_close.mp3'),
   jingle: require('../../../assets/sounds/redeem_modal_jingle.mp3'),
+  firework: require('../../../assets/sounds/firework_pop.mp3'),
+  /** Offline edit of whoosh.mp3: reversed, 590 ms, -20 LUFS (riser / Fever swell). */
+  whooshRev: require('../../../assets/sounds/edits/whoosh_rev_630.wav'),
 };
 
 /** Chris's one-shots, by semantic name. */
@@ -132,6 +137,9 @@ export const CHRIS_CUES = {
   'fx.purchaseCancel': { src: S.purchaseCancel, bus: 'ui', maxVoices: 1, durationMs: 1500 },
   'fx.redeemOpen': { src: S.redeemOpen, gainDb: -1, bus: 'stinger', maxVoices: 1, durationMs: 2756, note: 'match found, break bed' },
   'fx.redeemClose': { src: S.redeemClose, bus: 'ui', maxVoices: 1, durationMs: 171 },
+  'fx.firework': { src: S.firework, gainDb: 0, bus: 'sfx', maxVoices: 2, durationMs: 1600, priority: 1, note: 'firework_pop.mp3 (-25.2 LUFS, 77% under 200 Hz): Fever bursts, BIG low end, Whack x2 clap layer' },
+  'fx.coinTick': { src: S.coin, bus: 'sfx', maxVoices: 3, startMs: 0, endMs: 90, durationMs: 90, priority: 0, note: 'coin.mp3 0-90 ms slice: shaker layer, tallies' },
+  'fx.whooshRev': { src: S.whooshRev, bus: 'sfx', maxVoices: 1, durationMs: 590, priority: 1, note: 'reversed whoosh.mp3, peaks at its end: Final Pair riser, Fever swell every 4 bars' },
   'fx.jingle': { src: S.jingle, bus: 'stinger', maxVoices: 1, durationMs: 8642, duck: { db: 6, attackMs: 100, holdMs: 7000, releaseMs: 500 }, note: 'unused jingle: tally bed if Dustin approves' },
 } satisfies Record<string, CueDef>;
 
