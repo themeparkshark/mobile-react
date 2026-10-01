@@ -248,10 +248,10 @@ export const CARD_SET_BASE = 1000;
 // queue and heats x1.35. Index = difficulty 1..3: [1 star, 2 stars, 3 stars, crown].
 // Bot-seeded starting values; P2 human telemetry locks them (G19).
 export const STARS_RIDE: readonly (readonly [number, number, number, number])[] = [
-  [360, 800, 1350, 2500],
-  [360, 800, 1350, 2500],
-  [450, 1000, 1650, 2950],
-  [550, 1200, 2000, 3500],
+  [3250, 4550, 6350, 10450],
+  [3250, 4550, 6350, 10450],
+  [3300, 4650, 6600, 11100],
+  [3500, 4950, 6950, 11250],
 ];
 export const INTRO_TWO_Q8 = 205;
 export const INTRO_THREE_Q8 = 192;
