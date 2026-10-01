@@ -22,7 +22,7 @@
  * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
   Easing,
@@ -115,6 +115,8 @@ export type GameDialogProps = GameDialogOptions & {
   readonly children?: ReactNode;
   /** Run the chosen button's onPress after closing. Default true; the host sets false because the store runs it. */
   readonly runButtonHandlers?: boolean;
+  /** Lift the card above the keyboard (dialogs whose children include a text field). Default false. */
+  readonly avoidKeyboard?: boolean;
   readonly testID?: string;
 };
 
@@ -130,6 +132,7 @@ export function GameDialog({
   onAnswer,
   children,
   runButtonHandlers = true,
+  avoidKeyboard = false,
   testID,
 }: GameDialogProps) {
   const reducedMotion = useUiReducedMotion();
@@ -200,7 +203,8 @@ export function GameDialog({
   return (
     <Modal transparent visible animationType="none" statusBarTranslucent
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
-      <View testID={testID} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
+      <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
         <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
           {/* A soft light blur makes the page recede without greying it; the navy tint stays light so yellow stays yellow. */}
           <BlurView intensity={SCRIM_BLUR} tint="light" style={StyleSheet.absoluteFill} />
@@ -240,7 +244,7 @@ export function GameDialog({
             </View>
           </View>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

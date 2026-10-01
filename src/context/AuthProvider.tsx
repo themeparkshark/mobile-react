@@ -19,6 +19,13 @@ export interface AuthContextType {
   readonly logout: () => Promise<void>;
   readonly setPlayer: (player: PlayerType) => void;
   readonly refreshPlayer: () => Promise<PlayerType>;
+  /**
+   * Switch to a session the server issued for another account (original
+   * account recovery). Validates it first; the previous session is replaced
+   * and its cached data dropped. Opens the game for the new account unless
+   * navigate is false (the caller shows a celebration first).
+   */
+  readonly adoptSession: (token: string, options?: { readonly navigate?: boolean }) => Promise<PlayerType>;
   readonly player: PlayerType | null;
 }
 
@@ -140,6 +147,27 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     RootNavigation.navigate(signedInPlayer.username ? 'Loading' : 'Welcome');
   };
 
+  const adoptSession = async (nextToken: string, options: { readonly navigate?: boolean } = {}): Promise<PlayerType> => {
+    if (!nextToken.trim()) throw new Error('No session to switch to.');
+    const adopted = await getMe({ token: nextToken, throwOnError: true });
+    if (!adopted) throw new Error('Sign-in did not return a player profile.');
+
+    // The old session's account no longer exists: drop what was cached for it.
+    await clearCache().catch(() => undefined);
+    await SecureStore.setItemAsync('token', nextToken);
+    await AsyncStorage.setItem('player', JSON.stringify(adopted)).catch(() => undefined);
+
+    client.defaults.headers.common.Authorization = `Bearer ${nextToken}`;
+    hasInitialNavigated.current = true;
+    setPlayer(adopted);
+    setToken(nextToken);
+    setIsReady(true);
+    if (options.navigate !== false && !isStandalonePreviewMode()) {
+      RootNavigation.navigate(adopted.username ? 'Loading' : 'Welcome');
+    }
+    return adopted;
+  };
+
   const refreshPlayer = async (): Promise<PlayerType> => {
     const response = await getMe({ throwOnError: true });
     if (!response) throw new Error('Player profile is unavailable.');
@@ -173,6 +201,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         refreshPlayer,
         setPlayer,
         login: requestLogin,
+        adoptSession,
         logout,
         isReady,
       }}
