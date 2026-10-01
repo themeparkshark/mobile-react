@@ -16,7 +16,7 @@
  * 
  * NOTHING is auto-logged. Every detection requires user confirmation.
  */
-import { useContext, useEffect, useRef } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { getRides, RideType } from '../api/endpoints/rides';
 import getWikiTimes from '../api/endpoints/parks/queue-times/getWikiTimes';
@@ -31,6 +31,11 @@ import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
 import { LocationContext } from '../context/LocationProvider';
+import useLivePoll from './useLivePoll';
+
+/** Posted waits sharpen detection confidence: every 5 min on screen, every 15 min in a pocket. */
+export const WAIT_TIMES_FOREGROUND_MS = 5 * 60 * 1000;
+export const WAIT_TIMES_BACKGROUND_MS = 15 * 60 * 1000;
 
 /** Tracks whether we've already navigated to batch confirm to prevent double navigation (BUG 8 fix) */
 let batchConfirmNavigating = false;
@@ -78,10 +83,10 @@ async function checkAndShowPendingRides(): Promise<boolean> {
   }
 }
 
-export function useRideDetection(enabled: boolean) {
+export function useRideDetection(enabled: boolean, parkId?: number | null) {
   const { location, latestLocationSampleRef } = useContext(LocationContext);
   const ridesRef = useRef<RideType[]>([]);
-  const waitTimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [ridesLoaded, setRidesLoaded] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const initialCheckDoneRef = useRef(false);
 
@@ -158,14 +163,8 @@ export function useRideDetection(enabled: boolean) {
           rideDetectionService.processForegroundLocation(sample.latitude, sample.longitude);
         }
 
-        // Fetch wait times in parallel (ISSUE 11 fix)
-        await fetchAndSetWaitTimes(rides);
-        if (cancelled) return;
-
-        // Poll wait times every 5 minutes
-        waitTimeIntervalRef.current = setInterval(() => {
-          fetchAndSetWaitTimes(ridesRef.current);
-        }, 5 * 60 * 1000);
+        // Wait times poll below (useLivePoll) once the rides are known.
+        setRidesLoaded(true);
 
         // On initial mount, check for pending detections from a previous session
         if (!initialCheckDoneRef.current) {
@@ -184,25 +183,32 @@ export function useRideDetection(enabled: boolean) {
     return () => {
       cancelled = true;
       stopDetection();
-      if (waitTimeIntervalRef.current) {
-        clearInterval(waitTimeIntervalRef.current);
-        waitTimeIntervalRef.current = null;
-      }
+      setRidesLoaded(false);
     };
   }, [enabled]);
+
+  // Only the park the guest is in: the themeparks.wiki feed for each park is a
+  // large download, and fetching all eleven every 5 minutes cost far more
+  // radio and parsing than detection ever used.
+  const refreshWaitTimes = useCallback(() => fetchAndSetWaitTimes(ridesRef.current, parkId ?? null), [parkId]);
+  useLivePoll(refreshWaitTimes, WAIT_TIMES_FOREGROUND_MS, {
+    enabled: enabled && ridesLoaded, backgroundMs: WAIT_TIMES_BACKGROUND_MS, key: parkId ?? null,
+  });
 }
 
-async function fetchAndSetWaitTimes(rides: RideType[]) {
+export function waitTimeParkIds(rides: readonly RideType[], parkId: number | null): number[] {
+  const ids = parkId != null ? [parkId] : Array.from(new Set(rides.map(r => r.park_id)));
+  return ids.filter(pid => PARK_WIKI_IDS[pid]);
+}
+
+async function fetchAndSetWaitTimes(rides: RideType[], parkId: number | null) {
+  if (!rides.length) return;
   try {
-    const parkIds = Array.from(new Set(rides.map(r => r.park_id)));
+    const parkIds = waitTimeParkIds(rides, parkId);
     const allEntries: { name: string; queue?: { STANDBY?: { waitTime: number | null } } }[] = [];
 
     // Fetch all parks in parallel (ISSUE 11 fix)
-    const results = await Promise.allSettled(
-      parkIds
-        .filter(pid => PARK_WIKI_IDS[pid])
-        .map(pid => getWikiTimes(pid))
-    );
+    const results = await Promise.allSettled(parkIds.map(pid => getWikiTimes(pid)));
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
@@ -211,7 +217,7 @@ async function fetchAndSetWaitTimes(rides: RideType[]) {
     }
 
     if (allEntries.length > 0) {
-      const waitTimeMap = buildWaitTimeMap(allEntries, rides);
+      const waitTimeMap = buildWaitTimeMap(allEntries, parkId != null ? rides.filter(r => r.park_id === parkId) : rides);
       rideDetectionService.setCurrentWaitTimes(waitTimeMap);
     }
   } catch (e) {

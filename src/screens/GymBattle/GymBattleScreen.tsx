@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -656,7 +657,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     fetchGym();
-    const interval = setInterval(fetchGym, 30000);
+    const interval = setInterval(() => { if (AppState.currentState === 'active') void fetchGym(); }, 30000);
     
     Animated.parallel([
       Animated.timing(screenOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),

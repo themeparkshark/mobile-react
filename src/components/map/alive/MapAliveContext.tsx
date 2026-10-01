@@ -26,13 +26,18 @@ export interface MapAlive {
   readonly caps: AliveCaps;
   /** The clock is ticking right now. */
   readonly running: boolean;
+  /**
+   * The map is on screen in a foreground app, whatever the tier. Live UI that
+   * is information rather than ambience (countdowns, Rush sparkle) runs on this.
+   */
+  readonly active: boolean;
   readonly reducedMotion: boolean;
   /** Time-of-day lighting for the park (golden hour, dusk, night lamps). */
   readonly light: SkyLight;
 }
 
 const STILL: MapAlive = {
-  clock: makeMutable(0), tier: 'calm', caps: ALIVE_CAPS.calm, running: false, reducedMotion: true, light: DAYLIGHT,
+  clock: makeMutable(0), tier: 'calm', caps: ALIVE_CAPS.calm, running: false, active: false, reducedMotion: true, light: DAYLIGHT,
 };
 
 export const MapAliveContext = createContext<MapAlive>(STILL);
@@ -63,7 +68,8 @@ export function useMapAliveEngine({ focused, paused, light }: {
   const governed = aliveTier({ reducedMotion, strain: governor.strain });
   const tier: AliveTier = !reducedMotion && (pinned === 'full' || pinned === 'lite') ? pinned : governed;
   const caps = ALIVE_CAPS[tier];
-  const running = focused && appActive && !paused && caps.hz > 0;
+  const active = focused && appActive;
+  const running = active && !paused && caps.hz > 0;
 
   // A calm phone (strain 2) has no clock to measure; probe lite again after a rest.
   useEffect(() => {
@@ -113,8 +119,8 @@ export function useMapAliveEngine({ focused, paused, light }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
-  return useMemo(() => ({ clock, tier, caps, running, reducedMotion, light }),
-    [clock, tier, caps, running, reducedMotion, light]);
+  return useMemo(() => ({ clock, tier, caps, running, active, reducedMotion, light }),
+    [clock, tier, caps, running, active, reducedMotion, light]);
 }
 
 export function MapAliveProvider({ value, children }: { readonly value: MapAlive; readonly children: ReactNode }) {

@@ -361,7 +361,8 @@ export default function LinePlayScreen() {
         inFlight = false;
       }
     };
-    const interval = setInterval(() => void check(), 120_000);
+    // The return to the app checks at once (below); no feed downloads in a pocket.
+    const interval = setInterval(() => { if (AppState.currentState === 'active') void check(); }, 120_000);
     const appStateSubscription = AppState.addEventListener('change', state => {
       if (state === 'active') void check();
     });

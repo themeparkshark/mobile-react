@@ -94,7 +94,7 @@ export default function App() {
   // but only at a park: away from one, background GPS is battery drain and an
   // unexplained location indicator. Park presence is sticky, so this never flaps.
   // The service itself never asks for Always permission during app startup.
-  useRideDetection(!isStandalonePreview && !!player && permissionGranted && !!currentPark);
+  useRideDetection(!isStandalonePreview && !!player && permissionGranted && !!currentPark, currentPark?.id ?? null);
   const [fontsReady, fontError] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),

@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import allParks from '../../api/endpoints/parks/allParks';
@@ -97,7 +97,7 @@ export default function RideStandings() {
   }, [parksReload]);
 
   useEffect(() => {
-    const timer = setInterval(() => setRefreshKey(current => current + 1), 30000);
+    const timer = setInterval(() => { if (AppState.currentState === 'active') setRefreshKey(current => current + 1); }, 30000);
     return () => clearInterval(timer);
   }, []);
 

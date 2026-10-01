@@ -21,9 +21,10 @@ import { BOSS_ART } from './bossArt';
 import { AttackPips, BossHpBar, BossSheetSkeleton, TeamDamage, TopFighters } from './BossSheetParts';
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
+import useLivePoll from '../../hooks/useLivePoll';
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
-export function useParkRaid(parkId: number | null | undefined) {
+export function useParkRaid(parkId: number | null | undefined, { focused = true }: { readonly focused?: boolean } = {}) {
   const { player } = useContext(AuthContext);
   const scope = `${player?.id ?? 'guest'}:${parkId ?? 'none'}`;
   const current = useRef(scope), generation = useRef(0), mounted = useRef(false);
@@ -47,11 +48,10 @@ export function useParkRaid(parkId: number | null | undefined) {
   }, []);
   useEffect(() => {
     generation.current += 1;
-    refresh();
-    if (!parkId || !player?.id) return;
-    const id = setInterval(refresh, 20000);
-    return () => { clearInterval(id); generation.current += 1; };
-  }, [scope, refresh]);
+    return () => { generation.current += 1; };
+  }, [scope]);
+  // Every 20 s while the raid is on screen; paused in the background.
+  useLivePoll(refresh, 20000, { enabled: !!parkId && !!player?.id, focused, key: scope });
   const state = selection?.scope === scope ? selection.state : null;
   const names = state?.raid?.team_names;
   useEffect(() => applyTeamNames(names), [names]);

@@ -362,6 +362,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           ) : (
             <Image
               source={require('../../assets/images/screens/explore/shark_player.gif')}
+              autoplay={screenFocused && !reducedMotion}
               style={styles.sharkImage}
               contentFit="contain"
             />

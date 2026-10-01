@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useIsFocused } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
@@ -7,6 +8,7 @@ import { BOSS_NAMES, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim } from '../api/endpoints/parks/rideControl';
 import { TEAMS, teamName } from '../constants/teams';
 import type { BossMapMoment } from '../hooks/useBossMapMoment';
+import { useAppActive } from '../hooks/useLivePoll';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
 import type { BossAttackCheckpoint } from '../services/boss/attackRecovery';
@@ -58,10 +60,16 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   readonly onDismissMoment?: () => void;
 }) {
   const [now, setNow] = useState(Date.now());
+  // The countdowns tick once a second only while one is on screen.
+  const focused = useIsFocused();
+  const appActive = useAppActive();
+  const ticking = focused && appActive && (rushes.length > 0 || raid?.status === 'active');
   useEffect(() => {
+    if (!ticking) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [ticking]);
   const liveRushes = rushes.filter(r => new Date(r.rush.ends_at).getTime() > now);
   const boss = raid && raid.status === 'active' && new Date(raid.ends_at).getTime() > now ? raid : null;
   if (mapMoment) {

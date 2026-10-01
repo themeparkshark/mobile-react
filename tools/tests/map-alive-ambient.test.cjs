@@ -116,7 +116,7 @@ test('the map shares one ambient clock and pauses it with the screen, the app an
   assert.match(map, /<MapAliveProvider value=\{alive\}>/);
   const engine = read('src/components/map/alive/MapAliveContext.tsx');
   assert.match(engine, /AppState\.addEventListener/);
-  assert.match(engine, /const running = focused && appActive && !paused && caps\.hz > 0/);
+  assert.match(engine, /const active = focused && appActive;\s*const running = active && !paused && caps\.hz > 0/);
   assert.match(engine, /frame\.setActive\(running\)/);
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /ambientPaused=\{redeemFlowOpen \|\| bossOccluded \|\| adventureOccluded \|\| dailyGiftOccluded\}/);

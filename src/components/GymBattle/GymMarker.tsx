@@ -1,48 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Marker } from '../map/Marker';
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { getGym, GymData } from '../../api/endpoints/gym-battle';
+import type { GymData } from '../../api/endpoints/gym-battle';
+import { useMapAlive } from '../map/alive/MapAliveContext';
 import { TEAMS, type TeamId } from '../../constants/teams';
 
 const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
 
 interface Props {
-  parkId: number;
+  /** The map's gym data (ExploreScreen polls it); the marker only shows the leader. */
+  leader: GymData['leader'] | null | undefined;
   latitude: number;
   longitude: number;
   onPress: () => void;
 }
 
-export default function GymMarker({ parkId, latitude, longitude, onPress }: Props) {
-  const [gymData, setGymData] = useState<GymData | null>(null);
+export default function GymMarker({ leader, latitude, longitude, onPress }: Props) {
   const pulseScale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    const fetchGym = async () => {
-      try {
-        const data = await getGym(parkId);
-        setGymData(data);
-      } catch (error) {
-        // Silent fail
-      }
-    };
-
-    fetchGym();
-    const interval = setInterval(fetchGym, 30000);
-    return () => clearInterval(interval);
-  }, [parkId]);
+  // The breathing pauses with the living map (off screen, background, calm tier).
+  const { running } = useMapAlive();
 
   // Smooth breathing animation
   useEffect(() => {
+    if (!running) {
+      cancelAnimation(pulseScale);
+      cancelAnimation(glowOpacity);
+      return;
+    }
     pulseScale.value = withRepeat(
       withSequence(
         withTiming(1.03, { duration: 2500 }),
@@ -60,7 +54,11 @@ export default function GymMarker({ parkId, latitude, longitude, onPress }: Prop
       -1,
       true
     );
-  }, []);
+    return () => {
+      cancelAnimation(pulseScale);
+      cancelAnimation(glowOpacity);
+    };
+  }, [running]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
@@ -70,7 +68,6 @@ export default function GymMarker({ parkId, latitude, longitude, onPress }: Prop
     opacity: glowOpacity.value,
   }));
 
-  const leader = gymData?.leader;
   const leaderColor = leader ? TEAM_COLORS[leader] : '#FBBF24';
 
   return (

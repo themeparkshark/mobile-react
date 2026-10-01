@@ -1,5 +1,5 @@
-import { createContext, FC, ReactNode, useCallback, useContext, useState } from 'react';
-import { useIntervalWhen } from 'rooks';
+import { createContext, FC, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import useLivePoll from '../hooks/useLivePoll';
 import unreadNotificationsCount from '../api/endpoints/me/unread-notifications-count';
 import { AuthContext } from './AuthProvider';
 
@@ -18,15 +18,6 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
   const [notificationCount, setNotificationCount] = useState<number>(0);
   const { isReady, player } = useContext(AuthContext);
 
-  useIntervalWhen(
-    async () => {
-      await refreshNotificationCount();
-    },
-    120000,
-    Boolean(isReady && player),
-    true
-  );
-
   const refreshNotificationCount = useCallback(async () => {
     try {
       const response = await unreadNotificationsCount();
@@ -36,12 +27,15 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
     }
   }, []);
 
+  // Paused in the background; a return to the app refreshes the badge if it is due.
+  useLivePoll(refreshNotificationCount, 120000, { enabled: Boolean(isReady && player), key: player?.id ?? null });
+
+  const value = useMemo(() => ({ notificationCount, refreshNotificationCount }),
+    [notificationCount, refreshNotificationCount]);
+
   return (
     <NotificationContext.Provider
-      value={{
-        notificationCount,
-        refreshNotificationCount,
-      }}
+      value={value}
     >
       {children}
     </NotificationContext.Provider>

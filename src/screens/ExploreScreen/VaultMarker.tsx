@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { Marker } from '../../components/map/Marker';
+import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 
 /**
  * VaultMarker — 100% STATIC children inside <Marker>.
@@ -11,6 +12,8 @@ export default function VaultMarker({
 }: {
   readonly vault: { id: number; latitude: string; longitude: string };
 }) {
+  // The GIF stops decoding frames while the map is off screen or calm.
+  const { running } = useMapAlive();
   return (
     <Marker
       coordinate={{
@@ -35,6 +38,7 @@ export default function VaultMarker({
 
         <Image
           source={require('../../../assets/images/screens/explore/vault_animation.gif')}
+          autoplay={running}
           style={{ width: 70, height: 70 }}
           contentFit="contain"
         />

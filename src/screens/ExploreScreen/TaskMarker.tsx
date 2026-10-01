@@ -333,11 +333,13 @@ function TaskMarker({
   const limited = task.limited?.active ? limitedLabel(task.limited) : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
   const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
+  // Scenes are ambience: they unmount (and their loops stop) whenever the
+  // living map pauses (another screen on top, background, calm tier).
   const kinds = useMemo(() => {
-    const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
+    const base = ambient && !reducedMotion && alive.running ? ambienceNow(look.ambience) : [];
     // A Rush always sparkles, near or far: it's worth walking to.
-    return rush && !reducedMotion ? [...base, 'rush' as const] : base;
-  }, [ambient, look, rush, reducedMotion]);
+    return rush && !reducedMotion && alive.active ? [...base, 'rush' as const] : base;
+  }, [ambient, look, rush, reducedMotion, alive.running, alive.active]);
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -419,7 +421,7 @@ function TaskMarker({
             <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>
         </View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
-        {!isSelected && showTimer && (
+        {!isSelected && showTimer && alive.active && (
           <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent, badge !== 'new' && badge !== 'level' && styles.timerLow]}>
             <Countdown
               date={expiresAt!}
@@ -463,7 +465,7 @@ function TaskMarker({
         {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
         <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
-        {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion} />}
+        {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion || !alive.active} />}
 
         {control && (
           <View style={styles.teamFlag}>

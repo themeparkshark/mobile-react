@@ -3,7 +3,7 @@ import { goalCoinKind } from '../services/collection/nextCoinCopy';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
-import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { AppState, ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
 import { loadParkShelf } from '../services/collection/parkShelfPrefetch';
 import Ribbon from '../components/Ribbon';
@@ -289,7 +289,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       }
     };
     void refresh();
-    const interval = setInterval(() => void refresh(), 60_000);
+    // The feed is a large download: skip it while the app is in the background.
+    const interval = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 60_000);
     return () => { active = false; clearInterval(interval); request?.abort(); };
   }, [park, canChooseGoal, inThisPark]));
 

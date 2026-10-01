@@ -22,6 +22,10 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     useMemo(fn, deps) { const i = index++; if (!slots[i] || !same(slots[i].deps, deps)) slots[i] = { deps, value: fn() }; return slots[i].value; },
     useContext(context) { return context.value; },
     forwardRef(fn) { return props => fn(props, props.forwardedRef); },
+    useSyncExternalStore(subscribe, getSnapshot) {
+      react.useEffect(() => subscribe(() => { dirty = true; }), [subscribe]);
+      return getSnapshot();
+    },
     useImperativeHandle(ref, create, deps) { react.useEffect(() => {
       if (ref) ref.current = create();
       return () => { if (ref) ref.current = null; };
@@ -45,13 +49,27 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     View: 'View', Modal: 'Modal', Image: 'Image', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', TouchableOpacity: 'TouchableOpacity',
   };
   const jsx = (type, props) => ({ type, props }); const module = { exports: {} };
-  const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
+  const transpile = source => ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  vm.runInNewContext(code, { module, exports: module.exports, Date, Math, console, __DEV__: false, process: { env: {} }, ...globals,
+  const code = transpile(fs.readFileSync(path.join(root, file), 'utf8'));
+  // Shared app hooks that every poll uses run for real in the component's realm.
+  const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts' };
+  const realCache = new Map();
+  let sandbox;
+  const loadReal = name => {
+    if (realCache.has(name)) return realCache.get(name).exports;
+    const real = { exports: {} }; realCache.set(name, real);
+    vm.runInContext(`(function (module, exports, require) {${transpile(fs.readFileSync(path.join(root, realModules[name]), 'utf8'))}\n})`,
+      sandbox, { filename: realModules[name] })(real, real.exports, sandbox.require);
+    return real.exports;
+  };
+  sandbox = vm.createContext({ module, exports: module.exports, Date, Math, console, __DEV__: false, process: { env: {} }, ...globals,
     setTimeout(fn) { const id = ++timerId; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
     require(name) {
       if (Object.hasOwn(imports, name)) return imports[name];
+      const base = name.split('/').pop();
+      if (name.startsWith('.') && Object.hasOwn(realModules, base)) return loadReal(base);
       if (name === 'react') return react;
       if (name === '@react-navigation/native') return { useFocusEffect: fn => react.useEffect(fn, [fn]) };
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
@@ -73,7 +91,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (name.includes('assets/')) return name;
       return { default: name };
     },
-  }, { filename: file });
+  });
+  vm.runInContext(code, sandbox, { filename: file });
   Component = options.exportName ? module.exports[options.exportName] : module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2 ?? module.exports.BossBrawl ?? module.exports.ScoreDisplay;
   function render() { let count = 0; do {
     assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = options.arguments ? Component(...options.arguments(props)) : Component(props); effects.forEach(fn => fn());

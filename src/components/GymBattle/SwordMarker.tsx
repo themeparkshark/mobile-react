@@ -3,12 +3,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Marker } from '../map/Marker';
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { useMapAlive } from '../map/alive/MapAliveContext';
 
 interface Props {
   id: number;
@@ -23,6 +25,9 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
   const bounceY = useSharedValue(0);
   const glowOpacity = useSharedValue(0.4);
   const glowScale = useSharedValue(1);
+  // The countdown ticks while the map is on screen; the bounce is ambience and
+  // also rests in the calm tier.
+  const { active, running } = useMapAlive();
 
   // Calculate time remaining
   useEffect(() => {
@@ -34,12 +39,19 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
     };
 
     updateTime();
+    if (!active) return;
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, [expiresAt]);
+  }, [expiresAt, active]);
 
   // Animations
   useEffect(() => {
+    if (!running) {
+      cancelAnimation(bounceY);
+      cancelAnimation(glowOpacity);
+      cancelAnimation(glowScale);
+      return;
+    }
     // Bounce
     bounceY.value = withRepeat(
       withSequence(
@@ -68,7 +80,12 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
       -1,
       false
     );
-  }, []);
+    return () => {
+      cancelAnimation(bounceY);
+      cancelAnimation(glowOpacity);
+      cancelAnimation(glowScale);
+    };
+  }, [running]);
 
   const bounceStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bounceY.value }],
@@ -101,6 +118,7 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
         <Animated.View style={[styles.swordContainer, bounceStyle]}>
           <Image
             source={require('../../../assets/images/sword-marker.gif')}
+            autoplay={running}
             style={styles.swordImage}
             contentFit="contain"
           />

@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -12,6 +13,7 @@ import BossRaidFlow, { useParkRaid } from '../boss/BossRaidFlow';
 import { BOSS_ART } from '../boss/bossArt';
 import { BRAND, GameButton, GameIcon } from '../../ui';
 import PushSoftAsk from '../PushSoftAsk';
+import useLivePoll, { useAppActive } from '../../hooks/useLivePoll';
 
 const ORDER = TEAM_ORDER;
 
@@ -37,15 +39,19 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
   const { raid, loaded: raidLoaded, setState: setRaidState } = useParkRaid(raidPark);
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
+  // Live parks refresh every 30 s while the home map is on screen; the raid
+  // clocks tick each second only while a raid is showing.
+  const focused = useIsFocused();
+  const appActive = useAppActive();
+  useLivePoll(load, 30000, { focused });
+  const raidShowing = !!live?.parks.some(p => p.raid);
+  const ticking = focused && appActive && raidShowing;
   useEffect(() => {
-    load();
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
-  }, [load]);
-  useEffect(() => {
+    if (!ticking) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [ticking]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 3800);
