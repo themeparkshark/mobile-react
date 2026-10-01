@@ -444,9 +444,11 @@ export default function LinePlayScreen() {
           parkId: ride.parkId,
           chapterId: snapshot.chapter?.id,
           seed: activeGame.seed,
+          // A kid's turn deals the kids deck and easy cards first.
+          kids: activeGame.kidRound === true,
         })
       : null,
-  [activeGame?.id, activeGame?.seed, activeGame?.gameId, ride?.rideId, ride?.parkId, snapshot.chapter?.id]);
+  [activeGame?.id, activeGame?.seed, activeGame?.gameId, activeGame?.kidRound, ride?.rideId, ride?.parkId, snapshot.chapter?.id]);
 
   const handlePlayGame = useCallback((item: Extract<ActivityItem, { kind: 'minigame' }>) => {
     if (session.getState() !== 'active') return;
