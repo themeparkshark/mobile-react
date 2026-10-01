@@ -23,7 +23,7 @@ import {
 } from './constants';
 import { absInt, clampInt, floorDiv, rngBelow, rngRange, rngWeighted } from './fixed';
 import { MAXDX, TRAVEL, TRAVEL_MAX } from './tables';
-import { EV_SERVE, EV_TIPOVER, MAX_PENDING, MODE_QUEUE, WINDOW, emit, tierOf, type SimState } from './state';
+import { EV_SERVE, EV_TIPOVER, MAX_PENDING, MODE_PARTY, MODE_QUEUE, WINDOW, emit, tierOf, type SimState } from './state';
 
 // -- phases -------------------------------------------------------------------------
 
@@ -141,6 +141,7 @@ export function predictBall(s: SimState): void {
 
 export function phaseAt(s: SimState, lt: number): number {
   'worklet';
+  if (s.mode === MODE_PARTY) return lt < 240 ? PHASE_WARM : lt < 480 ? PHASE_BUILD : lt < 900 ? PHASE_PRESSURE : PHASE_RUSH;
   if (s.mode !== MODE_QUEUE) {
     if (lt < 600) return PHASE_WARM;
     if (lt < 1080) return PHASE_BUILD;
@@ -536,7 +537,14 @@ export function directorStep(s: SimState): void {
     emit(s, EV_SERVE, 0, 0, 0);
   }
   // Fixed beats of the run.
-  if (!queue) {
+  if (s.mode === MODE_PARTY) {
+    if (oneShot(s, TL_COIN, lt, 300)) addItem(s, c, K_COIN, 200, 0, 0, phase);
+    if (oneShot(s, TL_PUFFER, lt, 480)) {
+      s.pufferOn = 1;
+      addItem(s, c, K_PUFFER, clampInt(s.bx >> 8, 70, 330), 0, 0, phase);
+      if (s.dNext < c + 84) s.dNext = c + 84;
+    }
+  } else if (!queue) {
     if (oneShot(s, TL_COIN, lt, 600)) addItem(s, c, K_COIN, 200, 0, 0, phase);
     if (oneShot(s, TL_PUFFER, lt, 1080)) {
       s.pufferOn = 1;

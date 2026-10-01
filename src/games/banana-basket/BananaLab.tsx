@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BananaBasketGame } from './BananaBasketGame';
 import { PROGRESS_KEY } from './constants';
 
-type LabMode = { mode: 'ride' | 'queue'; difficulty: 1 | 2 | 3; autoplay: boolean; finn: boolean; deck: string };
+type LabMode = { mode: 'ride' | 'queue'; difficulty: 1 | 2 | 3; autoplay: boolean; finn: boolean; deck: string; unlock?: number };
 
 function parse(cmd: string): LabMode | null {
   const c = cmd.toLowerCase();
@@ -24,6 +24,7 @@ function parse(cmd: string): LabMode | null {
     autoplay: c.includes('bot'),
     finn: c.includes('finn'),
     deck: c.includes('ocean') ? 'ocean' : 'park',
+    unlock: c.includes('u1') ? 1 : c.includes('u3') ? 3 : undefined,
   };
 }
 
@@ -50,6 +51,7 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
           deck={run.deck}
           autoplay={run.autoplay}
           staffGhost={run.finn}
+          unlock={run.unlock}
           seed={20260930 + n}
           onComplete={(mult, meta) => {
             const m = meta as { score?: number; verifiedLocally?: boolean } | undefined;

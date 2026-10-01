@@ -703,7 +703,7 @@ function onClockStep(s: SimState): void {
   'worklet';
   const c = s.clock;
   const lt = c - s.setStart;
-  const lastSet = s.mode === MODE_RIDE || s.set === QUEUE_SETS - 1;
+  const lastSet = s.mode !== MODE_QUEUE || s.set === QUEUE_SETS - 1;
   if (lt >= s.setLen) {
     if (lastSet) {
       if (s.finale !== 1) finish(s, END_TIME);

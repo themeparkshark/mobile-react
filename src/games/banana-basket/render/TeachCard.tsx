@@ -22,6 +22,7 @@ const IMG = {
   finger: require('../../../assets/games/banana-basket/v2/finger.png'),
   shark: require('../../../assets/games/banana-basket/v2/shark_hold.png'),
   cheer: require('../../../assets/games/banana-basket/v2/shark_cheer.png'),
+  gull: require('../../../assets/games/banana-basket/v2/gull_glide.png'),
 };
 
 export interface CardInfo {
@@ -41,7 +42,7 @@ export const TWIST_CARD: Record<number, { title: string; body: string }> = {
   [CARD_GULLS]: { title: 'PARK TWIST: GULL SEASON', body: 'Leave the shadow before the gull dives.' },
 };
 
-export function cardInfo(id: number, extra?: { setScore?: number; chain?: number; twistCard?: number; nextSet?: number }): CardInfo {
+export function cardInfo(id: number, extra?: { setScore?: number; chain?: number; twistCard?: number; nextSet?: number; gullSet?: boolean }): CardInfo {
   if (id >= CARD_SET_BASE) {
     const set = id - CARD_SET_BASE;
     const lines: string[] = [];
@@ -49,7 +50,13 @@ export function cardInfo(id: number, extra?: { setScore?: number; chain?: number
     if (extra?.chain) lines.push(`CHAIN ${extra.chain} KEPT`);
     let title = `SET ${set} DONE`;
     let body = 'Shuffle forward, then touch to start the next set.';
-    if (set === 1 && extra?.twistCard && TWIST_CARD[extra.twistCard]) {
+    let image = set === 2 ? IMG.bunch : IMG.cheer;
+    if (set === 1 && extra?.gullSet) {
+      title = 'NEXT: GULL SET!';
+      body = 'Listen for the squawk. Slide out of the shadow before the gull dives.';
+      image = IMG.gull;
+      lines.unshift('SET 1 DONE');
+    } else if (set === 1 && extra?.twistCard && TWIST_CARD[extra.twistCard]) {
       title = TWIST_CARD[extra.twistCard].title;
       body = TWIST_CARD[extra.twistCard].body;
       lines.unshift(`SET 1 DONE`);
@@ -58,11 +65,11 @@ export function cardInfo(id: number, extra?: { setScore?: number; chain?: number
       body = 'The snack cart dumps a shower. Then FINAL RUSH.';
       lines.unshift('SET 2 DONE');
     }
-    return { id, title, body, image: set === 2 ? IMG.bunch : IMG.cheer, lines, minMs: 1500 };
+    return { id, title, body, image, lines, minMs: 1500 };
   }
   switch (id) {
     case CARD_BALL:
-      return { id, title: 'KEEP THE BALL UP', body: 'Bounce it off your basket. While it is up, your chain counts one tier higher.', image: IMG.ball, minMs: 1200 };
+      return { id, title: 'KEEP THE BALL UP', body: 'Bounce it off your basket. The ball is the key: x3 and x4 only count while it stays up.', image: IMG.ball, minMs: 1200 };
     case CARD_PUFFER:
       return { id, title: 'DODGE THE PUFFERFISH', body: 'Listen for the creak and watch the coral shadow. A hit costs a heart.', image: IMG.puffer, minMs: 1200 };
     case CARD_GOLDEN:

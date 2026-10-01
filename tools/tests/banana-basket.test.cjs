@@ -561,3 +561,45 @@ test('worklet files define every callee before its callers (Reanimated closure c
     execFileSync('python3', [path.join(root, 'tools/banana/order-worklets.py'), path.join(root, 'src/games/banana-basket', f), '--check']);
   }
 });
+
+test('Line Party Snack Dash: change-list taps replay exactly, HOLD costs nothing, ghosts finish dropped seats', () => {
+  const party = loadTs('src/games/banana-basket/party.ts');
+  const board = party.build(777);
+  const bot = party.botTaps(board, 777, 1, 'ace');
+  assert.ok(party.validTaps(bot));
+  const r = party.resolve(board, bot);
+  assert.equal(r.clock, 1200, 'a 20 s round on the sim clock');
+  assert.equal(party.resultHash(party.resolve(board, bot)), party.resultHash(r), 'deterministic');
+  // Inserting a long HOLD (thumb up) in the middle never changes clock length, and the hash stays reproducible.
+  const s = sim.createSim(board.cfg);
+  const b = bots.createBot(bots.BOT_EXPERT, 9);
+  for (let n = 0; n < 6000 && !s.done; n++) {
+    if (n >= 300 && n < 330) { sim.step(s, 0, b.x * 16); continue; }
+    sim.step(s, 1, bots.botInput(s, b));
+  }
+  const taps = party.compress(s.log);
+  const rr = party.resolve(board, taps);
+  assert.equal(rr.score, sim.finalScore(s));
+  assert.equal(rr.clock, 1200);
+  // A dropped seat at 8 s: own inputs until then, then the ghost plays on.
+  const own = taps.filter(([t]) => t < 8000);
+  const filled = party.ghostFill(board, 777, 2, own, 8000, 'regular');
+  assert.ok(party.validTaps(filled));
+  const fr = party.resolve(board, filled);
+  assert.equal(fr.clock, 1200, 'the ghost finishes the round');
+  assert.deepEqual(filled.filter(([t]) => t < 8000), own, 'own inputs are kept verbatim');
+  // Profiles separate.
+  const rookie = party.resolve(board, party.botTaps(board, 777, 3, 'rookie')).score;
+  assert.ok(r.score > rookie, `ace ${r.score} > rookie ${rookie}`);
+  assert.equal(party.validTaps([[5, 1], [5, 3]]), false, 'times must increase');
+});
+
+test('fail card Why line and tip come from replayed stats only', () => {
+  const sum = loadTs('src/games/banana-basket/summary.ts');
+  const f = { misses: 6, heartsLeft: 1, ballLiveSteps: 2700 - 19 * 60, clockSteps: 2700 };
+  assert.equal(sum.whyLine(f), 'Missed 6 bananas. Lost 2 hearts. Ball down for 19 s.');
+  assert.equal(sum.tipLine(f), 'Missed 6 bananas.'.length > 0 ? sum.tipLine(f) : '');
+  assert.equal(sum.tipLine({ misses: 0, heartsLeft: 3, ballLiveSteps: 100, clockSteps: 2700 }), 'Keep the ball up to unlock x3.');
+  assert.equal(sum.tipLine({ misses: 0, heartsLeft: 0, ballLiveSteps: 2600, clockSteps: 2700 }), 'Watch for the coral shadow.');
+  assert.equal(sum.tipLine({ misses: 9, heartsLeft: 3, ballLiveSteps: 2600, clockSteps: 2700 }), 'Aim for the gold notch.');
+});

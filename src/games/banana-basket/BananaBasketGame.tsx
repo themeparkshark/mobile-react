@@ -57,6 +57,7 @@ import {
   createSim, finalScore, replay, starTargets, starsFor, step, tierOf, type SimConfig, type SimState,
 } from './sim';
 import { mixSeed } from './fixed';
+import { tipLine, whyLine } from './summary';
 import { botInput, createBot, BOT_EXPERT, type Bot } from './bots';
 import { buildProof, decodeInput, type BananaProof } from './proof';
 import { compareLine, createGhost, finnRun, ghostAdvance, type Ghost } from './ghost';
@@ -111,6 +112,8 @@ export interface BananaBasketGameProps {
   autoplay?: boolean;
   /** Queue Easy Basket assist (excluded from boards, never in Ride). */
   assist?: boolean;
+  /** Dev/lab override of the queue unlock gate (1-3); normally from local progress. */
+  unlock?: number;
 }
 
 interface RunSetup {
@@ -152,7 +155,7 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
       difficulty,
       mode: queue ? MODE_QUEUE : MODE_RIDE,
       deck,
-      unlock: queue ? unlockFor(progress.queueRuns) : 5,
+      unlock: queue ? (props.unlock ?? unlockFor(progress.queueRuns)) : 3,
       cards: progress.cards,
       assist: queue && assist,
       twist: twistForDay(new Date()),
@@ -161,7 +164,7 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
     return { cfg, ghost: g, ghostLabel: g ? g.name : staffGhost ? 'FINN' : '' };
     // progress is read once per run (cards/unlock snapshot at run start)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress !== null, runIndex, baseSeed, mode, difficulty, deck, assist, ghostProp, raceSelf, staffGhost]);
+  }, [progress !== null, runIndex, baseSeed, mode, difficulty, deck, assist, ghostProp, raceSelf, staffGhost, props.unlock]);
 
   if (!setup) return <View style={styles.fill} />;
   return (
@@ -645,14 +648,7 @@ function BananaRun({
   const openCard = useCallback((id: number) => {
     let info: CardInfo;
     if (id >= CARD_SET_BASE) {
-      const twistCard = cfg.twist === TWIST_BREEZY ? CARD_BREEZY : cfg.twist === TWIST_BEACH ? CARD_BEACH : 0;
-      const splash = cfg.deck === 'ocean' || cfg.deck === 'pirates';
-      const unlockTwist = cfg.unlock >= 3;
-      info = cardInfo(id, {
-        setScore: scoreRef.current,
-        chain: chainRef.current,
-        twistCard: unlockTwist || splash ? (splash ? CARD_SPLASH : twistCard) : 0,
-      });
+      info = cardInfo(id, { setScore: scoreRef.current, chain: chainRef.current, gullSet: cfg.unlock >= 2 });
     } else info = cardInfo(id);
     setCard(info);
     setCardReady(false);
@@ -775,6 +771,7 @@ function BananaRun({
     }
     const proof = buildProof(cfg, s, Math.max(elapsed, s.steps * 17), freezes.current);
     const stars = starsFor(final, [thresholds.one, thresholds.two, thresholds.three]);
+    const facts = { misses: s.misses, heartsLeft: s.hearts, ballLiveSteps: s.ballLive, clockSteps: s.clock };
     const st = statsRef.current;
     const g = ghost.value;
     const cmp = g ? compareLine(s, (() => {
@@ -787,7 +784,8 @@ function BananaRun({
       stars,
       maxCombo: s.maxChain,
       thresholds,
-      message: cmp ? cmp.line : stars >= 1 ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!') : 'SO CLOSE!',
+      message: cmp ? cmp.line : stars >= 1 ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
+        : `SO CLOSE! ${whyLine(facts)} ${tipLine(facts)}`.trim(),
       stats: [
         { label: 'CATCHES', value: `${s.catches}` },
         { label: 'PERFECT', value: `${s.perfects}` },
@@ -874,7 +872,7 @@ function BananaRun({
       ref={shell}
       visible={visible}
       title="Banana Basket"
-      subtitle={mode === 'queue' ? `Queue run ${Math.min(5, progress.queueRuns + 1)}` : 'Ride Challenge'}
+      subtitle={mode === 'queue' ? (cfg.unlock >= 2 ? 'Queue: Gull Set run' : 'Queue run 1') : 'Ride Challenge'}
       score={score}
       personalBest={mode === 'ride' ? progress.bestRide || undefined : progress.bestQueue || undefined}
       objective={objective}

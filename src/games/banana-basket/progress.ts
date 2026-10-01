@@ -51,9 +51,9 @@ export async function saveProgress(p: BananaProgress): Promise<void> {
   }
 }
 
-/** Queue unlock gate: run N (1-based, lifetime) adds one system until 5. */
+/** Queue unlock gate (v2.0): run 1 core + puffers, run 2 the Gull Set, run 3+ the full ruleset. */
 export function unlockFor(queueRuns: number): number {
-  return Math.max(1, Math.min(5, queueRuns + 1));
+  return Math.max(1, Math.min(3, queueRuns + 1));
 }
 
 /**
@@ -62,6 +62,10 @@ export function unlockFor(queueRuns: number): number {
  * Beach Party; water-ride decks force Splashdown in the sim.
  */
 export function twistForDay(date: Date): number {
-  const pool = [TWIST_BREEZY, TWIST_BEACH];
-  return pool[hashDay(date) % pool.length];
+  // Park Twists are v2.1: v2.0 configs never carry one (the sim ignores it too).
+  void date;
+  void hashDay;
+  void TWIST_BREEZY;
+  void TWIST_BEACH;
+  return 0;
 }

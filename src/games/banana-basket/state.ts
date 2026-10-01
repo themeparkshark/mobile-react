@@ -12,6 +12,9 @@ import { clampInt, mixSeed, type BRng } from './fixed';
 
 export const MODE_RIDE = 0;
 export const MODE_QUEUE = 1;
+/** Line Party micro-round (Snack Dash): one 20 s set, serve, coin 5 s, puffers 8 s, rush 15 s. */
+export const MODE_PARTY = 2;
+export const PARTY_STEPS = 1200;
 
 export const END_NONE = 0;
 export const END_TIME = 1;
@@ -268,7 +271,7 @@ export function createSim(cfg: SimConfig): SimState {
   const diff = clampInt(cfg.difficulty | 0, 1, 3);
   const s: SimState = {
     seed: cfg.seed >>> 0,
-    mode: queue ? MODE_QUEUE : MODE_RIDE,
+    mode: queue ? MODE_QUEUE : cfg.mode === MODE_PARTY ? MODE_PARTY : MODE_RIDE,
     diff,
     unlock,
     twist,
@@ -283,7 +286,7 @@ export function createSim(cfg: SimConfig): SimState {
     fxTs: 256,
     clockQ: 0,
     clock: 0,
-    total: queue ? SET_STEPS * QUEUE_SETS : RIDE_STEPS,
+    total: queue ? SET_STEPS * QUEUE_SETS : cfg.mode === MODE_PARTY ? PARTY_STEPS : RIDE_STEPS,
     hitStopQ: 0,
     slowQ: -1,
     finale: 0,
@@ -294,8 +297,8 @@ export function createSim(cfg: SimConfig): SimState {
     cardsSeen: cfg.cards | 0,
     set: 0,
     setStart: 0,
-    setLen: queue ? SET_STEPS : RIDE_STEPS,
-    rushAt: queue ? 1 << 30 : 2100,
+    setLen: queue ? SET_STEPS : cfg.mode === MODE_PARTY ? PARTY_STEPS : RIDE_STEPS,
+    rushAt: queue ? 1 << 30 : cfg.mode === MODE_PARTY ? 900 : 2100,
     rushOn: 0,
     bx: 200 * SUB,
     bv: 0,

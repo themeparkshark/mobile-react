@@ -141,4 +141,24 @@ for (let seed = 3001, got = 0; got < 2 && seed < 3400; seed++) {
   vectors.push({ name: `hearts out ride ${seed}`, proof: plain(p), expect: { score: p.score, clock: s.clock, end: p.end } });
 }
 fs.writeFileSync(path.join(out, 'golden-vectors.json'), JSON.stringify(vectors));
+// Line Party Snack Dash (party.ts): sidecar vectors, 8 seeds x 3 profiles + a ghost-filled drop.
+if (!out.includes('fixtures')) {
+  const party = loadTs('src/games/banana-basket/party.ts');
+  const pv = [];
+  for (let k = 0; k < 8; k++) {
+    const seed = 5000 + k * 97;
+    const board = party.build(seed);
+    for (const [seat, prof] of [[0, 'rookie'], [1, 'regular'], [2, 'ace']]) {
+      const taps = party.botTaps(board, seed, seat, prof);
+      const r = party.resolve(board, taps);
+      pv.push({ seed, seat, profile: prof, taps, expect: { score: r.score, hash: party.resultHash(r) } });
+    }
+    const own = party.botTaps(board, seed, 3, 'ace').filter(([t]) => t < 9000);
+    const taps = party.ghostFill(board, seed, 3, own, 9000, 'regular');
+    const r = party.resolve(board, taps);
+    pv.push({ seed, seat: 3, profile: 'regular', dropAtMs: 9000, taps, expect: { score: r.score, hash: party.resultHash(r) } });
+  }
+  fs.writeFileSync(path.join(out, 'snack-dash-vectors.json'), JSON.stringify(pv));
+  console.log(`wrote snack-dash-vectors.json (${pv.length})`);
+}
 console.log(`wrote ${out}: constants.json, golden-vectors.json (${vectors.length} vectors, ends: ${vectors.map((v) => v.expect.end).join(',')})`);
