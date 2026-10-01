@@ -76,6 +76,7 @@ import QueueToast, { type QueueToastMessage } from './components/QueueToast';
 import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
+import WaitCoinHero from './components/waitscreen/WaitCoinHero';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
@@ -884,6 +885,19 @@ export default function LinePlayScreen() {
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
+              hero={snapshot.state !== 'complete' ? <WaitCoinHero
+                rideId={ride.rideId}
+                waitScreen={snapshot.waitScreen}
+                creditedParts={snapshot.creditedParts}
+                bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
+                elapsedSeconds={snapshot.elapsedSeconds}
+                plannedWaitMinutes={snapshot.plannedWaitMinutes}
+                waitSource={snapshot.waitSource}
+                playerEnergy={player?.energy ?? null}
+                covered={activeGame != null || arcadeOpen || projectOpen}
+                rewardsOn={snapshot.serverSessionId != null && !snapshot.rewardUnavailable}
+                onLeveled={() => void refreshPlayer().catch(() => undefined)}
+              /> : null}
             />
           )}
         </View>

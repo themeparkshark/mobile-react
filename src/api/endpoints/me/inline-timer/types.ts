@@ -93,6 +93,20 @@ export interface LineSignalSummary {
   readonly puzzle: CrewPuzzleSummary | null;
 }
 
+/**
+ * The wait screen block (L2): the line's coin and its live Part balance,
+ * players at this ride now, and the posted-vs-real ratio from recent waits.
+ * Absent on older servers and null while the flag is off.
+ */
+export interface LineWaitScreenSummary {
+  readonly coin_asset_id: number | null;
+  readonly parts_banked: number | null;
+  readonly in_line_now: number | null;
+  /** Median (time in line / posted wait) here; null until 5 waits back it. */
+  readonly wait_ratio: number | null;
+  readonly wait_ratio_samples: number;
+}
+
 export interface LineSessionResponse {
   success: boolean;
   session_id: string;
@@ -115,6 +129,7 @@ export interface LineSessionResponse {
   current_quest_verified?: boolean;
   signal: LineSignalSummary | null;
   bonus?: LineBonusSummary | null;
+  wait_screen?: LineWaitScreenSummary | null;
   park_project: import('../park-projects').ParkProject | null;
   rewards: {
     coin_asset_id?: number;

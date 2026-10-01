@@ -46,7 +46,7 @@ import submitCurrentQuest, { startCurrentQuestAttempt, type CurrentQuestAttempt,
   type CurrentQuestProof } from '../../api/endpoints/me/inline-timer/currentQuest';
 import { voteParkProject, type ParkProject } from '../../api/endpoints/me/park-projects';
 import type { LineSignalSummary } from '../../api/endpoints/me/inline-timer/types';
-import type { LineBonusClaim, LineBonusEncore, LineBonusSummary,
+import type { LineBonusClaim, LineBonusEncore, LineBonusSummary, LineWaitScreenSummary,
   LineSessionResponse } from '../../api/endpoints/me/inline-timer/types';
 import { ExitSpeedDetector, forcedHeartbeatDelaysMs, isWalkingSample, nextBonusSeconds,
   takeNewBonusEvents } from './bonusRounds';
@@ -270,6 +270,8 @@ export interface SessionSnapshot {
   readonly leftLine: boolean;
   /** The open Current Quest bonus attempt, if any. */
   readonly questAttempt: CurrentQuestAttempt | null;
+  /** Wait screen extras from the server (L2); null offline or on older servers. */
+  readonly waitScreen?: LineWaitScreenSummary | null;
 }
 
 type Listener = (snap: SessionSnapshot) => void;
@@ -597,6 +599,7 @@ export class LinePlaySession {
   private boardingAt: number | null = null;
   private crewRelay: CrewRelayProgress | null = null;
   private bonus: LineBonusSummary | null = null;
+  private waitScreen: LineWaitScreenSummary | null = null;
   private bonusSeen: string[] = [];
   private bonusFx: BonusFxEvent[] = [];
   private bonusFxSeq = 0;
@@ -751,6 +754,7 @@ export class LinePlaySession {
       moving: this.isMoving(),
       leftLine: this.clientLeftLine || Boolean(this.bonus?.motion?.left_line),
       questAttempt: this.questAttempt,
+      waitScreen: this.waitScreen,
     };
   }
 
@@ -1457,6 +1461,7 @@ export class LinePlaySession {
     this.applySignal(result.signal);
     this.applyParkProject(result.park_project);
     this.applyBonus(result.bonus);
+    if (result.wait_screen !== undefined) this.waitScreen = result.wait_screen;
     this.startedAt = Date.parse(result.started_at) || this.startedAt;
     if (result.status === 'completed') {
       void deactivateQueueBackgroundHeartbeat(result.session_id).catch(error =>
@@ -2024,6 +2029,7 @@ export class LinePlaySession {
     this.advanceTrail = [];
     this.clearForcedHeartbeats();
     this.bonus = null;
+    this.waitScreen = null;
     this.bonusSeen = [];
     this.bonusFx = [];
     this.questAttempt = null;
