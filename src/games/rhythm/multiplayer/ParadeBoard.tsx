@@ -65,6 +65,7 @@ export interface ParadeBoardProps {
 }
 
 const THUD_VOL = 0.42;
+const NO_DARES: number[] = [];
 
 export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgress, autoplay, offsetMs = 25 }: ParadeBoardProps) {
   const reducedMotion = useReducedGameMotion();
@@ -287,7 +288,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
       if (s.armed && v.armed === 0) v.armed = 1;
     }
     stepView(v, null, dt);
-    layoutFrame(draw.value, s, beatsSv.value, geom, v.now, s.approach, v.march, v.missAt, v.wt, 0, 1);
+    layoutFrame(draw.value, s, beatsSv.value, geom, v.now, s.approach, v.march, v.missAt, v.wt, 0, 1, NO_DARES);
     const batch = drainEvents(s.ev);
     if (batch.length) {
       applyEventsUI(v, s, null, batch);

@@ -807,3 +807,36 @@ test('parade_sprint (Line Party): deterministic replay, tap codes, ghost fill, m
   // Fever weighs 1.5x: a perfect run with Fever scores above 12 x 100.
   assert.ok(march.score > 1200, `Fever bars count 1.5x (${march.score})`);
 });
+
+test('Ghost Dares: rival Fever launches dare the next bar, never the Finale last 2 bars, at most one per 4 bars; dares only change the picture', () => {
+  const dl = loadTs('src/games/rhythm/multiplayer/drumline.ts');
+  const ch = chartOf('shark_shop_a', 'queue', 2, 1);
+  const r = (launchT) => ({ id: 'x', name: 'x', color: '#fff', isGhost: true, hitT: [], barScores: [], finalScore: 0, accuracy: 0, launchT });
+  const at = (bar, frac = 0.5) => ch.barStart[bar] + (ch.barStart[bar + 1] - ch.barStart[bar]) * frac;
+  const b0 = ch.firstBar + 5;
+  assert.deepEqual(plain(dl.dareBarsFor(ch, [r([at(b0)])])), [b0 + 1]);
+  // Two launches 2 bars apart from two rivals: only the first dares.
+  assert.deepEqual(plain(dl.dareBarsFor(ch, [r([at(b0)]), r([at(b0 + 2)])])), [b0 + 1]);
+  assert.deepEqual(plain(dl.dareBarsFor(ch, [r([at(b0)]), r([at(b0 + 4)])])), [b0 + 1, b0 + 5]);
+  // Never the Finale's last 2 bars.
+  assert.deepEqual(plain(dl.dareBarsFor(ch, [r([at(ch.lastBar - 2)])])), []);
+  // A crew's launches come from their own judged runs.
+  const crew = dl.crewForRound(ch, { seed: 9, autoFever: false }, null, null);
+  for (const c of crew) for (const t of c.launchT) assert.ok(t >= ch.barStart[ch.firstBar] && t <= ch.endMs);
+  // The picture only: identical inputs judge identically with or without dares (layout reads them, the judge never does).
+  const L = loadTs('src/games/rhythm/field/layout.ts');
+  const s = J.createJudge(ch, { forceMarch: 0, limp: true });
+  const i = firstIdx(ch, (k) => ch.bar[k] === b0 + 1);
+  J.judgeTick(s, ch.t[i] - 400);
+  const geom = { cx: 195, yLine: 400, yHorizon: -60, halfW: 75, noteSize: 62 };
+  const flags = ch.barStart.map((_, b) => (b === b0 + 1 ? 1 : 0));
+  const dA = L.createDrawList();
+  const dB = L.createDrawList();
+  const miss = new Array(ch.t.length).fill(-1e9);
+  L.layoutFrame(dA, s, ch.beats, geom, ch.t[i] - 200, 1300, 0, miss, 0, 0, 1, []);
+  L.layoutFrame(dB, s, ch.beats, geom, ch.t[i] - 200, 1300, 0, miss, 0, 0, 1, flags);
+  // The dared note is the lowest one still above the line.
+  const noteI = (d) => { let best = -1; for (let k = 0; k < d.n; k++) if (d.y[k] < geom.yLine && (best < 0 || d.y[k] > d.y[best])) best = k; return d.alpha[best]; };
+  assert.ok(noteI(dA) > 0.9, 'visible without a dare');
+  assert.equal(noteI(dB), 0, 'hidden in the last half of the read zone');
+});

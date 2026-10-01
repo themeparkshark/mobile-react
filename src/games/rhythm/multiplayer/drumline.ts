@@ -36,6 +36,8 @@ export interface Rival {
   finalScore: number;
   /** Layer-normalised accuracy (0-100): what a Drum-Off is decided on (design 11.2). */
   accuracy: number;
+  /** Song times of this rival's Fever launches (each delivers a Hidden Dare). */
+  launchT: number[];
 }
 
 export const CREW = [
@@ -74,6 +76,33 @@ export function playRival(chart: Chart, script: TouchEv[], cfg: JudgeConfig): { 
   return { s, barScores };
 }
 
+function launchesOf(s: JudgeState): number[] {
+  const out: number[] = [];
+  for (let i = 0; i + 1 < s.deployT.length; i += 2) out.push(s.deployT[i]);
+  return out;
+}
+
+/**
+ * Hidden Dares from rival Fever launches (design 11.2, Ghost Dares): each
+ * launch dares the bar after it lands. Deterministic from the rivals' data,
+ * so async play has the attack too. Limits: never the Finale's last 2 bars,
+ * at most one received per 4 bars. (MARCH sections and the player's own
+ * Fever cancel a dare at play time.)
+ */
+export function dareBarsFor(chart: Chart, rivals: Rival[]): number[] {
+  const bars: number[] = [];
+  const launches = rivals.flatMap((r) => r.launchT).sort((a, b) => a - b);
+  for (const t of launches) {
+    let b = chart.firstBar;
+    while (b + 1 < chart.barStart.length && chart.barStart[b + 1] <= t) b++;
+    const dare = b + 1;
+    if (dare < chart.firstBar || dare > chart.lastBar - 2) continue;
+    if (bars.length && dare - bars[bars.length - 1] < 4) continue;
+    bars.push(dare);
+  }
+  return bars;
+}
+
 function hitsOf(s: JudgeState): number[] {
   const out: number[] = [];
   for (let i = 0; i < s.n; i++) if (s.res[i] >= J_SHARP && s.res[i] <= J_GOOD) out.push(s.t[i]);
@@ -87,14 +116,14 @@ export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: str
   if (ghost.chartVersion && ghost.chartVersion !== chart.chartVersion) return null;
   const touches = decodeTouches(ghost.touches).map((x) => ({ t: x.t, type: x.type, zone: x.zone, pid: x.pid, y: x.y }));
   const { s, barScores } = playRival(chart, touches, { autoFever: ghost.autoFever ?? autoFever, marchBars: ghost.marchBars, limp: chart.format === 'queue' });
-  return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
+  return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
 }
 
 export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number, autoFever: boolean): Rival {
   const script = scriptHuman(chart, { sigmaMs: bot.sigma, lapse: bot.lapse, zoneSlip: 0.02 }, seed);
   const { s, barScores } = playRival(chart, script, { autoFever: true, forceMarch: 0, limp: chart.format === 'queue' });
   void autoFever;
-  return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
+  return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
 }
 
 /**

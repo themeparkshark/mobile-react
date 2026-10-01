@@ -7,7 +7,7 @@
  */
 
 import { J_MISS, J_NONE, K_BIG, K_CYMBAL, K_DRUM, K_FREEZE, K_POPPER, K_RIM, K_ROLL, L_MARCH, L_STANDING, F_ECHO } from '../core/types';
-import type { JudgeState } from '../core/judge';
+import { feverActiveAt, type JudgeState } from '../core/judge';
 import { fadeIn, scaleAt } from '../core/projection';
 
 export const MAX_NOTES = 40;
@@ -107,8 +107,13 @@ export function beatAt(beats: number[], t: number): number {
 export function layoutFrame(
   d: DrawList, s: JudgeState, beats: number[], g: LaneGeom, now: number, approach: number,
   march: number, missAt: number[], wt: number, echoStyle: number, bigMarch: number,
+  dare: number[],
 ): void {
   'worklet';
+  // Hidden Dare (design 11.2): notes fade out over 75% -> 50% of the read zone.
+  let readZone = 0.4 * approach;
+  if (readZone < 500) readZone = 500;
+  if (readZone > 0.7 * approach) readZone = 0.7 * approach;
   const widen = 1 + 0.17 * march;
   const sizeK = 1 + 0.15 * march;
   // Beat phase and bar.
@@ -170,6 +175,11 @@ export function layoutFrame(
       dropping = true;
     } else {
       continue;
+    }
+    if (dare.length > bar && dare[bar] && res === J_NONE && layer !== L_MARCH && !feverActiveAt(s, s.barStart[bar])) {
+      const tt = t - now;
+      if (tt < 0.5 * readZone) alpha = 0;
+      else if (tt < 0.75 * readZone) alpha *= (tt - 0.5 * readZone) / (0.25 * readZone);
     }
     if (u < 0 && !dropping && k !== K_ROLL && k !== K_POPPER) {
       // Just past the line and still unjudged: fade out quickly.

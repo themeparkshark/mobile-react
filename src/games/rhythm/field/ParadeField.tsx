@@ -120,6 +120,8 @@ interface Props {
   swap: number;
   /** Approach time (ms) for the drop-line marker. */
   approach: number;
+  /** Hidden Dare bars (per bar 1/0), telegraphed one bar ahead on the rails. */
+  dare?: SharedValue<number[]>;
 }
 
 // Crowd slots: side (0 left, 1 right), row (0 back, 1 front), x fraction inside the side band.
@@ -248,7 +250,7 @@ function buildBursts(v: ParadeView): SkPathLike[] {
   return [gold, sky, white, coral, grey, outline];
 }
 
-export const ParadeField = React.memo(function ParadeField({ geom, judge, view, draw, tick, reducedMotion, rails, railFlash, grip, hand, swap, approach }: Props) {
+export const ParadeField = React.memo(function ParadeField({ geom, judge, view, draw, tick, reducedMotion, rails, railFlash, grip, hand, swap, approach, dare }: Props) {
   const { width: W, height: H, cx, yLine, halfW, touchTop, yHorizon } = geom;
   const font = useFont(FONT, 22);
   const bigFont = useFont(FONT, 96);
@@ -750,6 +752,31 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
         const f = rise / (yLine + 10 - laneTop);
         const xx = cx + side * halfW * widen * (1 - 0.65 * f);
         addStar(p, xx, yLine + 6 - rise, 6.5 * (1 - 0.5 * u), j + t * 0.02);
+      }
+    }
+    return p;
+  });
+  // Hidden Dare telegraph: coral diagonal stripes run up both rails for the whole bar before it.
+  const dareStripes = useDerivedValue(() => {
+    tick.value;
+    const p = Skia.Path.Make();
+    if (!dare) return p;
+    const flags = dare.value;
+    const s = judge.value;
+    const next = draw.value.bar + 1;
+    if (next >= flags.length || !flags[next] || s.barLayer[next] === 2) return p;
+    const widen = 1 + 0.17 * view.value.march;
+    const topHalf = halfW * widen * 0.35;
+    const botHalf = halfW * widen;
+    const phase = (view.value.wt / 400) % 1;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let j = 0; j < 10; j++) {
+        const u = (j + phase) / 10;
+        const yy = yLine + 10 - (yLine + 10 - laneTop) * u;
+        const xx = cx + side * (botHalf + (topHalf - botHalf) * u);
+        const w = 7 - 4 * u;
+        p.moveTo(xx - w, yy + w);
+        p.lineTo(xx + w, yy - w);
       }
     }
     return p;
@@ -1274,6 +1301,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       <Path path={railPath} color={railColor} style="stroke" strokeWidth={railWidth} strokeCap="round" />
       <Path path={flamePath} color={GOLD} />
       <Path path={flamePath} color={NAVY} style="stroke" strokeWidth={1.6} strokeJoin="round" />
+      <Path path={dareStripes} color={CORAL} style="stroke" strokeWidth={5} strokeCap="round" />
       <Path path={dropLine} color={GOLD} style="stroke" strokeWidth={6} strokeCap="round" />
       <Path path={dropLine} color={NAVY} style="stroke" strokeWidth={1.8} strokeCap="round" />
       {railPaths.map((p, i) => (

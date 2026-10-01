@@ -49,6 +49,8 @@ export interface RhythmProofV4 {
   march_sections: number[];
   /** [launchMs, dropBar] per Fever launch. */
   fever_deploys: [number, number][];
+  /** Bars a rival's Fever dared (Hidden Dare: presentation only, never judged). */
+  dares_received: number[];
   auto_fever: boolean;
   inputs: [number, number, number, number][];
   poppers: [number, number, number][];
@@ -102,6 +104,7 @@ export interface ProofContext {
   grip: string;
   assist: boolean;
   limp: boolean;
+  daresReceived?: number[];
   roundToken?: string;
 }
 
@@ -150,6 +153,7 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
     march_bars: marchBarsOf(s),
     march_sections: marchSectionsOf(s),
     fever_deploys: pairsOf(s.deployT),
+    dares_received: (ctx.daresReceived ?? []).slice(),
     auto_fever: ctx.autoFever,
     inputs,
     poppers,

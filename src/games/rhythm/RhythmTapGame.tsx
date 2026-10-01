@@ -89,7 +89,7 @@ import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPE
 import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type GripPrefs } from './core/grip';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
 import { ParadeField, fieldGeom } from './field/ParadeField';
-import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_FULL, RB_HOLD, RB_MARCH, RB_READY, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
+import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_DARE, RB_FULL, RB_HOLD, RB_MARCH, RB_READY, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
 import { SongPlayer, type SongAnchor } from './audio/SongPlayer';
 import {
   effectiveDifficulty,
@@ -104,7 +104,7 @@ import {
   type ParadeProgress,
 } from './meta/progress';
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
-import { crewForRound, drumOffPlace, type Rival } from './multiplayer/drumline';
+import { crewForRound, dareBarsFor, drumOffPlace, type Rival } from './multiplayer/drumline';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 113;
@@ -291,6 +291,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const rivalHitT = useSharedValue<number[][]>([]);
   const rivalHitK = useSharedValue<number[]>([]);
   const lastBarSv = useSharedValue(-1);
+  // Hidden Dares delivered by rival Fever launches: per bar 1/0.
+  const dareSv = useSharedValue<number[]>([]);
+  const dareBarsRef = useRef<number[]>([]);
   const auto = useSharedValue<{ err: number[]; skip: number[]; i: number; relT: number[]; relP: number[]; popLast: number }>({ err: [], skip: [], i: 0, relT: [], relP: [], popLast: 0 });
 
   // -- Audio ------------------------------------------------------------------------
@@ -396,6 +399,11 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       : [];
     rivals.current = crew;
     rivalHitT.value = crew.map((r) => r.hitT);
+    const dares = plan.format === 'queue' ? dareBarsFor(chart, crew) : [];
+    dareBarsRef.current = dares;
+    const flags: number[] = [];
+    for (let b = 0; b < chart.barStart.length; b++) flags.push(dares.includes(b) ? 1 : 0);
+    dareSv.value = flags;
     rivalHitK.value = crew.map(() => 0);
     railFlash.value = [-1e9, -1e9, -1e9];
 
@@ -597,6 +605,14 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const onBar = useCallback((bar: number, barWallStart: number, beatMs: number, march: number, noteBeats: number) => {
     setMarchLive(!!march);
     if (marchWantRef.current === !!march) setMarchFrom(null);
+    // A rival's Fever dares the next bar: one bar of warning (whistle + coral rail stripes).
+    if (dareBarsRef.current.includes(bar + 1) && !march) {
+      GameAudio.play('rh_whistle_call', { volume: 0.55 });
+      runOnUI(() => {
+        'worklet';
+        showRibbon(view.value, RB_DARE);
+      })();
+    }
     // Ghost delta chip on every bar line (design 11.2).
     const r = rivals.current.find((x) => x.isGhost);
     if (r && judgeMirror.current) {
@@ -778,7 +794,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     }
     const fx = null;
     stepView(v, fx, dt);
-    layoutFrame(draw.value, s, beatsSv.value, geom, v.now, approachSv.value, v.march, v.missAt, v.wt, echoStyleSv.value, 1);
+    layoutFrame(draw.value, s, beatsSv.value, geom, v.now, approachSv.value, v.march, v.missAt, v.wt, echoStyleSv.value, 1, dareSv.value);
     const batch = drainEvents(s.ev);
     if (batch.length) {
       applyEventsUI(v, s, fx, batch);
@@ -871,6 +887,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       elapsedMs: elapsed,
       pauseSpans: pauseSpans.current,
       grip: gripLabel(grip, gripPrefs),
+      daresReceived: dareBarsRef.current,
       assist: plan.assist,
       limp: plan.limp,
     }, plan.chart.chartVersion, plan.chart.beatmapHash);
@@ -1061,6 +1078,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               hand={gripPrefs.hand}
               swap={gripPrefs.swap}
               approach={plan.assist ? 2080 : plan.difficulty === 1 ? 1600 : 1300}
+              dare={dareSv}
             />
           ) : null}
           <GestureDetector gesture={gesture}>
