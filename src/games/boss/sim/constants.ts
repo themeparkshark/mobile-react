@@ -83,6 +83,14 @@ export const PTS = {
   hit: 4, crit: 23, heavy: 58, perfect: 16, good: 6, hazard: 3, breakLump: 70,
   finisherPerfect: 200, finisherGood: 120,
 } as const;
+/**
+ * Counter weight per boss (integer percent on a counter's points and Break gauge).
+ * A Robo circuit counter is 2-3 ordered presses and a Ghost counter is a
+ * which-one read, and neither boss gets Kraken's multi-step attacks, so each
+ * counter carries more: the median bot lands within 8% of the Kraken median
+ * on every boss (balance test "every boss within 8% of the Kraken median").
+ */
+export const COUNTER_PCT: Record<BossId, number> = { kraken: 100, robo_shark: 140, ghost_squid: 170 };
 /** Multipliers as integer percents. */
 export const MULT = { normal: 100, break: 150, ally: 125 } as const;
 /** Scoring unit: points x combo pct x mult pct. One floor per bout. */

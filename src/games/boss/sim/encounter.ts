@@ -16,7 +16,7 @@ import { mixSeed, createRng, type Rng } from '../../../gamekit/core/rng';
 import {
   ATTACKS, BONUS_ATTACK_CAP, BREAK_FREEZE, BREAK_MAX, BREAK_Q, BREAK_RING_Q, BUFFER_MS, CLOSE_GRACE_MS, COYOTE_MS, DIZZY_MS,
   FINISHER_FREEZE, FINISHER_GAUGE_MIN, FINISHER_GOOD_MS, FINISHER_HOLD_MS, FINISHER_PERFECT_MS, FINISHER_Q, GAIN,
-  GAUGE_MAX, GUARD_SWAT_MS, GUARD_TAPS, GUARD_WINDOW_MS, HEAVY_WINDOW_MS, IN_ALLY, IN_END, IN_PAD_DOWN, IN_PAD_UP,
+  COUNTER_PCT, GAUGE_MAX, GUARD_SWAT_MS, GUARD_TAPS, GUARD_WINDOW_MS, HEAVY_WINDOW_MS, IN_ALLY, IN_END, IN_PAD_DOWN, IN_PAD_UP,
   IN_PAUSE, IN_RESCUE, IN_RESUME, IN_SURGE, IN_TARGET, KO_FREEZE, LEAD_Q, LOSS, MULT, OFFSET_CLAMP, OPENING_Q,
   PERFECT_EARLY, PERFECT_LATE, PTS, PUNISH_MS, QUARTER, RECOVER_Q, RING_CRIT_MS, RINGS, UNIT, comboPct, type BossId,
 } from './constants';
@@ -446,13 +446,15 @@ function counterPress(b: Bout, t: number, lane: number): void {
   let v: number;
   if (perfect) {
     b.stats.perfect += 1;
-    v = score(b, PTS.perfect, 100, 100);
-    addGauge(b, GAIN.perfect, t);
+    const w = COUNTER_PCT[b.cfg.boss];
+    v = score(b, PTS.perfect, w, 100);
+    addGauge(b, Math.floor((GAIN.perfect * w) / 100), t);
     emit(b, E_PERFECT, t, lane, err, v);
   } else {
     b.stats.good += 1;
-    v = score(b, PTS.good, 100, 100);
-    addGauge(b, GAIN.good, t);
+    const w = COUNTER_PCT[b.cfg.boss];
+    v = score(b, PTS.good, w, 100);
+    addGauge(b, Math.floor((GAIN.good * w) / 100), t);
     emit(b, E_GOOD, t, lane, err, v);
   }
   chainUp(b, t);

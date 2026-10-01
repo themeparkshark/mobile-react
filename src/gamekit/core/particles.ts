@@ -373,6 +373,19 @@ function rr(r: Rng, lo: number, hi: number): number {
   return lo + (hi - lo) * rngFloat(r);
 }
 
+/**
+ * Free a slot. MUST stay declared above claim(): the Reanimated plugin captures a
+ * worklet's closure at the point it is created, so a helper declared later is
+ * still undefined inside claim() on the UI runtime ("kill is not a function").
+ */
+function kill(pool: ParticlePool, i: number): void {
+  'worklet';
+  if (pool.alive[i] === 0) return;
+  pool.alive[i] = 0;
+  pool.live -= 1;
+  pool.layerLive[pool.layer[i]] -= 1;
+}
+
 /** Find a slot: a free one, else cull the lowest-priority oldest (if lower than prio). */
 function claim(pool: ParticlePool, prio: number, layer: number): number {
   'worklet';
@@ -398,16 +411,11 @@ function claim(pool: ParticlePool, prio: number, layer: number): number {
     }
   }
   if (victim < 0 || vPrio > prio) return -1;
-  kill(pool, victim);
-  return victim;
-}
-
-function kill(pool: ParticlePool, i: number): void {
-  'worklet';
-  if (pool.alive[i] === 0) return;
-  pool.alive[i] = 0;
+  // Evict inline (no helper call): claim runs inside every emit on the UI thread.
+  pool.alive[victim] = 0;
   pool.live -= 1;
-  pool.layerLive[pool.layer[i]] -= 1;
+  pool.layerLive[pool.layer[victim]] -= 1;
+  return victim;
 }
 
 /** Emit particles from a def at (x, y). Returns how many were spawned. */
