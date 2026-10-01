@@ -5,9 +5,12 @@
  *
  *   node tools/current-quest/build-library.cjs [--quick] [--out-server <dir>]
  *
- * Generates candidate 5x5 lagoon boards, solves them with the same solver the
- * app ships (src/games/current-quest/solver.ts), filters, grades, ranks by
- * quality, rejects near-duplicates under all 8 transforms and writes:
+ * Generates candidate lagoon boards (always 5 wide: Warm-up 5x5, Standard 5x6,
+ * Treasure 5x7, design v5 3.1), solves them with the same solver the app ships
+ * (src/games/current-quest/solver.ts), filters, grades, ranks by quality,
+ * rejects near-duplicates under every allowed transform, splits each cell into
+ * Rookie / Adept / Master terciles, runs the noisy-player Trial sim on the
+ * Rookie band (15.2) and writes:
  *   - src/games/current-quest/boards.v2.client.ts  (pool + teach boards, NO solutions, NO sealed ids)
  *   - <server dir>/boards.v2.server.json            (same ids WITH canonical solutions)
  *   - <server dir>/boards.v2.sealed.json            (Daily Tide / Showdown set, server only)
@@ -25,6 +28,9 @@ const S = loadTs('src/games/current-quest/solver.ts');
 
 const args = process.argv.slice(2);
 const QUICK = args.includes('--quick');
+// --resim: keep the generated boards in <server dir>, only re-run the Trial sim
+// and the coin flags (used to fit TEMP without regenerating the library).
+const RESIM = args.includes('--resim');
 const outServerIdx = args.indexOf('--out-server');
 const SERVER_DIR = outServerIdx >= 0 ? args[outServerIdx + 1]
   : '/Users/dustinsparage/apps/tps-prime-time-audit/studio/currentquest/library';
@@ -47,12 +53,13 @@ const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
 // ---------------------------------------------------------------------------
 // Cells (slot x mechanic set) and their filters
 
+const SLOT_H = { warmup: 5, standard: 6, treasure: 7 };
 const CELLS = [
-  { key: 'C-warmup', set: 'C', slot: 'warmup', count: 60, par: [3, 5], pearls: [2, 2], rocks: [3, 6], runs: [1, 3], sand: [0, 0], P: [0], carries: 1, maxDecision: 1, trap: false, maxOptimal: 99 },
-  { key: 'C-standard', set: 'C', slot: 'standard', count: 60, par: [5, 7], pearls: [2, 3], rocks: [4, 7], runs: [2, 4], sand: [0, 0], P: [0], carries: 2, trap: true, maxOptimal: 6 },
-  { key: 'C-treasure', set: 'C', slot: 'treasure', count: 120, par: [6, 8], pearls: [2, 3], rocks: [4, 7], runs: [3, 4], sand: [0, 0], P: [0], carries: 3, trap: true, maxOptimal: 6, riptideShare: 0.6 },
-  { key: 'CT-standard', set: 'CT', slot: 'standard', count: 60, par: [5, 7], pearls: [2, 3], rocks: [3, 6], runs: [2, 3], sand: [2, 4], P: [3, 4], carries: 2, trap: true, tide: true, maxOptimal: 6 },
-  { key: 'CT-treasure', set: 'CT', slot: 'treasure', count: 120, par: [6, 8], pearls: [2, 3], rocks: [3, 6], runs: [2, 4], sand: [2, 4], P: [3, 4], carries: 3, trap: true, tide: true, maxOptimal: 6, riptideShare: 0.6 },
+  { key: 'C-warmup', set: 'C', slot: 'warmup', H: 5, count: 60, par: [3, 5], pearls: [2, 2], rocks: [3, 6], runs: [1, 3], sand: [0, 0], P: [0], carries: 1, maxDecision: 1, trap: false, maxOptimal: 99 },
+  { key: 'C-standard', set: 'C', slot: 'standard', H: 6, count: 60, par: [5, 7], pearls: [2, 3], rocks: [4, 8], runs: [2, 4], sand: [0, 0], P: [0], carries: 2, trap: true, maxOptimal: 6 },
+  { key: 'C-treasure', set: 'C', slot: 'treasure', H: 7, count: 120, par: [6, 8], pearls: [2, 3], rocks: [5, 9], runs: [3, 5], sand: [0, 0], P: [0], carries: 3, trap: true, maxOptimal: 6, riptideShare: 0.6 },
+  { key: 'CT-standard', set: 'CT', slot: 'standard', H: 6, count: 60, par: [5, 7], pearls: [2, 3], rocks: [3, 7], runs: [2, 4], sand: [2, 4], P: [3, 4], carries: 2, trap: true, tide: true, maxOptimal: 6 },
+  { key: 'CT-treasure', set: 'CT', slot: 'treasure', H: 7, count: 120, par: [6, 8], pearls: [2, 3], rocks: [4, 8], runs: [3, 5], sand: [2, 5], P: [3, 4], carries: 3, trap: true, tide: true, maxOptimal: 6, riptideShare: 0.6 },
 ];
 const SEALED = [
   { key: 'sealed-CT-standard', base: 'CT-standard', count: 60 },
@@ -62,7 +69,9 @@ const SEALED = [
 const DIRS = '^>v<';
 
 function candidate(r, cell) {
-  const tiles = new Array(25).fill('.');
+  const H = cell.H;
+  const N = 5 * H;
+  const tiles = new Array(N).fill('.');
   const used = new Set();
   const P = pick(r, cell.P);
   // Currents: straight runs of 2..4 same-direction tiles.
@@ -71,16 +80,30 @@ function candidate(r, cell) {
     for (let attempt = 0; attempt < 20; attempt++) {
       const d = ri(r, 0, 3);
       const len = ri(r, 2, 4);
-      let p = ri(r, 0, 24);
+      let p = ri(r, 0, N - 1);
       const cells = [];
       let ok = true;
       for (let j = 0; j < len; j++) {
         if (p < 0 || tiles[p] !== '.') { ok = false; break; }
         cells.push(p);
-        p = R.stepCell(p, d);
+        p = R.stepCell(p, d, H);
       }
       if (!ok) continue;
       for (const c of cells) tiles[c] = DIRS[d];
+      // Riptide hand-off (v5 3.6): on Treasure boards, often chain a perpendicular
+      // run onto the end of this one, so one stroke can ride two runs.
+      if (cell.riptideShare && r() < 0.55 && p >= 0 && tiles[p] === '.') {
+        const d2 = (d + (r() < 0.5 ? 1 : 3)) % 4;
+        const len2 = ri(r, 1, 3);
+        let q = p;
+        const cells2 = [];
+        for (let j = 0; j < len2; j++) {
+          if (q < 0 || tiles[q] !== '.') break;
+          cells2.push(q);
+          q = R.stepCell(q, d2, H);
+        }
+        for (const c of cells2) tiles[c] = DIRS[d2];
+      }
       break;
     }
   }
@@ -93,44 +116,48 @@ function candidate(r, cell) {
   const start = take((t) => t === '.');
   if (start < 0) return null;
   // Chest on a reachable open cell, then pearls on cells still reachable
-  // with the chest closed (a locked chest blocks like coral).
-  const seen0 = reach({ tiles: tiles.join(''), start, chest: -1, P });
-  const chest = take((t) => t === '.', [...seen0].filter((i) => i !== start));
+  // with the chest closed (a locked chest blocks like coral). On the taller
+  // v5 boards everything is placed within a stroke radius of the start so par
+  // stays inside the slot window instead of sprawling over 7 rows.
+  const near = cell.par[1] - 2;
+  const pearlR = Math.ceil(cell.par[1] / 2) + 1;
+  const seen0 = reach({ tiles: tiles.join(''), start, chest: -1, P, H });
+  const chest = take((t) => t === '.', [...seen0.keys()].filter((i) => i !== start && seen0.get(i) >= 2 && seen0.get(i) <= near));
   if (chest < 0) return null;
-  const seen = reach({ tiles: tiles.join(''), start, chest, P });
-  const reachable = [...seen].filter((i) => i !== start && i !== chest);
+  const seen = reach({ tiles: tiles.join(''), start, chest, P, H });
+  const reachable = [...seen.keys()].filter((i) => i !== start && i !== chest && seen.get(i) <= pearlR);
   if (reachable.length < 5) return null;
   const nP = ri(r, cell.pearls[0], cell.pearls[1]);
   const pearls = [];
   for (let k = 0; k < nP; k++) { const c = take((t) => t !== '#', reachable); if (c >= 0) pearls.push(c); }
   const golden = take((t) => t !== '#', reachable);
   if (golden < 0 || pearls.length !== nP) return null;
-  return { tiles: tiles.join(''), start, chest, pearls: pearls.sort((a, b) => a - b), golden, P };
+  return { tiles: tiles.join(''), start, chest, pearls: pearls.sort((a, b) => a - b), golden, P, H };
 }
 
-/** Cells visited by any stroke sequence from the start (chest closed, pearls ignored). */
+/** Cells touched by any stroke sequence from the start -> fewest strokes to touch them (chest closed, pearls ignored). */
 function reach(b) {
   const board = { ...b, pearls: [0], golden: -1, id: 'r', name: 'r', slot: 'standard', set: 'C', ruleset: 2, par: 0, parGold: 0, authorRiptide: 0 };
   const M = b.P ? b.P * 2 : 1;
   const seenState = new Set([b.start * 16 + 0]);
-  const cells = new Set([b.start]);
-  const queue = [[b.start, 0]];
+  const cells = new Map([[b.start, 0]]);
+  const queue = [[b.start, 0, 0]];
   while (queue.length) {
-    const [pos, m] = queue.shift();
+    const [pos, m, depth] = queue.shift();
     const tide = R.tideAt(b.P, m, 0);
     for (let a = 0; a < (b.P ? 5 : 4); a++) {
       const sim = R.simulateStroke(board, pos, 0, false, tide, a === 4 ? -1 : a);
       if (sim.bump) continue;
-      for (const c of sim.path) cells.add(c);
+      for (const c of sim.path) if (!cells.has(c)) cells.set(c, depth + 1);
       const key = sim.pos * 16 + ((m + 1) % M);
-      if (!seenState.has(key)) { seenState.add(key); queue.push([sim.pos, (m + 1) % M]); }
+      if (!seenState.has(key)) { seenState.add(key); queue.push([sim.pos, (m + 1) % M, depth + 1]); }
     }
   }
   return cells;
 }
 
 function asBoard(c, cell, id) {
-  return { id, name: id, slot: cell.slot, set: cell.set, ruleset: 2, tiles: c.tiles, start: c.start, chest: c.chest, pearls: c.pearls, golden: c.golden, P: c.P, par: 0, parGold: 0, authorRiptide: 0 };
+  return { id, name: id, slot: cell.slot, set: cell.set, ruleset: 2, H: cell.H, tiles: c.tiles, start: c.start, chest: c.chest, pearls: c.pearls, golden: c.golden, P: c.P, par: 0, parGold: 0, authorRiptide: 0 };
 }
 
 /** Greedy Manhattan walker (trap filter): chase the nearest pearl, then the chest. */
@@ -172,8 +199,9 @@ function tideMatters(board, sol) {
 function spread(board) {
   const rows = new Set();
   const cols = new Set();
-  for (let i = 0; i < 25; i++) if (board.tiles[i] !== '.') { rows.add(R.rowOf(i)); cols.add(R.colOf(i)); }
-  return (rows.size + cols.size) / 10;
+  const n = R.cellsOf(board);
+  for (let i = 0; i < n; i++) if (board.tiles[i] !== '.') { rows.add(R.rowOf(i)); cols.add(R.colOf(i)); }
+  return (rows.size + cols.size) / (5 + R.heightOf(board));
 }
 
 function signature(board) {
@@ -185,12 +213,15 @@ function signature(board) {
 }
 
 function allTransforms(board) {
-  const out = [];
-  for (let tf = 0; tf < 8; tf++) out.push(signature(R.transformBoard(board, tf)));
-  return out;
+  return R.allowedTransforms(R.heightOf(board)).map((tf) => signature(R.transformBoard(board, tf)));
 }
 
-function hamming(a, b) { let d = 0; for (let i = 0; i < 25; i++) if (a[i] !== b[i]) d++; return d; }
+function hamming(a, b) {
+  if (a.length !== b.length) return Infinity;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
+  return d;
+}
 
 const NAME_A = ['Coral', 'Tidal', 'Pearl', 'Lagoon', 'Driftwood', 'Sandy', 'Bubble', 'Seashell', 'Sunny', 'Breezy', 'Foamy', 'Starfish', 'Kelp', 'Current', 'Splashy', 'Reef', 'Clamshell', 'Gull', 'Harbor', 'Treasure'];
 const NAME_B = ['Two-Step', 'Corner', 'Shortcut', 'Loop', 'Detour', 'Dash', 'Drift', 'Hop', 'Glide', 'Zigzag', 'Slide', 'Sprint', 'Run', 'Crossing', 'Channel', 'Switchback', 'Getaway', 'Ride', 'Shuffle', 'Wander'];
@@ -224,7 +255,9 @@ function buildCell(cell, seed, accepted, want) {
   const collectN = target * 2;
   const rej = {};
   const no = (k) => { rej[k] = (rej[k] || 0) + 1; };
-  while (pool.length < collectN && tries < maxTries) {
+  const ripNeed = cell.riptideShare ? Math.ceil(target * cell.riptideShare * 1.15) : 0;
+  let ripHave = 0;
+  while ((pool.length < collectN || ripHave < ripNeed) && tries < maxTries) {
     tries++;
     const c = candidate(r, cell);
     if (!c) { no('cand'); continue; }
@@ -237,16 +270,21 @@ function buildCell(cell, seed, accepted, want) {
     const gap = sol.parGold - sol.par;
     if (gap < 2 || gap > 4) { no('gap'); continue; }
     if (sol.carries < cell.carries) { no('carries'); continue; }
+    if (sol.maxCarry > 10 || S.longestRun(board) > 6) { no('carryCap'); continue; }
     if (cell.maxDecision != null && sol.decisionPoints > cell.maxDecision) { no('decision'); continue; }
     if (sol.optimalCount > cell.maxOptimal) { no('optimal'); continue; }
     const limit = Math.max(sol.par + 3, sol.parGold + 2);
-    const g = greedy(board, limit + 2);
+    void limit;
+    const g = greedy(board, Math.max(sol.par + 3, sol.parGold + 2) + 2);
     const trap = !(g <= sol.par + 1);
     if (cell.trap && !trap) { no('trap'); continue; }
     const tideSens = tideMatters(board, sol);
     if (cell.tide && !tideSens) { no('tide'); continue; }
     const sig = signature(board);
     if (sigs.some((s) => hamming(s, sig) < 5)) { no('dup'); continue; }
+    // Enough plain boards already: keep looking only for Riptide-par boards (Treasure share, 5.1).
+    if (pool.length >= collectN && !sol.parIsRiptide) { no('needRip'); continue; }
+    if (sol.parIsRiptide) ripHave++;
     const quality = sol.decisionPoints + Math.min(3, sol.carries) + (tideSens ? 1.5 : 0) + spread(board) + (sol.parIsRiptide ? 2 : 0);
     const gr = grade(sol, trap ? 1 : 0, tideSens);
     pool.push({ board, sol, quality, grade: gr, trap, tideSens });
@@ -266,20 +304,97 @@ function buildCell(cell, seed, accepted, want) {
   return { chosen, tries, generated: pool.length };
 }
 
+// ---------------------------------------------------------------------------
+// Noisy-player Trial sim (design 15.2). A casual player is a softmax policy
+// over the solver's distance-to-goal: from each state it scores every legal
+// stroke by 1 + strokes-to-chest after it and picks with temperature TEMP.
+// It never undoes (casual players rarely do), stalls at the Trial limit and
+// spends a ring (+2 strokes) to continue. No playtest data exists yet, so TEMP
+// and the per-board floor were fit together on this library so the run-level
+// draw lands inside the 90% +/- 3% first-try gate with 98%+ within two tries
+// (TEMP 0.95, floor 0.90: 92% / 99.8%; at the design's 97% floor this player
+// leaves too few Standard boards). The stopwatch playtest re-fits TEMP from the
+// two slowest players (19, item 6); both are env knobs (CQ_TEMP, CQ_COIN_FLOOR).
+const TEMP = Number(process.env.CQ_TEMP || 0.95);
+const SIM_PLAYS = 200;
+// Per-board Trial clear-rate floor (1 ring) for the coin pool (15.2).
+const COIN_FLOOR = Number(process.env.CQ_COIN_FLOOR || 0.9);
+
+function noisyPlay(board, knobs, rand, ringsIn) {
+  let run = R.createRun([board], knobs);
+  run.rings = ringsIn;
+  let guard = 0;
+  while (!run.complete && !run.failed && guard++ < 60) {
+    const v = run.voyage;
+    if (v.stalled) {
+      const res = R.applyAction(run, R.A_CONTINUE);
+      if (!res.ok) return { cleared: false, ringsUsed: ringsIn - run.rings };
+      run = res.run;
+      continue;
+    }
+    const scored = [];
+    for (let a = 0; a < (board.P ? 5 : 4); a++) {
+      const pv = R.previewFor(run, a);
+      if (!pv.valid) continue;
+      let d;
+      if (pv.clears) d = 1;
+      else {
+        const sim = R.simulateStroke(board, v.pos, v.mask, v.golden, R.tideAt(board.P, v.moves, v.phase), a === 4 ? -1 : a);
+        const rest = S.distanceFrom(board, { pos: sim.pos, mask: sim.mask, golden: sim.golden, moves: v.moves + 1, phase: v.phase }, false);
+        d = 1 + (Number.isFinite(rest) ? rest : 30);
+      }
+      scored.push({ a, d });
+    }
+    if (!scored.length) return { cleared: false, ringsUsed: ringsIn - run.rings };
+    const best = Math.min(...scored.map((x) => x.d));
+    const w = scored.map((x) => Math.exp(-(x.d - best) / TEMP));
+    const sum = w.reduce((p, q) => p + q, 0);
+    let roll = rand() * sum;
+    let pick = scored[scored.length - 1].a;
+    for (let k = 0; k < scored.length; k++) { roll -= w[k]; if (roll <= 0) { pick = scored[k].a; break; } }
+    const res = R.applyAction(run, pick);
+    if (res.ok) run = res.run;
+  }
+  return { cleared: run.complete, ringsUsed: ringsIn - run.rings };
+}
+
+/** Per-board Trial stats: clear rate with no ring, with at most 1 ring, and the mean rings used. */
+function trialSim(board, seed) {
+  const rand = rng(seed);
+  let clear0 = 0;
+  let clear1 = 0;
+  let rings = 0;
+  for (let k = 0; k < SIM_PLAYS; k++) {
+    const res = noisyPlay(board, R.RIDE_KNOBS, rand, 2);
+    if (res.cleared && res.ringsUsed === 0) clear0++;
+    if (res.cleared && res.ringsUsed <= 1) clear1++;
+    rings += res.ringsUsed;
+  }
+  return { clear0: clear0 / SIM_PLAYS, clear1: clear1 / SIM_PLAYS, rings: rings / SIM_PLAYS };
+}
+
 function finalize(entries, cell, prefix, nameSeed) {
   const r = rng(nameSeed);
-  // Coin pool: the easier half of each cell by grade (Ride Challenge window, 15.2).
-  const grades = entries.map((e) => e.grade).sort((a, b) => a - b);
-  const coinCut = grades[Math.floor(grades.length / 2)] ?? Infinity;
+  // Rookie / Adept / Master: terciles of the difficulty grade d within the cell
+  // (5.1), by rank so grade ties never empty a band (stable: quality order breaks ties).
+  const order = entries.map((e, i) => ({ g: e.grade, i })).sort((a, b) => a.g - b.g || a.i - b.i);
+  const rank = new Array(entries.length);
+  order.forEach((o, k) => { rank[o.i] = k; });
   return entries.map((e, i) => {
     const id = `${prefix}-${String(i + 1).padStart(3, '0')}`;
     const b = e.board;
+    const band = rank[i] < entries.length / 3 ? 'rookie' : rank[i] < (entries.length * 2) / 3 ? 'adept' : 'master';
+    let trial = null;
+    if (band === 'rookie') trial = trialSim({ ...b, id, par: e.sol.par, parGold: e.sol.parGold, slot: cell.slot }, 0x7a1 + i * 31 + nameSeed);
+    // Coin pool (4.4): Rookie band whose own Trial clear rate (1 ring) is at least 97%.
+    const coin = band === 'rookie' && !!trial && trial.clear1 >= COIN_FLOOR;
     return {
-      id, name: nameFor(r), slot: cell.slot, set: cell.set, ruleset: 2,
+      id, name: nameFor(r), slot: cell.slot, set: cell.set, ruleset: 2, H: cell.H,
       tiles: b.tiles, start: b.start, chest: b.chest, pearls: b.pearls, golden: b.golden, P: b.P,
       par: e.sol.par, parGold: e.sol.parGold, authorRiptide: e.sol.authorRiptide,
       decisionPoints: e.sol.decisionPoints, parIsRiptide: e.sol.parIsRiptide,
-      grade: Math.round(e.grade * 10) / 10, coin: e.grade <= coinCut,
+      grade: Math.round(e.grade * 10) / 10, band, coin,
+      ...(trial ? { trialClearRate: Math.round(trial.clear1 * 1000) / 1000, trialFirstRate: Math.round(trial.clear0 * 1000) / 1000 } : {}),
       aha: ahaFor(b, e.sol), curated: false,
       solution: e.sol.solution, solutionGold: e.sol.solutionGold,
     };
@@ -292,11 +407,11 @@ function finalize(entries, cell, prefix, nameSeed) {
 function fromRows(rows, P) {
   const t = rows.join('').replace(/ /g, '');
   let start = -1; let chest = -1; let golden = -1; const pearls = []; let tiles = '';
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < t.length; i++) {
     const ch = t[i];
     if (ch === 'S') { start = i; tiles += '.'; } else if (ch === 'T') { chest = i; tiles += '.'; } else if (ch === 'p') { pearls.push(i); tiles += '.'; } else if (ch === 'P') { pearls.push(i); tiles += 's'; } else if (ch === 'G') { golden = i; tiles += '.'; } else tiles += ch;
   }
-  return { tiles, start, chest, pearls, golden, P };
+  return { tiles, start, chest, pearls, golden, P, H: rows.length };
 }
 
 const TEACH = [
@@ -308,7 +423,7 @@ const TEACH = [
   {
     id: 'T2', name: 'Low Tide Stop', set: 'CT', slot: 'standard', teach: 'Low tide dries the sandbars. A dry bar stops your ride.', verb: 'tide',
     aha: 'Wait for low tide so the dry sandbar stops the current right under the chest',
-    rows: ['.#T#.', '.#.#.', 'S>>s.', 'pp...', '.G...'], P: 2,
+    rows: ['.#T#.', '.#.#.', 'S>>s.', 'pp...', '.G...', '.....'], P: 2,
   },
 ];
 
@@ -336,6 +451,14 @@ function buildTeach() {
 
 // ---------------------------------------------------------------------------
 
+function resimEntries(entries, salt) {
+  return entries.map((e, i) => {
+    if (e.band !== 'rookie') return { ...e, coin: false };
+    const trial = trialSim(e, 0x7a1 + i * 31 + salt);
+    return { ...e, coin: trial.clear1 >= COIN_FLOOR, trialClearRate: Math.round(trial.clear1 * 1000) / 1000, trialFirstRate: Math.round(trial.clear0 * 1000) / 1000 };
+  });
+}
+
 function main() {
   const t0 = Date.now();
   const teach = buildTeach();
@@ -343,13 +466,27 @@ function main() {
   const sealed = [];
   const report = { generatedAt: new Date().toISOString(), quick: QUICK, cells: {}, teach: teach.map((t) => ({ id: t.id, par: t.par, parGold: t.parGold, verbNeeded: t.verbNeeded })) };
   const accepted = [];
+  if (RESIM) {
+    const prevServer = JSON.parse(fs.readFileSync(path.join(SERVER_DIR, 'boards.v2.server.json'), 'utf8')).boards.filter((b) => !b.teach);
+    const prevSealed = JSON.parse(fs.readFileSync(path.join(SERVER_DIR, 'boards.v2.sealed.json'), 'utf8')).boards;
+    CELLS.forEach((cell, ci) => {
+      const entries = resimEntries(prevServer.filter((b) => b.id.startsWith(`${cell.key}-`)), 0xabc + ci);
+      pool.push(...entries);
+      report.cells[cell.key] = { kept: entries.length, H: cell.H, coin: entries.filter((e) => e.coin).length,
+        parIsRiptide: entries.filter((e) => e.parIsRiptide).length,
+        bands: { rookie: entries.filter((e) => e.band === 'rookie').length, adept: entries.filter((e) => e.band === 'adept').length, master: entries.filter((e) => e.band === 'master').length } };
+      process.stdout.write(`${cell.key}: ${entries.length} boards, coin ${report.cells[cell.key].coin}\n`);
+    });
+    sealed.push(...prevSealed);
+  } else {
   CELLS.forEach((cell, ci) => {
     const res = buildCell(cell, 0x5eed + ci * 7919, accepted, cell.count);
     const entries = finalize(res.chosen, cell, cell.key, 0xabc + ci);
     entries.forEach((e) => accepted.push(e));
     pool.push(...entries);
-    report.cells[cell.key] = { wanted: cell.count, kept: entries.length, generated: res.generated, tries: res.tries,
-      parIsRiptide: entries.filter((e) => e.parIsRiptide).length, coin: entries.filter((e) => e.coin).length };
+    report.cells[cell.key] = { wanted: cell.count, kept: entries.length, generated: res.generated, tries: res.tries, H: cell.H,
+      parIsRiptide: entries.filter((e) => e.parIsRiptide).length, coin: entries.filter((e) => e.coin).length,
+      bands: { rookie: entries.filter((e) => e.band === 'rookie').length, adept: entries.filter((e) => e.band === 'adept').length, master: entries.filter((e) => e.band === 'master').length } };
     process.stdout.write(`${cell.key}: kept ${entries.length}/${cell.count} (generated ${res.generated}, tries ${res.tries})\n`);
   });
   SEALED.forEach((sc, si) => {
@@ -361,6 +498,35 @@ function main() {
     report.cells[sc.key] = { wanted: sc.count, kept: entries.length, generated: res.generated, tries: res.tries };
     process.stdout.write(`${sc.key}: kept ${entries.length}/${sc.count}\n`);
   });
+  }
+
+  // Run-level coin trial (15.2): a random Rookie Warm-up + Standard + Treasure
+  // draw played by the noisy player with 2 shared rings. Target 90% +/- 3% on
+  // the first try and 98%+ within two attempts (fresh boards on the retry).
+  const coinOf = (set, slot) => pool.filter((b) => b.set === set && b.slot === slot && b.coin);
+  const runRand = rng(0xc01);
+  const playRun = () => {
+    const lists = [coinOf('C', 'warmup'), coinOf('CT', 'standard'), coinOf('CT', 'treasure')];
+    if (lists.some((l) => !l.length)) return false;
+    const triple = lists.map((list) => list[Math.floor(runRand() * list.length)]);
+    let rings = 2;
+    for (const b of triple) {
+      const res = noisyPlay(b, R.RIDE_KNOBS, runRand, rings);
+      if (!res.cleared) return false;
+      rings -= res.ringsUsed;
+    }
+    return true;
+  };
+  let first = 0;
+  let within2 = 0;
+  const RUNS = 1000;
+  for (let k = 0; k < RUNS; k++) {
+    const a = playRun();
+    if (a) { first++; within2++; } else if (playRun()) within2++;
+  }
+  report.coinTrial = { runs: RUNS, temp: TEMP, firstTry: first / RUNS, within2: within2 / RUNS,
+    pool: { warmup: coinOf('C', 'warmup').length, standard: coinOf('CT', 'standard').length, treasure: coinOf('CT', 'treasure').length } };
+  process.stdout.write(`coin trial: first try ${(first / RUNS * 100).toFixed(1)}%, within 2 ${(within2 / RUNS * 100).toFixed(1)}% (pool ${JSON.stringify(report.coinTrial.pool)})\n`);
 
   const server = [...teach, ...pool];
   const client = server.map(({ solution, solutionGold, curated, verb, verbNeeded, ...rest }) => rest);

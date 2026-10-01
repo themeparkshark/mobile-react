@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Current Quest v2 (design v4): rules engine, solver, library, proof replay,
+ * Current Quest v2 (design v5): rules engine, solver, library, proof replay,
  * FX governor and parity vectors. Everything here is pure TypeScript loaded
  * through the shared ts-module helper, the same code the app ships.
  */
@@ -20,22 +20,23 @@ const { CQ_LIBRARY } = loadTs('src/games/current-quest/boards.v2.client.ts');
 /** Rows use: . water, # rock, ^>v< current, s sandbar, S start, T chest, p pearl, P pearl on sandbar, q pearl on a > current, G golden. */
 function mk(rows, P = 0, extra = {}) {
   const t = rows.join('').replace(/ /g, '');
-  assert.equal(t.length, 25);
+  assert.equal(t.length, 5 * rows.length);
   let start = -1; let chest = -1; let golden = -1; const pearls = []; let tiles = '';
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < t.length; i++) {
     const ch = t[i];
     if (ch === 'S') { start = i; tiles += '.'; } else if (ch === 'T') { chest = i; tiles += '.'; } else if (ch === 'p') { pearls.push(i); tiles += '.'; } else if (ch === 'P') { pearls.push(i); tiles += 's'; } else if (ch === 'q') { pearls.push(i); tiles += '>'; } else if (ch === 'G') { golden = i; tiles += '.'; } else tiles += ch;
   }
-  const b = { id: 'x', name: 'x', slot: 'standard', set: P ? 'CT' : 'C', ruleset: 2, tiles, start, chest, pearls, golden, P, par: 0, parGold: 0, authorRiptide: 0, ...extra };
+  const b = { id: 'x', name: 'x', slot: 'standard', set: P ? 'CT' : 'C', ruleset: 2, H: rows.length, tiles, start, chest, pearls, golden, P, par: 0, parGold: 0, authorRiptide: 0, ...extra };
   const sol = S.solveBoard(b);
   return { ...b, par: extra.par ?? sol.par, parGold: extra.parGold ?? sol.parGold, authorRiptide: extra.authorRiptide ?? sol.authorRiptide };
 }
 
-function play(board, actions, knobs = R.PUZZLE_KNOBS) {
+function play(board, actions, knobs = R.PUZZLE_KNOBS, times = null) {
   let run = R.createRun([board], knobs);
   const events = [];
-  for (const a of actions) {
-    const res = R.applyAction(run, a);
+  for (let k = 0; k < actions.length; k++) {
+    const a = actions[k];
+    const res = R.applyAction(run, a, times ? times[k] : undefined);
     assert.ok(res.ok, `action ${a} rejected`);
     events.push(...res.events);
     run = res.run;
@@ -48,10 +49,12 @@ const U = 0; const Rt = 1; const D = 2; const Lf = 3; const TREAD = 4; const UND
 // ---------------------------------------------------------------------------
 // Library
 
-test('library: every pool and teach board solves to its par and parGold under all 8 transforms', () => {
+test('library: every pool and teach board solves to its par and parGold under every allowed transform (8 on 5x5, 4 on tall)', () => {
   assert.ok(CQ_LIBRARY.length >= 400, `library has ${CQ_LIBRARY.length} boards`);
   for (const b of CQ_LIBRARY) {
-    for (let tf = 0; tf < 8; tf++) {
+    const allowed = R.allowedTransforms(R.heightOf(b));
+    assert.equal(allowed.length, R.heightOf(b) === 5 ? 8 : 4);
+    for (const tf of allowed) {
       const tb = R.transformBoard(b, tf);
       const sol = S.solveBoard(tb);
       assert.ok(sol.solvable, `${b.id}~${tf} unsolvable`);
@@ -61,9 +64,15 @@ test('library: every pool and teach board solves to its par and parGold under al
   }
 });
 
-test('library: filters hold (gap, limit, slots, riptide share, aha, no solutions, no loops, launch ruleset)', () => {
+test('library: filters hold (heights, gap, limit, slots, riptide share, carry caps, aha, no solutions, no loops, launch ruleset)', () => {
   const cells = {};
+  const H = { warmup: 5, standard: 6, treasure: 7 };
   for (const b of CQ_LIBRARY) {
+    assert.equal(R.heightOf(b), H[b.slot], `${b.id} height ${R.heightOf(b)} for ${b.slot}`);
+    assert.equal(b.tiles.length, 5 * R.heightOf(b));
+    const sol = S.solveBoard(b);
+    assert.ok(sol.maxCarry <= 10, `${b.id} carries ${sol.maxCarry}`);
+    assert.ok(S.longestRun(b) <= 6, `${b.id} run ${S.longestRun(b)}`);
     assert.equal('solution' in b, false, `${b.id} ships a solution`);
     assert.equal('solutionGold' in b, false);
     assert.ok(!b.id.startsWith('sealed'), `${b.id} is sealed`);
@@ -86,6 +95,17 @@ test('library: filters hold (gap, limit, slots, riptide share, aha, no solutions
   }
   for (const key of ['C-warmup', 'C-standard', 'CT-standard']) assert.ok(cells[key].length >= 60, `${key} ${cells[key].length}`);
   for (const key of ['C-treasure', 'CT-treasure']) assert.ok(cells[key].length >= 120, `${key} ${cells[key].length}`);
+  // Rookie / Adept / Master terciles; the coin pool is Rookie boards that passed the Trial sim (4.4, 15.2).
+  for (const key of Object.keys(cells)) {
+    const list = cells[key].filter((b) => !b.teach);
+    const rookie = list.filter((b) => b.band === 'rookie').length;
+    assert.ok(Math.abs(rookie - list.length / 3) <= 1, `${key} rookie ${rookie}/${list.length}`);
+    for (const b of list.filter((x) => x.coin)) {
+      assert.equal(b.band, 'rookie', `${b.id} coin outside the Rookie band`);
+      assert.ok(b.trialClearRate >= 0.9, `${b.id} trial clear ${b.trialClearRate}`);
+    }
+  }
+  for (const key of ['C-warmup', 'CT-standard', 'CT-treasure']) assert.ok(cells[key].filter((b) => b.coin).length >= 10, `${key} coin pool`);
 });
 
 test('library: teach boards are unsolvable without their verb', () => {
@@ -97,22 +117,51 @@ test('library: teach boards are unsolvable without their verb', () => {
   assert.ok(t1.teach && t2.teach);
 });
 
-test('library: pickRun is deterministic, scored contexts ignore progress and use the coin pool', () => {
+test('library: pickRun is deterministic, scored contexts ignore progress and use the coin pool; Quick Run is 2 voyages', () => {
   const a = L.pickRun(123456, 'ride', { runsCompleted: 0, tideSeen: false });
   const b = L.pickRun(123456, 'ride', { runsCompleted: 9, tideSeen: true });
   assert.deepEqual(plain(a.map((x) => x.id)), plain(b.map((x) => x.id)));
   assert.deepEqual(plain(a.map((x) => x.slot)), ['warmup', 'standard', 'treasure']);
+  assert.deepEqual(plain(a.map((x) => R.heightOf(x))), [5, 6, 7]);
   for (const x of a) assert.ok(L.boardById(x.id).coin, `${x.id} not coin`);
+  for (const x of a) assert.ok(R.transformAllowed(R.transformOf(x.id), R.heightOf(x)), `${x.id} transform`);
   assert.notDeepEqual(plain(L.pickRun(1, 'line').map((x) => x.id)), plain(L.pickRun(2, 'line').map((x) => x.id)));
+  assert.equal(L.voyagesFor('quick'), 2);
+  assert.equal(L.voyagesFor('ride'), 3);
   const first = L.pickRun(5, 'quick', { runsCompleted: 0, tideSeen: false });
+  assert.equal(first.length, 2);
   assert.equal(first[0].id, 'T1');
   assert.equal(first[1].P, 0);
+  assert.equal(first[1].slot, 'treasure');
   const second = L.pickRun(5, 'quick', { runsCompleted: 1, tideSeen: false });
   assert.equal(second[1].id, 'T2');
   const later = L.pickRun(5, 'quick', { runsCompleted: 4, tideSeen: true });
-  assert.ok(later[1].P > 0 && later[2].P > 0 && later[0].P === 0);
+  assert.equal(later.length, 2);
+  assert.ok(later[0].P === 0 && later[1].P > 0 && later[1].slot === 'treasure' && R.heightOf(later[1]) === 7);
+  for (let s = 0; s < 200; s++) for (const x of L.pickRun(s, 'quick', { runsCompleted: 4, tideSeen: true })) {
+    assert.ok(R.transformAllowed(R.transformOf(x.id), R.heightOf(x)), `${x.id} transform on 5x${R.heightOf(x)}`);
+  }
   const refs = L.boardRefs(a);
   assert.deepEqual(plain(L.boardsFromRefs(refs).map((x) => x.tiles)), plain(a.map((x) => x.tiles)));
+  // A 90-degree transform id on a tall board is rejected everywhere.
+  const tall = CQ_LIBRARY.find((x) => R.heightOf(x) === 7);
+  assert.equal(L.boardsFromRefs([{ id: tall.id, tf: 1 }]), null);
+  assert.throws(() => R.transformBoard(tall, 3));
+  assert.equal(R.transformCell(0, 4, 7), -1);
+});
+
+test('rules: tall-board transforms map portrait to portrait (rotate 180, mirror left-right, mirror top-bottom)', () => {
+  const b = mk(['S>...', '.....', '..#..', '.....', '...p.', '.....', '..T.G']);
+  for (const tf of [2, 5, 7]) {
+    const t = R.transformBoard(b, tf);
+    assert.equal(t.tiles.length, 35);
+    const sol = S.solveBoard(t);
+    assert.equal(sol.par, S.solveBoard(b).par, `tf ${tf}`);
+  }
+  assert.equal(R.transformCell(0, 2, 7), 34);
+  assert.equal(R.transformCell(0, 5, 7), 4);
+  assert.equal(R.transformCell(0, 7, 7), 30);
+  assert.equal(R.transformBoard(b, 5).tiles[3], '<', 'a right current mirrors to a left one');
 });
 
 // ---------------------------------------------------------------------------
@@ -242,31 +291,41 @@ test('rules: stall at the limit; Puzzle allows undo/restart only, undo refunds a
   assert.equal(p.results[0].strokes, sol.par);
 });
 
-test('rules: Trial undo keeps the stroke spent, is refused while stalled; continue and restart cost rings; 0 rings stalled fails', () => {
-  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0, { slot: 'standard' });
+test('rules: Trial undo keeps the stroke spent and is refused while stalled; restart is free and keeps the budget; rings fall only at a stall; 0 rings stalled fails', () => {
+  const b = mk(['S....', '.....', '..T..', '.....', 'p...G', '.....'], 0, { slot: 'standard' });
   const limit = R.limitFor(b, R.RIDE_KNOBS);
+  assert.equal(limit, Math.max(b.par + 4, b.parGold + 2), 'Trial slack +4 on Standard');
   let run = R.createRun([b], R.RIDE_KNOBS);
   assert.equal(run.rings, 2);
   run = R.applyAction(run, Rt).run;
   run = R.applyAction(run, UNDO).run;
   assert.equal(run.voyage.strokes, 0);
   assert.equal(run.voyage.spent, 1);
-  for (let i = 1; i < limit; i++) run = R.applyAction(run, i % 2 ? Rt : Lf).run;
+  run = R.applyAction(run, Rt).run;
+  run = R.applyAction(run, Rt).run;
+  const rs0 = R.applyAction(run, RESTART);
+  assert.ok(rs0.ok);
+  assert.equal(rs0.run.rings, 2, 'restart is free');
+  assert.equal(rs0.run.voyage.spent, 3, 'the budget remembers');
+  assert.equal(rs0.run.voyage.pos, b.start);
+  run = rs0.run;
+  for (let i = 3; i < limit; i++) run = R.applyAction(run, i % 2 ? Rt : Lf).run;
   assert.equal(run.voyage.stalled, true);
   assert.equal(R.applyAction(run, UNDO).ok, false, 'trial undo while stalled');
+  assert.equal(R.applyAction(run, RESTART).ok, false, 'trial restart while stalled');
   const c = R.applyAction(run, CONT);
   assert.ok(c.ok);
   assert.equal(c.run.rings, 1);
   assert.equal(c.run.voyage.stalled, false);
   assert.equal(R.strokesLeft(c.run), 2);
-  const rs = R.applyAction(c.run, RESTART);
-  assert.equal(rs.run.rings, 0);
-  assert.equal(rs.run.voyage.spent, 0);
-  assert.equal(rs.run.voyage.limitBonus, 0);
-  let r3 = rs.run;
-  for (let i = 0; i < limit; i++) r3 = R.applyAction(r3, i % 2 ? Lf : Rt).run;
+  let r3 = R.applyAction(c.run, Rt).run;
+  r3 = R.applyAction(r3, Lf).run;
+  assert.equal(r3.voyage.stalled, true);
+  r3 = R.applyAction(r3, CONT).run;
+  assert.equal(r3.rings, 0);
+  r3 = R.applyAction(R.applyAction(r3, Rt).run, Lf).run;
   assert.equal(r3.failed, true);
-  assert.equal(R.applyAction(r3, RESTART).ok, false);
+  assert.equal(R.applyAction(r3, CONT).ok, false);
 });
 
 test('rules: clear after a continue is a clear without the Par shell', () => {
@@ -283,19 +342,98 @@ test('rules: clear after a continue is a clear without the Par shell', () => {
   assert.equal(run.rings, 1);
 });
 
-test('rules: Trial tips spend a ring and are refused at 0 rings; Puzzle tips cost nothing but Par', () => {
-  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0);
+test('rules: a Trial tip costs 2 strokes of budget (never a ring), is refused at 2 left and can stall; Puzzle tips cost only Par', () => {
+  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0, { slot: 'warmup' });
   let run = R.createRun([b], R.RIDE_KNOBS);
-  run = R.applyAction(run, TIP).run;
-  run = R.applyAction(run, TIP).run;
-  assert.equal(run.rings, 0);
-  assert.equal(R.applyAction(run, TIP).ok, false);
+  const lim = R.limitFor(b, R.RIDE_KNOBS);
+  const t1 = R.applyAction(run, TIP);
+  assert.ok(t1.ok);
+  assert.equal(t1.events[0].cost, 2);
+  assert.equal(t1.run.rings, 2, 'no ring');
+  assert.equal(t1.run.voyage.spent, 2);
+  assert.equal(t1.run.voyage.strokes, 0);
+  run = t1.run;
+  while (R.strokesLeft(run) > 2) run = R.applyAction(run, run.voyage.pos === b.start ? Rt : Lf).run;
+  assert.equal(R.tipAllowed(run), false);
+  assert.equal(R.applyAction(run, TIP).ok, false, 'refused at left <= 2');
+  assert.equal(R.strokesLeft(run), 2);
+  assert.equal(lim - run.voyage.spent, 2);
   const sol = S.solveBoard(b);
   let p = R.createRun([b], R.PUZZLE_KNOBS);
   p = R.applyAction(p, TIP).run;
+  assert.equal(p.voyage.spent, 0);
   for (const a of sol.solution) p = R.applyAction(p, a).run;
   assert.equal(p.results[0].shellPar, false);
   assert.equal(p.results[0].tips, 1);
+  // A tip that leaves the budget at the limit stalls (step 9 runs after action 9).
+  const tight = { ...R.RIDE_KNOBS, tipCost: 3 };
+  let q = R.createRun([b], tight);
+  while (R.strokesLeft(q) > 4) q = R.applyAction(q, q.voyage.pos === b.start ? Rt : Lf).run;
+  const st = R.applyAction(q, TIP);
+  assert.ok(st.ok);
+  assert.equal(R.strokesLeft(st.run), 1);
+});
+
+test('rules: the first undo within 1.5 s of its stroke is a free slip (Par kept); a second slip, or one at 1501 ms, forfeits Par', () => {
+  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0, { slot: 'warmup', golden: -1, parGold: 0 });
+  const sol = S.solveBoard(b);
+  const wrong = sol.solution[0] === Rt ? D : Rt;
+  // Slip at exactly 1500 ms: Par kept.
+  let r = play(b, [wrong, UNDO, ...sol.solution], R.PUZZLE_KNOBS, [1000, 2500, ...sol.solution.map((_, i) => 4000 + i * 800)]);
+  assert.equal(r.events.find((e) => e.type === 'undo').slip, true);
+  assert.equal(r.run.results[0].shellPar, true);
+  assert.equal(r.run.results[0].undos, 0);
+  // 1501 ms: not a slip.
+  r = play(b, [wrong, UNDO, ...sol.solution], R.PUZZLE_KNOBS, [1000, 2501, ...sol.solution.map((_, i) => 4000 + i * 800)]);
+  assert.equal(r.events.find((e) => e.type === 'undo').slip, false);
+  assert.equal(r.run.results[0].shellPar, false);
+  // Only the first slip of a voyage is free.
+  r = play(b, [wrong, UNDO, wrong, UNDO, ...sol.solution], R.PUZZLE_KNOBS, [1000, 1400, 2000, 2400, ...sol.solution.map((_, i) => 4000 + i * 800)]);
+  const undos = r.events.filter((e) => e.type === 'undo');
+  assert.deepEqual(plain(undos.map((e) => e.slip)), [true, false]);
+  assert.equal(r.run.results[0].shellPar, false);
+  // No times (bots, legacy replays): never a slip.
+  r = play(b, [wrong, UNDO, ...sol.solution]);
+  assert.equal(r.run.results[0].shellPar, false);
+  // Trial: a slip keeps Par but the stroke stays spent.
+  r = play(b, [wrong, UNDO, ...sol.solution], R.RIDE_KNOBS, [1000, 1800, ...sol.solution.map((_, i) => 4000 + i * 800)]);
+  assert.equal(r.run.results[0].shellPar, true);
+  assert.equal(r.run.results[0].spent, sol.par + 1);
+});
+
+test('rules: hold-to-scrub of 3 strokes counts 3 undos; restart counts as one undo and is free in Puzzle', () => {
+  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0, { slot: 'warmup' });
+  const r = play(b, [Rt, Rt, D, UNDO, UNDO, UNDO], R.PUZZLE_KNOBS, [1000, 3000, 5000, 9000, 9250, 9500]);
+  assert.equal(r.run.voyage.undos, 3);
+  assert.equal(r.run.voyage.strokes, 0);
+  assert.equal(r.run.voyage.spent, 0);
+  const rs = play(b, [Rt, Rt, RESTART], R.PUZZLE_KNOBS, [1000, 3000, 5000]);
+  assert.equal(rs.run.voyage.undos, 1);
+  assert.equal(rs.run.voyage.spent, 0);
+  assert.equal(rs.run.voyage.pos, b.start);
+});
+
+test('rules: Riptide strokes: 2 chained runs of 1 tile each, a single 5-tile run; 4 tiles in one run is not', () => {
+  // Swim onto a 1-tile right run that hands to a 1-tile down run.
+  const chain = mk(['S>v..', '..#..', '..p..', '..#.T', '....G']);
+  let st = play(chain, [Rt]).events.find((e) => e.type === 'stroke');
+  assert.equal(st.runs, 2);
+  assert.equal(st.riptide, true);
+  assert.deepEqual(plain(st.handoffs), [2]);
+  const long = mk(['S....', 'v....', 'v....', 'v....', 'v....', 'v....', '.p.TG']);
+  st = play(long, [D]).events.find((e) => e.type === 'stroke');
+  assert.equal(st.carried, 5);
+  assert.equal(st.runs, 1);
+  assert.equal(st.riptide, true);
+  const four = mk(['S....', 'v....', 'v....', 'v....', 'v....', '.....', '.p.TG']);
+  st = play(four, [D]).events.find((e) => e.type === 'stroke');
+  assert.equal(st.carried, 4);
+  assert.equal(st.riptide, false);
+  // Riptide strokes feed the Author medal only; the preview announces them before you commit.
+  const pv = R.previewFor(R.createRun([chain], R.PUZZLE_KNOBS), Rt);
+  assert.equal(pv.riptide, true);
+  assert.equal(R.isRiptide(1, 4), false);
+  assert.equal(R.isRiptide(2, 1), true);
 });
 
 test('rules: undo across a tide flip restores the tide; a Splash survives undo', () => {
@@ -357,6 +495,15 @@ test('scoring: shells, stars and the two-part treasure', () => {
   assert.equal(R.shellsToNextStar(4), 2);
   assert.equal(R.shellsToNextStar(7), 1);
   assert.equal(R.shellsToNextStar(9), 0);
+  // 2-voyage Quick Run (6 shells): 2-3 = 1 star, 4-5 = 2, 6 = 3.
+  assert.equal(R.starsFor(6, true, 2), 3);
+  assert.equal(R.starsFor(5, true, 2), 2);
+  assert.equal(R.starsFor(4, true, 2), 2);
+  assert.equal(R.starsFor(3, true, 2), 1);
+  assert.equal(R.starsFor(2, true, 2), 1);
+  assert.equal(R.shellsToNextStar(3, 2), 1);
+  assert.equal(R.shellsToNextStar(5, 2), 1);
+  assert.equal(R.shellsToNextStar(6, 2), 0);
   const b = CQ_LIBRARY.find((x) => x.slot === 'treasure' && !x.teach);
   const sol = S.solveBoard(b);
   let run = R.createRun([b], R.PUZZLE_KNOBS);
@@ -365,6 +512,22 @@ test('scoring: shells, stars and the two-part treasure', () => {
   assert.equal(r.shells, 3);
   assert.equal(r.treasure, 50 * b.pearls.length + 200 + 40 * (R.limitFor(b, R.PUZZLE_KNOBS) - b.parGold));
   assert.ok(r.medal >= 3);
+  // Author = Gold AND Riptide strokes >= authorRiptide (riptide never touches treasure).
+  assert.equal(r.medal === 4, r.ripStrokes >= b.authorRiptide);
+});
+
+test('solver: the wrong-turn marker finds the first state with no way home in budget', () => {
+  const b = mk(['S....', '.....', '..T..', '.....', 'p...G'], 0, { slot: 'warmup' });
+  const lim = R.limitFor(b, R.PUZZLE_KNOBS);
+  let run = R.createRun([b], R.PUZZLE_KNOBS);
+  for (let i = 0; i < lim; i++) run = R.applyAction(run, i % 2 ? Lf : Rt).run;
+  assert.equal(run.voyage.stalled, true);
+  const v = run.voyage;
+  const states = [...v.stack.map((x) => ({ pos: x.pos, mask: x.mask, golden: x.golden, moves: x.moves, phase: 0 })), { pos: v.pos, mask: v.mask, golden: v.golden, moves: v.moves, phase: 0 }];
+  const budget = [...v.stack.map((x) => lim - x.spent), lim - v.spent];
+  const k = S.firstDeadState(b, states, budget);
+  assert.ok(k > 0, `dead at ${k}`);
+  assert.ok(S.distanceFrom(b, states[k - 1], false) <= budget[k - 1], 'the state before still had a way home');
 });
 
 test('solver: following the Tide Tip from any point on a route reaches the chest at par', () => {
@@ -394,7 +557,7 @@ function solvedProof(boards, knobs, context = 'line') {
     const a = [];
     const ts = [];
     for (const act of sol.solutionGold) {
-      run = R.applyAction(run, act).run;
+      run = R.applyAction(run, act, t).run;
       a.push(act);
       ts.push(t);
       t += 700;
@@ -402,7 +565,7 @@ function solvedProof(boards, knobs, context = 'line') {
     voyages.push({ id: b.id.split('~')[0], tf: R.transformOf(b.id), a, t: ts, ready });
   }
   const shells = R.totalShells(run.results);
-  return { game: 'current', v: 2, context, profile: knobs.profile, rings: knobs.rings, seed: 1, treasure: R.treasureOf(run.results), stars: R.starsFor(shells, run.complete), shells, elapsed_ms: t + 500, voyages };
+  return { game: 'current', v: 2, context, profile: knobs.profile, rings: knobs.rings, seed: 1, treasure: R.treasureOf(run.results), stars: R.starsFor(shells, run.complete, boards.length), shells, elapsed_ms: t + 500, voyages };
 }
 
 test('proof: a real Trial run verifies; tampering is rejected', () => {
@@ -429,6 +592,24 @@ test('proof: a real Trial run verifies; tampering is rejected', () => {
   assert.equal(R.verifyProof(boards, R.LINE_BONUS_KNOBS, bot).reason, 'median');
   assert.equal(R.verifyProof(L.pickRun(98, 'line'), R.LINE_BONUS_KNOBS, proof).reason, 'board');
   assert.equal(R.verifyProof(boards, R.PUZZLE_KNOBS, proof).reason, 'profile');
+  // A 2-voyage Quick Run proof (6 shells) verifies with 2-voyage stars.
+  const quick = L.pickRun(7, 'quick', { runsCompleted: 5, tideSeen: true });
+  const qp = solvedProof(quick, R.PUZZLE_KNOBS, 'quick');
+  const qv = R.verifyProof(quick, R.PUZZLE_KNOBS, qp);
+  assert.equal(qv.ok, true, qv.reason);
+  assert.equal(qv.shells, 6);
+  assert.equal(qv.stars, 3);
+  // A slip undo in the proof keeps the Par shell on the server too.
+  const slip = JSON.parse(JSON.stringify(qp));
+  const v0 = slip.voyages[0];
+  const wrong = [0, 1, 2, 3].find((d) => d !== v0.a[0] && R.previewFor(R.createRun(quick, R.PUZZLE_KNOBS), d).valid);
+  v0.a = [wrong, 5, ...v0.a];
+  v0.t = [v0.t[0], v0.t[0] + 900, ...v0.t.map((x) => x + 2000)];
+  for (const v of slip.voyages.slice(1)) { v.ready += 2000; v.t = v.t.map((x) => x + 2000); }
+  slip.elapsed_ms += 2000;
+  const sv = R.verifyProof(quick, R.PUZZLE_KNOBS, slip);
+  assert.equal(sv.ok, true, sv.reason);
+  assert.equal(sv.shells, 6);
 });
 
 // ---------------------------------------------------------------------------
@@ -437,18 +618,18 @@ test('proof: a real Trial run verifies; tampering is rejected', () => {
 test('parity: vectors.v2.json replays exactly', () => {
   const file = path.join(root, 'tools/current-quest/vectors.v2.json');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.ok(data.vectors.length >= 300, `${data.vectors.length} vectors`);
+  assert.ok(data.vectors.length >= 360, `${data.vectors.length} vectors`);
   const knobsOf = (p) => ({ puzzle: R.PUZZLE_KNOBS, ride: R.RIDE_KNOBS, line: R.LINE_BONUS_KNOBS }[p]);
   for (const v of data.vectors) {
     const boards = L.boardsFromRefs(v.boards);
     let run = R.createRun(boards, { ...knobsOf(v.knobs), showdown: !!v.showdown });
     const accepted = [];
-    for (const a of v.actions) {
-      const res = R.applyAction(run, a);
+    v.actions.forEach((a, k) => {
+      const res = R.applyAction(run, a, v.times ? v.times[k] : undefined);
       accepted.push(res.ok ? (res.recorded ? 1 : 2) : 0);
       if (res.ok) run = res.run;
-    }
-    const got = { accepted, index: run.index, pos: run.voyage.pos, mask: run.voyage.mask, golden: run.voyage.golden, strokes: run.voyage.strokes, spent: run.voyage.spent, moves: run.voyage.moves, phase: run.voyage.phase, rings: run.rings, failed: run.failed, complete: run.complete, beached: run.voyage.beached, stalled: run.voyage.stalled, shells: R.totalShells(run.results), treasure: R.treasureOf(run.results) };
+    });
+    const got = { accepted, index: run.index, pos: run.voyage.pos, mask: run.voyage.mask, golden: run.voyage.golden, strokes: run.voyage.strokes, spent: run.voyage.spent, moves: run.voyage.moves, phase: run.voyage.phase, rings: run.rings, failed: run.failed, complete: run.complete, beached: run.voyage.beached, stalled: run.voyage.stalled, shells: R.totalShells(run.results), treasure: R.treasureOf(run.results), undos: run.voyage.undos, slipUsed: run.voyage.slipUsed, tips: run.voyage.tips, ripStrokes: run.voyage.ripStrokes };
     assert.deepEqual(plain(got), v.expect, `vector ${v.name}`);
   }
 });
@@ -462,14 +643,19 @@ const T = loadTs('src/games/current-quest/themeSubtitle.ts');
 
 test('motion: a carry rides 75 ms per tile, overshoots toward the blocker and settles on the last tile', () => {
   const pts = [0, 0, 100, 0, 200, 0, 300, 0];
-  const plan = { kind: M.PLAN_STROKE, t0: 0, pts, carry: 2, facing: 1, dive: 0, beached: 0, wasBeached: 0, bx: 0, by: 0, speed: 1 };
+  const plan = { kind: M.PLAN_STROKE, t0: 0, pts, carry: 2, facing: 1, dive: 0, beached: 0, wasBeached: 0, bx: 0, by: 0, speed: 1, rip: 0 };
   const f = M.newFrame();
   M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL, 0, f);
   assert.ok(Math.abs(f.x - 100) < 1);
   M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 1.5, 0, f);
   assert.ok(Math.abs(f.x - 250) < 1, `mid ride x ${f.x}`);
-  assert.equal(f.pose, M.POSE_DASH);
+  assert.equal(f.pose, M.POSE_SURF, 'every carry rides in the surf pose');
   assert.equal(f.carrying, 1);
+  assert.ok(f.sx > 1.2, 'stretch along travel holds near 1.25');
+  assert.equal(f.roll, 1, 'no corkscrew on an ordinary carry');
+  const rip = { ...plan, carry: 2, rip: 1 };
+  M.evalShark(rip, M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 1.0, 0, f);
+  assert.ok(f.roll < 1, 'Riptide strokes corkscrew');
   M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 2 + 10, 0, f);
   assert.ok(f.x > 300, 'overshoot past the last tile toward the blocker');
   M.evalShark(plan, M.planDuration(plan) + 5, 0, f);
@@ -548,6 +734,10 @@ test('showdown: seeded boards, deterministic crew bots that finish inside the wi
   assert.ok(SD.compareRacers({ ...fin, finished: false, voyagesCleared: 1 }, fin) > 0);
   assert.ok(SD.compareRacers({ ...fin, finished: false, voyagesCleared: 1, shells: 3 }, { ...fin, finished: false, voyagesCleared: 0, shells: 0 }) < 0);
   assert.ok(SD.scoreOf(fin) > SD.scoreOf({ ...fin, strokes: 16 }));
+  // No time key anywhere: equal shells, strokes and undos tie and share a rank, whatever the tempo.
+  assert.equal(SD.compareRacers(fin, { ...fin, tempo: 1 }), 0);
+  assert.equal(SD.scoreOf(fin), SD.scoreOf({ ...fin, tempo: 999999 }));
+  assert.deepEqual(plain(SD.placesOf([{ p: fin }, { p: { ...fin, tempo: 5 } }, { p: { ...fin, strokes: 20 } }])), [1, 1, 3]);
   assert.equal(SD.splashTarget([{ seat: 0, p: fin }, { seat: 2, p: { ...fin, finished: false, shells: 3 } }, { seat: 3, p: { ...fin, finished: false, shells: 1 } }], 0), 2);
 });
 
@@ -558,4 +748,16 @@ test('showdown: a Splash to a bot shifts its tide and the bot still finishes (re
   for (let t = 0; t <= SD.SHOWDOWN_WINDOW_MS && !bot.run.complete; t += 250) SD.stepBot(bot, t);
   assert.equal(bot.run.complete, true);
   assert.ok(bot.run.actions.flat().filter((a) => a === R.A_SPLASH).length >= 1);
+});
+
+// ---------------------------------------------------------------------------
+// Ink FX rule (9.13): no dash effects and no hairlines in this game's code.
+
+test('ink lint: no DashPathEffect and no stroke under 2 px in src/games/current-quest', () => {
+  const dir = path.join(root, 'src/games/current-quest');
+  for (const f of fs.readdirSync(dir).filter((x) => /\.tsx?$/.test(x))) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    assert.equal(/DashPathEffect|DashPath|dashPathEffect/.test(src), false, `${f} uses a dash effect`);
+    for (const m of src.matchAll(/strokeWidth=\{([0-9.]+)\}/g)) assert.ok(Number(m[1]) >= 2, `${f} strokeWidth ${m[1]}`);
+  }
 });

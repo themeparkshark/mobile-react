@@ -1,7 +1,8 @@
 /**
  * Current Quest solver (design 5.1). Exhaustive state graph over
  * (position, pearl mask, golden taken, tide clock) with every stroke costing 1.
- * Well under 4k states per board, so a full build takes a few ms.
+ * A 5x7 board with tide is 35 x 8 x 2 x 8 = 4,480 states, so a full build
+ * takes a few ms.
  *
  * Used for: library par / parGold, Author target, decision points, the Tide
  * Tip (next optimal strokes), the free first-stroke hint, the near-miss line,
@@ -9,7 +10,7 @@
  */
 
 import {
-  A_TREAD, CELLS, fullMask, simulateStroke, stepCell, tideAt,
+  A_TREAD, cellsOf, fullMask, heightOf, isRiptide, simulateStroke, stepCell, tideAt,
   type Board, type Voyage,
 } from './rules';
 
@@ -23,6 +24,8 @@ export interface SolveGraph {
   readonly next: Int32Array;
   /** carried tiles for s,a. */
   readonly carried: Int8Array;
+  /** 1 when stroke s,a is a Riptide stroke. */
+  readonly rip: Int8Array;
   /** Distance (strokes) to any clear / to a clear holding the golden pearl. */
   readonly distClear: Int32Array;
   readonly distGold: Int32Array;
@@ -44,7 +47,7 @@ function decode(M: number, s: number): { pos: number; mask: number; golden: bool
 const cache = new Map<string, SolveGraph>();
 
 function boardKey(b: Board): string {
-  return `${b.tiles}|${b.start}|${b.chest}|${b.pearls.join(',')}|${b.golden}|${b.P}`;
+  return `${heightOf(b)}|${b.tiles}|${b.start}|${b.chest}|${b.pearls.join(',')}|${b.golden}|${b.P}`;
 }
 
 export function buildGraph(board: Board): SolveGraph {
@@ -52,9 +55,10 @@ export function buildGraph(board: Board): SolveGraph {
   const hit = cache.get(key);
   if (hit) return hit;
   const M = board.P ? board.P * 2 : 1;
-  const n = CELLS * 8 * 2 * M;
+  const n = cellsOf(board) * 8 * 2 * M;
   const next = new Int32Array(n * 5).fill(-1);
   const carried = new Int8Array(n * 5);
+  const rip = new Int8Array(n * 5);
   const acts = board.P ? 5 : 4;
   const full = fullMask(board);
   for (let s = 0; s < n; s++) {
@@ -66,14 +70,16 @@ export function buildGraph(board: Board): SolveGraph {
     for (let a = 0; a < acts; a++) {
       const sim = simulateStroke(board, pos, mask, golden, tide, a === A_TREAD ? -1 : a);
       if (sim.bump) continue;
-      carried[s * 5 + a] = a === A_TREAD ? 0 : Math.max(0, sim.path.length - 2);
+      const c = a === A_TREAD ? 0 : Math.max(0, sim.path.length - 2);
+      carried[s * 5 + a] = c;
+      rip[s * 5 + a] = a !== A_TREAD && isRiptide(sim.runs, c) ? 1 : 0;
       if (sim.cleared) { next[s * 5 + a] = sim.golden ? -3 : -2; continue; }
       next[s * 5 + a] = stateKey(M, sim.pos, sim.mask, sim.golden, (m + 1) % M);
     }
   }
   const distClear = reverseDistances(n, next, false);
   const distGold = reverseDistances(n, next, true);
-  const graph: SolveGraph = { board, M, nStates: n, next, carried, distClear, distGold };
+  const graph: SolveGraph = { board, M, nStates: n, next, carried, rip, distClear, distGold };
   if (cache.size > 64) cache.clear();
   cache.set(key, graph);
   return graph;
@@ -165,12 +171,24 @@ export interface Solution {
   readonly optimalCount: number;
   readonly optimalGoldCount: number;
   readonly decisionPoints: number;
+  /** Some optimal par route contains a Riptide stroke (library alignment, 5.1). */
   readonly parIsRiptide: boolean;
+  /** Most Riptide strokes on any optimal Gold route (the Author target). */
   readonly authorRiptide: number;
+  /** Most Riptide strokes on any optimal par route. */
+  readonly parRiptides: number;
   /** Carries used by the canonical par route. */
   readonly carries: number;
   readonly longestCarry: number;
   readonly treads: number;
+  /** Longest carry any legal stroke on the board can make (library cap: 10). */
+  readonly maxCarry: number;
+}
+
+function maxCarryOf(g: SolveGraph): number {
+  let m = 0;
+  for (let k = 0; k < g.carried.length; k++) if (g.carried[k] > m) m = g.carried[k];
+  return m;
 }
 
 function route(g: SolveGraph, start: number, gold: boolean): number[] {
@@ -193,33 +211,28 @@ function route(g: SolveGraph, start: number, gold: boolean): number[] {
   return out;
 }
 
-/** Count optimal routes (capped) and find the best Riptide tile count among them. */
+/** Count optimal routes (capped) and find the most Riptide strokes among them. */
 function enumerate(g: SolveGraph, start: number, gold: boolean, cap = 400): { count: number; bestRip: number; anyRiptide: boolean } {
   const dist = gold ? g.distGold : g.distClear;
   let count = 0;
   let bestRip = 0;
-  let anyRiptide = false;
-  const walk = (s: number, flow: number, rip: number, lit: boolean) => {
+  const walk = (s: number, rip: number) => {
     if (count >= cap) return;
     const here = dist[s];
     for (let a = 0; a < 5; a++) {
       const t = g.next[s * 5 + a];
-      const c = g.carried[s * 5 + a];
-      const f = c >= 1 ? flow + 1 : 0;
-      const r = f >= 3 ? rip + c : rip;
-      const l = lit || f >= 3;
+      const r = rip + g.rip[s * 5 + a];
       if (here === 1 && (t === -3 || (t === -2 && !gold))) {
         count++;
         if (r > bestRip) bestRip = r;
-        if (l) anyRiptide = true;
         continue;
       }
-      if (t >= 0 && dist[t] === here - 1) walk(t, f, r, l);
+      if (t >= 0 && dist[t] === here - 1) walk(t, r);
       if (count >= cap) return;
     }
   };
-  if (dist[start] < INF) walk(start, 0, 0, false);
-  return { count, bestRip, anyRiptide };
+  if (dist[start] < INF) walk(start, 0);
+  return { count, bestRip, anyRiptide: bestRip > 0 };
 }
 
 export function solveBoard(board: Board): Solution {
@@ -228,7 +241,7 @@ export function solveBoard(board: Board): Solution {
   const par = g.distClear[start];
   const parGold = board.golden >= 0 ? g.distGold[start] : INF;
   if (par >= INF) {
-    return { solvable: false, par: 0, parGold: 0, solution: [], solutionGold: [], optimalCount: 0, optimalGoldCount: 0, decisionPoints: 0, parIsRiptide: false, authorRiptide: 0, carries: 0, longestCarry: 0, treads: 0 };
+    return { solvable: false, par: 0, parGold: 0, solution: [], solutionGold: [], optimalCount: 0, optimalGoldCount: 0, decisionPoints: 0, parIsRiptide: false, authorRiptide: 0, parRiptides: 0, carries: 0, longestCarry: 0, treads: 0, maxCarry: 0 };
   }
   const solution = route(g, start, false);
   const solutionGold = parGold < INF ? route(g, start, true) : [];
@@ -261,26 +274,57 @@ export function solveBoard(board: Board): Solution {
   return {
     solvable: true, par, parGold: parGold >= INF ? 0 : parGold, solution, solutionGold,
     optimalCount: clearEnum.count, optimalGoldCount: goldEnum.count, decisionPoints,
-    parIsRiptide: clearEnum.anyRiptide, authorRiptide: goldEnum.bestRip,
-    carries, longestCarry, treads,
+    parIsRiptide: clearEnum.anyRiptide, authorRiptide: goldEnum.bestRip, parRiptides: clearEnum.bestRip,
+    carries, longestCarry, treads, maxCarry: maxCarryOf(g),
   };
 }
 
 /** Walk every current tile's carry; true when a carry would loop (library rejects). */
 export function hasCurrentLoop(board: Board): boolean {
-  // Follow each current chain; a revisit means a loop.
-  for (let i = 0; i < CELLS; i++) {
+  const H = heightOf(board);
+  const n = cellsOf(board);
+  for (let i = 0; i < n; i++) {
     const seen = new Set<number>();
     let p = i;
     let d = '^>v<'.indexOf(board.tiles[p]);
     while (d >= 0) {
       if (seen.has(p)) return true;
       seen.add(p);
-      p = stepCell(p, d);
+      p = stepCell(p, d, H);
       if (p < 0) break;
       if (board.tiles[p] === '#') break;
       d = '^>v<'.indexOf(board.tiles[p]);
     }
   }
   return false;
+}
+
+/** Longest single current run on the board (library cap: 6 tiles). */
+export function longestRun(board: Board): number {
+  const H = heightOf(board);
+  const n = cellsOf(board);
+  let best = 0;
+  for (let i = 0; i < n; i++) {
+    const d = '^>v<'.indexOf(board.tiles[i]);
+    if (d < 0) continue;
+    let len = 1;
+    let p = stepCell(i, d, H);
+    while (p >= 0 && board.tiles[p] === board.tiles[i]) { len++; p = stepCell(p, d, H); }
+    if (len > best) best = len;
+  }
+  return best;
+}
+
+/**
+ * The wrong-turn marker (6): given the states after each stroke of the
+ * surviving stack (state 0 = voyage start), the index of the first state
+ * from which no clear fits the remaining budget, or -1. `budgetAt[k]` is the
+ * strokes left at state k.
+ */
+export function firstDeadState(board: Board, states: readonly Pick<Voyage, 'pos' | 'mask' | 'golden' | 'moves' | 'phase'>[], budgetAt: readonly number[]): number {
+  for (let k = 0; k < states.length; k++) {
+    const d = distanceFrom(board, states[k], false);
+    if (!(d <= budgetAt[k])) return k;
+  }
+  return -1;
 }

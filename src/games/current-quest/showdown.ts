@@ -3,8 +3,9 @@
  *
  * Everyone races the same two sealed-style voyages (Standard + Treasure, tide
  * set) inside a 3-minute window. Rank = shells desc, strokes asc, undos asc,
- * then capped tempo (each gap capped at 2 s, so looking up at the line costs
- * nothing). Unfinished racers rank by progress, never zero. A Par clear sends a
+ * with NO time key at all (design v5 E8: walkers and bots gain nothing from
+ * speed); remaining ties share a rank. Tempo is kept only for integrity and a
+ * local personal best. Unfinished racers rank by progress, never zero. A Par clear sends a
  * Splash to the provisional leader (their tide jumps one notch at their next
  * stroke boundary); a golden pearl arms a Shield that absorbs one Splash.
  *
@@ -81,7 +82,7 @@ export function progressOf(run: RunState, times: readonly number[]): RacerProgre
   };
 }
 
-/** Rank comparator: negative when a ranks above b. */
+/** Rank comparator: negative when a ranks above b, 0 for a shared rank. Never uses time. */
 export function compareRacers(a: RacerProgress, b: RacerProgress): number {
   if (a.finished !== b.finished) return a.finished ? -1 : 1;
   if (!a.finished) {
@@ -90,14 +91,17 @@ export function compareRacers(a: RacerProgress, b: RacerProgress): number {
   }
   if (a.shells !== b.shells) return b.shells - a.shells;
   if (a.strokes !== b.strokes) return a.strokes - b.strokes;
-  if (a.undos !== b.undos) return a.undos - b.undos;
-  return a.tempo - b.tempo;
+  return a.undos - b.undos;
 }
 
-/** A single integer score the server can store (higher is better), consistent with compareRacers for finishers. */
+/** Competition ranks (1, 1, 3, ...): tied racers share a place and both wear the crown. */
+export function placesOf<T extends { p: RacerProgress }>(list: readonly T[]): number[] {
+  return list.map((x) => 1 + list.filter((y) => compareRacers(y.p, x.p) < 0).length);
+}
+
+/** A single integer score the server can store (higher is better), consistent with compareRacers. No time component. */
 export function scoreOf(p: RacerProgress): number {
-  const tempoS = Math.min(999, Math.floor(p.tempo / 1000));
-  return (p.finished ? 1 : 0) * 1e9 + p.voyagesCleared * 1e8 + p.shells * 1e6 - Math.min(999, p.strokes) * 1e3 - Math.min(9, p.undos) * 100 - Math.min(99, tempoS);
+  return (p.finished ? 1 : 0) * 1e9 + p.voyagesCleared * 1e8 + p.shells * 1e6 - Math.min(999, p.strokes) * 1e3 - Math.min(999, p.undos);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +180,7 @@ export function stepBot(bot: Bot, nowMs: number): BotEvent[] {
       const budget = bot.goldThisVoyage ? strokesLeft(run) : 0;
       action = hintFrom(board, v, 1, budget)[0] ?? 0;
     }
-    const res = applyAction(run, action);
+    const res = applyAction(run, action, at);
     if (res.ok && res.recorded) {
       bot.run = res.run;
       bot.times.push(at);

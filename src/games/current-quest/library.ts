@@ -1,15 +1,24 @@
 /**
- * Board issue (design 5.3). Deterministic from a seed so a server can
- * reproduce the exact three boards (ids + transforms) of a run from the same
- * client library file. Scored contexts ignore local progress; the Quick Run
- * uses it to teach currents first and tide second.
+ * Board issue (design v5 5.3). Deterministic from a seed so a server can
+ * reproduce the exact boards (ids + transforms) of a run from the same client
+ * library file. Scored contexts ignore local progress; the Quick Run uses it
+ * to teach currents first and tide second.
+ *
+ * Run shapes (4.3, 4.4):
+ *   quick / practice / ghost: 2 voyages, Warm-up (5x5) + Treasure (5x7), Puzzle.
+ *   ride / line (Trial):      3 voyages, Rookie coin pool Warm-up + Standard (5x6) + Treasure (5x7).
+ *   showdown:                 2 voyages, Standard + Treasure (tide set).
+ * Transforms are drawn from the board's allowed set (8 on 5x5, 4 on tall boards).
  */
 
 import { CQ_LIBRARY } from './boards.v2.client';
 import {
-  LINE_BONUS_KNOBS, PUZZLE_KNOBS, RIDE_KNOBS, transformBoard,
+  allowedTransforms, heightOf, LINE_BONUS_KNOBS, PUZZLE_KNOBS, RIDE_KNOBS, transformAllowed, transformBoard,
   type Board, type Knobs, type MechanicSet, type Slot,
 } from './rules';
+
+/** Server knob (4.3): the Quick Run is 2 voyages unless the walking playtest earns it a third. */
+export const QUICK_RUN_VOYAGES = 2;
 
 export type RunContext = 'quick' | 'ride' | 'line' | 'ghost' | 'practice' | 'showdown';
 
@@ -64,28 +73,41 @@ export function isScored(context: RunContext): boolean {
   return context === 'ride' || context === 'line';
 }
 
-/** The three boards of a run: [warm-up, standard, treasure], transformed. */
+/** Pick a board and one of its allowed transforms with two draws from `rand`. */
+function drawFrom(rand: () => number, pool: Board[]): Board {
+  const b = pool[Math.floor(rand() * pool.length) % pool.length];
+  const allowed = allowedTransforms(heightOf(b));
+  const tf = allowed[Math.floor(rand() * allowed.length) % allowed.length];
+  return transformBoard(b, tf);
+}
+
+/** How many voyages a context plays (2 for queue runs and Showdowns, 3 for Trials). */
+export function voyagesFor(context: RunContext): number {
+  return isScored(context) ? 3 : context === 'showdown' ? 2 : QUICK_RUN_VOYAGES;
+}
+
+/** The boards of a run, in play order, transformed. */
 export function pickRun(seed: number, context: RunContext, progress: RunProgressHint = NO_PROGRESS): Board[] {
   const rand = mulberry32((seed >>> 0) ^ hashString(`cq:${context}`));
-  const draw = (pool: Board[]): Board => {
-    const b = pool[Math.floor(rand() * pool.length) % pool.length];
-    const tf = Math.floor(rand() * 8) & 7;
-    return transformBoard(b, tf);
-  };
+  const draw = (pool: Board[]): Board => drawFrom(rand, pool);
   const teach = (id: string) => CQ_LIBRARY.find((b) => b.id === id) as Board;
   if (context === 'showdown') return showdownBoards(seed);
   if (isScored(context)) {
+    // Ride Challenge / LinePlay bonus: Rookie band only, fixed coin window (4.4).
     return [draw(poolOf('C', 'warmup', true)), draw(poolOf('CT', 'standard', true)), draw(poolOf('CT', 'treasure', true))];
   }
+  const three = QUICK_RUN_VOYAGES >= 3;
   if (progress.runsCompleted <= 0) {
-    // First run ever: the current teach board, then currents only.
-    return [teach('T1'), draw(poolOf('C', 'standard')), draw(poolOf('C', 'treasure'))];
+    // First run ever: the current teach board (riding is the only way through), then currents only.
+    return three ? [teach('T1'), draw(poolOf('C', 'standard')), draw(poolOf('C', 'treasure'))] : [teach('T1'), draw(poolOf('C', 'treasure'))];
   }
   if (!progress.tideSeen) {
-    // Tide arrives in the Standard slot through its teach board; Treasure deepens it.
-    return [draw(poolOf('C', 'warmup')), teach('T2'), draw(poolOf('CT', 'treasure'))];
+    // Tide arrives through its teach board; one twist per voyage, never two at once.
+    return three ? [draw(poolOf('C', 'warmup')), teach('T2'), draw(poolOf('CT', 'treasure'))] : [draw(poolOf('C', 'warmup')), teach('T2')];
   }
-  return [draw(poolOf('C', 'warmup')), draw(poolOf('CT', 'standard')), draw(poolOf('CT', 'treasure'))];
+  return three
+    ? [draw(poolOf('C', 'warmup')), draw(poolOf('CT', 'standard')), draw(poolOf('CT', 'treasure'))]
+    : [draw(poolOf('C', 'warmup')), draw(poolOf('CT', 'treasure'))];
 }
 
 /** Proof board refs for a run (ids without the transform suffix + transform). */
@@ -101,8 +123,8 @@ export function boardsFromRefs(refs: readonly { id: string; tf: number }[]): Boa
   const out: Board[] = [];
   for (const r of refs) {
     const b = boardById(r.id);
-    if (!b) return null;
-    out.push(transformBoard(b, r.tf & 7));
+    if (!b || !transformAllowed(r.tf, heightOf(b))) return null;
+    out.push(transformBoard(b, r.tf));
   }
   return out;
 }
@@ -110,6 +132,5 @@ export function boardsFromRefs(refs: readonly { id: string; tf: number }[]): Boa
 /** The two Same-Board Showdown voyages for a seed (Standard + Treasure, tide set). */
 export function showdownBoards(seed: number): Board[] {
   const rand = mulberry32((seed >>> 0) ^ hashString('cq:showdown'));
-  const draw = (pool: Board[]) => transformBoard(pool[Math.floor(rand() * pool.length) % pool.length], Math.floor(rand() * 8) & 7);
-  return [draw(poolOf('CT', 'standard')), draw(poolOf('CT', 'treasure'))];
+  return [drawFrom(rand, poolOf('CT', 'standard')), drawFrom(rand, poolOf('CT', 'treasure'))];
 }
