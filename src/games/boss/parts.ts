@@ -27,8 +27,12 @@ export interface Launch { x: number; y: number; vx: number; vy: number; floor: n
 export interface Decal { x: number; y: number; zone: 0 | 1 }
 
 /** Sum of the horizontal travel factors over the flight (x speed drops to 0.6x per bounce). */
-export function restSpan(y0: number, vy: number, floor: number, g = PART_G, e = PART_E, bounces = PART_BOUNCES): number {
+export function restSpan(y0: number, vy: number, floor: number): number {
   'worklet';
+  // Literals, not the module constants: a worklet's default params are not captured on the UI runtime.
+  const g = 2200;
+  const e = 0.45;
+  const bounces = 2;
   let y = y0;
   let uy = vy;
   let k = 1;
@@ -51,7 +55,7 @@ export function aimLaunch(x: number, y: number, vy: number, tx: number, ty: numb
   return { x, y, vx: span > 0 ? (tx - x) / span : 0, vy, floor: ty };
 }
 
-function zoneAt(z: Zone, W: number, H: number, u: number, v: number): { x: number; y: number } {
+function zoneAt(z: { x0: number; x1: number; y0: number; y1: number }, W: number, H: number, u: number, v: number): { x: number; y: number } {
   'worklet';
   return { x: W * (z.x0 + (z.x1 - z.x0) * u), y: H * (z.y0 + (z.y1 - z.y0) * v) };
 }
@@ -62,13 +66,15 @@ function zoneAt(z: Zone, W: number, H: number, u: number, v: number): { x: numbe
  */
 export function settlePoint(W: number, H: number, n: number, k: number): Decal {
   'worklet';
+  const sand = { x0: 0, x1: 0.18, y0: 0.4, y1: 0.5 };
+  const deck = { x0: 0.82, x1: 1, y0: 0.3, y1: 0.42 };
   if (n === 1) {
-    const p = zoneAt(ZONE_SAND, W, H, 0.5, 0.55);
+    const p = zoneAt(sand, W, H, 0.5, 0.55);
     return { x: p.x, y: p.y, zone: 0 };
   }
   const left = k % 2 === 0;
   const i = Math.floor(k / 2);
-  const p = zoneAt(left ? ZONE_SAND : ZONE_DECK, W, H, 0.22 + 0.28 * i, 0.3 + 0.2 * ((i + k) % 3));
+  const p = zoneAt(left ? sand : deck, W, H, 0.22 + 0.28 * i, 0.3 + 0.2 * ((i + k) % 3));
   return { x: p.x, y: p.y, zone: left ? 0 : 1 };
 }
 
@@ -83,7 +89,7 @@ export function partLaunchTo(W: number, H: number, n: number, k: number, x: numb
 /** Position of a launched part t seconds after launch. */
 export function partAt(l: Launch, t: number): { x: number; y: number; rest: boolean } {
   'worklet';
-  const b = bounceAt(t, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, PART_BOUNCES);
+  const b = bounceAt(t, l.x, l.y, l.vx, l.vy, l.floor, 2200, 0.45, 2);
   return { x: b.x, y: b.y, rest: b.rest };
 }
 

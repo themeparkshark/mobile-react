@@ -6,16 +6,16 @@
  * this only draws the queue's state on the UI thread from the fx clock, so
  * hit-stop freezes callouts with the arena.
  */
-import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import {
-  Canvas, Group, Image as SkImage, Paint, Rect, Text as SkText, useFont, type SkImage as SkImageType,
+  Canvas, Group, Paint, Rect, Text as SkText, useFont,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import {
   POP_OUT_MS, calloutZones, emptyCallouts, holdRibbon, pushCallout, visibleCallouts, type CalloutSpec, type Wordmark,
 } from './callouts';
-import { aspectOf, useArenaImages } from './useArenaImages';
 
 const WM: Record<Wordmark, [number, number]> = {
   perfect: [require('../../assets/games/boss/wm/perfect_f0.png'), require('../../assets/games/boss/wm/perfect_f1.png')],
@@ -31,8 +31,6 @@ const WM: Record<Wordmark, [number, number]> = {
 };
 export const WORDMARK_SRC = WM;
 const WM_KEYS = Object.keys(WM) as Wordmark[];
-const WM_FLAT: Record<string, number> = {};
-WM_KEYS.forEach((k) => { WM_FLAT[`${k}0`] = WM[k][0]; WM_FLAT[`${k}1`] = WM[k][1]; });
 /** Hero wordmark widths (pt) before the per-callout scale. */
 const WM_W: Record<Wordmark, number> = {
   perfect: 236, break: 224, finish: 230, knockout: 296, getup: 220, teamstrike: 296, fury: 190, nice: 170, great: 210, superb: 230,
@@ -41,7 +39,6 @@ const WM_W: Record<Wordmark, number> = {
 const NAVY = '#1B2A4A';
 const TONE: Record<string, string> = { white: '#FFFFFF', coral: '#FF6B5C', lime: '#7BD94A' };
 const SMALL_PX = 26;
-const HERO_PX = 44;
 
 /** UI-thread snapshot of the visible queue. */
 interface Shown {
@@ -80,13 +77,13 @@ export const CalloutLayer = forwardRef<CalloutLayerHandle, Props>(function Callo
   const state = useRef(emptyCallouts());
   const q = useSharedValue<QueueView>({ hero: null, small: null, prevHero: null, prevSmall: null });
   const font = useFont(require('../../../assets/fonts/shark-random-funnyness-2.ttf'), SMALL_PX);
-  const heroFont = useFont(require('../../../assets/fonts/shark-random-funnyness-2.ttf'), HERO_PX);
-  const loaded = useArenaImages(WM_FLAT);
-  const imgs: (SkImageType | null)[][] = useMemo(() => WM_KEYS.map((k) => [loaded[`${k}0`] ?? null, loaded[`${k}1`] ?? null]), [loaded]);
   const midX = cx ?? width / 2;
 
+  const [heroNow, setHeroNow] = useState<Shown | null>(null);
   const publish = (now: number) => {
     const v = visibleCallouts(state.current, now);
+    const h = toShown(v.hero);
+    setHeroNow((cur) => (cur && h && cur.id === h.id ? cur : h));
     const prev = q.value;
     const hero = toShown(v.hero);
     const small = toShown(v.small);
@@ -108,17 +105,47 @@ export const CalloutLayer = forwardRef<CalloutLayerHandle, Props>(function Callo
     clear: () => {
       state.current = emptyCallouts();
       q.value = { hero: null, small: null, prevHero: null, prevSmall: null };
+      setHeroNow(null);
     },
   }));
 
   return (
-    <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
-      <HeroSlot q={q} which="prevHero" fx={fx} imgs={imgs} font={heroFont} x={midX} y={z.heroY} maxW={z.heroMaxW} />
-      <HeroSlot q={q} which="hero" fx={fx} imgs={imgs} font={heroFont} x={midX} y={z.heroY} maxW={z.heroMaxW} />
-      <SmallSlot q={q} which="prevSmall" fx={fx} font={font} x={midX} y={z.smallY} />
-      <SmallSlot q={q} which="small" fx={fx} font={font} x={midX} y={z.smallY} />
-    </Canvas>
+    <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+      <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
+        <SmallSlot q={q} which="small" fx={fx} font={font} x={midX} y={z.smallY} />
+      </Canvas>
+      {heroNow ? <HeroView key={heroNow.id} c={heroNow} fx={fx} x={midX} y={z.heroY} maxW={z.heroMaxW} /> : null}
+    </View>
   );
+});
+
+/** Hero wordmark (K10 drawn art, boil f0/f1 at 12 fps) or a display-font hero word, on the fx clock. */
+function HeroView({ c, fx, x, y, maxW }: { c: Shown; fx: SharedValue<number>; x: number; y: number; maxW: number }) {
+  const key = c.wm >= 0 ? WM_KEYS[c.wm] : null;
+  const w = key ? Math.min(maxW, WM_W[key]) : maxW;
+  const h = key ? w / 3.6 : 60;
+  const style = useAnimatedStyle(() => {
+    const e = envelope(c, fx.value);
+    return { opacity: e.o, transform: [{ scale: e.s * c.scale }, { rotate: '-3deg' }] };
+  });
+  const f0 = useAnimatedStyle(() => ({ opacity: Math.floor(fx.value / 83) % 2 === 0 ? 1 : 0 }));
+  const f1 = useAnimatedStyle(() => ({ opacity: Math.floor(fx.value / 83) % 2 === 1 ? 1 : 0 }));
+  return (
+    <Animated.View style={[{ position: 'absolute', left: x - w / 2, top: y - h / 2, width: w, height: h, alignItems: 'center', justifyContent: 'center' }, style]}>
+      {key ? (
+        <>
+          <Animated.Image source={WM[key][0]} style={[StyleSheet.absoluteFill, { width: w, height: h }, f0]} resizeMode="contain" />
+          <Animated.Image source={WM[key][1]} style={[StyleSheet.absoluteFill, { width: w, height: h }, f1]} resizeMode="contain" />
+        </>
+      ) : (
+        <Text style={heroText.t} numberOfLines={1} adjustsFontSizeToFit>{c.text}</Text>
+      )}
+    </Animated.View>
+  );
+}
+
+const heroText = StyleSheet.create({
+  t: { fontFamily: 'Shark', fontSize: 50, color: '#FFFFFF', textShadowColor: '#1B2A4A', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 1 },
 });
 
 function easeOutBack(x: number, s = 1.7): number {
@@ -143,62 +170,6 @@ function envelope(c: Shown | null, f: number): { s: number; o: number } {
   const tail = c.ms - e;
   const o = tail < 160 ? tail / 160 : 1;
   return { s, o };
-}
-
-function HeroSlot({ q, which, fx, imgs, font, x, y, maxW }: {
-  q: SharedValue<QueueView>; which: 'hero' | 'prevHero'; fx: SharedValue<number>; imgs: (SkImageType | null)[][];
-  font: ReturnType<typeof useFont>; x: number; y: number; maxW: number;
-}) {
-  const env = useDerivedValue(() => envelope(q.value[which], fx.value));
-  const tr = useDerivedValue(() => {
-    const c = q.value[which];
-    const sc = env.value.s * (c ? c.scale : 1);
-    return [{ translateX: x }, { translateY: y }, { scale: sc }, { rotate: -0.05 }];
-  });
-  const op = useDerivedValue(() => env.value.o);
-  // Boil: frame 0 / 1 alternate at 12 fps.
-  const boil = useDerivedValue(() => Math.floor(fx.value / 83) % 2);
-  const layers = WM_KEYS.map((k, i) => {
-    const w = Math.min(maxW, WM_W[k]);
-    const im0 = imgs[i][0];
-    const im1 = imgs[i][1];
-    const h = w / aspectOf(im0, 3.8);
-    return { k, i, w, h, im0, im1 };
-  });
-  const textOp = useDerivedValue(() => (q.value[which] && q.value[which]!.wm < 0 ? 1 : 0));
-  const text = useDerivedValue(() => (q.value[which] ? q.value[which]!.text : ''));
-  const tw = useDerivedValue(() => (font ? font.measureText(text.value).width : 0));
-  const tx = useDerivedValue(() => -tw.value / 2);
-  return (
-    <Group opacity={op} transform={tr}>
-      {layers.map((l) => (
-        <WmLayer key={l.k} q={q} which={which} idx={l.i} boil={boil} w={l.w} h={l.h} im0={l.im0} im1={l.im1} />
-      ))}
-      {font ? (
-        <Group opacity={textOp}>
-          <SkText text={text} x={tx} y={HERO_PX * 0.35 + 3} font={font} color={NAVY} />
-          <SkText text={text} x={tx} y={HERO_PX * 0.35} font={font} color="#FFFFFF">
-            <Paint style="stroke" strokeWidth={7} color={NAVY} />
-            <Paint color="#FFFFFF" />
-          </SkText>
-        </Group>
-      ) : null}
-    </Group>
-  );
-}
-
-function WmLayer({ q, which, idx, boil, w, h, im0, im1 }: {
-  q: SharedValue<QueueView>; which: 'hero' | 'prevHero'; idx: number; boil: SharedValue<number>; w: number; h: number;
-  im0: SkImageType | null; im1: SkImageType | null;
-}) {
-  const o0 = useDerivedValue(() => (q.value[which] && q.value[which]!.wm === idx && boil.value === 0 ? 1 : 0));
-  const o1 = useDerivedValue(() => (q.value[which] && q.value[which]!.wm === idx && boil.value === 1 ? 1 : 0));
-  return (
-    <Group>
-      {im0 ? <Group opacity={o0}><SkImage image={im0} x={-w / 2} y={-h / 2} width={w} height={h} /></Group> : null}
-      {im1 ? <Group opacity={o1}><SkImage image={im1} x={-w / 2} y={-h / 2} width={w} height={h} /></Group> : null}
-    </Group>
-  );
 }
 
 function SmallSlot({ q, which, fx, font, x, y }: {

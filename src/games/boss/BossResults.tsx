@@ -129,7 +129,8 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
 
   const cardStyle = useAnimatedStyle(() => ({ opacity: card.value, transform: [{ scale: 0.92 + 0.08 * card.value }] }));
   const starStyle = (i: number) => useAnimatedStyle(() => ({ // eslint-disable-line react-hooks/rules-of-hooks
-    transform: [{ scale: slam[i].value <= 0 ? 0.001 : slam[i].value }], opacity: slam[i].value <= 0 ? 0 : 1,
+    // Unearned stars stay empty outlines (the slot behind); only earned ones slam in.
+    transform: [{ scale: slam[i].value <= 0 ? 0.001 : slam[i].value }], opacity: i < stars && slam[i].value > 0 ? 1 : 0,
   }));
   const st = [starStyle(0), starStyle(1), starStyle(2)];
   const crownStyle = useAnimatedStyle(() => ({ transform: [{ scale: crownS.value <= 0 ? 0.001 : crownS.value }], opacity: crownS.value > 0 ? 1 : 0 }));
@@ -171,7 +172,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
               {[0, 1, 2].map((i) => (
                 <View key={i} style={styles.starSlot}>
                   <Image source={STAR} style={[styles.starEmpty]} />
-                  <Animated.Image source={STAR} style={[styles.star, i < stars ? null : styles.starHidden, st[i]]} />
+                  <Animated.Image source={STAR} style={[styles.star, st[i]]} />
                 </View>
               ))}
               <View style={styles.crownSlot}>
@@ -256,7 +257,6 @@ const styles = StyleSheet.create({
   starSlot: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   starEmpty: { position: 'absolute', width: 32, height: 32, opacity: 0.2, resizeMode: 'contain' },
   star: { width: 36, height: 36, resizeMode: 'contain' },
-  starHidden: { opacity: 0 },
   crownSlot: { marginLeft: 4, minWidth: 64, height: 30, alignItems: 'center', justifyContent: 'center' },
   crownEmpty: { position: 'absolute', fontFamily: 'Shark', fontSize: 13, color: '#B8C4D6', borderWidth: 2, borderColor: '#B8C4D6', borderRadius: 10, paddingHorizontal: 6, borderStyle: 'dashed' },
   crownGone: { opacity: 0 },

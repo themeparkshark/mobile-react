@@ -980,6 +980,7 @@ export function BossBrawl(props: BossBrawlProps) {
         fxRef.current?.flash({ color: '#1B2A4A', peak: reduced ? 0 : 0.25, ms: 360 });
         downOn.value = 1;
         setDown({ on: true, taps: 0 });
+        setHint(null);
         hero('getup', 'GET UP!', TIER_PUNISH, { ms: 1500 });
         small('TAP TAP TAP', TIER_PUNISH, { ms: 1500, key: 'getup' });
         break;
@@ -1429,6 +1430,7 @@ export function BossBrawl(props: BossBrawlProps) {
   const a11yTarget = (lane: number) => onInput(down.on ? IN_GETUP : IN_TARGET, lane, boutT.value);
 
   // ---- dev autoplay: a mastery-ish bot through the same input path ------------
+  const takeHits = __DEV__ ? Number(process.env.EXPO_PUBLIC_BOSS_TAKEHITS || 0) : 0;
   useEffect(() => {
     if (!autoplay || stage !== 'bout') return undefined;
     const tm: ReturnType<typeof setTimeout>[] = [];
@@ -1444,6 +1446,8 @@ export function BossBrawl(props: BossBrawlProps) {
       const a = b.attack;
       if (a && seenA !== `${b.cfg.bout}:${a.no}`) {
         seenA = `${b.cfg.bout}:${a.no}`;
+        // Dev capture: EXPO_PUBLIC_BOSS_TAKEHITS=n lets every tell land in the first n bouts (Knockdown, get-up, TKO).
+        if (b.cfg.bout < takeHits) return;
         if (a.hazardLane >= 0) at(a.hazardT0 + 320, () => onInput(IN_TARGET, a.hazardLane, boutT.value));
         a.steps.forEach((s, k) => {
           const when = s.graded ? s.I - 40 + Math.round((Math.random() - 0.5) * 60) : a.T + 300 + k * 120;
@@ -1559,7 +1563,8 @@ export function BossBrawl(props: BossBrawlProps) {
       objective={OBJECTIVE[boss]}
       score={shownDamage}
       multiplier={comboPct / 100}
-      fever={comboPct >= 200}
+      // FURY reads on the combo pill (lime edge); the shell's gold fever score is off (gold = hit here only).
+      fever={false}
       result={result}
       thresholds={THRESHOLDS}
       renderResults={(args) => (resultsExtras.current ? (
