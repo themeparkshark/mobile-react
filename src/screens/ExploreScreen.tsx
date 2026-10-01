@@ -76,6 +76,8 @@ import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
+import ChestMapButton from '../components/map/ChestMapButton';
+import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
@@ -750,6 +752,30 @@ function ExploreScreen() {
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
     otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
   });
+  // The daily chest presents itself once; "Back to map" puts it away until the
+  // next app open or the next day, and the map's chest button reopens it.
+  const [chestRequested, setChestRequested] = useState(false);
+  const [, setChestDismissals] = useState(0);
+  const chestUnclaimed = !!player && permissionGranted && !!dailyGift && dailyGift.redeemed_at === null
+    && hasCompleted('onboarding');
+  const chestScreenFree = chestMayPresent({
+    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind, firstCatchDone: true,
+    boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+  });
+  const chestShowing = mapFocused && !!dailyGift && chestShouldShow({
+    unclaimed: chestUnclaimed, autoReady: chestReady, screenFree: chestScreenFree,
+    requested: chestRequested, dismissed: chestDismissed(dailyGift.id),
+  });
+  const dailyGiftId = dailyGift?.id;
+  const onChestClosed = useCallback((claimed: boolean) => {
+    if (!claimed && dailyGiftId != null) markChestDismissed(dailyGiftId);
+    setChestRequested(false);
+    setChestDismissals(count => count + 1);
+  }, [dailyGiftId]);
+  const chestButton = chestUnclaimed && !chestShowing
+    ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -844,11 +870,11 @@ function ExploreScreen() {
         onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
-      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
-        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
+      {chestShowing && dailyGift &&
+        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
       <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
-        && !dailyGiftOccluded && !(dailyGift && dailyGift.redeemed_at === null)} />
+        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
       {/* Home Mode: the map always renders without a park, even before the
           first park check settles (it shows the park-check card until then).
           Gating it on parkLoaded left a blank grey screen whenever park state
@@ -857,7 +883,7 @@ function ExploreScreen() {
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} />
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
@@ -1156,7 +1182,7 @@ function ExploreScreen() {
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={chestButton} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>

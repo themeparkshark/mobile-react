@@ -14,6 +14,7 @@ const markers = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
 const adventure = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
 const timing = loadTs('src/screens/ExploreScreen/mapOpportunityTiming.ts');
 const queue = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+const chestPresence = loadTs('src/screens/ExploreScreen/dailyChestPresence.ts');
 
 // Modules the runtime implements itself; the stub proxy must not shadow them.
 const RUNTIME_OWNED = new Set(['react', 'react/jsx-runtime', 'react-native', 'react-native-reanimated',
@@ -78,6 +79,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/mapMarkerPresentation': markers,
     './ExploreScreen/adventureTicketPresentation': adventure,
     './ExploreScreen/mapPresentationQueue': queue,
+    './ExploreScreen/dailyChestPresence': chestPresence,
     './ExploreScreen/ws2Profiler': { withWs2Profiler: component => component },
     './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null },
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
