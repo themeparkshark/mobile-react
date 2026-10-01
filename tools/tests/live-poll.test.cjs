@@ -130,7 +130,8 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   const gym = read('src/components/GymBattle/GymMarker.tsx');
   assert.match(gym, /if \(!running\) \{\s*cancelAnimation\(pulseScale\)/);
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /ambient && !reducedMotion && alive\.running \? ambienceNow/);
+  assert.match(marker, /const base = alive\.running \? scenes : \[\];/);
+  assert.match(marker, /\{waterHome && waterSpot && \(\s*<Marker[^>]*>\s*\{waterKind \? <WaterAmbience/, 'pausing never adds or removes a map child');
   assert.match(marker, /showTimer && alive\.active &&/);
   const pill = read('src/components/LiveEventsPill.tsx');
   assert.match(pill, /const ticking = focused && appActive && \(rushes\.length > 0 \|\| raid\?\.status === 'active'\)/);

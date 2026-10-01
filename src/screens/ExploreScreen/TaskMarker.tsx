@@ -335,11 +335,16 @@ function TaskMarker({
   const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
   // Scenes are ambience: they unmount (and their loops stop) whenever the
   // living map pauses (another screen on top, background, calm tier).
+  const scenes = useMemo(() => ambient && !reducedMotion ? ambienceNow(look.ambience) : [], [ambient, look, reducedMotion]);
   const kinds = useMemo(() => {
-    const base = ambient && !reducedMotion && alive.running ? ambienceNow(look.ambience) : [];
+    const base = alive.running ? scenes : [];
     // A Rush always sparkles, near or far: it's worth walking to.
     return rush && !reducedMotion && alive.active ? [...base, 'rush' as const] : base;
-  }, [ambient, look, rush, reducedMotion, alive.running, alive.active]);
+  }, [scenes, rush, reducedMotion, alive.running, alive.active]);
+  // The water scene's own map marker stays mounted while paused (only its
+  // contents stop): adding and removing a map child on every focus change
+  // crashed MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]).
+  const waterHome = scenes.find(k => WATER_AMBIENCE.includes(k));
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -348,7 +353,7 @@ function TaskMarker({
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
   const glow = useMemo(() => resting ? null : waitGlow(live), [live, resting]);
-  const waterSpot = useWaterSpot(waterKind, latitude, longitude);
+  const waterSpot = useWaterSpot(waterHome, latitude, longitude);
 
   // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
   const lift = useSharedValue(isSelected ? 1 : 0);
@@ -394,9 +399,9 @@ function TaskMarker({
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
   return (<>
-    {waterKind && waterSpot && (
+    {waterHome && waterSpot && (
       <Marker coordinate={waterSpot} anchor={{ x: 0.5, y: 0.63 }}>
-        <WaterAmbience kind={waterKind} />
+        {waterKind ? <WaterAmbience kind={waterKind} /> : null}
       </Marker>
     )}
     <Marker
