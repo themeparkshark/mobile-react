@@ -94,13 +94,39 @@ export interface GameResult {
   stats?: ResultStat[];
   /** Ghost / rival / crew mate to compare against (near-miss line on the card). */
   rival?: { name: string; score: number } | null;
+  /** Bucket tallies filled before the score (HITS / COMBO / BONUS). */
+  buckets?: ResultStat[];
+  bucketValues?: number[];
+  /** Star slam spacing (ms), e.g. the win stinger's beat. */
+  starStepMs?: number;
   /**
    * Extra metadata forwarded verbatim as the 2nd arg of onComplete. This is
    * what carries {score, duration, seed, proof} to the server-authoritative
    * reward path. Never compute rewards on the client.
    */
   meta?: Record<string, unknown>;
+  /** One line under the card (a coaching tip). A wrap-up note wins over it. */
+  note?: string;
 }
+
+/** What a game-owned results surface receives (`renderResults`). */
+export interface ShellResultsArgs {
+  result: GameResult;
+  stars: number;
+  won: boolean;
+  /** Set when a queue event ended the run ('boarding' / 'left-queue'). */
+  wrapReason: WrapUpReason | null;
+  /** Continue / Close: runs the external onComplete contract (once). */
+  claim: () => void;
+  /** Present only when Play again / Challenge are allowed (never on paid rides or wrap-ups). */
+  rematch?: () => void;
+  challenge?: () => void;
+  reducedMotion: boolean;
+}
+
+/** Start count: 'full' 3-2-1-GO (default), 'go' a single GO (no clock), 'none' the game counts itself in. */
+export type CountdownStyle = 'full' | 'go' | 'none';
+export type CountdownScrim = 'default' | 'light' | 'none';
 
 export interface GameShellV2Handle {
   /** Hold the game (manual pause). Movement never calls this. */
@@ -156,6 +182,26 @@ interface GameShellV2Props {
   onRematch?: () => void;
   /** Offer CHALLENGE (ghost / score challenge to a friend or crew). */
   onChallenge?: () => void;
+  /** Label for the CHALLENGE button (default 'Challenge'). */
+  challengeLabel?: string;
+  /** Game-owned row under the results card (share, album, missions, unlock card). */
+  resultExtras?: React.ReactNode;
+  /** @deprecated alias of resultExtras (Sharky). */
+  resultsExtra?: React.ReactNode;
+  /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
+  renderResults?: (args: ShellResultsArgs) => React.ReactNode;
+  /** Game-specific settings in the hold sheet (Trivia Duel's Relaxed pace). */
+  pauseExtras?: React.ReactNode;
+  /** Hide the header score (the game draws its own, e.g. Trivia's rail). */
+  hideHeaderScore?: boolean;
+  /** Replace the header score with a game-owned node (Current Quest's run bar chip). */
+  headerScore?: React.ReactNode;
+  /** Start count style. Default 'full'. */
+  countdownStyle?: CountdownStyle;
+  /** @deprecated false = countdownStyle 'none' (Parade Beat counts in on the song's bar). */
+  introCountdown?: boolean;
+  /** Countdown backdrop: 'default' navy scrim, 'light' white wash, 'none' (Trivia: the stage stays readable). */
+  countdownScrim?: CountdownScrim;
   /**
    * Movement never pauses (QUEUE REALITY). 'pause' is accepted for older
    * call sites and treated as play-through.
@@ -165,8 +211,6 @@ interface GameShellV2Props {
   pauseOnLineMove?: boolean;
   /** 'countdown' = quick 3-2-1 after a hold (default); 'instant' = none. */
   resumeStyle?: 'countdown' | 'instant';
-  /** Start count: 'full' = 3-2-1-GO (default); 'go' = a single GO for games with no clock (Current Quest). */
-  countdownStyle?: 'full' | 'go';
   /** Game id for snapshots and proof meta, e.g. 'whack'. */
   gameId?: string;
   /** Session key (game + ride + attempt) for interruption snapshots. */
@@ -206,8 +250,17 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onQuit,
       onRematch,
       onChallenge,
+      challengeLabel = 'Challenge',
+      resultExtras,
+      resultsExtra,
+      renderResults,
+      pauseExtras,
+      hideHeaderScore = false,
+      headerScore,
+      countdownStyle: countdownStyleProp,
+      introCountdown,
+      countdownScrim = 'default',
       resumeStyle = 'countdown',
-      countdownStyle = 'full',
       gameId,
       sessionKey,
       getSnapshot,
@@ -222,6 +275,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
+    const countdownStyle: CountdownStyle = countdownStyleProp ?? (introCountdown === false ? 'none' : 'full');
     const firstCount = countdownStyle === 'go' ? 'GO!' : '3';
     const [countText, setCountText] = useState(firstCount);
     const [pauseReason, setPauseReason] = useState<string | undefined>();
@@ -314,6 +368,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (phase !== 'countdown' || !visible) return;
       clearCountdown();
+      if (countdownStyle === 'none') {
+        beginPlay();
+        return;
+      }
       const steps = countdownStyle === 'go' ? ['GO!'] : ['3', '2', '1', 'GO!'];
       steps.forEach((label, i) => {
         const t = setTimeout(() => {
@@ -330,6 +388,25 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       countdownTimers.current.push(done);
       return clearCountdown;
     }, [phase, visible, beginPlay, clearCountdown, punchCount, countdownStyle]);
+
+    // -- Play again: the game cleared its result, so run a fresh start count. --
+    const hadResultRef = useRef(false);
+    useEffect(() => {
+      if (result) {
+        hadResultRef.current = true;
+        return;
+      }
+      if (!visible || !hadResultRef.current || phase !== 'results' || wrap) return;
+      hadResultRef.current = false;
+      startedRef.current = false;
+      claimedRef.current = false;
+      clearCelebration();
+      resultsScale.value = 0.7;
+      resultsOpacity.value = 0;
+      setCountText(firstCount);
+      setPhase('countdown');
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result, phase, wrap, visible]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -356,20 +433,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         }, 900));
       }
     }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration, resultsOpacity, resultsScale]);
-
-    // Play again: the game clears its result, so the shell runs a fresh countdown.
-    const hadResult = useRef(false);
-    useEffect(() => {
-      if (result) { hadResult.current = true; return; }
-      if (!hadResult.current || phase !== 'results' || wrap) return;
-      hadResult.current = false;
-      startedRef.current = false;
-      claimedRef.current = false;
-      resultsScale.value = 0.7;
-      resultsOpacity.value = 0;
-      setCountText(firstCount);
-      setPhase('countdown');
-    }, [result, phase, wrap, resultsScale, resultsOpacity]);
 
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
@@ -630,16 +693,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 </Text>
               ) : null}
             </View>
-            <View style={styles.headerScore}>
-              <ScoreDisplay
-                score={score}
-                multiplier={multiplier}
-                fever={fever}
-                personalBest={personalBest}
-                compact
-                reducedMotion={reducedMotion}
-              />
-            </View>
+            {hideHeaderScore ? null : (
+              <View style={styles.headerScore}>
+                {headerScore ?? (
+                  <ScoreDisplay
+                    score={score}
+                    multiplier={multiplier}
+                    fever={fever}
+                    personalBest={personalBest}
+                    compact
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+              </View>
+            )}
           </View>
 
           {goal ? <GoalMeter {...goal} reducedMotion={reducedMotion} /> : null}
@@ -658,7 +725,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
           {/* Countdown overlay */}
           {phase === 'countdown' ? (
-            <Pressable style={styles.overlay} onPress={skipCountdown}>
+            <Pressable
+              style={[styles.overlay, countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null]}
+              onPress={skipCountdown}
+            >
               {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
               <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
               {objective ? <Text style={styles.objective}>{objective}</Text> : null}
@@ -680,6 +750,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>
                 <Text style={styles.sheetBody}>Your run is saved right where you left it.</Text>
+                {pauseExtras ?? null}
                 <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn]} onPress={doResume}>
                   <Text style={styles.primaryBtnTxt}>Resume</Text>
                 </TouchableOpacity>
@@ -691,7 +762,23 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           ) : null}
 
           {/* Results */}
-          {phase === 'results' ? (
+          {phase === 'results' && renderResults && effectiveResult ? (
+            <View style={styles.overlay} pointerEvents="box-none">
+              <Animated.View style={[{ width: '100%', alignItems: 'center' }, resultsStyle]}>
+                {renderResults({
+                  result: effectiveResult,
+                  stars,
+                  won,
+                  wrapReason: wrap?.reason ?? null,
+                  claim: handleClaim,
+                  rematch: !rideChallenge && !wrap ? onRematch : undefined,
+                  challenge: !rideChallenge && !wrap ? onChallenge : undefined,
+                  reducedMotion,
+                })}
+              </Animated.View>
+            </View>
+          ) : null}
+          {phase === 'results' && !(renderResults && effectiveResult) ? (
             <View style={styles.overlay} pointerEvents="box-none">
               <Animated.View style={[{ width: '86%' }, resultsStyle]}>
                 <ResultsCard
@@ -703,9 +790,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   maxCombo={effectiveResult?.maxCombo}
                   stats={effectiveResult?.stats}
                   rival={effectiveResult?.rival}
-                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : undefined}
+                  buckets={effectiveResult?.buckets}
+                  bucketValues={effectiveResult?.bucketValues}
+                  starStepMs={effectiveResult?.starStepMs}
+                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
                   reducedMotion={reducedMotion}
                 />
+                {resultExtras ?? resultsExtra ?? null}
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
@@ -724,7 +815,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                       {onChallenge ? (
                         <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onChallenge}>
                           <GameIcon name="swords" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>Challenge</Text>
+                          <Text style={styles.secondaryBtnTxtBold}>{challengeLabel}</Text>
                         </TouchableOpacity>
                       ) : null}
                     </View>
@@ -818,6 +909,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(8,56,128,0.45)',
   },
+  scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
+  scrimNone: { backgroundColor: 'transparent' },
   overlayLight: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
