@@ -34,11 +34,13 @@ export function MilestonePickSheet({ view, busy, onConfirm, onClose }: {
               <Pressable key={choice.id} disabled={choice.owned} accessibilityRole="button" accessibilityState={{ selected, disabled: choice.owned }}
                 accessibilityLabel={`${choice.name}${choice.owned ? ', owned' : ''}`}
                 onPress={() => setPicked(choice.id)}
-                style={{ width: 92, alignItems: 'center', padding: 6, borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 3, borderColor: selected ? BRAND.gold : BRAND.sky, opacity: choice.owned ? 0.5 : 1 }}>
+                style={{ width: 104, alignItems: 'center', padding: 6, borderRadius: RADIUS.md, backgroundColor: BRAND.white, borderWidth: 3, borderColor: selected ? BRAND.gold : BRAND.sky, opacity: choice.owned ? 0.5 : 1 }}>
                 {(choice.paper_url || choice.icon_url) ? <Image source={{ uri: (choice.paper_url ?? choice.icon_url) as string }} contentFit="contain" style={{ width: 64, height: 64 }} />
                   : <GameIcon name="gift" size={40} />}
-                <Text numberOfLines={2} style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navy, textAlign: 'center' }}>{choice.name}</Text>
-                {choice.owned && <Text style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.navySoft }}>OWNED</Text>}
+                <Text numberOfLines={2} style={{ fontFamily: 'Knockout', fontSize: 15, lineHeight: 17, color: BRAND.navy, textAlign: 'center' }}>{choice.name}</Text>
+                {choice.owned && (
+                  <View style={{ position: 'absolute', top: -8, right: -8 }} accessible={false}><GameIcon name="check" size={26} /></View>
+                )}
               </Pressable>
             );
           })}

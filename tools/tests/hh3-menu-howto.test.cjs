@@ -49,6 +49,7 @@ test('How to Play is 4 to 6 big cards: 7 words or fewer, no ride-coin clash, a v
     assert.equal(card.line.split(/(?<=[.!?])\s+/).length, 1, `${card.id}: one sentence`);
     assert.doesNotMatch(card.title + card.line, EM_DASH);
     assert.doesNotMatch(card.title + card.line, /\bcoins?\b/i, `${card.id}: "coins" is the currency only`);
+    assert.doesNotMatch(card.line, /play games/i, `${card.id}: cards 4 and 5 say different things`);
     assert.ok(topics.helpTopic(card.topic), `${card.id} opens a More topic`);
     assert.ok(fs.existsSync(path.join(root, `assets/sounds/howto/vo-${card.art}.mp3`)), `voice for ${card.id}`);
   }
@@ -67,7 +68,11 @@ test('How to Play shark is Alex\'s real PNG (ART_RULES rule 1), never a generate
   if (!fs.existsSync(builder)) return; // Art pipeline lives outside the repo.
   const py = fs.readFileSync(builder, 'utf8');
   assert.match(py, /sharks\/CLASSIC UPDATE 2023 WITH EYES\.png/);
-  assert.match(py, /export\(shark, 'shark'/);
+  assert.match(py, /\('shark', load_shark\('CLASSIC UPDATE 2023 WITH EYES\.png'\)\), \('shark-happy', happy\)/, 'two expressions, both Alex PNGs');
+  assert.match(py, /def keyline/, 'unify pass: matched outline weight');
+  assert.match(demos, /styles\.shadow/, 'contact shadow under the shark');
+  assert.match(demos, /happy \? SHARK_HAPPY : SHARK/);
+  assert.match(demos, /POINTER/, 'a glove pointer, not a hand next to the shark');
 });
 
 test('page math clamps to the deck', () => {
@@ -87,8 +92,12 @@ test('How to Play screen: looping demos, next card peeks, read aloud, springy do
   assert.match(screen, /<HowToDemo art=\{card\.art\}/);
   assert.match(screen, /VOICE\[card\.art\]/);
   assert.match(screen, /'Read aloud'/);
+  assert.match(screen, /if \(ticket !== voiceTicket\.current\) \{ void sound\.unloadAsync/, 'a stale clip never plays over a newer one');
+  assert.match(screen, /READ_ALOUD_SEEN/, 'first visit reads card 1 aloud');
+  assert.doesNotMatch(screen, /styles\.card, \{ width \}, cardStyle\]\} accessible/, 'the card never groups its speaker away from VoiceOver');
   assert.match(screen, /playSfx\('ui\.select'/);
   assert.match(screen, /interpolateColor\(distance/, 'dots follow the finger without a spring per frame');
+  assert.match(screen, /scaleX: interpolate\(distance/, 'dot width is a transform, not layout');
   assert.doesNotMatch(screen, /withSpring\(on \?/);
   assert.match(screen, /Learn more/);
   assert.doesNotMatch(screen, /of \{HOW_TO_CARDS\.length\}<\/Text>/, 'no "1 OF 5" eyebrow');
@@ -119,7 +128,9 @@ test('menu: real X close, whole-row targets, VoiceOver labels, reverse-stagger c
   assert.match(menu, /close-red\.webp/);
   assert.match(menu, /accessibilityLabel=\{open \? 'Close menu' : 'Open menu'\}/);
   assert.match(menu, /accessibilityElementsHidden=\{!open\}/);
-  assert.match(menu, /accessibilityViewIsModal=\{open\}/);
+  assert.match(menu, /accessibilityViewIsModal=\{open\} onAccessibilityEscape=/, 'one modal scope holds rows and the close button');
+  assert.match(menu, /AnimatedBlur animatedProps=\{blurProps\}/, 'blur never sits under a fading parent');
+  assert.match(menu, /reduced \? \{ opacity: t\.value \}/, 'Reduce Motion rows only fade');
   assert.match(menu, /\{round\}\s*\{label\}/, 'icon and label are one Pressable row');
   assert.match(menu, /badge=\{item\.id === 'sets' && rewardWaiting\}/);
   assert.match(menu, /useUiReducedMotion/);

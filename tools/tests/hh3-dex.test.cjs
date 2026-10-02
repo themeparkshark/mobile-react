@@ -196,8 +196,12 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   const src = read('src/screens/SetCollection/RidePhoto.tsx');
   const frames = src.slice(src.indexOf('export const PHOTO_FRAMES'), src.indexOf('};', src.indexOf('export const PHOTO_FRAMES')));
   assert.match(frames, /good: \{ outer: '#ffffff'[^}]*mat: null, stars: false, plaque: false/);
-  assert.match(frames, /great: \{[^}]*mat: '#[0-9a-f]{6}', stars: true, plaque: false/);
-  assert.match(frames, /frame_it: \{ outer: '#f5b400'[^}]*plaque: true/);
+  assert.match(frames, /great: \{ outer: '#cfe2f3'[^}]*mat: null, stars: true, plaque: false/, 'Great is one silver-blue frame, no tinted mat');
+  assert.match(frames, /frame_it: \{ outer: '#f5b400'[^}]*mat: null[^}]*plaque: true/);
+  // The find sits up front, left of the lap bar (never skewered by it), bigger than before.
+  assert.match(src, /left: carW \* 0\.25, bottom: carH \* 0\.34, width: carW \* 0\.36/);
+  assert.match(src, /<Text style=\{styles\.shareKicker\}>My Ride Photo<\/Text>/, 'never the child\'s username on a public card');
+  assert.doesNotMatch(src, /sharkName/);
   // The photo is the map catch's Alex-style ride layers with the real shark in the car, never placeholder vector art.
   for (const layer of ['scene-far.webp', 'scene-near.webp', 'car-back.webp', 'car-front.webp', 'howto/shark.webp']) assert.ok(src.includes(layer), layer);
   assert.doesNotMatch(src, /RIDE PHOTO<|speed:|sun:/);
@@ -295,16 +299,73 @@ test('VoiceOver and Reduce Motion: modals expose every control, reveal guards ea
     'src/screens/HowToPlayScreen.tsx', 'src/screens/HowToPlay/HowToDemos.tsx']) assert.match(read(file), /useUiReducedMotion|reduced/, file);
 });
 
-test('the set-complete reveal: beats in order with the button last, opaque scrim, rewards fly to the HUD', () => {
+test('the set-complete reveal: beats in order with the button last, sprite rays, gold medal, sockets, fade back', () => {
   const reveal = read('src/screens/SetCollection/DexReveal.tsx');
   const beat = reveal.match(/const BEAT = \{ ([^}]+) \}/)[1];
   const at = Object.fromEntries(beat.split(',').map(part => part.trim().split(': ')).map(([k, v]) => [k, Number(v)]));
   assert.ok(at.slam < at.ribbon && at.ribbon < at.prizes, 'medal, ribbon, prizes');
   assert.match(reveal, /plaqueAt \+ \(hasTitle \? 200 : 0\) \+ BEAT\.cta/, 'button rises last');
-  assert.match(reveal, /stopOpacity="1"/, 'opaque scrim');
+  assert.doesNotMatch(reveal, /react-native-svg/, 'no full-screen SVG layers (tens of MB of bitmap)');
+  assert.match(reveal, /reveal\/rays\.webp/);
+  assert.match(reveal, /alex-ui\/round-gold\.webp/, 'Alex gold medal');
+  assert.match(reveal, /styles\.glint/);
+  assert.match(reveal, /styles\.socket/, 'sockets stay after the fly-to');
+  assert.match(reveal, /label="Collect!"/);
+  assert.doesNotMatch(reveal, /Adding\.\.\.|Claiming\.\.\./);
+  assert.match(reveal, /closeWithFade/);
   assert.match(reveal, /<HudCounter/);
-  assert.match(reveal, /fly=\{paying && !reduced\}/);
-  assert.doesNotMatch(reveal, /rgba\(255,255,255,0\.14\)/, 'no see-through prize chips');
+  assert.match(reveal, /prize\.icon !== 'shark'/, 'a wearable gets its own wide plaque');
+  for (const sprite of ['rays', 'scrim', 'glow']) {
+    const size = fs.statSync(path.join(root, `assets/images/reveal/${sprite}.webp`)).size;
+    assert.ok(size < 40 * 1024, `${sprite} sprite is small`);
+  }
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  assert.doesNotMatch(parts, /'Claiming\.\.\.'/);
+});
+
+test('round 3: swap story, recycled tiles, focus refresh, light ticks, small phones, gems', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const card = read('src/screens/SetCollection/DexItemCard.tsx');
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  const look = read('src/screens/SetCollection/dexLook.tsx');
+  // Swap: a goal meter, the real price in the explainer, a trade icon.
+  const goal = plain(dex.swapGoal([{ found: true, exchangeCost: 4 }, { found: false, exchangeCost: 8 }, { found: false, exchangeCost: 12 }], 5));
+  assert.deepEqual(goal, { cost: 8, have: 5, extra: 0, ready: false, anyMissing: true });
+  assert.equal(dex.swapGoal([{ found: false, exchangeCost: 8 }], 14).extra, 6);
+  assert.match(screen, /cost=\{goal\.cost\}/);
+  assert.match(screen, /x\{cost\}/, 'the explainer shows the real price');
+  for (const src of [tile, card, parts]) assert.doesNotMatch(src, /name="retry"/, 'trade icon, never refresh');
+  // Recycled FlashList cells drop per-item state.
+  assert.match(tile, /setArtFailed\(false\);\s*setFlipping\(false\);/);
+  assert.match(tile, /if \(timer\) clearTimeout\(timer\)/);
+  // Focus refresh reads live refs; no lint escape hatches.
+  assert.match(screen, /slugRef\.current/);
+  assert.doesNotMatch(screen, /eslint-disable/);
+  // A tick re-reads only the v3 dex when it is live.
+  assert.match(screen, /void loadSets\(true\);/);
+  assert.match(screen, /reuse = light && dex != null/);
+  // The item card scrolls and scales on small phones.
+  assert.match(card, /<ScrollView style=\{\{ maxHeight: height \* 0\.78 \}\}/);
+  // Swap flips in place with a stamp.
+  assert.match(card, /Swapped!/);
+  // One unclipped gem: each diamond in its own box.
+  assert.match(look, /const box = Math\.ceil\(size \* 1\.45\)/);
+  assert.match(tile, /count: \{\s*position: 'absolute', bottom: 5, right: 4/, 'the count badge never covers the gems');
+  // Claim clears the compass.
+  assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
+  assert.match(screen, /listRef\.current\?\.scrollToOffset/);
+  // Spares sheet keeps Got it reachable.
+  assert.doesNotMatch(screen, /sparesCard\} accessibilityViewIsModal accessible/);
+  // Rare-or-better never says "Anytime, anywhere".
+  assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very rare: about 1 in 25 finds');
+  assert.equal(dex.rarityHint('Anytime, anywhere', 1), 'Anytime, anywhere');
+  assert.equal(dex.rarityHint('After sunset', 5), 'After sunset');
+  // Reduce Motion: set header and cards fade only.
+  assert.match(parts, /reduced \? \{ opacity: 0\.85 \+ 0\.15 \* lift\.value \}/);
+  assert.match(parts, /reduced \? \{ opacity: enter\.value \}/);
+  // Pick sheet text floor.
+  assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /fontSize: 1[0-4]\b/);
 });
 
 test('collection book files: no em dashes, no emoji, no purple', () => {
@@ -323,7 +384,7 @@ test('each set card says when it spawns and marks the focused set (moved from th
   const base = dex.fromLegacySet(legacySet());
   const now = new Date('2026-10-02T12:00:00Z');
   assert.equal(dex.tabStatus({ ...base, spawningNow: true, spawnHint: null }, now), null, 'an always-on set has no pill');
-  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: true, spawnHint: 'After sunset' }, now)), { text: 'On now', live: true });
+  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: true, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: true }, 'the special fact, never "On now"');
   assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: false, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: false });
   assert.deepEqual(plain(dex.tabStatus({ ...base, status: 'resting', spawnHint: 'Weekends' }, now)), { text: 'Weekends', live: false });
   assert.equal(dex.tabStatus({ ...base, status: 'upcoming', startsAt: '2026-10-15T07:00:00Z' }, now).text, 'Opens Oct 15');

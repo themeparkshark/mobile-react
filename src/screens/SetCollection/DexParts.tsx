@@ -107,7 +107,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
   useEffect(() => {
     lift.value = reduced ? withTiming(selected ? 1 : 0, { duration: 150 }) : withSpring(selected ? 1 : 0, { damping: 9, stiffness: 210 });
   }, [selected, reduced, lift]);
-  const liftStyle = useAnimatedStyle(() => ({
+  const liftStyle = useAnimatedStyle(() => (reduced ? { opacity: 0.85 + 0.15 * lift.value } : {
     opacity: 0.85 + 0.15 * lift.value,
     transform: [{ translateY: -6 * lift.value }, { scale: 0.94 + 0.06 * lift.value }],
   }));
@@ -167,8 +167,10 @@ export function BookStrip({ found, total, dailyRare, onDaily }: {
 }
 
 /** Gold ribbon with the set name, its badge on the left, the one count ring on the right, and two icon buttons. */
-export function SetHeader({ set, onFocus, focusBusy, onOdds }: {
+export function SetHeader({ set, onFocus, focusBusy, onOdds, stamp }: {
   readonly set: DexSet; readonly onFocus: (() => void) | null; readonly focusBusy: boolean; readonly onOdds: () => void;
+  /** A title just won: stamps onto the ribbon after the reveal closes. */
+  readonly stamp?: string | null;
 }) {
   const reduced = useUiReducedMotion();
   const enter = useSharedValue(0);
@@ -176,7 +178,8 @@ export function SetHeader({ set, onFocus, focusBusy, onOdds }: {
     enter.value = 0;
     enter.value = reduced ? withTiming(1, { duration: 150 }) : withSpring(1, { damping: 12, stiffness: 190 });
   }, [set.slug, reduced, enter]);
-  const style = useAnimatedStyle(() => ({ opacity: enter.value, transform: [{ translateY: (1 - enter.value) * 12 }] }));
+  const style = useAnimatedStyle(() => (reduced ? { opacity: enter.value }
+    : { opacity: enter.value, transform: [{ translateY: (1 - enter.value) * 12 }] }));
   return (
     <Animated.View style={[styles.header, style]}>
       <View style={[styles.headerBadge, { borderColor: set.color }]}>
@@ -185,6 +188,7 @@ export function SetHeader({ set, onFocus, focusBusy, onOdds }: {
       <View style={styles.ribbonWrap}>
         <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
         <Text style={styles.ribbonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} accessibilityRole="header">{set.name}</Text>
+        {!!stamp && <TitleStamp key={stamp} text={stamp} reduced={reduced} />}
       </View>
       <ProgressRing progress={progressFraction(set)} size={62} stroke={7} color={set.isComplete ? BRAND.gold : set.color} track="#d5e6f6">
         <View style={styles.countWell} accessible accessibilityLabel={`${set.found} of ${set.total} found`}>
@@ -208,6 +212,21 @@ export function SetHeader({ set, onFocus, focusBusy, onOdds }: {
   );
 }
 
+function TitleStamp({ text, reduced }: { readonly text: string; readonly reduced: boolean }) {
+  const t = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    if (reduced) return;
+    t.value = withSequence(withTiming(1.35, { duration: 140 }), withSpring(1, { damping: 7, stiffness: 240 }));
+  }, [reduced, t]);
+  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 2), transform: [{ scale: t.value }, { rotate: '-7deg' }] }));
+  return (
+    <Animated.View style={[styles.titleStamp, style]} accessible accessibilityLabel={`New title: ${text}`}>
+      <GameIcon name="crown" size={18} />
+      <Text style={styles.titleStampText} numberOfLines={1}>{text}</Text>
+    </Animated.View>
+  );
+}
+
 /** Small icon chip: "After sunset" with a star, "Rainy days" with a sparkle. Only for special timing. */
 export function StatusChip({ text, icon }: { readonly text: string; readonly icon: 'star' | 'timer' | 'sparkle' | 'map' }) {
   return (
@@ -218,18 +237,26 @@ export function StatusChip({ text, icon }: { readonly text: string; readonly ico
   );
 }
 
-/** Spares as a meter of sticker dots (up to 12), tappable for the one-picture explainer. */
-export function SparesMeter({ spares, onPress }: { readonly spares: number; readonly onPress: () => void }) {
-  const shown = Math.min(12, spares);
+/** Spares as progress toward the next swap: sockets fill to the cheapest missing item's cost, then glow gold. */
+export function SparesMeter({ spares, cost, ready, extra, onPress }: {
+  readonly spares: number; readonly cost: number; readonly ready: boolean; readonly extra: number; readonly onPress: () => void;
+}) {
+  const have = Math.min(cost, spares);
   return (
-    <SpringPress onPress={onPress} accessibilityLabel={`${spares} spare copies. Tap to see how swapping works.`} style={styles.chip}>
-      <GameIcon name="retry" size={22} />
-      <View style={styles.spareDots}>
-        {Array.from({ length: Math.max(4, shown) }, (_, index) => (
-          <View key={index} style={[styles.spareDot, index < shown ? styles.spareDotOn : null]} />
-        ))}
-      </View>
-      <Text style={styles.chipText}>{spares}</Text>
+    <SpringPress onPress={onPress} style={[styles.meterPlaque, ready && styles.meterReady]}
+      accessibilityLabel={ready ? `Swap ready. You have ${spares} spares; a swap costs ${cost}. Tap to see how.`
+        : `${have} of ${cost} spares for a swap. Tap to see how.`}>
+      <GameIcon name="swap" size={28} />
+      {ready ? (
+        <Text style={styles.meterReadyText} maxFontSizeMultiplier={1.2}>Swap ready!</Text>
+      ) : (
+        <View style={styles.meterSockets}>
+          {Array.from({ length: Math.min(12, cost) }, (_, index) => (
+            <View key={index} style={[styles.meterSocket, index < have && styles.meterSocketOn]} />
+          ))}
+        </View>
+      )}
+      <Text style={[styles.meterCount, ready && styles.meterCountReady]} maxFontSizeMultiplier={1.2}>{ready ? (extra > 0 ? `+${extra}` : '') : `${have}/${cost}`}</Text>
     </SpringPress>
   );
 }
@@ -277,11 +304,14 @@ export function RewardTrack({ set, busyId, onClaim, titleWorn, titleBusy, onTitl
   const ready = nodes.find(node => node.reward.status === 'claimable')?.reward ?? null;
   const next = ready ?? nodes.find(node => node.reward.status === 'locked')?.reward ?? set.reward;
   return (
-    <Animated.View style={[styles.trackPanel, finished && styles.trackPanelDone, popStyle]}>
-      <View style={styles.trackHead}>
-        <GameIcon name={finished ? 'check' : ready ? 'gift' : 'trophy'} size={32} />
+    <Animated.View style={[styles.trackWrap, popStyle]}>
+      <View style={styles.trackRibbon}>
+        <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
+        <GameIcon name={finished ? 'check' : ready ? 'gift' : 'trophy'} size={26} />
         <Text style={styles.trackTitle} maxFontSizeMultiplier={1.2}>{finished ? 'You got it!' : ready ? 'Tap to claim!' : 'Finish the set'}</Text>
       </View>
+      <View style={[styles.trackPanel, finished && styles.trackPanelDone]}>
+      <LinearGradient colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.blueGloss} pointerEvents="none" />
       <View style={styles.trackLine}>
         <View style={styles.trackBar}>
           <Animated.View style={[styles.trackFill, { backgroundColor: finished ? BRAND.gold : set.color }, fillStyle]} />
@@ -292,15 +322,16 @@ export function RewardTrack({ set, busyId, onClaim, titleWorn, titleBusy, onTitl
       </View>
       <PrizeRow reward={next} done={finished && next === set.reward} />
       {ready && (
-        <GameButton label={busyId === ready.id ? 'Claiming...' : ready.needsPick ? 'Pick and claim' : 'Claim!'} icon="gift"
+        <GameButton label={ready.needsPick ? 'Pick and claim' : 'Claim!'} icon="gift"
           loading={busyId === ready.id} onPress={() => onClaim(ready)} style={{ marginTop: 10 }}
           accessibilityLabel={`Claim ${ready.label}`} />
       )}
       {set.reward.status === 'pending' && <Text style={styles.trackNote}>Your shark item is on the way.</Text>}
       {finished && onTitle && set.reward.title && (
-        <GameButton label={titleBusy ? 'Saving...' : titleWorn ? 'Take off title' : 'Wear title'} icon="crown"
+        <GameButton label={titleWorn ? 'Take off title' : 'Wear title'} icon="crown"
           variant="secondary" loading={titleBusy} onPress={onTitle} style={{ marginTop: 10 }} />
       )}
+      </View>
     </Animated.View>
   );
 }
@@ -398,11 +429,11 @@ const styles = StyleSheet.create({
   tabStatusText: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navy, flexShrink: 1 },
   liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22b357', borderWidth: 1.5, borderColor: BRAND.white },
   tabHunt: {
-    position: 'absolute', top: -6, left: -4, width: 34, height: 34, borderRadius: 17, backgroundColor: BRAND.white,
+    position: 'absolute', top: 6, left: 6, width: 34, height: 34, borderRadius: 17, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.blue,
   },
   tabDot: {
-    position: 'absolute', top: -6, right: -4, width: 34, height: 34, borderRadius: 17, backgroundColor: BRAND.white,
+    position: 'absolute', top: 6, right: 6, width: 34, height: 34, borderRadius: 17, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,
   },
   bookRow: { flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 12 },
@@ -425,6 +456,11 @@ const styles = StyleSheet.create({
   },
   ribbonWrap: { flex: 1, height: 58, marginLeft: -16, justifyContent: 'center', paddingLeft: 26, paddingRight: 16 },
   ribbonText: { fontFamily: 'Shark', fontSize: 23, color: '#7a3d00', marginTop: -6 },
+  titleStamp: {
+    position: 'absolute', right: 6, bottom: -14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8,
+    height: 28, borderRadius: 8, backgroundColor: '#c0392b', borderWidth: 2, borderColor: '#ffe07a', maxWidth: 170,
+  },
+  titleStampText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, flexShrink: 1 },
   countWell: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
   countBig: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   countSmall: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
@@ -439,28 +475,47 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#bcd9f2',
   },
   chipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, flexShrink: 1 },
-  spareDots: { flexDirection: 'row', gap: 3 },
-  spareDot: { width: 9, height: 9, borderRadius: 3, backgroundColor: '#d5e3f0', transform: [{ rotate: '45deg' }] },
-  spareDotOn: { backgroundColor: BRAND.blueBright },
+  meterPlaque: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 12, borderRadius: 16,
+    backgroundColor: '#1a8fe3', borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: '#0b5aa0',
+  },
+  meterReady: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
+  meterSockets: { flexDirection: 'row', gap: 3 },
+  meterSocket: { width: 12, height: 16, borderRadius: 4, backgroundColor: '#0b5aa0', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  meterSocketOn: { backgroundColor: BRAND.goldLight, borderColor: BRAND.white },
+  meterCountReady: { color: '#7a3d00', textShadowColor: 'transparent' },
+  meterReadyText: { fontFamily: 'Shark', fontSize: 17, color: '#7a3d00' },
+  meterCount: {
+    fontFamily: 'Shark', fontSize: 16, color: BRAND.white,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+  },
   prizeRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 6 },
   prize: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36, paddingHorizontal: 9, borderRadius: 12,
-    backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#bcd9f2', maxWidth: 220,
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, paddingHorizontal: 9, borderRadius: 12,
+    backgroundColor: '#1a8fe3', borderWidth: 2, borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: '#0b5aa0',
+    maxWidth: 220,
   },
-  prizeDone: { borderColor: BRAND.green },
-  prizeText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, flexShrink: 1 },
+  prizeDone: { borderColor: '#bff0cd' },
+  prizeText: {
+    fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, flexShrink: 1,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+  },
   prizeCheck: { position: 'absolute', top: -8, right: -8 },
-  trackPanel: {
-    marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 20, backgroundColor: BRAND.cream,
-    borderWidth: 3, borderColor: BRAND.gold, borderBottomWidth: 6, borderBottomColor: BRAND.goldLip,
+  trackWrap: { marginHorizontal: 16, marginTop: 14 },
+  trackRibbon: {
+    alignSelf: 'center', width: 250, height: 52, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingBottom: 6, marginBottom: -22,
   },
-  trackPanelDone: { backgroundColor: '#fff4c7' },
-  trackHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  trackTitle: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
+  trackPanel: {
+    paddingHorizontal: 12, paddingTop: 26, paddingBottom: 12, borderRadius: 20, backgroundColor: '#1a8fe3', overflow: 'hidden',
+    borderWidth: 4, borderColor: BRAND.white, borderBottomWidth: 8, borderBottomColor: '#0b5aa0',
+  },
+  trackPanelDone: { backgroundColor: '#e8a700', borderBottomColor: '#a87700' },
+  trackTitle: { fontFamily: 'Shark', fontSize: 19, color: '#7a3d00' },
   trackLine: { height: 50, justifyContent: 'center', marginTop: 2, marginHorizontal: 18 },
-  trackBar: { height: 14, borderRadius: 7, backgroundColor: '#e2ecf5', overflow: 'hidden', borderWidth: 2, borderColor: BRAND.white },
+  trackBar: { height: 14, borderRadius: 7, backgroundColor: '#0b5aa0', overflow: 'hidden', borderWidth: 2, borderColor: BRAND.white },
   trackFill: { height: '100%', width: '100%', transformOrigin: 'left' },
-  trackNote: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.blue, marginTop: 8, textAlign: 'center' },
+  trackNote: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white, marginTop: 8, textAlign: 'center' },
   node: { position: 'absolute', top: 2, marginLeft: -22, alignItems: 'center' },
   nodeBall: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.white, borderWidth: 3, borderColor: '#c8d9ea',
@@ -468,7 +523,7 @@ const styles = StyleSheet.create({
   },
   nodeReady: { borderColor: BRAND.gold, backgroundColor: '#fff3c4', ...SHADOW.card, shadowColor: BRAND.gold, shadowOpacity: 0.9, shadowRadius: 8 },
   nodeDone: { borderColor: BRAND.green, backgroundColor: '#eafbef' },
-  nodeLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: -2 },
+  nodeLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: -2 },
   spark: { position: 'absolute', width: 14, height: 14, borderRadius: 3 },
   bluePanel: {
     backgroundColor: '#1a8fe3', borderRadius: 22, borderWidth: 4, borderColor: BRAND.white, borderBottomWidth: 8,

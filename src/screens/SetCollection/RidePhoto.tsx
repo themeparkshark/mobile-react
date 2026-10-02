@@ -33,8 +33,8 @@ export const RIDE_SHARE_HEIGHT = 640;
 /** Frame look per grade. Pure data so tests can check the three tiers differ. */
 export const PHOTO_FRAMES: Readonly<Record<PhotoGrade, { outer: string; lip: string; border: number; mat: string | null; stars: boolean; plaque: boolean }>> = {
   good: { outer: '#ffffff', lip: '#d5e2ee', border: 7, mat: null, stars: false, plaque: false },
-  great: { outer: '#ffffff', lip: '#9cc7ea', border: 7, mat: '#2f7fe8', stars: true, plaque: false },
-  frame_it: { outer: '#f5b400', lip: '#b77f00', border: 12, mat: '#fff1c2', stars: true, plaque: true },
+  great: { outer: '#cfe2f3', lip: '#8fa9c4', border: 10, mat: null, stars: true, plaque: false },
+  frame_it: { outer: '#f5b400', lip: '#b77f00', border: 12, mat: null, stars: true, plaque: true },
 };
 
 /** The drawn ride scene: sky and park, bushes, car back, the find and the shark in the seats, car front. */
@@ -47,8 +47,9 @@ function Scene({ art, width, height }: { readonly art: ImageSource; readonly wid
       <Image source={SCENE_NEAR} style={{ position: 'absolute', left: -width * 0.05, right: -width * 0.05, bottom: -height * 0.02, height: height * 0.3 }} contentFit="cover" />
       <View style={{ position: 'absolute', left: (width - carW) / 2, bottom: height * 0.02, width: carW, height: carH }}>
         <Image source={CAR_BACK} style={StyleSheet.absoluteFill} contentFit="contain" />
-        <Image source={SHARK} style={{ position: 'absolute', left: carW * 0.06, bottom: carH * 0.34, width: carW * 0.36, height: carW * 0.4, transform: [{ rotate: '-6deg' }] }} contentFit="contain" />
-        <Image source={art} style={{ position: 'absolute', left: carW * 0.46, bottom: carH * 0.36, width: carW * 0.4, height: carW * 0.4 }} contentFit="contain" />
+        {/* Shark in the back seat, the find up front left of the lap bar, both seated (bottoms tucked behind the car body). */}
+        <Image source={SHARK} style={{ position: 'absolute', left: -carW * 0.04, bottom: carH * 0.3, width: carW * 0.34, height: carW * 0.38, transform: [{ rotate: '-6deg' }] }} contentFit="contain" />
+        <Image source={art} style={{ position: 'absolute', left: carW * 0.25, bottom: carH * 0.34, width: carW * 0.36, height: carW * 0.36 }} contentFit="contain" />
         <Image source={CAR_FRONT} style={StyleSheet.absoluteFill} contentFit="contain" />
       </View>
     </View>
@@ -81,7 +82,7 @@ export function RidePhoto({ grade, art, photoUrl, width, showGrade = true }: {
         {frame.stars && <View style={[styles.starSticker, { right: -12, top: -12 }]}><GameIcon name="star" size={34} /></View>}
       </View>
       {showGrade && (
-        <View style={[styles.stamp, grade === 'frame_it' ? styles.stampGold : grade === 'great' ? styles.stampBlue : styles.stampPlain]}>
+        <View style={[styles.stamp, grade === 'frame_it' ? styles.stampGold : grade === 'great' ? styles.stampSilver : styles.stampPlain]}>
           <Text style={[styles.stampText, grade === 'good' && { color: BRAND.navy }]}>{PHOTO_GRADE_LABEL[grade]}</Text>
         </View>
       )}
@@ -92,9 +93,9 @@ export function RidePhoto({ grade, art, photoUrl, width, showGrade = true }: {
 /** 9:16 share card: water texture, logo, the photo, the shark, the item, where to get the app. */
 export const RidePhotoShareCard = forwardRef<View, {
   readonly grade: PhotoGrade; readonly art: ImageSource; readonly photoUrl: string | null; readonly rarity: number;
-  readonly itemName: string; readonly setName: string; readonly sharkName?: string | null;
+  readonly itemName: string; readonly setName: string;
   readonly onReadyChange?: (ready: boolean) => void;
-}>(function RidePhotoShareCard({ grade, art, photoUrl, rarity, itemName, setName, sharkName, onReadyChange }, ref) {
+}>(function RidePhotoShareCard({ grade, art, photoUrl, rarity, itemName, setName, onReadyChange }, ref) {
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
   const required = useMemo(() => ['background', 'logo', 'shark'], []);
   const markReady = useCallback((key: string) => setLoaded(previous =>
@@ -110,7 +111,8 @@ export const RidePhotoShareCard = forwardRef<View, {
       <ShareCardArtwork artworkKey="logo" onReady={markReady} source={require('../../../assets/images/screens/login/logo.png')}
         style={styles.shareLogo} contentFit="contain" />
       <View style={{ alignItems: 'center' }}>
-        <Text style={styles.shareKicker}>{sharkName ? `${sharkName}'s Ride Photo` : 'My Ride Photo'}</Text>
+        {/* Never the player's name: this card is made for public Stories and many players are kids. */}
+        <Text style={styles.shareKicker}>My Ride Photo</Text>
         <RidePhoto grade={grade} art={art} photoUrl={photoUrl} width={300} />
         <Text style={styles.shareItem}>{itemName}</Text>
         <View style={[styles.shareRarity, { backgroundColor: look.chip, borderColor: look.frame }]}>
@@ -147,8 +149,8 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-6deg' }],
   },
   stampPlain: { backgroundColor: BRAND.white, borderColor: BRAND.navy },
-  stampBlue: { backgroundColor: '#2f7fe8', borderColor: BRAND.white },
   stampGold: { backgroundColor: '#c0392b', borderColor: '#ffe07a' },
+  stampSilver: { backgroundColor: '#5a7894', borderColor: BRAND.white },
   stampText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, letterSpacing: 1, textTransform: 'uppercase' },
   share: {
     width: RIDE_SHARE_WIDTH, height: RIDE_SHARE_HEIGHT, overflow: 'hidden', backgroundColor: '#0768b9',

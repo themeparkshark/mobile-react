@@ -6,6 +6,7 @@
  * a "?" sheet that links a topic opens it directly.
  */
 import { useNavigation, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -41,6 +42,7 @@ const VOICE: Readonly<Record<HowToArtKey, number>> = {
 };
 
 /** Space left and right of a card; the next card shows PEEK points of itself. */
+const READ_ALOUD_SEEN = 'howto_read_aloud_intro_v1';
 const SIDE = 24;
 const GAP = 12;
 
@@ -66,7 +68,11 @@ export default function HowToPlayScreen() {
   const [cheer, setCheer] = useState(0);
   const last = page === HOW_TO_CARDS.length - 1;
 
+  // Every speak() takes a ticket; a clip that loads after a newer request (fast swipes) or after the
+  // screen closed is unloaded at once, so two voices never overlap.
+  const voiceTicket = useRef(0);
   const stopVoice = useCallback(() => {
+    voiceTicket.current += 1;
     const current = voice.current;
     voice.current = null;
     if (current) void current.unloadAsync().catch(() => undefined);
@@ -75,13 +81,30 @@ export default function HowToPlayScreen() {
   const speak = useCallback(async (card: HowToCard) => {
     stopVoice();
     if (!soundOn) return;
+    const ticket = voiceTicket.current;
     try {
-      const { sound } = await Audio.Sound.createAsync(VOICE[card.art], { shouldPlay: true, volume: 1 });
+      const { sound } = await Audio.Sound.createAsync(VOICE[card.art], { shouldPlay: false, volume: 1 });
+      if (ticket !== voiceTicket.current) { void sound.unloadAsync().catch(() => undefined); return; }
       voice.current = sound;
+      await sound.playAsync();
     } catch { /* Voice is a bonus; the words are on the card. */ }
   }, [soundOn, stopVoice]);
 
   useEffect(() => stopVoice, [stopVoice]);
+
+  // First visit: read the first card aloud on its own, so a kid who can't read finds the speaker.
+  useEffect(() => {
+    if (more || !soundOn) return;
+    let live = true;
+    void AsyncStorage.getItem(READ_ALOUD_SEEN).then(seen => {
+      if (!live || seen) return;
+      void AsyncStorage.setItem(READ_ALOUD_SEEN, '1').catch(() => undefined);
+      setReadAloud(true);
+      void speak(HOW_TO_CARDS[0]);
+    }).catch(() => undefined);
+    return () => { live = false; };
+    // Only on first mount.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPage = useCallback((next: number) => {
     if (next === pageRef.current) return;
@@ -208,22 +231,33 @@ function CardPage({ card, index, width, interval, scrollX, active, reduced, chee
     return { transform: [{ translateX: interpolate(progress, [-1, 0, 1], [width * 0.3, 0, -width * 0.3], 'clamp') }] };
   });
   const demo = Math.min(width - 24, 300);
+  // Finish beat on the last card: the art hops and tilts once (a wave stand-in, no redraw).
+  const hop = useSharedValue(0);
+  useEffect(() => {
+    if (!cheer || reduced) return;
+    hop.value = withSequence(withTiming(1, { duration: 220 }), withSpring(0, { damping: 6, stiffness: 180 }));
+  }, [cheer, reduced, hop]);
+  const hopStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -24 * hop.value }, { rotate: `${-6 * hop.value}deg` }] }));
   return (
-    <Animated.View style={[styles.card, { width }, cardStyle]} accessible accessibilityLabel={`${card.title}. ${card.line}`}>
+    <Animated.View style={[styles.card, { width }, cardStyle]}>
       <LinearGradient colors={card.colors as [string, string]} style={StyleSheet.absoluteFill} />
       <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
-      <Pressable accessibilityRole="button" accessibilityLabel={readAloud ? 'Stop reading aloud' : 'Read aloud'}
-        onPress={onSpeak} hitSlop={10} style={[styles.speaker, readAloud && styles.speakerOn]}>
-        <FontAwesomeIcon icon={faVolumeHigh} size={22} color={BRAND.navy} />
-      </Pressable>
       <Animated.View style={[styles.artWrap, artStyle]}>
         <View style={styles.halo} />
-        <HowToDemo art={card.art} size={demo} active={active} reduced={reduced} />
+        <Animated.View style={hopStyle}>
+          <HowToDemo art={card.art} size={demo} active={active} reduced={reduced} />
+        </Animated.View>
         {cheer > 0 && !reduced && <StarBurst key={cheer} size={demo} />}
       </Animated.View>
-      <View style={styles.copy}>
-        <Text accessibilityRole="header" style={styles.title}>{card.title}</Text>
-        <Text style={styles.line}>{card.line}</Text>
+      <View style={styles.copyRow}>
+        <View style={styles.copy} accessible accessibilityRole="header" accessibilityLabel={`${card.title}. ${card.line}`}>
+          <Text style={styles.title}>{card.title}</Text>
+          <Text style={styles.line}>{card.line}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={readAloud ? 'Stop reading aloud' : 'Read aloud'}
+          onPress={onSpeak} hitSlop={10} style={[styles.speaker, readAloud && styles.speakerOn]}>
+          <FontAwesomeIcon icon={faVolumeHigh} size={22} color={BRAND.navy} />
+        </Pressable>
       </View>
     </Animated.View>
   );
@@ -237,7 +271,7 @@ function Dot({ index, interval, scrollX, color, onPress }: {
   const style = useAnimatedStyle(() => {
     const distance = Math.min(1, Math.abs(scrollX.value / Math.max(1, interval) - index));
     return {
-      width: interpolate(distance, [0, 1], [30, 12], 'clamp'),
+      transform: [{ scaleX: interpolate(distance, [0, 1], [2.5, 1], 'clamp') }],
       backgroundColor: interpolateColor(distance, [0, 1], [color, '#9cc7ea']),
     };
   });
@@ -258,20 +292,21 @@ const styles = StyleSheet.create({
   halo: {
     position: 'absolute', width: '84%', aspectRatio: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)',
   },
+  copyRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 12 },
   speaker: {
-    position: 'absolute', top: 12, right: 12, zIndex: 2, width: 46, height: 46, borderRadius: 23, alignItems: 'center',
+    width: 48, height: 48, borderRadius: 23, alignItems: 'center',
     justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 3, borderColor: BRAND.white,
   },
   speakerOn: { backgroundColor: BRAND.gold },
   artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 22 },
-  copy: { paddingHorizontal: 20, paddingBottom: 24, alignItems: 'center' },
+  copy: { flex: 1, paddingLeft: 16, paddingRight: 4, paddingBottom: 22, alignItems: 'center' },
   title: {
     fontFamily: 'Shark', fontSize: 38, color: BRAND.white, textAlign: 'center',
     textShadowColor: 'rgba(5,52,110,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
   },
   line: { fontFamily: 'Knockout', fontSize: 26, lineHeight: 30, color: BRAND.white, textAlign: 'center', marginTop: 6 },
   dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  dot: { height: 12, borderRadius: 6 },
+  dot: { width: 12, height: 12, borderRadius: 6, marginHorizontal: 9 },
   footer: { paddingHorizontal: 16, gap: 10 },
   morePill: {
     alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 18,

@@ -40,14 +40,24 @@ export function rarityLook(rarity: number): RarityLook {
   return RARITY_LOOK[(rarity >= 1 && rarity <= 5 ? Math.round(rarity) : 1) as RarityTier];
 }
 
-/** 1 to 5 small gems: the shape cue that works without color. */
+/**
+ * 1 to 5 small diamond gems: the shape cue that works without color. Each
+ * diamond sits in its own box (side * 1.45) so the rotated corners never clip,
+ * with a white keyline and a light facet. One component for tiles, chips and
+ * the share card.
+ */
 export function RarityGems({ rarity, size = 9, style }: { readonly rarity: number; readonly size?: number; readonly style?: StyleProp<ViewStyle> }) {
   const look = rarityLook(rarity);
   const count = Math.max(1, Math.min(5, Math.round(rarity)));
+  const box = Math.ceil(size * 1.45);
   return (
     <View style={[styles.gems, style]} accessible={false}>
       {Array.from({ length: count }, (_, index) => (
-        <View key={index} style={[styles.gem, { width: size, height: size, backgroundColor: look.frame }]} />
+        <View key={index} style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={[styles.gem, { width: size, height: size, backgroundColor: look.frame }]}>
+            <View style={styles.facet} />
+          </View>
+        </View>
       ))}
     </View>
   );
@@ -69,8 +79,9 @@ export function TilePanel({ rarity, found, children, style }: {
 }
 
 const styles = StyleSheet.create({
-  gems: { flexDirection: 'row', gap: 5, paddingHorizontal: 2 },
-  gem: { transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: BRAND.white, borderRadius: 2 },
+  gems: { flexDirection: 'row', gap: 1 },
+  gem: { transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: BRAND.white, borderRadius: 2, overflow: 'hidden' },
+  facet: { position: 'absolute', left: 0, top: 0, width: '50%', height: '50%', backgroundColor: 'rgba(255,255,255,0.55)' },
   panel: {
     borderRadius: 16, borderWidth: 3, borderBottomWidth: 6, overflow: 'hidden', alignItems: 'center',
   },

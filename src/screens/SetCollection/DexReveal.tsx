@@ -18,7 +18,6 @@ import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'r
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { AuthContext } from '../../context/AuthProvider';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
@@ -28,6 +27,10 @@ import { RIBBON, setBadge, StarBurst } from './DexParts';
 import { prizeChips, type DexReward, type DexSet } from './dexModel';
 
 export const REVEAL_TAP_GUARD_MS = 1200;
+const RAYS = require('../../../assets/images/reveal/rays.webp');
+const SCRIM = require('../../../assets/images/reveal/scrim.webp');
+const GLOW = require('../../../assets/images/reveal/glow.webp');
+const MEDAL = require('../../../assets/images/alex-ui/round-gold.webp');
 const BEAT = { slam: 0, ribbon: 380, prizes: 650, step: 120, plaque: 160, cta: 400 } as const;
 
 type HudKey = 'energy' | 'ticket' | 'xp' | 'coins';
@@ -50,7 +53,8 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
   const reduced = useUiReducedMotion();
   const { width, height } = useWindowDimensions();
   const { player } = useContext(AuthContext);
-  const prizes = useMemo(() => prizeChips(reward).filter(prize => prize.icon !== 'crown'), [reward]);
+  // Number prizes ride the plaques; the title and a wearable get their own wide plaques (never cut off).
+  const prizes = useMemo(() => prizeChips(reward).filter(prize => prize.icon !== 'crown' && prize.icon !== 'shark'), [reward]);
   const { ctaAt, plaqueAt } = revealTimeline(prizes.length, !!reward.title);
   const openedAt = useRef(Date.now());
   const [paying, setPaying] = useState(false);
@@ -89,7 +93,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
     setPaying(true);
     playSfx('fx.coin', 0.8);
     setTimeout(() => setPaid(true), 650);
-    setTimeout(onClose, 1250);
+    setTimeout(closeWithFade, 1450);
   };
   const backdrop = () => {
     if (Date.now() - openedAt.current < REVEAL_TAP_GUARD_MS) return;
@@ -112,31 +116,24 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
     return paid ? n : 0;
   };
   const rays = Math.max(width, height) * 1.3;
+  const fade = useSharedValue(1);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const glint = useSharedValue(-1);
+  useEffect(() => {
+    if (reduced) return;
+    glint.value = withDelay(BEAT.slam + 400, withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }));
+  }, [reduced, glint]);
+  const glintStyle = useAnimatedStyle(() => ({ transform: [{ translateX: glint.value * 140 }, { rotate: '20deg' }] }));
+  const wearable = reward.wearableName;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={backdrop} statusBarTranslucent>
-      <View style={[StyleSheet.absoluteFill, styles.scrimBase]}>
-        <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-          <Defs>
-            <RadialGradient id="scrim" cx="50%" cy="42%" r="70%">
-              <Stop offset="0" stopColor="#0B4A9A" stopOpacity="1" />
-              <Stop offset="1" stopColor="#031C3F" stopOpacity="1" />
-            </RadialGradient>
-          </Defs>
-          <Rect x="0" y="0" width={width} height={height} fill="url(#scrim)" />
-        </Svg>
+    <Modal visible transparent animationType="none" onRequestClose={backdrop} statusBarTranslucent>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.scrimBase, fadeStyle]}>
+        <Image source={SCRIM} style={StyleSheet.absoluteFill} contentFit="fill" />
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={backdrop} style={StyleSheet.absoluteFill} />
         {!reduced && (
-          <Animated.View pointerEvents="none" style={[styles.rays, { width: rays, height: rays, left: (width - rays) / 2, top: height * 0.38 - rays / 2 }, raysStyle]}>
-            <Svg width={rays} height={rays}>
-              {Array.from({ length: 16 }, (_, index) => {
-                const c = rays / 2;
-                const a = (index / 16) * Math.PI * 2;
-                const b = a + Math.PI / 16;
-                return <Path key={index} d={`M${c} ${c} L${c + Math.cos(a) * c} ${c + Math.sin(a) * c} L${c + Math.cos(b) * c} ${c + Math.sin(b) * c} Z`}
-                  fill={index % 2 ? 'rgba(255,207,59,0.16)' : 'rgba(255,240,180,0.10)'} />;
-              })}
-            </Svg>
+          <Animated.View pointerEvents="none" style={[styles.rays, { width: rays, height: rays, left: (width - rays) / 2, top: height * 0.44 - rays / 2 }, raysStyle]}>
+            <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="fill" />
           </Animated.View>
         )}
         {!reduced && <Confetti width={width} height={height} />}
@@ -147,11 +144,18 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
 
         <View style={styles.center} pointerEvents="box-none" accessibilityViewIsModal>
           <Animated.View style={[styles.medalWrap, slamStyle]}>
-            <View style={styles.glow} />
-            <View style={[styles.medal, { borderColor: set.color }]}>
-              <LinearGradient colors={['#ffffff', '#dff1ff']} style={StyleSheet.absoluteFill} />
-              <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.medalGloss} />
-              <Image source={setBadge(set)} style={{ width: 124, height: 124 }} contentFit="contain" />
+            <Image source={GLOW} style={styles.glow} contentFit="fill" />
+            <View style={styles.medal}>
+              <Image source={MEDAL} style={StyleSheet.absoluteFill} contentFit="contain" />
+              <View style={styles.medalFace}>
+                <Image source={setBadge(set)} style={{ width: 112, height: 112 }} contentFit="contain" />
+              </View>
+              <View style={styles.glintClip} pointerEvents="none">
+                <Animated.View style={[styles.glint, glintStyle]}>
+                  <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                    colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.85)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
+                </Animated.View>
+              </View>
             </View>
             <StarBurst size={340} />
           </Animated.View>
@@ -163,25 +167,42 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
           </Animated.View>
           <View style={styles.prizes} accessible accessibilityLabel={`You get ${reward.prize}`}>
             {prizes.map((prize, index) => (
-              <PrizePlaque key={prize.icon} icon={prize.icon} value={prize.value} index={index} reduced={reduced}
-                fly={paying && !reduced} slot={HUD.indexOf(prize.icon as HudKey)} total={prizes.length} width={width} />
+              <View key={prize.icon} style={styles.socket}>
+                {paid && <View style={styles.socketTick}><GameIcon name="check" size={30} /></View>}
+                <PrizePlaque icon={prize.icon} value={prize.value} index={index} reduced={reduced}
+                  fly={paying && !reduced} slot={HUD.indexOf(prize.icon as HudKey)} total={prizes.length} width={width} />
+              </View>
             ))}
           </View>
+          {!!wearable && (
+            <Animated.View style={plaqueStyle}>
+              <View style={[styles.plaque, styles.plaqueBlue]}>
+                <GameIcon name="shark" size={30} />
+                <Text style={[styles.plaqueText, { color: BRAND.white }]} numberOfLines={2}>{wearable}</Text>
+              </View>
+            </Animated.View>
+          )}
           {!!reward.title && (
             <Animated.View style={plaqueStyle}>
               <View style={styles.plaque}>
                 <GameIcon name="crown" size={30} />
-                <Text style={styles.plaqueText} numberOfLines={1}>New title: {reward.title}</Text>
+                <Text style={styles.plaqueText} numberOfLines={1} adjustsFontSizeToFit>New title: {reward.title}</Text>
               </View>
             </Animated.View>
           )}
-          <Animated.View style={[{ marginTop: 22, minWidth: 230 }, ctaStyle]}>
-            <GameButton label={paying ? 'Adding...' : 'Collect!'} icon="gift" onPress={dismiss} fullWidth />
+          <Animated.View style={[{ marginTop: 22, minWidth: 230 }, ctaStyle, paying && { transform: [{ scale: 0.95 }] }]}>
+            <GameButton label="Collect!" icon="gift" onPress={dismiss} fullWidth disabled={paying} />
           </Animated.View>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
+
+  function closeWithFade() {
+    if (reduced) { onClose(); return; }
+    fade.value = withTiming(0, { duration: 320 });
+    setTimeout(onClose, 330);
+  }
 }
 
 /** A solid prize plaque (glossy blue, darker lip, gold count) that ticks in, then flies to its HUD counter. */
@@ -210,7 +231,7 @@ function PrizePlaque({ icon, value, index, reduced, fly, slot, total, width }: {
     };
   });
   return (
-    <Animated.View style={style}>
+    <Animated.View style={[StyleSheet.absoluteFill, style]}>
       <View style={styles.prize}>
         <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} style={styles.prizeGloss} />
         <GameIcon name={icon as 'energy'} size={42} />
@@ -280,16 +301,27 @@ const styles = StyleSheet.create({
   },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   hudText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingTop: 60 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingTop: 120 },
   medalWrap: { width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
-  glow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,207,59,0.3)' },
-  medal: { width: 178, height: 178, borderRadius: 89, borderWidth: 7, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  medalGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '45%' },
+  glow: { position: 'absolute', width: 300, height: 300 },
+  medal: { width: 190, height: 190, alignItems: 'center', justifyContent: 'center' },
+  medalFace: {
+    width: 136, height: 136, borderRadius: 68, backgroundColor: '#fff6d6', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 4, borderColor: '#b77f00', marginTop: -6,
+  },
+  glintClip: { position: 'absolute', width: 170, height: 170, borderRadius: 85, overflow: 'hidden', top: 4 },
+  glint: { position: 'absolute', top: -20, left: -70, width: 40, height: 220 },
+  socket: {
+    width: 82, height: 92, borderRadius: 16, backgroundColor: '#072f63', borderWidth: 3, borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  socketTick: { position: 'absolute' },
+  plaqueBlue: { backgroundColor: '#1a8fe3', borderBottomColor: '#0b5aa0', maxWidth: 320 },
   ribbon: { width: 300, height: 66, marginTop: 12, justifyContent: 'center', paddingHorizontal: 38 },
   ribbonText: { fontFamily: 'Shark', fontSize: 24, color: '#7a3d00', textAlign: 'center', marginTop: -6 },
   prizes: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16 },
   prize: {
-    width: 82, height: 92, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#1a8fe3',
+    position: 'absolute', left: -3, top: -3, width: 82, height: 92, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#1a8fe3',
     borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 7, borderBottomColor: '#0b5aa0', overflow: 'hidden',
   },
   prizeGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },

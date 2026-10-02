@@ -22,7 +22,7 @@ const ART: Readonly<Record<HelpArtKey, number>> = {
   park: require('../../../assets/images/screens/park/mystery-coin-shark-v1.png'),
   coin: require('../../../assets/images/screens/park/gold.png'),
   lineplay: require('../../../assets/images/screens/lineplay/queue-recap-shark.png'),
-  level: require('../../../assets/images/progression/crown.png'),
+  level: require('../../../assets/icons/game/coins.png'),
   stamps: require('../../../assets/images/stamps/stamp-logo.png'),
   teams: require('../../../assets/images/team-shark-badge.png'),
   standings: require('../../../assets/images/screens/leaderboard/crown-gold.png'),
@@ -82,7 +82,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
             </Pressable>
             {open && (
               <>
-                {topic.lines.slice(0, 2).map(line => <Text key={line} style={styles.cardLine}>{line}</Text>)}
+                {topic.lines.slice(0, 1).map(line => <Text key={line} style={styles.cardLine} numberOfLines={3}>{line}</Text>)}
                 <View style={styles.chips}>
                   {topic.terms.map(key => (
                     <Pressable key={key} accessibilityRole="button" accessibilityLabel={`What is ${glossary[key].label}?`}

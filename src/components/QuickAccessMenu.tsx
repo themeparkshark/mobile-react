@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import getPrepItemSets from '../api/endpoints/me/prep-item-sets';
@@ -34,6 +34,7 @@ const FAB = require('../../assets/images/alex-ui/fab-blue.webp');
 const CLOSE = require('../../assets/images/alex-ui/close-red.webp');
 const LABEL_BAR = require('../../assets/images/alex-ui/label-bar.webp');
 const RIBBON = require('../../assets/images/ribbon.png');
+const AnimatedBlur = Animated.createAnimatedComponent(BlurView);
 
 export interface MenuItem {
   readonly id: string;
@@ -138,10 +139,12 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
   };
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
-  const headerStyle = useAnimatedStyle(() => ({
+  const headerStyle = useAnimatedStyle(() => (reduced ? { opacity: scrim.value } : {
     opacity: scrim.value,
     transform: [{ translateY: (1 - scrim.value) * 16 }],
   }));
+  // The blur stays at full layer opacity (iOS drops the effect under a fading parent); its strength animates instead.
+  const blurProps = useAnimatedProps(() => ({ intensity: 18 * scrim.value }));
   const barsStyle = useAnimatedStyle(() => ({ opacity: 1 - fabSpin.value, transform: [{ scale: 1 - 0.3 * fabSpin.value }] }));
   const closeStyle = useAnimatedStyle(() => ({ opacity: fabSpin.value, transform: [{ scale: 0.6 + 0.4 * fabSpin.value }] }));
   const bottom = Math.max(insets.bottom, 12) + 66;
@@ -149,17 +152,18 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
   return (
     <>
       {mounted && (
-        <Animated.View style={[StyleSheet.absoluteFill, { zIndex: 98 }, scrimStyle]}>
-          <Pressable accessibilityLabel="Close menu" accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={() => closeMenu()}>
-            <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.42)' }]} />
-          </Pressable>
-        </Animated.View>
+        <View style={[StyleSheet.absoluteFill, { zIndex: 98 }]} pointerEvents={open ? 'auto' : 'none'}>
+          <AnimatedBlur animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.42)' }, scrimStyle]} />
+          <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
+        </View>
       )}
 
-      <View pointerEvents="box-none" style={[styles.stack, { bottom, [isRight ? 'right' : 'left']: 14, alignItems: isRight ? 'flex-end' : 'flex-start' }]}>
+      {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}
+      <View pointerEvents="box-none" accessibilityViewIsModal={open} onAccessibilityEscape={() => { if (open) closeMenu(); }}
+        style={[styles.stack, { bottom, [isRight ? 'right' : 'left']: 14, alignItems: isRight ? 'flex-end' : 'flex-start' }]}>
         {mounted && (
-          <View accessibilityViewIsModal={open} accessibilityElementsHidden={!open}
+          <View accessibilityElementsHidden={!open}
             importantForAccessibility={open ? 'auto' : 'no-hide-descendants'} pointerEvents={open ? 'box-none' : 'none'}
             style={{ alignItems: isRight ? 'flex-end' : 'flex-start' }}>
             <Animated.View style={[styles.header, headerStyle]}>
@@ -205,17 +209,24 @@ function MenuRow({ item, index, open, reduced, popped, isRight, badge, onPress }
   useEffect(() => {
     if (popped && !reduced) pop.value = withSequence(withTiming(1.08, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 260 }));
   }, [popped, reduced, pop]);
-  const style = useAnimatedStyle(() => ({
+  const style = useAnimatedStyle(() => (reduced ? { opacity: t.value } : {
     opacity: Math.min(1, t.value * 1.4),
     transform: [{ translateY: (1 - t.value) * 30 }, { scale: (0.9 + 0.1 * t.value) * pop.value }],
   }));
+  const bounce = useSharedValue(1);
+  useEffect(() => {
+    if (!open || !badge || reduced) return;
+    bounce.value = withDelay(menuDelay(index, MENU_ITEMS.length, true) + 260,
+      withSequence(withTiming(1.35, { duration: 140 }), withSpring(1, { damping: 6, stiffness: 260 })));
+  }, [open, badge, reduced, index, bounce]);
+  const badgeStyle = useAnimatedStyle(() => ({ transform: [{ scale: bounce.value }] }));
   const press = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const round = (
     <View style={styles.round}>
       <Image source={ROUND[item.round]} style={StyleSheet.absoluteFill} contentFit="contain" />
       <GameIcon name={item.icon} size={38} />
-      {badge && <View style={styles.badge}><GameIcon name="gift" size={20} /></View>}
+      {badge && <Animated.View style={[styles.badge, badgeStyle]}><GameIcon name="gift" size={20} /></Animated.View>}
     </View>
   );
   const label = (
@@ -249,7 +260,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -4, right: -4, width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,
   },
-  label: { width: 168, height: 50, marginHorizontal: -6, justifyContent: 'center', paddingLeft: 18, paddingRight: 14, zIndex: -1 },
+  label: { width: 176, height: 50, marginHorizontal: -6, justifyContent: 'center', paddingLeft: 20, paddingRight: 16, zIndex: -1 },
   labelText: {
     fontFamily: 'Shark', fontSize: 19, color: BRAND.white,
     textShadowColor: 'rgba(5,52,110,0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,

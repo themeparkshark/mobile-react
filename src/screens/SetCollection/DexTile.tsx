@@ -48,19 +48,31 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   const turn = useSharedValue(0);
   const shine = useSharedValue(-1);
 
+  // FlashList recycles this cell for other items: drop every per-item state on a new id.
+  useEffect(() => {
+    setArtFailed(false);
+    setFlipping(false);
+    turn.value = 0;
+  }, [item.id, turn]);
+
   // First time a NEW find is on screen: flip from silhouette to color.
   useEffect(() => {
     if (!item.isNew || !item.found || reduced) return;
     let live = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     void seenIds().then(set => {
       if (!live || set.has(item.id)) return;
       setFlipping(true);
       turn.value = 0;
       turn.value = withDelay(250, withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }));
-      setTimeout(() => { if (live) setFlipping(false); }, 1000);
+      timer = setTimeout(() => { if (live) setFlipping(false); }, 1000);
       markSeen(item.id);
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+      if (timer) clearTimeout(timer);
+      setFlipping(false);
+    };
   }, [item.id, item.isNew, item.found, reduced, turn]);
 
   // Legendary shimmer every ~3.5 s while the tile is mounted (the list unmounts off-screen tiles).
@@ -91,7 +103,7 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   return (
     <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width, marginBottom: 10 }}>
       <Animated.View style={flipStyle}>
-        <TilePanel rarity={item.rarity} found={item.found || flipping} style={{ width, height: width, justifyContent: 'center' }}>
+        <TilePanel rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
             <Image source={art} contentFit="contain" recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
               tintColor={item.found ? undefined : SILHOUETTE}
@@ -114,7 +126,7 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
           )}
           {item.isNew && item.found && <View style={styles.newTag}><GameIcon name="new" size={30} /></View>}
           {swapReady && (
-            <Animated.View style={[styles.swap, pulseStyle]}><GameIcon name="retry" size={20} /></Animated.View>
+            <Animated.View style={[styles.swap, pulseStyle]}><GameIcon name="swap" size={22} /></Animated.View>
           )}
         </TilePanel>
       </Animated.View>
@@ -125,9 +137,9 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  gems: { position: 'absolute', top: 6, left: 7 },
+  gems: { position: 'absolute', top: 7, left: 6 },
   count: {
-    position: 'absolute', top: 4, right: 4, minWidth: 30, height: 24, paddingHorizontal: 5, borderRadius: 12,
+    position: 'absolute', bottom: 5, right: 4, minWidth: 30, height: 24, paddingHorizontal: 5, borderRadius: 12,
     backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
   countText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },

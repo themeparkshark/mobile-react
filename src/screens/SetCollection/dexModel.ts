@@ -453,7 +453,7 @@ export function progressFraction(set: Pick<DexSet, 'found' | 'total'>): number {
 
 
 
-/** The set card pill, only when it says something: "On now" for a timed set that is live, "After sunset", "Opens Oct 15", "Saved". Null for an always-on set. */
+/** The set card pill, only when it says something: the special timing ("Sunset to 9 PM", "Oct 1 to Nov 2") with a live dot when it is on, "After sunset", "Opens Oct 15", "Saved". Null for an always-on set. */
 export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text: string; readonly live: boolean } | null {
   if (set.status === 'retired') return { text: 'Saved', live: false };
   if (set.status === 'upcoming') {
@@ -463,7 +463,7 @@ export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text:
     return { text, live: false };
   }
   if (set.spawningNow === false || set.status === 'resting') return { text: set.spawnHint ?? 'Resting', live: false };
-  if (set.spawnHint) return { text: 'On now', live: true };
+  if (set.spawnHint) return { text: set.spawnHint, live: true };
   return null;
 }
 
@@ -474,6 +474,20 @@ export function spawnIcon(hint: string | null | undefined): 'star' | 'timer' | '
   if (/rain|hot|cold|snow|wind|weather|sunny/.test(text)) return 'sparkle';
   if (/\d|am\b|pm\b|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug|sep/.test(text)) return 'timer';
   return 'map';
+}
+
+const GENERIC_HINT = /^(anytime,? anywhere\.?|pops up on the map near you, any time\.?)$/i;
+
+/**
+ * A Rare-or-better find with no special window still needs a reason to hunt:
+ * say how rare it is (the CONTRACT 3.4 tier odds) instead of "Anytime, anywhere".
+ */
+export function rarityHint(hint: string, rarity: number): string {
+  if (!GENERIC_HINT.test(hint.trim())) return hint;
+  if (rarity >= 5) return 'Super rare! Watch for the daily rare';
+  if (rarity === 4) return 'Very rare: about 1 in 25 finds';
+  if (rarity === 3) return 'Rare: about 1 in 8 finds';
+  return hint;
 }
 
 function legacyHint(item: PrepItemSetItem, setHint: string | null): string {
@@ -529,7 +543,7 @@ export function buildItems(
         : typeof item.found_in_world === 'boolean' ? item.found_in_world : null,
       caught,
       spares: Math.max(0, num(dex?.spares, copies - 1)),
-      spawnHint: str(dex?.spawn_hint) ?? legacyHint(item, setHint),
+      spawnHint: rarityHint(str(dex?.spawn_hint) ?? legacyHint(item, setHint), rarity),
       spawningNow: typeof dex?.spawning_now === 'boolean' ? dex.spawning_now : null,
       exchangeCost: cost,
       canExchange: typeof dex?.can_exchange === 'boolean' ? dex.can_exchange : !found && spares >= cost,
@@ -605,4 +619,14 @@ export function prizeChips(reward: Pick<DexReward, 'energy' | 'tickets' | 'exper
   if (reward.wearableName) list.push({ icon: 'shark', value: reward.wearableName, label: reward.wearableName });
   if (reward.title) list.push({ icon: 'crown', value: reward.title, label: `the ${reward.title} title` });
   return list;
+}
+
+/** The spare meter goal: the cheapest swap among missing items (or the set cost), and how far along the player is. */
+export function swapGoal(items: readonly Pick<DexItem, 'found' | 'exchangeCost'>[], spares: number, fallback = 4): {
+  readonly cost: number; readonly have: number; readonly extra: number; readonly ready: boolean; readonly anyMissing: boolean;
+} {
+  const missing = items.filter(item => !item.found);
+  const cost = Math.max(1, missing.length ? Math.min(...missing.map(item => item.exchangeCost || fallback)) : fallback);
+  const have = Math.max(0, Math.min(cost, spares));
+  return { cost, have, extra: Math.max(0, spares - cost), ready: missing.length > 0 && spares >= cost, anyMissing: missing.length > 0 };
 }

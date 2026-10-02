@@ -51,7 +51,7 @@ import { RewardReveal } from './SetCollection/DexReveal';
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
-  buildBook, buildItems, initialSlug, mergeStable, refreshEveryMs, spawnIcon, swapProgress, tabStatus,
+  buildBook, buildItems, initialSlug, mergeStable, refreshEveryMs, spawnIcon, swapGoal, swapProgress, tabStatus,
   type DexBook, type DexItem, type DexReward, type DexSet,
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
@@ -62,6 +62,8 @@ type Detail = PrepItemSetDetailResponse['data'];
 const COLUMNS = 4;
 const CELL_GAP = 8;
 const SIDE = 16;
+/** Space under the last row and any button: the bar plus the compass overhang plus breathing room. */
+const CTA_CLEARANCE = BOTTOM_BAR_OVERHANG + 84;
 
 /** A pick sheet view for any reward that needs a wearable choice. */
 function pickView(reward: DexReward, found: number): MilestoneView {
@@ -109,15 +111,21 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const [sparesOpen, setSparesOpen] = useState(false);
   const [popKey, setPopKey] = useState(0);
   const [reveal, setReveal] = useState<{ set: DexSet; reward: DexReward; key: number } | null>(null);
+  const [stamp, setStamp] = useState<{ slug: string; title: string } | null>(null);
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
 
-  const loadSets = useCallback(async (): Promise<DexSet[]> => {
+  // The legacy payloads carry claim routes and wearable picks; they change only on actions. A timer
+  // tick with v3 live re-reads just the v3 dex (2 requests per tick, not 4) over the last legacy copy.
+  const legacyList = useRef<PrepItemSetListItem[] | null>(null);
+  const legacyDetail = useRef<Record<string, Detail>>({});
+
+  const loadSets = useCallback(async (light = false): Promise<DexSet[]> => {
     try {
-      const [legacy, dex] = await Promise.all([
-        previewSets ?? getPrepItemSets(locationRef.current ?? undefined),
-        previewSets ? Promise.resolve(previewDex ?? null) : getHomeHuntDex(locationRef.current),
-      ]);
+      const dex = previewSets ? (previewDex ?? null) : await getHomeHuntDex(locationRef.current);
+      const reuse = light && dex != null && legacyList.current != null;
+      const legacy = previewSets ?? (reuse ? legacyList.current! : await getPrepItemSets(locationRef.current ?? undefined));
+      legacyList.current = legacy;
       const next = buildBook(legacy, dex);
       // Same data, same render: skip the state update entirely.
       const key = JSON.stringify(next);
@@ -136,12 +144,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     }
   }, [previewSets, previewDex, linkedSlug]);
 
-  const loadDetail = useCallback(async (target: string) => {
+  const loadDetail = useCallback(async (target: string, light = false) => {
     try {
-      const [raw, dex] = await Promise.all([
-        previewDetails?.[target] ?? getPrepItemSet(target, locationRef.current ?? undefined),
-        preview ? Promise.resolve(previewDexDetails?.[target] ?? null) : getHomeHuntDexSet(target, locationRef.current),
-      ]);
+      const dex = preview ? (previewDexDetails?.[target] ?? null) : await getHomeHuntDexSet(target, locationRef.current);
+      const cached = light && dex != null ? legacyDetail.current[target] : undefined;
+      const raw = previewDetails?.[target] ?? cached ?? await getPrepItemSet(target, locationRef.current ?? undefined);
+      legacyDetail.current[target] = raw;
       const payload = dex as { items?: unknown; exchange?: { spares?: unknown } } | null;
       const fresh = buildItems(raw, payload?.items);
       const spares = typeof payload?.exchange?.spares === 'number' ? payload.exchange.spares : Math.max(0, raw.progress.spare_count ?? 0);
@@ -164,32 +172,36 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const items = detail && detail.slug === slug ? detail.items : null;
   const spares = detail && detail.slug === slug ? detail.spares : set?.spares ?? 0;
 
-  // Back on screen: refresh once. While open: fast only for a timed set, else every 5 minutes.
+  // Back on screen: refresh once (skips the very first focus, which the mount load covers).
+  // While open: fast only for a timed set, else every 5 minutes.
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
+  const focusedOnce = useRef(false);
   useFocusEffect(useCallback(() => {
-    if (preview || loading) return undefined;
+    if (preview) return undefined;
+    if (!focusedOnce.current) { focusedOnce.current = true; return undefined; }
     void loadSets();
-    if (slug) void loadDetail(slug);
+    if (slugRef.current) void loadDetail(slugRef.current);
     return undefined;
-  }, [preview])); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [preview, loadSets, loadDetail]));
   const every = refreshEveryMs(set);
   useEffect(() => {
     if (!isFocused || preview) return;
     const timer = setInterval(() => {
-      void loadSets();
-      if (slug) void loadDetail(slug);
+      void loadSets(true);
+      if (slug) void loadDetail(slug, true);
     }, every);
     return () => clearInterval(timer);
   }, [isFocused, preview, loadSets, loadDetail, slug, every]);
 
-  // Keep the picked set card on screen, centered when possible.
-  useEffect(() => {
-    if (!slug) return;
-    const index = sets.findIndex(entry => entry.slug === slug);
-    if (index < 0) return;
-    const x = SIDE + index * (SET_TAB_WIDTH + SET_TAB_GAP) - (width - SET_TAB_WIDTH) / 2;
-    const timer = setTimeout(() => pickerRef.current?.scrollTo({ x: Math.max(0, x), animated: !reduced }), 60);
-    return () => clearTimeout(timer);
-  }, [slug, sets.length, width, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Keep the picked set card on screen, centered when possible: on change, and once the picker has laid out.
+  const slugIndex = sets.findIndex(entry => entry.slug === slug);
+  const centerPicker = useCallback((animated: boolean) => {
+    if (slugIndex < 0) return;
+    const x = SIDE + slugIndex * (SET_TAB_WIDTH + SET_TAB_GAP) - (width - SET_TAB_WIDTH) / 2;
+    pickerRef.current?.scrollTo({ x: Math.max(0, x), animated });
+  }, [slugIndex, width]);
+  useEffect(() => { centerPicker(!reduced); }, [centerPicker, reduced]);
 
   const reloadAll = useCallback(async () => {
     const list = await loadSets();
@@ -208,13 +220,13 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     });
   }, []);
 
-  const celebrate = (reward: DexReward) => {
+  const celebrate = useCallback((reward: DexReward) => {
     playSfx('fx.reward', 0.9);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     setPopKey(key => key + 1);
     invalidateMenuRewardBadge();
     if (set) setReveal({ set, reward, key: Date.now() });
-  };
+  }, [set]);
 
   const claim = useCallback(async (reward: DexReward, itemId?: number) => {
     if (!set || busy) return;
@@ -265,7 +277,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     } finally {
       setBusy(null);
     }
-  }, [set, busy, preview, refreshPlayer, reloadAll]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [set, busy, preview, refreshPlayer, reloadAll, celebrate]);
 
   const wearIt = useCallback(async () => {
     const wear = claimResult?.wear;
@@ -372,6 +384,19 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     RootNavigation.navigate('Explore');
   }, []);
 
+  // A reward waiting: make sure its Claim button sits above the compass, once per set.
+  const listRef = useRef<FlashList<DexItem | number>>(null);
+  const viewportH = useRef(0);
+  const trackBottom = useRef(0);
+  const revealedFor = useRef<string | null>(null);
+  const claimReady = !!set && (set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable'));
+  const revealClaim = () => {
+    if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) return;
+    revealedFor.current = set.slug;
+    const overflow = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
+    if (overflow > 0) setTimeout(() => listRef.current?.scrollToOffset({ offset: overflow, animated: !reduced }), 350);
+  };
+  const goal = swapGoal(items ?? [], spares, detail?.raw.progress.exchange_cost ?? 4);
   const cell = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
   const status = set ? tabStatus(set) : null;
   const special = status && (status.live ? null : status);
@@ -380,20 +405,24 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const header = (
     <View>
       <BookStrip found={book.found} total={book.total} dailyRare={daily} onDaily={goToMap} />
-      <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.picker}>
+      <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.picker}
+        style={styles.pickerBleed} onContentSizeChange={() => centerPicker(false)}>
         {sets.map(entry => <SetTab key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} />)}
       </ScrollView>
       {set && (
         <>
-          <SetHeader set={set} focusBusy={busy === 'focus'} onOdds={() => { playSfx('ui.tap', 0.5); setOddsOpen(true); }}
+          <SetHeader set={set} stamp={stamp?.slug === set.slug ? stamp.title : null} focusBusy={busy === 'focus'} onOdds={() => { playSfx('ui.tap', 0.5); setOddsOpen(true); }}
             onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
           <View style={styles.chips}>
             {special && <StatusChip text={special.text} icon={spawnIcon(special.text)} />}
-            <SparesMeter spares={spares} onPress={() => { playSfx('ui.tap', 0.5); setSparesOpen(true); }} />
+            <SparesMeter spares={spares} cost={goal.cost} ready={goal.ready} extra={goal.extra}
+              onPress={() => { playSfx('ui.tap', 0.5); setSparesOpen(true); }} />
           </View>
+          <View onLayout={event => { trackBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height; revealClaim(); }}>
           <RewardTrack set={set} busyId={busy} onClaim={reward => void claim(reward)}
             titleWorn={!!set.reward.title && player?.title === set.reward.title} titleBusy={busy === 'title'}
             onTitle={set.reward.title && !preview ? () => void toggleTitle() : null} popKey={popKey} />
+          </View>
           {claimResult && (
             <View style={{ marginTop: 10 }}>
               <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void wearIt()} onDismiss={() => setClaimResult(null)} />
@@ -426,7 +455,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         <TopbarColumn stretch={false} />
       </Topbar>
 
-      <View style={styles.page}>
+      <View style={styles.page} onLayout={event => { viewportH.current = event.nativeEvent.layout.height; revealClaim(); }}>
         <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
         <View style={[StyleSheet.absoluteFill, styles.dim]} />
         {loading ? (
@@ -444,13 +473,14 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
           </View>
         ) : (
           <FlashList
+            ref={listRef}
             data={data}
             numColumns={COLUMNS}
             estimatedItemSize={cell + 46}
             keyExtractor={entry => (typeof entry === 'number' ? `ghost-${entry}` : String(entry.id))}
             ListHeaderComponent={header}
             extraData={spares}
-            contentContainerStyle={{ paddingHorizontal: SIDE - CELL_GAP / 2, paddingBottom: BOTTOM_BAR_OVERHANG + 28 }}
+            contentContainerStyle={{ paddingHorizontal: SIDE - CELL_GAP / 2, paddingBottom: CTA_CLEARANCE }}
             showsVerticalScrollIndicator={false}
             renderItem={({ item: entry }) => (
               <View style={{ paddingHorizontal: CELL_GAP / 2 }}>
@@ -464,7 +494,6 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </View>
 
       <ItemCard item={selectedItem} set={set} spares={spares} onClose={closeItem} error={error} onFind={goToMap}
-        sharkName={player?.username}
         exchanging={busy === 'exchange'} onExchange={set && set.status !== 'retired' ? () => void exchange() : null}
         onShare={preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1' ? null : () => {
           playSfx('ui.tap', 0.5);
@@ -485,8 +514,16 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         </View>
       </Modal>
 
-      <SparesSheet visible={sparesOpen} items={items ?? []} onClose={() => setSparesOpen(false)} />
-      <RewardReveal reveal={reveal} onClose={() => { playSfx('ui.tap', 0.5); setReveal(null); }} />
+      <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
+      <RewardReveal reveal={reveal} onClose={() => {
+        const won = reveal;
+        setReveal(null);
+        // Back in the book: the title stamps onto the set's ribbon (the card ring is already gold).
+        if (won?.reward.title) {
+          setStamp({ slug: won.set.slug, title: won.reward.title });
+          playSfx('ui.confirm', 0.7);
+        }
+      }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
       <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
@@ -496,22 +533,29 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 }
 
 /** One picture: two spare copies swap for a missing find. */
-function SparesSheet({ visible, items, onClose }: { readonly visible: boolean; readonly items: readonly DexItem[]; readonly onClose: () => void }) {
+/** One picture with the real price: N spare copies (one stack, "xN") swap for one new find. */
+function SparesSheet({ visible, items, cost, onClose }: {
+  readonly visible: boolean; readonly items: readonly DexItem[]; readonly cost: number; readonly onClose: () => void;
+}) {
   const spare = items.find(item => item.found && item.spares > 0) ?? items.find(item => item.found) ?? null;
-  const missing = items.find(item => !item.found) ?? null;
+  const missing = items.filter(item => !item.found).sort((a, b) => a.exchangeCost - b.exchangeCost)[0] ?? null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.sparesCard} accessibilityViewIsModal accessible accessibilityLabel="Spares swap for missing finds">
-          <Text style={styles.sparesTitle}>Spares swap for new finds!</Text>
-          <View style={styles.sparesRow}>
-            {[0, 1].map(index => (
-              <TilePanel key={index} rarity={spare?.rarity ?? 1} found style={styles.sparesTile}>
-                {spare && <Image source={itemArt(spare)} style={styles.sparesArt} contentFit="contain" />}
-              </TilePanel>
-            ))}
-            <GameIcon name="arrow" size={36} />
+        <View style={styles.sparesCard} accessibilityViewIsModal>
+          <Text style={styles.sparesTitle} accessibilityRole="header">Spares swap for new finds!</Text>
+          <View style={styles.sparesRow} accessible accessibilityLabel={`${cost} spare copies swap for 1 new find`}>
+            <View style={styles.sparesStack}>
+              {[2, 1, 0].map(offset => (
+                <TilePanel key={offset} rarity={spare?.rarity ?? 1} found
+                  style={[styles.sparesTile, { position: offset ? 'absolute' : 'relative', left: offset * 6, top: -offset * 6 }]}>
+                  {spare && <Image source={itemArt(spare)} style={styles.sparesArt} contentFit="contain" />}
+                </TilePanel>
+              ))}
+              <View style={styles.sparesTimes}><Text style={styles.sparesTimesText}>x{cost}</Text></View>
+            </View>
+            <GameIcon name="swap" size={44} />
             <TilePanel rarity={missing?.rarity ?? 2} found style={styles.sparesTile}>
               {missing && <Image source={itemArt(missing)} style={styles.sparesArt} contentFit="contain" />}
               <View style={styles.sparesNew}><GameIcon name="new" size={30} /></View>
@@ -529,7 +573,9 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: 'rgba(5,52,110,0.2)' },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 24, gap: 12, width: '100%' },
   emptyTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textAlign: 'center' },
-  picker: { paddingHorizontal: SIDE, paddingTop: 20, paddingBottom: 18 },
+  picker: { paddingHorizontal: SIDE, paddingTop: 16, paddingBottom: 12 },
+  // The list pads its cells; the picker bleeds to the screen edges so cards are cut by the screen, not a clip line.
+  pickerBleed: { marginHorizontal: -(SIDE - CELL_GAP / 2) },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: SIDE, marginTop: 12 },
   error: {
     fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, marginHorizontal: SIDE, marginTop: 10, padding: 10, borderRadius: 12,
@@ -546,4 +592,10 @@ const styles = StyleSheet.create({
   sparesTile: { width: 70, height: 70, justifyContent: 'center' },
   sparesArt: { width: 52, height: 52 },
   sparesNew: { position: 'absolute', bottom: 0, left: 0 },
+  sparesStack: { width: 84, height: 84, justifyContent: 'flex-end' },
+  sparesTimes: {
+    position: 'absolute', right: -6, bottom: -6, minWidth: 40, height: 30, paddingHorizontal: 6, borderRadius: 15,
+    backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+  },
+  sparesTimesText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white },
 });

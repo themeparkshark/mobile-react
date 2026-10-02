@@ -11,11 +11,12 @@
 import { Image } from 'expo-image';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, PixelRatio, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { captureRef } from 'react-native-view-shot';
 import { parkDayCaptureSize } from '../../components/parkDayShareMetrics';
 import { playSfx } from '../../gamekit/SFX';
+import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameButton, GameIcon, gameAlert } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BluePanel, CLOSE_X, itemArt, RIBBON, SILHOUETTE, StarBurst } from './DexParts';
@@ -23,12 +24,12 @@ import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, swapProgress, type DexItem, type DexSet } from './dexModel';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
 
-export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, onShare, onFind, error, sharkName }: {
+export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, onShare, onFind, error }: {
   readonly item: DexItem | null; readonly set: DexSet | null; readonly spares: number;
   readonly onClose: () => void; readonly onExchange: (() => void) | null; readonly exchanging: boolean;
-  readonly onShare: (() => void) | null; readonly onFind: () => void; readonly error: string | null; readonly sharkName?: string | null;
+  readonly onShare: (() => void) | null; readonly onFind: () => void; readonly error: string | null;
 }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const reduced = useUiReducedMotion();
   const shareRef = useRef<View>(null);
   const [shareMount, setShareMount] = useState(false);
@@ -38,18 +39,37 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
   const scale = useSharedValue(reduced ? 1 : 0.6);
   const glow = useSharedValue(0);
 
+  const itemId = item?.id ?? null;
+  const [swappedKey, setSwappedKey] = useState(0);
+  const found = item?.found ?? false;
+  // Pop in once per item. A swap (found turning true on the same item) flips the art in place instead.
   useEffect(() => {
     setShareMount(false);
     setShareReady(false);
-    if (!item) return;
+    setSwappedKey(0);
+    if (itemId == null) return;
     scale.value = reduced ? 1 : 0.6;
     if (!reduced) scale.value = withSpring(1, { damping: 11, stiffness: 200 });
-  }, [item?.id, item?.found, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itemId, reduced, scale]);
+
+  const flip = useSharedValue(1);
+  const lastFound = useRef<{ id: number | null; found: boolean }>({ id: null, found: false });
+  useEffect(() => {
+    const before = lastFound.current;
+    lastFound.current = { id: itemId, found };
+    if (before.id !== itemId || before.found || !found) return;
+    setSwappedKey(Date.now());
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    playSfx('fx.coinTick', 0.9);
+    if (reduced) return;
+    flip.value = 0;
+    flip.value = withTiming(1, { duration: 520 });
+  }, [itemId, found, reduced, flip]);
 
   useEffect(() => {
-    if (!item || item.found || reduced) { glow.value = 0; return; }
+    if (itemId == null || found || reduced) { glow.value = 0; return; }
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 900 }), withTiming(0, { duration: 900 })), -1, false);
-  }, [item?.id, item?.found, reduced, glow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itemId, found, reduced, glow]);
 
   // The share card is built only when the player taps Share, then captured once its art is ready.
   useEffect(() => {
@@ -75,6 +95,9 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
   }, [shareMount, shareReady, sharing]);
 
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: Math.min(1, scale.value * 1.6 - 0.6) }));
+  // scaleX 1 -> 0 (silhouette) then 0 -> 1 (color): a coin-flip in place.
+  const flipStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.abs(1 - 2 * Math.min(1, flip.value)) * 0.98 + 0.02 }] }));
+  const silhouetteStyle = useAnimatedStyle(() => ({ opacity: flip.value < 0.5 ? 1 : 0 }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.25 + 0.45 * glow.value, transform: [{ scale: 0.9 + 0.12 * glow.value }] }));
   const look = item ? rarityLook(item.rarity) : null;
   const swap = item ? swapProgress(item, spares) : null;
@@ -92,15 +115,26 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
               </Text>
             </View>
             <BluePanel style={styles.body}>
-              <View style={[styles.hero, photo && styles.heroPhoto, item.goldenHour && styles.heroGolden]}>
+              <ScrollView style={{ maxHeight: height * 0.78 }} contentContainerStyle={styles.bodyInner} showsVerticalScrollIndicator={false} bounces={false}>
+              <View style={[styles.hero, { height: Math.min(photo ? 262 : 230, Math.round(height * (photo ? 0.31 : 0.27))) },
+                photo && styles.heroPhoto, item.goldenHour && styles.heroGolden]}>
                 {!item.found && <Animated.View style={[styles.halo, { backgroundColor: look.frame }, glowStyle]} />}
                 {item.found && !photo && <View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />}
                 {photo ? (
                   <RidePhoto grade={photo} art={itemArt(item)} photoUrl={item.photoUrl} width={Math.min(300, width - 110)} />
                 ) : (
-                  <Image source={itemArt(item)} contentFit="contain" tintColor={item.found ? undefined : SILHOUETTE} style={styles.art} />
+                  <Animated.View style={flipStyle}>
+                    <Image source={itemArt(item)} contentFit="contain" tintColor={item.found ? undefined : SILHOUETTE}
+                      style={{ width: Math.min(190, height * 0.22), height: Math.min(190, height * 0.22) }} />
+                    {item.found && swappedKey > 0 && (
+                      <Animated.View style={[StyleSheet.absoluteFill, silhouetteStyle]}>
+                        <Image source={itemArt(item)} contentFit="contain" tintColor={SILHOUETTE} style={StyleSheet.absoluteFill} />
+                      </Animated.View>
+                    )}
+                  </Animated.View>
                 )}
-                {item.found && item.isNew && <StarBurst key={item.id} />}
+                {item.found && item.isNew && <StarBurst key={`${item.id}-${swappedKey}`} color={look.frame} />}
+                {swappedKey > 0 && item.found && <View style={styles.swappedStamp}><Text style={styles.swappedText}>Swapped!</Text></View>}
                 {item.goldenHour && <View style={styles.goldenTag}><GameIcon name="sparkle" size={18} /><Text style={styles.goldenText}>Golden Hour</Text></View>}
               </View>
               <View style={styles.facts}>
@@ -146,6 +180,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 <GameButton label="Share a spare" icon="heart" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
               )}
               {!!error && <Text style={styles.error}>{error}</Text>}
+              </ScrollView>
             </BluePanel>
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} style={styles.close}>
               <Image source={CLOSE_X} style={StyleSheet.absoluteFill} contentFit="contain" />
@@ -153,7 +188,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
             {photo && shareMount && (
               <Offscreen>
                 <RidePhotoShareCard ref={shareRef} grade={photo} art={itemArt(item)} photoUrl={item.photoUrl}
-                  itemName={item.name} setName={set?.name ?? ''} rarity={item.rarity} sharkName={sharkName} onReadyChange={setShareReady} />
+                  itemName={item.name} setName={set?.name ?? ''} rarity={item.rarity} onReadyChange={setShareReady} />
               </Offscreen>
             )}
           </Animated.View>
@@ -172,7 +207,7 @@ function SwapReady({ cost, busy, reduced, onPress }: { readonly cost: number; re
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   return (
     <Animated.View style={[{ marginTop: 10 }, style]}>
-      <GameButton label={busy ? 'Swapping...' : `Swap! (${cost} spares)`} icon="retry" loading={busy} onPress={onPress} fullWidth
+      <GameButton label={`Swap! (${cost} spares)`} icon="swap" loading={busy} onPress={onPress} fullWidth
         accessibilityLabel={`Swap ${cost} spares for this item`} />
     </Animated.View>
   );
@@ -183,15 +218,20 @@ const styles = StyleSheet.create({
   cardWrap: { width: '100%', maxWidth: 390, paddingTop: 26 },
   ribbon: { position: 'absolute', top: 0, left: 24, right: 24, height: 62, zIndex: 3, justifyContent: 'center', paddingHorizontal: 34 },
   ribbonText: { fontFamily: 'Shark', fontSize: 24, color: '#7a3d00', textAlign: 'center', marginTop: -6 },
-  body: { paddingTop: 34, paddingHorizontal: 14, paddingBottom: 16 },
+  body: { paddingTop: 34 },
+  bodyInner: { paddingHorizontal: 14, paddingBottom: 16 },
   hero: {
-    height: 230, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: 'rgba(255,255,255,0.55)', overflow: 'hidden',
   },
-  heroPhoto: { height: 262, backgroundColor: 'rgba(255,255,255,0.12)' },
-  heroGolden: { backgroundColor: 'rgba(255,207,59,0.45)', borderColor: BRAND.gold },
+  heroPhoto: { backgroundColor: 'transparent', borderWidth: 0 },
+  heroGolden: { backgroundColor: '#ffd66b', borderColor: BRAND.gold, borderWidth: 3 },
+  swappedStamp: {
+    position: 'absolute', top: 12, right: 10, paddingHorizontal: 12, height: 34, justifyContent: 'center', borderRadius: 8,
+    backgroundColor: BRAND.green, borderWidth: 3, borderColor: BRAND.white, transform: [{ rotate: '8deg' }],
+  },
+  swappedText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, textTransform: 'uppercase' },
   halo: { position: 'absolute', width: 210, height: 210, borderRadius: 105 },
-  art: { width: 190, height: 190 },
   goldenTag: {
     position: 'absolute', bottom: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
     height: 28, borderRadius: 14, backgroundColor: '#7a3d00',

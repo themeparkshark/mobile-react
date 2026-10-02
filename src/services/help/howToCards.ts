@@ -28,8 +28,8 @@ export const HOW_TO_CARDS: readonly HowToCard[] = [
     line: 'Every catch fills your book.', colors: ['#3cc77a', '#14915a'] },
   { id: 'park', art: 'park', title: 'Park day!', topic: 'park',
     line: 'Beat ride games at the park.', colors: ['#ff6f61', '#d93a52'] },
-  { id: 'line', art: 'line', title: 'Play in line', topic: 'lineplay',
-    line: 'Play games while you wait.', colors: ['#5a7cf0', '#2f4cc4'] },
+  { id: 'line', art: 'line', title: 'Line time pays', topic: 'lineplay',
+    line: 'Waiting in line fills a prize!', colors: ['#5a7cf0', '#2f4cc4'] },
 ];
 
 /** Most words a card line may use (kids read 5 to 7 words at a glance). */
