@@ -30,7 +30,7 @@ import Svg, { Path as SvgPath } from 'react-native-svg';
 import { ART, BADGES, C, SHARKS, type SharkLook } from '../art';
 import { FINAL_HOLD_MS } from '../engine/config';
 
-export type TileState = 'down' | 'up' | 'dim' | 'locked' | 'amber' | 'correct' | 'wrong' | 'removed' | 'reveal-dim';
+export type TileState = 'down' | 'up' | 'dim' | 'locked' | 'amber' | 'correct' | 'truth' | 'wrong' | 'removed' | 'reveal-dim';
 
 interface Props {
   index: number;
@@ -56,6 +56,8 @@ interface Props {
   chomped: boolean;
   /** Read-only (spectating, someone else's pick): no touch. */
   disabled?: boolean;
+  /** Tension path drum-roll: your locked tile swells to 1.04 (design 13). */
+  tense?: boolean;
 }
 
 /** Labels longer than this use the compact face: smaller corner badge, wider text. */
@@ -64,7 +66,7 @@ export const TILE_COMPACT_CHARS = 26;
 const LIP = 6;
 
 export const Tile = React.memo(function Tile({
-  index, label, state, width, height, onTapUI, onTouch, holdToLock, flipDelay, heads, share, wiggleKey, reducedMotion, fontSize, chomped, disabled,
+  index, label, state, width, height, onTapUI, onTouch, holdToLock, flipDelay, heads, share, wiggleKey, reducedMotion, fontSize, chomped, disabled, tense,
 }: Props) {
   const flip = useSharedValue(1);
   const press = useSharedValue(0);
@@ -117,6 +119,14 @@ export const Tile = React.memo(function Tile({
       white.value = withSequence(withTiming(1, { duration: 16 }), withDelay(33, withTiming(0, { duration: 140 })));
       pop.value = reducedMotion ? 1 : withSequence(withTiming(1.06, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
       rimOn.value = 1;
+    } else if (state === 'truth') {
+      // You picked wrong: the correct tile pulses green twice, 2 x 180 ms. No stamp.
+      press.value = withTiming(0, { duration: 60 });
+      pop.value = reducedMotion ? 1 : withSequence(
+        withTiming(1.06, { duration: 90 }), withTiming(1, { duration: 90 }),
+        withTiming(1.06, { duration: 90 }), withTiming(1, { duration: 90 }),
+      );
+      rimOn.value = 0;
     } else if (state === 'wrong') {
       press.value = withTiming(0, { duration: 60 });
       pop.value = reducedMotion ? 1 : withSequence(withTiming(0.92, { duration: 70 }), withSpring(0.98, { damping: 10, stiffness: 300 }));
@@ -132,6 +142,11 @@ export const Tile = React.memo(function Tile({
       ring.value = 0;
     }
   }, [state, press, lift, white, pop, rimOn, ring, reducedMotion]);
+
+  useEffect(() => {
+    if (reducedMotion || (state !== 'locked' && state !== 'amber')) return;
+    pop.value = withTiming(tense ? 1.04 : 1, { duration: tense ? 160 : 90, easing: Easing.out(Easing.quad) });
+  }, [tense, state, pop, reducedMotion]);
 
   useEffect(() => {
     if (chomped) bite.value = reducedMotion ? 1 : withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) });
@@ -223,7 +238,7 @@ export const Tile = React.memo(function Tile({
 
   const badge = BADGES[index % 4];
   const dim = state === 'dim' || state === 'reveal-dim' || state === 'removed';
-  const bg = state === 'correct' ? C.gold : state === 'wrong' ? C.coral : state === 'amber' ? '#ffb347' : state === 'locked' ? '#fff3c4' : C.cream;
+  const bg = state === 'correct' ? C.gold : state === 'truth' ? C.green : state === 'wrong' ? C.coral : state === 'amber' ? '#ffb347' : state === 'locked' ? '#fff3c4' : C.cream;
   const border = state === 'locked' || state === 'amber' ? C.goldDeep : C.ink;
   if (state === 'removed' && !chomped) return <View style={{ width, height: height + LIP }} />;
 

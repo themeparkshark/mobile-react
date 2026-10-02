@@ -407,7 +407,7 @@ export function LifelineButton({ onPress }: { onPress: () => void }) {
 
 const styles = StyleSheet.create({
   stampText: { fontFamily: 'Shark', textAlign: 'center', ...OUTLINE },
-  stamp: { position: 'absolute', width: 300, alignItems: 'center' },
+  stamp: { position: 'absolute', width: 300, alignItems: 'center', overflow: 'visible' },
   bark: { position: 'absolute', top: 8, maxWidth: 220, backgroundColor: C.cream, borderWidth: 3, borderColor: C.ink, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
   barkText: { fontFamily: 'Knockout', fontSize: 17, color: C.navy, minHeight: 20 },
   barkTail: { position: 'absolute', bottom: -9, width: 16, height: 16, backgroundColor: C.cream, borderRightWidth: 3, borderBottomWidth: 3, borderColor: C.ink, transform: [{ rotate: '45deg' }] },
