@@ -8,6 +8,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadTs, read, root } = require('./helpers/load-ts.cjs');
+const { plain } = require('./helpers/plain.cjs');
 
 const EM_DASH = new RegExp(String.fromCharCode(0x2014));
 
@@ -37,24 +38,36 @@ test('help copy no longer mentions the removed grab zone', () => {
   assert.doesNotMatch(words, /grab zone/i);
 });
 
-test('How to Play is 4 to 6 big cards, one short sentence each, with art that exists and stays small', () => {
-  const { HOW_TO_CARDS } = loadTs('src/services/help/howToCards.ts');
+test('How to Play is 4 to 6 big cards: 7 words or fewer, no ride-coin clash, a voice clip each, demo art is small WebP', () => {
+  const { HOW_TO_CARDS, MAX_LINE_WORDS, wordCount } = loadTs('src/services/help/howToCards.ts');
   const topics = loadTs('src/services/help/helpTopics.ts');
   assert.ok(HOW_TO_CARDS.length >= 4 && HOW_TO_CARDS.length <= 6);
-  let total = 0;
+  assert.equal(MAX_LINE_WORDS, 7);
   for (const card of HOW_TO_CARDS) {
-    assert.ok(card.title.split(' ').length <= 3, `${card.id}: title is a few words`);
+    assert.ok(wordCount(card.title) <= 3, `${card.id}: title is a few words`);
+    assert.ok(wordCount(card.line) <= MAX_LINE_WORDS, `${card.id}: ${wordCount(card.line)} words`);
     assert.equal(card.line.split(/(?<=[.!?])\s+/).length, 1, `${card.id}: one sentence`);
-    assert.ok(card.line.length <= 60, `${card.id}: kid-short`);
     assert.doesNotMatch(card.title + card.line, EM_DASH);
+    assert.doesNotMatch(card.title + card.line, /\bcoins?\b/i, `${card.id}: "coins" is the currency only`);
     assert.ok(topics.helpTopic(card.topic), `${card.id} opens a More topic`);
-    const file = path.join(root, `assets/images/howto/${card.art}.png`);
-    assert.ok(fs.existsSync(file), file);
-    total += fs.statSync(file).size;
+    assert.ok(fs.existsSync(path.join(root, `assets/sounds/howto/vo-${card.art}.mp3`)), `voice for ${card.id}`);
   }
-  assert.ok(total < 600 * 1024, `How to Play art stays under 600 KB (${total})`);
-  const ids = HOW_TO_CARDS.map(card => card.id);
-  assert.deepEqual([...ids].sort(), ['book', 'catch', 'find', 'line', 'park']);
+  const dir = path.join(root, 'assets/images/howto');
+  const files = fs.readdirSync(dir);
+  assert.ok(files.every(file => file.endsWith('.webp')), 'demo layers are WebP');
+  const total = files.reduce((sum, file) => sum + fs.statSync(path.join(dir, file)).size, 0);
+  assert.ok(total < 400 * 1024, `How to Play art stays under 400 KB (${total})`);
+  assert.deepEqual(plain(HOW_TO_CARDS.map(card => card.id)).sort(), ['book', 'catch', 'find', 'line', 'park']);
+});
+
+test('How to Play shark is Alex\'s real PNG (ART_RULES rule 1), never a generated shark', () => {
+  const demos = read('src/screens/HowToPlay/HowToDemos.tsx');
+  assert.match(demos, /require\('..\/..\/..\/assets\/images\/howto\/shark\.webp'\)/);
+  const builder = path.join(process.env.HOME, 'apps/tps-prime-time-audit/next-wave/home-hunt-v3/tools/howto_build.py');
+  if (!fs.existsSync(builder)) return; // Art pipeline lives outside the repo.
+  const py = fs.readFileSync(builder, 'utf8');
+  assert.match(py, /sharks\/CLASSIC UPDATE 2023 WITH EYES\.png/);
+  assert.match(py, /export\(shark, 'shark'/);
 });
 
 test('page math clamps to the deck', () => {
@@ -67,22 +80,48 @@ test('page math clamps to the deck', () => {
   assert.equal(pageForOffset(Number.NaN, 390), 0);
 });
 
-test('How to Play screen: swipe deck, springy dots, a soft sound per swipe, More holds the detail', () => {
+test('How to Play screen: looping demos, next card peeks, read aloud, springy dots, Learn more pill, Reduce Motion', () => {
   const screen = read('src/screens/HowToPlayScreen.tsx');
-  assert.match(screen, /pagingEnabled/);
-  assert.match(screen, /withSpring/);
+  assert.match(screen, /snapToInterval=\{interval\}/);
+  assert.match(screen, /const cardWidth = width - SIDE \* 2 - 20;/, 'the next card peeks in');
+  assert.match(screen, /<HowToDemo art=\{card\.art\}/);
+  assert.match(screen, /VOICE\[card\.art\]/);
+  assert.match(screen, /'Read aloud'/);
   assert.match(screen, /playSfx\('ui\.select'/);
-  assert.match(screen, /HowToPlayMore/);
-  assert.match(screen, />More</);
-  // A "?" sheet that links a topic opens More on that topic.
+  assert.match(screen, /interpolateColor\(distance/, 'dots follow the finger without a spring per frame');
+  assert.doesNotMatch(screen, /withSpring\(on \?/);
+  assert.match(screen, /Learn more/);
+  assert.doesNotMatch(screen, /of \{HOW_TO_CARDS\.length\}<\/Text>/, 'no "1 OF 5" eyebrow');
+  assert.match(screen, /onAccessibilityAction/);
+  assert.match(screen, /BOTTOM_BAR_OVERHANG/);
   assert.match(screen, /useState\(focus != null\)/);
-  // Only the visible card floats (battery).
-  assert.match(screen, /if \(!active \|\| reduced\)/);
+  const demos = read('src/screens/HowToPlay/HowToDemos.tsx');
+  assert.match(demos, /if \(!active \|\| reduced\) \{ t\.value = 1; return; \}/, 'only the visible card animates; Reduce Motion shows a still');
   const more = read('src/screens/HowToPlay/HowToPlayMore.tsx');
-  assert.match(more, /HELP_TOPICS\.map/);
+  assert.match(more, /MORE_ORDER\.map/);
+  assert.match(more, /accessibilityState=\{\{ expanded: open \}\}/, 'collapsed rows');
+  assert.match(more, /LEAD: readonly HelpTopicId\[\] = \['home'/, 'the at-home hunt leads');
   assert.match(more, /GLOSSARY_KEYS\.map/);
   assert.match(more, /replayAllTutorials/);
-  for (const file of ['src/screens/HowToPlayScreen.tsx', 'src/screens/HowToPlay/HowToPlayMore.tsx', 'src/services/help/howToCards.ts']) {
+  for (const file of ['src/screens/HowToPlayScreen.tsx', 'src/screens/HowToPlay/HowToPlayMore.tsx', 'src/screens/HowToPlay/HowToDemos.tsx', 'src/services/help/howToCards.ts']) {
     assert.doesNotMatch(read(file), EM_DASH, file);
   }
+});
+
+test('menu: real X close, whole-row targets, VoiceOver labels, reverse-stagger close, reward badge', () => {
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  // menuDelay is a pure function; evaluate it from source.
+  const fn = menu.match(/export function menuDelay[\s\S]*?\n\}/)[0].replace('export ', '').replace(/: number/g, '').replace(/: boolean/g, '');
+  const model = { menuDelay: new Function(`${fn}; return menuDelay;`)() };
+  assert.deepEqual([0, 1, 2, 3, 4].map(i => model.menuDelay(i, 5, true)), [0, 50, 100, 150, 200]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(i => model.menuDelay(i, 5, false)), [120, 90, 60, 30, 0], 'close runs bottom first');
+  assert.doesNotMatch(menu, /faTimes|rotate: iconRotate|45deg/, 'never a rotated X that reads as +');
+  assert.match(menu, /close-red\.webp/);
+  assert.match(menu, /accessibilityLabel=\{open \? 'Close menu' : 'Open menu'\}/);
+  assert.match(menu, /accessibilityElementsHidden=\{!open\}/);
+  assert.match(menu, /accessibilityViewIsModal=\{open\}/);
+  assert.match(menu, /\{round\}\s*\{label\}/, 'icon and label are one Pressable row');
+  assert.match(menu, /badge=\{item\.id === 'sets' && rewardWaiting\}/);
+  assert.match(menu, /useUiReducedMotion/);
+  assert.doesNotMatch(menu, /bottom: 100/, 'safe-area aware placement');
 });

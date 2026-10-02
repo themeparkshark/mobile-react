@@ -8,6 +8,13 @@ import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
 
+/**
+ * How far the center compass button rises above the bottom bar into the
+ * screen content (its `top: -45` plus breathing room). Scroll content should
+ * end at least this far above the bar.
+ */
+export const BOTTOM_BAR_OVERHANG = 56;
+
 export default function Wrapper({
   children,
   previewMode = false,

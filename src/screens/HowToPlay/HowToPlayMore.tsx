@@ -10,7 +10,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useHelp } from '../../components/help/HelpProvider';
 import * as RootNavigation from '../../RootNavigation';
 import { GLOSSARY_KEYS, type HelpTopicId } from '../../services/help/glossary';
-import { HELP_TOPICS, type HelpArtKey } from '../../services/help/helpTopics';
+import { HELP_TOPICS, type HelpArtKey, type HelpTopic } from '../../services/help/helpTopics';
+import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
+import { playSfx } from '../../gamekit/SFX';
 import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW, textPreset } from '../../ui';
 
 /** Existing hand-drawn art only (Alex's originals and the kit art players already know). */
@@ -28,8 +30,16 @@ const ART: Readonly<Record<HelpArtKey, number>> = {
   extras: require('../../../assets/images/screens/pin-collections/shark.png'),
 };
 
+/** The at-home hunt leads; park and line topics follow. */
+const LEAD: readonly HelpTopicId[] = ['home', 'collections', 'basics'];
+export const MORE_ORDER: readonly HelpTopic[] = [
+  ...LEAD.map(id => HELP_TOPICS.find(topic => topic.id === id)).filter((topic): topic is HelpTopic => !!topic),
+  ...HELP_TOPICS.filter(topic => !LEAD.includes(topic.id)),
+];
+
 export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId | null }) {
   const { glossary, explain, replayAllTutorials } = useHelp();
+  const [openId, setOpenId] = useState<HelpTopicId | null>(focus ?? MORE_ORDER[0]?.id ?? null);
   const scroll = useRef<ScrollView>(null);
   const offsets = useRef<Partial<Record<HelpTopicId, number>>>({});
   const [replaying, setReplaying] = useState(false);
@@ -59,25 +69,34 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
 
   return (
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {HELP_TOPICS.map(topic => (
-        <View key={topic.id} onLayout={event => { offsets.current[topic.id] = event.nativeEvent.layout.y; }}
-          style={[styles.card, focus === topic.id && styles.cardFocus]}>
-          <View style={styles.cardHead}>
-            <Image source={ART[topic.art]} style={styles.cardArt} contentFit="contain" />
-            <Text accessibilityRole="header" style={styles.cardTitle}>{topic.title}</Text>
+      {MORE_ORDER.map(topic => {
+        const open = openId === topic.id;
+        return (
+          <View key={topic.id} onLayout={event => { offsets.current[topic.id] = event.nativeEvent.layout.y; }}
+            style={[styles.card, focus === topic.id && styles.cardFocus]}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={topic.title}
+              onPress={() => { playSfx('ui.tap', 0.5); setOpenId(open ? null : topic.id); }} style={styles.cardHead}>
+              <View style={styles.cardArtWell}><Image source={ART[topic.art]} style={styles.cardArt} contentFit="contain" /></View>
+              <Text accessibilityRole="header" style={styles.cardTitle}>{topic.title}</Text>
+              <View style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}><GameIcon name="arrow" size={24} /></View>
+            </Pressable>
+            {open && (
+              <>
+                {topic.lines.slice(0, 2).map(line => <Text key={line} style={styles.cardLine}>{line}</Text>)}
+                <View style={styles.chips}>
+                  {topic.terms.map(key => (
+                    <Pressable key={key} accessibilityRole="button" accessibilityLabel={`What is ${glossary[key].label}?`}
+                      onPress={() => explain(key)} style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}>
+                      <GameIcon name={glossary[key].icon} size={22} />
+                      <Text style={styles.chipText}>{glossary[key].label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
           </View>
-          {topic.lines.map(line => <Text key={line} style={styles.cardLine}>{line}</Text>)}
-          <View style={styles.chips}>
-            {topic.terms.map(key => (
-              <Pressable key={key} accessibilityRole="button" accessibilityLabel={`What is ${glossary[key].label}?`}
-                onPress={() => explain(key)} style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}>
-                <GameIcon name={glossary[key].icon} size={20} />
-                <Text style={styles.chipText}>{glossary[key].label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ))}
+        );
+      })}
 
       <Text style={styles.section}>Every word in the game</Text>
       <View style={styles.list}>
@@ -106,7 +125,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
         <GameButton label="Settings and support" variant="ghost" onPress={() => RootNavigation.navigate('Settings')}
           style={{ marginTop: 4 }} />
       </View>
-      <View style={{ height: 120 }} />
+      <View style={{ height: BOTTOM_BAR_OVERHANG + 40 }} />
     </ScrollView>
   );
 }
@@ -119,17 +138,18 @@ const styles = StyleSheet.create({
     marginBottom: 12, ...SHADOW.card, shadowOpacity: 0.12,
   },
   cardFocus: { borderColor: BRAND.gold, borderWidth: 3 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  cardArt: { width: 46, height: 46, marginRight: 10 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', minHeight: 48, marginBottom: 2 },
+  cardArtWell: { width: 48, height: 48, marginRight: 10, alignItems: 'center', justifyContent: 'center' },
+  cardArt: { width: 44, height: 44 },
   cardTitle: { flex: 1, fontFamily: 'Shark', fontSize: 21, color: BRAND.navy },
   cardLine: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 22, color: BRAND.navy, marginBottom: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef7ff', borderRadius: RADIUS.pill,
-    borderWidth: 2, borderColor: BRAND.sky, paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 2, borderColor: BRAND.sky, paddingHorizontal: 12, minHeight: 44,
   },
   chipPressed: { backgroundColor: BRAND.cream },
-  chipText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.blue },
+  chipText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
   section: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, textTransform: 'uppercase', marginTop: 10, marginBottom: 8, marginLeft: 6 },
   list: { backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: '#cfe8fb', marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12 },
