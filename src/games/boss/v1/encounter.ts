@@ -1,4 +1,4 @@
-import type { BossId, RaidDamageWeights } from '../../api/endpoints/parks/raid';
+import type { BossId, RaidDamageWeights } from '../../../api/endpoints/parks/raid';
 
 /**
  * Boss Brawl rules, shared by the arena, the node balance sim and the server

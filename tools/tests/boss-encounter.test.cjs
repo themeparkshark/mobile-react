@@ -1,111 +1,634 @@
-const assert=require('node:assert/strict'),test=require('node:test'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const m=require('./helpers/boss-encounter.cjs');
-const {runtime}=require('./helpers/reward-hook-runtime.cjs');
-const root=path.resolve(__dirname,'../..'),ts=require(path.join(root,'node_modules/typescript'));
-const raidModule={exports:{}};
-vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/api/endpoints/parks/raid.ts'),'utf8'),
- {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,
- {module:raidModule,exports:raidModule.exports,require:()=>({default:{}})});
-const {DEFAULT_DAMAGE,raidDamage}=raidModule.exports;
-const fresh=()=>({hits:0,weak:0,lastHitMs:-m.HIT_GAP_MS});
-/** BossRaidService::damageFor in PHP, written out: floor((hits*per_hit + weak*per_weak_hit) * rate). */
-const php=(hits,weak,w,rate=1)=>Math.floor((hits*w.per_hit+weak*w.per_weak_hit)*rate);
+'use strict';
+/**
+ * Boss Brawl v7 sim (design studio/design/boss.md v7): balance targets (9.1,
+ * 20.1), counter windows and the reflex grace, Grit / Knockdown / TKO, Pin and
+ * Pop slots, Easy Slam, Guard gating, fakes, the bubble, Break, the Final Pop
+ * with Anchor Stars, Captain's Call, boons, the step grid, pause / paintball,
+ * walking parity, determinism, golden replay fixtures, and the legacy raid proof.
+ */
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const { loadTs } = require('./helpers/ts-module.cjs');
 
-test('the brawl score is the server formula with the raid weights, including remote rounding',()=>{
- for(const w of [DEFAULT_DAMAGE,{per_hit:10,per_weak_hit:20,weak_share:3},{per_hit:3,per_weak_hit:55,weak_share:3}])
-  for(const [hits,weak] of [[0,0],[138,0],[69,23],[46,9],[7,2]])for(const rate of [1,0.6,0.25]){
-   const brawl=m.brawlDamage({hits,weak},rate,w);
-   assert.equal(brawl,php(hits,weak,w,rate));assert.equal(brawl,raidDamage(hits,weak,w,rate));}
- // The reviewer's example: a 138-hit spam round is 552 on the server, not 1,380.
- assert.equal(m.brawlDamage({hits:138,weak:0},1,DEFAULT_DAMAGE),552);
-});
-test('Kraken: only the telegraphed buoy lures it; the other buoy snags and locks the buoys',()=>{
- const state=m.createEncounter('kraken',0);
- assert.equal(m.krakenTell(state,100),null);
- const tell=m.krakenTell(state,m.KRAKEN_FIRST_TELL_MS+100);assert.equal(tell.up,true);
- const wrong=m.encounterAction(state,-tell.side,m.KRAKEN_FIRST_TELL_MS+100);
- assert.equal(wrong.opened,false);assert.equal(wrong.misread,true);assert.equal(wrong.state.misreads,1);
- assert.equal(m.encounterLocked(wrong.state,m.KRAKEN_FIRST_TELL_MS+100+m.SNAG_MS-1),true);
- assert.equal(m.encounterAction(wrong.state,tell.side,m.KRAKEN_FIRST_TELL_MS+200).accepted,false);
- const lured=m.encounterAction(state,tell.side,m.KRAKEN_FIRST_TELL_MS+100);
- assert.equal(lured.opened,true);assert.equal(lured.state.lureSide,tell.side);assert.equal(m.brawlDamage(fresh(),1),0);
- const at=m.KRAKEN_FIRST_TELL_MS+100;
- assert.equal(m.encounterExposed(lured.state,at+m.KRAKEN_OPEN_MS-1),true);assert.equal(m.encounterExposed(lured.state,at+m.KRAKEN_OPEN_MS),false);
- assert.equal(m.encounterExposed(m.consumeOpening(lured.state,at+300),at+300),false);
- // A buoy with no tentacle over it is a snag too.
- assert.equal(m.encounterAction(state,1,100).misread,true);
-});
-test('Robo-Shark: taps during the flash are ignored, a wrong node zaps and re-flashes, and the board shuffles',()=>{
- let state=m.createEncounter('robo_shark',0);const route=[...state.circuit];
- assert.equal(m.roboBoard(state,state.showFrom+10).phase,'flash');
- assert.equal(m.roboBoard(state,state.showFrom+10).flashing,route[0]);
- assert.equal(m.encounterAction(state,route[0],state.showFrom+10).accepted,false);
- const after=state.showUntil;const board=m.roboBoard(state,after);
- assert.equal(board.phase,'connect');assert.notDeepEqual([...board.positions],[...state.shownLayout]);
- state=m.encounterAction(state,route[0],after).state;assert.equal(state.step,1);
- const zap=m.encounterAction(state,route[2],after+100);assert.equal(zap.misread,true);assert.equal(zap.state.step,0);
- assert.equal(m.roboBoard(zap.state,after+100+m.ZAP_MS+10).phase,'flash');
- let s2=zap.state;const t=s2.showUntil;for(let i=0;i<3;i++)s2=m.encounterAction(s2,route[i],t+i*200).state;
- assert.equal(m.encounterExposed(s2,t+400),true);
- const next=m.consumeOpening(s2,t+500);assert.equal(next.step,0);assert.equal(m.roboBoard(next,t+510).phase,'flash');
-});
-test('Ghost Squid: a 300ms tell before it turns solid, and early taps spook it',()=>{
- const state=m.createEncounter('ghost_squid',0);
- assert.equal(m.ghostPhase(1099),'hidden');assert.equal(m.ghostPhase(1100),'tell');assert.equal(m.ghostPhase(1400),'solid');
- const early=m.registerStrike(fresh(),state,1200,true);assert.equal(early.spooked,true);assert.equal(early.stats.hits,0);
- assert.equal(m.registerStrike(fresh(),early.state,1500,true),null); // still spooked
- assert.equal(m.registerStrike(fresh(),early.state,1200+m.SPOOK_MS,true).stats.hits,1);
- const hit=m.registerStrike(fresh(),state,1400,true);assert.equal(hit.stats.hits,1);assert.equal(hit.spooked,false);
- assert.equal(m.ghostRevealed(2399),true);assert.equal(m.ghostRevealed(2400),false);
-});
-test('critical openings never exceed the server one-third limit, the hit cap holds, and remote damage rounds once',()=>{
- const t=m.createEncounter('kraken',0),tell=m.krakenTell(t,m.KRAKEN_FIRST_TELL_MS);
- const state=m.encounterAction(t,tell.side,m.KRAKEN_FIRST_TELL_MS).state;const base=m.KRAKEN_FIRST_TELL_MS;
- let stats=fresh();let hit;
- for(let i=0;i<3;i++){hit=m.registerStrike(stats,state,base+i*m.HIT_GAP_MS,true);stats=hit.stats;}
- assert.equal(hit.critical,true);assert.equal(stats.hits,3);assert.equal(stats.weak,1);
- assert.equal(m.brawlDamage(stats,0.25),Math.floor((3*4+40)*0.25));
- assert.equal(m.brawlDamage(stats,0.6),Math.floor((3*4+40)*0.6));
- assert.equal(m.registerStrike(stats,state,base+2*m.HIT_GAP_MS+1,true),null);
- assert.equal(m.registerStrike(stats,state,base+3*m.HIT_GAP_MS,true,3),null);
- assert.equal(m.registerStrike(stats,state,20000,true),null);
-});
-test('no em dashes or check glyphs in brawl copy',()=>{
- for(const file of ['src/games/boss/encounter.ts','src/games/boss/BossBrawl.tsx']){
-  const src=fs.readFileSync(path.join(root,file),'utf8');
-  assert.equal(/—|✓|✔|ROUND PREVIEW|BOSS_ART_SCALE/.test(src),false,file);}
-});
-function arena(boss='kraken',reduced=false){
- let now=0,intervalId=0;const ticks=new Map();
- const shake={style:{},translateX:{value:0},translateY:{value:0},shake(){}};
- const flash={style:{},opacity:{value:0},flash(){}};
- const tokens={BRAND:{white:'#fff',gold:'#ffcf3b',goldLight:'#ffe07a',sky:'#bfe5ff',blue:'#0768b9',blueBright:'#0879ca',blueLip:'#05468f',navy:'#05346e',red:'#ef4a3c'}};
- const view=runtime('src/games/boss/BossBrawl.tsx',{
-  './encounter':m,'../../hooks/useReducedGameMotion':{default:()=>reduced},
-  '../../components/boss/bossArt':{BOSS_ART:{kraken:1,robo_shark:2,ghost_squid:3}},'../../ui/tokens':tokens,
-  '../../gamekit':{GameShellV2:'GameShell',ParticleField:'Particles',useShake:()=>shake,useFlash:()=>flash,haptic(){},playSfx(){}},
- },{visible:true,boss,bossName:boss,hpLeft:5000,hpMax:5000,onComplete(){},onClose(){}},
- {Date:{now:()=>now},setInterval(fn){ticks.set(++intervalId,fn);return intervalId;},clearInterval(id){ticks.delete(id);}});
- view.find(n=>!!n.props?.onLayout).props.onLayout({nativeEvent:{layout:{width:390,height:600}}});view.render();
- return {view,ticks,setNow(value){now=value;},tick(){for(const fn of ticks.values())fn();view.render();},strike(){view.find(n=>!!n.props?.onAccessibilityTap).props.onAccessibilityTap();view.render();}};
+const C = loadTs('src/games/boss/sim/constants.ts');
+const enc = loadTs('src/games/boss/sim/encounter.ts');
+const pat = loadTs('src/games/boss/sim/patterns.ts');
+const bots = loadTs('src/games/boss/sim/bots.ts');
+const round = loadTs('src/games/boss/sim/round.ts');
+
+const BOSSES = ['kraken', 'robo_shark', 'ghost_squid'];
+const N = 200;
+
+const cache = new Map();
+function play(boss, name, seeds, opts = {}) {
+  const key = `${boss}:${name}:${seeds}:${JSON.stringify(opts)}`;
+  if (cache.has(key)) return cache.get(key);
+  const out = [];
+  const bot = typeof name === 'string' ? bots.BOTS[name] : name;
+  for (let s = 1; s <= seeds; s++) out.push(round.summarize(bots.runBotRound(boss, s * 7777, bot, { variant: 1, ...opts })));
+  cache.set(key, out);
+  return out;
 }
-test('pausing freezes encounter time, rejects paused inputs and resumes the same opening',()=>{
- const a=arena();a.view.tree.props.onStart();a.view.render();
- const at=m.KRAKEN_FIRST_TELL_MS+100;a.setNow(at);a.tick();
- const tell=m.krakenTell(m.createEncounter('kraken',0),at);
- a.view.find(n=>n.props?.accessibilityLabel===`Lure Kraken ${tell.side<0?'left':'right'} with a buoy`).props.onPress();a.view.render();
- a.setNow(at+100);a.strike();a.view.tree.props.onPause();a.view.render();a.setNow(at+10300);
- const damage=a.view.tree.props.score;assert.equal(damage,4);
- a.strike();a.tick();assert.equal(a.view.tree.props.score,damage);
- a.view.tree.props.onResume();a.setNow(at+10300+m.HIT_GAP_MS);a.strike();a.setNow(at+10300+2*m.HIT_GAP_MS);a.strike();
- assert.equal(a.view.tree.props.score,3*4+40); // three hits, the third one a critical
- a.view.change({visible:false});const before=a.view.tree.props.score;a.setNow(at+11000);a.strike();assert.equal(a.view.tree.props.score,before);
- a.view.unmount();assert.equal(a.ticks.size,0);
+const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const mean = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
+const rate = (xs, f) => xs.filter(f).length / xs.length;
+const dmg = (rs) => median(rs.map((s) => s.damage));
+
+/** Advance a fresh bout to its first attack and return [bout, attack]. */
+function firstAttack(boss = 'kraken', bout = 0, extra = {}) {
+  const b = enc.createBout({ boss, seed: 42, bout, variant: 1, ...extra });
+  enc.advance(b, b.nextAt);
+  assert.equal(b.phase, enc.P_ATTACK);
+  return [b, b.attack];
+}
+/** Counter the first attack PERFECT and return [bout, opening]. */
+function firstOpening(boss = 'kraken', bout = 0, extra = {}) {
+  const [b, a] = firstAttack(boss, bout, extra);
+  for (const s of a.steps) tap(b, s.I, s.lane);
+  assert.equal(b.phase, enc.P_OPEN);
+  return [b, b.opening];
+}
+function tap(b, t, lane) { enc.input(b, { t, k: C.IN_TARGET, a: lane }); }
+const codes = (b) => b.events.map((e) => e.code);
+const has = (b, code) => b.events.some((e) => e.code === code);
+
+// ---- balance (design 9.1, 20.1) -----------------------------------------------
+
+test('balance (Kraken, 200 seeds): every 9.1 bot target', () => {
+  const m = dmg(play('kraken', 'median', N));
+  const med = play('kraken', 'median', N);
+  assert.ok(m >= 1000 && m <= 1150, `median 1 000-1 150 (got ${m})`);
+  assert.equal(median(med.map((s) => s.stars)), 2, 'median: 2 stars');
+  const kd = rate(med, (s) => s.knockdowns > 0);
+  assert.ok(kd >= 0.05 && kd <= 0.15, `median Knockdown 5-15% (got ${kd})`);
+  assert.ok(rate(med, (s) => s.tko) <= 0.05, 'median TKO <= 5%');
+
+  const pad = play('kraken', 'padMasher', N);
+  assert.ok(pad.every((s) => s.damage === 0 && s.stars === 0), 'pad masher: 0');
+  const lane = play('kraken', 'laneMasher', N);
+  assert.ok(dmg(lane) <= 0.15 * m, `lane masher <= 15% (got ${dmg(lane)})`);
+  assert.ok(rate(lane, (s) => s.knockdowns > 0) >= 0.75, 'lane masher knocked down in most rounds');
+  const guess = play('kraken', 'guesser', N);
+  assert.ok(dmg(guess) <= 0.35 * m, 'guesser <= 35%');
+  assert.ok(guess.every((s) => s.stars <= 1), 'guesser <= 1 star');
+  assert.ok(rate(guess, (s) => s.knockdowns > 0) >= 0.6, 'guesser knocked down >= 60%');
+  const kid = play('kraken', 'kid', N);
+  assert.ok(dmg(kid) >= 0.5 * m, `kid >= 50% (got ${dmg(kid)})`);
+  assert.ok(rate(kid, (s) => s.dizzy > 0) <= 0.34, 'kid DIZZY in <= 1 of 3 rounds');
+  assert.ok(dmg(play('kraken', 'ringBlind', N)) <= 0.55 * m, 'ring-blind <= 55%');
+  const slam = dmg(play('kraken', 'easySlam', N));
+  assert.ok(slam >= 0.8 * m && slam <= 0.85 * m, `Easy-Slam-only 80-85% of median (got ${(slam / m).toFixed(3)})`);
+  const back = dmg(play('kraken', 'comeback', N));
+  assert.ok(back >= 0.85 * m, `comeback (punished on bout 1 attacks 1-2) >= 85% of median (got ${(back / m).toFixed(2)})`);
+  const mast = play('kraken', 'mastery', N);
+  assert.ok(dmg(mast) >= 2.8 * m, `mastery >= 2.8x median (got ${(dmg(mast) / m).toFixed(2)})`);
+  assert.ok(rate(mast, (s) => s.stars === 3) >= 0.95, 'mastery 3 stars in >= 95%');
+  assert.ok(rate(mast, (s) => s.crown) >= 0.6, `mastery Crown in >= 60% (got ${rate(mast, (s) => s.crown)})`);
+  assert.ok(rate(mast, (s) => s.knockdowns > 0) < 0.01, 'mastery Knockdown < 1%');
+  assert.ok(mast.every((s) => s.maxChain >= 10), 'mastery reaches FURY');
 });
-test('reduced motion retains timed ghost play and finishes once without burst or floating damage effects',()=>{
- const a=arena('ghost_squid',true);a.view.tree.props.onStart();a.view.render();
- a.setNow(1400);a.strike();assert.equal(a.view.tree.props.score,4);
- assert.equal(a.view.find(n=>n.type==='Particles'),undefined);
- a.setNow(20000);a.tick();const result=a.view.tree.props.result;assert.equal(result.score,4);assert.equal(result.meta.duration_ms,20000);
- a.setNow(21000);a.tick();assert.equal(a.view.tree.props.result,result);
+
+test('ring chain at 90% ring accuracy beats Easy Slam by >= 40%', () => {
+  const chain = { ...bots.BOTS.median, name: 'chain90', ringAcc: 0.9 };
+  const a = dmg(play('kraken', chain, 120));
+  const b = dmg(play('kraken', 'easySlam', 120));
+  assert.ok(a >= 1.4 * b, `${a} vs ${b}`);
+});
+
+test('every boss on one point table: pad masher 0, mastery 3 stars, guesser <= 1 star; held bosses stay playable', () => {
+  const k = dmg(play('kraken', 'median', 80));
+  for (const boss of ['robo_shark', 'ghost_squid']) {
+    assert.ok(play(boss, 'padMasher', 20).every((s) => s.damage === 0));
+    assert.ok(play(boss, 'guesser', 30).every((s) => s.stars <= 1));
+    assert.ok(rate(play(boss, 'mastery', 30), (s) => s.stars === 3) >= 0.7);
+    const m = dmg(play(boss, 'median', 80));
+    // v8: no per-boss weight. Held bosses may sit outside +-8% until M6 tunes their difficulty knobs (9.6).
+    assert.ok(m >= 0.8 * k && m <= 1.1 * k, `${boss} median ${m} vs Kraken ${k}`);
+  }
+});
+
+test('walking (wind-ups +1 step, 2-beat look-ahead) changes each bot by <= 3%', () => {
+  for (const boss of BOSSES) {
+    for (const name of ['median', 'easySlam', 'mastery']) {
+      const a = mean(play(boss, name, 60).map((s) => s.damage));
+      const w = mean(play(boss, name, 60, { walk: true }).map((s) => s.damage));
+      assert.ok(Math.abs(w / a - 1) <= 0.03, `${boss} ${name}: ${a} vs ${w}`);
+    }
+  }
+  const [bs, as] = firstAttack('kraken', 0);
+  const [bw, aw] = firstAttack('kraken', 0, { walk: true });
+  assert.equal(aw.W - as.W, bw.q);
+  assert.equal(enc.lookAheadMs(bs), 4 * bs.q);
+  assert.equal(enc.lookAheadMs(bw), 8 * bw.q);
+});
+
+// ---- counter ----------------------------------------------------------------
+
+test('counter windows: buffer and GOOD before, PERFECT [I-160, I+40], coyote to I+90', () => {
+  const [b0, a] = firstAttack();
+  const s = a.steps[0];
+  tap(b0, s.I - 160, s.lane);
+  assert.ok(has(b0, enc.E_PERFECT));
+  const [b1] = firstAttack();
+  tap(b1, s.I + 41, s.lane);
+  assert.ok(has(b1, enc.E_GOOD) && !has(b1, enc.E_PERFECT));
+  const [b2] = firstAttack();
+  tap(b2, s.I + 90, s.lane);
+  assert.ok(has(b2, enc.E_GOOD));
+  const [b3] = firstAttack();
+  tap(b3, s.I - a.G - 20, s.lane); // inside the 120 ms buffer (and past the reflex grace): GOOD
+  assert.ok(has(b3, enc.E_GOOD));
+  const [b4] = firstAttack();
+  enc.advance(b4, s.I + 91);
+  assert.ok(has(b4, enc.E_PUNISH), 'no input by I + 90 lands the tell');
+});
+
+test('reflex grace: taps in the first 250 ms of a tell never land it and never count as a counter', () => {
+  const [b, a] = firstAttack('kraken', 2); // Fury: the buffer opens right after the tell starts
+  const s = a.steps[0];
+  const wrong = (s.lane + 1) % 3;
+  tap(b, a.T + 60, wrong);
+  tap(b, a.T + 200, s.lane);
+  assert.ok(!has(b, enc.E_PUNISH) && !has(b, enc.E_GOOD) && !has(b, enc.E_PERFECT));
+  assert.equal(b.grit, C.GRIT);
+  tap(b, s.I, s.lane);
+  assert.ok(has(b, enc.E_PERFECT));
+});
+
+test('a wrong lane before the counter window is a soft tick; inside it the tell lands and costs a fin', () => {
+  const [b, a] = firstAttack();
+  const s = a.steps[0];
+  const wrong = (s.lane + 1) % 3;
+  tap(b, s.I - a.G - C.BUFFER_MS - 40, wrong);
+  assert.equal(b.events.at(-1).code, enc.E_EARLY);
+  assert.equal(b.grit, 3);
+  tap(b, s.I - 100, wrong);
+  assert.ok(has(b, enc.E_PUNISH));
+  const g = b.events.find((e) => e.code === enc.E_GRIT);
+  assert.equal(g.a, 2);
+  assert.equal(b.carry.chain, 0);
+});
+
+// ---- Grit, Knockdown, TKO ----------------------------------------------------------
+
+function punishAll(b, until) {
+  for (let i = 0; i < 20 && b.phase !== enc.P_DOWN && b.phase !== enc.P_DONE; i++) {
+    enc.advance(b, until);
+    if (b.phase === enc.P_LEAD) enc.advance(b, b.nextAt);
+    if (b.phase === enc.P_ATTACK) enc.advance(b, b.attack.steps[b.step].I + C.COYOTE_MS + 1);
+  }
+}
+
+test('Grit: three landed tells = Knockdown; 8 taps in 1.5 s gets up and ends the bout; slower is a TKO', () => {
+  const b = enc.createBout({ boss: 'kraken', seed: 5, bout: 0, variant: 1 });
+  // Bout 1 has three attacks and no safe instance: let every one land.
+  punishAll(b, 0);
+  assert.equal(b.phase, enc.P_DOWN, codes(b).join(','));
+  assert.equal(b.grit, 0);
+  assert.ok(has(b, enc.E_KNOCKDOWN));
+  const d = b.down;
+  for (let k = 0; k < 7; k++) enc.input(b, { t: d.open + 10 + k * 100, k: C.IN_GETUP });
+  assert.equal(b.phase, enc.P_DOWN);
+  enc.input(b, { t: d.open + 10 + 7 * 100, k: C.IN_GETUP });
+  assert.equal(b.phase, enc.P_DONE);
+  assert.equal(b.endReason, enc.END_GOT_UP);
+  assert.equal(b.carry.knockdowns, 1);
+
+  const c = enc.createBout({ boss: 'kraken', seed: 5, bout: 0, variant: 1 });
+  punishAll(c, 0);
+  const d2 = c.down;
+  for (let k = 0; k < 5; k++) enc.input(c, { t: d2.open + k * 100, k: C.IN_GETUP });
+  enc.advance(c, d2.end + 1);
+  assert.equal(c.endReason, enc.END_TKO);
+  assert.ok(c.carry.tko);
+});
+
+test('Grit: taps faster than 14/s are bounces; the 2nd Knockdown in a round is a TKO; damage dealt counts', () => {
+  const b = enc.createBout({ boss: 'kraken', seed: 5, bout: 0, variant: 1 });
+  punishAll(b, 0);
+  const d = b.down;
+  for (let k = 0; k < 8; k++) enc.input(b, { t: d.open + k * 30, k: C.IN_GETUP });
+  assert.equal(b.phase, enc.P_DOWN, '30 ms apart is a bounce');
+  const carry = { ...enc.freshCarry(), knockdowns: 1 };
+  const c = enc.createBout({ boss: 'kraken', seed: 6, bout: 2, carry, variant: pat.VARIANT_A0 });
+  punishAll(c, 0);
+  assert.equal(c.phase, enc.P_DONE);
+  assert.equal(c.endReason, enc.END_TKO);
+  assert.ok(has(c, enc.E_TKO));
+});
+
+test('Grit: novice rounds cannot drop below 1 fin in bout 1; Extra Fin starts at 4', () => {
+  const b = enc.createBout({ boss: 'kraken', seed: 9, bout: 0, variant: 1, novice: true });
+  for (let t = 0; t < 30000 && b.phase !== enc.P_DONE; t += 50) enc.advance(b, t);
+  assert.ok(b.grit >= 1);
+  assert.ok(!has(b, enc.E_KNOCKDOWN));
+  const offer = pat.boonOffer(77, 1);
+  const seed = offer.includes(C.BOON_FIN) ? 77 : [...Array(50).keys()].find((s) => pat.boonOffer(s, 1).includes(C.BOON_FIN));
+  const f = enc.createBout({ boss: 'kraken', seed, bout: 1, variant: 1 });
+  enc.input(f, { t: 0, k: C.IN_BOON, a: C.BOON_FIN });
+  assert.equal(f.grit, 4);
+  assert.equal(f.gritMax, 4);
+});
+
+// ---- Pin and Pop ----------------------------------------------------------------
+
+test('Pin and Pop: one tap per slot; lit lane POP +-110 / PERFECT POP +-50 / HIT; unlit and second taps CLANK', () => {
+  const [b, o] = firstOpening();
+  assert.equal(o.rings.length, 4, 'PERFECT counter adds a half-beat slot');
+  const lit = o.lanes;
+  for (let j = 1; j < lit.length; j++) assert.notEqual(lit[j], lit[j - 1], 'pop lanes never repeat back to back');
+  tap(b, o.rings[0] + 30, lit[0]);
+  assert.equal(b.events.at(-1).code, enc.E_POP_PERFECT);
+  tap(b, o.rings[0] + 80, lit[0]);
+  assert.equal(b.events.at(-1).code, enc.E_CLANK);
+  tap(b, o.rings[1] - 100, (lit[1] + 1) % 3);
+  assert.equal(b.events.at(-1).code, enc.E_CLANK, 'unlit lane');
+  tap(b, o.rings[1] - 100, lit[1]);
+  assert.equal(b.events.at(-1).code, enc.E_POP);
+  tap(b, o.rings[2] - 200, lit[2]);
+  assert.equal(b.events.at(-1).code, enc.E_HIT);
+  assert.equal(o.used.filter((u) => u > 0).length, 3);
+});
+
+test('Long Look boon widens POP to +-130 and the look-ahead to 2 beats', () => {
+  const seed = [...Array(80).keys()].find((s) => pat.boonOffer(s, 1).includes(C.BOON_LOOK));
+  const b = enc.createBout({ boss: 'kraken', seed, bout: 1, variant: 1 });
+  enc.input(b, { t: 0, k: C.IN_BOON, a: C.BOON_LOOK });
+  assert.equal(b.popMs, 130);
+  assert.equal(enc.lookAheadMs(b), 8 * b.q);
+  const bad = enc.createBout({ boss: 'kraken', seed, bout: 1, variant: 1 });
+  const notOffered = [1, 2, 3, 4].find((id) => !pat.boonOffer(seed, 1).includes(id));
+  enc.input(bad, { t: 0, k: C.IN_BOON, a: notOffered });
+  assert.equal(bad.boon, C.BOON_NONE, 'a boon not in the seeded offer is ignored');
+});
+
+test('Easy Slam: float down before the first ring and held fires on the last slot; early release cancels; lane taps ignored while held', () => {
+  const [b, o] = firstOpening();
+  enc.input(b, { t: o.start + 20, k: C.IN_PAD_DOWN });
+  tap(b, o.rings[0], o.lanes[0]);
+  assert.ok(!has(b, enc.E_POP_PERFECT), 'lane taps ignored while holding');
+  const last = o.rings[o.rings.length - 1];
+  enc.advance(b, last);
+  assert.ok(has(b, enc.E_SLAM));
+  assert.equal(b.events.find((e) => e.code === enc.E_SLAM).t, last);
+  enc.input(b, { t: last + 50, k: C.IN_PAD_UP });
+
+  const [c, p] = firstOpening();
+  enc.input(c, { t: p.start + 20, k: C.IN_PAD_DOWN });
+  enc.input(c, { t: p.rings[1], k: C.IN_PAD_UP });
+  assert.ok(has(c, enc.E_SLAM_CANCEL));
+  tap(c, p.rings[2], p.lanes[2]);
+  assert.ok(has(c, enc.E_POP_PERFECT), 'remaining slots still poppable');
+  enc.advance(c, p.end);
+  assert.ok(!has(c, enc.E_SLAM));
+
+  const [d, q] = firstOpening();
+  enc.input(d, { t: q.rings[0] + 30, k: C.IN_PAD_DOWN });
+  enc.advance(d, q.end);
+  assert.ok(!has(d, enc.E_SLAM), 'down after the first ring closed: no slam');
+});
+
+// ---- guard, fakes, bubble ------------------------------------------------------------
+
+test('Guard Counter: never in bout 1 or on A0; warning at the 3rd stray, DIZZY at the 5th within 1 s (bouts 2-3)', () => {
+  const spam = (b, o) => {
+    const lane = o.lanes[0] !== o.lanes[1] ? 3 - o.lanes[0] - o.lanes[1] : (o.lanes[0] + 1) % 3;
+    for (let i = 0; i < 6; i++) tap(b, o.start + 60 + i * 60, lane);
+  };
+  const [b1, o1] = firstOpening('kraken', 0);
+  spam(b1, o1);
+  assert.ok(!has(b1, enc.E_GUARD_WARN) && !has(b1, enc.E_GUARD_COUNTER));
+  const [a0, oa] = firstOpening('kraken', 2, { variant: pat.VARIANT_A0 });
+  spam(a0, oa);
+  assert.ok(!has(a0, enc.E_GUARD_COUNTER));
+  const [b2, o2] = firstOpening('kraken', 1);
+  spam(b2, o2);
+  const iw = b2.events.findIndex((e) => e.code === enc.E_GUARD_WARN);
+  const id = b2.events.findIndex((e) => e.code === enc.E_GUARD_COUNTER);
+  assert.ok(iw >= 0 && id > iw, 'warning always precedes DIZZY');
+  assert.equal(b2.stats.guard, 1);
+});
+
+test('taps in the 250 ms close grace never count', () => {
+  const [b, o] = firstOpening('kraken', 1);
+  enc.advance(b, o.end);
+  const n = b.events.length;
+  tap(b, o.end + 100, 0);
+  tap(b, o.end + 200, 1);
+  assert.equal(b.events.length, n);
+});
+
+test('fakes: never on A0 or the first attack or Captain\'s Call; the first is safe (greys, no lockout); later bites lock and reset the combo, never cost Grit', () => {
+  let seenSafe = false;
+  let seenBite = false;
+  for (let seed = 1; seed < 80; seed++) {
+    for (const variant of [pat.VARIANT_A0, pat.VARIANT_A, pat.VARIANT_B]) {
+      let carry = enc.freshCarry();
+      const b = enc.createBout({ boss: 'kraken', seed, bout: 2, variant, carry });
+      for (let t = 0; t < 60000 && b.phase !== enc.P_DONE; t += 10) {
+        enc.advance(b, t);
+        const a = b.attack;
+        if (a && a.feintLane >= 0 && t === a.feintT0 + 100 - ((a.feintT0 + 100) % 10)) {
+          assert.notEqual(variant, pat.VARIANT_A0);
+          assert.ok(a.no > 0 && !a.call);
+          const before = b.grit;
+          tap(b, t, a.feintLane);
+          if (a.feintSafe) {
+            assert.equal(b.events.at(-1).code, enc.E_GREY);
+            assert.equal(b.lockUntil, 0);
+            seenSafe = true;
+          } else {
+            assert.equal(b.events.at(-1).code, enc.E_FAKE_TAP);
+            assert.equal(b.lockUntil, t + C.PUNISH_MS);
+            seenBite = true;
+          }
+          assert.equal(b.grit, before);
+        }
+        if (a && b.phase === enc.P_ATTACK) {
+          const s = a.steps[b.step];
+          if (t >= s.I - 20 && t < s.I - 10) tap(b, t, pat.laneAt(a, b.step, t));
+        }
+      }
+    }
+  }
+  assert.ok(seenSafe && seenBite);
+});
+
+test('foam bubble: exactly one in Kraken bout 2, never in a telegraphed lane; first one safe; it blocks its buoy until tapped', () => {
+  for (let seed = 1; seed < 40; seed++) {
+    const b = enc.createBout({ boss: 'kraken', seed, bout: 1, variant: 1 });
+    let bubbles = 0;
+    for (let t = 0; t < 40000 && b.phase !== enc.P_DONE; t += 10) {
+      enc.advance(b, t);
+      const a = b.attack;
+      if (a && b.phase === enc.P_ATTACK) {
+        const s = a.steps[b.step];
+        if (t >= s.I - 20 && t < s.I - 10) tap(b, t, s.lane);
+      }
+    }
+    for (const e of b.events) if (e.code === enc.E_BUBBLE) bubbles += 1;
+    assert.equal(bubbles, 1);
+    const be = b.events.find((e) => e.code === enc.E_BUBBLE);
+    const tell = b.events.find((e) => e.code === enc.E_TELL && e.t === be.t);
+    assert.ok(tell && tell.a !== be.a);
+  }
+  for (const bout of [0, 2]) {
+    const b = enc.createBout({ boss: 'kraken', seed: 3, bout, variant: 1 });
+    enc.advance(b, 60000);
+    assert.ok(!has(b, enc.E_BUBBLE), `no bubble in bout ${bout + 1}`);
+  }
+});
+
+// ---- Break, Final Pop, Captain's Call ---------------------------------------------------
+
+test('Break: fills at 100, pays a lump, all suckers lit with a rotating ring lane, +1 bout-3 attack (cap 2), max 3', () => {
+  const carry = { ...enc.freshCarry(), gauge: 990 };
+  const [b, a] = firstAttack('kraken', 1, { carry });
+  tap(b, a.steps[0].I, a.steps[0].lane);
+  if (a.steps.length > 1) tap(b, a.steps[1].I, a.steps[1].lane);
+  assert.ok(has(b, enc.E_BREAK));
+  const o = b.opening;
+  assert.equal(o.kind, enc.O_BREAK);
+  assert.equal(o.rings.length, 6);
+  for (let j = 1; j < 6; j++) assert.equal(o.lanes[j], (o.lanes[j - 1] + 1) % 3);
+  assert.equal(b.carry.bonusAttacks, 1);
+  // Break opening starts on the step grid after the beat-absorbed freeze.
+  assert.equal(o.start % b.q, 0);
+  assert.ok(o.start >= b.events.find((e) => e.code === enc.E_BREAK).t + C.BREAK_FREEZE[0]);
+});
+
+test('Final Pop: every bout 3 that is not knocked down ends on exactly one Final Pop; Anchor Stars scale it', () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    for (const name of ['median', 'guesser', 'mastery', 'easySlam']) {
+      const bs = bots.runBotRound('kraken', seed * 31, bots.BOTS[name]);
+      const b3 = bs[2];
+      if (!b3 || b3.endReason === enc.END_GOT_UP || b3.endReason === enc.END_TKO) continue;
+      assert.equal(b3.events.filter((e) => e.code === enc.E_FINAL).length, 1, `${name} ${seed}`);
+      assert.equal(b3.endReason, enc.END_FINAL);
+    }
+  }
+  // Stars: PERFECT counters in bout 3 light them (cap 3); a punish puts one out.
+  const [b, a] = firstAttack('kraken', 2);
+  tap(b, a.steps[0].I, a.steps[0].lane);
+  assert.equal(b.carry.stars, 1);
+  const s = round.summarize(bots.runBotRound('kraken', 5, bots.BOTS.mastery));
+  assert.ok(s.anchorStars >= 1 && s.anchorStars <= 3);
+  assert.equal(s.final, 3);
+});
+
+test("Captain's Call: bout 3 attack #3 lands 2 steps off the beat; PERFECT earns the Skill Star", () => {
+  const b = enc.createBout({ boss: 'kraken', seed: 11, bout: 2, variant: 1 });
+  let call = null;
+  for (let t = 0; t < 60000 && b.phase !== enc.P_DONE; t += 5) {
+    enc.advance(b, t);
+    const a = b.attack;
+    if (a && b.phase === enc.P_ATTACK) {
+      if (a.call) call = a;
+      const s = a.steps[b.step];
+      if (t >= s.I - 5 && t < s.I) tap(b, s.I - 5, pat.laneAt(a, b.step, s.I));
+    }
+  }
+  assert.ok(call && call.no === pat.CALL_NO);
+  assert.equal(call.steps[0].I % (4 * b.q), 2 * b.q, 'impact on the "and" of the beat');
+  assert.ok(call.W >= C.WINDUP_Q[2] * b.q);
+  assert.ok(has(b, enc.E_SKILL_STAR));
+  assert.ok(b.carry.skillStar);
+});
+
+// ---- grid, boons, pause --------------------------------------------------------------
+
+test('step grid: every tell, impact, ring and slot is on the boss step grid (freezes included)', () => {
+  for (const boss of BOSSES) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const bs = bots.runBotRound(boss, seed * 101, bots.BOTS.mastery);
+      bs.forEach((b) => {
+        for (const e of b.events) {
+          if (e.code === enc.E_TELL || e.code === enc.E_OPEN) assert.equal(e.t % b.q, 0, `${boss} code ${e.code} at ${e.t}`);
+          if (e.code === enc.E_FINAL_READY) assert.equal(e.b % b.q, 0);
+        }
+      });
+    }
+  }
+});
+
+test('boons: two distinct seeded cards; Anchor Polish only before bout 3', () => {
+  for (let s = 0; s < 200; s++) {
+    const o1 = pat.boonOffer(s, 1);
+    const o2 = pat.boonOffer(s, 2);
+    assert.notEqual(o1[0], o1[1]);
+    assert.notEqual(o2[0], o2[1]);
+    assert.ok(!o1.includes(C.BOON_POLISH));
+    assert.deepEqual(pat.boonOffer(s, 1), o1);
+  }
+  const seed = [...Array(80).keys()].find((s) => pat.boonOffer(s, 1).includes(C.BOON_TIDE));
+  const b = enc.createBout({ boss: 'kraken', seed, bout: 1, variant: 1 });
+  enc.input(b, { t: 0, k: C.IN_BOON, a: C.BOON_TIDE });
+  assert.equal(b.carry.gauge, 300);
+  enc.input(b, { t: 0, k: C.IN_BOON, a: C.BOON_TIDE });
+  assert.equal(b.carry.gauge, 300, 'one boon per bout');
+});
+
+test('pause: two pauses are free; the 3rd paintballs the bout and its damage still counts', () => {
+  const [b, a] = firstAttack();
+  tap(b, a.steps[0].I, a.steps[0].lane);
+  const t0 = a.steps[0].I + 100;
+  tap(b, b.opening.rings[0], b.opening.lanes[0]);
+  const before = enc.scoreBout(b);
+  for (let i = 0; i < 2; i++) {
+    enc.input(b, { t: b.opening.rings[0] + 10 + i, k: C.IN_PAUSE });
+    enc.input(b, { t: b.opening.rings[0] + 10 + i, k: C.IN_RESUME });
+  }
+  assert.notEqual(b.phase, enc.P_DONE);
+  enc.input(b, { t: b.opening.rings[0] + 20, k: C.IN_PAUSE });
+  assert.equal(b.phase, enc.P_DONE);
+  assert.equal(b.endReason, enc.END_PAINTBALL);
+  assert.ok(enc.scoreBout(b) >= before && before > 0 && t0 > 0);
+});
+
+// ---- determinism, fixtures, integers, legacy proof, stars ------------------------------------
+
+test('determinism: a round rebuilt from its bout proofs gives identical damage and event streams', () => {
+  for (const boss of BOSSES) {
+    for (const name of ['median', 'mastery', 'guesser', 'kid', 'easySlam']) {
+      const bs = bots.runBotRound(boss, 4242, bots.BOTS[name], { novice: name === 'kid' });
+      const log = { boss, seed: 4242, variant: 1, bouts: bs.map(round.boutProof) };
+      const rs = round.replayRound(log);
+      assert.equal(JSON.stringify(rs.map((b) => enc.scoreBout(b))), JSON.stringify(bs.map((b) => enc.scoreBout(b))));
+      assert.deepEqual(JSON.stringify(rs.map((b) => b.events)), JSON.stringify(bs.map((b) => b.events)));
+      for (const p of log.bouts) assert.equal(p.sim_version, C.SIM_VERSION);
+    }
+  }
+});
+
+test('golden replay fixtures (sidecar parity source, v8) still replay exactly', () => {
+  const dir = path.join(__dirname, 'fixtures/boss-replays');
+  for (const boss of BOSSES) {
+    const fx = JSON.parse(fs.readFileSync(path.join(dir, `${boss}.json`), 'utf8'));
+    assert.equal(fx.version, C.SIM_VERSION);
+    assert.equal(fx.rounds.length, 24);
+    for (const r of fx.rounds) {
+      const rs = round.replayRound({ boss, seed: r.seed, variant: r.variant, bouts: r.bouts });
+      assert.equal(JSON.stringify(rs.map((b) => enc.scoreBout(b))), JSON.stringify(r.damage), `${boss} seed ${r.seed} ${r.bot}`);
+    }
+  }
+});
+
+test('the sim is integer-only: no floats, Math.random or Date in sim/*', () => {
+  for (const f of ['constants.ts', 'encounter.ts', 'patterns.ts', 'round.ts']) {
+    const src = fs.readFileSync(path.join(__dirname, '../../src/games/boss/sim', f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    assert.ok(!/Math\.random|Date\.now|new Date/.test(src), `${f}: no clocks or randomness`);
+    if (f !== 'round.ts') assert.ok(!/\d+\.\d+/.test(src), `${f}: no float literals`);
+  }
+  const bs = bots.runBotRound('kraken', 99, bots.BOTS.mastery);
+  for (const b of bs) {
+    assert.ok(Number.isSafeInteger(b.sum));
+    for (const e of b.events) assert.ok(Number.isInteger(e.t) && Number.isInteger(e.v));
+  }
+});
+
+test('legacy raid proof: the live endpoint formula gives the replayed damage (to 10) within its limits', () => {
+  for (let d = 0; d <= 3200; d += 7) {
+    for (const ms of [9000, 20000, 41000]) {
+      const p = round.toLegacyProof(d, ms);
+      assert.ok(p.duration_ms >= 12000 && p.duration_ms <= 26000);
+      assert.ok(p.hits <= Math.floor(p.duration_ms / 1000 * 7));
+      assert.ok(p.weak_hits <= Math.floor(p.hits / 3));
+      const cap = (() => { const h = Math.floor(p.duration_ms / 1000 * 7); return 10 * (h + 2 * Math.floor(h / 3)); })();
+      const want = Math.min(Math.floor(d / 10) * 10, cap);
+      const got = round.legacyDamage(p);
+      assert.ok(got <= want && (want < cap - 30 ? got === want : got >= want - 20), `${d} ${ms}: ${got} vs ${want}`);
+      if (d < 10) assert.equal(p.hits, 0);
+    }
+  }
+  assert.equal(round.legacyDamage({ hits: 3, weak_hits: 1, duration_ms: 20000 }, 0.6), 30);
+});
+
+test('stars, NEXT STAR in actions, and the Ride Challenge rule', () => {
+  assert.equal(round.starsFor(5000, false), 0);
+  assert.equal(round.starsFor(300, true), 1);
+  assert.equal(round.starsFor(1000, true), 2);
+  assert.equal(round.starsFor(2199, true), 2);
+  assert.equal(round.starsFor(2200, true), 3);
+  assert.equal(round.crownFor(2899, true), false);
+  assert.equal(round.crownFor(2900, true), true);
+  assert.equal(round.crownFor(4000, false), false);
+  const s = round.summarize(bots.runBotRound('kraken', 12, bots.BOTS.median));
+  if (s.stars < 3) assert.ok(typeof s.nextStar === 'string' && s.nextStar.length > 0);
+  const slam = round.summarize(bots.runBotRound('kraken', 12, bots.BOTS.easySlam));
+  if (slam.stars < 3) assert.equal(slam.nextStar, 'Pop instead of slam: about +20%');
+  assert.equal(round.rideChallengeWin({ ...s, stars: 2, tkoEarly: false }), true);
+  assert.equal(round.rideChallengeWin({ ...s, stars: 3, tkoEarly: true }), false);
+  assert.equal(round.timingReadout(-42), 'You were 42 ms early');
+});
+
+// ---- v8 (design v7.1 M1.1) ------------------------------------------------------
+
+test('v8: one point table, no per-boss weight anywhere in sim/*', () => {
+  for (const f of fs.readdirSync(path.join(__dirname, '../../src/games/boss/sim'))) {
+    const src = fs.readFileSync(path.join(__dirname, '../../src/games/boss/sim', f), 'utf8');
+    assert.ok(!/COUNTER_PCT/.test(src), `${f}`);
+  }
+  assert.equal(C.SIM_VERSION, 8);
+  // The same PERFECT counter pays the same on every boss.
+  const pays = BOSSES.map((boss) => {
+    const [b, a] = firstAttack(boss, 0);
+    for (const s of a.steps) tap(b, s.I, s.lane);
+    return b.events.find((e) => e.code === enc.E_PERFECT).v;
+  });
+  assert.ok(pays.every((v) => v === C.PTS.perfect * C.UNIT), JSON.stringify(pays));
+});
+
+test('v8 combo decay: every bout starts one tier below where the last ended', () => {
+  assert.deepEqual([0, 2, 3, 5, 6, 9, 10, 40].map(C.decayChain), [0, 0, 0, 0, 3, 3, 6, 6]);
+  for (const chain of [0, 4, 7, 15]) {
+    const carry = { ...enc.freshCarry(), chain, maxChain: chain };
+    const b = enc.createBout({ boss: 'kraken', seed: 5, bout: 1, carry, variant: 1 });
+    assert.equal(b.carry.chain, C.decayChain(chain));
+    assert.equal(C.comboPct(b.carry.chain) < C.comboPct(chain) || C.comboPct(chain) === 100, true);
+    if (chain > 0) assert.ok(b.events.some((e) => e.code === enc.E_DECAY && e.a === chain && e.b === C.decayChain(chain)));
+    // Bout 1 never decays (nothing to carry).
+    const b0 = enc.createBout({ boss: 'kraken', seed: 5, bout: 0, carry, variant: 1 });
+    assert.equal(b0.carry.chain, chain);
+  }
+  // Over real rounds: the chain each bout starts with is decayChain(previous end).
+  for (const name of ['median', 'mastery']) {
+    for (let s = 1; s <= 30; s++) {
+      const bs = bots.runBotRound('kraken', s * 31, bots.BOTS[name]);
+      for (let n = 1; n < bs.length; n++) {
+        const ev = bs[n].events.find((e) => e.code === enc.E_DECAY);
+        const prevEnd = bs[n - 1].carry.chain;
+        if (prevEnd > 0) assert.equal(ev.b, C.decayChain(prevEnd));
+      }
+    }
+  }
+});
+
+test('v8 combined cap: combo x mult never pays above 250% on any event', () => {
+  let capped = 0;
+  for (let s = 1; s <= 40; s++) {
+    const bs = bots.runBotRound('kraken', s * 13, bots.BOTS.mastery);
+    for (const b of bs) {
+      for (const e of b.events) {
+        if (e.code !== enc.E_POP && e.code !== enc.E_POP_PERFECT && e.code !== enc.E_HIT && e.code !== enc.E_SLAM) continue;
+        const base = e.code === enc.E_POP ? C.PTS.pop : e.code === enc.E_POP_PERFECT ? C.PTS.popPerfect : e.code === enc.E_HIT ? C.PTS.hit : C.PTS.slam;
+        assert.ok(e.v <= base * C.COMBINED_CAP, `${e.code} ${e.v}`);
+        if (e.v === base * C.COMBINED_CAP) capped += 1;
+      }
+    }
+  }
+  assert.ok(capped > 0, 'FURY in a Break hits the cap in mastery rounds');
+});
+
+test('v8 best chain counts within a bout (no round-long x67)', () => {
+  for (let s = 1; s <= 30; s++) {
+    const bs = bots.runBotRound('kraken', s * 17, bots.BOTS.mastery);
+    const sum = round.summarize(bs);
+    assert.equal(sum.maxChain, Math.max(...bs.map((b) => b.stats.bestChain)));
+    for (const b of bs) {
+      const ups = b.events.filter((e) => e.code === enc.E_PERFECT || e.code === enc.E_GOOD || e.code === enc.E_POP || e.code === enc.E_POP_PERFECT || e.code === enc.E_SLAM).length;
+      assert.ok(b.stats.bestChain <= ups + 1);
+    }
+  }
 });

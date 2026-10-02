@@ -1,12 +1,12 @@
 // Mechanic-first Boss Brawl balance, simulated on the app's own encounter rules
-// (src/games/boss/encounter.ts) and scored with the server formula (config/boss.php,
+// (src/games/boss/v1/encounter.ts) and scored with the server formula (config/boss.php,
 // mirrored as DEFAULT_DAMAGE in raid.ts). Four players per boss:
 //  - spam: taps the body as fast as the game allows, never touches the mechanic.
 //  - guess: mashes the body and presses buoys or nodes at random (no reading).
 //  - informed: reads the tell (250ms reaction) and still mashes the body in between.
 //  - median: reads the tell slowly (450ms), taps slower, misreads sometimes.
 const assert=require('node:assert/strict'),test=require('node:test'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const m=require('./helpers/boss-encounter.cjs');
+const m=require('./helpers/boss-encounter-v1.cjs');
 const root=path.resolve(__dirname,'../..'),ts=require(path.join(root,'node_modules/typescript'));
 const raidModule={exports:{}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/api/endpoints/parks/raid.ts'),'utf8'),

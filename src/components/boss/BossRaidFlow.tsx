@@ -11,7 +11,7 @@ import {
 import { applyTeamNames } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
-import { BossBrawl } from '../../games/boss/BossBrawl';
+import { BossBrawl } from '../../games/boss/v1/BossBrawl';
 import useBossAttackRecovery from '../../hooks/useBossAttackRecovery';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import type { BossAttackCheckpoint, BossAttackRecovery } from '../../services/boss/attackRecovery';
