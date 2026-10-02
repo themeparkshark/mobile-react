@@ -46,9 +46,10 @@ test('every store profile in eas.json points at a store-safe host and pins an Xc
     assert.equal(profile.developmentClient, undefined, `${name}: expo-dev-client is not installed`);
     if (target.isStoreProfile(profile)) {
       if (name === 'internal-tunnel') {
-        // Internal tester profile: allowed to target the Mac-hosted trycloudflare backend only.
+        // Internal tester profile: the Mac-hosted trycloudflare backend, or the real server.
         assert.equal(profile.env.TPS_INTERNAL_TUNNEL_BUILD, '1', name);
-        assert.match(new URL(profile.env.API_URL).hostname, /\.trycloudflare\.com$/, name);
+        const host = new URL(profile.env.API_URL).hostname;
+        assert.ok(/\.trycloudflare\.com$/.test(host) || target.storeUrlProblem(profile.env.API_URL) === null, name);
       } else {
         assert.equal(target.storeUrlProblem(profile.env.API_URL), null, name);
       }

@@ -61,8 +61,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "API_URL": "https://floating-obituaries-author-beth.trycloudflare.com/api",
-        "EXPO_PUBLIC_API_URL": "https://floating-obituaries-author-beth.trycloudflare.com/api",
+        "API_URL": "https://tps-api.on-forge.com/api",
+        "EXPO_PUBLIC_API_URL": "https://tps-api.on-forge.com/api",
         "TPS_INTERNAL_TUNNEL_BUILD": "1",
         "SOURCEMAP_FILE": "ios/main.jsbundle.map"
       },
