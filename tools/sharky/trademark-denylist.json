@@ -1,0 +1,4 @@
+{
+  "note": "Ride and IP names that must never render in Sharky's game UI (design v7.1 5.10 / 14.17). Case-insensitive substring match over src/games/**.",
+  "names": ["Space Mountain", "Splash Mountain", "Tiana", "Big Thunder", "Haunted Mansion", "Pirates of the Caribbean", "Hagrid", "Gringotts", "VelociCoaster", "Jurassic", "Harry Potter", "Disney", "Universal", "Mickey", "Star Wars", "Rise of the Resistance", "Smugglers Run", "Tron", "Guardians of the Galaxy", "Expedition Everest", "Test Track", "Seven Dwarfs", "Matterhorn", "Indiana Jones", "Mario Kart", "Nintendo", "Spider-Man", "Hulk", "Transformers", "Mummy", "Fast & Furious", "Minion", "Kong", "SeaWorld", "Cedar Point", "Six Flags", "Busch Gardens"]
+}

@@ -1,20 +1,25 @@
 /**
- * GameShellV2.tsx: the successor to the 1142-line MiniGameShell.
+ * GameShellV2.tsx: the shared shell every TPS mini-game renders inside.
  *
  * Responsibilities (games stay thin and just render their play field):
- *   - Consistent header (title, subtitle, live score, close).
+ *   - Consistent header (title, subtitle, live score, pause/close art icons).
  *   - 3-2-1-GO countdown (tap to skip).
- *   - Instant pause: a pause button + pause sheet with Resume / Quit. Also
- *     exposes requestPause() via ref so a LinePlay "line's moving" event can
- *     freeze the game from outside.
- *   - Results screen: score → 1-3 stars → server-reward handoff → confetti.
+ *   - QUEUE REALITY ("The line will always be moving"):
+ *       * movement NEVER pauses a game (movementPolicy is play-through only);
+ *         a gentle heads-up chip + edge glow shows when the line advances a
+ *         lot, with a -3 dB music trim, never a pause, sound or buzz;
+ *       * interruptions are free and instant: backgrounding, pocketing, a
+ *         locked screen or the pause button HOLD the game, snapshot its exact
+ *         state (getSnapshot + sessionKey), and resume with a quick 3-2-1
+ *         (about 1.1s, automatic when the app comes back);
+ *       * only a real queue event ends a run: LinePlay's `queueEnded`
+ *         (boarding / left the queue) or ref.wrapUp() shows "YOUR RIDE'S UP!",
+ *         saves the result and hands it on.
+ *   - Results: the studio ResultsCard (stars with drama, count-up, NEW BEST,
+ *     next-star goal, stat chips) plus Continue / Play again / Challenge.
  *   - Preserves the EXACT external completion contract used by
  *     MiniGameSelector: onComplete(multiplier: number, meta?) where multiplier
- *     is derived from stars (1★=1x, 2★=1.5x, 3★=2x by default, overridable).
- *
- * Phase model is owned INTERNALLY (unlike MiniGameShell, which pushed phase
- * up to each game). Games drive the shell with declarative props + a small
- * imperative ref, keeping game files short.
+ *     is derived from stars (1 star = 1x, 2 = 1.5x, 3 = 2x by default).
  */
 
 import React, {
@@ -43,8 +48,6 @@ import Animated, {
   withTiming,
   withSpring,
   withSequence,
-  withDelay,
-  runOnJS,
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
@@ -56,10 +59,24 @@ import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import GameIcon from '../ui/GameIcon';
+import { ResultsCard, type ResultStat } from './results/ResultsCard';
+import { starsFor, type StarThresholds } from './core/scoring';
+import {
+  WRAP_UP_COPY,
+  createHeadsUp,
+  makeSnapshot,
+  reportAdvance,
+  type HoldReason,
+  type MovementPolicy,
+  type WrapUpReason,
+} from './core/session';
+import { clearSnapshot, saveSnapshot } from './session/snapshotStore';
+import { GameAudio } from './audio/GameAudio';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-export type ShellPhase = 'countdown' | 'playing' | 'paused' | 'results';
+export type ShellPhase = 'countdown' | 'playing' | 'paused' | 'resuming' | 'results';
 
 /** Result a game hands to the shell when the round ends. */
 export interface GameResult {
@@ -71,20 +88,63 @@ export interface GameResult {
   message?: string;
   /** Best combo reached (surfaced on the results screen). */
   maxCombo?: number;
+  /** Star thresholds: enables the NEXT STAR goal bar. */
+  thresholds?: StarThresholds;
+  /** Extra stat chips (accuracy, time, pearls...). */
+  stats?: ResultStat[];
+  /** Ghost / rival / crew mate to compare against (near-miss line on the card). */
+  rival?: { name: string; score: number } | null;
+  /** Bucket tallies filled before the score (HITS / COMBO / BONUS). */
+  buckets?: ResultStat[];
+  bucketValues?: number[];
+  /** Star slam spacing (ms), e.g. the win stinger's beat. */
+  starStepMs?: number;
   /**
-   * Extra metadata forwarded verbatim as the 2nd arg of onComplete: this is
-   * what carries {score, duration, seed} to the server-authoritative reward
-   * path. Never compute rewards on the client.
+   * Extra metadata forwarded verbatim as the 2nd arg of onComplete. This is
+   * what carries {score, duration, seed, proof} to the server-authoritative
+   * reward path. Never compute rewards on the client.
    */
   meta?: Record<string, unknown>;
+  /** One line under the card (a coaching tip). A wrap-up note wins over it. */
+  note?: string;
 }
 
+/** What a game-owned results surface receives (`renderResults`). */
+export interface ShellResultsArgs {
+  result: GameResult;
+  stars: number;
+  won: boolean;
+  /** Set when a queue event ended the run ('boarding' / 'left-queue'). */
+  wrapReason: WrapUpReason | null;
+  /** Continue / Close: runs the external onComplete contract (once). */
+  claim: () => void;
+  /** Present only when Play again / Challenge are allowed (never on paid rides or wrap-ups). */
+  rematch?: () => void;
+  challenge?: () => void;
+  reducedMotion: boolean;
+}
+
+/** Start count: 'full' 3-2-1-GO (default), 'go' a single GO (no clock), 'none' the game counts itself in. */
+export type CountdownStyle = 'full' | 'go' | 'none';
+export type CountdownScrim = 'default' | 'light' | 'none';
+
 export interface GameShellV2Handle {
-  /** Freeze the game and show the pause sheet (e.g. line started moving). */
+  /** Hold the game (manual pause). Movement never calls this. */
   requestPause: (reason?: string) => void;
+  /** Resume from a hold (quick 3-2-1 unless resumeStyle='instant'). */
   resume: () => void;
+  /** A real queue event ended the run: save and show results. */
+  wrapUp: (reason?: WrapUpReason) => void;
   /** Current phase (read on demand). */
   getPhase: () => ShellPhase;
+}
+
+/** Snapshot payload a game hands the shell when it is held. */
+export interface ShellSnapshotData {
+  score: number;
+  simMs?: number;
+  steps?: number;
+  state: unknown;
 }
 
 interface GameShellV2Props {
@@ -95,22 +155,21 @@ interface GameShellV2Props {
   score: number;
   multiplier?: number;
   fever?: boolean;
-  /** Personal best for the header delta flash. */
+  /** Personal best for the header delta flash and the results card. */
   personalBest?: number;
   /** Short objective line shown under the countdown. */
   objective?: string;
-  /**
-   * Ride-challenge goal ("10 SHARKS"). Shown as a big meter under the header
-   * and as the countdown headline; the game ends the round when it's met.
-   */
+  /** Ride-challenge goal ("10 SHARKS"). */
   goal?: { current: number; target: number; label: string };
-  /** Set when the round is over → shell transitions to results. */
+  /** Set when the round is over: shell transitions to results. */
   result?: GameResult | null;
-  /** Stars → multiplier map. Defaults to {1:1, 2:1.5, 3:2}. */
+  /** Stars to multiplier map. Defaults to {1:1, 2:1.5, 3:2}. */
   starMultipliers?: Record<number, number>;
+  /** Star thresholds (used for wrap-up stars and the next-star bar). */
+  thresholds?: StarThresholds;
   /** Fired when the countdown finishes and play should begin. */
   onStart: () => void;
-  /** Fired when the shell pauses / resumes (games should freeze their loop). */
+  /** Fired when the shell holds / resumes (games freeze their loop). */
   onPause?: (reason?: string) => void;
   onResume?: () => void;
   /** Preserved external contract: matches MiniGameSelector's expectation. */
@@ -119,10 +178,56 @@ interface GameShellV2Props {
   onClose: () => void;
   /** Optional deliberate-exit flow. Failed results still use onClose. */
   onQuit?: (resume: () => void) => void;
+  /** Queue games: offer PLAY AGAIN on the results card. */
+  onRematch?: () => void;
+  /** Offer CHALLENGE (ghost / score challenge to a friend or crew). */
+  onChallenge?: () => void;
+  /** Label for the CHALLENGE button (default 'Challenge'). */
+  challengeLabel?: string;
+  /** Game-owned row under the results card (share, album, missions, unlock card). */
+  resultExtras?: React.ReactNode;
+  /** @deprecated alias of resultExtras (Sharky). */
+  resultsExtra?: React.ReactNode;
+  /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
+  renderResults?: (args: ShellResultsArgs) => React.ReactNode;
+  /** Game-specific settings in the hold sheet (Trivia Duel's Relaxed pace). */
+  pauseExtras?: React.ReactNode;
+  /** Hide the header score (the game draws its own, e.g. Trivia's rail). */
+  hideHeaderScore?: boolean;
+  /** Replace the header score with a game-owned node (Current Quest's run bar chip). */
+  headerScore?: React.ReactNode;
+  /** Start count style. Default 'full'. */
+  countdownStyle?: CountdownStyle;
+  /** @deprecated false = countdownStyle 'none' (Parade Beat counts in on the song's bar). */
+  introCountdown?: boolean;
+  /** Countdown backdrop: 'default' navy scrim, 'light' white wash, 'none' (Trivia: the stage stays readable). */
+  countdownScrim?: CountdownScrim;
+  /** Results backdrop behind a game-owned surface (renderResults): 'none' keeps the stage at full brightness (Trivia rev 7). */
+  resultsScrim?: CountdownScrim;
+  /**
+   * Movement never pauses (QUEUE REALITY). 'pause' is accepted for older
+   * call sites and treated as play-through.
+   */
+  movementPolicy?: MovementPolicy;
+  /** @deprecated movement never pauses; kept so older call sites compile. */
+  pauseOnLineMove?: boolean;
+  /** 'countdown' = quick 3-2-1 after a hold (default); 'instant' = none. */
+  resumeStyle?: 'countdown' | 'instant';
+  /** Game id for snapshots and proof meta, e.g. 'whack'. */
+  gameId?: string;
+  /** Session key (game + ride + attempt) for interruption snapshots. */
+  sessionKey?: string;
+  /** Called on every hold: return the exact state to persist. */
+  getSnapshot?: () => ShellSnapshotData | null;
+  /** Called when a queue event ends the run: return the final result. */
+  onWrapUp?: (reason: WrapUpReason) => GameResult | null;
   children: React.ReactNode;
 }
 
 const DEFAULT_STAR_MULT: Record<number, number> = { 0: 0, 1: 1, 2: 1.5, 3: 2 };
+const RESUME_STEP_MS = 300;
+const RESUME_GO_MS = 220;
+const HEADS_UP_MS = 2600;
 
 export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
   function GameShellV2(
@@ -138,12 +243,31 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       goal,
       result,
       starMultipliers = DEFAULT_STAR_MULT,
+      thresholds,
       onStart,
       onPause,
       onResume,
       onComplete,
       onClose,
       onQuit,
+      onRematch,
+      onChallenge,
+      challengeLabel = 'Challenge',
+      resultExtras,
+      resultsExtra,
+      renderResults,
+      pauseExtras,
+      hideHeaderScore = false,
+      headerScore,
+      countdownStyle: countdownStyleProp,
+      introCountdown,
+      resultsScrim = 'default',
+      countdownScrim = 'default',
+      resumeStyle = 'countdown',
+      gameId,
+      sessionKey,
+      getSnapshot,
+      onWrapUp,
       children,
     },
     ref,
@@ -154,18 +278,31 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
-    const [countText, setCountText] = useState('3');
+    const countdownStyle: CountdownStyle = countdownStyleProp ?? (introCountdown === false ? 'none' : 'full');
+    const firstCount = countdownStyle === 'go' ? 'GO!' : '3';
+    const [countText, setCountText] = useState(firstCount);
     const [pauseReason, setPauseReason] = useState<string | undefined>();
+    const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
+    const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult } | null>(null);
+    const [headsUp, setHeadsUp] = useState(false);
     const confettiRef = useRef<ParticleHandle>(null);
     const startedRef = useRef(false);
     const claimedRef = useRef(false);
     const countdownTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     const celebrationTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const resumeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const headsUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const headsUpState = useRef(createHeadsUp());
+    const scoreRef = useRef(score);
+    scoreRef.current = score;
+
+    const effectiveResult = result ?? wrap?.result ?? null;
 
     // Results animation values.
     const resultsScale = useSharedValue(0.7);
     const resultsOpacity = useSharedValue(0);
     const countScale = useSharedValue(1);
+    const glow = useSharedValue(0);
 
     const clearCountdown = useCallback(() => {
       countdownTimers.current.forEach(clearTimeout);
@@ -175,6 +312,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       celebrationTimers.current.forEach(clearTimeout);
       celebrationTimers.current = [];
     }, []);
+    const clearResume = useCallback(() => {
+      resumeTimers.current.forEach(clearTimeout);
+      resumeTimers.current = [];
+    }, []);
+    const clearHeadsUp = useCallback(() => {
+      if (headsUpTimer.current) clearTimeout(headsUpTimer.current);
+      headsUpTimer.current = null;
+    }, []);
 
     // -- Reset when (re)opened. ---------------------------------------------
     useEffect(() => {
@@ -182,15 +327,19 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       startedRef.current = false;
       claimedRef.current = false;
       setPhase('countdown');
-      setCountText('3');
+      setCountText(firstCount);
+      setWrap(null);
+      setHoldReason(null);
       resultsScale.value = 0.7;
       resultsOpacity.value = 0;
       return () => {
         clearCountdown();
         clearCelebration();
-        [resultsScale, resultsOpacity, countScale].forEach(cancelAnimation);
+        clearResume();
+        clearHeadsUp();
+        [resultsScale, resultsOpacity, countScale, glow].forEach(cancelAnimation);
       };
-    }, [visible, clearCountdown, clearCelebration, resultsScale, resultsOpacity, countScale]);
+    }, [visible, clearCountdown, clearCelebration, clearResume, clearHeadsUp, resultsScale, resultsOpacity, countScale, glow]);
 
     useEffect(() => {
       if (!reducedMotion) return;
@@ -222,7 +371,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (phase !== 'countdown' || !visible) return;
       clearCountdown();
-      const steps = ['3', '2', '1', 'GO!'];
+      if (countdownStyle === 'none') {
+        beginPlay();
+        return;
+      }
+      const steps = countdownStyle === 'go' ? ['GO!'] : ['3', '2', '1', 'GO!'];
       steps.forEach((label, i) => {
         const t = setTimeout(() => {
           setCountText(label);
@@ -237,108 +390,249 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }, steps.length * COUNTDOWN.stepMs - (COUNTDOWN.stepMs - COUNTDOWN.goMs));
       countdownTimers.current.push(done);
       return clearCountdown;
-    }, [phase, visible, beginPlay, clearCountdown, punchCount]);
+    }, [phase, visible, beginPlay, clearCountdown, punchCount, countdownStyle]);
 
-    // -- Transition to results when the game reports one. -------------------
+    // -- Play again: the game cleared its result, so run a fresh start count. --
+    const hadResultRef = useRef(false);
     useEffect(() => {
-      if (!visible || !result) return;
+      if (result) {
+        hadResultRef.current = true;
+        return;
+      }
+      if (!visible || !hadResultRef.current || phase !== 'results' || wrap) return;
+      hadResultRef.current = false;
+      startedRef.current = false;
+      claimedRef.current = false;
+      clearCelebration();
+      resultsScale.value = 0.7;
+      resultsOpacity.value = 0;
+      setCountText(firstCount);
+      setPhase('countdown');
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result, phase, wrap, visible]);
+
+    // -- Transition to results when the game (or a wrap-up) reports one. ----
+    useEffect(() => {
+      if (!visible || !effectiveResult) return;
       if (phase === 'results') return;
       clearCountdown();
+      clearResume();
       setPhase('results');
-      Haptic[result.stars > 0 ? 'success' : 'failBuzz']();
-      playSfx(result.stars > 0 ? 'win' : 'lose');
+      setHeadsUp(false);
+      if (sessionKey) void clearSnapshot(sessionKey);
+      Haptic[effectiveResult.stars > 0 ? 'success' : 'failBuzz']();
+      playSfx(effectiveResult.stars > 0 ? 'win' : 'lose');
       clearCelebration();
       resultsOpacity.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: 220 });
       resultsScale.value = reducedMotionRef.current ? 1 : withSpring(1, JUICE.settleSpring);
-      if (result.stars > 0 && !reducedMotionRef.current) {
-        // Confetti bursts staggered from the top.
+      if (effectiveResult.stars > 0 && !reducedMotionRef.current) {
+        // Confetti bursts timed to the star stamps.
         celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.32, preset: 'confetti', count: 40 });
-        }, 180));
+        }, 420));
         celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.3, y: SCREEN_H * 0.28, preset: 'confetti', count: 24 });
           confettiRef.current?.burst({ x: SCREEN_W * 0.7, y: SCREEN_H * 0.28, preset: 'confetti', count: 24 });
-        }, 420));
+        }, 900));
       }
-    }, [visible, result, phase, clearCountdown, clearCelebration, resultsOpacity, resultsScale]);
+    }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration, resultsOpacity, resultsScale]);
 
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
-      if (!rideChallenge || phase !== 'results' || !result || result.stars <= 0) return;
-      const t = setTimeout(() => handleClaimRef.current?.(), 1100);
+      if (!rideChallenge || phase !== 'results' || !effectiveResult || effectiveResult.stars <= 0) return;
+      const t = setTimeout(() => handleClaimRef.current?.(), 1600);
       return () => clearTimeout(t);
-    }, [rideChallenge, phase, result]);
+    }, [rideChallenge, phase, effectiveResult]);
 
-    // -- Pause / resume. -----------------------------------------------------
-    const doPause = useCallback(
-      (reason?: string) => {
-        if (phase !== 'playing' && phase !== 'countdown') return;
+    // -- Hold / resume (interruptions only; never movement). ------------------
+    const persist = useCallback((reason: HoldReason) => {
+      if (!sessionKey || !getSnapshot) return;
+      try {
+        const data = getSnapshot();
+        if (!data) return;
+        void saveSnapshot(makeSnapshot(gameId ?? title, sessionKey, reason, Date.now(), {
+          score: data.score, simMs: data.simMs ?? 0, steps: data.steps ?? 0, state: data.state,
+        }));
+      } catch {
+        // A snapshot failure must never break the hold itself.
+      }
+    }, [sessionKey, getSnapshot, gameId, title]);
+
+    const doHold = useCallback(
+      (reason: HoldReason, label?: string) => {
+        if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
         if (phase === 'countdown') clearCountdown();
+        if (phase === 'resuming') clearResume();
         setPhase('paused');
-        setPauseReason(reason);
-        if (phase === 'playing') onPause?.(reason);
+        setPauseReason(label);
+        setHoldReason(reason);
+        if (phase === 'playing') {
+          onPause?.(label ?? reason);
+          persist(reason);
+          void GameAudio.music.pause(300);
+        }
         Haptic.tickSelection();
       },
-      [onPause, phase, clearCountdown],
+      [onPause, phase, clearCountdown, clearResume, persist],
     );
+
+    const finishResume = useCallback(() => {
+      clearResume();
+      setPhase('playing');
+      setPauseReason(undefined);
+      setHoldReason(null);
+      linePlayMovement?.onResume();
+      onResume?.();
+      void GameAudio.music.resume(200);
+    }, [clearResume, linePlayMovement, onResume]);
 
     const doResume = useCallback(() => {
       if (phase !== 'paused') return;
-      setPhase(startedRef.current ? 'playing' : 'countdown');
-      if (!startedRef.current) setCountText('3');
-      setPauseReason(undefined);
-      linePlayMovement?.onResume();
-      if (startedRef.current) onResume?.();
-      Haptic.tickSelection();
-    }, [onResume, phase, linePlayMovement]);
+      if (!startedRef.current) {
+        setPhase('countdown');
+        setCountText(firstCount);
+        setPauseReason(undefined);
+        setHoldReason(null);
+        Haptic.tickSelection();
+        return;
+      }
+      if (resumeStyle === 'instant') {
+        finishResume();
+        return;
+      }
+      // Quick 3-2-1: about 1.1s, one tick per beat, GO on the downbeat.
+      clearResume();
+      setPhase('resuming');
+      const labels = ['3', '2', '1', 'GO!'];
+      labels.forEach((label, i) => {
+        resumeTimers.current.push(setTimeout(() => {
+          setCountText(label);
+          punchCount();
+          Haptic.tickSelection();
+          playSfx(label === 'GO!' ? 'go' : 'countdown');
+        }, i * RESUME_STEP_MS));
+      });
+      resumeTimers.current.push(setTimeout(finishResume, RESUME_STEP_MS * 3 + RESUME_GO_MS));
+    }, [phase, resumeStyle, clearResume, finishResume, punchCount]);
+
+    // Movement: never pause. Acknowledge the episode so LinePlay's own session
+    // keeps running, and show a gentle heads-up when the line advances a lot.
+    const movingRef = useRef(false);
+    const advanceRef = useRef(0);
+    const lastAdvanceAt = linePlayMovement?.lastAdvance?.at ?? 0;
+    const lastAdvanceMetres = linePlayMovement?.lastAdvance?.metres ?? 2;
+    const moving = !!linePlayMovement?.moving;
+    useEffect(() => {
+      if (!visible) return;
+      const started = moving && !movingRef.current;
+      const advanced = lastAdvanceAt !== advanceRef.current && lastAdvanceAt > 0;
+      movingRef.current = moving;
+      advanceRef.current = lastAdvanceAt;
+      if (!started && !advanced) return;
+      if (started && (phase === 'playing' || phase === 'countdown' || phase === 'resuming')) linePlayMovement?.onResume();
+      if (phase !== 'playing') return;
+      if (reportAdvance(headsUpState.current, Date.now(), advanced ? lastAdvanceMetres : 2)) {
+        setHeadsUp(true);
+        clearHeadsUp();
+        headsUpTimer.current = setTimeout(() => setHeadsUp(false), HEADS_UP_MS);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [visible, moving, lastAdvanceAt]);
 
     // lineMovePolicy 'passive' is the default: walking in a queue never pauses
     // a round. Only an explicit 'pause' opt-in (a QA preview) freezes here.
     const pauseForMovement = shouldPauseForMovement(linePlayMovement);
     useEffect(() => {
       if (visible && pauseForMovement && (phase === 'playing' || phase === 'countdown')) {
-        doPause(LINE_MOVING_TOAST);
+        doHold('manual', LINE_MOVING_TOAST);
       }
-    }, [visible, pauseForMovement, phase, doPause]);
+    }, [visible, pauseForMovement, phase, doHold]);
 
+    useEffect(() => {
+      if (!visible || phase !== 'playing') return;
+      GameAudio.music.setTrimDb(moving ? -3 : 0, 300);
+    }, [visible, phase, moving]);
+
+    useEffect(() => {
+      if (reducedMotionRef.current) {
+        glow.value = headsUp ? 1 : 0;
+        return;
+      }
+      glow.value = withTiming(headsUp ? 1 : 0, { duration: headsUp ? 200 : 400, easing: Easing.out(Easing.quad) });
+    }, [headsUp, glow]);
+
+    // Backgrounded / locked / pocketed: hold + snapshot. Back: quick 3-2-1.
+    const holdRef = useRef<HoldReason | null>(null);
+    holdRef.current = holdReason;
+    const doHoldRef = useRef(doHold);
+    doHoldRef.current = doHold;
+    const doResumeRef = useRef(doResume);
+    doResumeRef.current = doResume;
     useEffect(() => {
       if (!visible) return;
       const subscription = AppState.addEventListener('change', state => {
-        if (state !== 'active') doPause('Paused while away');
+        if (state === 'background' || state === 'inactive') doHoldRef.current('background', 'Paused while away');
+        else if (state === 'active' && holdRef.current === 'background') doResumeRef.current();
       });
       return () => subscription.remove();
-    }, [visible, doPause]);
+    }, [visible]);
+
+    // A real queue event (boarding / left the queue) ends the run.
+    const wrapUp = useCallback((reason: WrapUpReason = 'boarding') => {
+      if (phase === 'results' || wrap) return;
+      clearCountdown();
+      clearResume();
+      if (phase === 'playing') onPause?.('wrapUp');
+      const fromGame = onWrapUp?.(reason) ?? null;
+      const finalScore = fromGame?.score ?? scoreRef.current;
+      const base: GameResult = fromGame ?? {
+        score: finalScore,
+        stars: thresholds ? starsFor(finalScore, thresholds) : 0,
+        thresholds,
+      };
+      setWrap({
+        reason,
+        result: { ...base, message: base.message ?? WRAP_UP_COPY[reason].title, meta: { ...(base.meta ?? {}), wrapUp: reason } },
+      });
+    }, [phase, wrap, clearCountdown, clearResume, onPause, onWrapUp, thresholds]);
+
+    const queueEnded = linePlayMovement?.queueEnded ?? null;
+    useEffect(() => {
+      if (visible && queueEnded) wrapUp(queueEnded);
+    }, [visible, queueEnded, wrapUp]);
 
     useImperativeHandle(
       ref,
       (): GameShellV2Handle => ({
-        requestPause: (reason) => doPause(reason ?? LINE_MOVING_TOAST),
+        requestPause: (reason) => doHold('manual', reason),
         resume: doResume,
+        wrapUp,
         getPhase: () => phase,
       }),
-      [doPause, doResume, phase],
+      [doHold, doResume, wrapUp, phase],
     );
 
-    // -- Completion: stars → multiplier → external contract. ----------------
+    // -- Completion: stars -> multiplier -> external contract. ----------------
     const handleClaim = useCallback(() => {
-      if (claimedRef.current || !result) return;
+      if (claimedRef.current || !effectiveResult) return;
       claimedRef.current = true;
-      const stars = result?.stars ?? 0;
+      const stars = effectiveResult?.stars ?? 0;
       const mult = starMultipliers[stars] ?? DEFAULT_STAR_MULT[stars] ?? 0;
       if (stars > 0) {
-        onComplete(mult, result?.meta);
+        onComplete(mult, effectiveResult?.meta);
       } else {
         onClose();
       }
-    }, [result, starMultipliers, onComplete, onClose]);
+    }, [effectiveResult, starMultipliers, onComplete, onClose]);
 
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
 
     const resumeAfterQuitCancel = useCallback(() => {
       setPhase(startedRef.current ? 'playing' : 'countdown');
-      if (!startedRef.current) setCountText('3');
+      if (!startedRef.current) setCountText(firstCount);
       setPauseReason(undefined);
+      setHoldReason(null);
       if (startedRef.current) onResume?.();
     }, [onResume]);
 
@@ -348,13 +642,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onQuit, onClose, resumeAfterQuitCancel]);
 
     const handleExit = useCallback(() => {
-      if (phase === 'playing') doPause();
+      if (phase === 'playing' || phase === 'resuming') doHold('manual');
       else if (phase === 'results') handleClaim();
       else {
-        if (phase === 'countdown') doPause();
+        if (phase === 'countdown') doHold('manual');
         requestQuit();
       }
-    }, [phase, doPause, handleClaim, requestQuit]);
+    }, [phase, doHold, handleClaim, requestQuit]);
 
     const skipCountdown = useCallback(() => {
       if (phase === 'countdown') {
@@ -381,16 +675,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const countStyle = useAnimatedStyle(() => ({
       transform: [{ scale: countScale.value }],
     }));
+    const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.35 }));
 
-    const stars = result?.stars ?? 0;
+    const stars = effectiveResult?.stars ?? 0;
     const won = stars > 0;
-    const defaultMessage = won
-      ? stars === 3
-        ? 'INCREDIBLE!'
-        : stars === 2
-          ? 'GREAT!'
-          : 'NICE!'
-      : 'TRY AGAIN';
 
     if (!visible) return null;
 
@@ -402,8 +690,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               style={styles.iconBtn}
               onPress={handleExit}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={phase === 'playing' ? 'Pause' : 'Close'}
             >
-              <Text style={styles.iconTxt}>{phase === 'playing' ? 'II' : '✕'}</Text>
+              <GameIcon name={phase === 'playing' ? 'pause' : 'close'} size={26} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.title} numberOfLines={1}>
@@ -415,16 +705,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 </Text>
               ) : null}
             </View>
-            <View style={styles.headerScore}>
-              <ScoreDisplay
-                score={score}
-                multiplier={multiplier}
-                fever={fever}
-                personalBest={personalBest}
-                compact
-                reducedMotion={reducedMotion}
-              />
-            </View>
+            {hideHeaderScore ? null : (
+              <View style={styles.headerScore}>
+                {headerScore ?? (
+                  <ScoreDisplay
+                    score={score}
+                    multiplier={multiplier}
+                    fever={fever}
+                    personalBest={personalBest}
+                    compact
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+              </View>
+            )}
           </View>
 
           {goal ? <GoalMeter {...goal} reducedMotion={reducedMotion} /> : null}
@@ -432,9 +726,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {/* Play field */}
           <View style={styles.field}>{children}</View>
 
+          {/* Heads-up: the line advanced a lot. Never pauses, never buzzes. */}
+          <Animated.View pointerEvents="none" style={[styles.edgeGlow, glowStyle]} />
+          {headsUp && phase === 'playing' ? (
+            <View pointerEvents="none" style={styles.headsUp} accessibilityLiveRegion="polite">
+              <GameIcon name="queue" size={20} />
+              <Text style={styles.headsUpText}>Heads up, the line moved</Text>
+            </View>
+          ) : null}
+
           {/* Countdown overlay */}
           {phase === 'countdown' ? (
-            <Pressable style={styles.overlay} onPress={skipCountdown}>
+            <Pressable
+              style={[styles.overlay, countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null]}
+              onPress={skipCountdown}
+            >
               {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
               <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
               {objective ? <Text style={styles.objective}>{objective}</Text> : null}
@@ -442,11 +748,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </Pressable>
           ) : null}
 
-          {/* Pause sheet */}
+          {/* Quick resume 3-2-1 (tap to hold again) */}
+          {phase === 'resuming' ? (
+            <View style={styles.overlayLight}>
+              <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
+              <Text style={styles.objective}>Back in!</Text>
+            </View>
+          ) : null}
+
+          {/* Hold sheet */}
           {phase === 'paused' ? (
             <View style={styles.overlay}>
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>
+                <Text style={styles.sheetBody}>Your run is saved right where you left it.</Text>
+                {pauseExtras ?? null}
                 <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn]} onPress={doResume}>
                   <Text style={styles.primaryBtnTxt}>Resume</Text>
                 </TouchableOpacity>
@@ -458,40 +774,65 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           ) : null}
 
           {/* Results */}
-          {phase === 'results' ? (
+          {phase === 'results' && renderResults && effectiveResult ? (
+            <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
+              <Animated.View style={[{ width: '100%', alignItems: 'center' }, resultsStyle]}>
+                {renderResults({
+                  result: effectiveResult,
+                  stars,
+                  won,
+                  wrapReason: wrap?.reason ?? null,
+                  claim: handleClaim,
+                  rematch: !rideChallenge && !wrap ? onRematch : undefined,
+                  challenge: !rideChallenge && !wrap ? onChallenge : undefined,
+                  reducedMotion,
+                })}
+              </Animated.View>
+            </View>
+          ) : null}
+          {phase === 'results' && !(renderResults && effectiveResult) ? (
             <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[{ width: '84%' }, resultsStyle]}>
-              {/* Background on a non-animated child: iOS froze the fill at the
-                  0.7 start scale when it sat on the scaling view. */}
-              <View style={[styles.resultsCard, { width: '100%' }]}>
-                <Text style={[styles.resultsMsg, won ? styles.msgWin : styles.msgFail]}>
-                  {result?.message ?? defaultMessage}
-                </Text>
-                <StarRow stars={stars} reducedMotion={reducedMotion} />
-                <ScoreDisplay
-                  score={result?.score ?? score}
+              <Animated.View style={[{ width: '86%' }, resultsStyle]}>
+                <ResultsCard
+                  score={effectiveResult?.score ?? score}
+                  stars={stars}
+                  message={effectiveResult?.message}
+                  thresholds={effectiveResult?.thresholds ?? thresholds}
                   personalBest={personalBest}
-                  label="SCORE"
+                  maxCombo={effectiveResult?.maxCombo}
+                  stats={effectiveResult?.stats}
+                  rival={effectiveResult?.rival}
+                  buckets={effectiveResult?.buckets}
+                  bucketValues={effectiveResult?.bucketValues}
+                  starStepMs={effectiveResult?.starStepMs}
+                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
+                  reducedMotion={reducedMotion}
                 />
-                {result?.maxCombo && result.maxCombo > 1 ? (
-                  <Text style={styles.comboLine}>Best combo x{result.maxCombo}</Text>
-                ) : null}
-                {won && linePlayMovement?.justForFunNote ? (
-                  <View style={styles.funNote}>
-                    <Text style={styles.funNoteText}>{linePlayMovement.justForFunNote.text}</Text>
-                    <TouchableOpacity accessibilityRole="button" style={styles.funNoteTile}
-                      onPress={linePlayMovement.justForFunNote.onPress}>
-                      <Text style={styles.funNoteTileText}>{linePlayMovement.justForFunNote.actionLabel}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                <TouchableOpacity
-                  style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
-                  onPress={handleClaim}
-                >
-                  <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
-                </TouchableOpacity>
-              </View>
+                {resultExtras ?? resultsExtra ?? null}
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
+                    onPress={handleClaim}
+                  >
+                    <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
+                  </TouchableOpacity>
+                  {!rideChallenge && !wrap && (onRematch || onChallenge) ? (
+                    <View style={styles.row}>
+                      {onRematch ? (
+                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onRematch}>
+                          <GameIcon name="retry" size={20} />
+                          <Text style={styles.secondaryBtnTxtBold}>Play again</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {onChallenge ? (
+                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onChallenge}>
+                          <GameIcon name="swords" size={20} />
+                          <Text style={styles.secondaryBtnTxtBold}>{challengeLabel}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
               </Animated.View>
             </View>
           ) : null}
@@ -544,59 +885,10 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
   );
 }
 
-// -- Animated star row. -------------------------------------------------------
-
-function StarRow({ stars, reducedMotion }: { stars: number; reducedMotion: boolean }) {
-  return (
-    <View style={styles.starRow}>
-      {[1, 2, 3].map((n) => (
-        <Star key={n} index={n} filled={n <= stars} reducedMotion={reducedMotion} />
-      ))}
-    </View>
-  );
-}
-
-function Star({ index, filled, reducedMotion }: { index: number; filled: boolean; reducedMotion: boolean }) {
-  const scale = useSharedValue(0);
-  useEffect(() => {
-    cancelAnimation(scale);
-    if (reducedMotion) {
-      scale.value = 1;
-    } else if (filled) {
-      scale.value = withDelay(
-        200 + index * 160,
-        withSequence(
-          withTiming(1.4, { duration: 140, easing: Easing.out(Easing.back(2)) }),
-          withSpring(1, JUICE.popSpring, (finished) => {
-            'worklet';
-            if (finished) runOnJS(popStarHaptic)();
-          }),
-        ),
-      );
-    } else {
-      scale.value = withTiming(1, { duration: 200 });
-    }
-    return () => cancelAnimation(scale);
-  }, [filled, index, scale, reducedMotion]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  return (
-    <Animated.Text
-      style={[styles.star, { color: filled ? GAME_COLORS.star : GAME_COLORS.starEmpty }, style]}
-    >
-      ★
-    </Animated.Text>
-  );
-}
-
-function popStarHaptic() {
-  Haptic.hitMedium();
-  playSfx('star');
-}
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: GAME_COLORS.bgDeep,
+    backgroundColor: '#0879ca',
   },
   header: {
     flexDirection: 'row',
@@ -605,18 +897,19 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingHorizontal: 16,
     backgroundColor: '#0768b9',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomWidth: 3,
+    borderBottomColor: '#05346e',
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: GAME_COLORS.bgPanel,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    borderWidth: 3,
+    borderColor: '#05346e',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconTxt: { color: GAME_COLORS.text, fontSize: 16, fontWeight: '900' },
   headerCenter: { flex: 1, paddingHorizontal: 10 },
   title: { color: '#fff', fontSize: 22, fontFamily: 'Shark' },
   subtitle: { color: '#cdeaff', fontSize: 13, fontFamily: 'Knockout' },
@@ -626,18 +919,26 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(5,10,30,0.72)',
+    backgroundColor: 'rgba(8,56,128,0.45)',
+  },
+  scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
+  scrimNone: { backgroundColor: 'transparent' },
+  overlayLight: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   count: {
     color: GAME_COLORS.gold,
     fontSize: 120,
-    fontWeight: '900',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 12,
+    fontFamily: 'Shark',
+    textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 0,
   },
   goalWrap: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#0768b9' },
-  goalTrack: { height: 38, borderRadius: 19, backgroundColor: 'rgba(3, 32, 71, 0.6)', borderWidth: 3,
+  goalTrack: { height: 38, borderRadius: 19, backgroundColor: '#bfe5ff', borderWidth: 3,
     borderColor: '#fff', overflow: 'hidden', justifyContent: 'center' },
   goalFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffcf3b' },
   goalText: { alignSelf: 'center', fontFamily: 'Shark', fontSize: 20, color: '#fff',
@@ -646,13 +947,36 @@ const styles = StyleSheet.create({
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   objective: {
     color: GAME_COLORS.text,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontFamily: 'Knockout',
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 40,
+    textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
   },
-  skipHint: { color: GAME_COLORS.textFaint, fontSize: 12, marginTop: 18, letterSpacing: 1 },
+  skipHint: { color: '#e4f7ff', fontSize: 13, marginTop: 18, letterSpacing: 1, fontFamily: 'Knockout' },
+  edgeGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 6,
+    borderColor: '#ffcf3b',
+    borderRadius: 4,
+  },
+  headsUp: {
+    position: 'absolute',
+    top: 118,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff8e4',
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#05346e',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  headsUpText: { fontFamily: 'Knockout', fontSize: 16, color: '#05346e', marginLeft: 6 },
   sheet: {
     width: '80%',
     backgroundColor: '#0768b9',
@@ -662,7 +986,8 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  sheetTitle: { color: '#fff', fontSize: 26, fontFamily: 'Shark', marginBottom: 18, textAlign: 'center' },
+  sheetTitle: { color: '#fff', fontSize: 26, fontFamily: 'Shark', marginBottom: 6, textAlign: 'center' },
+  sheetBody: { color: '#e4f7ff', fontSize: 16, fontFamily: 'Knockout', marginBottom: 12, textAlign: 'center' },
   sheetBtn: {
     width: '100%',
     paddingVertical: 14,
@@ -673,28 +998,12 @@ const styles = StyleSheet.create({
   primaryBtn: { backgroundColor: '#ffcf3b', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   primaryBtnTxt: { color: '#075083', fontSize: 20, fontFamily: 'Shark' },
   secondaryBtnTxt: { color: '#e4f7ff', fontSize: 17, fontFamily: 'Knockout' },
-  resultsCard: {
-    width: '84%',
-    backgroundColor: '#0768b9',
-    borderRadius: 24,
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#fff',
-  },
-  resultsMsg: { fontSize: 34, fontFamily: 'Shark', marginBottom: 10, textAlign: 'center',
-    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
-  msgWin: { color: GAME_COLORS.gold },
-  msgFail: { color: '#fff' },
-  starRow: { flexDirection: 'row', marginBottom: 14 },
-  star: { fontSize: 48, marginHorizontal: 4 },
-  comboLine: { color: GAME_COLORS.blue, fontSize: 14, fontWeight: '800', marginTop: 6 },
-  funNote: { marginTop: 10, alignItems: 'center', gap: 6 },
-  funNoteText: { color: GAME_COLORS.blue, fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  funNoteTile: { minHeight: 36, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center',
-    borderWidth: 2, borderColor: '#fec90e', backgroundColor: '#fff8dc' },
-  funNoteTileText: { color: '#075083', fontSize: 13, fontWeight: '900' },
-  claimBtn: { marginTop: 18 },
+  secondaryBtn: { backgroundColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9cc9ec', flexDirection: 'row',
+    justifyContent: 'center' },
+  secondaryBtnTxtBold: { color: '#05346e', fontSize: 17, fontFamily: 'Shark', marginLeft: 6 },
+  actions: { width: '100%', marginTop: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  half: { width: '48.5%' },
+  claimBtn: { marginTop: 12 },
   confetti: { ...StyleSheet.absoluteFillObject },
 });

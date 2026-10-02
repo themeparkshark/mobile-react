@@ -111,7 +111,7 @@ function flow({reduced=false,round,stubs={}}={}){
   '@react-navigation/native':{useIsFocused:()=>focus.value},
   '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},DEFAULT_DAMAGE:{},fitToRound:m=>({hits:m.hits,weak_hits:m.weak_hits,duration_ms:m.duration_ms}),
    startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
-  './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/BossBrawl':{BossBrawl:'BossBrawl'},
+  './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/v1/BossBrawl':{BossBrawl:'BossBrawl'},
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
   './BossSheetParts':{AttackPips:'AttackPips',BossHpBar:'BossHpBar',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
   './BossWinCard':{default:'BossWinCard'},

@@ -70,6 +70,11 @@ export interface FiftyFiftyResult {
  */
 export interface TriviaSource {
   readonly mode: 'task' | 'lineplay';
+  /**
+   * Where the questions come from (LinePlay sources). Trivia Duel builds its
+   * own deck from this context; `next`/`grade` stay for older call sites.
+   */
+  readonly context?: { rideId?: number; parkId?: number; chapterId?: string; seed: number };
   /** Total questions this source will serve, for progress UI (0 = unknown). */
   readonly totalQuestions: number;
   next(): Promise<TriviaCard | null>;

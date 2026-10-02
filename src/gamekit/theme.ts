@@ -19,11 +19,20 @@ export const GAME_COLORS = {
   gold: '#fec90e',
   coral: '#ff6b5c',
 
-  // Surfaces (dark, game-native)
-  bgDeep: '#050a1e',
-  bgDark: '#0a1628',
-  bgPanel: '#142040',
-  bgElevated: '#1a2a50',
+  // Surfaces: the bright TPS world (no dark, neon or purple surfaces).
+  // Kept under the old names so every game moves to the bright palette.
+  bgDeep: '#0768b9',
+  bgDark: '#0879ca',
+  bgPanel: '#05468f',
+  bgElevated: '#0a5fa8',
+
+  // Bright world tokens (studio engine)
+  sky: '#bfe5ff',
+  skyDeep: '#7cc6f5',
+  cream: '#fff8e4',
+  ink: '#05346e',
+  teal: '#1fc8b8',
+  scrim: 'rgba(8,56,128,0.3)',
 
   // Text
   text: '#ffffff',
@@ -42,10 +51,10 @@ export const GAME_COLORS = {
 
 export type GameColorKey = keyof typeof GAME_COLORS;
 
-// Combo tier colors — escalate warmth as the streak climbs.
+// Combo tier colors: escalate warmth as the streak climbs (purple removed).
 export const COMBO_TIER_COLORS = {
   1: GAME_COLORS.blue,
-  2: '#7c4dff',
+  2: '#1fc8b8',
   3: GAME_COLORS.gold,
   5: GAME_COLORS.coral,
 } as const;
@@ -63,8 +72,11 @@ export const MAX_FRAME_MS = 250;
 /** Screen-shake ceiling — big hits must never exceed this (quality bar). */
 export const MAX_SHAKE_MS = 120;
 
-/** Standard interruption toast copy when the line moves. */
-export const LINE_MOVING_TOAST = "Line's moving! 🚶";
+/**
+ * Heads-up copy when the line moves. Movement never pauses a game (QUEUE
+ * REALITY); this is informational only.
+ */
+export const LINE_MOVING_TOAST = "Heads up, the line moved";
 
 export const JUICE = {
   /** Squash/stretch spring on tap. */

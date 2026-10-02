@@ -60,7 +60,7 @@ import { MemoryGame } from '../../games/memory';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { SharkySwim } from '../../games/sharky';
 import { BananaBasketGame } from '../../games/banana-basket';
-import { CurrentQuestGame } from '../../games/current-quest';
+import { CurrentQuestQueueGame } from '../../games/current-quest';
 import SharkShowdown from '../../games/showdown/SharkShowdown';
 import { showdownReplaySeed } from '../../games/showdown/logic';
 import type { RideContext, ActivityItem } from '../../services/lineplay/LinePlaySession';
@@ -97,7 +97,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
 import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
-import type { CurrentTier } from '../../games/current-quest/logic';
+import type { CurrentTier } from '../../games/current-quest/v1/logic';
 
 /** Shown once per install, before the first queue game. */
 const EYES_UP_KEY = 'lineplay_eyes_up_seen_v1';
@@ -530,7 +530,7 @@ export default function LinePlayScreen() {
       case 'shark': return <SharkySwim {...common} difficulty={activeGame.difficulty} />;
       case 'banana': return <BananaBasketGame {...common}
         difficulty={(activeGame.kidRound ? 1 : Math.max(2, activeGame.difficulty)) as QueueDifficulty} />;
-      case 'current': return <CurrentQuestGame {...common} taskName={ride.rideName} tier={activeGame.tier} />;
+      case 'current': return <CurrentQuestQueueGame {...common} taskName={ride.rideName} tier={activeGame.tier} />;
       case 'showdown': return <SharkShowdown {...common} rideId={ride.rideId} parkId={ride.parkId}
         chapterId={snapshot.chapter?.id} rideName={ride.rideName} />;
       case 'trivia':

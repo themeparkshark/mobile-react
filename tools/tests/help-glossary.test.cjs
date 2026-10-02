@@ -126,7 +126,7 @@ test('every one-time tip and mini-game intro has copy without em dashes', () => 
     assert.doesNotMatch(copy.title + copy.body, /—/, id);
     assert.ok(copy.body.length <= 140, `${id} fits a coach mark`);
   }
-  for (const kind of ['tap', 'timing', 'memory', 'trivia', 'shark', 'banana', 'photo']) {
+  for (const kind of ['tap', 'timing', 'memory', 'trivia', 'shark', 'banana', 'photo', 'current']) {
     const intro = topics.GAME_INTROS[kind];
     assert.ok(intro.name && intro.how && intro.win, kind);
     assert.equal(topics.gameIntroTip(kind), `game:${kind}`);

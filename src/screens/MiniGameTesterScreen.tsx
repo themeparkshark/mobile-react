@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -19,6 +19,15 @@ import PostWinRewardsModal from '../components/PostWinRewardsModal';
 import { CoinUpgradeDemoScreen } from '../components/CoinUpgradeDemo';
 import AnimatedShark from '../components/AnimatedShark';
 import Wrapper from '../components/Wrapper';
+import EngineDemo from '../gamekit/demo/EngineDemo';
+import FxLab from '../gamekit/demo/FxLab';
+import FeelLab from '../gamekit/demo/FeelLab';
+import JuiceLab from '../gamekit/demo/JuiceLab';
+import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
+import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
+import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
+import { RhythmTapGame } from '../games/rhythm';
+import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -44,9 +53,73 @@ export default function MiniGameTesterScreen() {
   const previewRideName = ridePreview
     ? process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_TASK || 'Space Mountain'
     : 'Space Mountain';
-  const [activeGame, setActiveGame] = useState<GameType | null>(null);
+  // Studio lab (dev only): EXPO_PUBLIC_SHARKY_PREVIEW=queue|ride opens Sharky Swim on launch.
+  const sharkyPreview = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_PREVIEW : undefined;
+  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : null);
   const [showPostWin, setShowPostWin] = useState(false);
   const [lastResult, setLastResult] = useState<string>('');
+  // Studio engine demo. EXPO_PUBLIC_ENGINE_DEMO=1 opens it on launch with the
+  // scripted autoplay tour (used to capture the engine demo video).
+  const engineDemoAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === '1';
+  const [engineDemo, setEngineDemo] = useState(engineDemoAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=fxlab opens the FX Lab bench with its tour.
+  const fxLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'fxlab';
+  const [fxLab, setFxLab] = useState(fxLabAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=feellab opens the Feel Lab bench (engine pass 4) with its tour.
+  const feelLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'feellab';
+  const [feelLab, setFeelLab] = useState(feelLabAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=juicelab opens the Juice Lab bench (engine pass 5) with its tour.
+  const juiceLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'juicelab';
+  const [juiceLab, setJuiceLab] = useState(juiceLabAuto);
+
+  // Dev only: EXPO_PUBLIC_RHYTHM_DEMO=queue | ride | sprint opens Parade Beat on launch.
+  const rhythmDemo = __DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_DEMO : undefined;
+  const [rhythmRun, setRhythmRun] = useState(0);
+  if (rhythmDemo === 'sprint') return <SprintLab seed={Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 1)} />;
+  if (rhythmDemo === 'queue' || rhythmDemo === 'ride') {
+    const seedEnv = Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 0);
+    return (
+      <RhythmTapGame
+        key={rhythmRun}
+        visible
+        format={rhythmDemo}
+        seed={seedEnv || undefined}
+        onComplete={() => setRhythmRun((n) => n + 1)}
+        onClose={() => setRhythmRun((n) => n + 1)}
+      />
+    );
+  }
+
+  // Current Quest lab (dev only, __DEV__ gated; inert in release builds):
+  // EXPO_PUBLIC_CQ_LAB=hub|quick|line|ride|showdown|daily|challenge|chart|dash. EXPO_PUBLIC_CQ_WALK=1 toggles walking every 5 s.
+  const cqLab = __DEV__ ? process.env.EXPO_PUBLIC_CQ_LAB : undefined;
+  const [cqPick, setCqPick] = useState<HubPick | null>(cqLab && cqLab !== 'hub' && cqLab !== 'dash' ? { context: (cqLab === 'chart' ? 'chart' : cqLab) as HubPick['context'], chartNodeId: cqLab === 'chart' ? 'ch1-02' : undefined } : null);
+  const [cqRound, setCqRound] = useState(0);
+  const [cqMoving, setCqMoving] = useState(false);
+  useEffect(() => {
+    if (!cqLab || process.env.EXPO_PUBLIC_CQ_WALK !== '1') return undefined;
+    const id = setInterval(() => setCqMoving((m) => !m), 5000);
+    return () => clearInterval(id);
+  }, [cqLab]);
+  const cqMovement = useMemo(() => ({ moving: cqMoving, onResume: () => undefined }), [cqMoving]);
+  if (cqLab === 'dash') return <LagoonDashPreview key={cqRound} seed={2026 + cqRound} autoplay="regular" />;
+  if (cqLab) {
+    const back = () => { setCqPick(cqLab === 'hub' ? null : cqPick); setCqRound((r) => r + 1); };
+    return (
+      <LinePlayMovementContext.Provider value={(process.env.EXPO_PUBLIC_CQ_WALK === '1' ? cqMovement : null) as any}>
+        <View style={{ flex: 1, backgroundColor: '#3fc1ef', alignSelf: 'center', width: Number(process.env.EXPO_PUBLIC_CQ_W ?? 0) || '100%' }}>
+          {cqLab === 'hub' && !cqPick ? <CurrentQuestHub key={cqRound} refreshKey={cqRound} liveHumans={Number(process.env.EXPO_PUBLIC_CQ_HUMANS ?? 1)} onPlay={setCqPick} /> : null}
+          {cqPick ? (
+            <CurrentQuestGame key={`${cqRound}:${cqPick.context}:${cqPick.chartNodeId ?? ''}`} visible context={cqPick.context} chartNodeId={cqPick.chartNodeId}
+              parkName="Lagoon Park" seed={cqPick.context === 'quick' || cqPick.context === 'daily' ? undefined : 424242 + cqRound}
+              challenge={cqPick.challenge ?? (cqPick.context === 'challenge' && process.env.EXPO_PUBLIC_CQ_FRIEND === '1' ? { seed: 424242, name: 'Maya', shells: 5, strokes: 11 } : null)}
+              onClose={() => { setTimeout(back, 300); }}
+              onComplete={() => { setTimeout(back, 300); }} />
+          ) : null}
+        </View>
+      </LinePlayMovementContext.Provider>
+    );
+  }
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);
@@ -138,6 +211,34 @@ export default function MiniGameTesterScreen() {
               footer="Exercises every gamekit primitive at 60fps."
             >
               <Cell
+                title="Studio Engine Demo: Bonk Lab"
+                cellStyle="Subtitle"
+                detail="FX stage, shaders, camera, audio, haptics, walk-safe shell, results, perf"
+                accessory="DisclosureIndicator"
+                onPress={() => setEngineDemo(true)}
+              />
+              <Cell
+                title="Studio Engine Lab: FX Lab"
+                cellStyle="Subtitle"
+                detail="Ribbon trails, brush strokes, FX governor, card flips, nearest taps, perf tiers"
+                accessory="DisclosureIndicator"
+                onPress={() => setFxLab(true)}
+              />
+              <Cell
+                title="Studio Engine Lab: Feel Lab"
+                cellStyle="Subtitle"
+                detail="Stamps, finisher cam, haptic bus, screen cap, thermal ladder, tally results"
+                accessory="DisclosureIndicator"
+                onPress={() => setFeelLab(true)}
+              />
+              <Cell
+                title="Studio Engine Lab: Juice Lab"
+                cellStyle="Subtitle"
+                detail="On twos, line boil, mesh sprites, fly-to-score, beat layers, parallax, camera and flash presets"
+                accessory="DisclosureIndicator"
+                onPress={() => setJuiceLab(true)}
+              />
+              <Cell
                 title="[GYM]  GameKit Gym"
                 cellStyle="Subtitle"
                 detail="Particles, shake, combo, FPS counter — engine stress test"
@@ -196,12 +297,20 @@ export default function MiniGameTesterScreen() {
         taskName={previewRideName}
         coinImageUrl={undefined}
         preferredGame={activeGame === 'random' ? undefined : activeGame ?? undefined}
-        rewardMode={ridePreview ? 'task-attempt' : 'legacy'}
+        rewardMode={ridePreview && sharkyPreview !== 'queue' ? 'task-attempt' : 'legacy'}
         isPractice={ridePreview}
         parkId={ridePreview ? 2 : undefined}
         onClose={handleClose}
         onComplete={handleComplete}
       />
+
+      {/* Studio engine demo (dev) */}
+      {engineDemo ? (
+        <EngineDemo visible={engineDemo} autoplay={engineDemoAuto} onClose={() => setEngineDemo(false)} />
+      ) : null}
+      {fxLab ? <FxLab visible={fxLab} autoplay={fxLabAuto} onClose={() => setFxLab(false)} /> : null}
+      {feelLab ? <FeelLab visible={feelLab} autoplay={feelLabAuto} onClose={() => setFeelLab(false)} /> : null}
+      {juiceLab ? <JuiceLab visible={juiceLab} autoplay={juiceLabAuto} onClose={() => setJuiceLab(false)} /> : null}
 
       {/* Post-Win Modal */}
       <PostWinRewardsModal

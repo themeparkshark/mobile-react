@@ -1,0 +1,96 @@
+{
+ "keysounds": {
+  "rh_drum_hit": {
+   "ms": 260,
+   "dbtp": -1.5,
+   "e150_300": 0.225,
+   "e2_5k": 0.06
+  },
+  "rh_drum_hit_plus": {
+   "ms": 260,
+   "dbtp": -1.5,
+   "e150_300": 0.197,
+   "e2_5k": 0.083
+  },
+  "rh_rim_hit": {
+   "ms": 220,
+   "dbtp": -1.5,
+   "e150_300": 0.001,
+   "e2_5k": 0.643
+  },
+  "rh_rim_hit_plus": {
+   "ms": 220,
+   "dbtp": -1.5,
+   "e150_300": 0.001,
+   "e2_5k": 0.518
+  },
+  "rh_big_crash": {
+   "ms": 1000,
+   "dbtp": -1.5,
+   "e150_300": 0.127,
+   "e2_5k": 0.087
+  }
+ },
+ "stems": {
+  "waiting_room_a_queue": {
+   "bed_lufs": -16.2,
+   "acc": {
+    "lufs": -22.6,
+    "dbtp": -2.95,
+    "ms": 49728
+   },
+   "guide": {
+    "lufs": -28.7,
+    "dbtp": -5.66,
+    "ms": 49728
+   },
+   "fever": {
+    "lufs": -22.5,
+    "dbtp": -2.25,
+    "ms": 49728
+   },
+   "bed_ms": 49728,
+   "src_ms": 49728
+  },
+  "waiting_room_a_ride": {
+   "bed_lufs": -16.3,
+   "acc": {
+    "lufs": -22.5,
+    "dbtp": -2.41,
+    "ms": 28558
+   },
+   "guide": {
+    "lufs": -28.8,
+    "dbtp": -6.33,
+    "ms": 28558
+   },
+   "fever": {
+    "lufs": -22.6,
+    "dbtp": -2.56,
+    "ms": 28558
+   },
+   "bed_ms": 28558,
+   "src_ms": 28558
+  },
+  "shark_shop_a_queue": {
+   "bed_lufs": -16.1,
+   "acc": {
+    "lufs": -22.2,
+    "dbtp": -2.22,
+    "ms": 49717
+   },
+   "guide": {
+    "lufs": -28.6,
+    "dbtp": -7.54,
+    "ms": 49717
+   },
+   "fever": {
+    "lufs": -22.4,
+    "dbtp": -1.88,
+    "ms": 49717
+   },
+   "bed_ms": 49717,
+   "src_ms": 49717
+  }
+ }
+}

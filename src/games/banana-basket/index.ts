@@ -1,13 +1,14 @@
 /**
- * Banana Basket — native Skia rebuild (Queue Kit, Component 3 game #2).
+ * Banana Basket v2 (design rev 4): public surface for MiniGameSelector,
+ * LinePlay and the dev lab.
  *
- * Public surface for MiniGameSelector / LinePlay wiring (Wave 3):
  *   import { BananaBasketGame } from '../games/banana-basket';
  *
- * Self-contained: consumes GameKit primitives only, reports {score, maxCombo,
- * seed} to the shell for server-authoritative rewards, zero network, runs in
- * airplane mode.
+ * The result meta carries a replayable proof (proof.ts); rewards stay
+ * server-side.
  */
 
 export { BananaBasketGame, default } from './BananaBasketGame';
-export type { BananaBasketGameProps } from './BananaBasketGame';
+export type { BananaBasketGameProps, BananaGhostInput } from './BananaBasketGame';
+export { buildProof, verifyProof, encodeInput, decodeInput } from './proof';
+export type { BananaProof } from './proof';

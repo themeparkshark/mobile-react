@@ -56,5 +56,6 @@ export const SFX_MANIFEST: Partial<Record<SfxName, SfxAsset>> = {
   countdown: require('../../../../assets/sounds/pin_swap_select_pin.mp3'),
   go: require('../../../../assets/sounds/whoosh.mp3'),
   whoosh: require('../../../../assets/sounds/whoosh.mp3'),
-  coin: require('../../../../assets/sounds/inventory_item_tap.mp3'),
+  // WS4: coin is Chris's coin.mp3 (the engine plays the first 700ms).
+  coin: require('../../../../assets/sounds/coin.mp3'),
 };
