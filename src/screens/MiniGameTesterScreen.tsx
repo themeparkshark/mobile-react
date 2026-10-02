@@ -48,7 +48,9 @@ export default function MiniGameTesterScreen() {
   const previewRideName = ridePreview
     ? process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_TASK || 'Space Mountain'
     : 'Space Mountain';
-  const [activeGame, setActiveGame] = useState<GameType | null>(null);
+  // Studio lab (dev only): EXPO_PUBLIC_SHARKY_PREVIEW=queue|ride opens Sharky Swim on launch.
+  const sharkyPreview = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_PREVIEW : undefined;
+  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : null);
   const [showPostWin, setShowPostWin] = useState(false);
   const [lastResult, setLastResult] = useState<string>('');
   // Studio engine demo. EXPO_PUBLIC_ENGINE_DEMO=1 opens it on launch with the
@@ -241,7 +243,7 @@ export default function MiniGameTesterScreen() {
         taskName={previewRideName}
         coinImageUrl={undefined}
         preferredGame={activeGame === 'random' ? undefined : activeGame ?? undefined}
-        rewardMode={ridePreview ? 'task-attempt' : 'legacy'}
+        rewardMode={ridePreview && sharkyPreview !== 'queue' ? 'task-attempt' : 'legacy'}
         isPractice={ridePreview}
         parkId={ridePreview ? 2 : undefined}
         onClose={handleClose}
