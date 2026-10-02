@@ -32,3 +32,6 @@ dist/
 .env*.local
 tools/assets/.raw/
 .env.*
+
+# Machine-local Node path; EAS deletes it anyway
+ios/.xcode.env.local
