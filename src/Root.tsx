@@ -235,7 +235,6 @@ export default function App() {
         <Stack.Screen name="SetCollection" getComponent={() => require('./screens/SetCollectionScreen').default} />
         <Stack.Screen name="StampBook" getComponent={() => require('./screens/StampBookScreen').default} />
         <Stack.Screen name="CoinShelf" getComponent={() => require('./screens/CoinShelfScreen').default} />
-        <Stack.Screen name="SharkPark" getComponent={() => require('./screens/SharkParkScreen').default} />
         <Stack.Screen 
           name="CommunityCenter" 
           getComponent={() => require('./screens/CommunityCenterScreen').default}

@@ -14,7 +14,6 @@ import {
   faTimes, 
   faLayerGroup, 
   faBook,
-  faGamepad,
   faCircleQuestion,
   faGear,
 } from '@fortawesome/free-solid-svg-icons';
@@ -52,13 +51,6 @@ const MENU_ITEMS: MenuItem[] = [
     color: '#0b7fd1',
     screen: 'Store',
     params: { store: 'shark-shop' },
-  },
-  {
-    id: 'sharkpark',
-    label: 'Shark Park',
-    icon: faGamepad,
-    color: '#09268f',
-    screen: 'SharkPark',
   },
   {
     id: 'help',

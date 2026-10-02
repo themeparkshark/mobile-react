@@ -13,7 +13,7 @@ export type GlossaryKey =
   | 'keys' | 'swords' | 'xp' | 'coin_levels' | 'limited_coins' | 'ride_challenge'
   | 'lineplay' | 'ride_passport' | 'coin_guide' | 'adventure_ticket' | 'park_goal'
   | 'stamps' | 'sets' | 'pins' | 'home_finds' | 'crew' | 'standings' | 'daily_chest'
-  | 'day_streak' | 'travel_mode' | 'ride_control' | 'shark_park' | 'vip' | 'supplies' | 'bonus_ads';
+  | 'day_streak' | 'travel_mode' | 'ride_control' | 'vip' | 'supplies' | 'bonus_ads';
 
 export interface GlossaryTerm {
   readonly key: GlossaryKey;
@@ -99,8 +99,8 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Collectible pins for your profile.',
     earn: 'Open Pin Packs from your profile, or swap with players in Pin Trading.' },
   { key: 'home_finds', label: 'Home finds', icon: 'gift', topic: 'home',
-    what: 'Items that pop up on the map near you, even at home. Each one leaves after a while.',
-    earn: 'Walk until a find is inside your grab zone, then tap it.' },
+    what: 'Snacks and souvenirs that pop up on the map near you, even at home. Each one leaves after a while.',
+    earn: 'Walk close to a find, then tap it to catch it.' },
   { key: 'crew', label: 'Crew', icon: 'heart', topic: 'lineplay',
     what: 'The people in line with you. Your crew plays together on one phone.',
     earn: 'In LinePlay, tap Add your crew and pass the phone.' },
@@ -119,9 +119,6 @@ const TERMS: readonly GlossaryTerm[] = [
   { key: 'ride_control', label: 'Teams and Ride Control', icon: 'crown', topic: 'teams',
     what: 'Three teams race to control the rides at each park.',
     earn: 'Pick a team. Your ride wins claim rides for it. Tap the team bar on the park map.' },
-  { key: 'shark_park', label: 'Shark Park', icon: 'dice', topic: 'extras',
-    what: 'A side game: build your own theme park with its own Shark Park money.',
-    earn: 'Open it from the menu. It never spends your Shark Coins.' },
   { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
     what: 'A membership that boosts your rewards. VIP players get every bonus ad reward without watching an ad.',
     earn: 'Tap Member on the Social screen to see the perks.' },
