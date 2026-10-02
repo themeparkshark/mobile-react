@@ -109,37 +109,100 @@ test('progress ring geometry is clamped', () => {
   assert.equal(model.ring(Number.NaN, 10).offset, full.circumference);
 });
 
-test('art comes from the server; bundled art is only a fallback and adds no new files', () => {
+test('art comes from the server in four variants; one small bundled fallback; failures never leave a hole', () => {
   const src = read('src/screens/stampbook/art.ts');
-  assert.match(src, /if \(stamp\.iconUrl\) return \{ uri: stamp\.iconUrl/);
   const requires = [...src.matchAll(/require\('([^']+)'\)/g)].map(m => m[1]);
-  for (const file of requires) assert.ok(fs.existsSync(path.join(root, 'src/screens/stampbook', file)), file);
-  // Only the eleven stamps that already shipped: new art never grows the bundle.
-  assert.equal(requires.length, 11);
-  assert.match(src, /__DEV__ \? process\.env\.EXPO_PUBLIC_STAMP_ART_BASE/);
+  assert.deepEqual(requires, ['../../../assets/images/stamps/stamp-fallback.png']);
+  assert.ok(fs.statSync(path.join(root, 'assets/images/stamps/stamp-fallback.png')).size < 60_000, 'fallback must stay small');
+  assert.match(src, /size === 'thumb' \? stamp\.lockedThumbUrl : stamp\.lockedUrl/);
+  assert.match(src, /size === 'thumb' \? stamp\.thumbUrl : stamp\.iconUrl/);
+  const artView = read('src/screens/stampbook/StampArt.tsx');
+  assert.match(artView, /onError=\{\(\) => setFailed\(true\)\}/);
+  assert.match(artView, /source=\{failed \? FALLBACK_ART : source\}/);
+  // Tiles use thumbs, the card uses the big art.
+  assert.match(read('src/screens/stampbook/StampTile.tsx'), /<StampArt stamp=\{stamp\} size="thumb"/);
+  assert.match(read('src/screens/stampbook/StampCard.tsx'), /<StampArt stamp=\{stamp\} size="full"/);
+  // Preview data never ships in the production bundle path.
+  assert.ok(!/^import .*preview/m.test(read('src/screens/StampBookScreen.tsx')));
 });
 
-test('the stamp card slams: impact haptic and thunk, reveal on rare, reward stinger on claim, reduced motion fades', () => {
+test('the slam: anticipation, exp drop, hit-stop, squash, one-overshoot settle, ink, shake, flash, impact on a predicted timer', () => {
   const src = read('src/screens/stampbook/StampCard.tsx');
-  assert.match(src, /haptic\('hitRigid'\)/);
-  assert.match(src, /playSfx\('fx\.hit'\)/);
-  assert.match(src, /playSfx\('fx\.reveal'/);
-  assert.match(src, /haptic\('success'\); playSfx\('fx\.reward'\)/);
+  assert.match(src, /Easing\.in\(Easing\.exp\)/);
+  assert.match(src, /const hold = rank >= 5 \? 120 : 50;/);
+  assert.match(src, /withTiming\(1\.08, \{ duration: 60 \}\)/);
+  assert.match(src, /const settle = \{ damping: 12, stiffness: 380 \};/);
+  assert.match(src, /later\(300, \(\) => impact\(celebrate\)\)/);
+  assert.ok(!/runOnJS/.test(src), 'impact must not hop through runOnJS');
+  assert.match(src, /haptic\('hitRigid'\);\n\s+playSfx\('fx\.hit'\);/);
+  assert.match(src, /<InkBurst /);
   assert.match(src, /if \(reducedMotion\) \{\n\s+fade\.value = withTiming/);
-  assert.match(src, /runOnJS\(impact\)/);
+  // Timers die with the card.
+  assert.match(src, /useEffect\(\(\) => \(\) => \{ timers\.current\.forEach\(clearTimeout\)/);
+  // VoiceOver: the backdrop does not swallow the card.
+  assert.match(src, /accessibilityViewIsModal onAccessibilityEscape=\{onClose\}/);
+  assert.match(src, /<Pressable style=\{StyleSheet\.absoluteFill\} onPress=\{onClose\} accessible=\{false\}/);
+  assert.ok(!/accessibilityLabel="Close stamp"/.test(src));
 });
 
-test('tile shine runs on the UI thread and stops off-screen or under the card', () => {
+test('claim cascade: tokens pop, particles arc to the HUD with rising ticks, counters, Got it!, then the next reward', () => {
+  const src = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(src, /<Particle key=\{b\.id\}/);
+  assert.match(src, /GameAudio\.play\('fx\.coinTick', \{ pitch: Math\.min\(12, n\)/);
+  assert.match(src, /label=\{gotIt \? 'Got it!' : 'Stamped!'\}/);
+  assert.match(src, /label=\{`Next reward \(\$\{nextCount\} left\)`\}/);
+  assert.match(src, /accessibilityLabel=\{`Claim rewards: \$\{rewardSpeech\(stamp\.rewards\)\}`\}/);
+});
+
+test('tiles never re-render for the card or scroll: one shared shine clock with a real rest, gated on screen', () => {
+  const fx = read('src/screens/stampbook/BookFx.tsx');
+  assert.match(fx, /withDelay\(2500, withTiming\(0, \{ duration: 0 \}\)\)/);
   const tile = read('src/screens/stampbook/StampTile.tsx');
-  assert.match(tile, /if \(!foil \|\| !animate\) \{\n\s+cancelAnimation\(shine\)/);
-  assert.match(tile, /return \(\) => cancelAnimation\(shine\)/);
+  assert.ok(!/withRepeat/.test(tile), 'tiles must not own infinite animations');
+  assert.match(tile, /!fx\.paused\.value && onScreen\(/);
+  assert.ok(!/animate:/.test(tile));
   const screen = read('src/screens/StampBookScreen.tsx');
-  assert.match(screen, /const animateTiles = focused && !selected;/);
+  assert.match(screen, /useBookClocks\(focused && !selected, reducedMotion\)/);
+  assert.match(screen, /const REFETCH_MS = 30_000;/);
+  assert.match(screen, /buildBook\(response, prevIndex\.current\)/);
+});
+
+test('stable identity: an unchanged stamp keeps its object across rebuilds', () => {
+  const resp = { stamps: { a: [stamp({ id: 1, section: 'parks' }), stamp({ id: 2, section: 'parks' })] }, sections: [{ key: 'parks', label: 'P', color: '#000000', blurb: '' }] };
+  const first = model.buildBook(resp);
+  const idx = model.stampIndex(first);
+  const second = model.buildBook({ ...resp, stamps: { a: [stamp({ id: 1, section: 'parks' }), stamp({ id: 2, section: 'parks', progress: 1 })] } }, idx);
+  const byId = new Map(second[0].stamps.map(s => [s.id, s]));
+  assert.equal(byId.get(1), idx.get(1));
+  assert.notEqual(byId.get(2), idx.get(2));
+});
+
+test('zero-reading: pictograms, pips, positive lines, Go targets, claim chain and next up', () => {
+  const r = (metric, target) => model.requirement({ metric, target });
+  assert.equal(r('prep_items_collected', 25).icon, 'pin');
+  assert.equal(r('prep_items_collected', 25).count, 25);
+  assert.equal(r('longest_streak', 7).pips, true);
+  assert.equal(r('friends_count', 3).go, 'Friends');
+  assert.equal(r('visited_epcot', 1).count, null);
+  assert.equal(r('logged_in_after_midnight', 1).go, null);
+  assert.equal(model.remainingLine({ metric: 'longest_streak', target: 7, progress: 4, earned: false, secret: false }), '3 more days!');
+  assert.equal(model.remainingLine({ metric: 'prep_items_collected', target: 25, progress: 24, earned: false, secret: false }), '1 more find!');
+  assert.equal(model.remainingLine({ metric: 'park_shelf:2', target: 100, progress: 40, earned: false, secret: false }), '60% to go!');
+  const book = model.buildBook({ stamps: { a: [
+    stamp({ id: 1, section: 'parks', is_earned: true, reward_claimed: false }),
+    stamp({ id: 2, section: 'parks', progress: 1, target: 5, target_value: 5 }),
+    stamp({ id: 3, section: 'parks', progress: 4, target: 5, target_value: 5 }),
+  ] }, sections: [{ key: 'parks', label: 'P', color: '#000000', blurb: '' }] });
+  assert.deepEqual(plain(model.claimQueue(book).map(s => s.id)), [1]);
+  assert.equal(model.nextUp(book).id, 3);
+  assert.equal(model.almostThere(book[0].stamps.find(s => s.id === 3)), true);
+  assert.equal(model.tileLabel(book[0].stamps.find(s => s.id === 3)), 'Explorer. Locked. 4 of 5. Visit 2 different parks');
+  assert.equal(model.tileLabel(book[0].stamps.find(s => s.id === 1)), 'Explorer. Earned. Rewards ready to claim.');
 });
 
 test('stamp book copy has no em dashes and no internal words', () => {
   for (const file of ['src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx', 'src/screens/stampbook/StampCard.tsx',
-    'src/screens/stampbook/model.ts', 'src/screens/stampbook/preview.ts']) {
+    'src/screens/stampbook/model.ts', 'src/screens/stampbook/preview.ts', 'src/screens/stampbook/SlamFx.tsx', 'src/screens/stampbook/Foil.tsx']) {
     const src = read(file);
     assert.ok(!src.includes('—'), `${file} has an em dash`);
     assert.ok(!/prep item/i.test(src), `${file} says "prep item"`);

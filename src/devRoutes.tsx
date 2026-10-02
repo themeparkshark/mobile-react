@@ -72,7 +72,7 @@ export function devInitialRoute(): string | null {
     [on(process.env.EXPO_PUBLIC_RIDE_BATCH_PREVIEW), 'RideBatchConfirm'],
     [on(process.env.EXPO_PUBLIC_RIDE_DETECTION_PREVIEW), 'RideTracker'],
     [on(process.env.EXPO_PUBLIC_RESCUE_PASS_PREVIEW), 'RescuePassPreview'],
-    [on(process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW), 'StampBook'],
+    [on(process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW) || on(process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE), 'StampBook'],
     [on(process.env.EXPO_PUBLIC_QUEUE_STAMP_PREVIEW), 'QueueStampPreview'],
     [on(process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW), 'MiniGameTester'],
     [on(process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW), 'CoinShelf'],

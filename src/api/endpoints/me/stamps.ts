@@ -33,6 +33,11 @@ export interface StampData {
   section?: string;
   icon_url?: string | null;
   how_to?: string;
+  short_name?: string;
+  icon_thumb_url?: string | null;
+  locked_icon_url?: string | null;
+  locked_thumb_url?: string | null;
+  retired?: boolean;
 }
 
 export interface StampSectionInfo {

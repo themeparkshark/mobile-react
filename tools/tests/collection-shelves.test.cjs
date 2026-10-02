@@ -158,16 +158,16 @@ test('park header only calls a reviewed ride coin a ride; food stands get neutra
   assert.match(fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8'), /nextCoinKind=\{goalCoinKind\(/);
 });
 
-test('stamp book cards and detail are bright parchment, never dark or purple', () => {
-  // Stamp Book v2 split the screen: tiles in StampTile, the big card in StampCard.
+test('stamp book cards and detail are bright parchment or Alex blue, never dark or purple', () => {
+  // Stamp Book v2: tiles in StampTile (parchment pages), the big card is Alex's blue DIALOG_CARD popup.
   const files = ['src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx', 'src/screens/stampbook/StampCard.tsx'];
   for (const file of files) {
     const src = fs.readFileSync(file, 'utf8');
     for (const dark of ['#1a1510', 'rgba(60,40,20', '#9C27B0', "backgroundColor: 'rgba(0,0,0,0.4)'"])
       assert.ok(!src.includes(dark), `${file} still has ${dark}`);
   }
-  assert.match(fs.readFileSync(files[1], 'utf8'), /cardEarned: \{\n\s+backgroundColor: '#FFF8E4'/i);
-  assert.match(fs.readFileSync(files[2], 'utf8'), /inner: \{\n\s+backgroundColor: '#FFF8E4'/i);
+  assert.match(fs.readFileSync(files[1], 'utf8'), /pageEarned: \{ backgroundColor: '#FFF8E4'/);
+  assert.match(fs.readFileSync(files[2], 'utf8'), /body: \{ \.\.\.DIALOG_CARD/);
 });
 
 test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part is singular for one', () => {
