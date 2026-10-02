@@ -36,6 +36,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
+import { COUNTDOWN } from '../../gamekit/theme';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
@@ -223,6 +224,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [roundIdx, setRoundIdx] = useState(0);
   const [round, setRound] = useState<PlannedRound | null>(null);
   const [tiles, setTiles] = useState<TileState[]>([]);
+  const [tense, setTense] = useState(false);
   const [heads, setHeads] = useState<SharkLook[][]>([]);
   const [shares, setShares] = useState<number[] | null>(null);
   const [chomped, setChomped] = useState<number[]>([]);
@@ -697,9 +699,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
     return { x: left + col * (g.w + g.gap) + g.w / 2, y: top + row * (g.h + 6 + g.gap) + g.h / 2 };
   }, [tileGeom, W, ZONE_TOP, round]);
 
-  const stamp = useCallback((text: string, color: string, share: number, x: number, y: number, sub?: string) => {
+  const stamp = useCallback((text: string, color: string, share: number, x: number, y: number, sub?: string, size?: number) => {
     stampKey.current += 1;
-    const spec = { key: stampKey.current, text, color, size: stampSize(text, share, W), x, y, sub };
+    const spec = { key: stampKey.current, text, color, size: size ?? stampSize(text, share, W), x, y, sub };
     setStamps((s) => [...s.slice(-2), spec]);
     later(900, () => setStamps((s) => s.filter((k) => k.key !== spec.key)));
   }, [later, W]);
@@ -1234,9 +1236,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
       sfx(beats >= 4 ? CUE.drum4 : beats === 2 ? CUE.drum2 : CUE.drum1);
       sfx(beats >= 4 ? 'crowd_ooh_1764' : beats === 2 ? 'crowd_ooh_833' : 'crowd_ooh_441', { volume: 0.6 });
       bulbFast.value = 1;
+      setTense(true);
       for (let k = 0; k < 4; k++) later(len - beatMs(final) + k * (beatMs(final) / 4), () => Haptic.tickSelection());
       await sleep(len);
       bulbFast.value = 0;
+      setTense(false);
       clock.hitStop(decisive ? 130 : final ? 110 : res.buzz?.steal ? 90 : CEREMONY.tensionHitStopMs, { force: decisive || final });
     } else {
       await sleep(await msToGrid(0.5));
@@ -1249,7 +1253,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const oppPick = r.spec.type === 'buzz' && res.buzz && res.buzz.first === 'me' ? oppIn.current.stealChoice ?? -1 : oppIn.current.choice;
     const proofTile = q.format !== 'closest' ? tileCenter(Math.max(0, correctIdx)) : { x: W / 2, y: ZONE_TOP + 40 };
     if (q.format !== 'closest') {
-      setTiles((ts) => ts.map((s, k) => (s === 'removed' ? s : k === correctIdx ? 'correct' : k === myPick ? 'wrong' : 'reveal-dim')));
+      // Right: the correct tile flips gold. Wrong: your tile goes coral first, then 180-540 ms the correct tile pulses green twice.
+      const pickedWrong = !res.me.correct && myPick >= 0 && myPick !== correctIdx;
+      setTiles((ts) => ts.map((s, k) => (s === 'removed' ? s : k === correctIdx ? (pickedWrong ? 'reveal-dim' : 'correct') : k === myPick ? 'wrong' : 'reveal-dim')));
+      if (pickedWrong) later(180, () => setTiles((ts) => ts.map((s, k) => (k === correctIdx && s !== 'removed' ? 'truth' : s))));
       backFx.current?.bloom(proofTile.x, proofTile.y, { color: C.gold, radius: Math.hypot(tileGeom.w, tileGeom.h) * 0.9, peak: 0.85, ms: 220 });
       if (res.buzz && !res.buzz.firstCorrect && !res.buzz.open) {
         const wrongBuzz = res.buzz.first === 'me' ? meIn.current.choice : oppIn.current.choice;
@@ -1675,9 +1682,23 @@ export function TriviaDuel(props: TriviaDuelProps) {
   }, [round, chompHeld, usedThisQ, later, tileCenter, setClock]);
 
   // -- Shell hooks ----------------------------------------------------------------------------------------
-  const onStart = useCallback(() => {
-    void beginMatch(false);
-  }, [beginMatch]);
+  // The countdown is the show's own (design 11, spotlight iris): 55%-width
+  // stamps on the stage, 3-2-1-GO on the shell's step timing, no scrim.
+  const onStart = useCallback(async () => {
+    await (warmRef.current ?? Promise.resolve());
+    await new Promise((r) => setTimeout(r, 250));
+    const steps = ['3', '2', '1', 'GO!'];
+    // Over the face-down board (the stage band draws above the stamp layer).
+    const y = ZONE_TOP + 40;
+    steps.forEach((label, i) => later(i * COUNTDOWN.stepMs, () => {
+      // 55% of the screen width: a digit at ~1.1x its font size per glyph, GO! at three glyphs.
+      const size = Math.round((0.55 * W) / (label === 'GO!' ? 1.9 : 1.1));
+      stamp(label, label === 'GO!' ? C.gold : '#ffffff', 0.55, W / 2, y + size * 0.5, undefined, Math.min(size, 190));
+      sfx(CUE.tick, { volume: label === 'GO!' ? 0.7 : 0.45 });
+      Haptic.tickSelection();
+    }));
+    later(3 * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
+  }, [beginMatch, later, stamp, W]);
 
   const onPause = useCallback(() => {
     clock.pause();
@@ -1740,12 +1761,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     else if (phase === 'question' && round?.spec.type !== 'final') spot.value = withTiming(0, { duration: 300 });
   }, [visible, phase, round, spot, reducedMotion]);
 
-  // Pre-warm the pool and memory during the shell countdown.
+  // Pre-warm the pool and memory before the countdown (the countdown waits for it, so its beats stay even).
+  const warmRef = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
     if (!visible) return;
-    void loadMemory();
-    if (!props.pool) void loadPool({ rideId, parkId, chapterId }).then((p) => { poolRef.current = p; });
+    const jobs: Promise<unknown>[] = [loadMemory()];
+    if (!props.pool) jobs.push(loadPool({ rideId, parkId, chapterId }).then((p) => { poolRef.current = p; }));
     else poolRef.current = props.pool;
+    warmRef.current = Promise.all(jobs).catch(() => undefined);
   }, [visible, rideId, parkId, chapterId, props.pool]);
 
   const tapAnywhere = useCallback(() => {
@@ -1799,6 +1822,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       gameId="trivia"
       onWrapUp={onWrapUp}
       countdownScrim="none"
+      countdownStyle="none"
       resultsScrim="none"
       renderResults={isRide ? (args) => (
         <View style={{ width: '100%', height: Dimensions.get('window').height }} pointerEvents="box-none">
@@ -1916,6 +1940,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                         reducedMotion={reducedMotion}
                         fontSize={tileFont(c, tileGeom.w)}
                         chomped={chomped.includes(i)}
+                        tense={tense && (tileStates[i] === 'locked' || tileStates[i] === 'amber')}
                       />
                     </View>
                   ))}
@@ -1978,7 +2003,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
             <Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} voice={VOICE[rankRef.current]} />
           </View>
 
-          {stamps.map((s) => <Stamp key={s.key} spec={s} reducedMotion={reducedMotion} />)}
 
           <FxStage
             ref={fx}
@@ -2038,6 +2062,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
               height={RESULTS_H}
             />
           ) : null}
+          {/* Stamps draw above the board and the countdown preview. */}
+          {stamps.map((s) => <Stamp key={s.key} spec={s} reducedMotion={reducedMotion} />)}
           {phase === 'loading' && visible && !preview ? <View style={styles.loading}><OutlinedText text="Setting the stage..." size={20} color="#ffffff" width={2} /></View> : null}
         </Pressable>
       </GestureHandlerRootView>
