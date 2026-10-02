@@ -8,24 +8,21 @@ import Map, { pointsPerMeter, type MapProjector } from '../../components/Map';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
 import { PrepItemType } from '../../models/prep-item-type';
-import { PlayerStatsType } from '../../models/player-stats-type';
 import getPrepItems, { getCachedPrepItems } from '../../api/endpoints/me/prep-items';
 import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import HomeLive from '../../components/home/HomeLive';
 import PrepItemMarker, { PREP_MARKER_ANCHOR } from './PrepItem';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
-import TripGoalCard, { TRIP_CHIP_COIN_SIZE } from './TripGoalCard';
 import { shouldThrottleHomeRequest } from './homeRefresh';
-import { nearestHomeHuntTarget } from './homeHuntTarget';
-import HomeHuntCard from './HomeHuntCard';
 import HomeMapStatusCard from './HomeMapStatusCard';
-import HomeFocusCard from './HomeFocusCard';
-import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
 import { isInPickupRange } from './homeFindCopy';
-import { findOnZoneEdge, pickGrabTagAngle, placeTripChip, samePlacement, type ChipPlacement, type Point, type Rect } from './homeMapLayout';
 import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
-import getPrepItemSets from '../../api/endpoints/me/prep-item-sets';
+import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
+import HomeCatchMoment, { type CatchRequest } from './HomeCatchMoment';
+import { screenBearing, walkCloserLine } from './findPresentation';
+import { queueHaptic } from '../../gamekit/Haptics';
+import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
 import * as RootNavigation from '../../RootNavigation';
 import { reportHomeSpot, type HuntReportReason } from '../../api/endpoints/me/homeHunt';
 import { HOME_HUNT_COPY } from '../../constants/homeHuntCopy';
@@ -35,15 +32,14 @@ import { homeHuntEnabled, loadHomeHuntWeek } from '../LeaderboardsScreen/homeHun
 import { REPORT_REASONS, SAFETY_LINE, huntRankLine, shouldShowSafetyLine } from './homeHuntMap';
 import { getHomeHuntRankLine, setHomeHuntRankLine, subscribeHomeHuntRankLine } from './homeHuntRankStore';
 
-// ── Layout: one grid for every home card ─────────────────────────────
-// Top row: the live bar (only for a live boss, or the team race when the
-// Home Hunt board is on), then the corner stack (park trip chip, focused set)
-// level with the recenter button. Bottom slot: the find card or a status card,
-// above the menu and shark buttons (bottom 100, 76 tall) with one gutter.
+// ── Layout ───────────────────────────────────────────────────────────
+// Home Hunt v3: the map is the screen. Top row: the live bar (only for a live
+// boss, or the team race when the Home Hunt board is on). Bottom slot, above
+// the menu and shark buttons (bottom 100, 76 tall): a status card only while
+// there are no finds, otherwise at most one slim chip, and the catch badge.
 const EDGE = 16;
 const TOP = 12;
 const LIVE_BAR_ROW = 58; // bar (50) + gap
-const RECENTER_COLUMN = 54 + 12;
 const BOTTOM_SLOT = 100 + 76 + 14;
 
 
@@ -77,7 +73,18 @@ let safetyLineShown = false;
 
 
 interface Props {
-  onPrepItemNearby: (prepItem: PrepItemType, pivotId: number) => void;
+  /**
+   * A find to catch. `auto` is the server's nearby check: only the tutorial
+   * takes it (Finn's first find); otherwise the find just glows on the map
+   * until the guest taps it.
+   */
+  onPrepItemNearby: (prepItem: PrepItemType, pivotId: number, source?: 'tap' | 'auto') => void;
+  /** The find the parent cleared for a catch (in range, no tutorial). Plays the catch moment. */
+  catching?: { readonly item: PrepItemType; readonly pivotId: number } | null;
+  onCatchCollected?: (data: RedeemPrepItemResponseType['data']) => void;
+  onCatchUnavailable?: () => void;
+  /** The catch moment finished (caught or not); the parent closes the find. */
+  onCatchDone?: (caught: boolean) => void;
   refreshVersion: number;
   homeLocationConfirmed: boolean;
   /** The screen's overlay queue allows the first-time intro right now. */
@@ -97,17 +104,12 @@ interface Props {
  * Home exploration view - shows prep items on map when not at a park.
  * This is the at-home gameplay experience.
  */
-export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed,
+export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
+  onCatchDone, refreshVersion, homeLocationConfirmed,
   introAllowed = false, introEligible = false, onIntroOpenChange, chestButton }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
-  const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [huntFocus, setHuntFocus] = useState<{
-    latitude: number; longitude: number; requestId: number;
-  } | null>(null);
-  const [selectedHuntPivotId, setSelectedHuntPivotId] = useState<number | null>(null);
-  const nextHuntFocusRequest = useRef(0);
   const { location } = useContext(LocationContext);
   const { player, refreshPlayer } = useContext(AuthContext);
 
@@ -125,29 +127,19 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   const screenFocused = useRef(false);
   const [rankLine, setRankLine] = useState<string | null>(getHomeHuntRankLine());
   const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
-  const [setProgress, setSetProgress] = useState<Record<string, { collected: number; total: number }>>({});
   const [introSeen, markIntroSeen] = useHomeIntroSeen(player?.id);
   const projector = useRef<MapProjector | null>(null);
-  const [mapZoom, setMapZoom] = useState(17.6);
-  // Bumped every time the camera settles, so screen positions are re-measured.
+  // The map has rendered and settled once: only then may a native map view be
+  // asked where a point is (MapLibre raises "Invalid react tag" before that).
   const [mapSettled, setMapSettled] = useState(0);
-  const onMapSettled = useCallback((zoom: number) => {
-    setMapZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
-    setMapSettled(version => version + 1);
-  }, []);
-  const [tagAngle, setTagAngle] = useState(0);
-  const [chipPlacement, setChipPlacement] = useState<ChipPlacement>({ collapsed: false, nudge: 0 });
-  // The full chip's window rect, measured while it is unfolded.
-  const chipRect = useRef<Rect | null>(null);
-  const chipRef = useRef<View>(null);
-  const measureChip = useCallback(() => {
-    if (chipPlacement.collapsed || chipPlacement.nudge) return;
-    chipRef.current?.measureInWindow((x, y, width, height) => {
-      if ([x, y, width, height].every(Number.isFinite) && width > 0) {
-        chipRect.current = { left: x, top: y, right: x + width, bottom: y + height };
-      }
-    });
-  }, [chipPlacement]);
+  const onMapSettled = useCallback(() => { setMapSettled(version => version + 1); }, []);
+  const containerRef = useRef<View>(null);
+  const [chip, setChip] = useState<HuntChipMessage | null>(null);
+  const dismissChip = useCallback(() => setChip(null), []);
+  const [catchRequest, setCatchRequest] = useState<CatchRequest | null>(null);
+  const catchAttempt = useRef(0);
+  // One "a find is close" ping per find, so standing still never repeats it.
+  const pingedPivots = useRef(new Set<number>());
   const introOpen = introSeen === false && introAllowed && homeLocationConfirmed;
   useEffect(() => { onIntroOpenChange?.(introOpen); }, [introOpen, onIntroOpenChange]);
 
@@ -229,7 +221,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
         const cached = await getCachedPrepItems(lat, lng, playerId);
         if (cached) {
           setPrepItems(Array.isArray(cached.data) ? cached.data : []);
-          setPlayerStats(cached.player_stats);
           setIsLoading(false);
         }
       }
@@ -237,7 +228,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       try {
         const response = await getPrepItems(lat, lng, playerId);
         setPrepItems(Array.isArray(response.data) ? response.data : []);
-        setPlayerStats(response.player_stats);
         setLoadError(false);
         recordFetch(lat, lng, lastFetchLocation, lastFetchTime);
 
@@ -258,7 +248,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     [homeLocationConfirmed, location?.latitude, location?.longitude, player?.id, refreshPlayer, loadError]
   );
   loadPrepItemsRef.current = loadPrepItems;
-  const loadSetProgressRef = useRef<() => void>(() => {});
   const handlePrepItemExpire = useCallback(() => {
     void loadPrepItemsRef.current(true);
   }, []);
@@ -288,24 +277,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     if (refreshVersion > 0) void loadPrepItems(true);
   }, [refreshVersion]);
 
-  // "Churro Collection: 3/40" on the find card. One small read on focus and
-  // after each pickup, never on GPS ticks.
-  const loadSetProgress = useCallback(() => {
-    if (!homeLocationConfirmed || !player?.id) return;
-    getPrepItemSets().then(sets => {
-      const next: Record<string, { collected: number; total: number }> = {};
-      for (const set of sets ?? []) {
-        if (set?.slug && Number.isFinite(set.total_items) && set.total_items > 0) {
-          next[set.slug] = { collected: set.collected_count ?? 0, total: set.total_items };
-        }
-      }
-      setSetProgress(next);
-    }).catch(() => undefined);
-  }, [homeLocationConfirmed, player?.id]);
-  loadSetProgressRef.current = loadSetProgress;
-  useEffect(() => { loadSetProgress(); }, [loadSetProgress, refreshVersion]);
-
-  // Returning from Collections may change the focused set. Refresh immediately
+  // Returning from Collections may change what spawns. Refresh immediately
   // even when GPS has not moved and the current spawn batch has not expired.
   useFocusEffect(useCallback(() => {
     screenFocused.current = true;
@@ -313,7 +285,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       firstScreenFocus.current = false;
     } else {
       void loadPrepItemsRef.current(true);
-      loadSetProgressRef.current();
     }
     return () => { screenFocused.current = false; };
   }, []));
@@ -344,7 +315,14 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
         const nearbyItem = await getCurrentPrepItem(lat, lng);
 
         if (active && nearbyItem?.pivot_id) {
-          onPrepItemNearby(nearbyItem, nearbyItem.pivot_id);
+          // Finn's first find still opens on its own; otherwise the find glows
+          // and hops on the map and one slim chip says so, once per find.
+          onPrepItemNearby(nearbyItem, nearbyItem.pivot_id, 'auto');
+          if (!pingedPivots.current.has(nearbyItem.pivot_id)) {
+            pingedPivots.current.add(nearbyItem.pivot_id);
+            queueHaptic('tickSelection', 1);
+            setChip(current => current ?? { key: `near-${nearbyItem.pivot_id}`, text: 'A find is close! Tap it to catch.' });
+          }
         }
       } catch (error) {
         // Silently handle - will retry on next location update
@@ -363,7 +341,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     if (!item.active_from || !item.active_to) return true;
     return dayjs().isBetween(dayjs(item.active_from), dayjs(item.active_to));
   });
-  const huntTarget = nearestHomeHuntTarget(activePrepItems, location, Date.now(), selectedHuntPivotId);
   const lat = location?.latitude;
   const lng = location?.longitude;
   const placed = useMemo(() => activePrepItems.map(item => {
@@ -381,43 +358,50 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prepItems, homeLocationConfirmed]);
-  const findInRange = homeLocationConfirmed && placed.some(entry => entry.inRange);
-  const ppm = lat != null ? pointsPerMeter(mapZoom, lat) : 0;
-  // Where the finds are on screen, measured each time the map settles: the GRAB
-  // ZONE tag picks a spot on the circle clear of them, and the park trip chip
-  // folds (or slides) off any find under it.
-  useEffect(() => {
+
+  /** A map coordinate in this view's own points (the catch layer's space), or null. */
+  const toLocal = useCallback(async (latitude: number, longitude: number) => {
     const project = projector.current;
-    // Only once the map has rendered and settled: asking an unmounted native map
-    // view for a point raises "Invalid react tag" in MapLibre.
-    if (!project || mapSettled === 0 || !homeLocationConfirmed || lat == null || lng == null) return;
+    // Only once the map has settled: asking an unmounted native map view for a point raises "Invalid react tag".
+    if (!project || mapSettled === 0) return null;
+    const [point, origin] = await Promise.all([
+      project(latitude, longitude).catch(() => null),
+      new Promise<{ x: number; y: number } | null>(resolve => {
+        if (!containerRef.current) { resolve(null); return; }
+        containerRef.current.measureInWindow((x, y) => resolve(Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null));
+      }),
+    ]);
+    return point && origin ? { x: point.x - origin.x, y: point.y - origin.y } : null;
+  }, [mapSettled]);
+
+  // Out of range: a tiny nudge with an arrow toward the find, gone on its own.
+  const nudge = useCallback(async (item: PrepItemType, distance: number | null) => {
+    queueHaptic('tapLight', 1);
+    const key = `far-${item.pivot_id ?? item.id}-${Date.now()}`;
+    setChip({ key, text: walkCloserLine(distance) });
+    if (lat == null || lng == null || item.latitude == null || item.longitude == null) return;
+    const [shark, find] = await Promise.all([toLocal(lat, lng), toLocal(item.latitude, item.longitude)]);
+    const arrowDeg = screenBearing(shark, find);
+    if (arrowDeg != null) setChip(current => (current?.key === key ? { ...current, arrowDeg } : current));
+  }, [lat, lng, toLocal]);
+
+  // The parent cleared a find for a catch: measure where it is and play the moment.
+  useEffect(() => {
+    if (!catching) return;
     let alive = true;
+    const { item, pivotId } = catching;
+    setChip(null);
     void (async () => {
-      const shark = await project(lat, lng);
-      const spots = await Promise.all(placed.map(({ item }) => (item.latitude != null && item.longitude != null
-        ? project(item.latitude, item.longitude) : Promise.resolve(null))));
-      if (!alive || !shark) return;
-      const finds = spots.filter((spot): spot is Point => spot != null);
-      const radius = HOME_PREP_PICKUP_RADIUS_METERS * ppm;
-      setTagAngle(pickGrabTagAngle(radius, finds.map(f => ({ x: f.x - shark.x, y: f.y - shark.y }))));
-      const next = placeTripChip(chipRect.current, TRIP_CHIP_COIN_SIZE, finds);
-      setChipPlacement(current => (samePlacement(current, next) ? current : next));
-    })().catch(() => undefined);
+      const from = item.latitude != null && item.longitude != null ? await toLocal(item.latitude, item.longitude) : null;
+      if (alive) setCatchRequest({ item, pivotId, from, attempt: ++catchAttempt.current });
+    })();
     return () => { alive = false; };
-  }, [mapSettled, placed, homeLocationConfirmed, lat, lng, ppm]);
-  const pickupRange = useMemo(() => (homeLocationConfirmed
-    ? { meters: HOME_PREP_PICKUP_RADIUS_METERS, findInside: findInRange, tagAngle } : null),
-  [homeLocationConfirmed, findInRange, tagAngle]);
+  // Only a new find (or a new open of the same one) starts a catch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catching]);
+
+  const catchingPivot = catchRequest?.pivotId ?? catching?.pivotId ?? null;
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
-  const focusedSet = playerStats?.focused_prep_set;
-  const huntSlug = huntTarget?.item.set_slug ?? null;
-  const huntProgress = huntSlug ? setProgress[huntSlug]
-    ?? (focusedSet && focusedSet.slug === huntSlug && focusedSet.total_items
-      ? { collected: focusedSet.collected_count ?? 0, total: focusedSet.total_items } : null) : null;
-  // The find card already names its set and progress; the focus card only
-  // earns the corner when it adds something (a different set, or a wait).
-  const showFocusCard = homeLocationConfirmed && !isLoading && !loadError && !!focusedSet &&
-    (!huntTarget || focusedSet.slug !== huntSlug || !focusedSet.available_now);
 
   let bottom: React.ReactNode = null;
   if (!homeLocationConfirmed) {
@@ -427,32 +411,19 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   } else if (activePrepItems.length === 0) {
     bottom = <HomeMapStatusCard mode={loadError ? 'error' : 'empty'} inline rankLine={rankLine}
       onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })}
-      onOpenCollections={() => RootNavigation.navigate('SetCollection',
-        focusedSet?.slug ? { slug: focusedSet.slug } : undefined)}
+      onOpenCollections={() => RootNavigation.navigate('SetCollection')}
       onRetry={() => void loadPrepItems(true)} />;
   } else if (loadError) {
     bottom = <HomeMapStatusCard mode="saved" inline rankLine={rankLine}
       onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })} onRetry={() => void loadPrepItems(true)} />;
-  } else if (huntTarget) {
-    bottom = <HomeHuntCard target={huntTarget} setProgress={huntProgress}
-      findsUntilTicket={playerStats?.ticket_guarantee_in}
-      ticketsCapped={playerStats?.home_tickets_capped === true}
-      onPress={() => {
-        const item = huntTarget.item;
-        if (isInPickupRange(huntTarget.distanceMeters) && item.pivot_id) {
-          onPrepItemNearby(item, item.pivot_id);
-        } else if (item.latitude != null && item.longitude != null) {
-          setHuntFocus({ latitude: item.latitude, longitude: item.longitude,
-            requestId: ++nextHuntFocusRequest.current });
-        }
-      }} />;
+  } else if (!catchRequest) {
+    bottom = <HomeHuntChip message={chip} onDismiss={dismissChip} />;
   }
 
   return (
-    <View style={styles.container}>
+    <View ref={containerRef} collapsable={false} style={styles.container}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map focusCoordinate={huntFocus} controlsTop={rowTop} pickupRange={pickupRange}
-        projector={projector} onZoomChange={onMapSettled} extraControls={chestButton}>
+      <Map controlsTop={rowTop} projector={projector} onZoomChange={onMapSettled} extraControls={chestButton}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <Marker
             key={prepItem.pivot_id || prepItem.id}
@@ -462,36 +433,37 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
             }}
             anchor={PREP_MARKER_ANCHOR}
             onLongPress={prepItem.pivot_id ? () => reportSpot(prepItem.pivot_id as number) : undefined}
-            accessibilityLabel={inRange ? `${prepItem.name}. In range. Tap to grab.` : `${prepItem.name}, ${distance == null ? 'distance unknown' : `${Math.round(distance)} meters away`}`}
+            accessibilityLabel={inRange ? `${prepItem.name}. In range. Tap to catch.` : `${prepItem.name}, ${distance == null ? 'distance unknown' : `${Math.round(distance)} meters away`}`}
             onPress={() => {
-              if (!loadError && prepItem.pivot_id) {
-                setSelectedHuntPivotId(prepItem.pivot_id);
-                if (!inRange) return;
-                onPrepItemNearby(prepItem, prepItem.pivot_id);
-              }
+              if (loadError || !prepItem.pivot_id || catchingPivot != null) return;
+              if (inRange) onPrepItemNearby(prepItem, prepItem.pivot_id, 'tap');
+              else void nudge(prepItem, distance);
             }}
           >
             <PrepItemMarker prepItem={prepItem} onExpire={handlePrepItemExpire}
-              inRange={inRange} distanceMeters={distance}
-              onZoneEdge={!inRange && findOnZoneEdge(distance, HOME_PREP_PICKUP_RADIUS_METERS, ppm)} />
+              inRange={inRange} hidden={catchingPivot === prepItem.pivot_id} />
           </Marker>
         ))}
       </Map>
 
-      {/* Corner stack, level with the recenter button. */}
-      <View style={[styles.corner, { top: rowTop }]} pointerEvents="box-none">
-        {/* Folds to its coin over a find; slides below it only when nothing sits under the chip. */}
-        <View ref={chipRef} onLayout={measureChip} collapsable={false}
-          style={!showFocusCard && chipPlacement.nudge ? { transform: [{ translateY: chipPlacement.nudge }] } : undefined}>
-          <TripGoalCard refreshVersion={refreshVersion} compact collapsed={chipPlacement.collapsed} />
-        </View>
-        {showFocusCard && focusedSet && (
-          <HomeFocusCard set={focusedSet}
-            onPress={() => RootNavigation.navigate('SetCollection', { slug: focusedSet.slug })} />
-        )}
-      </View>
-
       {bottom && <View style={styles.bottomSlot} pointerEvents="box-none">{bottom}</View>}
+
+      {/* The catch: pop, burst, fly into the badge. Never takes a touch. */}
+      <HomeCatchMoment request={catchRequest} badgeBottom={BOTTOM_SLOT}
+        onCollected={data => onCatchCollected?.(data)}
+        onUnavailable={() => onCatchUnavailable?.()}
+        onFailed={(line, retryable) => {
+          const failed = catchRequest;
+          setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error', ttlMs: 4000,
+            onPress: retryable && failed ? () => {
+              setChip(null);
+              onPrepItemNearby(failed.item, failed.pivotId, 'tap');
+            } : undefined });
+        }}
+        onDone={caught => {
+          setCatchRequest(null);
+          onCatchDone?.(caught);
+        }} />
 
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
       <HomeLive top={TOP} onBarChange={setLiveBar} />
@@ -511,8 +483,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  corner: { position: 'absolute', left: EDGE, right: EDGE + RECENTER_COLUMN, zIndex: 19,
-    alignItems: 'flex-start', gap: 8 },
   bottomSlot: { position: 'absolute', left: EDGE, right: EDGE, bottom: BOTTOM_SLOT, zIndex: 12,
     alignItems: 'stretch', maxWidth: 420, alignSelf: 'center' },
 });

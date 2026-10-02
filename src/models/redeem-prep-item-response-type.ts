@@ -53,6 +53,29 @@ export interface RedeemPrepItemResponseType {
       readonly name: string;
       readonly rarity: number;
       readonly rarity_label: string;
+      // Home Hunt v3 (CONTRACT.md 3.3, optional)
+      readonly icon_url?: string | null;
+      readonly flavor?: string | null;
+      readonly rarity_key?: string | null;
+      readonly set_slug?: string | null;
+      readonly set_name?: string | null;
+      readonly set_color?: string | null;
+      readonly set_badge_url?: string | null;
+      readonly is_daily_rare?: boolean;
+      readonly caught_count?: number;
     };
+    /** Home Hunt v3: "4 of 14" for the catch badge. */
+    readonly dex?: {
+      readonly set_slug?: string | null;
+      readonly found?: number;
+      readonly total?: number;
+      readonly reward_status?: 'locked' | 'claimable' | 'claimed' | 'pending' | string | null;
+    } | null;
+    /** App request (CONTRACT.md "App requests"): the graded Ride Photo the server accepted. */
+    readonly photo?: {
+      readonly quality?: 'good' | 'great' | 'frame_it' | string | null;
+      readonly golden_hour?: boolean;
+      readonly bonus_xp?: number;
+    } | null;
   };
 }

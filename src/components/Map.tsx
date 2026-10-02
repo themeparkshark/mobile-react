@@ -18,7 +18,6 @@ import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
 import { useFocusEffect } from '@react-navigation/native';
 import { outfitLayerUrls } from '../helpers/wardrobe';
 
@@ -42,19 +41,13 @@ const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 
-/** The GRAB ZONE tag's slot inside the grab-zone box (a 2r square), centred on its spot on the circle. */
-function grabTagSlotPosition(radius: number, angleDeg: number) {
-  const c = grabTagCenter(radius, angleDeg);
-  return { left: radius + c.x - GRAB_TAG_SIZE.width / 2, top: radius + c.y - GRAB_TAG_SIZE.height / 2 };
-}
-
 /** Map points per metre at this zoom and latitude (MapLibre: 512-point world tiles). */
 export function pointsPerMeter(zoom: number, latitude: number): number {
   const metersPerPoint = 40075016.686 * Math.cos(latitude * Math.PI / 180) / (512 * 2 ** zoom);
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, extraControls }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -72,17 +65,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly sunOverride?: number;
   /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
   readonly projector?: MutableRefObject<MapProjector | null>;
-  /**
-   * Home map: a dashed "grab zone" circle around the shark at the real pickup
-   * radius, gold while a find is inside it. Replaces the shark's blue ground
-   * pill, which read like a mystery button.
-   */
-  readonly pickupRange?: {
-    readonly meters: number;
-    readonly findInside: boolean;
-    /** Where the GRAB ZONE tag sits, degrees clockwise from the top, clear of every find. */
-    readonly tagAngle?: number;
-  } | null;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
 }) {
@@ -354,35 +336,18 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }],
   };
 
-  const rangeRadius = pickupRange && location
-    ? Math.max(24, Math.min(600, pickupRange.meters * pointsPerMeter(cameraZoom, location.latitude))) : 0;
   const playerShark = (
       <View style={styles.sharkMarkerContainer}>
-        {pickupRange ? (
-          // Grab zone: centred on the shark's ground point (50, 71.5 in this box).
-          <View pointerEvents="none" style={[styles.grabZone, pickupRange.findInside && styles.grabZoneReady, {
-            width: rangeRadius * 2, height: rangeRadius * 2, borderRadius: rangeRadius,
-            left: 50 - rangeRadius, top: 71.5 - rangeRadius }]}>
-            <View style={[styles.grabZoneTagSlot, grabTagSlotPosition(rangeRadius, pickupRange.tagAngle ?? 0)]}>
-              <View style={[styles.grabZoneTag, pickupRange.findInside && styles.grabZoneTagReady]}>
-                <Text style={[styles.grabZoneText, pickupRange.findInside && styles.grabZoneTextReady]}>GRAB ZONE</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <>
-            {/* Animated glow ring */}
-            <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
-            {/* Inner blue ring (ground indicator) */}
-            <View style={styles.groundRing} />
-          </>
-        )}
+        {/* Animated glow ring */}
+        <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
+        {/* Inner blue ring (ground indicator) */}
+        <View style={styles.groundRing} />
         {/* Wake: sparkles spill from under the shark while it walks. */}
         <SharkWake moving={wake} />
         {/* Animated shadow — shrinks when shark bobs up */}
         <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}
-        {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
+        {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
         <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
           {player?.inventory?.skin_item?.no_eye_url ? (
@@ -654,17 +619,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 3,
   },
-  grabZone: { position: 'absolute', alignItems: 'center', borderWidth: 2.5, borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.95)', backgroundColor: 'rgba(124,198,245,0.10)' },
-  grabZoneReady: { borderColor: BRAND.gold, borderStyle: 'solid', borderWidth: 3, backgroundColor: 'rgba(255,207,59,0.12)' },
-  // A fixed box centred on the tag's spot on the circle; the tag centres inside it.
-  grabZoneTagSlot: { position: 'absolute', width: GRAB_TAG_SIZE.width, height: GRAB_TAG_SIZE.height,
-    alignItems: 'center', justifyContent: 'center' },
-  grabZoneTag: { paddingHorizontal: 7, paddingVertical: 1, borderRadius: 9,
-    backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.blueBright },
-  grabZoneTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
-  grabZoneText: { fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.5, color: BRAND.blue },
-  grabZoneTextReady: { color: BRAND.navy },
   outerGlowRing: {
     position: 'absolute',
     bottom: 0,
