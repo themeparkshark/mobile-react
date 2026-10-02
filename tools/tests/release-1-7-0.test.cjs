@@ -91,3 +91,15 @@ test('react-native-audio-api ships patched and linked (studio audio engine)', ()
   // Xcode 26 (EAS image): Constants.h needs <cstddef> for size_t.
   assert.match(read('tools/audio/patch-audio-api.mjs'), /#include <cstddef>/);
 });
+
+test('the footer shows the binary version, not the server copyright label', () => {
+  const { copyrightLine } = loadTs('src/api/platform.ts', {
+    'expo-application': { nativeApplicationVersion: '1.7.0' },
+    'expo-constants': { default: { expoConfig: { version: '1.7.0' } } },
+  });
+  assert.equal(copyrightLine(new Date('2026-10-02T00:00:00Z')), '© Theme Park Shark 2026 v1.7.0');
+  for (const file of ['src/screens/SettingsScreen.tsx', 'src/screens/Auth/LoginScreen.tsx']) {
+    assert.doesNotMatch(read(file), /labels\.copyright/);
+    assert.match(read(file), /\{copyrightLine\(\)\}/);
+  }
+});

@@ -81,3 +81,13 @@ export function platformError(error: unknown): PlatformError | null {
 
   return null;
 }
+
+/**
+ * "(c) Theme Park Shark 2026 v1.7.0" with the copyright sign: the footer on sign-in and Settings. Built
+ * from this binary's own version, never a server string (the server label
+ * lagged at v1.4.0 for months).
+ */
+export function copyrightLine(now: Date = new Date()): string {
+  const version = appVersion();
+  return `\u00A9 Theme Park Shark ${now.getFullYear()}${version ? ` v${version}` : ''}`;
+}

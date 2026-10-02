@@ -22,6 +22,7 @@ import config from '../../config';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ThemeContext } from '../../context/ThemeProvider';
 import useCrumbs from '../../hooks/useCrumbs';
+import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SPLASH_VIDEO = require('../../../assets/videos/splash-loop.mp4');
@@ -368,7 +369,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
             fontFamily: 'Knockout',
           }}
         >
-          {labels.copyright}
+          {copyrightLine()}
         </Animated.Text>
       </SafeAreaView>
     </View>

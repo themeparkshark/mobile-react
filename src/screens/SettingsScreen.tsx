@@ -41,6 +41,7 @@ import {
   appleReconfirmFromError, DELETION_COPY, deletionDoneMessage, runAccountDeletion, SUPPORT_EMAIL, supportMailto,
   type AppleReconfirm,
 } from './Settings/accountDeletion';
+import { copyrightLine } from '../api/platform';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
 const SETTINGS_ART = {
@@ -409,7 +410,7 @@ export default function SettingsScreen() {
             isLast onPress={() => { void deleteAccount(); }} />
         </Section>
 
-        <Text style={styles.copyright}>{labels.copyright}</Text>
+        <Text style={styles.copyright}>{copyrightLine()}</Text>
         <Text style={styles.disclaimer}>
           Theme Park Shark is an independent fan app. It is not affiliated with, endorsed by, or sponsored by
           any theme park or its owners. Park and attraction names are used only to identify real places.
