@@ -408,10 +408,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           style={{
             flex: 1,
             marginTop: sharkShop ? 0 : -8,
+            // Brand blue under the art, never white if a store has no background.
+            backgroundColor: BRAND.blue,
           }}
-          source={{
-            uri: currentStore?.background_url,
-          }}
+          source={currentStore?.background_url ? { uri: currentStore.background_url } : undefined}
         >
           <SafeAreaView
             style={{
