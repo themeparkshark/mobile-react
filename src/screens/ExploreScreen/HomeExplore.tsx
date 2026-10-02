@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Marker } from '../../components/map/Marker';
 import dayjs from 'dayjs';
 import { useFocusEffect } from '@react-navigation/native';
@@ -137,6 +138,11 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const [chip, setChip] = useState<HuntChipMessage | null>(null);
   const dismissChip = useCallback(() => setChip(null), []);
   const [catchRequest, setCatchRequest] = useState<CatchRequest | null>(null);
+  // A Ride Photo leans the map in toward the find while it blurs behind the ride.
+  const mapFocus = useSharedValue(0);
+  const [focusOrigin, setFocusOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const mapLean = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.07 * mapFocus.value }] }));
   const catchAttempt = useRef(0);
   // One "a find is close" ping per find, so standing still never repeats it.
   const pingedPivots = useRef(new Set<number>());
@@ -393,7 +399,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     setChip(null);
     void (async () => {
       const from = item.latitude != null && item.longitude != null ? await toLocal(item.latitude, item.longitude) : null;
-      if (alive) setCatchRequest({ item, pivotId, from, attempt: ++catchAttempt.current });
+      if (!alive) return;
+      setFocusOrigin(from);
+      setCatchRequest({ item, pivotId, from, attempt: ++catchAttempt.current });
     })();
     return () => { alive = false; };
   // Only a new find (or a new open of the same one) starts a catch.
@@ -421,8 +429,11 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   }
 
   return (
-    <View ref={containerRef} collapsable={false} style={styles.container}>
+    <View ref={containerRef} collapsable={false} style={styles.container}
+      onLayout={event => setContainerSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
       {/* Map with prep items - player marker is handled by Map component */}
+      <Animated.View style={[styles.container, mapLean, focusOrigin && containerSize.width > 0 ? {
+        transformOrigin: `${Math.round(focusOrigin.x)}px ${Math.round(focusOrigin.y)}px` } : null]}>
       <Map controlsTop={rowTop} projector={projector} onZoomChange={onMapSettled} extraControls={chestButton}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <Marker
@@ -445,11 +456,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
           </Marker>
         ))}
       </Map>
+      </Animated.View>
 
       {bottom && <View style={styles.bottomSlot} pointerEvents="box-none">{bottom}</View>}
 
       {/* The catch: pop, burst, fly into the badge. Never takes a touch. */}
-      <HomeCatchMoment request={catchRequest} badgeBottom={BOTTOM_SLOT}
+      <HomeCatchMoment request={catchRequest} badgeBottom={BOTTOM_SLOT} mapFocus={mapFocus}
         onCollected={data => onCatchCollected?.(data)}
         onUnavailable={() => onCatchUnavailable?.()}
         onFailed={(line, retryable) => {

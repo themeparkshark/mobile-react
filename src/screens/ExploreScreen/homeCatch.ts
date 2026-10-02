@@ -1,3 +1,4 @@
+import type { RedeemCatchDetails } from '../../api/endpoints/me/prep-items/redeem';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
 import { catchErrorLine } from './findPresentation';
 
@@ -27,7 +28,7 @@ export type CatchResult =
   | { readonly kind: 'gone'; readonly line: string }
   | { readonly kind: 'failed'; readonly line: string };
 
-type Redeem = (id: number, pivotId: number, latitude?: number, longitude?: number) => Promise<RedeemPrepItemResponseType>;
+type Redeem = (id: number, pivotId: number, latitude?: number, longitude?: number, details?: RedeemCatchDetails) => Promise<RedeemPrepItemResponseType>;
 
 function errorStatus(error: unknown): { status: number | null; serverError: string | null } {
   const response = (error as { response?: { status?: number; data?: { error?: unknown } } } | null)?.response;
@@ -37,10 +38,10 @@ function errorStatus(error: unknown): { status: number | null; serverError: stri
 }
 
 export async function catchFind(redeem: Redeem, itemId: number, pivotId: number,
-  fix: { latitude: number; longitude: number } | null): Promise<CatchResult> {
+  fix: { latitude: number; longitude: number } | null, details?: RedeemCatchDetails): Promise<CatchResult> {
   if (!fix) return { kind: 'failed', line: 'Finding you on the map. Tap to try again.' };
   try {
-    const response = await redeem(itemId, pivotId, fix.latitude, fix.longitude);
+    const response = await redeem(itemId, pivotId, fix.latitude, fix.longitude, details);
     if (!response?.data) return { kind: 'failed', line: catchErrorLine(null, null) };
     return { kind: 'caught', data: response.data };
   } catch (error) {

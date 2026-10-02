@@ -192,13 +192,13 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false }: Props
     <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
       <View style={[styles.scaled, { opacity: look.opacity, transform: [{ scale: look.scale }] }]}>
         <Animated.View style={[styles.groundShadow, shadow]} />
-        {look.groundGlow && <Animated.View style={[styles.groundGlow, { backgroundColor: glowColor }, pulse]} />}
+        {look.groundGlow && <Animated.View style={[styles.groundGlow, { backgroundColor: glowColor, shadowColor: glowColor }, pulse]} />}
         {inRange && <Animated.View style={[styles.groundRing, pulse]} />}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
           {[0, 45, 90, 135].map(angle => <View key={angle}
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
         </Animated.View>}
-        {look.aura && <Animated.View style={[styles.aura, { backgroundColor: color }, pulse]} />}
+        {look.aura && <Animated.View style={[styles.aura, { backgroundColor: `${color}55`, shadowColor: color }, pulse]} />}
         <Animated.View style={[styles.art, bob]}>
           {imageSource ? (
             <Image source={imageSource} style={styles.image} contentFit="contain" transition={0}
@@ -231,12 +231,15 @@ const styles = StyleSheet.create({
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 8, width: 40, height: 10, borderRadius: 5,
     backgroundColor: BRAND.navy },
-  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 14, width: 64, height: 20, borderRadius: 10 },
+  // Soft light pools, not flat discs: a faint core and a wide shadow bloom.
+  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 10, width: 40, height: 10, borderRadius: 5, opacity: 0.6,
+    shadowOffset: { width: 0, height: 0 }, shadowRadius: 12, shadowOpacity: 1 },
   groundRing: { position: 'absolute', top: B / 2 + A / 2 - 18, width: 78, height: 28, borderRadius: 14,
     borderWidth: 3, borderColor: BRAND.gold },
   rays: { position: 'absolute', width: 96, height: 96, alignItems: 'center', justifyContent: 'center', opacity: 0.35 },
   ray: { position: 'absolute', width: 96, height: 8, borderRadius: 4 },
-  aura: { position: 'absolute', width: 66, height: 66, borderRadius: 33 },
+  aura: { position: 'absolute', width: 38, height: 38, borderRadius: 19,
+    shadowOffset: { width: 0, height: 0 }, shadowRadius: 22, shadowOpacity: 1 },
   art: { width: A, height: A, alignItems: 'center', justifyContent: 'center',
     shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 3 }, shadowRadius: 1.5, shadowOpacity: 0.35 },
   image: { width: A, height: A },

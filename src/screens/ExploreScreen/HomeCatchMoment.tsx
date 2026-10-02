@@ -1,4 +1,6 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BlurView } from 'expo-blur';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, {
@@ -21,7 +23,19 @@ import { findDisplayName } from './homeFindCopy';
 import { setHomeHuntRankLine } from './homeHuntRankStore';
 import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchProgressLine, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
-import { catchFind, pickupFix } from './homeCatch';
+import { catchFind, pickupFix, type CatchResult } from './homeCatch';
+import { rideSpec, type PhotoGrade } from './ridePhoto';
+import RidePhotoCatch from './ridePhoto/RidePhotoCatch';
+import type { RedeemCatchDetails } from '../../api/endpoints/me/prep-items/redeem';
+
+const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
+let rideHintSeen: boolean | null = null;
+/** Development recordings: show the first-catch finger again. */
+export function resetRideHintForPreview(): void {
+  rideHintSeen = false;
+  void AsyncStorage.removeItem(RIDE_HINT_KEY).catch(() => undefined);
+}
+void AsyncStorage.getItem(RIDE_HINT_KEY).then(value => { rideHintSeen = value === '1'; }).catch(() => { rideHintSeen = false; });
 
 const TICKET_ICON = require('../../../assets/images/ticket-icon.png');
 const SFX = {
@@ -70,9 +84,13 @@ function Spark({ index, count, pop, color }: { index: number; count: number; pop
  * and it never blocks the map: the layer ignores touches.
  */
 export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemPrepItem, onCollected, onUnavailable,
-  onDone, onFailed }: {
+  onDone, onFailed, mapFocus, autoShots }: {
+  /** Development recordings only (see RidePhotoCatch). */
+  readonly autoShots?: number[] | null;
   readonly request: CatchRequest | null;
   readonly badgeBottom: number;
+  /** 0..1: the map behind leans in (scale) while a Ride Photo is open. */
+  readonly mapFocus?: SharedValue<number>;
   readonly redeem?: typeof redeemPrepItem;
   readonly onCollected: (data: RedeemPrepItemResponseType['data']) => void;
   readonly onUnavailable: () => void;
@@ -91,6 +109,9 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
   const [layer, setLayer] = useState({ width: 0, height: 0 });
   const [summary, setSummary] = useState<CatchSummary | null>(null);
   const [showing, setShowing] = useState<CatchRequest | null>(null);
+  const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean } | null>(null);
+  const redeemRun = useRef<Promise<CatchResult> | null>(null);
+  const aliveRef = useRef(0);
 
   const pop = useSharedValue(0);
   const lift = useSharedValue(0);
@@ -101,6 +122,9 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
   const badgeKick = useSharedValue(1);
   const progress = useSharedValue(0);
   const reveal = useSharedValue(0);
+  const blur = useSharedValue(0);
+  const flyFromX = useSharedValue(0);
+  const flyFromY = useSharedValue(0);
 
   const latest = useRef({ location, latestLocationSampleRef, currencies, playSound, triggerFly, refreshPlayer,
     onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion });
@@ -119,18 +143,81 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
     y: layer.height - badgeBottom - BADGE_HEIGHT / 2,
   };
 
+  /** Steps 2 and 3, shared by every catch style: fly into the badge, then the reveal. */
+  const land = useCallback(async (item: PrepItemType, data: RedeemPrepItemResponseType['data'], token: number) => {
+    const motion = !latest.current.reducedMotion;
+    const next = catchSummary(item, data);
+    setSummary(next);
+    if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
+    latest.current.onCollected(data);
+    latest.current.refreshPlayer().catch(() => undefined);
+
+    progress.value = next.progressFrom;
+    badgeIn.value = motion ? withSpring(1, { damping: 14, stiffness: 220 }) : withTiming(1, { duration: 120 });
+    if (!data.replayed) sfx('whoosh', SFX_PRIORITY.whoosh);
+    fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
+    await wait(motion ? CATCH_TIMING.fly : 60);
+    if (aliveRef.current !== token) return;
+
+    itemGone.value = withTiming(1, { duration: 80 });
+    const tier = rarityTier(data.item?.rarity ?? item.rarity);
+    queueHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
+    sfx(next.isNew ? 'reveal' : 'land', SFX_PRIORITY.land);
+    badgeKick.value = motion ? withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
+    progress.value = withTiming(next.progressTo, { duration: motion ? 520 : 1, easing: Easing.out(Easing.cubic) });
+    reveal.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1;
+
+    // Rewards fly from the badge to the header counters.
+    if (!data.replayed) {
+      layerRef.current?.measureInWindow((x, y) => {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const startX = x + target.x, startY = y + target.y;
+        const { currencies: list, triggerFly: flyTo } = latest.current;
+        if (data.rewards.coins > 0 && list[0]?.icon_url) {
+          flyTo({ imageUrl: list[0].icon_url, amount: Math.min(data.rewards.coins, 8), startX, startY, targetPosition: 'coins' });
+        }
+        if (data.rewards.tickets > 0) {
+          flyTo({ imageSource: TICKET_ICON, amount: Math.min(data.rewards.tickets, 6), startX, startY, targetPosition: 'tickets' });
+        }
+      });
+    }
+
+    await wait(CATCH_TIMING.reveal + CATCH_TIMING.hold);
+    if (aliveRef.current !== token) return;
+    badgeIn.value = withTiming(0, { duration: CATCH_TIMING.exit });
+    await wait(CATCH_TIMING.exit);
+    if (aliveRef.current === token) { setShowing(null); setSummary(null); setRide(null); latest.current.onDone(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.x, target.y]);
+
+  const focusMap = (on: boolean) => {
+    const motion = !latest.current.reducedMotion;
+    blur.value = withTiming(on ? 1 : 0, { duration: motion ? (on ? 380 : 300) : 1, easing: Easing.out(Easing.cubic) });
+    if (mapFocus) mapFocus.value = motion ? (on ? withSpring(1, { damping: 18, stiffness: 120 }) : withTiming(0, { duration: 320 })) : 0;
+  };
+
   useEffect(() => {
     if (!request || layer.width === 0) return;
-    let alive = true;
+    const token = ++aliveRef.current;
+    const alive = () => aliveRef.current === token;
     const { item, pivotId } = request;
     const motion = !latest.current.reducedMotion;
-    const reset = () => {
-      [pop, lift, wobble, fly, itemGone, badgeIn, reveal, progress].forEach(value => { cancelAnimation(value); value.value = 0; });
-      badgeKick.value = 1;
-    };
-    reset();
+    [pop, lift, wobble, fly, itemGone, badgeIn, reveal, progress].forEach(value => { cancelAnimation(value); value.value = 0; });
+    badgeKick.value = 1;
     setSummary(null);
     setShowing(request);
+    const start = fromPoint(request);
+    flyFromX.value = start.x;
+    flyFromY.value = start.y;
+
+    // Uncommon and rarer: Ride Photo. The map blurs and leans in, the ride opens out of the find.
+    if (rideSpec(item.rarity).style === 'ride_photo') {
+      itemGone.value = 1;
+      redeemRun.current = null;
+      setRide({ key: token, closing: false, hint: rideHintSeen !== true });
+      focusMap(true);
+      return () => { aliveRef.current += 0; };
+    }
 
     void (async () => {
       // 1. Tap: pop and burst right away, before the server answers.
@@ -143,10 +230,10 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
         withTiming(0, { duration: 90 }))) : 0;
       const fix = pickupFix(latest.current.latestLocationSampleRef.current, latest.current.location, Date.now());
       const [result] = await Promise.all([
-        catchFind(latest.current.redeem, item.id, pivotId, fix),
+        catchFind(latest.current.redeem, item.id, pivotId, fix, { catch_style: 'chomp' }),
         wait(CATCH_TIMING.pop + CATCH_TIMING.minHover),
       ]);
-      if (!alive) return;
+      if (!alive()) return;
 
       if (result.kind !== 'caught') {
         queueHaptic('failBuzz', 3);
@@ -154,71 +241,76 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
           withTiming(1, { duration: 80 }), withTiming(0, { duration: 60 })) : 0;
         lift.value = withTiming(0, { duration: 220 });
         await wait(300);
-        if (!alive) return;
+        if (!alive()) return;
         itemGone.value = withTiming(1, { duration: 160 });
         if (result.kind === 'gone') latest.current.onUnavailable();
         latest.current.onFailed(result.line, result.kind === 'failed');
         await wait(170);
-        if (alive) { setShowing(null); latest.current.onDone(false); }
+        if (alive()) { setShowing(null); latest.current.onDone(false); }
         return;
       }
-
-      const data = result.data;
-      const next = catchSummary(item, data);
-      setSummary(next);
-      if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
-      latest.current.onCollected(data);
-      latest.current.refreshPlayer().catch(() => undefined);
-
-      // 2. Fly into the badge.
-      progress.value = next.progressFrom;
-      badgeIn.value = motion ? withSpring(1, { damping: 14, stiffness: 220 }) : withTiming(1, { duration: 120 });
-      if (!data.replayed) sfx('whoosh', SFX_PRIORITY.whoosh);
-      fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
-      await wait(motion ? CATCH_TIMING.fly : 60);
-      if (!alive) return;
-
-      // 3. Land: the badge kicks, progress ticks, NEW! reveals.
-      itemGone.value = withTiming(1, { duration: 80 });
-      const tier = rarityTier(data.item?.rarity ?? item.rarity);
-      queueHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
-      sfx(next.isNew ? 'reveal' : 'land', SFX_PRIORITY.land);
-      badgeKick.value = motion ? withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
-      progress.value = withTiming(next.progressTo, { duration: motion ? 520 : 1, easing: Easing.out(Easing.cubic) });
-      reveal.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1;
-
-      // Rewards fly from the badge to the header counters.
-      if (!data.replayed) {
-        layerRef.current?.measureInWindow((x, y) => {
-          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-          const startX = x + target.x, startY = y + target.y;
-          const { currencies: list, triggerFly: fly } = latest.current;
-          if (data.rewards.coins > 0 && list[0]?.icon_url) {
-            fly({ imageUrl: list[0].icon_url, amount: Math.min(data.rewards.coins, 8), startX, startY, targetPosition: 'coins' });
-          }
-          if (data.rewards.tickets > 0) {
-            fly({ imageSource: TICKET_ICON, amount: Math.min(data.rewards.tickets, 6), startX, startY, targetPosition: 'tickets' });
-          }
-        });
-      }
-
-      await wait(CATCH_TIMING.reveal + CATCH_TIMING.hold);
-      if (!alive) return;
-      badgeIn.value = withTiming(0, { duration: CATCH_TIMING.exit });
-      await wait(CATCH_TIMING.exit);
-      if (alive) { setShowing(null); setSummary(null); latest.current.onDone(true); }
+      await land(item, result.data, token);
     })();
-    return () => { alive = false; };
   // A new request (or a retry of the same find) starts a fresh moment.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.pivotId, request?.attempt, layer.width > 0]);
 
+  // ── Ride Photo hand-offs ───────────────────────────────────────────────
+  const onRideCaught = useCallback((details: RedeemCatchDetails, _grade: PhotoGrade) => {
+    const req = request;
+    if (!req) return;
+    if (rideHintSeen !== true) { rideHintSeen = true; void AsyncStorage.setItem(RIDE_HINT_KEY, '1').catch(() => undefined); }
+    const fix = pickupFix(latest.current.latestLocationSampleRef.current, latest.current.location, Date.now());
+    // The server call runs while the photo develops, so the wait hides inside the suspense beats.
+    redeemRun.current = catchFind(latest.current.redeem, req.item.id, req.pivotId, fix, details);
+  }, [request]);
+
+  const closeRide = (caught: boolean) => {
+    setRide(current => (current ? { ...current, closing: true } : current));
+    focusMap(false);
+    if (!caught) setTimeout(() => setRide(null), 320);
+  };
+
+  const onPrintReady = useCallback(async (at: { x: number; y: number }) => {
+    const req = request;
+    const token = aliveRef.current;
+    if (!req || !redeemRun.current) return;
+    const result = await redeemRun.current;
+    if (aliveRef.current !== token) return;
+    if (result.kind !== 'caught') {
+      queueHaptic('failBuzz', 3);
+      closeRide(false);
+      if (result.kind === 'gone') latest.current.onUnavailable();
+      latest.current.onFailed(result.line, result.kind === 'failed');
+      setTimeout(() => { if (aliveRef.current === token) { setShowing(null); latest.current.onDone(false); } }, 320);
+      return;
+    }
+    // The photo becomes the find again and flies into the badge as the ride folds away.
+    flyFromX.value = at.x;
+    flyFromY.value = at.y;
+    lift.value = 0.4;
+    itemGone.value = 0;
+    closeRide(true);
+    await land(req.item, result.data, token);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, land]);
+
+  const onRodeOff = useCallback(() => {
+    const token = aliveRef.current;
+    queueHaptic('warning', 3);
+    closeRide(false);
+    latest.current.onFailed('It rode off. Might be back tomorrow.', false);
+    setTimeout(() => { if (aliveRef.current === token) { setShowing(null); latest.current.onDone(false); } }, 320);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const from = fromPoint(showing);
   const itemStyle = useAnimatedStyle(() => {
     const f = fly.value;
-    const arc = Math.min(180, Math.max(90, Math.abs(target.y - from.y) * 0.45));
-    const x = from.x + (target.x - from.x) * f;
-    const y = from.y + (target.y - from.y) * f - arc * 4 * f * (1 - f) - 18 * lift.value * (1 - f);
+    const fx0 = flyFromX.value, fy0 = flyFromY.value;
+    const arc = Math.min(180, Math.max(90, Math.abs(target.y - fy0) * 0.45));
+    const x = fx0 + (target.x - fx0) * f;
+    const y = fy0 + (target.y - fy0) * f - arc * 4 * f * (1 - f) - 18 * lift.value * (1 - f);
     const grow = 1 + 0.45 * lift.value;
     const shrink = 1 - 0.55 * f;
     return {
@@ -247,6 +339,8 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
     transform: [{ translateY: (1 - reveal.value) * 12 }, { scale: 0.6 + 0.4 * reveal.value }],
   }));
 
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: blur.value }));
+
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     setLayer(current => (current.width === width && current.height === height ? current : { width, height }));
@@ -260,8 +354,18 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
   const name = item ? findDisplayName(item.name, item.set_name) : '';
 
   return (
-    <View ref={layerRef} collapsable={false} pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={onLayout}
+    <View ref={layerRef} collapsable={false} pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={onLayout}
       accessibilityLiveRegion="polite">
+      {ride && <>
+        {/* Animating a BlurView's intensity is unreliable on iOS; fade a fixed blur instead. */}
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
+          <BlurView tint="systemThinMaterialDark" intensity={55} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, styles.scrim]} />
+        </Animated.View>
+      </>}
+      {ride && item && <RidePhotoCatch key={ride.key} item={item} art={artSource(art)} from={showing?.from ?? null} layer={layer}
+        reducedMotion={reducedMotion} showHint={ride.hint} closing={ride.closing}
+        onCaught={onRideCaught} onPrintReady={onPrintReady} onRodeOff={onRodeOff} autoShots={autoShots} />}
       {item && <>
         <Animated.View style={[styles.flash, flashStyle]} />
         <Animated.View style={[styles.ring, { borderColor: color }, ringStyle]} />
@@ -300,7 +404,15 @@ export default function HomeCatchMoment({ request, badgeBottom, redeem = redeemP
   );
 }
 
+/** expo-image source to a Skia image source (a bundled module id or a URL). */
+function artSource(art: unknown): number | { uri: string } | null {
+  if (typeof art === 'number') return art;
+  if (art && typeof art === 'object' && typeof (art as { uri?: unknown }).uri === 'string') return { uri: (art as { uri: string }).uri };
+  return null;
+}
+
 const styles = StyleSheet.create({
+  scrim: { backgroundColor: 'rgba(6,52,110,0.22)' },
   flash: { position: 'absolute', left: 0, top: 0, width: 72, height: 72, borderRadius: 36, backgroundColor: BRAND.white },
   ring: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, borderRadius: 40, borderWidth: 5 },
   sparkOrigin: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
