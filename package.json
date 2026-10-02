@@ -20,7 +20,8 @@
     "verify": "npm run typecheck && npm test",
     "hooks:install": "git config core.hooksPath .githooks",
     "eas-build-pre-install": "node tools/check-api-target.cjs \"$EAS_BUILD_PROFILE\"",
-    "eas-build-on-success": "node tools/upload-sourcemaps.cjs build"
+    "eas-build-on-success": "node tools/upload-sourcemaps.cjs build",
+    "postinstall": "node tools/audio/patch-audio-api.mjs"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",
