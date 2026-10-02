@@ -76,6 +76,9 @@ import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
+import ChestMapButton from '../components/map/ChestMapButton';
+import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
+import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
@@ -99,6 +102,10 @@ import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSp
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText } from '../ui';
+import { useHelp } from '../components/help/HelpProvider';
+import OneTimeTip from '../components/help/OneTimeTip';
+import HelpButton from '../components/help/HelpButton';
+import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -227,6 +234,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
+  const { explain } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -404,7 +412,7 @@ function ExploreScreen() {
   // Ride Control: poll the park's team map while at a park, and after wins.
   const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused, idle: mapIdle });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
-  const { raid, setState: setRaidState } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
+  const { raid, setState: setRaidState, link: raidLink, retryLink: retryRaidLink } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
   const [bossOpen, setBossOpen] = useState(false);
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
@@ -749,12 +757,47 @@ function ExploreScreen() {
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
     otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
   });
-  const homeIntroAllowed = homeIntroMayPresent({
+  // The daily chest presents itself once; "Back to map" puts it away until the
+  // next app open or the next day, and the map's chest button reopens it.
+  const [chestRequested, setChestRequested] = useState(false);
+  const [, setChestDismissals] = useState(0);
+  const chestUnclaimed = !!player && permissionGranted && !!dailyGift && dailyGift.redeemed_at === null
+    && hasCompleted('onboarding');
+  const chestScreenFree = chestMayPresent({
+    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind, firstCatchDone: true,
+    boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+  });
+  const chestShowing = mapFocused && !!dailyGift && chestShouldShow({
+    unclaimed: chestUnclaimed, autoReady: chestReady, screenFree: chestScreenFree,
+    requested: chestRequested, dismissed: chestDismissed(dailyGift.id),
+  });
+  const dailyGiftId = dailyGift?.id;
+  const onChestClosed = useCallback((claimed: boolean) => {
+    if (!claimed && dailyGiftId != null) markChestDismissed(dailyGiftId);
+    setChestRequested(false);
+    setChestDismissals(count => count + 1);
+  }, [dailyGiftId]);
+  const chestButton = chestUnclaimed && !chestShowing
+    ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
+  const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     otherModalOpen: showTooFarModal || showCommunityCenterModal, chestShowing: dailyGiftOccluded,
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
+  };
+  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
+  const parkTip = parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
+    rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
+  const parkTipReady = mapTipReady({
+    mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+    bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
+  // Would present but for a find: home finds hold their auto-open until the intro is seen.
+  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
   return (
     <Wrapper>
@@ -782,7 +825,7 @@ function ExploreScreen() {
               ))}
             {park && (
               <TopbarColumn>
-                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
             {/* TRAVEL MODE: Coins | TRAVEL MODE | Tickets */}
@@ -795,20 +838,23 @@ function ExploreScreen() {
                   )}
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Text style={{
-                    fontSize: 16,
-                    color: 'white',
-                    fontFamily: 'Shark',
-                    textTransform: 'uppercase',
-                    letterSpacing: 2,
-                    textShadowColor: '#05346e',
-                    textShadowOffset: { width: 2, height: 2 },
-                    textShadowRadius: 0,
-                    textAlign: 'center',
-                  }}>Travel Mode</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Travel Mode" accessibilityHint="Explains Travel Mode"
+                    hitSlop={8} onPress={() => explain('travel_mode')}>
+                    <Text style={{
+                      fontSize: 16,
+                      color: 'white',
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      letterSpacing: 2,
+                      textShadowColor: '#05346e',
+                      textShadowOffset: { width: 2, height: 2 },
+                      textShadowRadius: 0,
+                      textAlign: 'center',
+                    }}>Travel Mode</Text>
+                  </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
@@ -837,11 +883,15 @@ function ExploreScreen() {
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
+        link={raidLink} onRetryLink={retryRaidLink}
         onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
-      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
-        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
+      {chestShowing && dailyGift &&
+        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
+      {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
+      <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
+        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
       {/* Home Mode: the map always renders without a park, even before the
           first park check settles (it shows the park-check card until then).
           Gating it on parkLoaded left a blank grey screen whenever park state
@@ -849,7 +899,8 @@ function ExploreScreen() {
       {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
-          introAllowed={mapFocused && homeIntroAllowed} onIntroOpenChange={setHomeIntroOpen} />
+          introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
@@ -886,6 +937,8 @@ function ExploreScreen() {
               zIndex: 10,
             }}
           >
+            {/* How to play, reachable at the park too (the home menu is not shown here). */}
+            <HelpButton topic="park" size={44} style={{ marginBottom: 10, marginLeft: 13 }} label="How to play at the park" />
             {/* Queue Times - moved from right side */}
             <View style={{ marginBottom: 8 }}>
               <Button
@@ -1004,8 +1057,10 @@ function ExploreScreen() {
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
-              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0} />
-              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0} />
+              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
+                onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
+              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
+                onPress={() => explain('swords', { count: playerSwordCount })} />
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -1030,6 +1085,13 @@ function ExploreScreen() {
           marginTop: -8,
         }}
       >
+        {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
+        {player && parkTip && (
+          <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
+            style={parkTip === 'coin_in_range'
+              ? { position: 'absolute', left: 12, right: 12, bottom: 196, zIndex: 40 }
+              : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
+        )}
         {/* Ride Control floats over the map so the map runs right up to the header. */}
         {player && (
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
@@ -1148,7 +1210,7 @@ function ExploreScreen() {
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={chestButton} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>

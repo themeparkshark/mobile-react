@@ -88,6 +88,11 @@ interface Props {
   inRange?: boolean;
   /** Metres from the player, for the out-of-range label. */
   distanceMeters?: number | null;
+  /**
+   * Out of range but touching the grab zone's edge: drawn smaller and much
+   * dimmer, so it never reads as inside the zone.
+   */
+  onZoneEdge?: boolean;
 }
 
 /**
@@ -102,7 +107,7 @@ const RARITY: Record<number, string> = {
   1: '#4CAF50', 2: config.secondary, 3: '#9C27B0', 4: '#FF9800', 5: '#FFD700',
 };
 
-/** "leaves in 21m": re-renders when the label changes, and only while the map is on screen. */
+/** "leaves in 21 min": re-renders when the label changes, and only while the map is on screen. */
 function useLeavesIn(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
   const endsAt = activeTo ? Date.parse(activeTo) : NaN;
   const [label, setLabel] = useState(() => Number.isFinite(endsAt) ? formatLeavesIn(endsAt - Date.now()) : null);
@@ -129,7 +134,7 @@ function useLeavesIn(activeTo: string | null | undefined, onExpire: () => void, 
  * it is. Motion rides the map's shared ambient clock on the UI thread, so it
  * stops with the map (off screen, backgrounded, Reduce Motion).
  */
-function PrepItem({ prepItem, onExpire, inRange = false, distanceMeters = null }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, distanceMeters = null, onZoneEdge = false }: Props) {
   const { clock, active } = useMapAlive();
   const leavesIn = useLeavesIn(prepItem.active_to, onExpire, active);
 
@@ -151,11 +156,12 @@ function PrepItem({ prepItem, onExpire, inRange = false, distanceMeters = null }
     return { opacity: 0.55 + 0.45 * wave, transform: [{ scale: 1 + 0.12 * wave }] };
   }, [inRange]);
 
+  const edge = onZoneEdge && !inRange;
   const distance = distanceMeters != null && Number.isFinite(distanceMeters) ? formatFindDistance(distanceMeters) : '';
 
   return (
     <View style={styles.box}>
-      <Animated.View style={[styles.findGroup, bounce]}>
+      <Animated.View style={[styles.findGroup, bounce, edge && styles.findGroupEdge]}>
         <Animated.View style={[styles.rangeRing, ringPulse]} />
         <View style={[styles.glow, { backgroundColor: inRange ? BRAND.gold : rarityColor },
           inRange ? styles.glowInRange : styles.glowFar]} />
@@ -189,6 +195,7 @@ export default memo(PrepItem);
 const styles = StyleSheet.create({
   box: { width: 128, height: 124, alignItems: 'center' },
   findGroup: { position: 'absolute', top: 31, width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
+  findGroupEdge: { opacity: 0.5, transform: [{ scale: 0.86 }] },
   rangeRing: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: BRAND.gold },
   glow: { position: 'absolute', width: 70, height: 70, borderRadius: 35 },
   glowInRange: { opacity: 0.55 },

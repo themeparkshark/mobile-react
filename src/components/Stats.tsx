@@ -182,7 +182,7 @@ export default function Stats({ player }: { readonly player: PlayerType }) {
       iconIndex: 3,
     },
     {
-      label: 'Tasks Done',
+      label: 'Ride Wins',
       value: player.completed_tasks_count,
       iconIndex: 4,
     },

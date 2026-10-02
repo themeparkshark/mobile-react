@@ -31,7 +31,7 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { useTutorial } from '../components/Tutorial';
+import { useHelp } from '../components/help/HelpProvider';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
 import { FEEDBACK_COPY } from '../services/feedback/model';
 import { syncBackgroundRideDetection } from '../services/RideDetectionService';
@@ -152,7 +152,7 @@ export default function SettingsScreen() {
   const accountAction = useRef(false);
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
-  const { resetAll: resetTutorials } = useTutorial();
+  const { replayAllTutorials, openHowToPlay } = useHelp();
 
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
@@ -377,15 +377,22 @@ export default function SettingsScreen() {
 
         <Section title="Help" index={4}>
           <SettingsRow
+            art="info"
+            title="How to Play"
+            detail="Every feature and word, explained"
+            onPress={() => openHowToPlay()}
+          />
+          <SettingsRow
             art="retry"
             title="Replay Tutorials"
-            detail="See the park and collection tips again"
+            detail="See every tip again: home, park and LinePlay"
             onPress={() => {
-              resetTutorials();
-              gameAlert('Tutorials ready', 'The tips will appear again on your next visit.', undefined, { icon: 'retry' });
+              void replayAllTutorials().then(() => {
+                gameAlert('Tutorials ready', 'Finn will show every tip again as you play.', undefined, { icon: 'retry' });
+              });
             }}
           />
-          <SettingsRow art="info" title="Terms of Service" onPress={() => WebBrowser.openBrowserAsync(urls.terms)} />
+          <SettingsRow art="edit" title="Terms of Service" onPress={() => WebBrowser.openBrowserAsync(urls.terms)} />
           <SettingsRow art="lock" title="Privacy Policy" onPress={() => WebBrowser.openBrowserAsync(urls.privacy_policy)} />
           <SettingsRow art="mail" title="Need Help?" detail={SUPPORT_EMAIL} onPress={() => { void openSupport('help'); }} />
           <SettingsRow art="wrench" title={FEEDBACK_COPY.settingsTitle} detail={FEEDBACK_COPY.settingsDetail} isLast

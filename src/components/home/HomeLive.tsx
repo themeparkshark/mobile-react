@@ -41,7 +41,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
   const [toast, setToast] = useState<string | null>(null);
   const pending = useRef<(() => void) | null>(null);
   const [now, setNow] = useState(Date.now());
-  const { raid, loaded: raidLoaded, setState: setRaidState } = useParkRaid(raidPark);
+  const { raid, loaded: raidLoaded, setState: setRaidState, link: raidLink, retryLink: retryRaidLink } = useParkRaid(raidPark);
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
   // Live parks refresh every 30 s while the home map is on screen; the raid
@@ -236,6 +236,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
       </Modal>
 
       <BossRaidFlow parkId={raidPark} raid={raidPark ? raid : null} open={raidPark !== null} loading={raidPark !== null && !raidLoaded}
+        link={raidPark !== null ? raidLink : 'live'} onRetryLink={retryRaidLink}
         onClose={() => { setRaidPark(null); load(); }} onState={setRaidState} />
 
       {cheer && (

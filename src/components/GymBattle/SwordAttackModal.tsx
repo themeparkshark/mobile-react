@@ -14,6 +14,7 @@ import { battleHUDEvents } from './battleHUDEvents';
 import { Image } from 'expo-image';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon, GameRichText } from '../../ui';
+import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -61,7 +62,7 @@ export default function SwordAttackModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Attack failed!');
+      setError(friendlyActionError(err, 'Attack failed!'));
       setState('error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }

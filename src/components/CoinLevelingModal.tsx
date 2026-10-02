@@ -40,6 +40,8 @@ function ridDay(iso: string): string {
   return match ? `${SHORT_MONTHS[Number(match[2]) - 1] ?? ''} ${Number(match[3])}` : '';
 }
 import * as RootNavigation from '../RootNavigation';
+import OneTimeTip from './help/OneTimeTip';
+import { storeAvailable } from '../services/purchases';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -122,6 +124,8 @@ export default function CoinLevelingModal({
   const crowningSlot = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
+  // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
+  const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
 
   // Staggered resource bar animations
@@ -349,6 +353,11 @@ export default function CoinLevelingModal({
           pendingExploreRef.current = false;
           RootNavigation.navigate('Explore');
         }
+        if (pendingSuppliesRef.current) {
+          const focus = pendingSuppliesRef.current;
+          pendingSuppliesRef.current = null;
+          RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus });
+        }
       }}
       onBackdropPress={state !== 'leveling' ? handleClose : undefined}
       backdropColor="#05346e"
@@ -363,6 +372,13 @@ export default function CoinLevelingModal({
         maxHeight: SCREEN_H * 0.82,
         alignItems: 'center',
       }}>
+        {/* Always a visible way out (the backdrop is a thin strip on small phones). */}
+        {state !== 'leveling' && (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={handleClose} hitSlop={12}
+            style={{ position: 'absolute', top: 58, right: 0, zIndex: 40 }}>
+            <GameIcon name="close" size={34} />
+          </TouchableOpacity>
+        )}
         {/* ── Ribbon Header ── */}
         <Ribbon text={
           state === 'success' ? levelRibbon(nextLevel) :
@@ -436,8 +452,8 @@ export default function CoinLevelingModal({
                   textAlign: 'center',
                   marginBottom: 2,
                 }}>
-                  {state === 'success' ? 'YOUR COIN POWERED UP'
-                    : state === 'maxed' ? 'COIN FULLY POWERED' : 'LEVEL UP YOUR COIN'}
+                  {state === 'success' ? 'YOUR COIN LEVELED UP'
+                    : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
                 </Text>
 
                 {/* ── Level Badge Row (compact) ── */}
@@ -756,9 +772,12 @@ export default function CoinLevelingModal({
                         {upgradeError}
                       </Text>
                     </View>}
+                    {/* First look at a coin card: what leveling costs and does, once. */}
+                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
+                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Level Up Button ── */}
                     {canLevelUp || !missingAction ? <YellowButton
-                      text="Power Up!"
+                      text="Level Up!"
                       disabled={!canLevelUp}
                       onPress={handleLevelUp}
                     /> : <YellowButton
@@ -783,10 +802,23 @@ export default function CoinLevelingModal({
                       }}>
                         {!hasParts
                           ? showPartsHelp || !onPlayInLine
-                            ? 'Win this ride again or play a queue adventure in its line to earn Ride Parts.'
-                            : 'Play a queue adventure in this line to earn Ride Parts.'
+                            ? 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
+                            : 'Play LinePlay in this line to earn Ride Parts.'
                           : 'Energy comes from finds on your home map.'}
                       </Text>
+                    )}
+                    {/* Ride Parts are earned at the ride and never sold. The shop
+                        only helps with what is sold: Tickets for more ride
+                        challenges, or Energy. */}
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && (
+                      <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
+                        accessibilityRole="button" hitSlop={8}
+                        accessibilityLabel={!hasParts ? 'Get Park Tickets for more ride challenges' : 'See Supplies packs with Energy'}>
+                        <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#0B5FA8', textAlign: 'center',
+                          marginTop: 6, textDecorationLine: 'underline' }}>
+                          {!hasParts ? 'Out of Tickets for ride challenges? Get Tickets' : 'Short on Energy? Supplies packs include Energy'}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </>
                 )}
@@ -904,6 +936,8 @@ export default function CoinLevelingModal({
                       )}
                     </View>
 
+                    <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact
+                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     <YellowButton text="Awesome!" onPress={handleClose} />
                   </Animated.View>
                 )}

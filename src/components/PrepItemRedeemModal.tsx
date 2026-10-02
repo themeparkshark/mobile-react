@@ -20,9 +20,15 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import config from '../config';
+import { BRAND } from '../ui';
 import HapticPatterns from '../helpers/hapticPatterns';
 import prepItemImage from '../helpers/prepItemImages';
+import { findDisplayName } from '../screens/ExploreScreen/homeFindCopy';
 import type { RedeemPrepItemResponseType } from '../models/redeem-prep-item-response-type';
+import ReAnimated, { FadeInDown } from 'react-native-reanimated';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { huntPointsChip } from '../screens/ExploreScreen/homeHuntMap';
+import { setHomeHuntRankLine } from '../screens/ExploreScreen/homeHuntRankStore';
 
 // Local asset icons for currency fly (must be hoisted to module level)
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
@@ -56,6 +62,10 @@ interface Props {
  * Modal for collecting a prep item.
  * Styled to match app's AAA quality standards.
  */
+/** Every find reward says what it is, like the ride challenge tiles. */
+const FIND_REWARD_LABEL = { fontFamily: 'Knockout', fontSize: 13, color: '#fff', textAlign: 'center' as const, marginTop: 4,
+  textTransform: 'uppercase' as const };
+
 export default function PrepItemRedeemModal({
   visible,
   prepItem,
@@ -82,8 +92,9 @@ export default function PrepItemRedeemModal({
   } | null>(null);
   const [pickupOutcome, setPickupOutcome] = useState<Pick<
     RedeemPrepItemResponseType['data'],
-    'is_new_variant' | 'replayed' | 'set_progress' | 'project_update'
+    'is_new_variant' | 'replayed' | 'set_progress' | 'project_update' | 'hunt_points'
   > | null>(null);
+  const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
   const { location, latestLocationSampleRef, permissionGranted, requestLocation } = useContext(LocationContext);
   const { triggerFly } = useCurrencyFly();
@@ -139,7 +150,10 @@ export default function PrepItemRedeemModal({
         replayed: response.data.replayed,
         set_progress: response.data.set_progress,
         project_update: response.data.project_update,
+        hunt_points: response.data.hunt_points,
       });
+      // The map's rank line follows the redeem response, only when the server sends it.
+      if (response.data.hunt_week?.rank_line) setHomeHuntRankLine(response.data.hunt_week.rank_line);
       if (!response.data.replayed) {
         HapticPatterns.collect(celebrationLevel);
         playSound(require('../../assets/sounds/reward.mp3'));
@@ -303,6 +317,7 @@ export default function PrepItemRedeemModal({
     5: '#5a4a1a',   // Legendary
   };
 
+  const displayName = findDisplayName(prepItem.name, prepItem.set_name);
   const rarityConfig = {
     label: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][prepItem.rarity - 1] || 'Common',
     color: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
@@ -413,7 +428,7 @@ export default function PrepItemRedeemModal({
           {/* Ribbon Header */}
           <Ribbon text={showRewards
             ? pickupOutcome?.replayed ? 'Already collected' : 'Collected!'
-            : 'Prep Item'} />
+            : prepItem.is_new_variant ? 'New find!' : 'Find'} />
 
           {/* Main Content Box - matches task modal structure exactly */}
           <View
@@ -496,7 +511,7 @@ export default function PrepItemRedeemModal({
                     <Box
                       background={require('../../assets/images/screens/explore/starburst.png')}
                       image={itemImage}
-                      text={prepItem.name}
+                      text={displayName}
                       type="task"
                       pulse
                     />
@@ -526,6 +541,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'ENERGY'}</Text>
                         </View>
                       )}
                       {prepItem.ticket_reward > 0 && (
@@ -543,6 +559,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'PARK TICKET'}</Text>
                         </View>
                       )}
                       {prepItem.experience_reward > 0 && (
@@ -560,6 +577,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'XP'}</Text>
                         </View>
                       )}
                     </View>
@@ -615,7 +633,8 @@ export default function PrepItemRedeemModal({
                       style={{
                         fontFamily: 'Shark',
                         fontSize: 28,
-                        color: config.tertiary,
+                        // Gold text vanished on the gold uncommon and legendary cards.
+                        color: prepItem.rarity === 2 || prepItem.rarity === 5 ? BRAND.white : config.tertiary,
                         textAlign: 'center',
                         textTransform: 'uppercase',
                         textShadowColor: '#05346e',
@@ -639,7 +658,7 @@ export default function PrepItemRedeemModal({
                         marginBottom: 8,
                       }}
                     >
-                      {prepItem.name}
+                      {displayName}
                     </Text>
 
                     {!!pickupOutcome?.project_update?.points_awarded && (
@@ -757,6 +776,20 @@ export default function PrepItemRedeemModal({
                         </Text>}
                       </View>
                     )}
+                    {(() => {
+                      // Only when the server sent hunt_points. Zero shows the server's line verbatim.
+                      const chip = huntPointsChip(pickupOutcome?.hunt_points);
+                      if (!chip) return null;
+                      return (
+                        <ReAnimated.View entering={reducedMotion ? undefined : FadeInDown.duration(220)}
+                          style={{ alignSelf: 'center', marginTop: 10, borderRadius: 12, borderWidth: 2, borderColor: '#fff',
+                            backgroundColor: chip.kind === 'points' ? '#ffca30' : '#07569e', paddingHorizontal: 13, paddingVertical: 6 }}
+                          accessible accessibilityRole="text" accessibilityLabel={chip.text}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 15, textAlign: 'center',
+                            color: chip.kind === 'points' ? '#073b73' : '#fff' }}>{chip.text}</Text>
+                        </ReAnimated.View>
+                      );
+                    })()}
                     {setProgress && prepItem.set_slug && (
                       <View style={{
                         marginTop: 12, borderWidth: 2, borderColor: '#FFC842',
@@ -817,7 +850,7 @@ export default function PrepItemRedeemModal({
             {/* Button outside inner content - matches task modal exactly */}
             <View style={{ marginTop: 8 }}>
               <YellowButton
-                text={showRewards ? pickupOutcome?.replayed ? 'Back to map' : 'Awesome!' : (isCollecting ? 'Collecting...' : unavailable ? 'Back to map' : collectError ? 'Retry' : 'Collect')}
+                text={showRewards ? pickupOutcome?.replayed ? 'Back to map' : 'Awesome!' : (isCollecting ? 'Grabbing...' : unavailable ? 'Back to map' : collectError ? 'Retry' : 'Grab it')}
                 onPress={showRewards || unavailable ? handleDone : handleCollect}
                 disabled={!showRewards && isCollecting}
               />

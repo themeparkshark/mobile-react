@@ -21,6 +21,46 @@ export interface StarterMilestone {
   awarded_item_id?: number | null;
 }
 
+export type SetMilestoneKey = 'starter' | 'explorer' | 'complete' | 'master' | 'encore';
+export type SetMilestoneStatus = 'locked' | 'claimable' | 'claimed' | 'pending';
+
+export interface SetWearableChoice {
+  id: number;
+  name: string;
+  item_type_id: number;
+  icon_url: string | null;
+  paper_url: string | null;
+  owned: boolean;
+}
+
+/** Authored sets only. Legacy sets send milestones: null and keep the starter flow. */
+export interface SetMilestone {
+  key: SetMilestoneKey;
+  label: string;
+  target: number;
+  collected: number;
+  is_unlocked: boolean;
+  status: SetMilestoneStatus;
+  month_goal?: boolean;
+  hunt_points?: number;
+  rewards: {
+    energy?: number;
+    tickets?: number;
+    experience?: number;
+    title?: string;
+    wearable_name?: string;
+    shelf_trim?: string;
+    pick?: boolean;
+  };
+  wearable_choices?: SetWearableChoice[];
+}
+
+/** Gate on an item: weather, evening or opening hours. The server writes the explainer. */
+export interface SetItemGate {
+  type: 'weather' | 'evening' | 'hours';
+  explainer: string;
+}
+
 export interface PrepItemSetListItem {
   id: number;
   slug: string;
@@ -55,6 +95,7 @@ export interface PrepItemSetListItem {
   exchange_cost: number;
   rewards_claimed: boolean;
   starter_milestone: StarterMilestone | null;
+  milestones?: SetMilestone[] | null;
   completion_rewards: {
     energy: number;
     tickets: number;
@@ -102,9 +143,13 @@ export interface PrepItemSetDetailResponse {
       collected_ids: number[];
       spare_count: number;
       exchange_cost: number;
+      /** Authored sets: cost by rarity number, for example { 1: 4, 4: 8, 5: 12 }. */
+      exchange_costs?: Record<string, number> | null;
       rewards_claimed: boolean;
       starter_milestone: StarterMilestone | null;
+      milestones?: SetMilestone[] | null;
     };
+    milestones?: SetMilestone[] | null;
     discovery?: {
       found_in_world: number;
       legendary_found_in_world: number;
@@ -157,6 +202,9 @@ export interface PrepItemSetItem {
   quantity_collected: number;
   first_collected_at: string | null;
   last_collected_at: string | null;
+  gate?: SetItemGate | null;
+  /** Exchange cost for this item's rarity (authored sets). */
+  exchange_cost?: number | null;
 }
 
 export async function getPrepItemSet(slug: string, location?: LocationType): Promise<PrepItemSetDetailResponse['data']> {
@@ -210,4 +258,25 @@ export async function focusPrepItemSet(slug: string): Promise<void> {
 
 export async function clearPrepItemSetFocus(): Promise<void> {
   await client.delete('/me/prep-item-sets/focus');
+}
+
+export interface MilestoneClaimResult {
+  rewards_granted: {
+    energy?: number;
+    tickets?: number;
+    experience?: number;
+    coins?: number;
+    title?: string | null;
+    item?: { id: number; name: string; item_type_id: number; paper_url?: string | null } | null;
+    pending_wearable?: string | null;
+    ticket_note?: string | null;
+  };
+  new_totals?: { energy: number; tickets: number; experience: number };
+  milestone?: SetMilestone;
+}
+
+export async function claimSetMilestone(slug: string, key: SetMilestoneKey, itemId?: number): Promise<MilestoneClaimResult> {
+  const { data } = await client.post<{ success: boolean; data: MilestoneClaimResult }>(
+    `/me/prep-item-sets/${slug}/milestones/${key}/claim`, itemId ? { item_id: itemId } : {});
+  return data.data;
 }

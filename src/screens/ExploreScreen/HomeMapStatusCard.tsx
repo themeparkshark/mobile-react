@@ -9,10 +9,23 @@ interface Props {
   readonly onOpenCollections?: () => void;
   /** Sit in the parent's layout (the home map's bottom slot) instead of floating. */
   readonly inline?: boolean;
+  /** "#12 Orlando Area · 340 pts". Shown only when the server sent it (Home Hunt). */
+  readonly rankLine?: string | null;
+  /** Tap on the rank line opens Standings on the Home Hunt tab. */
+  readonly onOpenStandings?: () => void;
 }
 
 /** A shark-led status for the moments between live GPS finds. */
-export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, inline = false }: Props) {
+/** The one Home Hunt rank line. Renders nothing unless the server sent a line. */
+function RankLine({ line, onPress, light }: { readonly line?: string | null; readonly onPress?: () => void; readonly light?: boolean }) {
+  if (!line) return null;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`Home Hunt rank. ${line}. Open Standings`}
+    disabled={!onPress} onPress={onPress} hitSlop={8} style={styles.rankLine}>
+    <Text numberOfLines={1} style={[styles.rankLineText, light && { color: '#ffe06c' }]}>{line}</Text>
+  </Pressable>;
+}
+
+export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, inline = false, rankLine, onOpenStandings }: Props) {
   // The card itself never animates. A native-driven scale pop on this
   // bordered, rounded card left the blue fill at its starting 0.92 scale on
   // device (Fabric) while the white border and text laid out at full size,
@@ -37,6 +50,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
     <View style={styles.savedCopy}>
       <Text style={styles.savedTitle}>SAVED MAP</Text>
       <Text style={styles.savedDetail}>Reconnect to collect these finds.</Text>
+      <RankLine line={rankLine} onPress={onOpenStandings} light />
     </View>
     {onRetry && <Pressable accessibilityRole="button"
       accessibilityLabel="Refresh saved home map" onPress={onRetry}
@@ -62,6 +76,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
       <Text style={styles.kicker}>{mode === 'park_check' ? 'LOCATION CHECK' : 'HOME EXPLORER'}</Text>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.detail}>{detail}</Text>
+      <RankLine line={rankLine} onPress={onOpenStandings} light />
       {mode === 'empty' && onOpenCollections && <Pressable accessibilityRole="button"
         accessibilityLabel="Open home collections" onPress={onOpenCollections}
         style={styles.button}>
@@ -114,5 +129,7 @@ const styles = StyleSheet.create({
   refreshButton: { alignSelf: 'flex-end', justifyContent: 'center', alignItems: 'center',
     width: 30, height: 30, marginLeft: 2, borderRadius: 15,
     borderWidth: 2, borderColor: '#9ddcff', backgroundColor: '#07569e' },
+  rankLine: { alignSelf: 'flex-start', marginTop: 3 },
+  rankLineText: { color: '#ffe06c', fontFamily: 'Shark', fontSize: 12 },
   refreshText: { color: '#fff', fontSize: 25, lineHeight: 28, marginTop: -2 },
 });

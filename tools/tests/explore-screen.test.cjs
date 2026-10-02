@@ -131,3 +131,25 @@ test('a selected queue ride leads and the adventure folds into its stub', async 
   assert.ok(app.find(label('Play queue games for Space Ride')));
   assert.equal(app.find(named('AdventureTicketCard')).props.collapsed, true);
 });
+
+test('daily chest: "Back to map" puts it away, and the map chest button brings it back', async () => {
+  const gift = { dailyGift: { id: 4401, redeemed_at: null } };
+  const modules = { '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined,
+    hasCompleted: id => id === 'onboarding', isReady: true, isActive: false }) } };
+  const app = exploreScreen({ contexts: { dailyGift: gift, auth: { player: { id: 5, completed_tasks_count: 4 }, refreshPlayer: async () => undefined } }, modules, redeemables });
+  await app.settle();
+  const chest = app.find(named('DailyGiftModal'));
+  assert.ok(chest, 'the chest presents itself once');
+  assert.equal(app.find(named('Map')).props.extraControls, null, 'no chest button while the card is up');
+  chest.props.onClosed(false); app.render();
+  assert.equal(app.find(named('DailyGiftModal')), undefined, 'dismissed: it stays away');
+  await app.settle(); await app.settle();
+  assert.equal(app.find(named('DailyGiftModal')), undefined, 'and does not come back on the next render');
+  const button = app.find(named('Map')).props.extraControls;
+  assert.equal(button?.type?.name, 'ChestMapButton', 'the map shows the chest button while unclaimed');
+  button.props.onPress(); app.render();
+  const reopened = app.find(named('DailyGiftModal'));
+  assert.ok(reopened, 'the button reopens the chest');
+  reopened.props.onClosed(false); app.render();
+  assert.equal(app.find(named('DailyGiftModal')), undefined);
+});

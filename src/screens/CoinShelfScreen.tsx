@@ -173,7 +173,7 @@ export default function CoinShelfScreen({ route }: {
           </Pressable>}
 
           {ready.length > 0 && <View style={styles.readyCard}>
-            <Text style={styles.readyTitle}>READY TO POWER UP</Text>
+            <Text style={styles.readyTitle}>READY TO LEVEL UP</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 6 }}>
               {ready.map((coin, index) => <Pressable key={coin.id} accessibilityRole="button"
                 accessibilityLabel={`${coin.ride_name} is ready to power up. Open it on its park shelf.`}

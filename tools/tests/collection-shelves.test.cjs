@@ -113,11 +113,11 @@ test('challenge copy: ride vs coin vs secret, and out-of-Tickets copy follows wh
   assert.equal(copy.challengeRibbon('secret_task', 'ride').title, 'Secret Challenge');
   for (const { title } of [copy.challengeRibbon('task', 'ride'), copy.challengeRibbon('task'), copy.challengeRibbon('secret_task')])
     assert.ok(title.length <= 22, `${title} fits the ribbon`);
-  assert.match(copy.outOfTicketsCopy({ sources: { line: true, home: true }, rescuePassUsedToday: false }).body, /queue adventure while you wait/);
+  assert.match(copy.outOfTicketsCopy({ sources: { line: true, home: true }, rescuePassUsedToday: false }).body, /LinePlay while you wait/);
   assert.equal(copy.outOfTicketsCopy({ sources: { line: true, line_remaining_today: 0, home: true }, rescuePassUsedToday: true }).body,
     'Today’s Rescue Pass is used. Today’s queue Tickets are collected. Home finds earn Tickets for your next park day.');
   assert.doesNotMatch(copy.outOfTicketsCopy({ sources: { line: false, home: false }, rescuePassUsedToday: false }).body, /home|queue/i);
-  assert.match(copy.outOfTicketsCopy({ rescuePassUsedToday: false }).body, /Queue adventures and home finds/);
+  assert.match(copy.outOfTicketsCopy({ rescuePassUsedToday: false }).body, /LinePlay and home finds/);
 });
 
 test('unfound coin copy is type-aware and leads with the gameplay action', () => {

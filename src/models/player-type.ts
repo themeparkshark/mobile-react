@@ -39,6 +39,8 @@ export interface PlayerType {
   // V2 fields
   readonly tickets?: number;
   readonly energy?: number;
+  /** Rescue Passes held (Supplies packs); the free daily pass is not counted here. */
+  readonly rescue_passes?: number;
   readonly max_energy?: number;
   readonly current_streak?: number;
   readonly longest_streak?: number;

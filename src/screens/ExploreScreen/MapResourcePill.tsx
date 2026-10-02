@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, SHADOW, type GameIconName } from '../../ui';
@@ -10,10 +10,12 @@ import { BRAND, GameIcon, SHADOW, type GameIconName } from '../../ui';
  * change pops the icon and counts the number up. Reduced motion: no pop, the
  * number changes at once.
  */
-function MapResourcePill({ icon, count, label, muted = false }: {
+function MapResourcePill({ icon, count, label, muted = false, onPress }: {
   readonly icon: GameIconName;
   readonly count: number;
   readonly label: string;
+  /** Opens the "What's this?" sheet. */
+  readonly onPress?: () => void;
   /** Zero balances read quieter without going grey-dark. */
   readonly muted?: boolean;
 }) {
@@ -38,12 +40,18 @@ function MapResourcePill({ icon, count, label, muted = false }: {
     return () => cancelAnimationFrame(frame);
   }, [count, reduced, pop]);
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-  return <View accessible accessibilityRole="text" accessibilityLabel={`${label}: ${count}`} style={styles.wrap}>
+  const body = <>
     <View style={[styles.pill, muted && styles.muted]}>
       <Text style={styles.count} numberOfLines={1} adjustsFontSizeToFit>{shown}</Text>
     </View>
     <Animated.View style={[styles.icon, iconStyle]}><GameIcon name={icon} size={32} /></Animated.View>
-  </View>;
+  </>;
+  if (onPress) {
+    return <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${count}`}
+      accessibilityHint="Explains what this is and how to get more" hitSlop={6} onPress={onPress}
+      style={({ pressed }) => [styles.wrap, pressed && { transform: [{ scale: 0.96 }] }]}>{body}</Pressable>;
+  }
+  return <View accessible accessibilityRole="text" accessibilityLabel={`${label}: ${count}`} style={styles.wrap}>{body}</View>;
 }
 
 export default memo(MapResourcePill);

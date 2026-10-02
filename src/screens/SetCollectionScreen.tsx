@@ -36,6 +36,7 @@ import getPrepItemSets, {
   getPrepItemSet,
   claimSetRewards,
   claimStarterRewards,
+  claimSetMilestone,
   equipSetTitle,
   exchangeSetDuplicates,
   focusPrepItemSet,
@@ -45,6 +46,18 @@ import getPrepItemSets, {
   PrepItemSetDetailResponse,
 } from '../api/endpoints/me/prep-item-sets';
 import { RARITY_TONES } from '../constants/coinTiers';
+import equipInventoryItem from '../api/endpoints/me/inventory/update-inventory';
+import type { ItemType } from '../models/item-type';
+import HomeHuntInfoSheet, { useHomeHuntInfo } from '../components/home/HomeHuntInfoSheet';
+import { oddsInfoSections } from '../components/home/homeHuntInfoModel';
+import { showToast } from '../utils/toast';
+import {
+  ClaimResultCard, ExchangeCostsRow, GateBadge, MilestonePickSheet, MilestoneTrack, SetHeroRow,
+} from './SetCollection/SetHuntSections';
+import {
+  authoredMilestones, claimOutcome, exchangeCostRows, gateIcon, gateLabel, heroItems, itemExchangeCost, milestoneTrack, wearNavigationParams,
+  type ClaimOutcome, type MilestoneView,
+} from './SetCollection/setHuntModel';
 
 // Churro image mapping - require all images statically
 const CHURRO_IMAGES: Record<string, any> = {
@@ -253,6 +266,13 @@ function CollectionCard({
             </View>
           )}
 
+          {/* Gate badge: this find only appears in certain weather or hours */}
+          {!!item.gate && (
+            <View accessibilityLabel={gateLabel(item.gate)} style={{ position: 'absolute', left: 3, top: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}>
+              <GameIcon name={gateIcon(item.gate) ?? 'timer'} size={14} />
+            </View>
+          )}
+
           {/* Rarity indicator strip at bottom */}
           <View
             style={[
@@ -359,6 +379,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
     items: PrepItemSetItem[];
     items_by_rarity: any;
     completion_rewards: any;
+    milestones?: PrepItemSetDetailResponse['data']['milestones'];
     discovery?: { found_in_world: number; legendary_found_in_world: number; legendary_total: number };
     recent_gifts?: PrepItemSetDetailResponse['data']['recent_gifts'];
   } | null>(null);
@@ -380,6 +401,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
   const [giftItem, setGiftItem] = useState<PrepItemSetItem | null>(null);
   const [giftNotice, setGiftNotice] = useState<string | null>(null);
   const [showMissingChoices, setShowMissingChoices] = useState(false);
+  const [oddsOpen, setOddsOpen] = useState(false);
+  const [pickView, setPickView] = useState<MilestoneView | null>(null);
+  const [milestoneBusy, setMilestoneBusy] = useState<string | null>(null);
+  const [claimResult, setClaimResult] = useState<ClaimOutcome | null>(null);
+  const [wearing, setWearing] = useState(false);
+  const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const detailScrollRef = useRef<ScrollView>(null);
   const tripPrepTopRef = useRef(0);
 
@@ -505,6 +532,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
       setDetailError(false);
       setActionError(null);
       setGiftNotice(null);
+      setClaimResult(null);
       progressAnim.setValue(0);
       headerFadeAnim.setValue(0);
 
@@ -606,6 +634,65 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
       setClaimingStarter(false);
     }
   }, [selectedSetSlug, selectedSetData, selectedWearableId, claimingStarter, refreshPlayer, loadSetDetail, loadSets]);
+
+  // Authored sets claim every milestone, including starter, through the milestone endpoint.
+  const handleClaimMilestone = useCallback(async (view: MilestoneView, itemId?: number) => {
+    if (!selectedSetSlug || milestoneBusy || previewSets) return;
+    setMilestoneBusy(view.key);
+    try {
+      const result = await claimSetMilestone(selectedSetSlug, view.key, itemId);
+      const outcome = claimOutcome(result);
+      setClaimResult(outcome);
+      setPickView(null);
+      setActionError(null);
+      if (outcome.toast) showToast(outcome.toast, 'success');
+      await refreshPlayer().catch(() => undefined);
+      await loadSetDetail(selectedSetSlug);
+      await loadSets();
+      HapticPatterns.achievement();
+    } catch {
+      try {
+        const latest = await getPrepItemSet(selectedSetSlug, locationRef.current);
+        setSelectedSetData(latest);
+        const status = authoredMilestones(latest.progress, latest)?.find(entry => entry.key === view.key)?.status;
+        if (status === 'claimed' || status === 'pending') {
+          setPickView(null);
+          await loadSets();
+          setActionError(null);
+          HapticPatterns.achievement();
+        } else {
+          setActionError('Could not claim that reward. Please try again.');
+          HapticPatterns.error();
+        }
+      } catch {
+        setActionError('Could not confirm your claim. Refresh this collection before trying again.');
+        HapticPatterns.error();
+      }
+    } finally {
+      setMilestoneBusy(null);
+    }
+  }, [selectedSetSlug, milestoneBusy, previewSets, refreshPlayer, loadSetDetail, loadSets]);
+
+  const onMilestonePress = useCallback((view: MilestoneView) => {
+    if (view.needsPick) setPickView(view);
+    else void handleClaimMilestone(view);
+  }, [handleClaimMilestone]);
+
+  // WEAR IT: equip through the normal inventory call, then open Inventory on that item.
+  const handleWearIt = useCallback(async () => {
+    const wear = claimResult?.wear;
+    if (!wear || wearing) return;
+    setWearing(true);
+    try {
+      await equipInventoryItem({ id: wear.itemId } as ItemType);
+      await refreshPlayer().catch(() => undefined);
+    } catch {
+      showToast('Could not put it on. Open Inventory to wear it.', 'warning');
+    } finally {
+      setWearing(false);
+    }
+    RootNavigation.navigate('Inventory', wearNavigationParams(wear));
+  }, [claimResult, wearing, refreshPlayer]);
 
   const handleEquipTitle = useCallback(async (tier: 'starter' | 'complete' = 'complete') => {
     const title = tier === 'starter'
@@ -821,6 +908,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
     const progressFrac = progress.total > 0 ? progress.collected / progress.total : 0;
     const missingItems = items.filter((item) => !item.is_collected);
     const sparesNeeded = Math.max(0, progress.exchange_cost - progress.spare_count);
+    const milestones = authoredMilestones(progress, selectedSetData);
+    const milestoneViews = milestoneTrack(milestones);
+    const heroes = milestones ? heroItems(items) : [];
+    const costRows = milestones ? exchangeCostRows(progress.exchange_costs, items) : [];
     const wearableChoices = progress.starter_milestone?.wearable_choices ?? [];
     const visibleWearableId = progress.starter_milestone?.rewards_claimed
       ? progress.starter_milestone.awarded_item_id : selectedWearableId;
@@ -946,7 +1037,18 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           borderRadius: 14, borderWidth: 2, borderColor: '#FFD466', backgroundColor: '#0D6EA9' }}>
           <Text style={{ color: '#FFFFFF', fontFamily: 'Knockout', fontSize: 15 }}>{giftNotice}</Text>
         </View>}
-        {progress.starter_milestone && (
+        {milestones && (
+          <>
+            <ClaimResultCard outcome={claimResult} wearing={wearing} onWear={() => void handleWearIt()}
+              onDismiss={() => setClaimResult(null)} />
+            <SetHeroRow items={heroes} imageFor={item => prepItemImage(item.variant_slug)
+              || (item.variant_slug ? getChurroImage(item.variant_slug) : null)
+              || (item.icon_url ? { uri: item.icon_url } : null)} onPress={setSelectedItem} />
+            <ExchangeCostsRow rows={costRows} onOdds={() => setOddsOpen(true)} />
+            <MilestoneTrack views={milestoneViews} busyKey={milestoneBusy} onClaim={onMilestonePress} />
+          </>
+        )}
+        {progress.starter_milestone && !milestones && (
           <View onLayout={event => { tripPrepTopRef.current = event.nativeEvent.layout.y; }}
             style={[styles.rewardsSection, { backgroundColor: '#FFF5DE', borderRadius: 16, marginBottom: 14 }]}>
             <Text style={styles.sectionTitle}>Trip Prep · {progress.starter_milestone.collected}/{progress.starter_milestone.target} unique finds</Text>
@@ -1601,6 +1703,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                   </Text>
                 )}
 
+                <GateBadge gate={selectedItem.gate} explain />
+
                 {selectedItem.quantity_collected > 1 && (!previewSets || process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW === '1') && <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel={`Share a spare ${selectedItem.name} with a friend`}
@@ -1621,23 +1725,26 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     </Text>
                   )}
 
-                {!selectedItem.is_collected && selectedSetData && (
+                {!selectedItem.is_collected && selectedSetData && (() => {
+                  const itemCost = itemExchangeCost(selectedItem, selectedSetData.progress.exchange_costs, selectedSetData.progress.exchange_cost);
+                  return (
                   <TouchableOpacity
                     style={[
                       styles.modalCloseButton,
-                      selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost && styles.modalDisabledButton,
+                      selectedSetData.progress.spare_count < itemCost && styles.modalDisabledButton,
                     ]}
-                    disabled={exchanging || selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost}
+                    disabled={exchanging || selectedSetData.progress.spare_count < itemCost}
                     onPress={handleExchange}
                   >
                     <Text style={[styles.modalCloseText,
-                      selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost && styles.modalDisabledText]}>
-                      {exchanging ? 'Exchanging...' : selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost
-                        ? `Need ${selectedSetData.progress.exchange_cost - selectedSetData.progress.spare_count} more ${selectedSetData.progress.exchange_cost - selectedSetData.progress.spare_count === 1 ? 'spare copy' : 'spare copies'}`
-                        : `Exchange ${selectedSetData.progress.exchange_cost} spare copies`}
+                      selectedSetData.progress.spare_count < itemCost && styles.modalDisabledText]}>
+                      {exchanging ? 'Exchanging...' : selectedSetData.progress.spare_count < itemCost
+                        ? `Need ${itemCost - selectedSetData.progress.spare_count} more ${itemCost - selectedSetData.progress.spare_count === 1 ? 'spare copy' : 'spare copies'}`
+                        : `Exchange ${itemCost} spare copies`}
                     </Text>
                   </TouchableOpacity>
-                )}
+                )
+                })()}
                 {actionError && <Text style={styles.modalHint}>{actionError}</Text>}
 
                 {/* Close button */}
@@ -1652,6 +1759,11 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           </View>
         </TouchableOpacity>
       </Modal>
+      <MilestonePickSheet view={pickView} busy={milestoneBusy != null}
+        onConfirm={itemId => { if (pickView) void handleClaimMilestone(pickView, itemId); }}
+        onClose={() => setPickView(null)} />
+      <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
+        loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />
     </Wrapper>
   );
 }

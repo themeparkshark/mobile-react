@@ -72,6 +72,7 @@ import {
 } from '../../services/lineplay/content';
 import { circuitThemeFor } from '../../services/lineplay/circuitTheme';
 import SessionRecap from './components/SessionRecap';
+import LineSnackOffer from './components/LineSnackOffer';
 import QueueToast, { type QueueToastMessage } from './components/QueueToast';
 import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
@@ -156,6 +157,10 @@ function tabLabel(screen: string): string {
 }
 
 import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLiveActivity';
+
+import OneTimeTip from '../../components/help/OneTimeTip';
+import { useHelp } from '../../components/help/HelpProvider';
+import { linePlayTipReady } from '../../services/help/tipGate';
 
 export default function LinePlayScreen() {
   const navigation = useNavigation();
@@ -259,6 +264,13 @@ export default function LinePlayScreen() {
     if (snapshot.state === 'active' && snapshot.creditedParts != null && snapshot.creditedParts > 0)
       void refreshPlayer().catch(() => undefined);
   }, [snapshot.creditedParts, snapshot.state]);
+
+  // First Ride Part ever: Finn explains what it is for, once, between games.
+  const { hasSeenTip, tipsReady } = useHelp();
+  const [partTipPending, setPartTipPending] = useState(false);
+  useEffect(() => {
+    if (tipsReady && (snapshot.creditedParts ?? 0) > 0 && !hasSeenTip('first_ride_part')) setPartTipPending(true);
+  }, [snapshot.creditedParts, tipsReady, hasSeenTip]);
 
   useEffect(() => {
     if (snapshot.state !== 'complete' || !snapshot.rewards ||
@@ -688,6 +700,11 @@ export default function LinePlayScreen() {
     openTurn: openGroupTurn,
   });
   groupPlayRef.current = groupPlay;
+  const lineTipReady = linePlayTipReady({
+    screenReady: snapshot.state === 'active', gameOpen: activeGame != null, lineMoving: snapshot.moving,
+    sheetOpen: groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming,
+    finished: false,
+  });
 
   // -- Queue Bonus Rounds presentation ------------------------------------
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
@@ -964,6 +981,7 @@ export default function LinePlayScreen() {
         <View style={styles.activityArea}>
           {snapshot.state === 'complete' ? (
             <SessionRecap
+              snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
               elapsedSeconds={snapshot.elapsedSeconds}
               activityCount={completedActivityIds.size}
               activityNames={snapshot.completedActivityIds.map(id => playedActivityName(id, snapshot.playlist, snapshot.chapter))}
@@ -1243,6 +1261,10 @@ export default function LinePlayScreen() {
 
       {groupPlay.overlays}
 
+      {/* One-time tips: what LinePlay is, then the first Ride Part. Only between games, never while the line moves. */}
+      <OneTimeTip id="lineplay_intro" ready={lineTipReady} style={styles.tip} />
+      <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending} style={styles.tip} />
+
       <QueueToast message={toast} onDone={() => setToast(null)} />
 
       <ResumeCountdown active={resuming} onDone={() => {
@@ -1334,6 +1356,7 @@ function ActivitySkeleton() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#07569e' },
+  tip: { position: 'absolute', left: 12, right: 12, top: 300, zIndex: 60 },
   safe: { flex: 1 },
   centered: {
     flex: 1,

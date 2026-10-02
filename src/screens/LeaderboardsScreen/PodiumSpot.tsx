@@ -67,9 +67,11 @@ type Props = {
   readonly landed: boolean;
   readonly reduced: boolean;
   readonly isMe?: boolean;
+  /** False on Near Me boards: they never open a profile. */
+  readonly interactive?: boolean;
 };
 
-export default function PodiumSpot({ rank, player, score, scoreIcon, progress, landed, reduced, isMe }: Props) {
+export default function PodiumSpot({ rank, player, score, scoreIcon, progress, landed, reduced, isMe, interactive = true }: Props) {
   const { playSound } = useContext(SoundEffectContext);
   const first = rank === 1;
   const avatarPx = first ? 80 : 70;
@@ -152,8 +154,9 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${player.screen_name}, place ${rank}, ${score}`}
+        disabled={!interactive}
         onPress={() => { playSound(tapSound); RootNavigation.navigate('Player', { player: player.id }); }}
-        style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.95 : 1 }] })}
+        style={({ pressed }) => ({ transform: [{ scale: pressed && interactive ? 0.95 : 1 }] })}
       >
         <View style={{
           borderWidth: first ? 5 : 4, borderColor: ring.ring, borderBottomColor: ring.lip, borderRadius: 999, padding: 2,

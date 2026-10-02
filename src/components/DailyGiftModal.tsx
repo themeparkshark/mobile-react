@@ -73,13 +73,16 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOpen = ws7Preview() === 'chest' }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest' }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
+  /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
+  readonly onClosed?: (claimed: boolean) => void;
   /** Dev visual QA only: open the chest without a tap. */
   readonly autoOpen?: boolean;
 }) {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
+  const closed = useRef(onClosed); closed.current = onClosed;
   useEffect(() => () => { occlusion.current?.(false); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly } = useCurrencyFly();
@@ -325,7 +328,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
 
   return (
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
-      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => occlusion.current?.(false)}
+      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
+        occlusion.current?.(false);
+        closed.current?.(!!acknowledgedGift.current);
+      }}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
       backdropColor={BRAND.navy}

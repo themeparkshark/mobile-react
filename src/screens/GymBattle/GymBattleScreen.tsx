@@ -24,6 +24,9 @@ import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal'
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon } from '../../ui';
+import useMatchLink from '../../hooks/useMatchLink';
+import MatchLinkBanner from '../../components/match/MatchLinkBanner';
+import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -609,6 +612,10 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     } catch (e) {}
   };
 
+  // Reconnect with backoff when the park can't be reached; the arena keeps its last real scores.
+  const fetchGymRef = useRef<() => void>(() => undefined);
+  const gymLink = useMatchLink(() => fetchGymRef.current(), parkId);
+  const [loadError, setLoadError] = useState(false);
   const fetchGym = useCallback(async () => {
     try {
       const data = await getGym(parkId);
@@ -616,22 +623,19 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       if (data && !data.scores) {
         data.scores = { mouse: 0, globe: 0, shark: 0 };
       }
+      gymLink.ok();
+      setLoadError(false);
       setGymData(data);
     } catch (error) {
-      console.error('Failed to fetch gym:', error);
-      // Set default data on error so UI still renders
-      setGymData({
-        gym: null,
-        scores: { mouse: 0, globe: 0, shark: 0 },
-        leader: null,
-        lead_margin: 0,
-        player: null,
-        teammates_here: 0,
-      } as any);
+      // Never swap in a fake empty arena: with no player it read as "Join a Team!"
+      // and zeroed every score whenever the connection dropped.
+      if (isLinkFailure(error)) gymLink.fail(error);
+      else { gymLink.ok(); setLoadError(true); }
     } finally {
       setLoading(false);
     }
   }, [parkId]);
+  fetchGymRef.current = () => { void fetchGym(); };
 
   // Countdown timers - single interval, refetch when any cooldown expires
   useEffect(() => {
@@ -734,7 +738,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       battleHUDEvents.emit();
     } catch (error) {
       console.error('Check-in failed:', error);
-      setPillarToast(error instanceof Error ? error.message : 'Check-in failed');
+      setPillarToast(friendlyActionError(error, 'Check-in failed'));
       setTimeout(() => setPillarToast(null), 2000);
     }
   };
@@ -827,28 +831,20 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     );
   }
 
-  if (loading) {
-    return (
-      <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-        <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
-          <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingText}>Loading Arena...</Text>
-          </View>
-        </ImageBackground>
-      </Animated.View>
-    );
-  }
-  
-  // Safety check - should never happen after loading completes
+  // Loading, reconnecting, lost or unavailable: there is always a way back out.
   if (!gymData) {
+    const title = loadError && gymLink.phase === 'live' && !loading ? 'Arena Unavailable' : 'Loading Arena...';
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
         <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
           <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingText}>Arena Unavailable</Text>
-            <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack}>
+            <Text style={styles.loadingText}>{title}</Text>
+            <View style={styles.linkSlot}>
+              <MatchLinkBanner phase={gymLink.phase} onRetry={gymLink.retryNow} onLeave={handleGoBack} leaveLabel="Leave arena" />
+            </View>
+            {gymLink.phase !== 'lost' && <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack} accessibilityRole="button">
               <Text style={styles.goBackText}>GO BACK</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         </ImageBackground>
       </Animated.View>
@@ -871,6 +867,11 @@ export default function GymBattleScreen({ navigation, route }: Props) {
         
         {/* Sparkles */}
         {sparkles.map((s) => <Sparkle key={s.id} x={s.x} y={s.y} delay={s.delay} />)}
+
+        {/* Connection: "Reconnecting..." or a free way out once the park can't be reached */}
+        {gymLink.phase !== 'live' && <View style={styles.linkOverlay} pointerEvents="box-none">
+          <MatchLinkBanner phase={gymLink.phase} onRetry={gymLink.retryNow} onLeave={handleGoBack} leaveLabel="Leave arena" />
+        </View>}
 
         {/* Arena Header */}
         <View style={styles.arenaHeader}>
@@ -1312,6 +1313,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
+  linkSlot: { alignSelf: 'stretch', paddingHorizontal: 24 },
+  linkOverlay: { position: 'absolute', left: 16, right: 16, bottom: 150, zIndex: 50 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

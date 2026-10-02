@@ -105,12 +105,12 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
         return <View key={guideRow.key} style={styles.rowWrap}>
           <Pressable disabled={!onPlayRideInLine} onPress={() => onPlayRideInLine?.(ride)}
             accessibilityRole={onPlayRideInLine ? 'button' : undefined}
-            accessibilityLabel={`${ride.name}. Line Play, no coin at this ride.${onPlayRideInLine ? ' Play in line.' : ''}`}
+            accessibilityLabel={`${ride.name}. LinePlay, no coin at this ride.${onPlayRideInLine ? ' Play in line.' : ''}`}
             style={styles.row}>
             <View style={styles.coin}><GameIcon name="queue" size={24} /></View>
             <View style={styles.copy}>
               <Text style={styles.rideName} numberOfLines={2}>{ride.name}</Text>
-              <Text style={styles.status} numberOfLines={1}>LINE PLAY · GAMES WHILE YOU WAIT</Text>
+              <Text style={styles.status} numberOfLines={1}>LINEPLAY · GAMES WHILE YOU WAIT</Text>
             </View>
             {onPlayRideInLine && <View style={styles.playChip}><Text style={styles.playChipText}>PLAY IN LINE</Text></View>}
           </Pressable>

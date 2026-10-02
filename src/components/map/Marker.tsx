@@ -10,10 +10,12 @@ type LatLng = { readonly latitude: number | string; readonly longitude: number |
  * coordinate. Legacy-only props (tracksViewChanges, flat, stopPropagation,
  * tappable, zIndex) are accepted and ignored.
  */
-export function Marker({ coordinate, anchor, onPress, children, accessibilityLabel }: {
+export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel }: {
   readonly coordinate: LatLng;
   readonly anchor?: { x: number; y: number };
   readonly onPress?: () => void;
+  /** Long-press, for example "Report this spot" on a home find. */
+  readonly onLongPress?: () => void;
   readonly children?: ReactNode;
   readonly tracksViewChanges?: boolean;
   readonly flat?: boolean;
@@ -28,7 +30,7 @@ export function Marker({ coordinate, anchor, onPress, children, accessibilityLab
   return (
     <MarkerView coordinate={[lng, lat]} anchor={anchor ?? { x: 0.5, y: 0.5 }} allowOverlap>
       {onPress
-        ? <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>{children}</Pressable>
+        ? <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>{children}</Pressable>
         : <View pointerEvents="none">{children}</View>}
     </MarkerView>
   );

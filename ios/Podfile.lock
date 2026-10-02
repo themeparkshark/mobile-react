@@ -1,19 +1,4 @@
 PODS:
-  - Adapty (3.17.3):
-    - AdaptyLogger (= 3.17.3)
-    - AdaptyUIBuilder (= 3.17.3)
-  - AdaptyLogger (3.17.3)
-  - AdaptyPlugin (3.17.3):
-    - Adapty (= 3.17.3)
-    - AdaptyLogger (= 3.17.3)
-    - AdaptyUI (= 3.17.3)
-    - AdaptyUIBuilder (= 3.17.3)
-  - AdaptyUI (3.17.3):
-    - Adapty (= 3.17.3)
-    - AdaptyLogger (= 3.17.3)
-    - AdaptyUIBuilder (= 3.17.3)
-  - AdaptyUIBuilder (3.17.3):
-    - AdaptyLogger (= 3.17.3)
   - boost (1.84.0)
   - DoubleConversion (1.1.6)
   - EASClient (0.13.3):
@@ -139,6 +124,9 @@ PODS:
   - FBLazyVector (0.76.9)
   - fmt (11.0.2)
   - glog (0.3.5)
+  - Google-Mobile-Ads-SDK (12.11.0):
+    - GoogleUserMessagingPlatform (>= 1.1)
+  - GoogleUserMessagingPlatform (3.0.0)
   - hermes-engine (0.76.9):
     - hermes-engine/Pre-built (= 0.76.9)
   - hermes-engine/Pre-built (0.76.9)
@@ -1459,11 +1447,6 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-adapty-sdk (3.17.2):
-    - Adapty (= 3.17.3)
-    - AdaptyPlugin (= 3.17.3)
-    - AdaptyUI (= 3.17.3)
-    - React
   - react-native-render-html (6.3.4):
     - React-Core
   - react-native-safe-area-context (4.12.0):
@@ -1953,6 +1936,35 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNGoogleMobileAds (15.8.3):
+    - DoubleConversion
+    - glog
+    - Google-Mobile-Ads-SDK (= 12.11.0)
+    - GoogleUserMessagingPlatform (= 3.0.0)
+    - hermes-engine
+    - RCT-Folly (= 2024.10.14.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
+  - RNIap (13.0.4):
+    - RCT-Folly
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - ReactCommon/turbomodule/core
   - RNReanimated (3.16.7):
     - DoubleConversion
     - glog
@@ -2221,7 +2233,6 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
-  - react-native-adapty-sdk (from `../node_modules/react-native-adapty`)
   - react-native-render-html (from `../node_modules/react-native-render-html`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - "react-native-skia (from `../node_modules/@shopify/react-native-skia`)"
@@ -2258,6 +2269,8 @@ DEPENDENCIES:
   - "RNCPicker (from `../node_modules/@react-native-picker/picker`)"
   - "RNFlashList (from `../node_modules/@shopify/flash-list`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
+  - RNGoogleMobileAds (from `../node_modules/react-native-google-mobile-ads`)
+  - RNIap (from `../node_modules/react-native-iap`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
@@ -2266,11 +2279,8 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - Adapty
-    - AdaptyLogger
-    - AdaptyPlugin
-    - AdaptyUI
-    - AdaptyUIBuilder
+    - Google-Mobile-Ads-SDK
+    - GoogleUserMessagingPlatform
     - libavif
     - libdav1d
     - lottie-ios
@@ -2428,8 +2438,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
-  react-native-adapty-sdk:
-    :path: "../node_modules/react-native-adapty"
   react-native-render-html:
     :path: "../node_modules/react-native-render-html"
   react-native-safe-area-context:
@@ -2502,6 +2510,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@shopify/flash-list"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
+  RNGoogleMobileAds:
+    :path: "../node_modules/react-native-google-mobile-ads"
+  RNIap:
+    :path: "../node_modules/react-native-iap"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
@@ -2514,11 +2526,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  Adapty: 4992fd72157a30f234f288827ea85e37326eb6a9
-  AdaptyLogger: aaf2e43dcc3b62119ba8628906482500320e0a24
-  AdaptyPlugin: 63ddb8bd426e5f8d9f1011c98c3ae216b44f596a
-  AdaptyUI: 6a61b27819088cc0606c43282f277fdffd26db23
-  AdaptyUIBuilder: 3659d68adc12c43899d94091196940e38df4b7f8
   boost: 1dca942403ed9342f98334bf4c3621f011aa7946
   DoubleConversion: f16ae600a246532c4020132d54af21d0ddb2a385
   EASClient: 88b5fd19d0787186a0c7e6ba76deb2d4f96395ce
@@ -2558,6 +2565,8 @@ SPEC CHECKSUMS:
   FBLazyVector: 7605ea4810e0e10ae4815292433c09bf4324ba45
   fmt: 01b82d4ca6470831d1cc0852a1af644be019e8f6
   glog: 08b301085f15bcbb6ff8632a8ebaf239aae04e6a
+  Google-Mobile-Ads-SDK: b833c723759e32bbaf06edaaf2293f08ed898232
+  GoogleUserMessagingPlatform: f8d0cdad3ca835406755d0a69aa634f00e76d576
   hermes-engine: 9e868dc7be781364296d6ee2f56d0c1a9ef0bb11
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
@@ -2596,7 +2605,6 @@ SPEC CHECKSUMS:
   React-logger: c4052eb941cca9a097ef01b59543a656dc088559
   React-Mapbuffer: 33546a3ebefbccb8770c33a1f8a5554fa96a54de
   React-microtasksnativemodule: d80ff86c8902872d397d9622f1a97aadcc12cead
-  react-native-adapty-sdk: e232d0cd085e532913d888ff63bc9a635e5acbcc
   react-native-render-html: 5afc4751f1a98621b3009432ef84c47019dcb2bd
   react-native-safe-area-context: cd916088cac5300c3266876218377518987b995e
   react-native-skia: 9b4e1185bdc0d4e7e6488c5419b5643cc456dd2e
@@ -2633,6 +2641,8 @@ SPEC CHECKSUMS:
   RNCPicker: 4995c384c0a33966352c70cc800012a4ee658a37
   RNFlashList: 648e2273693600985aaa72a2ef4700e815500901
   RNGestureHandler: fffddeb8af59709c6d8de11b6461a6af63cad532
+  RNGoogleMobileAds: 81dd74bc6d3130e63071c1cfbf5d3a415a63d411
+  RNIap: 61f183ac917792fae42b0326b1bef33598c1adf6
   RNReanimated: 2e5069649cbab2c946652d3b97589b2ae0526220
   RNScreens: 362f4c861dd155f898908d5035d97b07a3f1a9d1
   RNSVG: b889dc9c1948eeea0576a16cc405c91c37a12c19

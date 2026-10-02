@@ -96,7 +96,7 @@ test('the recovery receipt offers one clear retry and does not claim an unconfir
  view.change({snapshot:{...snapshot,phase:'sending'}});assert.equal(view.find(n=>n.type==='Pressable'),undefined);
 });
 
-function flow({reduced=false,round}={}){
+function flow({reduced=false,round,stubs={}}={}){
  const captures=[],states=[],writes=[],reads=[],rounds=[],acks=[],focus={value:true},auth={value:{player:{id:5,energy:185,tickets:7},refreshPlayer:async()=>{}}},location={value:{location:{latitude:34.13,longitude:-118.35}}};
  const raid={id:77,boss:'kraken',ride_name:'Practice attraction',latitude:34.13,longitude:-118.35,hp_max:5000,hp_left:5000,
   status:'active',ends_at:new Date(Date.now()+600000).toISOString(),fighters:0,teams:{mouse:0,globe:0,shark:0},top:[],
@@ -117,6 +117,7 @@ function flow({reduced=false,round}={}){
   './BossWinCard':{default:'BossWinCard'},
   '@react-native-async-storage/async-storage':{default:{getItem:async key=>{reads.push(key);return null;},setItem:async(key,value)=>{writes.push([key,value]);}}},
   '../../constants/teams':{applyTeamNames(){}},
+  ...stubs,
  },{raid,parkId:1,open:true,onClose(){},onState:state=>states.push(state)},
  {setInterval(){return 1;},clearInterval(){}});
  const fight=()=>view.find(n=>n.type==='GameButton'&&n.props.testID==='boss-fight');
@@ -170,6 +171,7 @@ test('a poll cannot resurrect stale raid HP after a confirmed hit or after chang
  const view=runtime('src/components/boss/BossRaidFlow.tsx',{
   '../../context/AuthProvider':{AuthContext:auth},'../../constants/teams':{applyTeamNames(){}},'../../ui':{BRAND:{}},
   '../../api/endpoints/parks/raid':{getParkRaid:id=>{const p=pending();requests.push({id,...p});return p.promise;}},
+  '../../hooks/useMatchLink':{default:()=>({phase:'live',ok(){},fail(){},retryNow(){}})},
  },{parkId:1},{setInterval(){return 1;},clearInterval(){}},{exportName:'useParkRaid',arguments:props=>[props.parkId]});
  assert.equal(requests.length,1);assert.equal(view.tree.loaded,false);
  const fresh={raid:{id:77,hp_left:4500},next_at:null};view.tree.setState(fresh);view.render();assert.equal(view.tree.loaded,true);
@@ -245,4 +247,42 @@ test('saved rounds carry their server token, may lack GPS (remote without a fix)
  assert.equal(parseBossAttack(JSON.stringify({...checkpoint,body:{...checkpoint.body,duration_ms:26000}}),5,1).body.duration_ms,26000);
  for(const body of [{...checkpoint.body,round_token:'NOT HEX'},{...checkpoint.body,latitude:undefined}])
   assert.throws(()=>parseBossAttack(JSON.stringify({...checkpoint,body}),5,1));
+});
+test('a raid poll reports the connection: a reply keeps it live, a dropped request starts Reconnecting',async()=>{
+ const requests=[],calls=[];
+ const view=runtime('src/components/boss/BossRaidFlow.tsx',{
+  '../../context/AuthProvider':{AuthContext:{value:{player:{id:5}}}},'../../constants/teams':{applyTeamNames(){}},'../../ui':{BRAND:{}},
+  '../../api/endpoints/parks/raid':{getParkRaid:id=>{const p=pending();requests.push({id,...p});return p.promise;}},
+  '../../hooks/useMatchLink':{default:(retry,key)=>({phase:'reconnecting',ok(){calls.push('ok');},fail(e){calls.push(['fail',e]);},retryNow(){calls.push('retry');}})},
+ },{parkId:1},{setInterval(){return 1;},clearInterval(){}},{exportName:'useParkRaid',arguments:props=>[props.parkId]});
+ const dropped={response:{status:0}};
+ requests[0].reject(dropped);await view.settle();
+ assert.deepEqual(calls,[['fail',dropped]]);assert.equal(view.tree.raid,null,'a failed poll never invents a raid');
+ assert.equal(view.tree.link,'reconnecting');view.tree.retryLink();assert.equal(calls.at(-1),'retry');
+ view.tree.refresh();requests[1].resolve({raid:{id:77,hp_left:4000},next_at:null});await view.settle();
+ assert.equal(calls.at(-1),'ok');assert.equal(view.tree.raid.hp_left,4000);
+});
+test('losing the park mid-fight: FIGHT waits, Reconnecting shows, then Leave fight closes the sheet for free',async()=>{
+ const h=flow({stubs:{'../match/MatchLinkBanner':{default:'MatchLinkBanner'}}});let closed=0,retried=0;
+ h.view.change({link:'reconnecting',onRetryLink(){retried++;},onClose(){closed++;}});
+ assert.equal(h.fight().props.disabled,true);
+ assert.ok(h.view.find(n=>n.props?.children==='Reconnecting…'),'the blocked line says Reconnecting');
+ assert.equal(h.view.find(n=>n.type==='MatchLinkBanner').props.phase,'reconnecting');
+ h.fight().props.onPress();await h.view.settle();assert.equal(h.rounds.length,0,'no round is started while the link is down');
+ h.view.change({link:'lost'});
+ const banner=h.view.find(n=>n.type==='MatchLinkBanner');
+ assert.equal(banner.props.phase,'lost');assert.equal(banner.props.leaveLabel,'Leave fight');
+ banner.props.onRetry();assert.equal(retried,1);
+ banner.props.onLeave();assert.equal(closed,1);
+ assert.equal(h.captures.length,0,'leaving after a drop sends and spends nothing');
+ h.view.change({link:'live'});assert.equal(h.fight().props.disabled,false);
+});
+test('an unreachable park never leaves the raid sheet on an endless skeleton',()=>{
+ const h=flow({stubs:{'../match/MatchLinkBanner':{default:'MatchLinkBanner'}}});
+ h.view.change({raid:null,loading:true,link:'reconnecting'});
+ assert.ok(h.view.find(n=>n.type==='BossSheetSkeleton'));
+ h.view.change({link:'lost'});
+ assert.equal(h.view.find(n=>n.type==='BossSheetSkeleton'),undefined);
+ assert.equal(h.view.find(n=>n.type==='MatchLinkBanner').props.leaveLabel,'Leave fight');
+ assert.ok(h.view.find(n=>n.type==='GameButton'&&n.props.label==='Back to the park'));
 });
