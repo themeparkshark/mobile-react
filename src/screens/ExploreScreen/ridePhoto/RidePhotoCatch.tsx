@@ -600,8 +600,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const crop = useMemo(() => {
     const w = box.w * 1.9;
     const h = w * (PHOTO_H / PHOTO_W);
-    return { x: lut.frameX - w / 2, y: box.y + box.h * 0.5 - h / 2, k: PHOTO_W / w };
-  }, [box, lut.frameX]);
+    // Kept inside the scene so the photo never shows past its edge.
+    const x = Math.max(0, Math.min(sceneW - w, lut.frameX - w / 2));
+    return { x, y: Math.max(0, Math.min(sceneH - h, box.y + box.h * 0.5 - h / 2)), k: PHOTO_W / w };
+  }, [box, lut.frameX, sceneW, sceneH]);
   const grainOpacity = useDerivedValue(() => 0.04 + 0.4 * (1 - develop.value));
   const nudgeStyle = useAnimatedStyle(() => ({ opacity: 0.4 + 0.6 * nudgeBlink.value }));
   const glintStyle = useAnimatedStyle(() => ({ opacity: edgeGlint.value }));

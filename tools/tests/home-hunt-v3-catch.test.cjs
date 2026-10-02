@@ -171,3 +171,63 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
     assert.doesNotMatch(read(file), /—/, `${file} has an em dash`);
   }
 });
+
+test('round 2: grading is in ms at the touch minus 50 ms, with a coyote frame, the same for every rarity', () => {
+  assert.deepEqual(plain(ride.GRADE_WINDOWS_MS), { frame_it: 35, great: 80, good: 150 });
+  // A tap exactly on the visual centre lands 50 ms late on the clock and still grades Frame It!.
+  const arrival = 1600;
+  assert.equal(ride.gradeOffset(ride.shotOffsetMs(arrival + 50, arrival)).grade, 'frame_it');
+  assert.equal(ride.gradeOffset(35 + 16).grade, 'frame_it', 'one frame of grace');
+  assert.equal(ride.gradeOffset(70).grade, 'great');
+  assert.equal(ride.gradeOffset(-150).grade, 'good');
+  const early = ride.gradeOffset(-200);
+  assert.equal(early.grade, 'blurry');
+  assert.equal(early.direction, 'early');
+  assert.equal(early.soClose, true, 'inside 1.5x the Good window');
+  const late = ride.gradeOffset(600);
+  assert.equal(late.direction, 'late');
+  assert.equal(late.soClose, false);
+  assert.equal(ride.gradeOffset(-200, 3).grade, 'good', 'windows grow after misses');
+});
+
+test('round 2: holds, stars and the ready pips', () => {
+  assert.deepEqual(plain(ride.GRADE_HOLD_MS), { blurry: 900, good: 450, great: 650, frame_it: 1100 });
+  assert.deepEqual(plain(ride.GRADE_STARS), { blurry: 0, good: 1, great: 2, frame_it: 3 });
+  assert.deepEqual(plain(ride.READY_PIPS.map(p => [p.atMs, p.semitones])), [[600, 0], [400, 3], [200, 7]]);
+});
+
+test('round 2: the Rare frame sits on the slow run-out, never the fastest part of the track', () => {
+  const lut = track.buildTrack('hill', 400, 600, undefined, { top: 160, height: 380 });
+  const uFrame = track.uAtX(lut, lut.frameX);
+  const tFrame = track.tAtU('hill', uFrame);
+  const speed = t => (ride.rideProgress('hill', Math.min(1, t + 0.005)) - ride.rideProgress('hill', t)) / 0.005;
+  let peak = 0;
+  for (let t = 0; t < 1; t += 0.01) peak = Math.max(peak, speed(t));
+  assert.ok(speed(tFrame) < peak * 0.75, `frame speed ${speed(tFrame).toFixed(2)} vs peak ${peak.toFixed(2)}`);
+  // A retry starts 0.9 s before the frame, so a miss gets its next chance within 1.4 s.
+  assert.ok(300 + 900 <= ride.RETRY_MAX_MS);
+});
+
+test('round 2: per-find variety and edge arrows', () => {
+  const variants = [0, 1, 2, 3].map(n => plain(track.rideVariant(n)));
+  assert.equal(new Set(variants.map(v => v.frameShift)).size, 3);
+  assert.equal(variants[3].sky, 'sunset');
+  const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
+  const at = plain(edges.edgeArrowPlacement({ x: 200, y: -300 }, { width: 400, height: 800 }, { top: 70, bottom: 190, side: 30 }));
+  assert.equal(at.y, 70);
+  assert.equal(at.angleDeg, 0);
+  assert.equal(plain(edges.edgeArrowPlacement({ x: 900, y: 400 }, { width: 400, height: 800 }, { top: 70, bottom: 190, side: 30 })).angleDeg, 90);
+});
+
+test('round 2: the map steps back during a catch and the catch never reads GPS on render', () => {
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /ambientPaused=\{catchOpen\}/);
+  assert.match(home, /catchOpen && styles\.dimmed/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
+  assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen\) return null;/);
+  const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
+  assert.doesNotMatch(scene, /BlurMask|<Shadow|ColorMatrix/);
+  assert.match(scene, /createPicture/);
+  const markers = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.doesNotMatch(markers, /shadowRadius/);
+});

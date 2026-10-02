@@ -130,7 +130,7 @@ export const GRADE_LABEL: Readonly<Record<PhotoGrade, string>> = {
   blurry: 'Blurry!', good: 'Good!', great: 'Great!', frame_it: 'Frame It!',
 };
 /** Suggested bonus XP (the server decides; CONTRACT.md App requests). */
-export const GRADE_BONUS_XP: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 0, great: 5, frame_it: 15 };
+export const GRADE_BONUS_XP: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 0, great: 10, frame_it: 25 };
 
 export function isGoodShot(grade: PhotoGrade): boolean {
   'worklet';
