@@ -256,6 +256,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const [walkHint, setWalkHint] = useState<0 | 1 | 2>(0);
   const [gripPrefs, setGripPrefs] = useState<GripPrefs>(DEFAULT_GRIP);
   const [armedJs, setArmedJs] = useState(false);
+  // Two Thumbs is offered once, after 3 d2 clears with no MARCH sections (3.3).
+  const [offerTwo, setOfferTwo] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -899,6 +901,10 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     const board = plan.format === 'ride' ? 'ride' : sum.marchShare >= 0.25 ? 'march' : 'stage';
     const p0 = progressRef.current;
     const { next, newPb } = recordRound(p0, { stage: plan.stage, difficulty: plan.difficulty, board, score: sum.score, stars: sum.stars, ftue: plan.ftue });
+    if (plan.format === 'queue' && plan.difficulty === 2 && !plan.easy && sum.cleared && sum.marchBars.length === 0) {
+      next.d2CleanClears = (next.d2CleanClears ?? 0) + 1;
+    }
+    setOfferTwo(!next.twoThumbsAsked && (next.d2CleanClears ?? 0) >= 3 && plan.chart.kind.includes(K_RIM));
     const tuned = autoTuneOffset(offset.value, s);
     next.offsets = { ...next.offsets, speaker: tuned };
     if (newPb && !plan.ftue && sum.cleared) {
@@ -932,7 +938,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       thresholds: undefined,
       rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
       stats: [
-        { label: 'Accuracy', value: `${Math.round(sum.accuracy)}%` },
+        { label: 'Accuracy', value: `${Math.round(sum.stageAccuracy)}%` },
+        ...(plan.format === 'queue' && !plan.ftue ? [{ label: 'March stars', value: `${sum.marchStars} of 3` }] : []),
         { label: sum.steadinessLabel, value: String(sum.steadiness) },
         { label: 'Timing', value: sum.timingWords.replace("You're ", '') },
         ...(sum.feverBars ? [{ label: 'Fever', value: `${Math.round(sum.feverBars / 4)} drop${sum.feverBars > 4 ? 's' : ''}` }] : []),
@@ -1099,10 +1106,33 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           ) : null}
         </View>
       ) : undefined}
-      resultExtras={plan && !plan.ftue && !plan.easy && result && result.stars < 2 ? (
-        <Pressable accessibilityRole="button" onPress={rematchEasy} style={styles.easyBtn} hitSlop={6}>
-          <Text style={styles.easyBtnTxt}>Try with Easy Beat</Text>
-        </Pressable>
+      resultExtras={plan && !plan.ftue && result && (offerTwo || (!plan.easy && result.stars < 2)) ? (
+        offerTwo ? (
+          <View style={styles.twoCard}>
+            <Text style={styles.twoTitle}>Try Two Thumbs?</Text>
+            <Text style={styles.twoBody}>Blue on the left thumb, coral on the right.</Text>
+            <View style={styles.twoRow}>
+              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+                saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
+                setOfferTwo(false);
+              }}>
+                <Text style={styles.easyBtnTxt}>Yes</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+                void saveProgress(progressRef.current);
+                setOfferTwo(false);
+              }}>
+                <Text style={styles.easyBtnTxt}>No thanks</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable accessibilityRole="button" onPress={rematchEasy} style={styles.easyBtn} hitSlop={6}>
+            <Text style={styles.easyBtnTxt}>Try with Easy Beat</Text>
+          </Pressable>
+        )
       ) : undefined}
       onChallenge={props.onChallengeCrew && result && lastRun.current ? () => lastRun.current && props.onChallengeCrew?.(lastRun.current) : undefined}
       onComplete={onComplete}
@@ -1256,6 +1286,10 @@ const styles = StyleSheet.create({
   switchOn: { backgroundColor: '#1f7fe0' },
   knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0b3a6b' },
   knobOn: { alignSelf: 'flex-end' },
+  twoCard: { alignItems: 'center', marginTop: 6 },
+  twoTitle: { fontFamily: 'Shark', fontSize: 16, color: '#0b3a6b' },
+  twoBody: { fontFamily: 'Knockout', fontSize: 13, color: '#1f6fc0', marginBottom: 2 },
+  twoRow: { flexDirection: 'row', gap: 10 },
   easyBtn: { alignSelf: 'center', marginTop: 6, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 6 },
   easyBtnTxt: { fontFamily: 'Shark', fontSize: 15, color: '#1f6fc0' },
   marchPill: { position: 'absolute', left: 12, top: 94, minWidth: 104, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#0b3a6b', backgroundColor: '#ffffff', paddingHorizontal: 14, justifyContent: 'center', alignItems: 'flex-start' },

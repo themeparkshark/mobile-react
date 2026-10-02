@@ -1,13 +1,14 @@
 /**
- * grip: which part of the drum face a touch lands on (design 3.1, rev 6).
+ * grip: which part of the drum face a touch lands on (design 3.3, rev 7).
  *
  * Colour equals input zone (Taiko): blue = DRUM, coral = RIM. Two grips:
  *
- *   One Thumb (d1 default): centre head = DRUM, both rim bands = RIM. The
+ *   One Thumb (the only default): centre head = DRUM, both rim bands = RIM. The
  *     thumb-side rim is widened: right thumb -> left rim 20%, centre 40%,
  *     right rim 40%; mirrored for a left thumb.
- *   Two Thumbs (d2 default): left half = DRUM, right half = RIM; "Swap
- *     sides" puts RIM on the left.
+ *   Two Thumbs (opt-in only, offered once after 3 d2 clears with no MARCH
+ *     sections): left half = DRUM, right half = RIM; "Swap sides" puts RIM
+ *     on the left.
  *
  * 16 pt dead bands at every boundary count for either zone. Pure worklets,
  * shared by the gesture handler, the drum-face drawing and the tests.
@@ -22,7 +23,7 @@ export const GRIP_ALL = 2;
 export const DEAD_BAND = 16;
 
 export interface GripPrefs {
-  /** 0 One Thumb, 1 Two Thumbs; -1 = the difficulty's default. */
+  /** 0 One Thumb, 1 Two Thumbs (the player accepted the prompt); -1 = default (One Thumb). */
   grip: number;
   /** 1 right thumb, -1 left thumb. */
   hand: number;
@@ -36,8 +37,7 @@ export function gripFor(prefs: GripPrefs, difficulty: number, format: 'queue' | 
   'worklet';
   if (!hasRim) return GRIP_ALL;
   if (format === 'ride') return GRIP_ONE;
-  if (prefs.grip === GRIP_ONE || prefs.grip === GRIP_TWO) return prefs.grip;
-  return difficulty >= 2 ? GRIP_TWO : GRIP_ONE;
+  return prefs.grip === GRIP_TWO && difficulty >= 2 ? GRIP_TWO : GRIP_ONE;
 }
 
 /**

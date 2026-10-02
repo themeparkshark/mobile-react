@@ -307,8 +307,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     }
     return [{ translateX: dx + cx * (1 - z) }, { translateY: dy + (yLine * 0.6) * (1 - z) }, { scale: z }];
   });
-  // The inhale (design 6.5): in the rest beat before a queued drop the
-  // world dims 6% and the crowd crouches; the drop lands out of silence.
+  // The inhale (6.6, Thumper): across the rest beat before a queued drop the
+  // world value falls 1.0 -> 0.82 (ease-in quad) and the crowd crouches; the
+  // drop snaps it back. The reading surface never dims.
   const inhale = useDerivedValue(() => {
     tick.value;
     const s = judge.value;
@@ -322,7 +323,8 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   const feverMatrix = useDerivedValue(() => {
     tick.value;
     const f = view.value.fever * 0.9;
-    const dim = 1 - 0.06 * Math.min(1, inhale.value * 3);
+    const k = inhale.value;
+    const dim = 1 - 0.18 * k * k;
     // Golden hour: lift red and green, cool the blue a little. Never purple.
     return [
       (1 + 0.1 * f) * dim, 0.08 * f, 0, 0, 0.06 * f,
@@ -666,8 +668,13 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     }
     return [0, 0, 0];
   });
-  // Lane backing plate: white at the line to sky at the horizon, constant in every state.
-  const laneGradEnd = useMemo(() => vec(0, laneTop), [laneTop]);
+  // Lane (6.0, 6.1): the cream parade-route stripe, constant in every state, with a faint dashed centre line.
+  const laneCentre = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(cx, laneTop + 6);
+    p.lineTo(cx, yLine - 6);
+    return p;
+  }, [cx, laneTop, yLine]);
   const railPath = useDerivedValue(() => {
     tick.value;
     const m = view.value.march;
@@ -854,9 +861,19 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     }
     const r0 = a[d.spr[j]];
     const r = { width: r0[2], height: r0[3] };
-    const sc = d.size[j] / Math.max(r.width, r.height);
-    const c = Math.cos(d.rot[j]) * sc;
-    const s = Math.sin(d.rot[j]) * sc;
+    // Notes march (6.2, Crypt of the NecroDancer): a squash for the first 1/8
+    // beat, a stretch for the next, neutral after, frames on twos; the tilt
+    // alternates +/-4 degrees per beat. Centre x/y stay exact.
+    let k = 1;
+    let tilt = 0;
+    if (!reducedMotion) {
+      const ph = d.beatPhase;
+      k = ph < 0.125 ? 0.95 : ph < 0.25 ? 1.05 : 1;
+      tilt = (d.beatIdx % 2 === 0 ? 1 : -1) * 0.0698 * Math.min(1, ph / 0.125);
+    }
+    const sc = (d.size[j] / Math.max(r.width, r.height)) * k;
+    const c = Math.cos(d.rot[j] + tilt) * sc;
+    const s = Math.sin(d.rot[j] + tilt) * sc;
     const w = r.width;
     const h = r.height;
     xf.set(c, s, d.x[j] - (c * w / 2 - s * h / 2), d.y[j] - (s * w / 2 + c * h / 2));
@@ -1296,8 +1313,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Group>
 
       {/* ------------------------- READING SURFACE ------------------------- */}
-      <Path path={lanePath}>
-        <LinearGradient start={vec(0, yLine + 10)} end={laneGradEnd} colors={['rgba(255,255,255,0.86)', 'rgba(191,230,255,0.62)']} />
+      <Path path={lanePath} color="#fff1cf" opacity={0.92} />
+      <Path path={laneCentre} color="#e9d9ae" style="stroke" strokeWidth={3} strokeCap="round">
+        <DashPathEffect intervals={[14, 12]} />
       </Path>
       <Path path={beatLines} color={NAVY} style="stroke" strokeWidth={beatLineWidth} opacity={beatLineOpacity} />
       <Path path={barLines} color={NAVY} style="stroke" strokeWidth={3} opacity={0.7} />

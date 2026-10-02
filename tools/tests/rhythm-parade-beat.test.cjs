@@ -256,11 +256,12 @@ test('grips: One Thumb (right) x 40/160/300 = RIM/DRUM/RIM; Two Thumbs x 100 DRU
   assert.ok(isDead(G.zoneOf(195, 390, G.GRIP_TWO, 1, 0)));
   assert.ok(isDead(G.zoneOf(78, 390, G.GRIP_ONE, 1, 0)));
   assert.ok(isDead(G.zoneOf(234, 390, G.GRIP_ONE, 1, 0)));
-  // Defaults: d1 One Thumb, d2 Two Thumbs, ride always One Thumb; an explicit pick wins.
+  // Rev 7 (3.3): One Thumb is the only default; Two Thumbs only after the player accepts the prompt, never in the ride.
   assert.equal(G.gripFor(G.DEFAULT_GRIP, 1, 'queue'), G.GRIP_ONE);
-  assert.equal(G.gripFor(G.DEFAULT_GRIP, 2, 'queue'), G.GRIP_TWO);
+  assert.equal(G.gripFor(G.DEFAULT_GRIP, 2, 'queue'), G.GRIP_ONE);
+  assert.equal(G.gripFor({ grip: G.GRIP_TWO, hand: 1, swap: 0 }, 2, 'queue'), G.GRIP_TWO);
   assert.equal(G.gripFor({ grip: G.GRIP_TWO, hand: 1, swap: 0 }, 1, 'ride'), G.GRIP_ONE);
-  assert.equal(G.gripFor({ grip: G.GRIP_ONE, hand: 1, swap: 0 }, 2, 'queue'), G.GRIP_ONE);
+  assert.equal(G.gripFor(G.DEFAULT_GRIP, 2, 'queue', false), G.GRIP_ALL);
   // Handedness from the first 20 touches.
   assert.equal(G.detectHand(new Array(20).fill(260), 390, -1), 1);
   assert.equal(G.detectHand(new Array(20).fill(120), 390, 1), -1);
