@@ -41,7 +41,26 @@ function assertBundleTargets(distDir, apiUrl) {
   }
 }
 
-module.exports = { publishEnv, assertBundleTargets, API_ENV_KEYS };
+const MEDIA = /\.(png|jpe?g|gif|webp|wav|mp3|m4a|mp4|ttf|otf|html|ahap)$/i;
+
+/**
+ * Asset patterns for a store-channel OTA: only media changed since the
+ * channel's binary was built (tools/ota-base.json). Everything else is
+ * embedded in that binary. Null when the channel has no recorded base.
+ */
+function otaAssetPatterns(channel, git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }),
+  base = JSON.parse(fs.readFileSync(path.join(__dirname, 'ota-base.json'), 'utf8'))) {
+  const commit = base[channel]?.commit;
+  if (!commit) return null;
+  const changed = [
+    ...git(['diff', '--name-only', '--diff-filter=AMR', commit, '--']).split('\n'),
+    ...git(['ls-files', '--others', '--exclude-standard']).split('\n'),
+  ].filter((file) => file && MEDIA.test(file) && !file.startsWith('dist/'));
+  // A pattern that matches nothing: an empty list would mean "bundle all".
+  return changed.length ? [...new Set(changed)] : ['__no_changed_media__'];
+}
+
+module.exports = { publishEnv, assertBundleTargets, otaAssetPatterns, API_ENV_KEYS };
 
 async function run() {
   const [channel, message] = process.argv.slice(2);
@@ -52,8 +71,13 @@ async function run() {
   const env = publishEnv(channel);
   const dist = path.join(root, 'dist');
   // Export first, check the bundle, then upload exactly that export.
+  const patterns = otaAssetPatterns(channel);
+  if (patterns) console.log(`[assets] ${patterns.length} changed media file(s) since ${channel} binary`);
+  // The pattern env is for the export only: eas update must fingerprint the
+  // same config the binary was built with.
+  const exportEnv = patterns ? { ...env, TPS_OTA_ASSET_PATTERNS: JSON.stringify(patterns) } : env;
   execFileSync('npx', ['expo', 'export', '--platform', 'ios', '--source-maps', '--output-dir', 'dist', '--clear'],
-    { cwd: root, stdio: 'inherit', env });
+    { cwd: root, stdio: 'inherit', env: exportEnv });
   assertBundleTargets(dist, env.EXPO_PUBLIC_API_URL);
   const out = execFileSync('eas', [
     'update', '--channel', channel, '--platform', 'ios', '--message', message,

@@ -68,6 +68,12 @@ export default {
     // the next cold start. No in-session reloads.
     checkAutomatically: 'ON_LOAD',
     fallbackToCacheTimeout: 0,
+    // Set only while tools/publish-update.cjs exports a store OTA: just the
+    // media changed since that binary's build (the rest is embedded), which
+    // keeps updates under EAS's 1000-asset cap. Unset for builds/fingerprints.
+    ...(process.env.TPS_OTA_ASSET_PATTERNS
+      ? { assetPatternsToBeBundled: JSON.parse(process.env.TPS_OTA_ASSET_PATTERNS) }
+      : {}),
   },
   assetBundlePatterns: ['**/*'],
   ios: {
