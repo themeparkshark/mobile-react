@@ -415,7 +415,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
           <View style={styles.chips}>
             {special && <StatusChip text={special.text} icon={spawnIcon(special.text)} />}
-            <SparesMeter spares={spares} cost={goal.cost} ready={goal.ready} extra={goal.extra}
+            <SparesMeter spares={spares} cost={goal.cost} ready={goal.ready} extra={goal.extra} anyMissing={goal.anyMissing}
               onPress={() => { playSfx('ui.tap', 0.5); setSparesOpen(true); }} />
           </View>
           <View onLayout={event => { trackBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height; revealClaim(); }}>

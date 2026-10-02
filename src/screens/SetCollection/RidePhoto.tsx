@@ -49,7 +49,7 @@ function Scene({ art, width, height }: { readonly art: ImageSource; readonly wid
         <Image source={CAR_BACK} style={StyleSheet.absoluteFill} contentFit="contain" />
         {/* Shark in the back seat, the find up front left of the lap bar, both seated (bottoms tucked behind the car body). */}
         <Image source={SHARK} style={{ position: 'absolute', left: -carW * 0.04, bottom: carH * 0.3, width: carW * 0.34, height: carW * 0.38, transform: [{ rotate: '-6deg' }] }} contentFit="contain" />
-        <Image source={art} style={{ position: 'absolute', left: carW * 0.25, bottom: carH * 0.34, width: carW * 0.36, height: carW * 0.36 }} contentFit="contain" />
+        <Image source={art} style={{ position: 'absolute', left: carW * 0.29, bottom: carH * 0.34, width: carW * 0.36, height: carW * 0.36 }} contentFit="contain" />
         <Image source={CAR_FRONT} style={StyleSheet.absoluteFill} contentFit="contain" />
       </View>
     </View>

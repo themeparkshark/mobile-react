@@ -238,10 +238,20 @@ export function StatusChip({ text, icon }: { readonly text: string; readonly ico
 }
 
 /** Spares as progress toward the next swap: sockets fill to the cheapest missing item's cost, then glow gold. */
-export function SparesMeter({ spares, cost, ready, extra, onPress }: {
-  readonly spares: number; readonly cost: number; readonly ready: boolean; readonly extra: number; readonly onPress: () => void;
+export function SparesMeter({ spares, cost, ready, extra, anyMissing, onPress }: {
+  readonly spares: number; readonly cost: number; readonly ready: boolean; readonly extra: number; readonly anyMissing: boolean;
+  readonly onPress: () => void;
 }) {
   const have = Math.min(cost, spares);
+  if (!anyMissing) {
+    // Nothing left to swap for in this set: just the spare count (they can still be shared with friends).
+    return (
+      <SpringPress onPress={onPress} style={styles.meterPlaque} accessibilityLabel={`${spares} spare copies. Tap to see how swapping works.`}>
+        <GameIcon name="swap" size={28} />
+        <Text style={styles.meterCount} maxFontSizeMultiplier={1.2}>{spares} spares</Text>
+      </SpringPress>
+    );
+  }
   return (
     <SpringPress onPress={onPress} style={[styles.meterPlaque, ready && styles.meterReady]}
       accessibilityLabel={ready ? `Swap ready. You have ${spares} spares; a swap costs ${cost}. Tap to see how.`

@@ -199,7 +199,7 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   assert.match(frames, /great: \{ outer: '#cfe2f3'[^}]*mat: null, stars: true, plaque: false/, 'Great is one silver-blue frame, no tinted mat');
   assert.match(frames, /frame_it: \{ outer: '#f5b400'[^}]*mat: null[^}]*plaque: true/);
   // The find sits up front, left of the lap bar (never skewered by it), bigger than before.
-  assert.match(src, /left: carW \* 0\.25, bottom: carH \* 0\.34, width: carW \* 0\.36/);
+  assert.match(src, /left: carW \* 0\.29, bottom: carH \* 0\.34, width: carW \* 0\.36/);
   assert.match(src, /<Text style=\{styles\.shareKicker\}>My Ride Photo<\/Text>/, 'never the child\'s username on a public card');
   assert.doesNotMatch(src, /sharkName/);
   // The photo is the map catch's Alex-style ride layers with the real shark in the car, never placeholder vector art.

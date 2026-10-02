@@ -191,7 +191,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
             </Animated.View>
           )}
           <Animated.View style={[{ marginTop: 22, minWidth: 230 }, ctaStyle, paying && { transform: [{ scale: 0.95 }] }]}>
-            <GameButton label="Collect!" icon="gift" onPress={dismiss} fullWidth disabled={paying} />
+            <GameButton label="Collect!" icon="gift" onPress={dismiss} fullWidth />
           </Animated.View>
         </View>
       </Animated.View>
