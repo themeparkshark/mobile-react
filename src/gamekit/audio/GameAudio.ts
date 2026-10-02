@@ -80,7 +80,9 @@ class GameAudioEngine {
   private nextId = 1;
   private sfxEnabled = true;
   private musicEnabled = true;
-  private masterVolume = 1;
+  /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
+  private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  private masterVolume = this.studioMute ? 0 : 1;
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];
   private duckTimer: ReturnType<typeof setInterval> | null = null;
@@ -228,7 +230,7 @@ class GameAudioEngine {
   }
 
   setMasterVolume(v: number): void {
-    this.masterVolume = Math.max(0, Math.min(1, v));
+    this.masterVolume = this.studioMute ? 0 : Math.max(0, Math.min(1, v));
     this.backend?.setMasterGain(this.masterVolume);
   }
 
