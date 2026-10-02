@@ -414,6 +414,44 @@ class GameAudioEngine {
     this.loaded.clear();
     this.active = [];
   }
+
+  // -- Stems: several music decks on one clock (Parade Beat 7.4) ------------
+  // Each stem is a music-bus deck; startStems starts them in the same JS
+  // tick, so on audio-api they begin on the same render quantum. Decks are
+  // independent of the MusicDirector's A/B decks.
+
+  /** Load a stem file (MP3 or WAV decodes on audio-api; AAC falls back to expo-av). */
+  async loadStem(key: string, src: number): Promise<boolean> {
+    await this.init();
+    if (!this.backend) return false;
+    if (this.backend.isLoaded(key)) return true;
+    return this.backend.load(key, src, 1);
+  }
+
+  /** True when every stem decodes on the sample-accurate backend (audio-api). */
+  stemsLocked(keys: string[]): boolean {
+    const b = this.backend as unknown as { routeOf?: (k: string) => string } | null;
+    if (!b || this.backend?.name !== 'audio-api') return false;
+    return keys.every((k) => (b.routeOf ? b.routeOf(k) === 'audio-api' : true));
+  }
+
+  startStems(decks: { deck: string; key: string; gain: number }[], fromMs: number): void {
+    const b = this.backend;
+    if (!b) return;
+    for (const d of decks) b.musicStart(d.deck, d.key, { gain: d.gain, loop: false, fadeMs: 0, fromMs: Math.max(0, fromMs) });
+  }
+
+  stemGain(deck: string, gain: number, rampMs: number): void {
+    this.backend?.musicGain(deck, Math.max(0, gain), Math.max(0, rampMs));
+  }
+
+  async stemPosition(deck: string): Promise<number> {
+    return this.backend ? this.backend.musicPosition(deck) : 0;
+  }
+
+  stopStems(decks: string[], fadeMs: number): void {
+    for (const d of decks) this.backend?.musicStop(d, fadeMs);
+  }
 }
 
 // =============================================================================

@@ -1,0 +1,159 @@
+/**
+ * drumline: the async Drum-Off (design 11.2, "Ghost Drumline").
+ *
+ * Every queue round races up to three drummers on the identical chart:
+ *   - your personal-best ghost (its verified touch log replayed through the
+ *     real judge),
+ *   - a friend's or crew mate's challenge ghost when one was sent,
+ *   - house-crew drummers (the Line Party bot names) filling empty seats,
+ *     played by the human model in core/sim.ts.
+ *
+ * Each rival yields the times of their hits (their rail flashes on the
+ * beat-map time of the note, never on arrival), the cumulative score at every
+ * bar line (the ahead/behind delta chip) and their final score. The same
+ * Rival shape is what a live Line Party room feeds from 250 ms telemetry
+ * (see rhythmParty.ts), so the UI does not care which it is.
+ *
+ * Pure (no React).
+ */
+
+import { mulberry32 } from '../core/generate';
+import { decodeTouches } from '../core/proof';
+import { accuracyPct, createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
+import { scriptHuman, type TouchEv } from '../core/sim';
+import { J_GOOD, J_SHARP, type Chart } from '../core/types';
+import type { GhostRun } from '../meta/progress';
+
+export interface Rival {
+  id: string;
+  name: string;
+  color: string;
+  isGhost: boolean;
+  /** Song times (ms) of the rival's hits, ascending. */
+  hitT: number[];
+  /** Cumulative score at the end of each playable bar. */
+  barScores: number[];
+  finalScore: number;
+  /** Layer-normalised accuracy (0-100): what a Drum-Off is decided on (design 11.2). */
+  accuracy: number;
+  /** Song times this rival's Fever auto-fired (each delivers a Hidden Dare). */
+  launchT: number[];
+}
+
+export const CREW = [
+  { id: 'bot:captain', name: 'Captain Fin', color: '#1f8fff', sigma: 26, lapse: 0.01 },
+  { id: 'bot:bubbles', name: 'Bubbles', color: '#ff8a6b', sigma: 40, lapse: 0.03 },
+  { id: 'bot:chomps', name: 'Chomps', color: '#35c46a', sigma: 55, lapse: 0.05 },
+  { id: 'bot:coral', name: 'Coral', color: '#ffb02e', sigma: 33, lapse: 0.02 },
+  { id: 'bot:tidal', name: 'Tidal', color: '#12b5c9', sigma: 46, lapse: 0.04 },
+];
+
+/** Play a touch script through the judge, recording the score at every bar line. */
+export function playRival(chart: Chart, script: TouchEv[], cfg: JudgeConfig): { s: JudgeState; barScores: number[] } {
+  const s = createJudge(chart, cfg);
+  const barScores: number[] = [];
+  let bar = chart.firstBar;
+  let now = chart.barStart[0];
+  let e = 0;
+  while (now <= chart.endMs + 50) {
+    while (e < script.length && script[e].t <= now) {
+      const x = script[e++];
+      if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
+      else if (x.type === 1) judgeUp(s, x.t, x.pid);
+      else judgeMove(s, x.t, x.pid, x.y);
+    }
+    judgeTick(s, now);
+    while (bar <= chart.lastBar && now >= chart.barStart[bar + 1]) {
+      barScores.push(s.score);
+      bar++;
+    }
+    if (s.stalled) break;
+    now += 16;
+  }
+  finishJudge(s, now, false);
+  while (barScores.length < chart.lastBar - chart.firstBar + 1) barScores.push(s.score);
+  return { s, barScores };
+}
+
+function launchesOf(s: JudgeState): number[] {
+  const out: number[] = [];
+  for (let i = 0; i + 1 < s.deployT.length; i += 2) out.push(s.deployT[i]);
+  return out;
+}
+
+/**
+ * Hidden Dares from rival Fever launches (design 11.2, Ghost Dares): each
+ * launch dares the bar after it lands. Deterministic from the rivals' data,
+ * so async play has the attack too. Limits: never the Finale's last 2 bars,
+ * at most one received per 4 bars. (MARCH sections and the player's own
+ * Fever cancel a dare at play time.)
+ */
+export function dareBarsFor(chart: Chart, rivals: Rival[]): number[] {
+  const bars: number[] = [];
+  const launches = rivals.flatMap((r) => r.launchT).sort((a, b) => a - b);
+  for (const t of launches) {
+    let b = chart.firstBar;
+    while (b + 1 < chart.barStart.length && chart.barStart[b + 1] <= t) b++;
+    const dare = b + 1;
+    if (dare < chart.firstBar || dare > chart.lastBar - 2) continue;
+    if (bars.length && dare - bars[bars.length - 1] < 4) continue;
+    bars.push(dare);
+  }
+  return bars;
+}
+
+function hitsOf(s: JudgeState): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < s.n; i++) if (s.res[i] >= J_SHARP && s.res[i] <= J_GOOD) out.push(s.t[i]);
+  return out;
+}
+
+export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: string): Rival | null {
+  // Charts are canonical (one per stage, format and difficulty): a ghost matches
+  // on those plus the chart version, never on the seed.
+  if (ghost.stage !== chart.stage || ghost.format !== chart.format || ghost.difficulty !== chart.difficulty) return null;
+  if (ghost.chartVersion && ghost.chartVersion !== chart.chartVersion) return null;
+  const touches = decodeTouches(ghost.touches).map((x) => ({ t: x.t, type: x.type, zone: x.zone, pid: x.pid, y: x.y }));
+  const { s, barScores } = playRival(chart, touches, { marchBars: ghost.marchBars });
+  return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
+}
+
+export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number): Rival {
+  const script = scriptHuman(chart, { sigmaMs: bot.sigma, lapse: bot.lapse, zoneSlip: 0.02 }, seed);
+  const { s, barScores } = playRival(chart, script, { forceMarch: 0 });
+  return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
+}
+
+/**
+ * The round's drumline: the challenge ghost first, then your PB ghost when it
+ * was set on this exact seed, then house crew up to 3 rivals.
+ */
+/** Drum-Off place: decided on layer-normalised accuracy, so marching never loses a duel. */
+export function drumOffPlace(myAccuracy: number, rivals: Rival[]): number {
+  return 1 + rivals.filter((r) => r.accuracy > myAccuracy).length;
+}
+
+export function crewForRound(
+  chart: Chart,
+  plan: { seed: number },
+  pbGhost: GhostRun | null,
+  challenge: GhostRun | null,
+): Rival[] {
+  const out: Rival[] = [];
+  if (challenge) {
+    const r = ghostRival(chart, challenge, `ghost:${challenge.name}`, '#ffcf3b');
+    if (r) out.push(r);
+  }
+  if (pbGhost) {
+    const r = ghostRival(chart, pbGhost, 'ghost:pb', '#ffffff');
+    if (r) out.push(r);
+  }
+  const rand = mulberry32(plan.seed ^ 0xc0ffee);
+  const pool = CREW.slice();
+  while (out.length < 3 && pool.length) {
+    const k = Math.floor(rand() * pool.length);
+    const bot = pool.splice(k, 1)[0];
+    out.push(botRival(chart, bot, (plan.seed + out.length * 7919) >>> 0));
+  }
+  return out;
+}

@@ -26,6 +26,8 @@ import JuiceLab from '../gamekit/demo/JuiceLab';
 import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
 import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
 import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
+import { RhythmTapGame } from '../games/rhythm';
+import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -69,6 +71,24 @@ export default function MiniGameTesterScreen() {
   // EXPO_PUBLIC_ENGINE_DEMO=juicelab opens the Juice Lab bench (engine pass 5) with its tour.
   const juiceLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'juicelab';
   const [juiceLab, setJuiceLab] = useState(juiceLabAuto);
+
+  // Dev only: EXPO_PUBLIC_RHYTHM_DEMO=queue | ride | sprint opens Parade Beat on launch.
+  const rhythmDemo = __DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_DEMO : undefined;
+  const [rhythmRun, setRhythmRun] = useState(0);
+  if (rhythmDemo === 'sprint') return <SprintLab seed={Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 1)} />;
+  if (rhythmDemo === 'queue' || rhythmDemo === 'ride') {
+    const seedEnv = Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 0);
+    return (
+      <RhythmTapGame
+        key={rhythmRun}
+        visible
+        format={rhythmDemo}
+        seed={seedEnv || undefined}
+        onComplete={() => setRhythmRun((n) => n + 1)}
+        onClose={() => setRhythmRun((n) => n + 1)}
+      />
+    );
+  }
 
   // Current Quest lab (dev only, __DEV__ gated; inert in release builds):
   // EXPO_PUBLIC_CQ_LAB=hub|quick|line|ride|showdown|daily|challenge|chart|dash. EXPO_PUBLIC_CQ_WALK=1 toggles walking every 5 s.

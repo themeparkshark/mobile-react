@@ -131,8 +131,11 @@ export default function MiniGameSelector({
       return;
     }
 
+    // Parade Beat ('timing') is queue-only until the server replays its proof
+    // (WS7, rhythm SERVER_NOTE.md): a missing preferredGame never starts an
+    // unprovable rhythm ride. TaskAttemptController::GAMES has no 'timing' either.
     const allGames: MiniGameType[] = rewardMode === 'task-attempt'
-      ? ['tap', 'timing', 'memory', 'trivia']
+      ? ['tap', 'memory', 'trivia']
       : USE_QUEUE_KIT_GAMES
         ? ['tap', 'timing', 'memory', 'trivia', 'shark', 'banana']
         : ['tap', 'timing', 'memory', 'trivia', 'shark'];

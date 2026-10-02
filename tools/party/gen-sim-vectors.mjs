@@ -79,6 +79,26 @@ function humanTaps(sim, board, seed) {
     // One landing per n, at most 400 entries.
     return taps.slice(0, sim.maxTaps);
   }
+  if (sim.key === 'parade_sprint') {
+    // A drummer in a moving line: most notes near the beat, some late or early,
+    // bumps, a Fever swipe and a MARCH toggle now and then.
+    const ch = board.chart;
+    let pid = 1;
+    for (let i = 0; i < ch.t.length; i++) {
+      const roll = next() % 100;
+      if (roll < 82) {
+        const err = (next() % 181) - 90;
+        const t = Math.max(0, Math.min(board.roundMs, Math.round(ch.t[i] + err)));
+        const p = pid++ % 5000;
+        taps.push([t, p], [Math.min(board.roundMs, t + 60 + (ch.kind[i] === 2 ? Math.round(ch.end[i] - ch.t[i]) : 0)), 100000 + p]);
+      }
+      if (roll > 94) taps.push([Math.max(0, Math.min(board.roundMs, Math.round(ch.t[i] + 300 + (next() % 200)))), (next() % 3) * 10000 + (pid++ % 5000)]);
+      if (roll === 50) taps.push([Math.max(0, Math.round(ch.t[i] - 400)), 300000 + 7000 + i]);
+      if (roll === 51) taps.push([Math.max(0, Math.round(ch.t[i])), 400000 + (next() % 2) * 10000]);
+    }
+    taps.sort((a, b) => a[0] - b[0]);
+    return taps.slice(0, sim.maxTaps);
+  }
   if (sim.key === 'lagoon_dash') {
     // A walker's thumb: a slow solver line with stray swipes (bumps, wrong turns) and late undos mixed in.
     const base = sim.botTaps(board, (seed ^ 0x55aa) >>> 0, 5, 'rookie');
