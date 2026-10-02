@@ -9,7 +9,8 @@
 //   its $MLRN.post_install switches MapLibre to SPM, which breaks archives.)
 // - Info.plist: background modes stay exactly [location] (expo-task-manager's
 //   plugin adds an unused `fetch`), and the unused image picker's Expo-default
-//   photo-library read string is dropped.
+//   photo-library read string is dropped. No CADisableMinimumFrameDurationOnPhone
+//   (120 Hz off, 1.7.0).
 // - Xcode project: no ENABLE_BITCODE build setting. Bitcode is deprecated
 //   since Xcode 14 and the App Store no longer accepts it.
 //
@@ -92,6 +93,8 @@ function applyInfoPlistInvariants(plist) {
   const out = { ...plist };
   out.UIBackgroundModes = ['location'];
   out.ITSAppUsesNonExemptEncryption = false;
+  // 60 Hz everywhere: ProMotion's 120 Hz was the biggest heat source (perf PERF.md).
+  delete out.CADisableMinimumFrameDurationOnPhone;
   for (const [key, value] of Object.entries(out)) {
     if (/UsageDescription$/.test(key) && typeof value === 'string' && EXPO_DEFAULT_PURPOSE.test(value)) {
       if (key === 'NSPhotoLibraryUsageDescription') delete out[key];

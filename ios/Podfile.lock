@@ -122,6 +122,8 @@ PODS:
     - ExpoModulesCore
   - fast_float (6.1.4)
   - FBLazyVector (0.76.9)
+  - FlashSafety (1.0.0):
+    - ExpoModulesCore
   - fmt (11.0.2)
   - glog (0.3.5)
   - Google-Mobile-Ads-SDK (12.11.0):
@@ -2195,6 +2197,7 @@ DEPENDENCIES:
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
+  - FlashSafety (from `../modules/flash-safety/ios`)
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
@@ -2367,6 +2370,8 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/react-native/third-party-podspecs/fast_float.podspec"
   FBLazyVector:
     :path: "../node_modules/react-native/Libraries/FBLazyVector"
+  FlashSafety:
+    :path: "../modules/flash-safety/ios"
   fmt:
     :podspec: "../node_modules/react-native/third-party-podspecs/fmt.podspec"
   glog:
@@ -2563,6 +2568,7 @@ SPEC CHECKSUMS:
   EXUpdatesInterface: 7c977640bdd8b85833c19e3959ba46145c5719db
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: 7605ea4810e0e10ae4815292433c09bf4324ba45
+  FlashSafety: 134cf1518bd8aa0c4d0811d5aa04abf0881d3ffc
   fmt: 01b82d4ca6470831d1cc0852a1af644be019e8f6
   glog: 08b301085f15bcbb6ff8632a8ebaf239aae04e6a
   Google-Mobile-Ads-SDK: b833c723759e32bbaf06edaaf2293f08ed898232

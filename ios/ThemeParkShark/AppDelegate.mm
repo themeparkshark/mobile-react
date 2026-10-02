@@ -2,6 +2,36 @@
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
+#import <CoreLocation/CoreLocation.h>
+#import <objc/runtime.h>
+
+// TPS: foreground GPS is people walking a park, so tell Core Location
+// (CLActivityType .fitness = pedestrian) for better filtering and less battery.
+// expo-location 18 has no activityType option for watchPositionAsync, so this
+// sets it on every foreground manager that kept the default. Background
+// managers (allowsBackgroundLocationUpdates, ride detection and the queue
+// heartbeat) keep whatever activityType their task asked for.
+@implementation CLLocationManager (TPSWalking)
+
++ (void)load
+{
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    Method original = class_getInstanceMethod(self, @selector(startUpdatingLocation));
+    Method walking = class_getInstanceMethod(self, @selector(tps_startUpdatingLocation));
+    if (original && walking) method_exchangeImplementations(original, walking);
+  });
+}
+
+- (void)tps_startUpdatingLocation
+{
+  if (!self.allowsBackgroundLocationUpdates && self.activityType == CLActivityTypeOther) {
+    self.activityType = CLActivityTypeFitness;
+  }
+  [self tps_startUpdatingLocation];
+}
+
+@end
 
 @implementation AppDelegate
 

@@ -42,6 +42,7 @@ function ridDay(iso: string): string {
 import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
 import { storeAvailable } from '../services/purchases';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -207,7 +208,7 @@ export default function CoinLevelingModal({
     setState('leveling');
     setUnlocks(null);
     setLevelXp(0);
-    const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion });
+    const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion, dimFlashingLights: isDimFlashingLightsEnabled() });
     setFx(plan);
 
     // Phase 1: Coin shakes and charges up

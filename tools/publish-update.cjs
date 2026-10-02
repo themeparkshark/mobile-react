@@ -16,7 +16,7 @@ const { main: uploadSourcemaps } = require('./upload-sourcemaps.cjs');
 
 const root = path.resolve(__dirname, '..');
 const CHANNELS = new Set(['testflight', 'production', 'internal-tunnel']);
-const API_ENV_KEYS = ['API_URL', 'EXPO_PUBLIC_API_URL', 'TPS_INTERNAL_TUNNEL_BUILD'];
+const API_ENV_KEYS = ['API_URL', 'EXPO_PUBLIC_API_URL', 'TPS_INTERNAL_TUNNEL_BUILD', 'EXPO_PUBLIC_TPS_TEST_ADS'];
 
 /** The publish env: the shell minus any API keys, plus the profile's API keys. */
 function publishEnv(channel, shellEnv = process.env, easJson = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8'))) {

@@ -8,6 +8,7 @@ const coinTiers = loadTs('src/constants/coinTiers.ts');
 // Progression v2 (S2): the pure coin model and the app-wide limiters the sheet now uses.
 const progressionModel = loadTs('src/components/coin/progressionModel.ts');
 const progressionStubs = {
+  '../../modules/flash-safety': { isDimFlashingLightsEnabled: () => false },
   './coin/progressionModel': progressionModel,
   '../gamekit/Haptics': { queueHaptic() {} },
   '../audio/sfxLimiter': { playLimited: (_name, _request, play) => { play(); return true; }, SFX_PRIORITY: { whoosh: 1, tap: 2, land: 3 } },

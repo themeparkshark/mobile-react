@@ -13,7 +13,10 @@
         "resourceClass": "m-medium",
         "image": "macos-tahoe-26.5-xcode-26.6"
       },
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_TPS_TEST_ADS": "1"
+      }
     },
     "development-device": {
       "distribution": "internal",
@@ -64,7 +67,8 @@
         "API_URL": "https://tps-api.on-forge.com/api",
         "EXPO_PUBLIC_API_URL": "https://tps-api.on-forge.com/api",
         "TPS_INTERNAL_TUNNEL_BUILD": "1",
-        "SOURCEMAP_FILE": "ios/main.jsbundle.map"
+        "SOURCEMAP_FILE": "ios/main.jsbundle.map",
+        "EXPO_PUBLIC_TPS_TEST_ADS": "1"
       },
       "ios": {
         "resourceClass": "m-medium",

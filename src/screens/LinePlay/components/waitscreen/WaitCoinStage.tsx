@@ -28,6 +28,7 @@ import type { WaitCoinProgress, WaitStamp } from '../../../../services/lineplay/
 import type { WaitCoin } from './useWaitScreenCoin';
 import CoinFillRing from './CoinFillRing';
 import WaitStampBadge from './WaitStampBadge';
+import { isDimFlashingLightsEnabled } from '../../../../../modules/flash-safety';
 
 export interface WaitCoinStageProps {
   readonly size: number;
@@ -95,7 +96,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
     setBusy(true);
     setError(null);
     const target = coin.level + 1;
-    const plan = levelUpFx(target, coin.partsToNext, { reducedMotion });
+    const plan = levelUpFx(target, coin.partsToNext, { reducedMotion, dimFlashingLights: isDimFlashingLightsEnabled() });
     setChargeKey(key => key + 1);
     if (!reducedMotion) scale.value = withTiming(1.12, { duration: 900 });
     plan.haptics.filter(tick => tick.intent !== 'success')

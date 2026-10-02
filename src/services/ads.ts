@@ -22,13 +22,17 @@ import { TurboModuleRegistry, NativeModules, Platform } from 'react-native';
 import {
   adErrorCode, claimAdReward, getAdReward, offerAdReward, type AdPlacement, type AdReward,
 } from '../api/endpoints/me/ad-rewards';
-import { AD_REQUEST, REWARDED_AD_UNITS, USING_TEST_ADS } from './adConfig';
+import { AD_REQUEST, ADS_ENABLED, REWARDED_AD_UNITS, USING_TEST_ADS } from './adConfig';
 
 type Gma = typeof import('react-native-google-mobile-ads');
 
-/** True when this binary has the Google Mobile Ads module (1.7.0 and later, iOS only). */
+/**
+ * True when ads can run: this binary has the Google Mobile Ads module (1.7.0
+ * and later, iOS only) and the bundle has ad units (store builds have none
+ * until the AdMob account exists, see adConfig.ts).
+ */
 export function adsAvailable(): boolean {
-  if (Platform.OS !== 'ios') return false;
+  if (!ADS_ENABLED || Platform.OS !== 'ios') return false;
   try {
     return !!(TurboModuleRegistry.get('RNGoogleMobileAdsModule') ?? NativeModules.RNGoogleMobileAdsModule);
   } catch {
@@ -62,8 +66,10 @@ type Watched = 'earned' | 'closed' | 'failed';
 
 /** Loads and shows one rewarded ad; resolves once it is dismissed. */
 function watch(placement: AdPlacement, nonce: string): Promise<Watched> {
-  const { RewardedAd, RewardedAdEventType, AdEventType } = gma();
-  const ad = RewardedAd.createForAdRequest(REWARDED_AD_UNITS[placement], {
+  const { RewardedAd, RewardedAdEventType, AdEventType, TestIds } = gma();
+  const unit = REWARDED_AD_UNITS[placement] ?? (USING_TEST_ADS ? TestIds.REWARDED : null);
+  if (!unit) return Promise.resolve('failed');
+  const ad = RewardedAd.createForAdRequest(unit, {
     requestNonPersonalizedAdsOnly: AD_REQUEST.requestNonPersonalizedAdsOnly,
     serverSideVerificationOptions: { customData: nonce },
   });

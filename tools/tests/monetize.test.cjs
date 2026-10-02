@@ -106,12 +106,13 @@ test('a purchase left unfinished last run is delivered at launch and announced',
 });
 
 /** ads.ts with a fake Google Mobile Ads SDK and a fake server. */
-function adsHarness({ native = true, offer, claim, closeEarly = false } = {}) {
+function adsHarness({ native = true, offer, claim, closeEarly = false, env = '1' } = {}) {
   const calls = { offers: [], claims: [], requests: [], required: 0, config: [] };
   const listeners = {};
   const gma = {
     default: () => ({ setRequestConfiguration: async c => { calls.config.push(c); }, initialize: async () => [] }),
     MaxAdContentRating: { G: 'G', PG: 'PG' },
+    TestIds: { REWARDED: 'ca-app-pub-3940256099942544/1712485313' },
     RewardedAdEventType: { LOADED: 'loaded', EARNED_REWARD: 'earned' },
     AdEventType: { CLOSED: 'closed', ERROR: 'error' },
     RewardedAd: {
@@ -139,9 +140,18 @@ function adsHarness({ native = true, offer, claim, closeEarly = false } = {}) {
       getAdReward: async () => reward('granted'),
       adErrorCode: e => e?.response?.data?.code ?? null,
     },
-  });
+  }, { process: { env: { EXPO_PUBLIC_TPS_TEST_ADS: env } } });
   return { ads, calls, reward };
 }
+
+test('a store bundle with no real ad units never touches the SDK; VIP still gets the reward', async () => {
+  const { ads, calls, reward } = adsHarness({ env: '', offer: () => reward('granted', 'vip') });
+  assert.equal(ads.adsAvailable(), false);
+  assert.equal(plain(await ads.watchForReward('daily_ticket', null, false)).status, 'unavailable');
+  assert.deepEqual(calls.offers, []);
+  assert.equal(plain(await ads.watchForReward('daily_ticket', null, true)).status, 'granted');
+  assert.equal(calls.required, 0, 'the SDK is never required');
+});
 
 test('on a 1.6.0 binary ads never load; VIP still gets the reward with no ad', async () => {
   const { ads, calls, reward } = adsHarness({ native: false, offer: () => reward('granted', 'vip') });
