@@ -1,168 +1,217 @@
-import * as Haptics from 'expo-haptics';
+/**
+ * How to Play: five big swipe cards, one short sentence each, so a kid gets
+ * the game in a few seconds. A springy page indicator and a soft tick on each
+ * swipe. Deeper detail (every feature, every word, replay tutorials) sits
+ * behind the small "More" link. A "?" sheet that links a topic opens More
+ * directly on that topic.
+ */
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useRoute } from '@react-navigation/native';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useHelp } from '../components/help/HelpProvider';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, {
+  cancelAnimation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat,
+  withSequence, withSpring, withTiming, type SharedValue,
+} from 'react-native-reanimated';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
-import * as RootNavigation from '../RootNavigation';
-import { GLOSSARY_KEYS, type HelpTopicId } from '../services/help/glossary';
-import { HELP_TOPICS, type HelpArtKey } from '../services/help/helpTopics';
-import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW, textPreset } from '../ui';
+import { playSfx } from '../gamekit/SFX';
+import * as Haptics from '../helpers/haptics';
+import type { HelpTopicId } from '../services/help/glossary';
+import { HOW_TO_CARDS, pageForOffset, type HowToArtKey, type HowToCard } from '../services/help/howToCards';
+import { BRAND, GameButton, RADIUS } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import HowToPlayMore from './HowToPlay/HowToPlayMore';
 
-/** Existing hand-drawn art only (Alex's originals and the kit art players already know). */
-const ART: Readonly<Record<HelpArtKey, number>> = {
-  finn: require('../../assets/images/tutorial/teacher-shark.png'),
-  churro: require('../../assets/images/prep-items/churros/churro_18.png'),
-  park: require('../../assets/images/screens/park/mystery-coin-shark-v1.png'),
-  coin: require('../../assets/images/screens/park/gold.png'),
-  lineplay: require('../../assets/images/screens/lineplay/queue-recap-shark.png'),
-  level: require('../../assets/images/progression/crown.png'),
-  stamps: require('../../assets/images/stamps/stamp-logo.png'),
-  teams: require('../../assets/images/team-shark-badge.png'),
-  standings: require('../../assets/images/screens/leaderboard/crown-gold.png'),
-  shop: require('../../assets/images/screens/profile/shark_shop.png'),
-  extras: require('../../assets/images/screens/pin-collections/shark.png'),
+const ART: Readonly<Record<HowToArtKey, number>> = {
+  find: require('../../assets/images/howto/find.png'),
+  catch: require('../../assets/images/howto/catch.png'),
+  book: require('../../assets/images/howto/book.png'),
+  park: require('../../assets/images/howto/park.png'),
+  line: require('../../assets/images/howto/line.png'),
 };
 
-/** How to play: every feature in a couple of sentences, every word, and a replay switch. */
+const GUTTER = 16;
+
 export default function HowToPlayScreen() {
   const route = useRoute();
+  const navigation = useNavigation();
   const focus = (route.params as { topic?: HelpTopicId } | undefined)?.topic ?? null;
-  const { glossary, explain, replayAllTutorials } = useHelp();
-  const scroll = useRef<ScrollView>(null);
-  const offsets = useRef<Partial<Record<HelpTopicId, number>>>({});
-  const [replaying, setReplaying] = useState(false);
+  const [more, setMore] = useState(focus != null);
+  const [moreFocus, setMoreFocus] = useState<HelpTopicId | null>(focus);
+  const { width } = useWindowDimensions();
+  const reduced = useUiReducedMotion();
 
-  // Opened from a "?" or a term sheet: land on that card.
-  useEffect(() => {
-    if (!focus) return;
-    const timer = setTimeout(() => {
-      const y = offsets.current[focus];
-      if (y != null) scroll.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [focus]);
+  const scrollRef = useRef<Animated.ScrollView>(null);
+  const scrollX = useSharedValue(0);
+  const [page, setPage] = useState(0);
+  const pageRef = useRef(0);
 
-  const replay = async () => {
-    if (replaying) return;
-    setReplaying(true);
-    try {
-      await replayAllTutorials();
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      gameAlert('Tutorials ready', 'Finn will show every tip again as you play: at home, at the park and in line.',
-        undefined, { icon: 'retry' });
-    } finally {
-      setReplaying(false);
-    }
+  const onPage = useCallback((next: number) => {
+    if (next === pageRef.current) return;
+    pageRef.current = next;
+    setPage(next);
+    playSfx('ui.select', 0.45);
+    void Haptics.selectionAsync().catch(() => undefined);
+  }, []);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: event => { scrollX.value = event.contentOffset.x; },
+    onMomentumEnd: event => { runOnJS(onPage)(Math.round(event.contentOffset.x / Math.max(1, width))); },
+  }, [width, onPage]);
+
+  const goTo = (index: number) => {
+    scrollRef.current?.scrollTo({ x: index * width, animated: !reduced });
+    onPage(pageForOffset(index * width, width));
+  };
+
+  const last = page === HOW_TO_CARDS.length - 1;
+  const openMore = (topic: HelpTopicId | null) => {
+    playSfx('ui.tap', 0.6);
+    setMoreFocus(topic);
+    setMore(true);
   };
 
   return (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <BackButton />
+          <BackButton onPress={more && focus == null ? () => setMore(false) : undefined} />
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>How to Play</TopbarText>
+          <TopbarText>{more ? 'More help' : 'How to Play'}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
-      <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <Image source={ART.finn} style={styles.heroArt} contentFit="contain" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Hi, I'm Finn!</Text>
-            <Text style={styles.heroBody}>Everything in the game, in one place. Tap any word to see what it means.</Text>
+      {more ? <HowToPlayMore focus={moreFocus} /> : (
+        <View style={styles.body}>
+          <Animated.ScrollView ref={scrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+            onScroll={onScroll} scrollEventThrottle={16} style={{ flex: 1 }} decelerationRate="fast">
+            {HOW_TO_CARDS.map((card, index) => (
+              <CardPage key={card.id} card={card} index={index} width={width} scrollX={scrollX}
+                active={index === page} reduced={reduced} />
+            ))}
+          </Animated.ScrollView>
+
+          <View style={styles.dots} accessibilityRole="adjustable" accessibilityLabel={`Card ${page + 1} of ${HOW_TO_CARDS.length}`}>
+            {HOW_TO_CARDS.map((card, index) => (
+              <Dot key={card.id} index={index} width={width} scrollX={scrollX} color={card.colors[1]}
+                onPress={() => goTo(index)} />
+            ))}
+          </View>
+
+          <View style={styles.footer}>
+            <GameButton label={last ? "Let's play!" : 'Next'} icon={last ? 'play' : 'arrow'} fullWidth
+              onPress={() => (last ? navigation.goBack() : goTo(page + 1))} />
+            <Pressable accessibilityRole="button" accessibilityLabel="More help" hitSlop={12}
+              onPress={() => openMore(HOW_TO_CARDS[page]?.topic ?? null)} style={styles.moreLink}>
+              <Text style={styles.moreText}>More</Text>
+            </Pressable>
           </View>
         </View>
-
-        {HELP_TOPICS.map(topic => (
-          <View key={topic.id} onLayout={event => { offsets.current[topic.id] = event.nativeEvent.layout.y; }}
-            style={[styles.card, focus === topic.id && styles.cardFocus]}>
-            <View style={styles.cardHead}>
-              <Image source={ART[topic.art]} style={styles.cardArt} contentFit="contain" />
-              <Text accessibilityRole="header" style={styles.cardTitle}>{topic.title}</Text>
-            </View>
-            {topic.lines.map(line => <Text key={line} style={styles.cardLine}>{line}</Text>)}
-            <View style={styles.chips}>
-              {topic.terms.map(key => (
-                <Pressable key={key} accessibilityRole="button" accessibilityLabel={`What is ${glossary[key].label}?`}
-                  onPress={() => explain(key)} style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}>
-                  <GameIcon name={glossary[key].icon} size={20} />
-                  <Text style={styles.chipText}>{glossary[key].label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ))}
-
-        <Text style={styles.section}>Every word in the game</Text>
-        <View style={styles.list}>
-          {GLOSSARY_KEYS.map((key, index) => {
-            const term = glossary[key];
-            return (
-              <Pressable key={key} accessibilityRole="button" accessibilityLabel={`${term.label}. ${term.what}`}
-                onPress={() => explain(key)}
-                style={({ pressed }) => [styles.row, index < GLOSSARY_KEYS.length - 1 && styles.rowBorder, pressed && styles.chipPressed]}>
-                <GameIcon name={term.icon} size={26} />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.rowTitle}>{term.label}</Text>
-                  <Text style={styles.rowBody} numberOfLines={2}>{term.what}</Text>
-                </View>
-                <GameIcon name="arrow" size={20} />
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.section}>Need a refresher?</Text>
-        <View style={[styles.card, { alignItems: 'stretch' }]}>
-          <Text style={styles.cardLine}>Replay every tutorial and tip. Finn shows each one again the next time it comes up.</Text>
-          <GameButton label="Replay tutorials" icon="retry" loading={replaying} onPress={() => { void replay(); }}
-            style={{ marginTop: 8 }} />
-          <GameButton label="Settings and support" variant="ghost" onPress={() => RootNavigation.navigate('Settings')}
-            style={{ marginTop: 4 }} />
-        </View>
-        <View style={{ height: 120 }} />
-      </ScrollView>
+      )}
     </Wrapper>
   );
 }
 
+function CardPage({ card, index, width, scrollX, active, reduced }: {
+  readonly card: HowToCard; readonly index: number; readonly width: number; readonly scrollX: SharedValue<number>;
+  readonly active: boolean; readonly reduced: boolean;
+}) {
+  const bob = useSharedValue(0);
+  // Only the card on screen floats, so nothing animates off-screen.
+  useEffect(() => {
+    if (!active || reduced) {
+      cancelAnimation(bob);
+      bob.value = withTiming(0, { duration: 150 });
+      return;
+    }
+    bob.value = withRepeat(withSequence(withTiming(-8, { duration: 1100 }), withTiming(0, { duration: 1100 })), -1, false);
+    return () => cancelAnimation(bob);
+  }, [active, reduced, bob]);
+
+  const cardStyle = useAnimatedStyle(() => {
+    const progress = (scrollX.value - index * width) / Math.max(1, width);
+    return {
+      transform: [
+        { scale: interpolate(progress, [-1, 0, 1], [0.9, 1, 0.9], 'clamp') },
+        { rotate: `${interpolate(progress, [-1, 0, 1], [4, 0, -4], 'clamp')}deg` },
+      ],
+    };
+  });
+  const artStyle = useAnimatedStyle(() => {
+    const progress = (scrollX.value - index * width) / Math.max(1, width);
+    return {
+      transform: [
+        { translateX: interpolate(progress, [-1, 0, 1], [width * 0.25, 0, -width * 0.25], 'clamp') },
+        { translateY: bob.value },
+      ],
+    };
+  });
+
+  return (
+    <View style={{ width, paddingHorizontal: GUTTER, paddingTop: 16, paddingBottom: 8 }}>
+      <Animated.View style={[styles.card, cardStyle]}>
+        <LinearGradient colors={card.colors as [string, string]} style={StyleSheet.absoluteFill} />
+        <View style={styles.glow} />
+        <Animated.View style={[styles.artWrap, artStyle]}>
+          <Image source={ART[card.art]} style={styles.art} contentFit="contain" accessibilityIgnoresInvertColors />
+        </Animated.View>
+        <View style={styles.copy}>
+          <Text style={styles.step}>{index + 1} of {HOW_TO_CARDS.length}</Text>
+          <Text accessibilityRole="header" style={styles.title}>{card.title}</Text>
+          <Text style={styles.line}>{card.line}</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+function Dot({ index, width, scrollX, color, onPress }: {
+  readonly index: number; readonly width: number; readonly scrollX: SharedValue<number>; readonly color: string;
+  readonly onPress: () => void;
+}) {
+  const style = useAnimatedStyle(() => {
+    const distance = Math.abs(scrollX.value / Math.max(1, width) - index);
+    const on = distance < 0.5;
+    return {
+      width: withSpring(on ? 30 : 12, { damping: 11, stiffness: 220 }),
+      opacity: interpolate(distance, [0, 1], [1, 0.45], 'clamp'),
+      backgroundColor: on ? color : '#9cc7ea',
+    };
+  });
+  return (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityLabel={`Card ${index + 1}`}>
+      <Animated.View style={[styles.dot, style]} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  scroll: { flex: 1, marginTop: -8, backgroundColor: '#e3f3ff' },
-  content: { padding: 16, paddingTop: 14 },
-  hero: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: RADIUS.lg, borderWidth: 3,
-    borderColor: BRAND.white, padding: 12, marginBottom: 14, ...SHADOW.card,
-  },
-  heroArt: { width: 86, height: 86, marginRight: 10 },
-  heroTitle: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy },
-  heroBody: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 21, color: BRAND.navySoft, marginTop: 2 },
+  body: { flex: 1, marginTop: -8, backgroundColor: '#e3f3ff' },
   card: {
-    backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: '#cfe8fb', padding: 14,
-    marginBottom: 12, ...SHADOW.card, shadowOpacity: 0.12,
+    flex: 1, borderRadius: 30, overflow: 'hidden', borderWidth: 4, borderColor: BRAND.white,
+    shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
   },
-  cardFocus: { borderColor: BRAND.gold, borderWidth: 3 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  cardArt: { width: 46, height: 46, marginRight: 10 },
-  cardTitle: { flex: 1, fontFamily: 'Shark', fontSize: 21, color: BRAND.navy },
-  cardLine: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 22, color: BRAND.navy, marginBottom: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef7ff', borderRadius: RADIUS.pill,
-    borderWidth: 2, borderColor: BRAND.sky, paddingHorizontal: 10, paddingVertical: 4,
+  glow: {
+    position: 'absolute', top: '6%', alignSelf: 'center', width: '82%', aspectRatio: 1, borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  chipPressed: { backgroundColor: BRAND.cream },
-  chipText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.blue },
-  section: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, textTransform: 'uppercase', marginTop: 10, marginBottom: 8, marginLeft: 6 },
-  list: { backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: '#cfe8fb', marginBottom: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12 },
-  rowBorder: { borderBottomWidth: 2, borderBottomColor: '#eef6fd' },
-  rowTitle: { ...textPreset('label'), fontSize: 16 },
-  rowBody: { ...textPreset('bodySmall'), color: BRAND.navySoft },
+  artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 18 },
+  art: { width: '86%', height: '100%', maxHeight: 340 },
+  copy: { paddingHorizontal: 22, paddingBottom: 26, alignItems: 'center' },
+  step: { fontFamily: 'Knockout', fontSize: 15, color: 'rgba(255,255,255,0.85)', letterSpacing: 1, textTransform: 'uppercase' },
+  title: {
+    fontFamily: 'Shark', fontSize: 38, color: BRAND.white, textAlign: 'center', marginTop: 2,
+    textShadowColor: 'rgba(5,52,110,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
+  },
+  line: { fontFamily: 'Knockout', fontSize: 24, lineHeight: 29, color: BRAND.white, textAlign: 'center', marginTop: 8 },
+  dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 12 },
+  dot: { height: 12, borderRadius: 6 },
+  footer: { paddingHorizontal: GUTTER, paddingBottom: 26 },
+  moreLink: { alignSelf: 'center', marginTop: 10, paddingHorizontal: 16, paddingVertical: 6, borderRadius: RADIUS.pill },
+  moreText: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.blue, textDecorationLine: 'underline' },
 });
