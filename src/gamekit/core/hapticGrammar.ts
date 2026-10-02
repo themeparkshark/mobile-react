@@ -73,9 +73,66 @@ export const HAPTIC_PATTERNS = {
   resumeBeat: [{ at: 0, p: 'selection' }],
   win: [{ at: 0, p: 'success' }],
   lose: [{ at: 0, p: 'warning' }],
+  /**
+   * Trivia Duel signature (rev 7 section 14): correct = success (a rising
+   * double pulse) then hitMedium at +120 ms on the stamp, 3 rising pulses;
+   * wrong = one hitSoft, nothing else. Steal and win share correct, loss
+   * shares wrong. Checked by hapticSignature in the tests.
+   */
+  triviaCorrect: [{ at: 0, p: 'success' }, { at: 120, p: 'medium' }],
+  triviaWrong: [{ at: 0, p: 'soft' }],
+  /** Banana / Rhythm on-beat catch: Light only within the beat window (see onBeatWindow). */
+  onBeatLight: [{ at: 0, p: 'light' }],
 } satisfies Record<string, HapticStep[]>;
 
 export type HapticPatternName = keyof typeof HAPTIC_PATTERNS;
+
+/**
+ * What the player actually feels per primitive: notification types are
+ * multi-pulse on iOS (success = a weak then strong double tap, warning = strong
+ * then weak, error = three taps). Strength is on the perceptual 1..4 scale.
+ */
+export const PRIMITIVE_PULSES: Record<HapticPrimitive, number[]> = {
+  selection: [1],
+  soft: [2],
+  light: [2],
+  medium: [3],
+  rigid: [3],
+  heavy: [4],
+  success: [2, 3],
+  warning: [3, 2],
+  error: [3, 3, 3],
+};
+
+export interface HapticSignature {
+  /** Felt pulses in order. */
+  pulses: number[];
+  count: number;
+  /** Every pulse at least as strong as the previous one. */
+  rising: boolean;
+  maxStrength: number;
+}
+
+/** The felt signature of a step list (Trivia's correct/wrong rule, blind tests). */
+export function hapticSignature(steps: readonly HapticStep[]): HapticSignature {
+  const sorted = [...steps].sort((a, b) => a.at - b.at);
+  const pulses: number[] = [];
+  for (const st of sorted) pulses.push(...PRIMITIVE_PULSES[st.p]);
+  let rising = true;
+  for (let i = 1; i < pulses.length; i++) if (pulses[i] < pulses[i - 1]) rising = false;
+  return { pulses, count: pulses.length, rising, maxStrength: pulses.reduce((m, v) => Math.max(m, v), 0) };
+}
+
+/**
+ * Banana: an x3-x4 catch gets impact Light only when within +/- `windowMs` of
+ * a beat (2 sim steps = 33 ms); off-beat catches get nothing. `beatMs` is the
+ * beat period, `phaseMs` the time since the last beat.
+ */
+export function onBeatWindow(phaseMs: number, beatMs: number, windowMs = 33): boolean {
+  if (beatMs <= 0) return false;
+  const p = ((phaseMs % beatMs) + beatMs) % beatMs;
+  return p <= windowMs || beatMs - p <= windowMs;
+}
 
 /** Priority classes. */
 export const HP = {
