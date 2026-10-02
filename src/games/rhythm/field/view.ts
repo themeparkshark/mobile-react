@@ -21,8 +21,6 @@ import {
   EV_FLICK,
   EV_FREEZE_FAULT,
   EV_HIT,
-  EV_LAUNCH,
-  EV_LIMP,
   EV_MILESTONE,
   EV_MISS,
   EV_OOS,
@@ -54,7 +52,7 @@ export const JUDGE_TEXT = ['', 'SHARP', 'PERFECT', 'GREAT', 'GOOD', 'MISS', 'OTH
 export const RIBBON_TEXT = [
   '', 'FIREWORK FEVER', 'COMBO 10', 'COMBO 25', 'COMBO 50', 'COMBO 100', 'MARCHING', 'TAP ON THE BEAT', 'HIT THE SIDE',
   'HOLD', 'TWO FINGERS!', 'POP IT', "DON'T TAP", 'FLICK UP', 'FULL COMBO', 'THE PARADE NEEDS YOU!', 'LISTEN... NOW YOU',
-  'CRASH!', 'SWIPE UP TO LAUNCH', 'FEEL THE BEAT', 'PARADE CLEARED', 'PERFECT x8',
+  'CRASH!', 'FEVER READY', 'FEEL THE BEAT', 'PARADE CLEARED', 'PERFECT x8',
   'TAP ON THE BLUE', 'CORAL = THE SIDE', 'BLUE LEFT, CORAL RIGHT', 'KEEP DRUMMING!', 'BACK IN STEP!', 'FEVER ON THE DROP',
   'FULL CHART', 'HIDDEN DARE!',
 ];
@@ -162,7 +160,6 @@ export interface ParadeView {
   /** Launch Swipe streak. */
   launchAt: number;
   launchX: number;
-  limping: number;
   /** Per-hit text side: alternates left / right of the lane. */
   judgSide: number;
   /** Count-in numerals 4-3-2-1 run on these 5 beat times (pre-roll or resume bar). */
@@ -198,7 +195,7 @@ export function createView(n: number, cx: number, yLine: number, width: number, 
     reduced: 0, pocket: 0,
     overAt: -1e9, overX: 0, overY: 0, rippleAt: -1e9, rippleAmp: 0,
     zoneFlashAt: -1e9, zoneFlashX: 0, zoneFlashKind: 0,
-    railSparkAt: -1e9, railSparkN: 0, dropAt: -1e9, launchAt: -1e9, launchX: 0, limping: 0, judgSide: 0,
+    railSparkAt: -1e9, railSparkN: 0, dropAt: -1e9, launchAt: -1e9, launchX: 0, judgSide: 0,
     countBeats,
     cx, yLine, width,
   };
@@ -402,20 +399,14 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.judgFS = 0;
       v.popperTaps = 0;
       addBurst(v, B_CONFETTI, v.cx, v.yLine - 30, 30);
-    } else if (kind === EV_LIMP) {
-      v.limping = a;
-      if (a) {
-        v.stumbleAt = v.wt;
-        ribbon(v, RB_LIMP);
-      } else ribbon(v, RB_UNLIMP);
-    } else if (kind === EV_LAUNCH) {
-      v.launchAt = v.wt;
-      v.launchX = v.touchX;
-      ribbon(v, RB_QUEUED);
     } else if (kind === EV_FEVER_ARMED) {
       v.armed = 1;
     } else if (kind === EV_FEVER_DEPLOY) {
+      // Auto-fire (4.2): the fuse lights up the lane toward the drop line.
       v.armed = 0;
+      v.launchAt = v.wt;
+      v.launchX = v.cx;
+      ribbon(v, RB_QUEUED);
     } else if (kind === EV_FEVER_START) {
       // The drop (design 6.5): light, sound and touch; the camera never moves.
       v.feverTarget = 1;
@@ -438,7 +429,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
   }
   // Crowd tier follows the live combo (design 6.4).
   const combo = s.combo;
-  v.crowdTarget = s.limping ? 6 : combo >= 50 ? 22 : combo >= 25 ? 16 : combo >= 10 ? 10 : 6;
+  v.crowdTarget = combo >= 50 ? 22 : combo >= 25 ? 16 : combo >= 10 ? 10 : 6;
 }
 
 export function showRibbon(v: ParadeView, id: number): void {

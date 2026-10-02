@@ -1,22 +1,22 @@
 /**
  * RhythmTapGame.tsx: "Parade Beat", the Rhythm Tap rework
- * (design: tps-prime-time-audit/studio/design/rhythm.md, revision 6).
+ * (design: tps-prime-time-audit/studio/design/rhythm.md, revision 7).
  *
  * Your shark is the drum major of the park parade. Chris's songs play, notes
  * march down the parade route onto the big drum, and every note is a drum hit
  * you can hear. Colour equals input: blue notes on the blue part of the drum,
- * coral notes on the coral part. Hold through rolls, two fingers on the gold
- * BIG stars, and swipe up off the drum to launch Firework Fever on the next
- * drop line.
+ * coral notes on the coral part, two fingers on the gold BIG stars for a
+ * double. Firework Fever fires itself on the next drop line once the meter is
+ * full; a clean Fever section keeps it lit. Every touch-down is a judgment.
  *
  * External contract (unchanged): MiniGameSelector, LinePlay and Crew Relay
  * render <RhythmTapGame visible seed difficulty format onComplete onClose
  * onQuit />. Proof: meta.score + meta.seed (what TaskGameProofService
- * validates today) plus meta.rhythmProof (v5, see core/proof.ts).
+ * validates today) plus meta.rhythmProof (v6, see core/proof.ts).
  *
  * QUEUE REALITY: movement never pauses. The MARCH pill switches the next
  * 4-bar section to the March layer (big quarter-note hits, zones ignored,
- * softer penalties) so a player can keep drumming by ear with eyes up; the
+ * identical windows and points) so a player can keep drumming with eyes up; the
  * walk sensor only suggests it (the pill pulses), it never changes the chart.
  * Backgrounding, a locked screen or the pause button hold the round; resume
  * replays the bar before the pause as a counted pre-roll.
@@ -60,8 +60,6 @@ import {
   EV_FLICK,
   EV_FREEZE_FAULT,
   EV_HIT,
-  EV_LAUNCH,
-  EV_LIMP,
   EV_MILESTONE,
   EV_MISS,
   EV_OOS,
@@ -75,7 +73,6 @@ import {
   feverActiveAt,
   finishJudge,
   judgeDown,
-  judgeLaunch,
   judgeMove,
   judgeTick,
   judgeUp,
@@ -91,7 +88,7 @@ import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPE
 import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type GripPrefs } from './core/grip';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
 import { ParadeField, fieldGeom } from './field/ParadeField';
-import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_DARE, RB_FULL, RB_HOLD, RB_MARCH, RB_READY, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
+import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_DARE, RB_FULL, RB_HOLD, RB_MARCH, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
 import { SongPlayer, type SongAnchor } from './audio/SongPlayer';
 import {
   effectiveDifficulty,
@@ -137,8 +134,8 @@ export interface RhythmTapGameProps {
   stageId?: StageId;
   /** A friend's or crew mate's ghost run to race (async challenge). */
   challenge?: GhostRun;
-  /** Ride Assist (design 3.5): granted by the server after a recorded ride loss. */
-  assist?: boolean;
+  /** Easy Beat (design 3.5) forced on by the host (a first ride loss offers it); the player can also toggle it. */
+  easyBeat?: boolean;
   /**
    * "Challenge crew" (Ghost Drumline, design 11.2): when the host can deliver
    * a Line Party challenge, the results card offers it and this receives the
@@ -157,17 +154,14 @@ interface RoundPlan {
   difficulty: Difficulty;
   seed: number;
   ftue: boolean;
-  autoFever: boolean;
-  assist: boolean;
-  /** Queue rounds Limp at Groove 0 instead of stalling (design 3.6). */
-  limp: boolean;
-  noFailUntil: number;
+  /** Easy Beat (3.5): Easy windows, approach ring on every note, d1 chart. */
+  easy: boolean;
   chart: Chart;
   songSrc: number;
   feverSrc: number;
 }
 
-function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: number): RoundPlan {
+function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: number, easyPick: boolean): RoundPlan {
   const props: RhythmTapGameProps = {
     ...props0,
     stageId: props0.stageId ?? (DEV_STAGE && STAGES[DEV_STAGE] ? DEV_STAGE : undefined),
@@ -181,8 +175,8 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
   if (ride) {
     stage = props.stageId && STAGES[props.stageId].audio.ride ? props.stageId : RIDE_STAGES[(runSeed >>> 0) % RIDE_STAGES.length];
   } else if (!p.firstParadeDone && !props.stageId) {
-    // First Parade: Opening Day, a 12-bar sprint, DRUM and one BIG, cannot fail.
-    stage = 'opening_day_a';
+    // First Parade (3.8): Waiting Room, a 12-bar sprint, DRUM and one BIG, cannot fail.
+    stage = 'waiting_room_a';
     format = 'ride';
     difficulty = 1;
     ftue = true;
@@ -193,19 +187,17 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
   }
   const entry = STAGES[stage];
   const audio = entry.audio[format] ?? entry.audio.queue!;
+  // Easy Beat always plays the d1 chart (3.4); FTUE is already the easiest.
+  const easy = !ftue && (easyPick || !!props.easyBeat);
+  if (easy) difficulty = 1;
   const chart = generate(entry.json, format, difficulty, runSeed >>> 0, { ftue });
-  const firstRideEver = ride && !p.firstParadeDone;
-  const noFailUntil = ftue ? Infinity : firstRideEver ? chart.barStart[chart.firstBar + 4] : 0;
   return {
     stage,
     format: chart.format,
     difficulty: chart.difficulty,
     seed: runSeed >>> 0,
     ftue,
-    autoFever: ftue || ride || entry.order <= 2,
-    assist: ride && !!props.assist,
-    limp: !ride && format === 'queue',
-    noFailUntil,
+    easy,
     chart,
     songSrc: audio.song,
     feverSrc: audio.fever,
@@ -238,6 +230,10 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const shellRef = useRef<GameShellV2Handle>(null);
   const baseSeed = useMemo(() => (roundSeed ?? (Math.floor(Math.random() * 0xffffffff) ^ Date.now())) >>> 0, [roundSeed]);
   const [runIndex, setRunIndex] = useState(0);
+  // Easy Beat (3.5): the saved choice applies to the round being planned; a
+  // toggle in the pause sheet or on the results card applies from the next run.
+  const [easyNext, setEasyNext] = useState(false);
+  const [easyRun, setEasyRun] = useState(false);
   const [progress, setProgress] = useState<ParadeProgress | null>(null);
   const progressRef = useRef<ParadeProgress>(emptyProgress());
   const [result, setResult] = useState<GameResult | null>(null);
@@ -262,6 +258,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     void (DEV_FRESH ? Promise.resolve(emptyProgress()) : loadProgress()).then((p) => {
       if (!alive) return;
       progressRef.current = p;
+      setEasyNext(!!p.easyBeat);
+      setEasyRun(!!p.easyBeat);
       setProgress(p);
       if (p.grip) setGripPrefs(p.grip);
     });
@@ -271,9 +269,17 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   }, [visible]);
 
   const runSeed = runIndex === 0 ? baseSeed : deriveRunSeed(baseSeed, runIndex);
-  const plan = useMemo(() => (progress ? planRound(progress, props, runSeed) : null),
+  const plan = useMemo(() => (progress ? planRound(progress, props, runSeed, easyRun) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [progress, runSeed, props.format, props.difficulty, props.stageId]);
+    [progress, runSeed, easyRun, props.format, props.difficulty, props.stageId, props.easyBeat]);
+  const toggleEasy = useCallback(() => {
+    setEasyNext((on) => {
+      const next = !on;
+      progressRef.current = { ...progressRef.current, easyBeat: next };
+      void saveProgress(progressRef.current);
+      return next;
+    });
+  }, []);
 
   // -- Geometry -------------------------------------------------------------------
   const fieldH = SCREEN_H - HEADER_H - (props.format === 'ride' ? 54 : 0);
@@ -387,7 +393,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     setDeltaChip(null);
     setReady(false);
     const chart = plan.chart;
-    const js = createJudge(chart, { autoFever: plan.autoFever, noFailUntilMs: plan.noFailUntil, limp: plan.limp, assist: plan.assist });
+    const js = createJudge(chart, { ride: plan.format === 'ride' && !plan.ftue, easy: plan.easy });
     js.marchWant = marchSv.value;
     judge.value = js;
     const v = createView(chart.t.length, geom.cx, geom.yLine, SCREEN_W, countInBeats(chart));
@@ -563,10 +569,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('sh_powerup', { volume: 0.65 });
         Haptic.success();
         setArmedJs(true);
-      } else if (kind === EV_LAUNCH) {
-        GameAudio.play('fx.whoosh', { volume: 0.7 });
-        Haptic.hitMedium();
-        setArmedJs(false);
       } else if (kind === EV_FEVER_START) {
         GameAudio.play('rh_firework');
         GameAudio.play('fx.whoosh');
@@ -583,14 +585,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('fx.reveal', { volume: 0.7 });
         if (a >= 50) GameAudio.play('sh_crowd_cheer', { volume: 0.6 });
         Haptic.comboHeavy();
-      } else if (kind === EV_LIMP) {
-        if (a) {
-          GameAudio.play('fx.nope', { volume: 0.35 });
-          Haptic.warning();
-        } else {
-          GameAudio.play('fx.reveal', { volume: 0.5 });
-          Haptic.success();
-        }
       } else if (kind === EV_STALL) {
         Haptic.failBuzz();
         void onStall();
@@ -663,24 +657,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     })(next ? 1 : 0);
   }, [plan, judge, marchSv]);
 
-  // -- Fever: tap the armed meter to launch (accessibility path, design 3.1).
-  const launchFromMeter = useCallback(() => {
-    runOnUI(() => {
-      'worklet';
-      if (!running.value) return;
-      const s = judge.value;
-      const v = view.value;
-      const t = clock.value + Math.min(34, Math.max(0, Date.now() - lastWall.value)) - offset.value;
-      v.touchX = SCREEN_W - 40;
-      judgeLaunch(s, t, 9000 + Math.floor(t));
-      const batch = drainEvents(s.ev);
-      if (batch.length) {
-        applyEventsUI(v, s, null, batch);
-        runOnJS(onBatch)(batch, s.score, s.combo, feverActiveAt(s, v.now) ? 1 : 0, s.hitN);
-      }
-    })();
-  }, [judge, view, clock, lastWall, offset, running, onBatch]);
-
   // -- The frame: clock, judge tick, layout, FX, events ----------------------------
   const onEnded = useRef<() => void>(() => {});
   const fireEnded = useCallback(() => onEnded.current(), []);
@@ -733,19 +709,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
             ap.relP.push(50000 + i);
           }
         }
-        // The scripted drummer saves Fever for the Chorus (or the next drop) and swipes in the rest beat.
-        if (s.armed && !s.autoFever && s.pendingDeploy < 0) {
-          const chorus = s.firstBar + 12;
-          const target = s.dropBars.indexOf(chorus) >= 0 && barAt(s, vnow) < chorus ? chorus : -1;
-          const drop = target > 0 ? target : barAt(s, vnow) + 1;
-          if (s.dropBars.indexOf(drop) >= 0) {
-            const at = s.barStart[drop] - (s.barStart[drop] - s.barStart[drop - 1]) / 8 - 160;
-            if (vnow >= at) {
-              v.touchX = SCREEN_W * 0.5;
-              judgeLaunch(s, vnow, 77000 + drop);
-            }
-          }
-        }
         for (let q = ap.relT.length - 1; q >= 0; q--) {
           if (ap.relT[q] <= vnow) {
             judgeUp(s, ap.relT[q], ap.relP[q]);
@@ -783,10 +746,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         const beatMs = (s.barStart[bar + 1] - barStartT) / 4;
         runOnJS(onBar)(bar, nowWall + (barStartT - vnow) + offset.value, beatMs, s.barLayer[bar] === L_MARCH ? 1 : 0, mask);
       }
-      if (s.armed && v.armed === 0) {
-        v.armed = 1;
-        if (!s.autoFever) showRibbon(v, RB_READY);
-      }
+      if (s.armed && v.armed === 0) v.armed = 1;
       // Rival rails flash on their verified hits at the beat-map time.
       const rt = rivalHitT.value;
       const rk = rivalHitK.value;
@@ -889,8 +849,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       difficulty: plan.difficulty,
       seed: plan.seed,
       ftue: plan.ftue,
-      autoFever: plan.autoFever,
-      noFailUntilMs: plan.noFailUntil,
       audioBackend: GameAudio.backendName === 'expo-av' ? 'expoav' : 'expoav+audioapi-sfx',
       route: 'speaker',
       offsetMs: offset.value,
@@ -900,8 +858,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       pauseSpans: pauseSpans.current,
       grip: gripLabel(grip, gripPrefs),
       daresReceived: dareBarsRef.current,
-      assist: plan.assist,
-      limp: plan.limp,
+      easy: plan.easy,
     }, plan.chart.chartVersion, plan.chart.beatmapHash);
     // Progress: PB, stars, mastery, silent offset auto-tune, ghost of a PB run.
     // 25% or more March sections posts to the March board (design 4.6).
@@ -915,7 +872,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         ...next.ghosts,
         [ghostKey(plan.stage, plan.format, plan.difficulty)]: {
           stage: plan.stage, format: plan.format, difficulty: plan.difficulty, seed: plan.seed, touches: proof.touches,
-          marchBars: proof.march_bars, autoFever: plan.autoFever, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Your best', barScores: [], at: Date.now(),
+          marchBars: proof.march_bars, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Your best', barScores: [], at: Date.now(),
         },
       };
     }
@@ -923,7 +880,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     void saveProgress(next);
     lastRun.current = plan.format === 'queue' && !plan.ftue ? {
       stage: plan.stage, format: plan.format, difficulty: plan.difficulty, seed: plan.seed, touches: proof.touches,
-      marchBars: proof.march_bars, autoFever: plan.autoFever, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Me', barScores: [], at: Date.now(),
+      marchBars: proof.march_bars, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Me', barScores: [], at: Date.now(),
     } : null;
     const win = plan.format === 'ride' && !plan.ftue ? sum.rideWin : sum.stars > 0;
     const stars = plan.format === 'ride' && !plan.ftue ? (sum.rideWin ? Math.max(1, sum.stars) : 0) : sum.stars;
@@ -932,12 +889,12 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       if (newPb && sum.score > 0) setTimeout(() => GameAudio.play('fx.purchase', { volume: 0.8 }), 900);
     }
     const topRival = rivals.current.slice().sort((x, y) => y.finalScore - x.finalScore)[0];
-    const goal = nextGoal(sum, s.accN, plan.format === 'ride' && !plan.ftue, s.limped === 1);
+    const goal = nextGoal(sum, s.accN, plan.format === 'ride' && !plan.ftue);
     const res: GameResult = {
       score: sum.score,
       stars: win ? stars : 0,
       maxCombo: sum.maxCombo,
-      message: resultMessage(sum, plan.ftue, reason, s.limped === 1),
+      message: resultMessage(sum, plan.ftue, reason),
       thresholds: undefined,
       rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
       stats: [
@@ -1044,6 +1001,16 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
 
   // -- Play again / challenge ---------------------------------------------------------
   const onRematch = useCallback(() => {
+    setEasyRun(easyNext);
+    setProgress({ ...progressRef.current });
+    setRunIndex((n) => n + 1);
+  }, [easyNext]);
+  // "Try with Easy Beat" on a rough results card: switch it on and go again.
+  const rematchEasy = useCallback(() => {
+    progressRef.current = { ...progressRef.current, easyBeat: true };
+    void saveProgress(progressRef.current);
+    setEasyNext(true);
+    setEasyRun(true);
     setProgress({ ...progressRef.current });
     setRunIndex((n) => n + 1);
   }, []);
@@ -1074,6 +1041,35 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       onResume={onResume}
       onWrapUp={onWrapUp}
       onRematch={props.format === 'ride' ? undefined : onRematch}
+      pauseExtras={plan && !plan.ftue ? (
+        <View style={styles.sheet}>
+          <SheetToggle
+            label="Easy Beat"
+            hint={easyNext === plan.easy ? 'Wider timing, slower notes' : 'From the next round'}
+            on={easyNext}
+            onPress={toggleEasy}
+          />
+          <SheetToggle
+            label="Playing without sound?"
+            hint="Bigger beat lines and a beat you can feel"
+            on={pocket}
+            onPress={() => setPocket((on) => !on)}
+          />
+          {plan.format === 'queue' && hasRim && progressRef.current.grip?.grip === GRIP_TWO ? (
+            <SheetToggle
+              label="Swap sides"
+              hint="Two Thumbs: drum and rim switch hands"
+              on={!!gripPrefs.swap}
+              onPress={() => saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: gripPrefs.swap ? 0 : 1 })}
+            />
+          ) : null}
+        </View>
+      ) : undefined}
+      resultExtras={plan && !plan.ftue && !plan.easy && result && result.stars < 2 ? (
+        <Pressable accessibilityRole="button" onPress={rematchEasy} style={styles.easyBtn} hitSlop={6}>
+          <Text style={styles.easyBtnTxt}>Try with Easy Beat</Text>
+        </Pressable>
+      ) : undefined}
       onChallenge={props.onChallengeCrew && result && lastRun.current ? () => lastRun.current && props.onChallengeCrew?.(lastRun.current) : undefined}
       onComplete={onComplete}
       onClose={onClose}
@@ -1094,7 +1090,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               grip={grip}
               hand={gripPrefs.hand}
               swap={gripPrefs.swap}
-              approach={plan.assist ? 2080 : plan.difficulty === 1 ? 1600 : 1300}
+              approach={plan.easy ? 2080 : plan.difficulty === 1 ? 1600 : 1300}
               dare={dareSv}
             />
           ) : null}
@@ -1115,35 +1111,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           {deltaChip != null && rivals.current.find((r) => r.isGhost) ? (
             <DeltaChip bar={deltaChip} myScore={score} ghost={rivals.current.find((r) => r.isGhost)!} />
           ) : null}
-          <View style={styles.chipRow} pointerEvents="box-none">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={pocket ? 'Sound on' : 'Playing without sound'}
-              hitSlop={8}
-              onPress={() => setPocket((p) => !p)}
-              style={[styles.chip, pocket && styles.chipOn]}
-            >
-              <Text style={[styles.chipTxt, pocket && styles.chipTxtOn]}>{pocket ? 'FEEL' : 'SOUND'}</Text>
-            </Pressable>
-            {plan && plan.format === 'queue' && !plan.ftue && hasRim ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Change grip"
-                hitSlop={8}
-                onPress={() => {
-                  // One Thumb -> Two Thumbs -> Two Thumbs swapped -> One Thumb.
-                  const g = gripPrefs;
-                  const cur = grip;
-                  if (cur === GRIP_ONE) saveGrip({ ...g, grip: GRIP_TWO, swap: 0 });
-                  else if (!g.swap) saveGrip({ ...g, grip: GRIP_TWO, swap: 1 });
-                  else saveGrip({ ...g, grip: GRIP_ONE, swap: 0 });
-                }}
-                style={styles.chip}
-              >
-                <Text style={styles.chipTxt}>{grip === GRIP_TWO ? (gripPrefs.swap ? '2 THUMBS SWAP' : '2 THUMBS') : '1 THUMB'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
           {/* MARCH pill (design 4.6): 44pt target on the HUD, never shakes. */}
           {plan && !plan.ftue ? (
             <Pressable
@@ -1161,14 +1128,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               ) : null}
             </Pressable>
           ) : null}
-          {/* Tap the armed Fever meter to launch (accessibility path). */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Launch Firework Fever"
-            disabled={!armedJs}
-            onPress={launchFromMeter}
-            style={styles.meterTap}
-          />
           {DEV_PERF ? <PerfOverlay probe={perfProbe} visible style={styles.perf} /> : null}
           {!ready ? (
             <View pointerEvents="none" style={styles.loading}>
@@ -1178,6 +1137,20 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         </View>
       </GestureHandlerRootView>
     </GameShellV2>
+  );
+}
+
+function SheetToggle({ label, hint, on, onPress }: { label: string; hint: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label} onPress={onPress} style={styles.sheetRow} hitSlop={4}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.sheetLabel}>{label}</Text>
+        <Text style={styles.sheetHint}>{hint}</Text>
+      </View>
+      <View style={[styles.switch, on && styles.switchOn]}>
+        <View style={[styles.knob, on && styles.knobOn]} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -1205,29 +1178,29 @@ function countInBeats(chart: Chart): number[] {
   return out;
 }
 
-function resultMessage(sum: RoundSummary, ftue: boolean, reason: string, limped: boolean): string {
+function resultMessage(sum: RoundSummary, ftue: boolean, reason: string): string {
   if (reason === 'stall') return 'The parade needs you!';
   if (ftue) return 'Parade cleared';
-  if (limped) return sum.stars > 0 ? 'Limped home!' : 'Keep marching!';
   if (sum.allPerfect) return 'ALL PERFECT!';
   if (sum.fullCombo) return 'FULL COMBO!';
-  if (sum.accuracy >= STAR_ACCURACY.three) return 'SHOWSTOPPER!';
-  if (sum.accuracy >= STAR_ACCURACY.two) return 'What a parade!';
+  if (sum.stageAccuracy >= STAR_ACCURACY.three) return 'SHOWSTOPPER!';
+  if (sum.stageAccuracy >= STAR_ACCURACY.two) return 'What a parade!';
   if (sum.stars > 0) return 'Parade cleared';
   // Never a 0-star failure title (design 6.8).
   return 'Keep marching!';
 }
 
 /** The concrete next goal (design 6.8): never a fixed hit count, always reachable. */
-function nextGoal(sum: RoundSummary, judged: number, ride: boolean, limped: boolean): string {
+function nextGoal(sum: RoundSummary, judged: number, ride: boolean): string {
   if (ride) {
     if (sum.rideWin) return '';
     const hr = Math.round(sum.hitRate * 100);
     return hr < 75 ? `Hit 3 of every 4 (${hr}%)` : 'Fewer misstaps';
   }
-  const next = sum.accuracy < STAR_ACCURACY.one ? [STAR_ACCURACY.one, 1] : sum.accuracy < STAR_ACCURACY.two ? [STAR_ACCURACY.two, 2] : sum.accuracy < STAR_ACCURACY.three ? [STAR_ACCURACY.three, 3] : null;
-  if (!next) return limped || !sum.fullCombo ? 'Go for FULL COMBO' : '';
-  const more = Math.max(1, Math.ceil(((next[0] - sum.accuracy) * judged) / 60));
+  const acc = sum.stageAccuracy;
+  const next = acc < STAR_ACCURACY.one ? [STAR_ACCURACY.one, 1] : acc < STAR_ACCURACY.two ? [STAR_ACCURACY.two, 2] : acc < STAR_ACCURACY.three ? [STAR_ACCURACY.three, 3] : null;
+  if (!next) return !sum.fullCombo ? 'Go for FULL COMBO' : '';
+  const more = Math.max(1, Math.ceil(((next[0] - acc) * judged) / 60));
   return `${more} more PERFECT${more > 1 ? 's' : ''} for ${next[1]} star${next[1] > 1 ? 's' : ''}`;
 }
 
@@ -1241,11 +1214,16 @@ const styles = StyleSheet.create({
   touchZone: { position: 'absolute', left: 0, right: 0 },
   loading: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 8 },
   loadingTxt: { fontFamily: 'Shark', fontSize: 18, color: '#0b3a6b' },
-  chipRow: { position: 'absolute', left: 12, top: 146, alignItems: 'flex-start' },
-  chip: { backgroundColor: '#fff8e4', borderRadius: 12, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 },
-  chipOn: { backgroundColor: '#1f7fe0' },
-  chipTxt: { fontFamily: 'Shark', fontSize: 12, color: '#0b3a6b' },
-  chipTxtOn: { color: '#ffffff' },
+  sheet: { alignSelf: 'stretch', gap: 8, marginTop: 4 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 12, paddingVertical: 8 },
+  sheetLabel: { fontFamily: 'Shark', fontSize: 15, color: '#0b3a6b' },
+  sheetHint: { fontFamily: 'Knockout', fontSize: 12, color: '#1f6fc0' },
+  switch: { width: 46, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#0b3a6b', backgroundColor: '#d9e9f7', justifyContent: 'center', paddingHorizontal: 2 },
+  switchOn: { backgroundColor: '#1f7fe0' },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0b3a6b' },
+  knobOn: { alignSelf: 'flex-end' },
+  easyBtn: { alignSelf: 'center', marginTop: 6, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 6 },
+  easyBtnTxt: { fontFamily: 'Shark', fontSize: 15, color: '#1f6fc0' },
   marchPill: { position: 'absolute', left: 12, top: 94, minWidth: 104, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#0b3a6b', backgroundColor: '#ffffff', paddingHorizontal: 14, justifyContent: 'center', alignItems: 'flex-start' },
   marchPillLive: { backgroundColor: '#ffcf3b' },
   marchPillPending: { borderStyle: 'dashed', backgroundColor: '#eaf6ff' },
@@ -1254,7 +1232,6 @@ const styles = StyleSheet.create({
   marchTxtLive: { color: '#0b3a6b' },
   marchHint: { fontFamily: 'Knockout', fontSize: 11, color: '#1f6fc0' },
   perf: { position: 'absolute', right: 8, bottom: 8 },
-  meterTap: { position: 'absolute', right: 6, top: 34, width: 64, height: 64, borderRadius: 32 },
   rivalStrip: { position: 'absolute', top: 46, left: 64, right: 64, flexDirection: 'row', justifyContent: 'center' },
   rivalChip: { backgroundColor: 'rgba(255,248,228,0.92)', borderWidth: 2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginHorizontal: 3, alignItems: 'center', minWidth: 64 },
   rivalName: { fontFamily: 'Knockout', fontSize: 10, color: '#0b3a6b' },

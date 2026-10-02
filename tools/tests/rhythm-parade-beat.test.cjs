@@ -75,13 +75,13 @@ test('generate: canonical charts (the chart is the level): identical for every s
   }
   const rows = st.formats.queue.charts['2'];
   for (let i = 0; i < a.t.length; i++) assert.ok(rows.some((r) => r[0] === a.t[i]), `note at ${a.t[i]} is authored`);
-  assert.equal(st.chartVersion, 'pb-2.0');
+  assert.equal(st.chartVersion, 'pb-3.0');
 });
 
-test('generate: ride sprint vocabulary is DRUM, ROLL, BIG only (rev 6)', () => {
+test('generate: ride sprint vocabulary is DRUM and BIG only (rev 7)', () => {
   for (const id of ['opening_day_a', 'waiting_room_a']) {
     const ch = chartOf(id, 'ride', 1, 1);
-    for (const k of new Set(Array.from(ch.kind))) assert.ok([T.K_DRUM, T.K_ROLL, T.K_BIG].includes(k), `${id} ride kind ${k}`);
+    for (const k of new Set(Array.from(ch.kind))) assert.ok([T.K_DRUM, T.K_BIG].includes(k), `${id} ride kind ${k}`);
     assert.ok(Array.from(ch.flags).every((f) => f === 0));
     assert.equal(ch.playableBars, 12);
     assert.equal(ch.kind.filter((k) => k === T.K_BIG).length, 1);
@@ -89,13 +89,13 @@ test('generate: ride sprint vocabulary is DRUM, ROLL, BIG only (rev 6)', () => {
 });
 
 test('generate: First Parade (FTUE) is DRUM and one BIG only', () => {
-  const ch = chartOf('opening_day_a', 'ride', 1, 5, { ftue: true });
+  const ch = chartOf('waiting_room_a', 'ride', 1, 5, { ftue: true });
   const kinds = Array.from(ch.kind);
   assert.equal(kinds.filter((k) => k === T.K_BIG).length, 1);
   assert.ok(kinds.every((k) => k === T.K_DRUM || k === T.K_BIG));
 });
 
-test('charts (rev 6): launch vocabulary, d1/d2 only, nesting, rest before every drop line, run rule, RIM cap', () => {
+test('charts (rev 7): launch vocabulary, d1/d2 only, nesting, rest before every drop line, run rule, RIM cap', () => {
   const tickOf = (row) => row[1] * 4 + row[2];
   for (const id of STAGE_IDS) {
     for (const [fmt, f] of Object.entries(stages[id].formats)) {
@@ -107,7 +107,7 @@ test('charts (rev 6): launch vocabulary, d1/d2 only, nesting, rest before every 
       for (const d of ds) {
         const rows = f.charts[d];
         for (const r of rows) {
-          assert.ok([T.K_DRUM, T.K_RIM, T.K_ROLL, T.K_BIG].includes(r[3]), `${id} d${d} kind ${r[3]}`);
+          assert.ok([T.K_DRUM, T.K_RIM, T.K_BIG].includes(r[3]), `${id} d${d} kind ${r[3]}`);
           assert.equal(r[7], 0, 'no seeded groups');
           // No note in the last beat before a drop line (Fever drops out of silence).
           for (const db of drops) assert.ok(!(r[1] >= db * 4 - 1 && r[1] < db * 4), `${id}/${fmt} d${d} note in the rest beat before bar ${db}`);
@@ -139,14 +139,19 @@ test('charts (rev 6): launch vocabulary, d1/d2 only, nesting, rest before every 
       }
     }
   }
-  // Stage intro order (design 3.7): Opening Day d1 is DRUM + BIG only; RIM from Waiting Room; ROLL from Shark Shop.
-  const k1 = (id) => new Set(stages[id].formats.queue.charts['1'].map((r) => r[3]));
-  assert.ok(!k1('opening_day_a').has(T.K_RIM) && !k1('opening_day_a').has(T.K_ROLL));
-  assert.ok(k1('waiting_room_a').has(T.K_RIM) && !k1('waiting_room_a').has(T.K_ROLL));
+  // Stage intro order (design 3.2, 3.8): Waiting Room is DRUM + BIG at d1 and d2; RIM arrives with Shark Shop.
+  const kq = (id, d) => new Set(stages[id].formats.queue.charts[d].map((r) => r[3]));
+  for (const d of ['1', '2']) assert.ok(!kq('waiting_room_a', d).has(T.K_RIM), `waiting room d${d} has no RIM`);
+  assert.ok(kq('shark_shop_a', '1').has(T.K_RIM) && kq('shark_shop_a', '2').has(T.K_RIM));
+  // Launch charts end on a BIG; d2 has one more on the bar-12 crash.
+  for (const id of ['waiting_room_a', 'shark_shop_a']) {
+    const c2 = stages[id].formats.queue.charts['2'];
+    assert.equal(c2.filter((r) => r[3] === T.K_BIG).length, 2, `${id} d2 BIGs`);
+  }
 });
 
-test('judge: touch-down is judged at its own time with the rev 6 windows (d1 55/110/165)', () => {
-  const ch = chartOf('opening_day_a', 'queue', 1, 3);
+test('judge: touch-down is judged at its own time with the rev 7 windows (d1 55/110/165); Easy Beat widens GOOD to 180', () => {
+  const ch = chartOf('waiting_room_a', 'queue', 1, 3);
   const i = firstIdx(ch, (k) => ch.kind[k] === T.K_DRUM && (ch.layers[k] & 1));
   const cases = [[0, T.J_PERFECT], [54, T.J_PERFECT], [-100, T.J_GREAT], [160, T.J_GOOD], [-200, T.J_MISS]];
   for (const [dt, want] of cases) {
@@ -156,16 +161,14 @@ test('judge: touch-down is judged at its own time with the rev 6 windows (d1 55/
     assert.equal(got, i);
     assert.equal(s.res[i], want, `delta ${dt}`);
   }
-  // Later than GOOD: the note has already auto-missed; the tap is a stray after the 250 ms pending window.
+  // Later than GOOD: the note has already auto-missed; the tap is a misstap right away (no gesture to wait for).
   const late = J.createJudge(ch, { forceMarch: 0 });
   J.judgeTick(late, ch.t[i] - 1000);
   assert.equal(J.judgeDown(late, ch.t[i] + 170, T.Z_CENTRE, 1, 700), -1);
   assert.equal(late.res[i], T.J_MISS);
-  assert.equal(late.strays, 0, 'pending');
-  J.judgeTick(late, ch.t[i] + 170 + 250);
   assert.equal(late.strays, 1);
-  // Ride Assist widens GOOD to 180 (d1 only).
-  const as = J.createJudge(ch, { forceMarch: 0, assist: true });
+  // Easy Beat.
+  const as = J.createJudge(ch, { forceMarch: 0, easy: true });
   J.judgeTick(as, ch.t[i] - 1000);
   J.judgeDown(as, ch.t[i] + 175, T.Z_CENTRE, 1, 700);
   assert.equal(as.res[i], T.J_GOOD);
@@ -173,7 +176,7 @@ test('judge: touch-down is judged at its own time with the rev 6 windows (d1 55/
 });
 
 test('judge: zones: centre is DRUM, rim bands are RIM, dead bands count for either, WRONG SIDE otherwise', () => {
-  const ch = chartOf('waiting_room_a', 'queue', 1, 3);
+  const ch = chartOf('shark_shop_a', 'queue', 1, 3);
   const di = firstIdx(ch, (k) => ch.kind[k] === T.K_DRUM && (ch.layers[k] & 1));
   const ri = firstIdx(ch, (k) => ch.kind[k] === T.K_RIM && (ch.layers[k] & 1));
   assert.ok(di >= 0 && ri >= 0);
@@ -201,18 +204,25 @@ test('judge: zones: centre is DRUM, rim bands are RIM, dead bands count for eith
   assert.equal(s.res[mi], T.J_PERFECT);
 });
 
-test('judge: earliest candidate is consumed (mashing ahead cannot skip notes), strays drain Groove after 250 ms', () => {
+test('judge: earliest candidate is consumed (mashing ahead cannot skip notes); misstaps cost Fever, the first 4 are free in accuracy', () => {
   const ch = synth([[5000, T.K_DRUM], [5250, T.K_DRUM], [5500, T.K_DRUM]]);
   const s = J.createJudge(ch, { forceMarch: 0 });
   assert.equal(J.judgeDown(s, 5120, T.Z_CENTRE, 1, 700), 0);
   assert.equal(s.res[0], T.J_GOOD);
   assert.equal(s.res[1], T.J_NONE);
   const s2 = J.createJudge(ch, { forceMarch: 0 });
+  s2.meter = 40;
   J.judgeDown(s2, 3000, T.Z_CENTRE, 1, 700);
-  J.judgeTick(s2, 3300);
   assert.equal(s2.strays, 1);
-  assert.equal(s2.groove, T.GROOVE.start + T.GROOVE.stray);
+  assert.equal(s2.meter, 35, 'a misstap costs 5 Fever');
   assert.equal(s2.combo, 0);
+  // Accuracy: 4 free misstaps, then each adds 0.5 of a zero-score note.
+  const s3 = J.createJudge(ch, { forceMarch: 0 });
+  for (let k = 0; k < 6; k++) J.judgeDown(s3, 1500 + k * 400, T.Z_CENTRE, 10 + k, 700);
+  J.judgeDown(s3, 5000, T.Z_CENTRE, 1, 700);
+  assert.equal(s3.strays, 6);
+  assert.equal(J.misstapWeight(s3), 1);
+  assert.equal(J.accuracyPct(s3), 50);
 });
 
 test('judge: WRONG SIDE keeps the combo at d1 (not increased) and resets it at d2', () => {
@@ -288,7 +298,7 @@ function feverChart() {
   return synth(notes, { bars: 12 });
 }
 
-test('Fever (rev 6): armed at 100, Launch Swipe queues it for the next drop line, one section x2, fizzles on MISS', () => {
+test('Fever (rev 7): fills from accuracy, fires itself on the next drop line 1+ beat away, one section x2, a MISS ends it on the next beat', () => {
   const ch = feverChart();
   const s = J.createJudge(ch, { forceMarch: 0 });
   assert.deepEqual(plain(s.dropBars), [6, 10]);
@@ -296,30 +306,14 @@ test('Fever (rev 6): armed at 100, Launch Swipe queues it for the next drop line
   s.meter = 99;
   J.judgeDown(s, 5000, T.Z_CENTRE, 1, 700);
   J.judgeUp(s, 5050, 1);
-  assert.equal(s.armed, 1);
+  J.judgeTick(s, 5060);
+  assert.equal(s.armed, 0, 'armed and fired in the same tick');
+  assert.equal(s.pendingDeploy, 6, 'queued for the next drop line (bar 6)');
+  assert.equal(s.meter, 0);
   const m0 = s.meter;
   J.judgeDown(s, 5500, T.Z_CENTRE, 2, 700);
-  J.judgeUp(s, 5550, 2);
-  assert.equal(s.meter, m0, 'overfill is wasted while armed');
-  // A two-finger pair never launches.
-  J.judgeDown(s, 6000, T.Z_CENTRE, 3, 700);
-  J.judgeDown(s, 6020, T.Z_CENTRE, 4, 700);
-  assert.equal(s.pendingDeploy, -1);
-  J.judgeUp(s, 6100, 3);
-  J.judgeUp(s, 6100, 4);
-  // A 70 pt flick does not launch; 90 pt up within 300 ms does.
-  J.judgeDown(s, 6500, T.Z_CENTRE, 5, 700);
-  J.judgeMove(s, 6560, 5, 630);
-  assert.equal(s.pendingDeploy, -1);
-  J.judgeUp(s, 6600, 5);
-  J.judgeDown(s, 7000, T.Z_CENTRE, 6, 700);
-  J.judgeMove(s, 7120, 6, 605);
-  assert.equal(s.pendingDeploy, 6, 'queued for the next drop line (bar 6)');
-  assert.equal(s.armed, 0);
-  assert.equal(s.meter, 0);
-  assert.deepEqual(plain(s.deployT), [7120, 6]);
-  J.judgeUp(s, 7200, 6);
-  for (let t = 7500; t < 13000; t += 500) {
+  assert.equal(s.meter, m0, 'no refill while a Fever is queued');
+  for (let t = 6000; t < 13000; t += 500) {
     if (t >= 12500) continue;
     J.judgeDown(s, t, T.Z_CENTRE, 10 + t, 700);
     J.judgeUp(s, t + 50, 10 + t);
@@ -329,6 +323,7 @@ test('Fever (rev 6): armed at 100, Launch Swipe queues it for the next drop line
   J.judgeTick(s, ch.barStart[6] + 1);
   assert.equal(s.feverFrom, 6);
   assert.equal(s.feverTo, 10, 'one whole section');
+  assert.equal(s.feverCount, 1);
   const before = s.score;
   const mult = T.comboMultiplier(s.combo + 1);
   J.judgeDown(s, 13000, T.Z_CENTRE, 99, 700);
@@ -337,75 +332,64 @@ test('Fever (rev 6): armed at 100, Launch Swipe queues it for the next drop line
   assert.ok(s.feverKillAt > 0, 'a MISS fizzles Fever at the next beat');
   J.judgeTick(s, s.feverKillAt + 1);
   assert.equal(s.feverFrom, -1);
+  assert.equal(s.meter, 0, 'a fizzled Fever does not keep it lit');
+  // An armed meter in the last beat before a drop waits for the next drop line.
+  const late = J.createJudge(ch, { forceMarch: 0 });
+  J.judgeTick(late, ch.barStart[6] - 400);
+  late.meter = 100;
+  late.armed = 1;
+  J.judgeTick(late, ch.barStart[6] - 380);
+  assert.equal(late.pendingDeploy, 10, 'less than a beat to bar 6: Fever waits for bar 10');
 });
 
-test('Fever: a launch in the rest beat catches the drop only 150 ms or more before the downbeat; launches are never strays', () => {
+test('Fever: Keep it lit, a clean Fever section restarts the meter at 50; touches never trigger Fever', () => {
   const ch = feverChart();
-  const mk = () => {
-    const s = J.createJudge(ch, { forceMarch: 0, limp: true });
-    J.judgeTick(s, 12000); // nobody played: every note so far missed
-    s.groove = 60;
-    s.limping = 0;
-    s.armed = 1;
-    s.meter = 100;
-    return s;
-  };
-  const a = mk();
-  J.judgeLaunch(a, ch.barStart[6] - 160, 1);
-  assert.equal(a.pendingDeploy, 6);
-  const b = mk();
-  J.judgeLaunch(b, ch.barStart[6] - 100, 1);
-  assert.equal(b.pendingDeploy, 10, 'too late for bar 6: queued for the next drop');
-  // Swipe touch-down with no note in reach: pending stray, cancelled by the launch.
-  const c = mk();
-  J.judgeDown(c, 12700, T.Z_CENTRE, 7, 700);
-  J.judgeMove(c, 12780, 7, 600);
-  J.judgeTick(c, 13200);
-  assert.equal(c.strays, 0);
-  assert.equal(c.feverFrom, 6, "the drop landed");
-  // Not armed: a swipe does nothing and costs nothing.
-  const d = J.createJudge(ch, { forceMarch: 0, limp: true });
-  J.judgeTick(d, 12000);
-  d.limping = 0;
-  J.judgeDown(d, 12700, T.Z_CENTRE, 7, 700);
-  J.judgeMove(d, 12780, 7, 600);
-  J.judgeTick(d, 13200);
-  assert.equal(d.strays, 0);
-  assert.equal(d.pendingDeploy, -1);
-  // Auto Fever (stages 1-2, ride) waits for a drop line too.
-  const e = J.createJudge(ch, { forceMarch: 0, autoFever: true, limp: true });
-  J.judgeTick(e, 8000);
-  e.limping = 0;
-  e.meter = 100;
-  e.armed = 1;
-  J.judgeTick(e, 8010);
-  assert.equal(e.pendingDeploy, 6);
-});
-
-test('Limping (queue rounds): Groove 0 never ends the round; x1, no Fever until Groove 30; the ride sprint stalls', () => {
-  const ch = feverChart();
-  const s = J.createJudge(ch, { forceMarch: 0, limp: true });
+  const s = J.createJudge(ch, { forceMarch: 0 });
   J.judgeTick(s, 4000);
-  s.groove = 3;
-  s.meter = 60;
-  J.judgeTick(s, 5000 + 200); // the 5000 note misses
-  assert.equal(s.limping, 1);
-  assert.equal(s.stalled, 0);
-  J.judgeDown(s, 5500, T.Z_CENTRE, 1, 700);
-  assert.equal(s.meter, 45, 'meter cannot fill while Limping');
-  s.combo = 30;
-  const before = s.score;
-  J.judgeDown(s, 6000, T.Z_CENTRE, 2, 700);
-  assert.equal(s.score - before, 300, 'multiplier locked at x1');
-  s.groove = 29;
-  J.judgeDown(s, 6500, T.Z_CENTRE, 3, 700);
-  assert.equal(s.limping, 0, 'back in step at 30');
-  assert.equal(s.limped, 1);
-  const r = J.createJudge(ch, { forceMarch: 0 });
-  J.judgeTick(r, 4000);
-  r.groove = 3;
-  J.judgeTick(r, 5200);
+  s.meter = 100;
+  s.armed = 1;
+  for (let t = 5000; t < 21000; t += 500) {
+    if (t >= 12500 && t < 13000) continue;
+    if (t >= 20500) continue;
+    J.judgeDown(s, t, T.Z_CENTRE, 10 + t, 700);
+    J.judgeUp(s, t + 40, 10 + t);
+    J.judgeTick(s, t + 41);
+  }
+  J.judgeTick(s, ch.barStart[10] + 1);
+  assert.equal(s.feverBarsUsed, 4);
+  assert.equal(s.meter, 50, 'zero MISS: the meter starts again at 50');
+  // A swipe, a long press and a two-finger pair on an empty stretch are all just misstaps.
+  const q = J.createJudge(ch, { forceMarch: 0 });
+  J.judgeTick(q, 12400);
+  q.meter = 90;
+  J.judgeDown(q, 12600, T.Z_CENTRE, 7, 760);
+  J.judgeMove(q, 12680, 7, 600);
+  J.judgeUp(q, 12700, 7);
+  J.judgeTick(q, 12800);
+  assert.equal(q.pendingDeploy, -1);
+  assert.equal(q.strays, 1);
+  assert.equal(q.meter, 85);
+});
+
+test('fail rules: queue rounds never end early; the ride sprint stalls once 75% hits or 12 misstaps is out of reach', () => {
+  const ch = feverChart();
+  const q = J.createJudge(ch, { forceMarch: 0 });
+  J.judgeTick(q, 30000);
+  assert.equal(q.stalled, 0, 'a silent queue round plays to its last bar');
+  const r = J.createJudge(ch, { forceMarch: 0, ride: true });
+  const n = ch.t.length;
+  let stallAt = -1;
+  for (let t = 4000; t < 30000 && !r.stalled; t += 50) J.judgeTick(r, t);
+  stallAt = r.stallT;
   assert.equal(r.stalled, 1);
+  // Stalls on the first miss that makes 75% impossible: misses > 25% of the chart.
+  assert.ok(r.cMiss > n * 0.25 && r.cMiss <= n * 0.25 + 1, `stalled after ${r.cMiss} of ${n} misses`);
+  assert.ok(stallAt < ch.barStart[ch.lastBar], 'well before the end');
+  const m = J.createJudge(ch, { forceMarch: 0, ride: true });
+  J.judgeTick(m, 3000);
+  for (let k = 0; k < 13; k++) J.judgeDown(m, 1100 + k * 290, T.Z_CENTRE, k + 1, 700);
+  assert.equal(m.oos, 0);
+  assert.equal(m.stalled, 1, 'the 13th misstap stalls the ride');
 });
 
 test('judge: BIG two-finger double, ROLL hold ticks and early release, POPPER pops, FREEZE fault, CYMBAL flick', () => {
@@ -486,91 +470,92 @@ test('March fairness: same chart either way; identical inputs never score more w
   }
 });
 
-test('anti-mash: 6/10/15 taps/s Limp queue rounds before 60% and stay Limping in 60%+ of bars, never star; stall and lose the ride', () => {
-  for (const id of ['opening_day_a', 'waiting_room_a', 'shark_shop_a']) {
+test('anti-mash gate (4.3): 6/10/15 taps/s never star on either track, score under 25% of a sigma-60 player; the ride stalls before 60% and is never won', () => {
+  for (const id of ['waiting_room_a', 'shark_shop_a']) {
     for (const d of [1, 2]) {
       const ch = chartOf(id, 'queue', d, 1);
-      const first = ch.barStart[ch.firstBar];
-      const span = ch.barStart[ch.lastBar + 1] - first;
       for (const rate of [6, 10, 15]) {
-        let early = 0;
-        let limpy = 0;
         let stars = 0;
         let ratio = 0;
         const N = 30;
-        const pro = sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 60 }, 3), { limp: true, forceMarch: 0 }).score;
+        const pro = sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 60 }, 3), { forceMarch: 0 }).score;
         for (let seed = 1; seed <= N; seed++) {
-          const s = sim.runScript(ch, sim.scriptMasher(ch, rate, seed), { limp: true });
-          assert.equal(s.stalled, 0, 'queue rounds never end early');
-          if (s.limpT >= 0 && s.limpT < first + 0.6 * span) early++;
-          let lb = 0;
-          for (let b = ch.firstBar; b <= ch.lastBar; b++) lb += s.barLimp[b];
-          if (lb / ch.playableBars >= 0.6) limpy++;
-          stars += sc.summarize(s, { format: 'queue' }).stars;
-          ratio = Math.max(ratio, s.score / pro);
+          for (const march of [0, 1]) {
+            const s = sim.runScript(ch, sim.scriptMasher(ch, rate, seed), { forceMarch: march });
+            assert.equal(s.stalled, 0, 'queue rounds never end early');
+            const sum = sc.summarize(s, { format: 'queue' });
+            stars += sum.stars + sum.marchStars;
+            ratio = Math.max(ratio, s.score / pro);
+          }
         }
-        assert.ok(early / N >= 0.95, `${id} d${d} ${rate}/s limps early ${early}/${N}`);
-        assert.ok(limpy / N >= 0.9, `${id} d${d} ${rate}/s limping most bars ${limpy}/${N}`);
-        assert.equal(stars, 0);
+        assert.equal(stars, 0, `${id} d${d} ${rate}/s stars`);
         assert.ok(ratio < 0.25, `${id} d${d} ${rate}/s scores under 25% of sigma 60 (${ratio.toFixed(2)})`);
       }
     }
   }
   let wins = 0;
+  let late = 0;
   let n = 0;
-  for (const id of ['opening_day_a', 'waiting_room_a']) {
+  for (const id of ['waiting_room_a', 'opening_day_a']) {
     const ch = chartOf(id, 'ride', 1, 1);
+    const first = ch.barStart[ch.firstBar];
+    const span = ch.barStart[ch.lastBar + 1] - first;
     for (let seed = 1; seed <= 60; seed++) {
       for (const march of [0, 1]) {
-        for (const assist of [false, true]) {
-          const s = sim.runScript(ch, sim.scriptMasher(ch, 8 + (seed % 3) * 3, seed), { forceMarch: march, autoFever: true, assist });
+        for (const easy of [false, true]) {
+          const s = sim.runScript(ch, sim.scriptMasher(ch, 6 + (seed % 3) * 4.5, seed), { forceMarch: march, ride: true, easy });
           if (sc.summarize(s, { format: 'ride' }).rideWin) wins++;
+          if (!s.stalled || s.stallT > first + 0.6 * span) late++;
           n++;
         }
       }
     }
   }
   assert.ok(wins / n < 0.01, `masher ride wins ${wins}/${n}`);
+  assert.equal(late, 0, 'every mashed ride stalls before 60% of the chart');
 });
 
-test('human sims: ride wins for sigma 60 standing, 70 marching, 100 with drift (unassisted and with Assist); stars at d2 for sigma 35 and 18', () => {
+test('human sims (13): ride sigma 60 85%+, MARCH sigma 70 + 4% lapses 80%+, Easy sigma 100 + drift 80%+, Easy sigma 120 65%+; d2 sigma 35 2+ Stage stars 90%, sigma 18 3 stars 80%', () => {
   const rate = (fn, N) => {
     let ok = 0;
     for (let seed = 1; seed <= N; seed++) if (fn(seed)) ok++;
     return ok / N;
   };
-  const rideWin = (ch, model, seed, cfg) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, model, seed), { autoFever: true, ...cfg }), { format: 'ride' }).rideWin;
-  for (const id of ['opening_day_a', 'waiting_room_a']) {
+  const rideWin = (ch, model, seed, cfg) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, model, seed), { ride: true, ...cfg }), { format: 'ride' }).rideWin;
+  for (const id of ['waiting_room_a', 'opening_day_a']) {
     const ch = chartOf(id, 'ride', 1, 1);
     const stand = rate((seed) => rideWin(ch, { sigmaMs: 60 }, seed, { forceMarch: 0 }), 80);
     assert.ok(stand >= 0.85, `${id} sigma 60 ride win ${stand}`);
     const walk = rate((seed) => rideWin(ch, { sigmaMs: 70, lapse: 0.04, march: true }, seed, { forceMarch: 1 }), 80);
     assert.ok(walk >= 0.8, `${id} marching sigma 70 ride win ${walk}`);
-    const drift = rate((seed) => rideWin(ch, { sigmaMs: 100, lapse: 0.06, driftMs: 40 }, seed, { forceMarch: 0 }), 80);
-    assert.ok(drift >= 0.55, `${id} sigma 100 + drift unassisted ${drift}`);
-    const assisted = rate((seed) => rideWin(ch, { sigmaMs: 100, lapse: 0.06, driftMs: 40 }, seed, { forceMarch: 0, assist: true }), 80);
-    assert.ok(assisted >= 0.8, `${id} sigma 100 + drift with Assist ${assisted}`);
-    const a120 = rate((seed) => rideWin(ch, { sigmaMs: 120, lapse: 0.06 }, seed, { forceMarch: 0, assist: true }), 80);
-    assert.ok(a120 >= 0.65, `${id} sigma 120 with Assist ${a120}`);
+    const easy = rate((seed) => rideWin(ch, { sigmaMs: 100, lapse: 0.06, driftMs: 40 }, seed, { forceMarch: 0, easy: true }), 80);
+    assert.ok(easy >= 0.8, `${id} sigma 100 + drift with Easy Beat ${easy}`);
+    const e120 = rate((seed) => rideWin(ch, { sigmaMs: 120, lapse: 0.06 }, seed, { forceMarch: 0, easy: true }), 80);
+    assert.ok(e120 >= 0.65, `${id} sigma 120 with Easy Beat ${e120}`);
   }
-  for (const id of STAGE_IDS) {
+  for (const id of ['waiting_room_a', 'shark_shop_a']) {
     const ch = chartOf(id, 'queue', 2, 1);
-    const two = rate((seed) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 35 }, seed), { forceMarch: 0, limp: true }), { format: 'queue' }).stars >= 2, 40);
+    const two = rate((seed) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 35 }, seed), { forceMarch: 0 }), { format: 'queue' }).stars >= 2, 40);
     assert.ok(two >= 0.9, `${id} sigma 35 two stars ${two}`);
-    const three = rate((seed) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 18 }, seed), { forceMarch: 0, limp: true }), { format: 'queue' }).stars >= 3, 40);
+    const three = rate((seed) => sc.summarize(sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 18 }, seed), { forceMarch: 0 }), { format: 'queue' }).stars >= 3, 40);
     assert.ok(three >= 0.8, `${id} sigma 18 three stars ${three}`);
   }
 });
 
-test('Fever routing: the best drop lines beat auto-launch; maxScore uses the meter-legal best route', () => {
-  for (const id of ['shark_shop_a', 'backpack_bounce_a']) {
+test('Fever is deterministic (no routing): maxScore is the perfect run; Keep it lit gives a clean player more Fevers', () => {
+  for (const id of ['waiting_room_a', 'shark_shop_a']) {
     const ch = chartOf(id, 'queue', 2, 1);
-    const auto = sim.perfectRun(ch, [], { autoFever: true }).score;
-    const best = sim.maxScore(ch);
-    assert.ok(best >= auto, `${id}: best ${best} >= auto ${auto}`);
-    // A launch never starts Fever off a drop line.
-    const s = sim.perfectRun(ch, sim.dropBarsOf(ch), {});
-    for (let i = 0; i + 1 < s.deployT.length; i += 2) assert.ok(sim.dropBarsOf(ch).includes(s.deployT[i + 1]));
+    const p = sim.perfectRun(ch);
+    assert.equal(sim.maxScore(ch), p.score);
+    // The meter cannot fill while a Fever is queued or live, so on these charts
+    // a clean run fires on the bar 9 and 17 drop lines (the doc's "3 times"
+    // needs 20 PERFECTs inside the 4-bar warm-up, which no launch chart has).
+    assert.ok(p.feverCount >= 2, `${id}: ${p.feverCount} Fevers in a perfect run`);
+    for (let i = 0; i + 1 < p.deployT.length; i += 2) assert.ok(sim.dropBarsOf(ch).includes(p.deployT[i + 1]));
+    // A sloppy player fires fewer.
+    const sloppy = sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 70, lapse: 0.08 }, 4), { forceMarch: 0 });
+    assert.ok(sloppy.feverCount <= p.feverCount);
+    assert.ok(sloppy.score < p.score);
   }
 });
 
@@ -580,13 +565,14 @@ test('stars from accuracy; FULL COMBO and ALL PERFECT from a perfect run; FTUE n
   assert.equal(sc.starsForAccuracy(80), 2);
   assert.equal(sc.starsForAccuracy(92), 3);
   const ch = chartOf('shark_shop_a', 'queue', 2, 8);
-  const s = sim.perfectRun(ch, [], { autoFever: true, limp: true });
+  const s = sim.perfectRun(ch);
   const sum = sc.summarize(s, { format: 'queue' });
   assert.equal(sum.stars, 3);
+  assert.equal(sum.marchStars, 3);
   assert.ok(sum.fullCombo && sum.allPerfect);
   assert.equal(sum.accuracy, 100);
-  const f = chartOf('opening_day_a', 'ride', 1, 2, { ftue: true });
-  const fs2 = sim.runScript(f, sim.scriptMasher(f, 12, 3), { noFailUntilMs: Infinity });
+  const f = chartOf('waiting_room_a', 'ride', 1, 2, { ftue: true });
+  const fs2 = sim.runScript(f, sim.scriptMasher(f, 12, 3), {});
   assert.equal(fs2.stalled, 0, 'First Parade cannot fail');
   assert.ok(sc.summarize(fs2, { format: 'ride', ftue: true }).stars >= 1);
 });
@@ -605,7 +591,7 @@ test('pause: notes within +/-250 ms of the pause point are voided, not missed', 
 });
 
 test('Out of Step: 5 taps in 400 ms on a sparse stretch trips the drum major and resets the combo', () => {
-  const ch = chartOf('opening_day_a', 'queue', 1, 3);
+  const ch = chartOf('waiting_room_a', 'queue', 1, 3);
   const s = J.createJudge(ch, { forceMarch: 0 });
   const t0 = ch.barStart[1];
   J.judgeTick(s, t0);
@@ -616,24 +602,24 @@ test('Out of Step: 5 taps in 400 ms on a sparse stretch trips the drum major and
   assert.ok(s.oosUntil > t0);
 });
 
-test('proof v5: replay with 8 ms ticks reproduces a run judged on irregular frames (MARCH pill, Launch Swipes, Assist)', () => {
+test('proof v6: replay with 8 ms ticks reproduces a run judged on irregular frames (MARCH pill, auto Fever, Easy Beat, ride stall)', () => {
   const ctx = (st, fmt, d, extra = {}) => ({
-    stage: st, format: fmt, difficulty: d, seed: 4242, ftue: false, autoFever: fmt === 'ride', noFailUntilMs: 0,
-    audioBackend: 'expoav', route: 'speaker', offsetMs: 25, sharpEnabled: false, pocket: false, elapsedMs: 50000,
-    pauseSpans: [], grip: 'two_thumbs', assist: false, limp: fmt === 'queue', ...extra,
+    stage: st, format: fmt, difficulty: d, seed: 4242, ftue: false,
+    audioBackend: 'audioapi', route: 'speaker', offsetMs: 25, sharpEnabled: false, pocket: false, elapsedMs: 50000,
+    pauseSpans: [], grip: 'one_thumb_r', easy: false, ...extra,
   });
-  for (const [id, fmt, d, assist] of [['waiting_room_a', 'queue', 2, false], ['opening_day_a', 'ride', 1, true], ['shark_shop_a', 'queue', 1, false]]) {
+  for (const [id, fmt, d, easy] of [['waiting_room_a', 'queue', 2, false], ['waiting_room_a', 'ride', 1, true], ['shark_shop_a', 'queue', 1, false], ['shark_shop_a', 'queue', 1, true]]) {
     const st = stages[id];
     const ch = chartOf(id, fmt, d, 4242);
     const script = sim.scriptHuman(ch, { sigmaMs: 45, lapse: 0.05, zoneSlip: 0.05 }, 99);
-    // Launch Swipes at a few points (down + move 100 pt up + up).
+    // A few stray swipes (just misstaps now).
     let pid = 50000;
     for (const t of [ch.barStart[ch.firstBar + 3] + 100, ch.barStart[ch.firstBar + 11] + 300]) {
       script.push({ t, type: 0, zone: 0, pid, y: 760 }, { t: t + 60, type: 2, zone: 0, pid, y: 650 }, { t: t + 90, type: 1, zone: 0, pid, y: 640 });
       pid++;
     }
     script.sort((a, b) => a.t - b.t || a.type - b.type);
-    const s = J.createJudge(ch, { autoFever: fmt === 'ride', limp: fmt === 'queue', assist });
+    const s = J.createJudge(ch, { ride: fmt === 'ride', easy });
     let now = ch.barStart[0];
     let e = 0;
     let r = 1;
@@ -651,9 +637,10 @@ test('proof v5: replay with 8 ms ticks reproduces a run judged on irregular fram
       now += 13 + (r % 12);
     }
     J.finishJudge(s, now, false);
-    const p = proof.buildProof(s, ctx(st, fmt, d, { assist }), ch.chartVersion, ch.beatmapHash);
+    const p = proof.buildProof(s, ctx(st, fmt, d, { easy }), ch.chartVersion, ch.beatmapHash);
     assert.equal(p.game, 'timing');
-    assert.equal(p.v, 5);
+    assert.equal(p.v, 6);
+    assert.equal(p.easy_beat, easy);
     assert.equal(p.touch_count, s.touches);
     const rep = proof.replayProof(st, JSON.parse(JSON.stringify(p)));
     assert.equal(rep.score, s.score, `${id} replay score`);
@@ -664,7 +651,7 @@ test('proof v5: replay with 8 ms ticks reproduces a run judged on irregular fram
     for (const [, drop] of p.fever_deploys) assert.ok((drop - ch.firstBar) % 4 === 0, 'drops land on section lines');
   }
   assert.throws(() => proof.replayProof(stages.waiting_room_a, { ...proof.buildProof(J.createJudge(chartOf('waiting_room_a', 'queue', 1, 1)),
-    ctx(stages.waiting_room_a, 'queue', 1), 'pb-2.0', 'bad'), beatmap_hash: 'bad' }), /beatmap_hash/);
+    ctx(stages.waiting_room_a, 'queue', 1), 'pb-3.0', 'bad'), beatmap_hash: 'bad' }), /beatmap_hash/);
 });
 
 test('projection: y = yHorizon + (yLine - yHorizon) / (1 + 1.857 u); spawn scale 0.35', () => {
@@ -698,36 +685,33 @@ test('score read-outs: steadiness, timing words, histogram, auto-tune offset', (
   assert.equal(sc.clampOffset(999), 350);
 });
 
-test('progress: FTUE, unlock order, PB boards, mastery XP and tiers', () => {
+test('progress: FTUE, unlock order (rev 7: Waiting Room, then Shark Shop), PB boards, mastery XP and tiers', () => {
   const stub = {
     '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => {} } },
-    '../stages': { STAGE_ORDER: ['opening_day_a', 'waiting_room_a', 'shark_shop_a', 'backpack_bounce_a'] },
+    '../stages': { STAGE_ORDER: ['waiting_room_a', 'shark_shop_a'] },
   };
   const prog = loadTs('src/games/rhythm/meta/progress.ts', stub);
   let p = prog.emptyProgress();
-  assert.deepEqual(plain(prog.unlockedStages(p)), ['opening_day_a']);
-  assert.equal(prog.pickQueueStage(p, 7), 'opening_day_a');
-  const r1 = prog.recordRound(p, { stage: 'opening_day_a', difficulty: 1, board: 'ride', score: 36000, stars: 1, ftue: true });
+  assert.deepEqual(plain(prog.unlockedStages(p)), ['waiting_room_a']);
+  assert.equal(prog.pickQueueStage(p, 7), 'waiting_room_a');
+  const r1 = prog.recordRound(p, { stage: 'waiting_room_a', difficulty: 1, board: 'ride', score: 36000, stars: 1, ftue: true });
   p = r1.next;
   assert.equal(p.firstParadeDone, true);
   assert.equal(r1.newPb, true);
-  assert.deepEqual(plain(prog.unlockedStages(p)), ['opening_day_a', 'waiting_room_a']);
-  assert.equal(prog.pickQueueStage(p, 7), 'waiting_room_a');
+  assert.deepEqual(plain(prog.unlockedStages(p)), ['waiting_room_a', 'shark_shop_a']);
+  assert.equal(prog.pickQueueStage(p, 7), 'shark_shop_a');
   const r2 = prog.recordRound(p, { stage: 'waiting_room_a', difficulty: 2, board: 'march', score: 50000, stars: 2, ftue: false });
   assert.equal(r2.next.pb['waiting_room_a:2:march'], 50000);
   assert.equal(prog.recordRound(r2.next, { stage: 'waiting_room_a', difficulty: 2, board: 'march', score: 40000, stars: 2, ftue: false }).newPb, false);
   assert.equal(prog.masteryXp(10000, 3, true), 200 + 800);
   assert.equal(prog.masteryTier(0), 0);
-  assert.equal(prog.masteryTier(12000), 3, 'rev 6: 3 tiers');
+  assert.equal(prog.masteryTier(12000), 3);
   assert.equal(prog.masteryTier(99999), 3);
-  // Backpack Bounce opens at 2 stars on any 2 stages.
-  const two = { ...prog.emptyProgress(), stars: { opening_day_a: 2, waiting_room_a: 2 } };
-  assert.ok(prog.unlockedStages(two).includes('backpack_bounce_a'));
   // d2 unlocks per stage at 2 stars on d1.
-  assert.equal(prog.effectiveDifficulty(p, 'opening_day_a', 2), 1);
-  const d1 = prog.recordRound(p, { stage: 'opening_day_a', difficulty: 1, board: 'stage', score: 1, stars: 2, ftue: false }).next;
-  assert.equal(prog.effectiveDifficulty(d1, 'opening_day_a', 2), 2);
-  assert.equal(prog.effectiveDifficulty(d1, 'opening_day_a', 1), 1);
+  assert.equal(prog.effectiveDifficulty(p, 'shark_shop_a', 2), 1);
+  const d1 = prog.recordRound(p, { stage: 'shark_shop_a', difficulty: 1, board: 'stage', score: 1, stars: 2, ftue: false }).next;
+  assert.equal(prog.effectiveDifficulty(d1, 'shark_shop_a', 2), 2);
+  assert.equal(prog.effectiveDifficulty(d1, 'shark_shop_a', 1), 1);
 });
 
 test('drumline: house crew and ghosts race the same chart; a ghost replays its own score', () => {

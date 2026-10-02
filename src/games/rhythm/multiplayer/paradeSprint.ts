@@ -14,7 +14,7 @@
  * Tap log rows are [songMs, code] with songMs = ms since GO in song time
  * (already shifted by the phone's audio offset) and
  *   code = type * 100000 + zone * 10000 + pointer   (pointer 0-9999)
- *   type 0 touch-down, 1 touch-up, 3 Fever launch (swipe or meter tap),
+ *   type 0 touch-down, 1 touch-up, 3 retired (the rev 6 Fever launch; ignored),
  *        4 MARCH pill (zone 1 = march from the next section, 0 = full chart)
  *
  * Score = Duel Points (layer-normalised, design 11.2): per playable bar
@@ -27,12 +27,12 @@
  */
 
 import { generate, mulberry32 } from '../core/generate';
-import { accuracyPct, createJudge, finishJudge, judgeDown, judgeLaunch, judgeTick, judgeUp, type JudgeState } from '../core/judge';
+import { accuracyPct, createJudge, finishJudge, judgeDown, judgeTick, judgeUp, type JudgeState } from '../core/judge';
 import { scriptHuman } from '../core/sim';
 import { ACCURACY_VALUE, J_GOOD, J_MISS, J_SHARP, J_WRONG, type Chart, type StageJson } from '../core/types';
 import { SIM_STAGES } from '../stages/simStages.generated';
 
-export const PARADE_SPRINT_VERSION = 1;
+export const PARADE_SPRINT_VERSION = 2;
 export const PARADE_SPRINT_KEY = 'parade_sprint';
 export const MAX_TAPS = 600;
 export const TICK_MS = 8;
@@ -111,7 +111,7 @@ export function validTaps(taps: unknown): taps is SprintTap[] {
 /** Replay a tap log through the judge (8 ms ticks), up to untilMs. */
 export function playLog(board: SprintBoard, taps: SprintTap[], untilMs: number = board.roundMs): JudgeState {
   const ch = board.chart;
-  const s = createJudge(ch, { autoFever: true, limp: true });
+  const s = createJudge(ch, {});
   const end = Math.min(untilMs, board.roundMs + 50);
   let now = 0;
   let e = 0;
@@ -121,7 +121,6 @@ export function playLog(board: SprintBoard, taps: SprintTap[], untilMs: number =
       const { type, zone, pointer } = decodeTap(code);
       if (type === T_DOWN) judgeDown(s, t, zone, pointer, 700);
       else if (type === T_UP) judgeUp(s, t, pointer);
-      else if (type === T_LAUNCH) judgeLaunch(s, t, pointer);
       else if (type === T_MARCH) s.marchWant = zone ? 1 : 0;
     }
     judgeTick(s, now);

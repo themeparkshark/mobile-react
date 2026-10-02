@@ -30,7 +30,7 @@ export const STAGES: Record<StageId, StageEntry> = {
       queue: { song: require('../audio/opening_day_a_queue.m4a'), fever: require('../audio/opening_day_a_queue_fever.m4a') },
       ride: { song: require('../audio/opening_day_a_ride.m4a'), fever: require('../audio/opening_day_a_ride_fever.m4a') },
     },
-    order: 1,
+    order: 3,
     teaches: 'TAP ON THE BEAT',
   },
   waiting_room_a: {
@@ -41,8 +41,8 @@ export const STAGES: Record<StageId, StageEntry> = {
       queue: { song: require('../audio/waiting_room_a_queue.m4a'), fever: require('../audio/waiting_room_a_queue_fever.m4a') },
       ride: { song: require('../audio/waiting_room_a_ride.m4a'), fever: require('../audio/waiting_room_a_ride_fever.m4a') },
     },
-    order: 2,
-    teaches: 'HIT THE SIDE',
+    order: 1,
+    teaches: 'TAP ON THE BLUE',
   },
   shark_shop_a: {
     id: 'shark_shop_a',
@@ -51,8 +51,8 @@ export const STAGES: Record<StageId, StageEntry> = {
     audio: {
       queue: { song: require('../audio/shark_shop_a_queue.m4a'), fever: require('../audio/shark_shop_a_queue_fever.m4a') },
     },
-    order: 3,
-    teaches: 'HOLD',
+    order: 2,
+    teaches: 'CORAL = THE SIDE',
   },
   backpack_bounce_a: {
     id: 'backpack_bounce_a',
@@ -62,10 +62,13 @@ export const STAGES: Record<StageId, StageEntry> = {
       queue: { song: require('../audio/backpack_bounce_a_queue.m4a'), fever: require('../audio/backpack_bounce_a_queue_fever.m4a') },
     },
     order: 4,
-    teaches: 'FLICK UP',
+    teaches: 'TAP ON THE BEAT',
   },
 };
 
-export const STAGE_ORDER: StageId[] = ['opening_day_a', 'waiting_room_a', 'shark_shop_a', 'backpack_bounce_a'];
-/** Ride challenge stages (design 3.5): the two ride windows. */
-export const RIDE_STAGES: StageId[] = ['waiting_room_a', 'opening_day_a'];
+/** Rev 7 launch (5.3): Waiting Room, then Shark Shop (unlocks on a Waiting Room clear). */
+export const STAGE_ORDER: StageId[] = ['waiting_room_a', 'shark_shop_a'];
+/** Drop C1 (3.8): behind a remote flag, not in the launch rotation. */
+export const DROP_STAGES: StageId[] = ['opening_day_a', 'backpack_bounce_a'];
+/** Ride sprint stage (3.7, 7.2): Waiting Room; Opening Day joins with drop C1. */
+export const RIDE_STAGES: StageId[] = ['waiting_room_a'];

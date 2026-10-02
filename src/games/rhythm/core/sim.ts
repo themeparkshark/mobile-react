@@ -7,9 +7,9 @@
  *
  * Models:
  *   perfect   every note dead on, right zone, ROLLs held, BIGs doubled,
- *             CYMBAL flicks, POPPERs popped, Fever on chosen bar lines
+ *             CYMBAL flicks, POPPERs popped (Fever fires itself)
  *   human     Gaussian timing error (sigma), lapses (skipped notes), zone
- *             slips, a small constant bias; deploys Fever when armed
+ *             slips, a small constant bias
  *   masher    uniform taps at N per second, random zones
  */
 
@@ -17,7 +17,6 @@ import { mulberry32 } from './generate';
 import {
   createJudge,
   judgeDown,
-  judgeLaunch,
   judgeMove,
   judgeTick,
   judgeUp,
@@ -43,7 +42,7 @@ import {
 
 export interface TouchEv {
   t: number;
-  /** 0 down, 1 up, 2 move, 3 Fever launch (swipe or meter tap) */
+  /** 0 down, 1 up, 2 move */
   type: number;
   zone: number;
   pid: number;
@@ -57,8 +56,6 @@ export interface HumanModel {
   driftMs?: number;
   lapse?: number;
   zoneSlip?: number;
-  /** Bars (file bars) to deploy Fever at when armed; empty = deploy as soon as armed. */
-  deployBars?: number[];
   /** Layer the player reads (their own walking plan). */
   march?: boolean;
   popperRate?: number;
@@ -136,19 +133,12 @@ export function scriptMasher(chart: Chart, tapsPerSec: number, seed: number): To
 }
 
 /**
- * Feed a script through the judge with an 8 ms tick. `launchAtMs` adds a
- * Fever launch (the one-finger Launch Swipe) at each time; `marchPlan`
- * drives the MARCH pill. Returns the finished judge.
+ * Feed a script through the judge with an 8 ms tick; `marchPlan` drives the
+ * MARCH pill. Returns the finished judge.
  */
-export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}, launchAtMs: number[] = [], marchPlan?: (t: number) => boolean): JudgeState {
+export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}, marchPlan?: (t: number) => boolean): JudgeState {
   const s = createJudge(chart, cfg);
-  const events = script.slice();
-  let pidX = 100000;
-  for (const at of launchAtMs) {
-    events.push({ t: at, type: 3, zone: Z_CENTRE, pid: pidX, y: 700 });
-    pidX++;
-  }
-  events.sort((a, b) => a.t - b.t || a.type - b.type);
+  const events = script.slice().sort((a, b) => a.t - b.t || a.type - b.type);
   let now = chart.barStart[0];
   const endT = chart.endMs + 50;
   let e = 0;
@@ -158,7 +148,6 @@ export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}
       const x = events[e++];
       if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
       else if (x.type === 1) judgeUp(s, x.t, x.pid);
-      else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
       else judgeMove(s, x.t, x.pid, x.y);
     }
     judgeTick(s, now);
@@ -169,11 +158,10 @@ export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}
   return s;
 }
 
-/** Perfect play with Fever launched in the rest beat before each listed drop bar. */
-export function perfectRun(chart: Chart, dropBars: number[], cfg: JudgeConfig = {}): JudgeState {
+/** Perfect play (Fever fires itself, Keep it lit holds it). */
+export function perfectRun(chart: Chart, cfg: JudgeConfig = {}): JudgeState {
   const script = scriptHuman(chart, { sigmaMs: 0 }, 1);
-  const launchAt = dropBars.map((b) => chart.barStart[b] - (chart.barStart[b] - chart.barStart[b - 1]) / 4 - 60);
-  return runScript(chart, script, { ...cfg, forceMarch: 0 }, launchAt);
+  return runScript(chart, script, { ...cfg, forceMarch: 0 });
 }
 
 /** Drop lines of a chart (first bar of every section after the first). */
@@ -183,18 +171,7 @@ export function dropBarsOf(chart: Chart): number[] {
   return out;
 }
 
-/**
- * Max score (design 5.4): perfect play with Fever on the best drop lines the
- * meter allows (every subset of drop lines is tried; the meter decides which
- * launches are possible). Auto-launch is a candidate too.
- */
+/** Max score (4.2): deterministic, a perfect run under auto-fire. No routing. */
 export function maxScore(chart: Chart): number {
-  let best = perfectRun(chart, [], { autoFever: true }).score;
-  const drops = dropBarsOf(chart);
-  for (let mask = 1; mask < 1 << drops.length; mask++) {
-    const pick = drops.filter((_, i) => mask & (1 << i));
-    const s = perfectRun(chart, pick, {});
-    if (s.score > best) best = s.score;
-  }
-  return best;
+  return perfectRun(chart).score;
 }

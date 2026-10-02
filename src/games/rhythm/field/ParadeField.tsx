@@ -574,12 +574,14 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     return -(ribbonWidths[view.value.ribbon] ?? 0) / 2;
   });
 
-  // Meters: Groove (left) and Fever (right) arcs.
+  // Meters: star progress (left, live accuracy with notches at 1, 2 and 3 stars) and Fever (right).
   const meterR = 22;
   const grooveArc = useDerivedValue(() => {
     tick.value;
     const p = Skia.Path.Make();
-    const g = Math.max(0, Math.min(100, judge.value.groove)) / 100;
+    const s = judge.value;
+    const den = s.accN + Math.max(0, s.strays - 4) * 0.5;
+    const g = den > 0 ? Math.max(0, Math.min(100, s.accSum / den)) / 100 : 0;
     p.addArc({ x: 14, y: 42, width: meterR * 2, height: meterR * 2 }, 135, 270 * g);
     return p;
   });
@@ -609,8 +611,11 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   });
   const grooveColor = useDerivedValue(() => {
     tick.value;
-    const g = judge.value.groove;
-    return g < 25 ? '#ff7a59' : g < 50 ? GOLD : '#35c46a';
+    const s = judge.value;
+    const den = s.accN + Math.max(0, s.strays - 4) * 0.5;
+    const g = den > 0 ? s.accSum / den : 0;
+    // White below 1 star, sky at 1-2, gold from 2 stars (reward colour, 6.0).
+    return g >= 80 ? GOLD : g >= 60 ? SKY : '#ffffff';
   });
   const feverBulge = useDerivedValue(() => {
     tick.value;
@@ -881,7 +886,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     tick.value;
     const v = view.value;
     const s = judge.value;
-    if (v.march < 0.5 && !v.pocket && !s.assist) return 0;
+    if (v.march < 0.5 && !v.pocket && !s.easy) return 0;
     for (let i = s.cursor; i < s.n; i++) {
       if (s.res[i] !== 0) continue;
       const layer = s.barLayer[s.bar[i]] === 2 ? 2 : 1;

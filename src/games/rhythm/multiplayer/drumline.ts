@@ -19,7 +19,7 @@
 
 import { mulberry32 } from '../core/generate';
 import { decodeTouches } from '../core/proof';
-import { accuracyPct, createJudge, finishJudge, judgeDown, judgeLaunch, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
+import { accuracyPct, createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
 import { scriptHuman, type TouchEv } from '../core/sim';
 import { J_GOOD, J_SHARP, type Chart } from '../core/types';
 import type { GhostRun } from '../meta/progress';
@@ -36,7 +36,7 @@ export interface Rival {
   finalScore: number;
   /** Layer-normalised accuracy (0-100): what a Drum-Off is decided on (design 11.2). */
   accuracy: number;
-  /** Song times of this rival's Fever launches (each delivers a Hidden Dare). */
+  /** Song times this rival's Fever auto-fired (each delivers a Hidden Dare). */
   launchT: number[];
 }
 
@@ -60,7 +60,6 @@ export function playRival(chart: Chart, script: TouchEv[], cfg: JudgeConfig): { 
       const x = script[e++];
       if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
       else if (x.type === 1) judgeUp(s, x.t, x.pid);
-      else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
       else judgeMove(s, x.t, x.pid, x.y);
     }
     judgeTick(s, now);
@@ -109,20 +108,19 @@ function hitsOf(s: JudgeState): number[] {
   return out;
 }
 
-export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: string, autoFever: boolean): Rival | null {
+export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: string): Rival | null {
   // Charts are canonical (one per stage, format and difficulty): a ghost matches
   // on those plus the chart version, never on the seed.
   if (ghost.stage !== chart.stage || ghost.format !== chart.format || ghost.difficulty !== chart.difficulty) return null;
   if (ghost.chartVersion && ghost.chartVersion !== chart.chartVersion) return null;
   const touches = decodeTouches(ghost.touches).map((x) => ({ t: x.t, type: x.type, zone: x.zone, pid: x.pid, y: x.y }));
-  const { s, barScores } = playRival(chart, touches, { autoFever: ghost.autoFever ?? autoFever, marchBars: ghost.marchBars, limp: chart.format === 'queue' });
+  const { s, barScores } = playRival(chart, touches, { marchBars: ghost.marchBars });
   return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
 }
 
-export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number, autoFever: boolean): Rival {
+export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number): Rival {
   const script = scriptHuman(chart, { sigmaMs: bot.sigma, lapse: bot.lapse, zoneSlip: 0.02 }, seed);
-  const { s, barScores } = playRival(chart, script, { autoFever: true, forceMarch: 0, limp: chart.format === 'queue' });
-  void autoFever;
+  const { s, barScores } = playRival(chart, script, { forceMarch: 0 });
   return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s), launchT: launchesOf(s) };
 }
 
@@ -137,17 +135,17 @@ export function drumOffPlace(myAccuracy: number, rivals: Rival[]): number {
 
 export function crewForRound(
   chart: Chart,
-  plan: { seed: number; autoFever: boolean },
+  plan: { seed: number },
   pbGhost: GhostRun | null,
   challenge: GhostRun | null,
 ): Rival[] {
   const out: Rival[] = [];
   if (challenge) {
-    const r = ghostRival(chart, challenge, `ghost:${challenge.name}`, '#ffcf3b', plan.autoFever);
+    const r = ghostRival(chart, challenge, `ghost:${challenge.name}`, '#ffcf3b');
     if (r) out.push(r);
   }
   if (pbGhost) {
-    const r = ghostRival(chart, pbGhost, 'ghost:pb', '#ffffff', plan.autoFever);
+    const r = ghostRival(chart, pbGhost, 'ghost:pb', '#ffffff');
     if (r) out.push(r);
   }
   const rand = mulberry32(plan.seed ^ 0xc0ffee);
@@ -155,7 +153,7 @@ export function crewForRound(
   while (out.length < 3 && pool.length) {
     const k = Math.floor(rand() * pool.length);
     const bot = pool.splice(k, 1)[0];
-    out.push(botRival(chart, bot, (plan.seed + out.length * 7919) >>> 0, plan.autoFever));
+    out.push(botRival(chart, bot, (plan.seed + out.length * 7919) >>> 0));
   }
   return out;
 }

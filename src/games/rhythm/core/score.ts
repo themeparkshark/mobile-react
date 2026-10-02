@@ -4,11 +4,33 @@
  */
 
 import { accuracyPct, hitRate, marchBarsOf, type JudgeState } from './judge';
-import { RIDE_RULES, STAR_ACCURACY, J_MISS, J_WRONG } from './types';
+import {
+  ACCURACY_VALUE,
+  J_MISS,
+  J_NONE,
+  J_VOID,
+  J_WRONG,
+  K_FREEZE,
+  K_POPPER,
+  L_MARCH,
+  L_STANDING,
+  MARCH_SHARE,
+  MISSTAP,
+  RIDE_RULES,
+  SECTION_BARS,
+  STAR_ACCURACY,
+} from './types';
 
 export interface RoundSummary {
   score: number;
+  /** Stage-track stars (the main row, 3.6). */
   stars: number;
+  /** March-track stars (second row, 3.6). */
+  marchStars: number;
+  /** Stage-track accuracy: section-weighted on the full standing chart, MARCH sections at 0.7. */
+  stageAccuracy: number;
+  /** March-track accuracy over the MARCH-subset notes, whatever layer was active. */
+  marchAccuracy: number;
   cleared: boolean;
   stalled: boolean;
   accuracy: number;
@@ -82,12 +104,75 @@ export function histogramOf(errs: readonly number[]): number[] {
   return bins;
 }
 
+function scored(r: number): boolean {
+  return r !== J_NONE && r !== J_VOID && r !== -1 && r in ACCURACY_VALUE;
+}
+
+/**
+ * The two star tracks (design 3.6).
+ * Stage: starAcc = sum_s(V_s x acc_s x c_s) / sum_s(V_s), V_s = notes of the
+ * full standing chart in section s, acc_s = accuracy over the judged notes of
+ * the active layer in s (misstaps past the free 4 add 0.5 of a zero note to
+ * the section they fell in), c_s = 1.0 standing, MARCH_SHARE in MARCH.
+ * March: accuracy over the MARCH-subset notes of every section.
+ */
+export function trackAccuracy(s: JudgeState): { stage: number; march: number } {
+  const sections = Math.max(1, Math.ceil((s.lastBar - s.firstBar + 1) / SECTION_BARS));
+  const V = new Array(sections).fill(0);
+  const sum = new Array(sections).fill(0);
+  const den = new Array(sections).fill(0);
+  let mSum = 0;
+  let mDen = 0;
+  const secOf = (bar: number) => Math.max(0, Math.min(sections - 1, Math.floor((bar - s.firstBar) / SECTION_BARS)));
+  for (let i = 0; i < s.n; i++) {
+    const k = s.kind[i];
+    if (k === K_FREEZE || k === K_POPPER) continue;
+    const b = s.bar[i];
+    if (b < s.firstBar || b > s.lastBar) continue;
+    const sec = secOf(b);
+    if (s.layers[i] & L_STANDING) V[sec]++;
+    const r = s.res[i];
+    if (!scored(r)) continue;
+    const v = ACCURACY_VALUE[r] ?? 0;
+    sum[sec] += v;
+    den[sec] += 1;
+    if (s.layers[i] & L_MARCH) {
+      mSum += v;
+      mDen += 1;
+    }
+  }
+  // Misstaps past the free ones land in the section of their song time.
+  const extra = s.strayT.slice(MISSTAP.free);
+  for (const t of extra) {
+    let b = s.firstBar;
+    while (b + 1 <= s.lastBar && s.barStart[b + 1] <= t) b++;
+    den[secOf(b)] += MISSTAP.weight;
+    mDen += MISSTAP.weight;
+  }
+  let num = 0;
+  let vTot = 0;
+  for (let k = 0; k < sections; k++) {
+    if (V[k] === 0) continue;
+    const bar = s.firstBar + k * SECTION_BARS;
+    const c = s.barLayer[bar] === L_MARCH ? MARCH_SHARE : 1;
+    const acc = den[k] > 0 ? sum[k] / den[k] : 0;
+    num += V[k] * acc * c;
+    vTot += V[k];
+  }
+  return { stage: vTot > 0 ? num / vTot : 0, march: mDen > 0 ? mSum / mDen : 0 };
+}
+
 export function summarize(s: JudgeState, opts: { ftue?: boolean; format: 'queue' | 'ride' }): RoundSummary {
   const acc = accuracyPct(s);
   const stalled = !!s.stalled;
   const cleared = !stalled;
-  let stars = cleared ? starsForAccuracy(acc) : 0;
-  if (opts.ftue) stars = Math.max(1, stars);
+  const tracks = trackAccuracy(s);
+  let stars = cleared ? starsForAccuracy(tracks.stage) : 0;
+  let marchStars = cleared ? starsForAccuracy(tracks.march) : 0;
+  if (opts.ftue) {
+    stars = Math.max(1, stars);
+    marchStars = Math.max(1, marchStars);
+  }
   const march = marchBarsOf(s);
   const playable = s.lastBar - s.firstBar + 1;
   const errs = s.errs;
@@ -99,6 +184,9 @@ export function summarize(s: JudgeState, opts: { ftue?: boolean; format: 'queue'
   return {
     score: s.score,
     stars,
+    marchStars,
+    stageAccuracy: Math.round(tracks.stage * 10) / 10,
+    marchAccuracy: Math.round(tracks.march * 10) / 10,
     cleared,
     stalled,
     accuracy: Math.round(acc * 10) / 10,

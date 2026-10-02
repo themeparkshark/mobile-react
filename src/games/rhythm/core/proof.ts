@@ -1,5 +1,5 @@
 /**
- * proof: Parade Beat proof v5 (design 9.2) and its replay.
+ * proof: Parade Beat proof v6 (design 9.2, rev 7 rules) and its replay.
  *
  * The phone sends two views of the same run:
  *   - `inputs` rows [noteIndex, signedDeltaMs, kind, zone] (design 9.2) for
@@ -9,19 +9,19 @@
  *
  * Today's server (TaskGameProofService) validates {game, score, elapsed_ms,
  * seed}; those legacy fields stay at the top level of the result meta, so
- * ride proofs keep verifying unchanged. The v4 object rides along as
+ * ride proofs keep verifying unchanged. The v6 object rides along as
  * meta.rhythmProof for the WS7 change request (studio note in
  * src/games/rhythm/SERVER_NOTE.md).
  */
 
 import { generate } from './generate';
-import { createJudge, finishJudge, judgeDown, judgeLaunch, judgeMove, judgeTick, judgeUp, marchBarsOf, type JudgeState } from './judge';
+import { createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, marchBarsOf, type JudgeState } from './judge';
 import { summarize } from './score';
 import { GAME_KEY, PROOF_VERSION, type Difficulty, type RoundFormat, type StageJson } from './types';
 
-export interface RhythmProofV4 {
+export interface RhythmProofV6 {
   game: 'timing';
-  v: 5;
+  v: 6;
   seed: number;
   stage: string;
   chart_version: string;
@@ -31,11 +31,8 @@ export interface RhythmProofV4 {
   ftue: boolean;
   /** one_thumb_r | one_thumb_l | two_thumbs | two_thumbs_swap */
   grip: string;
-  assist: boolean;
-  /** Queue rounds Limp instead of stalling (design 3.6). */
-  limp: boolean;
-  /** Groove floor 10 until this song time (first ride ever); -1 = the whole run (First Parade). */
-  no_fail_until_ms: number;
+  /** Easy Beat (3.5): the server applies Easy windows whenever this is set. */
+  easy_beat: boolean;
   touch_ts: 'est';
   audio_backend: string;
   route: string;
@@ -47,11 +44,10 @@ export interface RhythmProofV4 {
   march_bars: number[];
   /** Section indexes (0-5 queue, 0-2 ride) played on the March layer. */
   march_sections: number[];
-  /** [launchMs, dropBar] per Fever launch. */
+  /** [armedMs, dropBar] per auto-fired Fever (informational; the replay recomputes them). */
   fever_deploys: [number, number][];
   /** Bars a rival's Fever dared (Hidden Dare: presentation only, never judged). */
   dares_received: number[];
-  auto_fever: boolean;
   inputs: [number, number, number, number][];
   poppers: [number, number, number][];
   strays: number[];
@@ -92,8 +88,6 @@ export interface ProofContext {
   difficulty: Difficulty;
   seed: number;
   ftue: boolean;
-  autoFever: boolean;
-  noFailUntilMs: number;
   audioBackend: string;
   route: string;
   offsetMs: number;
@@ -102,8 +96,7 @@ export interface ProofContext {
   elapsedMs: number;
   pauseSpans: [number, number][];
   grip: string;
-  assist: boolean;
-  limp: boolean;
+  easy: boolean;
   daresReceived?: number[];
   roundToken?: string;
 }
@@ -120,7 +113,7 @@ export function marchSectionsOf(s: JudgeState): number[] {
   return out;
 }
 
-export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: string, beatmapHash: string): RhythmProofV4 {
+export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: string, beatmapHash: string): RhythmProofV6 {
   const sum = summarize(s, { format: ctx.format, ftue: ctx.ftue });
   const inputs: [number, number, number, number][] = [];
   for (let i = 0; i < s.logNote.length; i++) inputs.push([s.logNote[i], s.logDelta[i], s.logKind[i], s.logZone[i]]);
@@ -139,9 +132,7 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
     format: ctx.format,
     ftue: ctx.ftue,
     grip: ctx.grip,
-    assist: ctx.assist,
-    limp: ctx.limp,
-    no_fail_until_ms: Number.isFinite(ctx.noFailUntilMs) ? Math.round(ctx.noFailUntilMs) : -1,
+    easy_beat: ctx.easy,
     touch_ts: 'est',
     audio_backend: ctx.audioBackend,
     route: ctx.route,
@@ -154,7 +145,6 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
     march_sections: marchSectionsOf(s),
     fever_deploys: pairsOf(s.deployT),
     dares_received: (ctx.daresReceived ?? []).slice(),
-    auto_fever: ctx.autoFever,
     inputs,
     poppers,
     strays: s.strayT.slice(),
@@ -172,16 +162,14 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
  * (stage, format, difficulty, seed), re-run every touch through the judge
  * with the declared March bars, and return the server's numbers.
  */
-export function replayProof(stage: StageJson, proof: RhythmProofV4): { score: number; stars: number; rideWin: boolean; judge: JudgeState } {
-  const chart = generate(stage, proof.format, proof.difficulty as Difficulty, proof.seed, { ftue: proof.ftue });
+export function replayProof(stage: StageJson, proof: RhythmProofV6): { score: number; stars: number; rideWin: boolean; judge: JudgeState } {
+  const chart = generate(stage, proof.format, (proof.easy_beat ? 1 : proof.difficulty) as Difficulty, proof.seed, { ftue: proof.ftue });
   if (chart.beatmapHash !== proof.beatmap_hash) throw new Error('beatmap_hash mismatch');
   const s = createJudge(chart, {
-    autoFever: proof.auto_fever,
     marchBars: proof.march_bars,
     sharpEnabled: proof.sharp_enabled,
-    noFailUntilMs: proof.ftue || proof.no_fail_until_ms < 0 ? Infinity : proof.no_fail_until_ms,
-    limp: proof.limp,
-    assist: proof.assist,
+    ride: proof.format === 'ride',
+    easy: proof.easy_beat,
   });
   const touches = decodeTouches(proof.touches);
   let now = chart.barStart[0];
@@ -192,7 +180,6 @@ export function replayProof(stage: StageJson, proof: RhythmProofV4): { score: nu
     }
     if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
     else if (x.type === 1) judgeUp(s, x.t, x.pid);
-    else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
     else judgeMove(s, x.t, x.pid, x.y);
   }
   const end = s.stalled ? s.stallT : chart.endMs + 50;

@@ -5,8 +5,8 @@
  * (the PHP twin must read the same constants).
  */
 
-export const CHART_VERSION = 'pb-2.0';
-export const PROOF_VERSION = 5;
+export const CHART_VERSION = 'pb-3.0';
+export const PROOF_VERSION = 6;
 export const GAME_KEY = 'timing';
 
 // -- Note kinds (stage JSON column 3) ----------------------------------------
@@ -74,15 +74,13 @@ export const WINDOWS: Record<Difficulty, Windows> = {
   3: { sharp: 22, perfect: 35, great: 70, good: 115, consider: 160, approachMs: 1050 },
 };
 
-/** Ride Assist (design 3.5): d1 chart, GOOD widened, approach x1.3. */
-export const ASSIST_WINDOWS: Windows = { sharp: 0, perfect: 55, great: 110, good: 180, consider: 230, approachMs: 2080 };
+/** Easy Beat (rev 7, design 3.5): a visible toggle, d1 chart, GOOD widened, approach x1.3. */
+export const EASY_WINDOWS: Windows = { sharp: 0, perfect: 55, great: 110, good: 180, consider: 230, approachMs: 2080 };
 
-/** Fever Launch Swipe (design 3.1, 4.3): one finger up >= 90 pt within 300 ms. */
-export const LAUNCH = { swipePt: 90, swipeMs: 300, catchMs: 150 };
-/** Queue rounds: Groove 0 = Limping until Groove is back to this (design 3.6). */
-export const LIMP_RECOVER = 30;
-/** A touch with no note in reach is a stray only after this (design 4.1). */
-export const PENDING_STRAY_MS = 250;
+/** Misstaps (design 3.6, 4.3): the first 4 are free; each later one adds 0.5 of a zero-score note. */
+export const MISSTAP = { free: 4, weight: 0.5 };
+/** Stage-track star weight of a MARCH section (design 3.6, versioned with CHART_VERSION). */
+export const MARCH_SHARE = 0.7;
 /** Playable bars per section; a drop line opens every section after the first. */
 export const SECTION_BARS = 4;
 
@@ -99,26 +97,7 @@ export const BASE_POINTS = {
   popperPop: 500,
 };
 
-/** Section 4.2 (standing bars). March modifiers in 4.6. */
-export const GROOVE = {
-  start: 50,
-  max: 100,
-  perfect: 2,
-  great: 1,
-  good: 0.5,
-  miss: -8,
-  missMarch: -4,
-  wrong: -4,
-  stray: -3,
-  strayMarch: -1,
-  freezeFault: -6,
-  outOfStep: -6,
-  rollTick: 0.25,
-  rollBreak: -4,
-  popperPop: 4,
-  marchFloor: 10,
-};
-
+/** Section 4.2 (rev 7). Fever fires itself on the next drop line once the meter is full. */
 export const FEVER_METER = {
   perfect: 5,
   great: 3,
@@ -132,6 +111,8 @@ export const FEVER_METER = {
   popperPop: 10,
   full: 100,
   bars: 4,
+  /** Keep it lit: a Fever section with zero MISS restarts the meter here. */
+  keepLit: 50,
 };
 
 /** Accuracy values for stars (section 3.6). */

@@ -25,14 +25,12 @@ import {
   EV_FEVER_END,
   EV_FEVER_START,
   EV_HIT,
-  EV_LAUNCH,
   EV_MILESTONE,
   EV_MISS,
   EV_ROLL_TICK,
   EV_WRONG,
   createJudge,
   judgeDown,
-  judgeLaunch,
   judgeMove,
   judgeTick,
   judgeUp,
@@ -45,7 +43,7 @@ import { ParadeField, fieldGeom } from '../field/ParadeField';
 import { createDrawList, layoutFrame, beatAt } from '../field/layout';
 import { applyEventsUI, createView, showRibbon, stepView, RB_FULL, RB_MARCH, type ParadeView } from '../field/view';
 import { STAGES, type StageId } from '../stages';
-import { botTaps, decodeTap, encodeTap, T_DOWN, T_LAUNCH, T_MARCH, T_UP, type SprintBoard, type SprintProfile } from './paradeSprint';
+import { botTaps, decodeTap, encodeTap, T_DOWN, T_MARCH, T_UP, type SprintBoard, type SprintProfile } from './paradeSprint';
 
 export interface ParadeBoardProps {
   board: SprintBoard;
@@ -79,7 +77,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
   const hasRim = chart.kind.includes(K_RIM);
   const grip = gripFor(DEFAULT_GRIP, 1, 'ride', hasRim);
 
-  const judge = useSharedValue<JudgeState>(createJudge(chart, { autoFever: true, limp: true }));
+  const judge = useSharedValue<JudgeState>(createJudge(chart, {}));
   const view = useSharedValue<ParadeView>(createView(chart.t.length, geom.cx, geom.yLine, geom.width));
   const draw = useSharedValue(createDrawList());
   const tick = useSharedValue(0);
@@ -99,7 +97,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
 
   // A fresh judge and view for every board (and when the layout settles).
   useEffect(() => {
-    judge.value = createJudge(chart, { autoFever: true, limp: true });
+    judge.value = createJudge(chart, {});
     const v = createView(chart.t.length, geom.cx, geom.yLine, geom.width, [chart.beats[4], chart.beats[5], chart.beats[6], chart.beats[7], chart.beats[8]]);
     v.reduced = reducedMotion ? 1 : 0;
     view.value = v;
@@ -210,9 +208,6 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
         else if (b === J_GOOD) Haptic.tickSelection();
       } else if (kind === EV_ROLL_TICK) {
         GameAudio.play('rh_thud', { volume: THUD_VOL * 0.6 });
-      } else if (kind === EV_LAUNCH) {
-        GameAudio.play('fx.whoosh', { volume: 0.7 });
-        Haptic.hitMedium();
       } else if (kind === EV_FEVER_START) {
         p.feverFrom = a;
         GameAudio.play('rh_firework');
@@ -267,12 +262,6 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
           judgeDown(s, at, d.zone, d.pointer, 700);
         } else if (d.type === T_UP) judgeUp(s, at, d.pointer);
         runOnJS(recordAt)(at, encodeTap(d.type, d.zone, d.pointer));
-      }
-      if (ap.t.length && s.armed && !s.limping && s.pendingDeploy < 0 && s.feverFrom < 0) {
-        const at = Math.max(Math.round(vnow), lastTapT.value);
-        lastTapT.value = at;
-        judgeLaunch(s, at, 9001);
-        runOnJS(recordAt)(at, encodeTap(T_LAUNCH, 0, 9001));
       }
       judgeTick(s, vnow);
       const bf = beatAt(beatsSv.value, vnow);
@@ -330,13 +319,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
       for (const touch of e.changedTouches) {
         const t0 = Math.round(clock.value + Math.min(34, Math.max(0, Date.now() - lastWall.value)) - offset.value);
         const t = Math.max(t0, lastTapT.value);
-        const before = s.touchT.length;
         judgeMove(s, t, touch.id, touch.absoluteY);
-        // A Launch Swipe logs a launch touch: hand it to the room log too.
-        if (s.touchT.length > before && s.touchType[s.touchT.length - 1] === 3) {
-          lastTapT.value = t;
-          runOnJS(recordAt)(t, encodeTap(T_LAUNCH, 0, touch.id));
-        }
       }
     })
     .onTouchesUp((e) => {

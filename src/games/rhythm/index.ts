@@ -12,5 +12,5 @@ export { RhythmTapGame, default } from './RhythmTapGame';
 export type { RhythmTapGameProps } from './RhythmTapGame';
 export { generate } from './core/generate';
 export { replayProof, buildProof } from './core/proof';
-export type { RhythmProofV4 } from './core/proof';
+export type { RhythmProofV6 } from './core/proof';
 export type { Chart, Difficulty, RoundFormat } from './core/types';

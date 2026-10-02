@@ -20,7 +20,8 @@ export interface GhostRun {
   seed: number;
   touches: string;
   marchBars: number[];
-  autoFever: boolean;
+  /** Rev 6 ghosts only (Fever is always automatic since rev 7). */
+  autoFever?: boolean;
   /** Chart version the run was judged on (a version bump retires old ghosts). */
   chartVersion?: string;
   score: number;
@@ -50,6 +51,12 @@ export interface ParadeProgress {
   grip?: GripPrefs;
   /** The player has walked during a round (the MARCH callout shows on stage 4 otherwise). */
   walkSeen?: boolean;
+  /** Easy Beat (rev 7, 3.5): remembered per player, applies from the next round. */
+  easyBeat?: boolean;
+  /** d2 clears with no MARCH sections (Two Thumbs is offered once after 3). */
+  d2CleanClears?: number;
+  /** The one-time Two Thumbs prompt was answered (never asked again). */
+  twoThumbsAsked?: boolean;
 }
 
 export function emptyProgress(): ParadeProgress {
@@ -74,16 +81,13 @@ export async function saveProgress(p: ParadeProgress): Promise<void> {
   }
 }
 
-/** Rev 6: Backpack Bounce opens at 2 stars on any 2 stages; the first 3 unlock in order on a clear. */
+/** Rev 7 (5.3): the launch stages unlock in order on a clear (1 Stage star). */
 export function unlockedStages(p: ParadeProgress): StageId[] {
   const out: StageId[] = [];
   for (const id of STAGE_ORDER) {
-    if (id === 'backpack_bounce_a') continue;
     out.push(id);
     if ((p.stars[id] ?? 0) < 1) break;
   }
-  const twoStar = STAGE_ORDER.filter((s) => (p.stars[s] ?? 0) >= 2).length;
-  if (twoStar >= 2 && STAGE_ORDER.includes('backpack_bounce_a')) out.push('backpack_bounce_a');
   return out;
 }
 

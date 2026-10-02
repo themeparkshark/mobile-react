@@ -40,7 +40,7 @@ OUT = os.path.join(ROOT, 'src/games/rhythm/stages')
 DRUM, RIM, ROLL, BIG, CYMBAL, POPPER, FREEZE = range(7)
 STANDING, MARCH = 1, 2
 F_ECHO, F_EITHER, F_FLICK = 1, 2, 4
-CHART_VERSION = 'pb-2.0'
+CHART_VERSION = 'pb-3.0'
 
 # Round sections (queue, 24 playable bars): name, first bar, last bar (1-based).
 QUEUE_SECTIONS = [
@@ -52,15 +52,17 @@ DENSITY = {  # notes per bar, d1 / d2 / d3
     'breakdown': (2, 3, 4), 'finale': (4, 6, 9),
 }
 ECHO = 'echo'
-# Rev 6 launch vocabulary (DRUM, RIM, ROLL, BIG). CYMBAL, POPPER, ECHO and
-# FREEZE are post-launch content drops (design 3.8) and are not charted.
+# Rev 7 launch vocabulary (design 3.2): DRUM, RIM, BIG only. RIM is Shark
+# Shop's new idea (stage 2); Waiting Room (stage 1, the ride stage) is DRUM and
+# BIG. ROLL returns in drop C2; CYMBAL, POPPER, ECHO and FREEZE in C3-C5.
 VOCAB = {
-    'opening_day_a': {1: {DRUM, BIG}, 2: {DRUM, RIM, BIG, ROLL}},
-    'waiting_room_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, BIG, ROLL}},
-    'shark_shop_a': {1: {DRUM, RIM, ROLL, BIG}, 2: {DRUM, RIM, ROLL, BIG}},
-    'backpack_bounce_a': {1: {DRUM, RIM, ROLL, BIG}, 2: {DRUM, RIM, ROLL, BIG}},
+    'waiting_room_a': {1: {DRUM, BIG}, 2: {DRUM, BIG}},
+    'shark_shop_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, BIG}},
+    # Drop C1 stages (not in the launch rotation).
+    'opening_day_a': {1: {DRUM, BIG}, 2: {DRUM, RIM, BIG}},
+    'backpack_bounce_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, BIG}},
 }
-RIDE_VOCAB = {DRUM, ROLL, BIG}
+RIDE_VOCAB = {DRUM, BIG}
 POS_WEIGHT = {0: 1.35, 4: 1.0, 8: 1.15, 12: 1.0, 2: 0.9, 6: 0.9, 10: 0.9, 14: 0.9}  # slot in bar -> weight
 THRESH = 0.28  # minimum onset strength for a note (normalised flux)
 
@@ -209,8 +211,8 @@ def pick_with(bar, d, n, forced, avoid, prev):
 
 
 def author_all(stage_id, fmt, f, bars):
-    """Rev 6 charting (design rhythm.md 3.2-3.5, 4.6):
-      * launch vocabulary only: DRUM, RIM, ROLL, BIG (per-stage intro order);
+    """Rev 7 charting (design rhythm.md 3.2-3.6, 4.5):
+      * launch vocabulary only: DRUM, RIM, BIG (RIM from stage 2);
       * one canonical chart per stage and difficulty (no seeded groups);
       * nesting by tick: MARCH layer in d1, d1 in d2;
       * no note in the last beat before a drop line (sections start on
@@ -301,13 +303,17 @@ def author_all(stage_id, fmt, f, bars):
     for d in diffs:
         notes[d].sort(key=lambda n: (n[0], n[3]))
         if d == 2:
-            fix_runs(notes[d])
+            vocab = RIDE_VOCAB if fmt == 'ride' else VOCAB[stage_id][2]
+            d1_ticks = {n_[1] * 4 + n_[2] for n_ in notes.get(1, [])}
+            fix_runs(notes[d], RIM in vocab, d1_ticks)
     return notes
 
 
-def fix_runs(notes):
-    """No d3 bar has more than 3 same-zone notes in a row at 8th spacing or
-    faster, counting an 'either' CYMBAL as the DRUM it may become."""
+def fix_runs(notes, allow_rim=True, d1_ticks=frozenset()):
+    """No d2 bar has more than 3 same-zone notes in a row at 8th spacing or
+    faster, counting an 'either' CYMBAL as the DRUM it may become. A stage
+    without RIM drops the 4th d2-only note instead of switching its zone."""
+    drop = []
     by_bar = {}
     for n_ in notes:
         if n_[5] & STANDING and n_[3] in (DRUM, RIM, CYMBAL):
@@ -324,6 +330,12 @@ def fix_runs(notes):
                 if za == zb and seq[i][0] - seq[i - 1][0] <= 260:
                     run += 1
                     if run > 3:
+                        if not allow_rim:
+                            if seq[i][1] * 4 + seq[i][2] in d1_ticks or seq[i][3] != DRUM:
+                                continue
+                            drop.append(seq[i])
+                            run = 1
+                            continue
                         if seq[i][3] == DRUM:
                             seq[i][3], seq[i][4] = RIM, 1
                         elif seq[i][3] == RIM:
@@ -333,6 +345,9 @@ def fix_runs(notes):
                         run = 1
                 else:
                     run = 1
+    for n_ in drop:
+        if n_ in notes:
+            notes.remove(n_)
 
 
 def main(ids):
