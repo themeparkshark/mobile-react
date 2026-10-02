@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useRef } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -13,7 +14,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import reviewLogin from '../../api/endpoints/auth/review-login';
 import SignInButtons from '../../components/SignInButtons';
+import { AuthContext } from '../../context/AuthProvider';
+import { gameAlert } from '../../ui';
 import config from '../../config';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ThemeContext } from '../../context/ThemeProvider';
@@ -133,6 +137,25 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
   const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const { playSound } = useContext(SoundEffectContext);
+  const { adoptSession } = useContext(AuthContext);
+
+  // App Store review sign-in: hold the copyright line, enter the review code
+  // from the App Review notes. Signs in the review account, which plays with a
+  // simulated location inside a park.
+  const openReviewSignIn = () => {
+    Alert.prompt('App Review sign-in', 'Enter the review code from the App Review notes.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign in',
+        onPress: (code?: string) => {
+          if (!code?.trim()) return;
+          void reviewLogin(code)
+            .then(token => adoptSession(token))
+            .catch(() => gameAlert('Could not sign in', 'Check the review code and try again.', undefined, { icon: 'lock' }));
+        },
+      },
+    ], 'secure-text');
+  };
   // Entrance animations
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -332,8 +355,10 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           </Animated.View>
         </View>
 
-        {/* Copyright */}
+        {/* Copyright (hold for App Review sign-in) */}
         <Animated.Text
+          onLongPress={openReviewSignIn}
+          suppressHighlighting
           style={{
             opacity: copyrightOpacity,
             paddingBottom: 30,

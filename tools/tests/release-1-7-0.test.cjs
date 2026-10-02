@@ -70,3 +70,16 @@ test('Dim Flashing Lights reaches both level-up effects through the FlashSafety 
   });
   assert.equal(on.isDimFlashingLightsEnabled(), true);
 });
+
+test('App Review mode: only the review account gets the simulated location, players keep real GPS', () => {
+  const provider = read('src/context/LocationProvider.tsx');
+  assert.match(provider, /const simulationAllowed = __DEV__ \|\| isAppReviewer;/);
+  assert.doesNotMatch(provider, /devMode && __DEV__/, 'every simulated-location gate also allows the review account');
+  assert.match(provider, /APP_REVIEW_START: LocationType = \{ latitude: 28\.44071, longitude: -81\.448 \}/);
+  assert.match(read('src/helpers/dev-location-store.ts'), /return devModeEnabled;/);
+  assert.match(read('src/Root.tsx'), /\(__DEV__ \|\| player\?\.is_app_reviewer\) && !isStandalonePreview && player && devMode && <DevJoystickHost \/>/);
+  const login = read('src/screens/Auth/LoginScreen.tsx');
+  assert.match(login, /onLongPress=\{openReviewSignIn\}/);
+  assert.match(login, /reviewLogin\(code\)\s*\.then\(token => adoptSession\(token\)\)/);
+  assert.match(read('src/api/endpoints/auth/review-login.ts'), /'\/auth\/review-login'/);
+});

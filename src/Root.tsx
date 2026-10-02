@@ -300,7 +300,7 @@ export default function App() {
     <GameDialogHost />
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
-    {__DEV__ && !isStandalonePreview && player && devMode && <DevJoystickHost />}
+    {(__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
     </View>
   );
 }
@@ -314,7 +314,7 @@ function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; r
   return null;
 }
 
-/** Dev builds: the location joystick, which needs the live position. */
+/** Dev builds and the App Store review account: the location joystick, which needs the live position. */
 function DevJoystickHost() {
   const { location, moveDevLocation } = useContext(LocationContext);
   const onMove = useCallback((dx: number, dy: number, speed: number) => moveDevLocation(dx, dy, speed), [moveDevLocation]);

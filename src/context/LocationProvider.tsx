@@ -86,6 +86,8 @@ export const HeadingContext = createContext<HeadingContextType>({
 // (dev builds only) drop the joystick at a specific ride for playtesting.
 const DEV_DEFAULT_LAT = Number(process.env.EXPO_PUBLIC_DEV_START_LAT) || 34.1381;
 const DEV_DEFAULT_LNG = Number(process.env.EXPO_PUBLIC_DEV_START_LNG) || -118.3534;
+/** Where the App Store review account starts: inside Epic Universe (park 10). */
+export const APP_REVIEW_START: LocationType = { latitude: 28.44071, longitude: -81.448 };
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
@@ -107,9 +109,18 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     leading: true,
   });
 
-  // Dev joystick mock location - auto-enable in dev for testing
+  // Dev joystick mock location - auto-enable in dev for testing. The App Store
+  // review account gets it too, starting inside a park (App Review can't
+  // visit one). Every other player always uses real GPS.
+  const isAppReviewer = !!player?.is_app_reviewer;
+  const simulationAllowed = __DEV__ || isAppReviewer;
   const [devMode, setDevMode] = useState<boolean>(__DEV__);
   const devLocationRef = useRef<LocationType>({ latitude: DEV_DEFAULT_LAT, longitude: DEV_DEFAULT_LNG });
+  useEffect(() => {
+    if (!isAppReviewer) return;
+    devLocationRef.current = { ...APP_REVIEW_START };
+    setDevMode(true);
+  }, [isAppReviewer]);
 
   const moveDevLocation = useCallback((dx: number, dy: number, speed: number) => {
     const prev = devLocationRef.current;
@@ -125,7 +136,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // When dev mode is toggled on, set initial mock location and sync global store
   useEffect(() => {
-    if (devMode && __DEV__) {
+    if (devMode && simulationAllowed) {
       setDevModeEnabled(true);
       setGlobalDevLocation(devLocationRef.current);
       latestLocationSampleRef.current = { ...devLocationRef.current, timestamp: Date.now() };
@@ -134,7 +145,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     } else {
       setDevModeEnabled(false);
     }
-  }, [devMode]);
+  }, [devMode, simulationAllowed]);
 
   // Heading state for compass-based map rotation
   const [heading, setHeadingState] = useState<number | null>(null);
@@ -252,7 +263,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const getCurrentLocation = async () => {
     // In dev mode, return the mock location
-    if (devMode && __DEV__) {
+    if (devMode && simulationAllowed) {
       return devLocationRef.current;
     }
 
@@ -407,7 +418,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // This is what makes the shark actively follow you as you walk.
   useEffect(() => {
     // Don't start watcher in dev mode (joystick handles it) or without permissions
-    if ((devMode && __DEV__) || !permissionGranted || !player?.username) {
+    if ((devMode && simulationAllowed) || !permissionGranted || !player?.username) {
       return;
     }
 
@@ -488,7 +499,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         positionSubscriptionRef.current = null;
       }
     };
-  }, [devMode, permissionGranted, player?.username, watch.accuracy, watch.distanceInterval, watch.timeInterval, watchEpoch]);
+  }, [devMode, simulationAllowed, permissionGranted, player?.username, watch.accuracy, watch.distanceInterval, watch.timeInterval, watchEpoch]);
 
   // Fallback poll — only fires if watchPositionAsync somehow stalls
   // (some Android devices throttle background location callbacks)

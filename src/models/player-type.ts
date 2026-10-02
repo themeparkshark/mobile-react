@@ -31,6 +31,8 @@ export interface PlayerType {
   /** Ride Masters standings (progression v2). */
   readonly ride_masters?: { readonly crowned: number; readonly boss_clears: number; readonly polish_stars: number; readonly coin_levels: number };
   readonly screen_name: string;
+  /** The App Store review account: plays with a simulated location inside a park. */
+  readonly is_app_reviewer?: boolean;
   readonly token: string;
   readonly total_experience: number;
   readonly username: string;
