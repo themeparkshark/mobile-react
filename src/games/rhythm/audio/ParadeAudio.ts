@@ -85,6 +85,7 @@ export class ParadeAudio {
     if (this.disposed) return;
     this.locked = ok.every(Boolean) && GameAudio.stemsLocked(parts.map((p) => this.keys[p]));
     this.loaded = ok[0];
+    if (__DEV__) console.log(`[parade-audio] decks ${ok.map((v) => (v ? 1 : 0)).join('')} locked=${this.locked} backend=${GameAudio.backendName}`);
   }
 
   // -- gains ------------------------------------------------------------------

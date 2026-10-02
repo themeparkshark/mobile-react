@@ -23,6 +23,8 @@ import EngineDemo from '../gamekit/demo/EngineDemo';
 import FxLab from '../gamekit/demo/FxLab';
 import FeelLab from '../gamekit/demo/FeelLab';
 import JuiceLab from '../gamekit/demo/JuiceLab';
+import { RhythmTapGame } from '../games/rhythm';
+import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -64,6 +66,24 @@ export default function MiniGameTesterScreen() {
   // EXPO_PUBLIC_ENGINE_DEMO=juicelab opens the Juice Lab bench (engine pass 5) with its tour.
   const juiceLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'juicelab';
   const [juiceLab, setJuiceLab] = useState(juiceLabAuto);
+
+  // Dev only: EXPO_PUBLIC_RHYTHM_DEMO=queue | ride | sprint opens Parade Beat on launch.
+  const rhythmDemo = __DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_DEMO : undefined;
+  const [rhythmRun, setRhythmRun] = useState(0);
+  if (rhythmDemo === 'sprint') return <SprintLab seed={Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 1)} />;
+  if (rhythmDemo === 'queue' || rhythmDemo === 'ride') {
+    const seedEnv = Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 0);
+    return (
+      <RhythmTapGame
+        key={rhythmRun}
+        visible
+        format={rhythmDemo}
+        seed={seedEnv || undefined}
+        onComplete={() => setRhythmRun((n) => n + 1)}
+        onClose={() => setRhythmRun((n) => n + 1)}
+      />
+    );
+  }
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);
