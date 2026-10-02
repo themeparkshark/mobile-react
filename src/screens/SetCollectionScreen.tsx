@@ -920,7 +920,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
       4: 'body_item', 5: 'hand_item', 8: 'pin_item' } as Record<number, keyof InventoryType>)[selectedWearable?.item_type_id];
     const canPreviewWearable = !!selectedWearable && !!wearableSlot &&
       (selectedWearable.item_type_id === 8 ? !!selectedWearable.icon_url : !!selectedWearable.paper_url);
-    const previewInventory = canPreviewWearable && !!player?.inventory?.skin_item?.no_eye_url ? {
+    const previewInventory = canPreviewWearable && !!player?.inventory ? {
       ...(player?.inventory ?? {}),
       [wearableSlot]: {
         id: selectedWearable.id,

@@ -36,6 +36,8 @@ exports.loadTs = function loadTs(file, stubs = {}, globals = {}) {
     const fn = vm.runInContext(`(function (module, exports, require) {${code}\n})`, context, { filename: full });
     fn(module, module.exports, specifier => {
       if (Object.hasOwn(stubs, specifier)) return stubs[specifier];
+      // Bundled art resolves to its path, as in reward-hook-runtime.
+      if (/\.(png|jpe?g|gif|webp)$/i.test(specifier)) return specifier;
       if (specifier.startsWith('.')) return load(resolveFile(path.dirname(full), specifier));
       throw new Error(`loadTs: unstubbed import ${specifier} in ${path.relative(root, full)}`);
     });

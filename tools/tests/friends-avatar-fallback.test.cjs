@@ -7,7 +7,7 @@ const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 function avatar(player) {
   return runtime('src/components/Avatar.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: null } } },
-    '../helpers/wardrobe': { liveOutfitFor: (p) => p.inventory, outfitLayerUrls: () => [] },
+    '../helpers/wardrobe': { liveOutfitFor: (p) => p.inventory, outfitLayerUrls: () => [], hasDressedShark: () => false, sharkBaseLayers: () => [] },
     '../config': { default: { secondary: '#00f', lightBlue: '#0af' } },
   }, { player, size: 'md' });
 }

@@ -3,7 +3,7 @@ import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { liveOutfitFor, outfitLayerUrls } from '../helpers/wardrobe';
+import { hasDressedShark, liveOutfitFor, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { PlayerType } from '../models/player-type';
 
 export const DEFAULT_PORTRAIT = require('../../assets/images/screens/pin-collections/shark.png');
@@ -39,7 +39,8 @@ export default function Avatar({
 
   // Build layered avatar URL — use skin + eyes + items for live outfit
   // The circle container clips it so background is fine
-  const hasSkin = inventory?.skin_item?.no_eye_url;
+  // Any skin or worn item draws live on the shark the art was made for.
+  const dressed = hasDressedShark(inventory);
   // A photo URL that 404s or is not an image left a black or white blob in
   // the friends list (QA P2-7): fall back to the TPS shark instead.
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
@@ -162,16 +163,16 @@ export default function Avatar({
             height: s,
           }}
         >
-          {hasSkin ? (
+          {dressed ? (
             <View style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}>
               {/* Background */}
               {inventory?.background_item?.paper_url && (
                 <Image source={{ uri: inventory.background_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
               )}
-              {/* Skin */}
-              <Image source={{ uri: inventory!.skin_item.no_eye_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              {/* Eyes */}
-              <Image source={require('../../assets/images/screens/inventory/blink.png')} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
+              {/* Skin (or Alex's Classic) and eyes */}
+              {sharkBaseLayers(inventory).map((source, index) => (
+                <Image key={`base-${index}`} source={source} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
+              ))}
               {/* Items */}
               {outfitLayerUrls(inventory).map((uri) => (
                 <Image key={uri} source={{ uri }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />

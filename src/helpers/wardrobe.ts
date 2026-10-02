@@ -12,6 +12,34 @@ import { PlayerType } from '../models/player-type';
  */
 export const OUTFIT_LAYER_ORDER = ['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const;
 
+/**
+ * Alex's Classic shark with no eyes (1353x1530). Every wardrobe paper is drawn
+ * on this canvas against this shark plus blink.png, so it is the shark to draw
+ * when no skin is worn. Never the older shark-colored-v2 drawing: its eye sits
+ * elsewhere and glasses, masks and mouth items miss the face on it.
+ */
+export const CLASSIC_NO_EYE = require('../../assets/images/screens/inventory/classic-no-eye.png');
+/** The eyes drawn over every no-eye shark body. */
+export const SHARK_EYES = require('../../assets/images/screens/inventory/blink.png');
+
+/** A bundled image (require) or a remote one. */
+export type SharkLayerSource = number | { uri: string };
+
+/**
+ * The shark under the outfit, back to front: the worn skin's no-eye body (or
+ * Alex's Classic when no skin is worn) and then the eyes. Each layer is drawn
+ * full frame with contentFit="contain", in the same box as the outfit layers.
+ */
+export function sharkBaseLayers(inventory: InventoryType | null | undefined): SharkLayerSource[] {
+  const skin = inventory?.skin_item?.no_eye_url;
+  return [skin ? { uri: skin } : CLASSIC_NO_EYE, SHARK_EYES];
+}
+
+/** True when there is a shark outfit worth drawing: a skin or any outfit layer. */
+export function hasDressedShark(inventory: InventoryType | null | undefined): boolean {
+  return !!inventory?.skin_item?.no_eye_url || outfitLayerUrls(inventory).length > 0;
+}
+
 /** Slots that always hold an item: the shark itself and its backdrop. */
 export const REQUIRED_SLOTS = ['skin_item', 'background_item'] as const;
 
@@ -60,7 +88,7 @@ export function liveOutfitFor(
   player: Pick<PlayerType, 'id' | 'inventory'>,
   signedIn: Pick<PlayerType, 'id' | 'inventory'> | null | undefined,
 ): InventoryType | undefined {
-  if (signedIn && signedIn.id === player.id && signedIn.inventory?.skin_item?.no_eye_url) {
+  if (signedIn && signedIn.id === player.id && hasDressedShark(signedIn.inventory)) {
     return signedIn.inventory;
   }
   return player.inventory ?? undefined;

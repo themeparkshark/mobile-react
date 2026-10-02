@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Animated, GestureResponderEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
+import { sharkBaseLayers } from '../helpers/wardrobe';
 
 // Tap zone map — Y percentage ranges on the shark for each slot
 // Checked top-to-bottom; first match wins
@@ -233,23 +234,10 @@ export default function Playercard({
               marginTop: '5%',
             }}
           >
-            {/* Shark body */}
-            <Image
-              source={
-                inventory?.skin_item?.no_eye_url
-                  ? { uri: inventory.skin_item.no_eye_url }
-                  : require('../../assets/images/screens/inventory/shark-colored-v2.png')
-              }
-              style={styles.image}
-              contentFit="contain"
-            />
-            {inventory?.skin_item?.no_eye_url && (
-              <Image
-                source={require('../../assets/images/screens/inventory/blink.png')}
-                style={styles.image}
-                contentFit="contain"
-              />
-            )}
+            {/* Shark body (worn skin or Alex's Classic) and eyes */}
+            {sharkBaseLayers(inventory).map((source, index) => (
+              <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain" />
+            ))}
             {/* Item layers — purely visual, no individual Pressables */}
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
               const worn = inventory?.[slot];

@@ -20,7 +20,7 @@ import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
 import { useFocusEffect } from '@react-navigation/native';
-import { outfitLayerUrls } from '../helpers/wardrobe';
+import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -385,23 +385,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
         <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
-          {player?.inventory?.skin_item?.no_eye_url ? (
+          {hasDressedShark(player?.inventory) ? (
             <View style={{ width: 60, height: 60, position: 'relative' }}>
-              {/* Base skin (no eyes) */}
-              <Image
-                source={{ uri: player.inventory.skin_item.no_eye_url }}
-                style={{ width: 60, height: 60, position: 'absolute' }}
-                cachePolicy="memory-disk" transition={0}
-                contentFit="contain"
-              />
-              {/* Animated eyes layer */}
-              <Image
-                source={require('../../assets/images/screens/inventory/blink.png')}
-                style={{ width: 60, height: 60, position: 'absolute' }}
-                contentFit="contain"
-              />
+              {/* Skin (or Alex's Classic) with no eyes, then the eyes layer */}
+              {sharkBaseLayers(player?.inventory).map((source, index) => (
+                <Image
+                  key={`base-${index}`}
+                  source={source}
+                  style={{ width: 60, height: 60, position: 'absolute' }}
+                  cachePolicy="memory-disk" transition={0}
+                  contentFit="contain"
+                />
+              ))}
               {/* Equipped items layered on top, in the shared outfit order */}
-              {outfitLayerUrls(player.inventory).map((uri) => (
+              {outfitLayerUrls(player?.inventory).map((uri) => (
                 <Image key={uri} source={{ uri }} style={{ width: 60, height: 60, position: 'absolute' }} cachePolicy="memory-disk" transition={0} contentFit="contain" />
               ))}
             </View>

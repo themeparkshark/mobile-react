@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { isItemWorn, isLockedWhileWorn, itemDisplayName, wearableBadge } from '../helpers/wardrobe';
+import { isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
@@ -78,17 +78,9 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
           )}
           {item.item_type?.id === 4 && !!item.paper_url ? (
             <View style={{ width: artSize, height: artSize }}>
-              <Image
-                source={worn?.skin_item?.no_eye_url
-                  ? { uri: worn.skin_item.no_eye_url }
-                  : require('../../assets/images/screens/inventory/shark-colored-v2.png')}
-                style={StyleSheet.absoluteFill}
-                contentFit="contain"
-              />
-              {worn?.skin_item?.no_eye_url && (
-                <Image source={require('../../assets/images/screens/inventory/blink.png')}
-                  style={StyleSheet.absoluteFill} contentFit="contain" />
-              )}
+              {sharkBaseLayers(worn).map((source, index) => (
+                <Image key={`base-${index}`} source={source} style={StyleSheet.absoluteFill} contentFit="contain" />
+              ))}
               <Image source={item.paper_url} style={StyleSheet.absoluteFill} contentFit="contain" />
             </View>
           ) : (
