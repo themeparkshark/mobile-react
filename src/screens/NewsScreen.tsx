@@ -11,6 +11,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import config from '../config';
+import getNews from '../api/endpoints/news/getNews';
 import { EntryType } from '../models/entry-type';
 import Entry from './NewsScreen/Entry';
 
@@ -119,8 +120,23 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchEntries = async () => {
+    try {
+      const cached = await getNews();
+      if (cached.length > 0) {
+        setEntries(cached);
+        return;
+      }
+    } catch {
+      // Fall through to WordPress directly.
+    }
     return axios
-      .get('https://themeparkshark.com/wp-json/wp/v2/posts?_embed&per_page=20')
+      .get('https://themeparkshark.com/wp-json/wp/v2/posts', {
+        params: {
+          per_page: 20,
+          _embed: 'wp:featuredmedia',
+          _fields: 'id,date_gmt,title,link,excerpt,content,_links,_embedded',
+        },
+      })
       .then((response) => {
         setEntries(
           response.data.map((item: any) => {
