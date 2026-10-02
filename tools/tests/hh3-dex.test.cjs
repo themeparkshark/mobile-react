@@ -87,7 +87,17 @@ test('v3 dex fields overlay the legacy set and are all optional', () => {
   assert.equal(over.caught, 31);
   assert.equal(over.spares, 5);
   assert.equal(over.reward.label, 'Finish the set: get 60 Energy');
+  // Without a server label, v3 numbers (coins included) rebuild it.
+  const coins = plain(dex.overlayDexSet(base, { reward: { coins: 500, energy: 10, tickets: 2, experience: 60, title: 'Snack Boss' } }));
+  assert.equal(coins.reward.label, 'Finish the set: get 10 Energy, 2 Tickets, 60 XP, 500 coins and the Snack Boss title');
+  assert.equal(coins.reward.coins, 500);
   assert.deepEqual(over.reward.claim, { kind: 'complete' }, 'claims keep the legacy route');
+  const routed = plain(dex.overlayDexSet(base, { starter: { status: 'claimable', claim_path: '/me/prep-item-sets/x/milestones/starter/claim' },
+    reward: { claim_path: '/me/prep-item-sets/x/claim' } }));
+  assert.deepEqual(routed.steps[0].claim, { kind: 'milestone', key: 'starter' }, 'a v3 starter claims through the milestone route');
+  assert.deepEqual(routed.reward.claim, { kind: 'complete' });
+  assert.equal(dex.claimFromPath('/me/prep-item-sets/x/claim-starter').kind, 'starter');
+  assert.equal(dex.claimFromPath('/evil/milestones/hack/claim'), null);
   assert.equal(over.steps[0].status, 'claimable');
   // Junk or missing payloads never throw and keep the legacy values.
   for (const junk of [undefined, null, 'x', 42, { color: 'red', status: 'nope', progress: 'x', reward: [] }]) {
@@ -164,9 +174,13 @@ test('Ride Photo: best grade in any optional shape, only on found items', () => 
   assert.equal(dex.photoGradeOf(1), 'good');
   assert.equal(dex.photoGradeOf(3), 'frame_it');
   assert.equal(dex.photoGradeOf('meh'), null);
-  assert.deepEqual(plain(dex.ridePhotoOf({ ride_photo: { grade: 'great', url: 'https://x/p.jpg' } })), { grade: 'great', url: 'https://x/p.jpg' });
-  assert.deepEqual(plain(dex.ridePhotoOf({ best_photo_grade: 'good' })), { grade: 'good', url: null });
-  assert.deepEqual(plain(dex.ridePhotoOf({ photo_url: 'https://x/p.jpg' })), { grade: null, url: null }, 'no grade, no photo');
+  assert.deepEqual(plain(dex.ridePhotoOf({ ride_photo: { grade: 'great', url: 'https://x/p.jpg' } })), { grade: 'great', url: 'https://x/p.jpg', goldenHour: false });
+  assert.deepEqual(plain(dex.ridePhotoOf({ best_photo_grade: 'good' })), { grade: 'good', url: null, goldenHour: false });
+  assert.deepEqual(plain(dex.ridePhotoOf({ photo_url: 'https://x/p.jpg' })), { grade: null, url: null, goldenHour: false }, 'no grade, no photo');
+  assert.deepEqual(plain(dex.ridePhotoOf({ best_photo: null })), { grade: null, url: null, goldenHour: false });
+  // CONTRACT 3.2: best_photo { quality, golden_hour, frame }.
+  assert.deepEqual(plain(dex.ridePhotoOf({ best_photo: { quality: 'frame_it', golden_hour: true, frame: 'gold' } })),
+    { grade: 'frame_it', url: null, goldenHour: true });
   const detail = { progress: { spare_count: 0, exchange_cost: 4 }, items: [legacyItem(1, 4, { is_collected: true, quantity_collected: 1 }), legacyItem(2, 4)] };
   const items = plain(dex.buildItems(detail, [{ id: 1, best_photo_grade: 'frame_it' }, { id: 2, best_photo_grade: 'great' }]));
   assert.equal(items[0].photoGrade, 'frame_it');

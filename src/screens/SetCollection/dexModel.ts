@@ -32,6 +32,8 @@ export interface DexReward {
   readonly energy: number;
   readonly tickets: number;
   readonly experience: number;
+  /** Shark Coins (v3 sets add coins to the finish reward). */
+  readonly coins: number;
   readonly title: string | null;
   readonly wearableName: string | null;
   /** "Finish the set: get 60 Energy, 3 Tickets and 400 XP" */
@@ -94,6 +96,8 @@ export interface DexItem {
   readonly photoGrade: PhotoGrade | null;
   /** A server-rendered Ride Photo, when the server sends one. */
   readonly photoUrl: string | null;
+  /** Caught during Golden Hour (cosmetic gold card). */
+  readonly goldenHour: boolean;
 }
 
 export type PhotoGrade = 'good' | 'great' | 'frame_it';
@@ -111,14 +115,14 @@ export function photoGradeOf(value: unknown): PhotoGrade | null {
   return null;
 }
 
-/** Best grade and photo url from any of the optional shapes (best_photo_grade, ride_photo: { grade, url }). */
-export function ridePhotoOf(raw: Record<string, unknown> | null): { grade: PhotoGrade | null; url: string | null } {
-  if (!raw) return { grade: null, url: null };
+/** Best grade, photo url and Golden Hour from any of the optional shapes (CONTRACT 3.2 best_photo: { quality, golden_hour }, or ride_photo: { grade, url }). */
+export function ridePhotoOf(raw: Record<string, unknown> | null): { grade: PhotoGrade | null; url: string | null; goldenHour: boolean } {
+  if (!raw) return { grade: null, url: null, goldenHour: false };
   const nested = record(raw.ride_photo) ?? record(raw.best_ride_photo) ?? record(raw.best_photo);
-  const grade = photoGradeOf(raw.best_photo_grade) ?? photoGradeOf(raw.photo_grade) ?? photoGradeOf(nested?.grade)
-    ?? photoGradeOf(nested?.best_grade);
+  const grade = photoGradeOf(nested?.quality) ?? photoGradeOf(raw.best_photo_grade) ?? photoGradeOf(raw.photo_grade)
+    ?? photoGradeOf(nested?.grade) ?? photoGradeOf(nested?.best_grade);
   const url = str(nested?.url) ?? str(nested?.photo_url) ?? str(raw.best_photo_url) ?? str(raw.photo_url);
-  return { grade, url: grade ? url : null };
+  return { grade, url: grade ? url : null, goldenHour: grade != null && nested?.golden_hour === true };
 }
 
 export interface DexBook {
@@ -158,12 +162,13 @@ export const rarityLabel = (rarity: number): string => RARITY_LABEL[rarity] ?? '
 
 /** "60 Energy, 3 Tickets, 400 XP and the Snack Boss title" */
 export function prizeLine(parts: {
-  energy?: number; tickets?: number; experience?: number; title?: string | null; wearableName?: string | null; pick?: boolean;
+  energy?: number; tickets?: number; experience?: number; coins?: number; title?: string | null; wearableName?: string | null; pick?: boolean;
 }): string {
   const list: string[] = [];
   if (num(parts.energy) > 0) list.push(`${parts.energy} Energy`);
   if (num(parts.tickets) > 0) list.push(`${parts.tickets} ${parts.tickets === 1 ? 'Ticket' : 'Tickets'}`);
   if (num(parts.experience) > 0) list.push(`${parts.experience} XP`);
+  if (num(parts.coins) > 0) list.push(`${parts.coins} coins`);
   if (parts.wearableName) list.push(parts.wearableName);
   else if (parts.pick) list.push('a shark item you pick');
   if (parts.title) list.push(`the ${parts.title} title`);
@@ -197,7 +202,7 @@ function fromMilestone(milestone: SetMilestone, total: number, isFinal: boolean)
     id: milestone.key,
     target,
     status: milestone.status ?? 'locked',
-    energy: num(rewards.energy), tickets: num(rewards.tickets), experience: num(rewards.experience),
+    energy: num(rewards.energy), tickets: num(rewards.tickets), experience: num(rewards.experience), coins: num((rewards as Record<string, unknown>).coins),
     title: str(rewards.title), wearableName: str(rewards.wearable_name),
     prize,
     label: isFinal ? finishLabel(prize) : stepLabel(target, prize),
@@ -225,10 +230,12 @@ export function legacyRewards(set: LegacySetLike): { reward: DexReward; steps: D
     return { reward, steps };
   }
   const rewards = set.completion_rewards ?? { energy: 0, tickets: 0, experience: 0, title: null, badge_url: null };
-  const prize = prizeLine({ energy: rewards.energy, tickets: rewards.tickets, experience: rewards.experience, title: rewards.title });
+  const prize = prizeLine({ energy: rewards.energy, tickets: rewards.tickets, experience: rewards.experience,
+    coins: num((rewards as Record<string, unknown>).coins), title: rewards.title });
   const reward: DexReward = {
     id: 'complete', target: total, status: legacyStatus(set),
     energy: num(rewards.energy), tickets: num(rewards.tickets), experience: num(rewards.experience),
+    coins: num((rewards as Record<string, unknown>).coins),
     title: str(rewards.title), wearableName: null, prize, label: finishLabel(prize),
     claim: { kind: 'complete' }, needsPick: false, choices: [], titleTier: 'complete',
   };
@@ -245,7 +252,7 @@ export function legacyRewards(set: LegacySetLike): { reward: DexReward; steps: D
     steps.push({
       id: 'starter', target: Math.max(1, num(starter.target, 8)),
       status: starter.rewards_claimed ? 'claimed' : starter.is_unlocked ? 'claimable' : 'locked',
-      energy: num(starter.rewards?.energy), tickets: num(starter.rewards?.tickets), experience: num(starter.rewards?.experience),
+      energy: num(starter.rewards?.energy), tickets: num(starter.rewards?.tickets), experience: num(starter.rewards?.experience), coins: 0,
       title: str(starter.rewards?.title), wearableName: awarded, prize: starterPrize,
       label: stepLabel(Math.max(1, num(starter.target, 8)), starterPrize),
       claim: { kind: 'starter' }, needsPick: !starter.rewards_claimed && pick, choices, titleTier: 'starter',
@@ -290,6 +297,17 @@ export function fromLegacySet(set: PrepItemSetListItem, index = 0): DexSet {
   };
 }
 
+const MILESTONE_KEYS = ['starter', 'explorer', 'complete', 'master', 'encore'];
+
+/** The claim route named by a v3 claim_path, or null to keep the legacy route. */
+export function claimFromPath(path: unknown): DexClaim | null {
+  if (typeof path !== 'string') return null;
+  const match = /^\/me\/prep-item-sets\/[a-z0-9_-]+\/(claim|claim-starter|milestones\/([a-z]+)\/claim)$/.exec(path);
+  if (!match) return null;
+  if (match[2]) return MILESTONE_KEYS.includes(match[2]) ? { kind: 'milestone', key: match[2] as SetMilestone['key'] } : null;
+  return match[1] === 'claim-starter' ? { kind: 'starter' } : { kind: 'complete' };
+}
+
 /** Overlay one v3 dex set (GET /me/home-hunt/dex sets[]) onto the legacy set. Unknown fields keep the legacy value. */
 export function overlayDexSet(base: DexSet, raw: unknown): DexSet {
   const dex = record(raw);
@@ -303,13 +321,23 @@ export function overlayDexSet(base: DexSet, raw: unknown): DexSet {
     ? rewardRaw.status as DexRewardStatus : base.reward.status;
   // Keep the legacy reward shape (claim route, picks); refresh status and the server's own label.
   const serverLabel = str(rewardRaw?.label);
-  const reward: DexReward = { ...base.reward, status: rewardStatus, label: serverLabel ?? base.reward.label };
+  const merged = {
+    energy: num(rewardRaw?.energy, base.reward.energy), tickets: num(rewardRaw?.tickets, base.reward.tickets),
+    experience: num(rewardRaw?.experience, base.reward.experience), coins: num(rewardRaw?.coins, base.reward.coins),
+    title: rewardRaw && 'title' in rewardRaw ? str(rewardRaw.title) : base.reward.title,
+  };
+  const prize = prizeLine({ ...merged, wearableName: base.reward.wearableName, pick: base.reward.needsPick });
+  const reward: DexReward = {
+    ...base.reward, ...merged, status: rewardStatus, prize, label: serverLabel ?? finishLabel(prize),
+    claim: claimFromPath(rewardRaw?.claim_path) ?? base.reward.claim,
+  };
   const starterRaw = record(dex.starter);
   const steps = base.steps.map(step => {
     if (step.id !== 'starter' || !starterRaw) return step;
     const starterStatus = typeof starterRaw.status === 'string' && ['locked', 'claimable', 'claimed', 'pending'].includes(starterRaw.status)
       ? starterRaw.status as DexRewardStatus : step.status;
-    return { ...step, status: starterStatus, label: str(starterRaw.label) ?? step.label };
+    return { ...step, status: starterStatus, label: str(starterRaw.label) ?? step.label,
+      claim: claimFromPath(starterRaw.claim_path) ?? step.claim };
   });
   return {
     ...base,
@@ -435,7 +463,7 @@ export function buildItems(
     const firstFound = str(dex?.first_found_at) ?? str(item.first_collected_at);
     const firstMs = firstFound ? Date.parse(firstFound) : Number.NaN;
     const dexPhoto = ridePhotoOf(dex);
-    const photo = !found ? { grade: null, url: null }
+    const photo = !found ? { grade: null, url: null, goldenHour: false }
       : dexPhoto.grade ? dexPhoto : ridePhotoOf(item as unknown as Record<string, unknown>);
     return {
       id: item.id,
@@ -457,6 +485,7 @@ export function buildItems(
       isNew: found && Number.isFinite(firstMs) && now - firstMs >= 0 && now - firstMs < NEW_FOR_MS,
       photoGrade: photo.grade,
       photoUrl: photo.url,
+      goldenHour: photo.goldenHour,
     };
   });
 }

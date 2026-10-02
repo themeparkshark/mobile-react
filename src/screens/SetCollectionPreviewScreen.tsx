@@ -96,12 +96,14 @@ function build(set: MockDexSet, setIndex: number) {
     // Set badges are still being drawn: the set's top item stands in.
     slug: set.slug, color: set.color, badge_url: ART ? `${ART}/items/${set.items[set.items.length - 1].slug}.png` : null,
     status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: HINTS[set.spawn] ?? null,
+    reward: { coins: set.reward.coins },
   };
   const dexItems = items.map((item, index) => ({
     id: item.id,
     spawn_hint: HINTS[set.spawn] ?? null,
-    // Rare-or-better finds carry a Ride Photo grade.
-    best_photo_grade: item.is_collected && item.rarity >= 3 ? grades[index % 3] : null,
+    // Uncommon-or-better finds carry their best Ride Photo (CONTRACT 3.2); one is a Golden Hour catch.
+    best_photo: item.is_collected && item.rarity >= 2
+      ? { quality: grades[index % 3], golden_hour: index === 5, frame: grades[index % 3] === 'frame_it' ? 'gold' : 'plain' } : null,
   }));
   return { list, detail, dexSet, dexItems };
 }

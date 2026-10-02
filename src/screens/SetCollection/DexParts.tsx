@@ -154,7 +154,8 @@ export const ItemTile = memo(function ItemTile({ item, size, color, onPress, ind
       <SpringPress onPress={() => onPress(item)} accessibilityLabel={item.found
         ? `${item.name}, ${item.rarityLabel}, caught ${item.caught}` : `Missing ${item.rarityLabel} find`}
         style={[styles.tile, { width: size, height: size + 22 },
-          item.found ? { backgroundColor: BRAND.white, borderColor: tone } : { backgroundColor: '#dfeaf5', borderColor: '#c6d8ea' }]}>
+          item.found ? { backgroundColor: item.goldenHour ? '#fff6d6' : BRAND.white, borderColor: item.goldenHour ? BRAND.gold : tone }
+            : { backgroundColor: '#dfeaf5', borderColor: '#c6d8ea' }]}>
         {item.found && <View style={[styles.tileGlow, { backgroundColor: color }]} />}
         <LinearGradient colors={item.found ? ['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
           style={styles.tileGloss} pointerEvents="none" />
@@ -277,12 +278,13 @@ export function RewardReveal({ reveal, onClose }: {
   );
 }
 
-type PrizeIcon = 'energy' | 'ticket' | 'xp' | 'shark';
+type PrizeIcon = 'energy' | 'ticket' | 'xp' | 'coins' | 'shark';
 function prizeChips(reward: DexReward): { icon: PrizeIcon; label: string }[] {
   const list: { icon: PrizeIcon; label: string }[] = [];
   if (reward.energy > 0) list.push({ icon: 'energy', label: `+${reward.energy}` });
   if (reward.tickets > 0) list.push({ icon: 'ticket', label: `+${reward.tickets}` });
   if (reward.experience > 0) list.push({ icon: 'xp', label: `+${reward.experience}` });
+  if (reward.coins > 0) list.push({ icon: 'coins', label: `+${reward.coins}` });
   if (reward.wearableName) list.push({ icon: 'shark', label: reward.wearableName });
   return list;
 }
@@ -381,7 +383,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
         {item && (
           <Animated.View style={[styles.itemCard, cardStyle]}>
             <Pressable onPress={() => undefined} style={{ alignItems: 'center' }}>
-              <LinearGradient colors={item.found ? [color, shade(color)] : ['#3b5675', '#1b3a5c']}
+              <LinearGradient colors={item.found ? (item.goldenHour ? ['#ffd66b', '#e08a00'] : [color, shade(color)]) : ['#3b5675', '#1b3a5c']}
                 style={[styles.itemHero, photo && styles.itemHeroPhoto]}>
                 <View style={styles.itemHalo} />
                 <LinearGradient colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.heroGloss} pointerEvents="none" />
@@ -392,6 +394,9 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                     style={styles.itemArt} />
                 )}
                 {item.found && item.isNew && <StarBurst key={item.id} />}
+                {item.goldenHour && (
+                  <View style={styles.goldenTag}><GameIcon name="sparkle" size={18} /><Text style={styles.goldenText}>Golden Hour</Text></View>
+                )}
                 <View style={[styles.rarityPill, photo && styles.rarityPillPhoto, { backgroundColor: tone }]}>
                   {item.rarity >= 4 && <GameIcon name="star" size={18} />}
                   <Text style={styles.rarityText}>{item.rarityLabel}</Text>
@@ -559,6 +564,11 @@ const styles = StyleSheet.create({
   },
   itemHeroPhoto: { height: 300 },
   heroGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '55%' },
+  goldenTag: {
+    position: 'absolute', bottom: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
+    paddingVertical: 3, borderRadius: 999, backgroundColor: '#7a3d00',
+  },
+  goldenText: { fontFamily: 'Shark', fontSize: 13, color: '#ffe07a' },
   rarityPillPhoto: { top: 12, bottom: undefined },
   itemHalo: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.22)' },
   itemArt: { width: 190, height: 190 },

@@ -7,7 +7,7 @@ export interface MockDexSet {
   readonly slug: string;
   readonly name: string;
   readonly color: string;
-  readonly reward: { readonly energy: number; readonly tickets: number; readonly xp: number; readonly title: string | null };
+  readonly reward: { readonly energy: number; readonly tickets: number; readonly xp: number; readonly coins?: number; readonly title: string | null };
   readonly spawn: string;
   readonly badge: string;
   readonly items: readonly { readonly slug: string; readonly name: string; readonly rarity: number; readonly flavor: string }[];
@@ -22,6 +22,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 10,
    "tickets": 2,
    "xp": 60,
+   "coins": 500,
    "title": "Snack Boss"
   },
   "spawn": "always",
@@ -109,6 +110,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 10,
    "tickets": 2,
    "xp": 50,
+   "coins": 400,
    "title": "Churro Champ"
   },
   "spawn": "always",
@@ -178,6 +180,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 10,
    "tickets": 2,
    "xp": 60,
+   "coins": 500,
    "title": "Sugar Scout"
   },
   "spawn": "always",
@@ -265,6 +268,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 10,
    "tickets": 3,
    "xp": 70,
+   "coins": 600,
    "title": "Gift Shop Guru"
   },
   "spawn": "always",
@@ -352,6 +356,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 15,
    "tickets": 3,
    "xp": 60,
+   "coins": 500,
    "title": "Ready Rider"
   },
   "spawn": "always",
@@ -439,6 +444,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 15,
    "tickets": 3,
    "xp": 80,
+   "coins": 600,
    "title": "Night Owl"
   },
   "spawn": "time",
@@ -520,6 +526,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 10,
    "tickets": 3,
    "xp": 70,
+   "coins": 600,
    "title": "Parade Pro"
   },
   "spawn": "days",
@@ -601,6 +608,7 @@ export const MOCK_DEX_SETS: readonly MockDexSet[] = [
    "energy": 15,
    "tickets": 4,
    "xp": 90,
+   "coins": 700,
    "title": "Pumpkin Hunter"
   },
   "spawn": "seasonal",
