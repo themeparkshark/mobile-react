@@ -1,22 +1,30 @@
 /**
  * Shark Shop v2 gear shelves (shop-v2/CONTRACT.md).
  *
- * Top to bottom: sets ready to claim, the Featured hero stage (this week's
- * star on the player's own shark), event banners with key art and two honest
- * timers (next drop, event end), the rest of Featured with "complete the
- * look" callouts, then Daily. Everyone sees the same shelves; a tile bought
- * this visit stays put and stamps OWNED, owned items sink on the next visit.
+ * Top to bottom:
+ * 1. One "You finished N sets!" card when sets wait for their title.
+ * 2. The Featured hero stage: this week's star on your own shark, alone and spotlit.
+ * 3. Event banners with key art, two honest timers and a "Next:" tease.
+ * 4. The rest of Featured with "complete the look" callouts.
+ * 5. Daily.
  *
- * Performance: each timer pill owns its minute tick (server clock), the heart
- * handler is stable and updates one id, and tiles, grids and banners are
- * memoized, so a heart tap re-renders one tile.
+ * Everyone sees the same shelves. A tile bought this visit stays put and
+ * stamps OWNED. On the first open of a shop day, today's new items wear NEW!.
+ *
+ * Performance:
+ * - Hearts live in a tiny store keyed by item id (wishStore), so a heart tap
+ *   re-renders one tile and the wishlist pill.
+ * - Timer pills own their own minute tick, on server time.
+ * - Grids, banners and the hero are memoized with stable props.
+ * - EXPO_PUBLIC_SHOP_PROFILE=1 logs React Profiler commits per tile.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Dimensions, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, type SharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { claimShopSet } from '../../api/endpoints/me/shop-sets';
 import updatePlayer from '../../api/endpoints/me/update-player';
 import { addToWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
@@ -24,18 +32,20 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  dailyPill, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, pieceState,
-  reconcileWish, sectionAccent, setA11y, setProgressText, stableOrder, toggleWish, wearingIds,
+  dailyPill, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, pieceState, readySummary,
+  restockBackoffMs, sectionAccent, setA11y, setProgressText, shortDate, stableOrder, wishSavedCopy,
 } from '../../helpers/shopShelves';
-import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
+import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopToday } from '../../models/shop-today';
+import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopTease, ShopToday } from '../../models/shop-today';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW } from '../../ui';
 import { showToast } from '../../utils/toast';
 import SetCompleteReveal from './SetCompleteReveal';
 import ShopTile, { TileArt } from './ShopTile';
-import TryOnSheet, { previewLook } from './TryOnSheet';
-import { MAX_FONT, PieceChip, TimerPill, useShopNow } from './shopUi';
+import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
+import { MAX_FONT, PieceChip, Sheen, ShopStage, TimerPill, useShopNow } from './shopUi';
+import { ShopProfile } from './shopProfile';
+import { wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GAP = 12;
@@ -43,9 +53,13 @@ const GAP = 12;
 const GRID_PAD = 8;
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
-const HERO_H = Math.round(Math.min(300, SCREEN_W * 0.7));
+const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
+const NEW_SEEN_KEY = 'shop:new-seen-day';
+const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: '6%' as const };
+const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
-type Open = { item: ShopItem; fullLook: boolean } | null;
+type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
+type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null }) => void;
 
 const SectionPills = memo(function SectionPills({ section, offset, still }: { section: ShopSection; offset: number; still: boolean }) {
   const now = useShopNow(offset);
@@ -60,60 +74,134 @@ const SectionPills = memo(function SectionPills({ section, offset, still }: { se
   );
 });
 
-const Grid = memo(function Grid({ items, wishes, vip, balance, still, bought, width = TILE_W, horizontal = false, onOpen, onWish }: {
-  items: ShopItem[]; wishes: number[]; vip: boolean; balance: number; still: boolean; bought: number[]; width?: number; horizontal?: boolean;
+/** "Next: Bone Zone" with a few blacked-out piece shapes (honest: the real next set). */
+const TeaseChip = memo(function TeaseChip({ tease, label }: { tease: ShopTease; label: string }) {
+  const when = shortDate(tease.starts_on);
+  return (
+    <View style={styles.tease} accessible accessibilityLabel={`${label}, ${tease.title ?? tease.set_name ?? 'a surprise'}${when ? `, from ${when}` : ''}`}>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.teaseLabel}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.teaseName} numberOfLines={1}>{tease.title ?? tease.set_name ?? '???'}</Text>
+      <View style={styles.teaseShapes}>
+        {(tease.silhouettes.length ? tease.silhouettes : [null]).slice(0, 3).map((url, i) => url
+          ? <Image key={i} source={url} style={styles.teaseShape} contentFit="contain" tintColor="#0a2350" />
+          : <Text key={i} style={styles.teaseQ}>?</Text>)}
+      </View>
+    </View>
+  );
+});
+
+const Grid = memo(function Grid({ items, vip, balance, still, bought, showNew, width = TILE_W, horizontal = false, onOpen, onWish }: {
+  items: ShopItem[]; vip: boolean; balance: number; still: boolean; bought: number[]; showNew: boolean; width?: number; horizontal?: boolean;
   onOpen: (item: ShopItem) => void; onWish: (item: ShopItem) => void;
 }) {
   const tiles = items.map(item => (
-    <ShopTile key={item.id} item={item} width={width} wished={wishes.includes(item.id)} still={still}
-      vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
-      onOpen={onOpen} onWish={onWish} />
+    <ShopProfile key={item.id} id={`tile-${item.id}`}>
+      <ShopTile item={item} width={width} still={still} showNew={showNew}
+        vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
+        onOpen={onOpen} onWish={onWish} />
+    </ShopProfile>
   ));
   return horizontal
     ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventRow}>{tiles}</ScrollView>
     : <View style={styles.grid}>{tiles}</View>;
 });
 
-const SetCallout = memo(function SetCallout({ set, todayIds, onTry, onClaim }: {
-  set: ShopSetSummary; todayIds: number[]; onTry: (set: ShopSetSummary) => void; onClaim: (set: ShopSetSummary) => void;
-}) {
-  const ready = set.reward_state === 'ready';
-  const done = set.reward_state === 'claimed';
+/** Your shark in the set, small (completed callouts). */
+const SetPortrait = memo(function SetPortrait({ set }: { set: ShopSetSummary }) {
+  const { player } = useContext(AuthContext);
+  const stage = useMemo(() => previewLook(player?.inventory, (set.pieces ?? []).map(asWearable), 'base'), [player?.inventory?.skin_item?.id, set.slug]);
+  if (!stage) return null;
   return (
-    <Pressable onPress={() => (ready ? onClaim(set) : onTry(set))} accessibilityRole="button" accessibilityLabel={setA11y(set)}
-      style={[styles.setCard, { borderColor: set.color ?? BRAND.gold }]}>
+    <View style={[styles.portrait, { borderColor: set.color ?? BRAND.gold }]}>
+      <Playercard inventory={stage.look} still showBackground={false} pinAnchor="body" style={MINI_CARD_STYLE} />
+    </View>
+  );
+});
+
+const SetCallout = memo(function SetCallout({ set, todayIds, onTry }: {
+  set: ShopSetSummary; todayIds: number[]; onTry: (set: ShopSetSummary) => void;
+}) {
+  const done = set.reward_state === 'claimed';
+  const color = set.color ?? BRAND.gold;
+  return (
+    <Pressable onPress={() => onTry(set)} accessibilityRole="button" accessibilityLabel={setA11y(set)}
+      style={[styles.setCard, { borderColor: color }]}>
       <View style={styles.setHead}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setTitle} numberOfLines={1}>{ready ? `You finished ${set.name}!` : set.name}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setTitle} numberOfLines={1}>{set.name}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setCount}>{setProgressText(set)}</Text>
       </View>
-      <View style={styles.setPieces}>
-        {(set.pieces ?? []).map(piece => (
-          <PieceChip key={piece.id} piece={piece} state={pieceState(piece, todayIds)} size={50} />
+      {/* One segment per piece, filled in the set colour. */}
+      <View style={styles.segments}>
+        {Array.from({ length: set.total }, (_, i) => (
+          <View key={i} style={[styles.segment, i < set.owned && { backgroundColor: color }]} />
         ))}
       </View>
-      <View style={styles.chips}>
-        {set.title && <View style={styles.titleChip}><GameIcon name="crown" size={15} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.titleChipText}>{set.title}</Text></View>}
-        {set.xp_reward > 0 && !done && <View style={styles.xpChip}><GameIcon name="xp" size={15} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpChipText}>+{set.xp_reward} XP</Text></View>}
-        {done && <View style={styles.doneChip}><GameIcon name="check" size={15} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.doneText}>Yours</Text></View>}
+      <View style={styles.setRow}>
+        {done && <SetPortrait set={set} />}
+        <View style={{ flex: 1, gap: 8 }}>
+          <View style={styles.setPieces}>
+            {(set.pieces ?? []).map(piece => (
+              <View key={piece.id} style={!piece.owned && { opacity: 0.55 }}>
+                <PieceChip piece={piece} state={pieceState(piece, todayIds)} size={50} />
+              </View>
+            ))}
+          </View>
+          <View style={styles.chips}>
+            {set.title && <View style={styles.titleChip}><GameIcon name="crown" size={15} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.titleChipText}>{set.title}</Text></View>}
+            {set.xp_reward > 0 && !done && <View style={styles.xpChip}><GameIcon name="xp" size={15} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpChipText}>+{set.xp_reward} XP</Text></View>}
+            {done && <View style={styles.doneChip}><GameIcon name="check" size={15} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.doneText}>Yours</Text></View>}
+          </View>
+        </View>
       </View>
-      {ready && <GameButton label="Claim your title!" icon="crown" onPress={() => onClaim(set)} />}
     </Pressable>
   );
 });
 
-const EventBanner = memo(function EventBanner({ section, offset, still, children }: {
-  section: ShopSection; offset: number; still: boolean; children: React.ReactNode;
+/** Every set waiting for its title in one card, with one "Claim all". */
+const ReadyCard = memo(function ReadyCard({ sets, todayIds, onClaimAll }: {
+  sets: ShopSetSummary[]; todayIds: number[]; onClaimAll: () => void;
+}) {
+  const summary = readySummary(sets);
+  if (!summary) return null;
+  return (
+    <View style={[styles.setCard, styles.readyCard]}>
+      <View style={styles.setHead}>
+        <GameIcon name="trophy" size={24} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.readyTitle} numberOfLines={1}>{summary.title}</Text>
+      </View>
+      <ScrollView horizontal pagingEnabled={sets.length > 1} showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+        {sets.map(set => (
+          <View key={set.slug} style={styles.readySet}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.readySetName}>{set.name}</Text>
+            <View style={styles.setPieces}>
+              {(set.pieces ?? []).map(piece => <PieceChip key={piece.id} piece={piece} state={pieceState(piece, todayIds)} size={44} />)}
+            </View>
+            {set.title && <View style={[styles.titleChip, { alignSelf: 'flex-start' }]}><GameIcon name="crown" size={15} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.titleChipText}>{set.title}</Text></View>}
+          </View>
+        ))}
+      </ScrollView>
+      <GameButton label={sets.length > 1 ? `Claim all ${sets.length}!` : 'Claim your title!'} icon="crown" onPress={onClaimAll} />
+    </View>
+  );
+});
+
+const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, showNew, todayIds, setsBySlug, onOpen, onWish, onTrySet }: {
+  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; showNew: boolean;
+  todayIds: number[]; setsBySlug: Map<string, ShopSetSummary>;
+  onOpen: OpenFn; onWish: (item: ShopItem) => void; onTrySet: (set: ShopSetSummary) => void;
 }) {
   const accent = sectionAccent(section);
   const ink = section.art_url ? '#ffffff' : inkOn(accent);
+  const openHere = useCallback((item: ShopItem) => onOpen(item, { accent }), [onOpen, accent]);
   return (
     <View style={[styles.event, { backgroundColor: accent }]}>
       {section.art_url ? (
         <ImageBackground source={{ uri: section.art_url }} resizeMode="cover" style={styles.eventArt}>
-          <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.0)', accent]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0)', accent]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
         </ImageBackground>
       ) : <View style={styles.eventShine} pointerEvents="none" />}
       <View style={styles.eventHead}>
@@ -123,63 +211,89 @@ const EventBanner = memo(function EventBanner({ section, offset, still, children
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventSub, { color: ink }]} numberOfLines={2}>{section.subtitle}</Text>
         ) : null}
         <SectionPills section={section} offset={offset} still={still} />
+        {section.next_wave && <View style={{ marginTop: 8 }}><TeaseChip tease={section.next_wave} label="NEXT" /></View>}
       </View>
-      {children}
+      <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew}
+        width={EVENT_TILE_W} horizontal onOpen={openHere} onWish={onWish} />
+      {section.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
+        <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={onTrySet} />
+      ))}
     </View>
   );
 });
 
-function Hero({ item, set, section, offset, still, onOpen }: {
-  item: ShopItem; set: ShopSetSummary | null; section: ShopSection; offset: number; still: boolean; onOpen: (item: ShopItem, full: boolean) => void;
+const Hero = memo(function Hero({ item, set, section, offset, still, todayItems, tease, onOpen }: {
+  item: ShopItem; set: ShopSetSummary | null; section: ShopSection; offset: number; still: boolean;
+  todayItems: ShopItem[]; tease: ShopTease | null | undefined; onOpen: OpenFn;
 }) {
   const { player } = useContext(AuthContext);
   const badge = wearableBadge(item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
+  const worn = isItemWorn(player?.inventory, item);
   const pieces = set?.pieces ?? [];
-  const look = useMemo(() => {
-    const ids = wearingIds(item.id, pieces, false);
-    const wear = ids.map(id => (id === item.id
-      ? { id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url, item_type: item.item_type }
-      : (() => { const p = pieces.find(x => x.id === id)!; return { id, name: p.name, icon_url: p.icon_url, paper_url: p.paper_url,
-        no_eye_url: p.no_eye_url, item_type: { id: p.item_type_id } }; })()));
-    return previewLook(player?.inventory, wear as never);
-  }, [player?.inventory, item.id, pieces]);
+  // The star alone on your shark's own skin: the brightest thing in the panel.
+  const stage = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
+    paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type }], 'base'), [player?.inventory?.skin_item?.id, item.id]);
+  const extra = pieces.length > 4 ? pieces.length - 3 : 0;
+
+  const openPiece = (pieceId: number) => {
+    const onShelf = todayItems.find(i => i.id === pieceId);
+    onOpen(onShelf ?? item, { fullLook: !onShelf });
+  };
 
   return (
-    <Pressable onPress={() => onOpen(item, false)} accessibilityRole="button"
-      accessibilityLabel={`This week's star: ${itemDisplayName(item)}, ${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}
-      style={[styles.hero, { height: HERO_H, borderColor: glow }]}>
-      <LinearGradient colors={['#d7f0ff', '#8fd0f7']} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={styles.heroSpot} />
-      <View pointerEvents="none" style={styles.heroFloor} />
-      <View style={styles.heroStage}>
-        {look ? <Playercard inventory={look} still={still} showBackground={false} style={{ position: 'absolute', width: '100%', height: '100%' }} />
-          : <View style={styles.heroFlat}><TileArt item={item} size={170} torso={false} /></View>}
-      </View>
-      <View style={styles.heroText}>
+    <View style={[styles.hero, { height: HERO_H, borderColor: glow }]}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
+        accessibilityLabel={`This week's star: ${itemDisplayName(item)}, ${owned ? 'owned' : `${formatCoins(item.cost)} Shark Coins`}. Tap to try it on.`}>
+        <View style={styles.heroStage}>
+          <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
+            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" style={HERO_CARD_STYLE} />
+              : <View style={styles.heroFlat}><TileArt item={item} size={170} torso={false} thumb={false} /></View>}
+          </ShopStage>
+        </View>
+      </Pressable>
+      <View style={styles.heroText} pointerEvents="box-none">
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroName} numberOfLines={2}>{itemDisplayName(item)}</Text>
         {badge.label ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View> : null}
-        {set && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroSet} numberOfLines={1}>Part of {set.name}</Text>}
+        {set && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroSet} numberOfLines={1}>{set.name}: {setProgressText(set)}</Text>}
         {pieces.length > 1 && (
           <View style={styles.heroPieces}>
-            {pieces.slice(0, 4).map(p => <PieceChip key={p.id} piece={p} state={pieceState(p, [item.id])} size={34} />)}
+            {pieces.slice(0, extra ? 3 : 4).map(p => (
+              <PieceChip key={p.id} piece={p} state={pieceState(p, todayItems.map(i => i.id))} size={44} onPress={() => openPiece(p.id)} />
+            ))}
+            {extra > 0 && <View style={styles.heroMore}><Text style={styles.heroMoreText}>+{extra}</Text></View>}
           </View>
         )}
         <View style={{ marginTop: 'auto', gap: 4 }}>
-          {!owned && <View style={styles.heroPrice}><GameIcon name="coins" size={18} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroPriceText}>{formatCoins(item.cost)}</Text></View>}
-          <View style={styles.heroCta}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroCtaText}>{owned ? 'OWNED' : 'TRY IT ON'}</Text></View>
+          {owned ? (
+            worn ? (
+              <View style={styles.wearingChip}><GameIcon name="check" size={18} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.wearingText}>WEARING</Text></View>
+            ) : (
+              <Pressable onPress={() => onOpen(item, { bought: true })} style={styles.heroGhost} accessibilityRole="button">
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroGhostText}>WEAR IT</Text>
+              </Pressable>
+            )
+          ) : (
+            <>
+              <View style={styles.heroPrice}><GameIcon name="coins" size={18} />
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroPriceText}>{formatCoins(item.cost)}</Text></View>
+              <Pressable onPress={() => onOpen(item)} style={styles.heroCta} accessibilityRole="button">
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroCtaText}>TRY IT ON</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
-      <View style={styles.heroTimer}><SectionPills section={section} offset={offset} still={still} /></View>
-    </Pressable>
+      <View style={styles.heroTimer} pointerEvents="none"><SectionPills section={section} offset={offset} still={still} /></View>
+      {tease && <View style={styles.heroTease} pointerEvents="none"><TeaseChip tease={tease} label="NEXT WEEK" /></View>}
+    </View>
   );
-}
+});
 
-export default function ShopShelves({ today, setToday, onRefresh, offset, focusItemId, wishCount }: {
+export default function ShopShelves({ today, setToday, onRefresh, offset, focusItemId, scrollY }: {
   readonly today: ShopToday;
   readonly setToday: Dispatch<SetStateAction<ShopToday | null>>;
   readonly onRefresh: () => Promise<boolean>;
@@ -187,19 +301,40 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   readonly offset: number;
   /** Opens this item's try-on once (wishlist push deep link). */
   readonly focusItemId?: number;
-  readonly wishCount?: (n: number) => void;
+  /** The screen collapses its header from this. */
+  readonly scrollY?: SharedValue<number>;
 }) {
   const { player } = useContext(AuthContext);
-  const { playSound } = useContext(SoundEffectContext);
+  const { playSound: playSoundNow } = useContext(SoundEffectContext);
+  // Stable sound callback: the provider's value changes identity, our handlers must not.
+  const soundRef = useRef(playSoundNow);
+  soundRef.current = playSoundNow;
+  const playSound = useCallback((sound: number, options?: { volume?: number }) => soundRef.current(sound, options), []);
   const still = useReducedGameMotion();
   const [open, setOpen] = useState<Open>(null);
-  const [reveal, setReveal] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null } | null>(null);
+  const [reveals, setReveals] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null }[]>([]);
   const [askAlerts, setAskAlerts] = useState(false);
   const [bought, setBought] = useState<number[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const vip = !!player?.is_subscribed;
   const balance = Number(player?.coins ?? 0);
-  const wishes = today.wishlist_ids ?? [];
+
+  // The wishlist store follows the server copy (never a per-tap re-render of the shelves).
+  useEffect(() => { wishStore.seed(today.wishlist_ids ?? [], today.wishlist_alerts); }, [today.wishlist_ids, today.wishlist_alerts]);
+
+  // NEW! ribbons show on the first open of each shop day, for that visit.
+  useEffect(() => {
+    let live = true;
+    void AsyncStorage.getItem(NEW_SEEN_KEY).then(seen => {
+      if (!live) return;
+      if (seen !== today.shop_day) {
+        setShowNew(true);
+        void AsyncStorage.setItem(NEW_SEEN_KEY, today.shop_day).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [today.shop_day]);
 
   // A tile stays where the kid saw it for this visit (per shop day).
   const seenOrder = useRef<{ day: string; order: Record<string, number[]> }>({ day: '', order: {} });
@@ -216,7 +351,6 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   const allItems = useMemo(() => sections.flatMap(s => s.items), [sections]);
   const todayIds = useMemo(() => allItems.map(i => i.id), [allItems]);
   const setsBySlug = useMemo(() => new Map([...(today.sets ?? []), ...(today.ready_sets ?? [])].map(s => [s.slug, s])), [today.sets, today.ready_sets]);
-  useEffect(() => { wishCount?.(wishes.length); }, [wishes.length]);
 
   // Prefetch the hero and event art so try-on and banners never pop in.
   useEffect(() => {
@@ -225,76 +359,76 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
     if (urls.length) void Image.prefetch(urls, 'memory-disk').catch(() => undefined);
   }, [today.shop_day]);
 
-  const openItem = useCallback((item: ShopItem, fullLook = false) => {
+  const openItem = useCallback<OpenFn>((item, opts = {}) => {
     playSound(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setOpen({ item, fullLook });
+    setOpen({ item, fullLook: !!opts.fullLook, bought: !!opts.bought, accent: opts.accent ?? null });
   }, [playSound]);
-  const openTile = useCallback((item: ShopItem) => openItem(item, false), [openItem]);
+  const openTile = useCallback((item: ShopItem) => openItem(item), [openItem]);
 
   // Deep link from a wishlist push: open that item's try-on once.
   const focused = useRef(false);
   useEffect(() => {
     if (focused.current || !focusItemId) return;
     const item = allItems.find(i => i.id === focusItemId);
-    if (item) { focused.current = true; setOpen({ item, fullLook: false }); }
+    if (item) { focused.current = true; setOpen({ item, fullLook: false, bought: false, accent: null }); }
   }, [focusItemId, allItems]);
 
-  // Stable heart: reads the latest state through a ref, updates one id.
-  const alertsRef = useRef(today.wishlist_alerts);
-  alertsRef.current = today.wishlist_alerts;
-  const wishesRef = useRef(wishes);
-  wishesRef.current = wishes;
+  // Stable heart: the store holds the truth per id; the server answer reconciles that id only.
   const wish = useCallback(async (item: ShopItem) => {
     const id = item.id;
-    const adding = !wishesRef.current.includes(id);
+    const adding = !wishStore.has(id);
     playSound(require('../../../assets/sounds/tap.mp3'));
     void Haptics.impactAsync(adding ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setToday(t => (t ? { ...t, wishlist_ids: toggleWish(t.wishlist_ids, id) } : t));
-    if (adding && alertsRef.current == null) setAskAlerts(true);
-    else if (adding) showToast(alertsRef.current ? 'Saved! We’ll ping you when it’s back.' : 'Saved to your wishlist.', 'success', 2200);
+    wishStore.set(id, adding);
+    if (adding && wishStore.alerts() == null) setAskAlerts(true);
+    else if (adding) showToast(wishSavedCopy(wishStore.alerts()), 'success', 2200);
     try {
       const server = adding ? await addToWishlist(id) : await removeFromWishlist(id);
-      setToday(t => (t ? { ...t, wishlist_ids: reconcileWish(t.wishlist_ids, server, id) } : t));
+      wishStore.set(id, server.includes(id));
     } catch (error: unknown) {
-      setToday(t => (t ? { ...t, wishlist_ids: toggleWish(t.wishlist_ids, id) } : t));
+      wishStore.set(id, !adding);
       const full = (error as { response?: { data?: { code?: string } } })?.response?.data?.code === 'wishlist_full';
       showToast(full ? 'Your wishlist is full. Remove one to add another.' : 'Couldn’t save that. Try again.', 'warning');
     }
-  }, [playSound, setToday]);
+  }, [playSound]);
 
   const answerAlerts = useCallback(async (on: boolean) => {
     setAskAlerts(false);
-    setToday(t => (t ? { ...t, wishlist_alerts: on } : t));
-    showToast(on ? 'Saved! We’ll ping you when it’s back.' : 'Saved to your wishlist.', 'success', 2200);
+    wishStore.setAlerts(on);
+    showToast(wishSavedCopy(on), 'success', 2200);
     await updatePlayer({ wishlist_alerts: on }).catch(() => undefined);
-  }, [setToday]);
+  }, []);
 
   const onPurchased = useCallback((item: ShopItem) => {
     setBought(list => (list.includes(item.id) ? list : [...list, item.id]));
-    // Owned state comes from the server; the tile keeps its place this visit.
     void onRefresh();
   }, [onRefresh]);
 
   const onSetComplete = useCallback((reward: ShopSetReward) => {
     setOpen(null);
-    setTimeout(() => setReveal({ reward, set: setsBySlug.get(reward.slug) ?? null }), 280);
+    setTimeout(() => setReveals(list => [...list, { reward, set: setsBySlug.get(reward.slug) ?? null }]), 280);
   }, [setsBySlug]);
 
-  const claim = useCallback(async (set: ShopSetSummary) => {
-    try {
-      const reward = await claimShopSet(set.slug);
-      setReveal({ reward: { ...reward, item_ids: reward.item_ids ?? set.item_ids }, set });
-      void onRefresh();
-    } catch {
-      showToast('Couldn’t claim that yet. Try again.', 'warning');
+  // Claim every waiting set, then play their reveals one after another.
+  const claimAll = useCallback(async () => {
+    const ready = today.ready_sets ?? [];
+    const queue: { reward: ShopSetReward; set: ShopSetSummary }[] = [];
+    for (const set of ready) {
+      try {
+        const reward = await claimShopSet(set.slug);
+        queue.push({ reward: { ...reward, item_ids: reward.item_ids ?? set.item_ids }, set });
+      } catch { /* already claimed elsewhere: skip */ }
     }
-  }, [onRefresh]);
+    if (!queue.length) showToast('Couldn’t claim that yet. Try again.', 'warning');
+    setReveals(list => [...list, ...queue]);
+    void onRefresh();
+  }, [today.ready_sets, onRefresh]);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
       ?? allItems.find(i => i.shop?.set?.slug === set.slug);
-    if (target) openItem(target, true);
+    if (target) openItem(target, { fullLook: true });
   }, [allItems, openItem]);
 
   // At the reset the next day is already built server side: reload, retry with backoff on failure.
@@ -304,11 +438,13 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
     const due = Date.parse(today.resets_at) - (Date.now() + offset) + 2_000;
     const run = async () => {
       const ok = await onRefresh().catch(() => false);
-      if (!ok) { timer = setTimeout(run, Math.min(120_000, 5_000 * Math.pow(3, attempt++))); }
+      if (!ok) timer = setTimeout(run, restockBackoffMs(attempt++));
     };
     timer = setTimeout(run, Math.max(1_000, due));
     return () => clearTimeout(timer);
   }, [today.resets_at, offset]);
+
+  const scrollHandler = useAnimatedScrollHandler(e => { if (scrollY) scrollY.value = e.contentOffset.y; });
 
   const refresh = async () => {
     setRefreshing(true);
@@ -320,37 +456,43 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   const daily = sections.find(s => s.type === 'daily');
   const hero = featured ? heroItem(featured.hero_id, featured.items) : null;
   const heroSet = hero?.shop?.set ? setsBySlug.get(hero.shop.set.slug) ?? null : null;
-  const featuredRest = featured ? featured.items.filter(item => item.id !== hero?.id) : [];
+  const featuredRest = useMemo(() => (featured ? featured.items.filter(item => item.id !== hero?.id) : []), [featured, hero?.id]);
   const readySets = today.ready_sets ?? [];
   const openSet = open?.item.shop?.set ? setsBySlug.get(open.item.shop.set.slug) ?? null : null;
   const enter = (i: number) => (still ? undefined : FadeInUp.delay(60 * i).springify().damping(16));
+  const reveal = reveals[0] ?? null;
 
   return (
-    <>
+    <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+        <Animated.ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+          onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
-          {readySets.map(set => (
-            <Animated.View key={`ready-${set.slug}`} entering={enter(0)}>
-              <SetCallout set={set} todayIds={todayIds} onTry={trySet} onClaim={claim} />
+          {today.fallback && (
+            <View style={styles.fallback}><GameIcon name="timer" size={18} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>Today’s shop is opening. Back in a moment!</Text></View>
+          )}
+          {readySets.length > 0 && (
+            <Animated.View entering={enter(0)}>
+              <ReadyCard sets={readySets} todayIds={todayIds} onClaimAll={() => void claimAll()} />
             </Animated.View>
-          ))}
+          )}
 
           {featured && hero && (
             <Animated.View entering={enter(0)}>
-              <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} onOpen={openItem} />
+              <ShopProfile id="hero">
+                <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
+                  tease={today.next_featured} onOpen={openItem} />
+              </ShopProfile>
             </Animated.View>
           )}
 
           {events.map((section, index) => (
             <Animated.View key={section.key} entering={enter(index + 1)}>
-              <EventBanner section={section} offset={offset} still={still}>
-                <Grid items={section.items} wishes={wishes} vip={vip} balance={balance} still={still} bought={bought}
-                  width={EVENT_TILE_W} horizontal onOpen={openTile} onWish={wish} />
-                {section.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
-                  <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} onClaim={claim} />
-                ))}
-              </EventBanner>
+              <ShopProfile id={`banner-${section.key}`}>
+                <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} showNew={showNew}
+                  todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
+              </ShopProfile>
             </Animated.View>
           ))}
 
@@ -361,49 +503,49 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
                 <SectionPills section={featured} offset={offset} still={still} />
               </View>
               {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
-                <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} onClaim={claim} />
+                <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />
               ))}
-              <Grid items={featuredRest} wishes={wishes} vip={vip} balance={balance} still={still} bought={bought} onOpen={openTile} onWish={wish} />
+              <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew} onOpen={openTile} onWish={wish} />
             </Animated.View>
           )}
 
           {daily && (
             <Animated.View entering={enter(events.length + 2)} style={styles.panel}>
-              <View style={styles.header}>
+              <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
+                {showNew && <Sheen still={still} delay={700} width={SCREEN_W} />}
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>DAILY</Text>
                 <SectionPills section={daily} offset={offset} still={still} />
               </View>
-              <Grid items={daily.items} wishes={wishes} vip={vip} balance={balance} still={still} bought={bought} onOpen={openTile} onWish={wish} />
+              <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew} onOpen={openTile} onWish={wish} />
             </Animated.View>
           )}
-
-          <View style={styles.footer}>
-            <GameIcon name="heart" size={18} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.footerText}>Missed something? Heart it. Items come back, and we can tell you when.</Text>
-          </View>
-        </ScrollView>
-        {/* Content fades under the header instead of a hard cut. */}
+        </Animated.ScrollView>
+        {/* Content fades under the tab row instead of a hard cut. */}
         <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
       </View>
 
       {open && (
-        <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} wished={wishes.includes(open.item.id)} still={still}
-          startFullLook={open.fullLook} onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onSetComplete={onSetComplete} />
+        <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
+          startFullLook={open.fullLook} startBought={open.bought}
+          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onSetComplete={onSetComplete} />
       )}
-      {reveal && <SetCompleteReveal reward={reveal.reward} set={reveal.set} still={still} onDone={() => setReveal(null)} />}
+      {reveal && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
+        onDone={() => setReveals(list => list.slice(1))} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
-          message="We'll send one note when something on your wishlist is back in the shop. Turn it off anytime in Settings."
+          message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
           buttons={[{ text: 'Yes, tell me', onPress: () => void answerAlerts(true) }, { text: 'No thanks', style: 'cancel', onPress: () => void answerAlerts(false) }]}
           onAnswer={() => setAskAlerts(false)} />
       )}
-    </>
+    </ShopProfile>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingTop: 12, paddingBottom: 40, gap: 14 },
-  fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 14 },
+  scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
+  fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
+  fallback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.6)' },
+  fallbackText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   panel: { marginHorizontal: 10, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.88)', paddingBottom: 14,
     borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
@@ -419,28 +561,49 @@ const styles = StyleSheet.create({
   eventTitle: { fontFamily: FONT.display, fontSize: 28, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 2 } },
   eventSub: { maxWidth: '64%', fontFamily: FONT.body, fontSize: 17, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
   eventRow: { gap: GAP, paddingHorizontal: 14, paddingTop: 16, paddingBottom: 6 },
-  hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', ...SHADOW.card },
-  heroSpot: { position: 'absolute', right: '6%', top: '8%', width: '50%', aspectRatio: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.5)' },
-  heroFloor: { position: 'absolute', right: '12%', bottom: 18, width: '38%', height: 22, borderRadius: 99, backgroundColor: 'rgba(5,52,110,0.18)' },
-  heroStage: { position: 'absolute', right: -10, top: 6, bottom: 0, width: '62%' },
+  tease: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 12, paddingLeft: 8, paddingRight: 6, paddingVertical: 4, borderWidth: 2, borderColor: BRAND.white },
+  teaseLabel: { fontFamily: FONT.display, fontSize: 12, color: BRAND.goldLip, letterSpacing: 0.8 },
+  teaseName: { maxWidth: 130, fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
+  teaseShapes: { flexDirection: 'row', gap: 2 },
+  teaseShape: { width: 24, height: 24, opacity: 0.85 },
+  teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
+  hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: '#dff3ff', ...SHADOW.card },
+  heroStage: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '62%' },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroText: { position: 'absolute', left: 14, top: 14, bottom: 14, width: '46%', gap: 4 },
   heroKicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLip, letterSpacing: 1 },
   heroName: { fontFamily: FONT.display, fontSize: 24, lineHeight: 26, color: BRAND.navy },
   heroRarity: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
   heroRarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
-  heroSet: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft },
-  heroPieces: { flexDirection: 'row', gap: 6, marginTop: 2 },
+  heroSet: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft },
+  heroPieces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  heroMore: { width: 44, height: 44, borderRadius: 14, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   heroCta: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8,
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   heroCtaText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
+  heroGhost: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7, borderWidth: 3, borderColor: BRAND.navy },
+  heroGhostText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
+  wearingChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: BRAND.green,
+    borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white },
+  wearingText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   heroTimer: { position: 'absolute', right: 10, top: 10 },
+  heroTease: { position: 'absolute', right: 10, bottom: 10 },
   setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: '#fffdf4', padding: 10, gap: 8 },
+  readyCard: { borderColor: BRAND.gold, backgroundColor: '#fffaf0' },
+  readyTitle: { flex: 1, fontFamily: FONT.display, fontSize: 19, color: BRAND.navy },
+  readySet: { width: SCREEN_W - 70, gap: 6 },
+  readySetName: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft },
   setHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   setTitle: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   setCount: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft },
+  segments: { flexDirection: 'row', gap: 4 },
+  segment: { flex: 1, height: 8, borderRadius: 4, backgroundColor: '#e3eaf2' },
+  setRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  portrait: { width: 78, height: 88, borderRadius: 14, borderWidth: 3, overflow: 'hidden', backgroundColor: '#dff3ff' },
   setPieces: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   titleChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
@@ -449,7 +612,4 @@ const styles = StyleSheet.create({
   xpChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.blue },
   doneChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#effbf2', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   doneText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.greenLip },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 18, padding: 10, borderRadius: 14,
-    backgroundColor: 'rgba(5,52,110,0.55)' },
-  footerText: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: BRAND.white },
 });

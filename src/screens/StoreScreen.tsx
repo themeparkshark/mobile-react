@@ -21,6 +21,9 @@ import getShopToday from '../api/endpoints/stores/today';
 import { ShopToday } from '../models/shop-today';
 import ShopShelves from './StoreScreen/ShopShelves';
 import { WishHeart } from './StoreScreen/shopUi';
+import WishlistSheet from './StoreScreen/WishlistSheet';
+import { useWishCount } from './StoreScreen/wishStore';
+import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
@@ -247,13 +250,19 @@ function SingleBubble({
 }
 
 /** Gear (cosmetics for Shark Coins) and Supplies (in-app purchases), on the Shark Shop only. */
-function ShopTabs({ tab, onChange, coins, wishes }: {
+function ShopTabs({ tab, onChange, coins, onWishlist, collapse }: {
   tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void;
   /** Shop v2: the balance lives in the tab row (no separate pill row). */
-  coins?: number | null; wishes?: number;
+  coins?: number | null;
+  onWishlist?: () => void;
+  /** 0..1 as the shop scrolls: a compact back button slides in when the title bar collapses. */
+  collapse?: SharedValue<number>;
 }) {
+  const wishes = useWishCount();
+  const back = useAnimatedStyle(() => ({ width: (collapse?.value ?? 0) * 44, opacity: collapse?.value ?? 0 }));
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
+    {collapse && <Reanimated.View style={[{ overflow: 'hidden', marginLeft: 10, marginTop: 10 }, back]}><BackButton /></Reanimated.View>}
     <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }]} accessibilityRole="tablist">
       {(['gear', 'supplies'] as const).map(key => (
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
@@ -263,12 +272,17 @@ function ShopTabs({ tab, onChange, coins, wishes }: {
       ))}
     </View>
     {coins != null && (
-      <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins${wishes ? `, ${wishes} on your wishlist` : ''}`}>
-        <GameIcon name="coins" size={20} />
-        <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
-        {!!wishes && <View style={tabStyles.wishBadge}><WishHeart on size={11} />
-          <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text></View>}
-      </View>
+      <>
+        <Pressable onPress={onWishlist} style={tabStyles.wish} accessibilityRole="button"
+          accessibilityLabel={`My wishlist, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
+          <WishHeart on={wishes > 0} size={20} />
+          {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
+        </Pressable>
+        <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins`}>
+          <GameIcon name="coins" size={20} />
+          <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
+        </View>
+      </>
     )}
     </View>
   );
@@ -284,9 +298,9 @@ const tabStyles = StyleSheet.create({
   coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
   coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
-  wishBadge: { position: 'absolute', top: -8, right: -8, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#c2185b',
-    borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: '#fff' },
-  wishText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
+  wish: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, marginRight: 8, backgroundColor: '#fff0f5',
+    borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, borderWidth: 2, borderColor: '#ff4f8b' },
+  wishText: { fontFamily: 'Shark', fontSize: 14, color: '#c2185b' },
 });
 
 export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
@@ -311,7 +325,14 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const storeIdRef = useRef<number | null>(null);
   // Server clock minus device clock: timers never trust a changed device clock.
   const [clockSkew, setClockSkew] = useState(0);
-  const [wishCount, setWishCount] = useState(0);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  const [focusFromWishlist, setFocusFromWishlist] = useState<number | undefined>();
+  const shopStill = useReducedGameMotion();
+  // The title bar folds into the tab row after 40pt of shop scroll.
+  const scrollY = useSharedValue(0);
+  const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
+  const [barH, setBarH] = useState(0);
+  const barStyle = useAnimatedStyle(() => (barH ? { height: barH - (barH - 54) * collapse.value, overflow: 'hidden' } : {}));
   const reloadToday = useCallback(async (): Promise<boolean> => {
     if (!storeIdRef.current) return false;
     const next = await getShopToday(storeIdRef.current).catch(() => null);
@@ -421,6 +442,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   return (
     <>
       {purchaseModal}
+      <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
+        onOpenItem={id => setFocusFromWishlist(id)} />
+      <Reanimated.View style={today && tab === 'gear' ? barStyle : undefined}
+        onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       <Topbar purple={currentStore?.is_secret_store ?? false}>
         <TopbarColumn stretch={false}>
           <BackButton />
@@ -432,9 +457,11 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           <InformationModal id={InformationModalEnums.StoreScreen} />
         </TopbarColumn>
       </Topbar>
+      </Reanimated.View>
       {sharkShop && (
         <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
-          <ShopTabs tab={tab} onChange={setTab} coins={today && tab === 'gear' ? Number(player?.coins ?? 0) : null} wishes={wishCount} />
+          <ShopTabs tab={tab} onChange={setTab} coins={today && tab === 'gear' ? Number(player?.coins ?? 0) : null}
+            onWishlist={() => setWishlistOpen(true)} collapse={today && tab === 'gear' ? collapse : undefined} />
         </View>
       )}
       {sharkShop && tab === 'supplies' && (
@@ -523,7 +550,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusItemId={focusItem} wishCount={setWishCount} />
+                focusItemId={focusFromWishlist ?? focusItem} scrollY={scrollY} key={focusFromWishlist ? `focus-${focusFromWishlist}` : 'shelves'} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (

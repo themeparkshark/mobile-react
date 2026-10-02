@@ -1,20 +1,24 @@
 /**
- * Try before you buy, and buy without leaving: the item on the player's own
- * shark (the Playercard overlay) on a lit stage, already wearing the set
- * pieces they own, with "Try the full look" one tap away. The purchase
- * happens here: the button asks once ("Buy for 750?"), shows the coin math,
- * then the coins tick down, the piece pops on the shark and the button
- * becomes "Wear it now". Preview only until then: a TRY-ON stamp sits on the
- * stage and nothing is saved to the look.
+ * Try before you buy, and buy without leaving.
+ *
+ * The item is shown on the player's own shark (the Playercard overlay) on the
+ * shop stage, already wearing the set pieces they own, with "Try the full
+ * look" one tap away. A tried backdrop becomes the stage, and pins sit on the
+ * chest.
+ *
+ * The buy: the button asks once ("Yes, buy it!") with the coin math on the
+ * stage. Coins arc from the balance into the stage, the number ticks down on
+ * the UI thread, and the piece drops onto the shark with a rarity flash. A
+ * NEW! ribbon replaces TRY-ON. "Wear it now" spins the shark, shows "Now
+ * wearing" and closes. A wear failure has its own message and retry and never
+ * offers to buy again.
  */
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-  FadeIn, SlideInDown, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
+  Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import purchase from '../../api/endpoints/me/inventory/purchase-item';
@@ -23,48 +27,99 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  completesSet, formatCoins, pieceState, setProgressText, shortfall as shortBy, wearingIds,
+  completesSet, formatCoins, lastChanceLine, pieceState, setProgressText, shortfall as shortBy, wearingIds, wishHintCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
 import { ShopItem, ShopSetPiece, ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameButton, GameIcon, SHADOW } from '../../ui';
-import { Burst, MAX_FONT, PieceChip, Sheen, WishHeart } from './shopUi';
+import { showToast } from '../../utils/toast';
+import { CoinArc, LandFlash, MAX_FONT, PieceChip, Sheen, ShopStage, WishHeart } from './shopUi';
 import { TileArt } from './ShopTile';
+import { useWished, wishStore } from './wishStore';
 
-const { height: SCREEN_H } = Dimensions.get('window');
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const SHEET_H = Math.min(SCREEN_H * 0.88, 760);
 const STAGE_H = Math.round(Math.min(310, SHEET_H * 0.42));
+const STAGE_TOP = 52;
+const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: '6%' as const };
 
 type Phase = 'idle' | 'confirm' | 'buying' | 'bought' | 'failed';
+type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
 
-type Wearable = { id: number; name: string; icon_url: string | null; paper_url: string | null; no_eye_url?: string | null;
+export type Wearable = { id: number; name: string; icon_url: string | null; paper_url: string | null; no_eye_url?: string | null;
   item_type: { id: number; name?: string } };
 
-const asWearable = (piece: ShopSetPiece): Wearable => ({ id: piece.id, name: piece.name, icon_url: piece.icon_url,
+export const asWearable = (piece: ShopSetPiece): Wearable => ({ id: piece.id, name: piece.name, icon_url: piece.icon_url,
   paper_url: piece.paper_url, no_eye_url: piece.no_eye_url, item_type: { id: piece.item_type_id } });
 
-/** The player's look with these items put on (pins, backdrops and skins included). */
-export function previewLook(base: InventoryType | undefined, items: Wearable[]): InventoryType | null {
+/**
+ * A look for the stage. 'player' starts from the player's outfit; 'base' starts
+ * from their shark skin only (the hero and the set reveal show exactly the
+ * pieces asked for). Returns the backdrop piece separately: the stage draws it.
+ */
+export function previewLook(base: InventoryType | undefined, items: Wearable[], from: 'player' | 'base' = 'player'):
+  { look: InventoryType; backdrop: string | null } | null {
   if (!base?.skin_item?.no_eye_url) return null;
-  const look: Record<string, unknown> = { ...base };
+  const look: Record<string, unknown> = from === 'player' ? { ...base } : { skin_item: base.skin_item, id: base.id };
+  let backdrop: string | null = null;
   for (const item of items) {
     const slot = slotForItem(item as never);
     if (!slot) continue;
+    if (slot === 'background_item') { backdrop = item.paper_url ?? item.icon_url; continue; }
     look[slot] = { id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
       no_eye_url: item.no_eye_url, item_type: item.item_type };
   }
-  return look as unknown as InventoryType;
+  return { look: look as unknown as InventoryType, backdrop };
 }
 
-export default function TryOnSheet({ item, set, todayIds, wished, still, startFullLook = false, onClose, onWish, onPurchased, onSetComplete }: {
+const AnimatedInput = Animated.createAnimatedComponent(TextInput);
+
+/** The balance, counted on the UI thread (no React render per frame). */
+function CoinTicker({ value, still }: { value: number; still: boolean }) {
+  const shown = useSharedValue(value);
+  useEffect(() => {
+    shown.value = still ? value : withTiming(value, { duration: 700, easing: Easing.out(Easing.cubic) });
+  }, [value, still]);
+  const props = useAnimatedProps(() => {
+    const n = Math.max(0, Math.round(shown.value));
+    let s = String(n);
+    let out = '';
+    while (s.length > 3) { out = ',' + s.slice(-3) + out; s = s.slice(0, -3); }
+    return { text: s + out, defaultValue: s + out } as never;
+  });
+  return <AnimatedInput editable={false} underlineColorAndroid="transparent" animatedProps={props}
+    defaultValue={formatCoins(value)} style={styles.balanceText} />;
+}
+
+/** A real switch: the knob travels and shows a check when on. */
+function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPress: () => void }) {
+  const x = useSharedValue(on ? 1 : 0);
+  useEffect(() => { x.value = still ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 120 }); }, [on, still]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: x.value * 22 }] }));
+  return (
+    <Pressable onPress={onPress} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel="Try the full look"
+      style={styles.switchRow} hitSlop={8}>
+      <View style={[styles.track, on && styles.trackOn]}>
+        <Animated.View style={[styles.knob, knob]}>{on && <GameIcon name="check" size={20} />}</Animated.View>
+      </View>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.switchText}>Try the full look</Text>
+    </Pressable>
+  );
+}
+
+export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
+  onClose, onWish, onPurchased, onSetComplete }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
-  readonly wished: boolean;
   readonly still: boolean;
+  /** The section colour (event colour for last-chance copy). */
+  readonly accent?: string | null;
   readonly startFullLook?: boolean;
+  /** Opened from an owned hero: skip straight to the bought state ("Wear it"). */
+  readonly startBought?: boolean;
   readonly onClose: () => void;
   readonly onWish: (item: ShopItem) => void;
   readonly onPurchased: (item: ShopItem, reward: ShopSetReward | null) => void;
@@ -73,53 +128,61 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
+  const wished = useWished(item?.id ?? -1);
   const [fullLook, setFullLook] = useState(startFullLook);
   const [extras, setExtras] = useState<number[]>([]);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [shownBalance, setShownBalance] = useState<number | null>(null);
-  const [burst, setBurst] = useState(0);
-  const [wearing, setWearing] = useState(false);
+  const [phase, setPhase] = useState<Phase>(startBought ? 'bought' : 'idle');
+  const [wear, setWear] = useState<WearState>('idle');
+  const [dropping, setDropping] = useState(false);
+  const [landed, setLanded] = useState(0);
+  const [coins, setCoins] = useState(0);
+  const [balanceAfter, setBalanceAfter] = useState<number | null>(null);
   const reward = useRef<ShopSetReward | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
 
-  useEffect(() => { setExtras([]); setPhase('idle'); setShownBalance(null); setFullLook(startFullLook); reward.current = null; }, [item?.id, startFullLook]);
+  useEffect(() => {
+    setExtras([]); setPhase(startBought ? 'bought' : 'idle'); setWear('idle'); setBalanceAfter(null);
+    setFullLook(startFullLook); reward.current = null;
+  }, [item?.id, startFullLook, startBought]);
 
   const pieces = set?.pieces ?? [];
   const balance = Number(player?.coins ?? 0);
   const ids = useMemo(() => (item ? wearingIds(item.id, pieces, fullLook, extras) : []), [item?.id, pieces, fullLook, extras]);
-  const look = useMemo(() => {
+  const stage = useMemo(() => {
     if (!item) return null;
     const byId = new Map<number, Wearable>(pieces.map(p => [p.id, asWearable(p)]));
     byId.set(item.id, { id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
-      no_eye_url: (item as { no_eye_url?: string }).no_eye_url, item_type: item.item_type });
-    return previewLook(player?.inventory, ids.map(id => byId.get(id)).filter((w): w is Wearable => !!w));
-  }, [player?.inventory, ids.join(','), item?.id]);
+      no_eye_url: item.no_eye_url, item_type: item.item_type });
+    // While the bought piece is dropping in, leave it off so Playercard pops it on.
+    const wearing = ids.filter(id => !(dropping && id === item.id)).map(id => byId.get(id)).filter((w): w is Wearable => !!w);
+    return previewLook(player?.inventory, wearing);
+  }, [player?.inventory, ids.join(','), item?.id, dropping]);
 
-  // Stage reactions: a wiggle when a piece goes on, a squash and stretch when the buy lands.
+  // Stage reactions: a wiggle when a piece goes on, a spin when you wear it.
   const stageScale = useSharedValue(1);
-  const stageSquash = useSharedValue(1);
-  const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: stageScale.value }, { scaleY: stageSquash.value }] }));
+  const spin = useSharedValue(0);
+  const stageStyle = useAnimatedStyle(() => ({ transform: [{ perspective: 600 }, { scale: stageScale.value }, { rotateY: `${spin.value}deg` }] }));
   const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
 
-  // Pan down to dismiss (the grabber is a promise).
+  // Pan down to dismiss; a release past the line slides the sheet away first.
   const drag = useSharedValue(0);
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
-      if (e.translationY > 120 || e.velocityY > 900) runOnJS(onClose)();
+      if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(onClose)());
       else drag.value = withSpring(0, { damping: 18 });
     });
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
 
-  // Coins tick down from the old balance to the new one.
-  const tickTo = useCallback((from: number, to: number) => {
-    if (still) { setShownBalance(to); return; }
-    const start = Date.now();
-    const timer = setInterval(() => {
-      const t = Math.min(1, (Date.now() - start) / 700);
-      setShownBalance(Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3))));
-      if (t >= 1) clearInterval(timer);
-    }, 30);
-  }, [still]);
+  const togglePiece = useCallback((piece: ShopSetPiece) => {
+    if (!item || piece.owned || piece.id === item.id) return;
+    playSound(require('../../../assets/sounds/inventory_item_tap.mp3'));
+    void Haptics.selectionAsync().catch(() => undefined);
+    wiggle();
+    setExtras(list => (list.includes(piece.id) ? list.filter(id => id !== piece.id) : [...list, piece.id]));
+  }, [item?.id, still]);
 
   if (!item) return null;
   const badge = wearableBadge(item);
@@ -130,14 +193,6 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
-
-  const togglePiece = (piece: ShopSetPiece) => {
-    if (piece.owned || piece.id === item.id) return;
-    playSound(require('../../../assets/sounds/inventory_item_tap.mp3'));
-    void Haptics.selectionAsync().catch(() => undefined);
-    wiggle();
-    setExtras(list => (list.includes(piece.id) ? list.filter(id => id !== piece.id) : [...list, piece.id]));
-  };
 
   const toggleFull = () => {
     playSound(require('../../../assets/sounds/inventory_item_tap.mp3'));
@@ -159,16 +214,28 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
       const result = await purchase(item);
       reward.current = result?.set_reward ?? null;
       setPhase('bought');
-      tickTo(balance, balance - item.cost);
-      setBurst(b => b + 1);
-      if (!still) stageSquash.value = withSequence(withTiming(0.9, { duration: 90 }), withSpring(1, { damping: 5, stiffness: 240 }));
-      playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      setBalanceAfter(balance - item.cost);
       onPurchased(item, reward.current);
+      if (still) {
+        setLanded(l => l + 1);
+        playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      } else {
+        // Coins fly from the balance into the stage, then the piece lands.
+        setDropping(true);
+        setCoins(c => c + 1);
+        playSound(require('../../../assets/sounds/coin.mp3'));
+        later(() => {
+          setDropping(false);
+          setLanded(l => l + 1);
+          playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        }, 560);
+      }
       void refreshPlayer();
       if (reward.current) {
         const done = reward.current;
-        setTimeout(() => onSetComplete(done), still ? 300 : 1100);
+        later(() => onSetComplete(done), still ? 400 : 1500);
       }
     } catch (error: unknown) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
@@ -180,30 +247,38 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
 
   const wearNow = async () => {
     if (worn) { onClose(); return; }
-    setWearing(true);
+    setWear('busy');
     try {
       await updateInventory(item);
-      await refreshPlayer();
+      void refreshPlayer();
       playSound(require('../../../assets/sounds/whoosh.mp3'));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      onClose();
+      setWear('spinning');
+      if (!still) spin.value = withTiming(360, { duration: 520, easing: Easing.out(Easing.back(1.4)) });
+      later(() => { onClose(); showToast(`Now wearing ${name}!`, 'success', 2000); }, still ? 500 : 1200);
     } catch {
-      setWearing(false);
-      setPhase('failed');
+      setWear('failed');
     }
   };
 
   const earn = () => { onClose(); RootNavigation.navigate('Explore'); };
 
+  const phaseKey = owned ? `owned-${wear}` : vipLocked ? 'vip' : phase === 'failed' ? 'failed' : short > 0 ? 'short'
+    : phase === 'confirm' || phase === 'buying' ? 'confirm' : 'idle';
+
   const actions = (() => {
-    if (phase === 'bought' || (owned && phase !== 'failed')) {
+    if (owned) {
       return (
-        <View style={styles.row}>
-          <View style={{ flex: 1.4 }}>
-            <GameButton label={worn ? 'Wearing it' : 'Wear it now'} icon="shark" onPress={wearNow} loading={wearing} disabled={worn} />
+        <>
+          {wear === 'failed' && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.failed}>Couldn’t put it on. Try again.</Text>}
+          <View style={styles.row}>
+            <View style={{ flex: 1.4 }}>
+              <GameButton label={worn ? 'Wearing it' : wear === 'failed' ? 'Try again' : 'Wear it now'} icon="shark"
+                onPress={() => void wearNow()} loading={wear === 'busy'} disabled={worn || wear === 'spinning'} />
+            </View>
+            <View style={{ flex: 1 }}><GameButton label="Keep shopping" variant="ghost" onPress={onClose} /></View>
           </View>
-          <View style={{ flex: 1 }}><GameButton label="Keep shopping" variant="ghost" onPress={onClose} /></View>
-        </View>
+        </>
       );
     }
     if (vipLocked) {
@@ -229,20 +304,10 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
     }
     if (phase === 'confirm' || phase === 'buying') {
       return (
-        <>
-          <View style={styles.equation} accessible
-            accessibilityLabel={`You have ${formatCoins(balance)} Shark Coins. This costs ${formatCoins(item.cost)}. You will have ${formatCoins(balance - item.cost)} left.`}>
-            <CoinAmount n={balance} />
-            <Text style={styles.op}>−</Text>
-            <CoinAmount n={item.cost} />
-            <Text style={styles.op}>=</Text>
-            <CoinAmount n={balance - item.cost} label="left" />
-          </View>
-          <View style={styles.row}>
-            <View style={{ flex: 1.4 }}><GameButton label="Yes, buy it!" onPress={() => void buy()} loading={phase === 'buying'} /></View>
-            <View style={{ flex: 1 }}><GameButton label="Not now" variant="ghost" onPress={() => setPhase('idle')} /></View>
-          </View>
-        </>
+        <View style={styles.row}>
+          <View style={{ flex: 1.4 }}><GameButton label="Yes, buy it!" onPress={() => void buy()} loading={phase === 'buying'} /></View>
+          <View style={{ flex: 1 }}><GameButton label="Not now" variant="ghost" onPress={() => setPhase('idle')} /></View>
+        </View>
       );
     }
     return (
@@ -259,6 +324,7 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
     );
   })();
 
+  const stageW = SCREEN_W - 28;
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -270,29 +336,46 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
               <View>
                 <View style={styles.grabber} />
                 <View style={styles.topRow}>
-                  <View style={styles.balance} accessible accessibilityLabel={`${formatCoins(shownBalance ?? balance)} Shark Coins`}>
+                  <View style={styles.balance} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
                     <GameIcon name="coins" size={20} />
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.balanceText}>{formatCoins(shownBalance ?? balance)}</Text>
+                    <CoinTicker value={balanceAfter ?? balance} still={still} />
                   </View>
                   <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
                     <GameIcon name="close" size={30} />
                   </Pressable>
                 </View>
-                <Animated.View style={[styles.stage, { height: STAGE_H }, stageStyle]}>
-                  <LinearGradient colors={['#bfe5ff', '#7cc6f5']} style={StyleSheet.absoluteFill} />
-                  <View pointerEvents="none" style={[styles.spot, { backgroundColor: glow }]} />
-                  <View pointerEvents="none" style={styles.floor} />
-                  {look ? (
-                    <Playercard inventory={look} popLayers still={still} showBackground={false}
-                      style={{ position: 'absolute', width: '100%', height: STAGE_H - 12 }} />
+                <View style={[styles.stage, { height: STAGE_H }]}>
+                  <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
+                    <LandFlash color={glow} still={still} trigger={landed} />
+                    <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
+                      {stage ? (
+                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body"
+                          popFrom={landed ? 1.45 : 1.18} style={PLAYERCARD_STYLE} />
+                      ) : (
+                        <View style={styles.flatArt}><TileArt item={item} size={170} torso={false} thumb={false} /></View>
+                      )}
+                    </Animated.View>
+                  </ShopStage>
+                  {owned ? (
+                    landed > 0 || phase === 'bought' ? (
+                      <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
+                        <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'NEW!'}</Text>
+                      </Animated.View>
+                    ) : null
                   ) : (
-                    <View style={styles.flatArt}><TileArt item={item} size={170} torso={false} /></View>
+                    <View style={styles.tag} pointerEvents="none"><Text style={styles.tagText}>TRY-ON</Text></View>
                   )}
-                  <Burst color={glow} still={still} trigger={burst} size={220} count={18} />
-                  {phase !== 'bought' && !owned && (
-                    <View style={styles.stamp} pointerEvents="none"><Text style={styles.stampText}>TRY-ON</Text></View>
+                  {(phase === 'confirm' || phase === 'buying') && (
+                    <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
+                      accessibilityLabel={`You have ${formatCoins(balance)} Shark Coins. This costs ${formatCoins(item.cost)}. You will have ${formatCoins(balance - item.cost)} left.`}>
+                      <CoinAmount n={balance} />
+                      <Text style={styles.op}>−</Text>
+                      <CoinAmount n={item.cost} />
+                      <Text style={styles.op}>=</Text>
+                      <CoinAmount n={balance - item.cost} label="left" />
+                    </Animated.View>
                   )}
-                </Animated.View>
+                </View>
               </View>
             </GestureDetector>
 
@@ -302,7 +385,8 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
                 {badge.label && <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
               </View>
-              {item.shop?.last_chance && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>Last chance! It comes back next season.</Text>}
+              {item.shop?.last_chance && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.leaving, { color: accent ?? BRAND.navy }]}>
+                {lastChanceLine(item.shop?.season)}</Text>}
               {item.shop?.returning && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
 
               {set && pieces.length > 1 && (
@@ -319,28 +403,23 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pieces}>
                     {pieces.map(piece => (
-                      <PieceChip key={piece.id} piece={piece.id === item.id ? { ...piece, owned: owned } : piece}
+                      <PieceChip key={piece.id} piece={piece.id === item.id ? { ...piece, owned } : piece}
                         state={piece.id === item.id ? (owned ? 'owned' : 'in_shop') : pieceState(piece, todayIds)}
-                        selected={ids.includes(piece.id)} onPress={togglePiece} />
+                        selected={ids.includes(piece.id)} trying={piece.id === item.id && !owned} onPress={togglePiece} />
                     ))}
                   </ScrollView>
                   {set.reward_state !== 'claimed' && pieces.some(p => !p.owned && p.id !== item.id) && (
-                    <Pressable onPress={toggleFull} style={[styles.fullToggle, fullLook && styles.fullToggleOn]} accessibilityRole="switch"
-                      accessibilityState={{ checked: fullLook }} accessibilityLabel="Try the full look">
-                      <View style={[styles.knob, fullLook && styles.knobOn]} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.fullText, fullLook && { color: BRAND.navy }]}>Try the full look</Text>
-                    </Pressable>
+                    <LookSwitch on={fullLook} still={still} onPress={toggleFull} />
                   )}
                 </View>
               )}
               {!owned && phase === 'idle' && (
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>
-                  {wished ? 'Saved! We will tell you when it is back.' : 'Heart it to save it for later. We will tell you when it is back.'}
-                </Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{wishHintCopy(wished, wishStore.alerts())}</Text>
               )}
             </ScrollView>
 
-            <View style={styles.actions}>{actions}</View>
+            <Animated.View key={phaseKey} entering={still ? undefined : FadeIn.duration(140)} style={styles.actions}>{actions}</Animated.View>
+            <CoinArc from={{ x: 60, y: 44 }} to={{ x: stageW / 2 + 14, y: STAGE_TOP + STAGE_H * 0.45 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>
       </GestureHandlerRootView>
@@ -366,20 +445,22 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6 },
   balance: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 999,
     paddingHorizontal: 12, paddingVertical: 4, borderWidth: 2, borderColor: '#efe3bd' },
-  balanceText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
+  balanceText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, padding: 0, minWidth: 54 },
   stage: { marginHorizontal: 14, marginTop: 8, borderRadius: 22, overflow: 'hidden', borderWidth: 3, borderColor: BRAND.white },
-  spot: { position: 'absolute', alignSelf: 'center', top: '6%', width: '62%', aspectRatio: 1, borderRadius: 999, opacity: 0.22 },
-  floor: { position: 'absolute', alignSelf: 'center', bottom: 16, width: 180, height: 26, borderRadius: 90, backgroundColor: 'rgba(5,52,110,0.18)' },
   flatArt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  stamp: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
+  tag: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 3, transform: [{ rotate: '-6deg' }] },
-  stampText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, letterSpacing: 1 },
-  body: { paddingHorizontal: 18, paddingTop: 10, gap: 8 },
+  tagText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.white, letterSpacing: 1 },
+  newTag: { backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white },
+  newTagText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, letterSpacing: 1 },
+  equation: { position: 'absolute', left: 10, right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, paddingVertical: 7, borderWidth: 2, borderColor: '#efe3bd' },
+  body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 8 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flexShrink: 1, fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
   rarity: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
-  leaving: { fontFamily: FONT.display, fontSize: 16, color: BRAND.red },
+  leaving: { fontFamily: FONT.display, fontSize: 16 },
   back: { fontFamily: FONT.display, fontSize: 16, color: '#7c4dff' },
   setCard: { backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 3, padding: 12, gap: 8 },
   setHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -390,21 +471,18 @@ const styles = StyleSheet.create({
   titleChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLight },
   xpChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef6ff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   xpChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.blue },
-  pieces: { gap: 10, paddingVertical: 6, paddingRight: 8 },
-  fullToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', borderRadius: 999,
-    backgroundColor: BRAND.blue, paddingLeft: 4, paddingRight: 14, paddingVertical: 4 },
-  fullToggleOn: { backgroundColor: BRAND.gold },
-  knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.55)' },
-  knobOn: { backgroundColor: BRAND.white },
-  fullText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
+  pieces: { gap: 10, paddingVertical: 8, paddingRight: 8 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' },
+  track: { width: 54, height: 32, borderRadius: 16, backgroundColor: '#c9d7e6', padding: 3, borderWidth: 2, borderColor: '#aebfd2' },
+  trackOn: { backgroundColor: BRAND.green, borderColor: BRAND.greenLip },
+  knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
+  switchText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
   wishHint: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft },
   actions: { paddingHorizontal: 16, paddingTop: 10, gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wish: { width: 54, height: 54, borderRadius: 27, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#ff9bbf' },
   wishOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
-  equation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: BRAND.white,
-    borderRadius: 14, paddingVertical: 8, borderWidth: 2, borderColor: '#efe3bd' },
   op: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navySoft },
   amount: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   amountText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },

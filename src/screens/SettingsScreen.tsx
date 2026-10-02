@@ -21,6 +21,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import deletePlayer from '../api/endpoints/me/delete';
 import deleteAccountNow from '../api/endpoints/me/delete-account';
+import { showToast } from '../utils/toast';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
 import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
@@ -356,8 +357,14 @@ export default function SettingsScreen() {
                 onValueChange={async () => {
                   const next = !wishlistAlerts;
                   setWishlistAlerts(next);
-                  await updatePlayer({ wishlist_alerts: next }).catch(() => undefined);
-                  await refreshPlayer().catch(() => undefined);
+                  try {
+                    await updatePlayer({ wishlist_alerts: next });
+                    await refreshPlayer().catch(() => undefined);
+                  } catch {
+                    // Say so and put the switch back: never a silent save failure.
+                    setWishlistAlerts(!next);
+                    showToast('Couldn’t save Wishlist Alerts. Try again.', 'warning');
+                  }
                 }}
               />
             }

@@ -254,3 +254,54 @@ export function stableOrder(ids: number[], seen: number[] | undefined): number[]
 export function restockBackoffMs(attempt: number): number {
   return Math.min(120_000, 5_000 * Math.pow(3, Math.max(0, attempt)));
 }
+
+const SEASON_NAME: Record<string, string> = {
+  halloween: 'Halloween', holiday: 'holiday season', valentines: "Valentine's Day", st_patricks: "St. Patrick's Day",
+  spring: 'spring', summer: 'summer', july_4th: 'Fourth of July', lunar_new_year: 'Lunar New Year', new_year: 'New Year',
+  harvest: 'fall', winter: 'winter', mardi_gras: 'Mardi Gras', park_birthday: 'park birthday',
+};
+
+/** Calm, true last-chance copy for the try-on ("It comes back next Halloween."). */
+export function lastChanceLine(season: string | null | undefined): string {
+  const name = season ? SEASON_NAME[season] : null;
+  return name ? `Last chance! It comes back next ${name}.` : 'Last chance! It comes back another time.';
+}
+
+/** Honest wishlist copy: alerts on promise a note; off or not asked promise nothing. */
+export function wishSavedCopy(alerts: boolean | null | undefined): string {
+  return alerts ? 'Saved! We’ll tell you next time it’s in the shop.' : 'Saved to your wishlist.';
+}
+
+/** Hint under the try-on buttons. */
+export function wishHintCopy(wished: boolean, alerts: boolean | null | undefined): string {
+  if (wished) return alerts ? 'Saved. We’ll tell you next time it’s in the shop.' : 'Saved to your wishlist.';
+  return alerts ? 'Heart it to save it. We’ll tell you next time it’s in the shop.' : 'Heart it to save it for later.';
+}
+
+export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
+
+/**
+ * Fixed tile lanes: rarity top-left, heart or owned check top-right, and one
+ * full-width top ribbon for a time tag that replaces (never overlaps) the
+ * rarity chip. LAST CHANCE beats BACK AGAIN beats NEW. Owned tiles show no ribbon.
+ */
+export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?: boolean } }, showNew: boolean): { ribbon: TileRibbon; showRarity: boolean } {
+  if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null, showRarity: true };
+  const ribbon: TileRibbon = item.shop?.last_chance ? 'last_chance' : item.shop?.returning ? 'returning'
+    : showNew && item.shop?.is_new ? 'new' : null;
+  return { ribbon, showRarity: ribbon === null };
+}
+
+/** One card for every finished-but-unclaimed set. */
+export function readySummary(sets: { name: string }[]): { count: number; title: string } | null {
+  if (!sets.length) return null;
+  return { count: sets.length, title: sets.length === 1 ? `You finished ${sets[0].name}!` : `You finished ${sets.length} sets!` };
+}
+
+/** "Level 12 · 48% to 62%" for the reveal's XP bar (fractions 0..1). */
+export function levelProgress(level: number, before: number, needed: number, gained: number): { level: number; from: number; to: number; levelUp: boolean } {
+  const need = Math.max(1, needed);
+  const after = before + gained;
+  if (after >= need) return { level: level + 1, from: before / need, to: Math.min(1, (after - need) / need), levelUp: true };
+  return { level, from: before / need, to: after / need, levelUp: false };
+}

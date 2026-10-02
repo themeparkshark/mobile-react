@@ -32,8 +32,8 @@ const SLOT_ANCHORS: Record<string, string> = {
  * One worn layer. When it arrives after the shark is already on screen it
  * fades in over 60ms and settles from 1.18 to 1.0 at its slot.
  */
-function WornLayer({ uri, slot, pop }: { readonly uri: string; readonly slot: string; readonly pop: boolean }) {
-  const scale = useRef(new Animated.Value(pop ? 1.18 : 1)).current;
+function WornLayer({ uri, slot, pop, popFrom = 1.18 }: { readonly uri: string; readonly slot: string; readonly pop: boolean; readonly popFrom?: number }) {
+  const scale = useRef(new Animated.Value(pop ? popFrom : 1)).current;
   const opacity = useRef(new Animated.Value(pop ? 0 : 1)).current;
 
   useEffect(() => {
@@ -65,6 +65,8 @@ export default function Playercard({
   onItemTap,
   popLayers = false,
   still = false,
+  pinAnchor = 'card',
+  popFrom,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -75,6 +77,10 @@ export default function Playercard({
   readonly popLayers?: boolean;
   /** Reduce Motion: skip the idle bob. */
   readonly still?: boolean;
+  /** Stages (shop try-on, reveal): 'body' pins the pin on the chest instead of the card corner. */
+  readonly pinAnchor?: 'card' | 'body';
+  /** How big a newly worn layer starts before settling (1.18 by default; the shop's buy drop uses 1.4). */
+  readonly popFrom?: number;
 }) {
   const translate = useRef(new Animated.Value(0)).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -177,7 +183,7 @@ export default function Playercard({
             contentFit="cover"
           />
         )}
-        {inventory?.pin_item && (
+        {inventory?.pin_item && pinAnchor === 'card' && (
           onItemTap ? (
             <Pressable
               onPress={() => onItemTap(inventory.pin_item, 'pin_item')}
@@ -261,9 +267,14 @@ export default function Playercard({
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
               const worn = inventory?.[slot];
               return worn?.paper_url ? (
-                <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} />
+                <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} popFrom={popFrom} />
               ) : null;
             })}
+            {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
+            {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
+              <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
+                pointerEvents="none" style={styles.chestPin} />
+            ) : null}
             {/* Single tap overlay — uses coordinates to determine which equipped item */}
             {onItemTap && (
               <Pressable
@@ -279,6 +290,7 @@ export default function Playercard({
 }
 
 const styles = StyleSheet.create({
+  chestPin: { position: 'absolute', left: '47%', top: '52%', width: '11%', aspectRatio: 1 },
   image: {
     width: '100%',
     height: '100%',

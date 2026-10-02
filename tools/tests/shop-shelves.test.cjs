@@ -12,7 +12,8 @@ function load(file) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const moduleRef = { exports: {} };
-  vm.runInNewContext(code, { module: moduleRef, exports: moduleRef.exports }, { filename: file });
+  const fakeRequire = name => (name === 'react' ? { useSyncExternalStore: () => undefined } : require(name));
+  vm.runInNewContext(code, { module: moduleRef, exports: moduleRef.exports, require: fakeRequire }, { filename: file });
   return moduleRef.exports;
 }
 
@@ -134,4 +135,56 @@ test('accent ink stays readable', () => {
   assert.equal(shelves.inkOn('#ffcf3b'), '#05346e');
   assert.equal(shelves.inkOn('#6a1b9a'), '#ffffff');
   assert.equal(shelves.sectionAccent({ type: 'event', color: '#ff7a00', ends_at: '' }), '#ff7a00');
+});
+
+test('round 3: tile lanes put one ribbon up and hide the rarity chip under it', () => {
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } }, true)), { ribbon: 'last_chance', showRarity: false });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } }, true)), { ribbon: 'returning', showRarity: false });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { is_new: true } }, true)), { ribbon: 'new', showRarity: false });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { is_new: true } }, false)), { ribbon: null, showRarity: true }, 'NEW only on the first open of the day');
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, has_purchased: true, shop: { last_chance: true } }, true)), { ribbon: null, showRarity: true }, 'owned: no ribbon');
+});
+
+test('round 3: honest wishlist copy', () => {
+  assert.equal(shelves.wishSavedCopy(true), 'Saved! We’ll tell you next time it’s in the shop.');
+  assert.equal(shelves.wishSavedCopy(false), 'Saved to your wishlist.');
+  assert.equal(shelves.wishSavedCopy(null), 'Saved to your wishlist.');
+  assert.equal(shelves.wishHintCopy(false, false), 'Heart it to save it for later.');
+  assert.doesNotMatch(shelves.wishHintCopy(true, false), /tell you/);
+});
+
+test('round 3: calm last-chance copy names the season', () => {
+  assert.equal(shelves.lastChanceLine('halloween'), 'Last chance! It comes back next Halloween.');
+  assert.equal(shelves.lastChanceLine(null), 'Last chance! It comes back another time.');
+});
+
+test('round 3: ready sets collapse into one card', () => {
+  assert.equal(shelves.readySummary([]), null);
+  assert.equal(shelves.readySummary([{ name: 'Snow Day' }]).title, 'You finished Snow Day!');
+  assert.equal(shelves.readySummary([{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }]).title, 'You finished 4 sets!');
+});
+
+test('round 3: XP bar level context', () => {
+  assert.deepEqual(plain(shelves.levelProgress(12, 480, 1000, 140)), { level: 12, from: 0.48, to: 0.62, levelUp: false });
+  const up = shelves.levelProgress(12, 950, 1000, 120);
+  assert.equal(up.level, 13);
+  assert.equal(up.levelUp, true);
+});
+
+test('round 3: the wishlist store notifies once per real change', () => {
+  const store = load('src/screens/StoreScreen/wishStore.ts');
+  // wishStore.ts imports React only for its hooks; the store itself is plain.
+  const s = store.wishStore;
+  let calls = 0;
+  const off = s.subscribe(() => { calls++; });
+  s.seed([1, 2], true);
+  s.seed([2, 1], true);
+  assert.equal(calls, 1, 'same ids: no emit');
+  s.set(3, true); s.set(3, true);
+  assert.equal(calls, 2);
+  assert.equal(s.has(3), true);
+  assert.equal(s.count(), 3);
+  s.set(1, false);
+  assert.equal(s.has(1), false);
+  off();
 });
