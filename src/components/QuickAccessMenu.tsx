@@ -1,326 +1,264 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Platform,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import * as Haptics from '../helpers/haptics';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faBars, faTimes } from '@fortawesome/free-solid-svg-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as RootNavigation from '../RootNavigation';
-import config from '../config';
+/**
+ * The home map menu: Alex's round blue button opens a stack of framed rows
+ * (round Alex badge + blue fin bar label). The whole row is the tap target.
+ * Opening springs in with a stagger; closing runs the stagger in reverse.
+ * Collections shows a gift badge when a set reward is waiting.
+ *
+ * Motion runs on the UI thread (Reanimated); Reduce Motion swaps every move
+ * for a short fade.
+ */
+import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import getPrepItemSets from '../api/endpoints/me/prep-item-sets';
 import { playSfx } from '../gamekit/SFX';
+import * as Haptics from '../helpers/haptics';
+import * as RootNavigation from '../RootNavigation';
+import { buildBook, hasClaimable } from '../screens/SetCollection/dexModel';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
-interface MenuItem {
-  id: string;
-  label: string;
-  icon: GameIconName;
-  color: string;
-  screen: string;
-  params?: object;
+const ROUND = {
+  gold: require('../../assets/images/alex-ui/round-gold.webp'),
+  green: require('../../assets/images/alex-ui/round-green.webp'),
+  blue: require('../../assets/images/alex-ui/round-blue.webp'),
+  purple: require('../../assets/images/alex-ui/round-purple.webp'),
+  slate: require('../../assets/images/alex-ui/round-slate.webp'),
+} as const;
+const FAB = require('../../assets/images/alex-ui/fab-blue.webp');
+const CLOSE = require('../../assets/images/alex-ui/close-red.webp');
+const LABEL_BAR = require('../../assets/images/alex-ui/label-bar.webp');
+const RIBBON = require('../../assets/images/ribbon.png');
+
+export interface MenuItem {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: GameIconName;
+  readonly round: keyof typeof ROUND;
+  readonly screen: string;
+  readonly params?: object;
 }
 
-const MENU_ITEMS: MenuItem[] = [
-  {
-    id: 'sets',
-    label: 'Collections',
-    icon: 'chest',
-    color: '#FF9800',
-    screen: 'SetCollection',
-  },
-  {
-    id: 'stamps',
-    label: 'Stamp Book',
-    icon: 'medal1',
-    color: '#4CAF50',
-    screen: 'StampBook',
-  },
-  {
-    id: 'shop',
-    label: 'Shark Shop',
-    icon: 'coins',
-    color: '#0b7fd1',
-    screen: 'Store',
-    params: { store: 'shark-shop' },
-  },
-  {
-    id: 'help',
-    label: 'How to Play',
-    icon: 'info',
-    color: '#0768b9',
-    screen: 'HowToPlay',
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: 'settings',
-    color: '#3d5f8c',
-    screen: 'Settings',
-  },
+export const MENU_ITEMS: readonly MenuItem[] = [
+  { id: 'sets', label: 'Collections', icon: 'chest', round: 'gold', screen: 'SetCollection' },
+  { id: 'stamps', label: 'Stamp Book', icon: 'medal1', round: 'green', screen: 'StampBook' },
+  { id: 'shop', label: 'Shark Shop', icon: 'coins', round: 'blue', screen: 'Store', params: { store: 'shark-shop' } },
+  { id: 'help', label: 'How to Play', icon: 'info', round: 'purple', screen: 'HowToPlay' },
+  { id: 'settings', label: 'Settings', icon: 'settings', round: 'slate', screen: 'Settings' },
 ];
 
-const LABEL = {
-  backgroundColor: BRAND.white,
-  paddingHorizontal: 14,
-  paddingVertical: 7,
-  borderRadius: 14,
-  borderWidth: 2,
-  borderColor: BRAND.sky,
-  shadowColor: BRAND.shadow,
-  shadowOffset: { width: 0, height: 3 },
-  shadowRadius: 5,
-  shadowOpacity: 0.25,
-} as const;
-const LABEL_TEXT = { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy } as const;
-
-interface Props {
-  position?: 'left' | 'right';
+/** Open: top row first, 50 ms apart. Close: bottom row first, 30 ms apart. */
+export function menuDelay(index: number, count: number, opening: boolean): number {
+  return opening ? index * 50 : (count - 1 - index) * 30;
 }
 
-/**
- * Quick Access floating menu for navigating to collection screens.
- * Inspired by iOS control center / Android FAB menus.
- */
-export default function QuickAccessMenu({ position = 'right' }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
-  
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const bgOpacity = useRef(new Animated.Value(0)).current;
-  const itemAnims = useRef(
-    MENU_ITEMS.map(() => ({
-      translateY: new Animated.Value(50),
-      opacity: new Animated.Value(0),
-    }))
-  ).current;
+// One read of "is a set reward waiting", shared by every menu mount for 2 minutes.
+let rewardCache: { at: number; value: boolean } | null = null;
+const REWARD_TTL_MS = 2 * 60 * 1000;
 
-  // Toggle menu
-  const toggleMenu = () => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    playSfx(isOpen ? 'ui.modalClose' : 'fx.whoosh', 0.45);
-    setIsOpen(!isOpen);
-  };
-
-  // Animate menu open/close
+function useRewardWaiting(open: boolean): boolean {
+  const [waiting, setWaiting] = useState(rewardCache?.value ?? false);
   useEffect(() => {
-    if (isOpen) {
-      // Open animations
-      Animated.parallel([
-        Animated.spring(rotateAnim, {
-          toValue: 1,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bgOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        ...itemAnims.map((anim, index) => 
-          Animated.sequence([
-            Animated.delay(index * 50),
-            Animated.parallel([
-              Animated.spring(anim.translateY, {
-                toValue: 0,
-                friction: 5,
-                tension: 90,
-                useNativeDriver: true,
-              }),
-              Animated.timing(anim.opacity, {
-                toValue: 1,
-                duration: 200,
-                useNativeDriver: true,
-              }),
-            ]),
-          ])
-        ),
-      ]).start();
-    } else {
-      // Close animations
-      Animated.parallel([
-        Animated.spring(rotateAnim, {
-          toValue: 0,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bgOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-        ...itemAnims.map((anim) =>
-          Animated.parallel([
-            Animated.timing(anim.translateY, {
-              toValue: 50,
-              duration: 100,
-              useNativeDriver: true,
-            }),
-            Animated.timing(anim.opacity, {
-              toValue: 0,
-              duration: 100,
-              useNativeDriver: true,
-            }),
-          ])
-        ),
-      ]).start();
-    }
-  }, [isOpen]);
+    if (rewardCache && Date.now() - rewardCache.at < REWARD_TTL_MS) { setWaiting(rewardCache.value); return; }
+    let live = true;
+    getPrepItemSets()
+      .then(list => {
+        const value = buildBook(list).sets.some(hasClaimable);
+        rewardCache = { at: Date.now(), value };
+        if (live) setWaiting(value);
+      })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [open]);
+  return waiting;
+}
 
-  // Handle menu item press
-  const handleItemPress = (item: MenuItem) => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    playSfx('ui.tap', 0.6);
-    setIsOpen(false);
-    RootNavigation.navigate(item.screen, item.params);
+/** Collections calls this after a claim so the badge clears at once. */
+export function invalidateMenuRewardBadge(): void {
+  rewardCache = null;
+}
+
+interface Props {
+  readonly position?: 'left' | 'right';
+}
+
+export default function QuickAccessMenu({ position = 'right' }: Props) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const reduced = useUiReducedMotion();
+  const insets = useSafeAreaInsets();
+  const rewardWaiting = useRewardWaiting(open);
+  const scrim = useSharedValue(0);
+  const fabSpin = useSharedValue(0);
+  const [popIndex, setPopIndex] = useState<number | null>(null);
+  const busy = useRef(false);
+  const isRight = position === 'right';
+
+  // Rows animate themselves from `open`; this drives the scrim and button and waits out the close.
+  const animateTo = useCallback((next: boolean, then?: () => void) => {
+    scrim.value = withTiming(next ? 1 : 0, { duration: next ? 200 : 180 });
+    fabSpin.value = reduced ? withTiming(next ? 1 : 0, { duration: 150 }) : withSpring(next ? 1 : 0, { damping: 12, stiffness: 220 });
+    const total = next ? 0 : (reduced ? 150 : menuDelay(0, MENU_ITEMS.length, false) + 140);
+    setTimeout(() => then?.(), total);
+  }, [reduced, scrim, fabSpin]);
+
+  const openMenu = () => {
+    if (busy.current) return;
+    setMounted(true);
+    setOpen(true);
+    playSfx('fx.whoosh', 0.45);
+    if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPopIndex(null);
+    requestAnimationFrame(() => animateTo(true));
   };
 
-  // Icon rotation
-  const iconRotate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '45deg'],
-  });
+  const closeMenu = (then?: () => void) => {
+    if (busy.current) return;
+    busy.current = true;
+    setOpen(false);
+    playSfx('fx.whoosh', 0.25);
+    animateTo(false, () => {
+      busy.current = false;
+      setMounted(false);
+      then?.();
+    });
+  };
 
-  const isRight = position === 'right';
+  const choose = (item: MenuItem, index: number) => {
+    if (busy.current) return;
+    playSfx('ui.tap', 0.6);
+    if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPopIndex(index);
+    setTimeout(() => closeMenu(() => RootNavigation.navigate(item.screen, item.params)), reduced ? 0 : 140);
+  };
+
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
+  const headerStyle = useAnimatedStyle(() => ({
+    opacity: scrim.value,
+    transform: [{ translateY: (1 - scrim.value) * 16 }],
+  }));
+  const barsStyle = useAnimatedStyle(() => ({ opacity: 1 - fabSpin.value, transform: [{ scale: 1 - 0.3 * fabSpin.value }] }));
+  const closeStyle = useAnimatedStyle(() => ({ opacity: fabSpin.value, transform: [{ scale: 0.6 + 0.4 * fabSpin.value }] }));
+  const bottom = Math.max(insets.bottom, 12) + 66;
 
   return (
     <>
-      {/* Backdrop */}
-      {isOpen && (
-        <TouchableOpacity
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 98,
-          }}
-          activeOpacity={1}
-          onPress={() => setIsOpen(false)}
-        >
-          <Animated.View
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(5, 52, 110, 0.55)',
-              opacity: bgOpacity,
-            }}
-          />
-        </TouchableOpacity>
+      {mounted && (
+        <Animated.View style={[StyleSheet.absoluteFill, { zIndex: 98 }, scrimStyle]}>
+          <Pressable accessibilityLabel="Close menu" accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={() => closeMenu()}>
+            <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.42)' }]} />
+          </Pressable>
+        </Animated.View>
       )}
 
-      {/* Menu container - box-none lets touches pass through empty space */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          bottom: 100,
-          [isRight ? 'right' : 'left']: 16,
-          zIndex: 99,
-          alignItems: isRight ? 'flex-end' : 'flex-start',
-        }}
-      >
-        {/* Menu items - pointerEvents none when closed to prevent ghost touches */}
-        {MENU_ITEMS.map((item, index) => (
-          <Animated.View
-            key={item.id}
-            pointerEvents={isOpen ? 'auto' : 'none'}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginBottom: 12,
-              opacity: itemAnims[index].opacity,
-              transform: [{ translateY: itemAnims[index].translateY }],
-            }}
-          >
-            {/* Label (left of button if right-positioned) */}
-            {isRight && (
-              <View
-                style={[LABEL, { marginRight: 10 }]}
-              >
-                <Text style={LABEL_TEXT}>
-                  {item.label}
-                </Text>
-              </View>
-            )}
+      <View pointerEvents="box-none" style={[styles.stack, { bottom, [isRight ? 'right' : 'left']: 14, alignItems: isRight ? 'flex-end' : 'flex-start' }]}>
+        {mounted && (
+          <View accessibilityViewIsModal={open} accessibilityElementsHidden={!open}
+            importantForAccessibility={open ? 'auto' : 'no-hide-descendants'} pointerEvents={open ? 'box-none' : 'none'}
+            style={{ alignItems: isRight ? 'flex-end' : 'flex-start' }}>
+            <Animated.View style={[styles.header, headerStyle]}>
+              <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
+              <Text style={styles.headerText} accessibilityRole="header">Menu</Text>
+            </Animated.View>
+            {MENU_ITEMS.map((item, index) => (
+              <MenuRow key={item.id} item={item} index={index} open={open} reduced={reduced} popped={popIndex === index} isRight={isRight}
+                badge={item.id === 'sets' && rewardWaiting} onPress={() => choose(item, index)} />
+            ))}
+          </View>
+        )}
 
-            {/* Button */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              activeOpacity={0.8}
-              onPress={() => handleItemPress(item)}
-              style={{
-                width: 58,
-                height: 58,
-                borderRadius: 29,
-                overflow: 'hidden',
-                alignItems: 'center',
-                justifyContent: 'center',
-                shadowColor: BRAND.shadow,
-                shadowOffset: { width: 0, height: 4 },
-                shadowRadius: 6,
-                shadowOpacity: 0.35,
-                borderWidth: 3,
-                borderColor: 'white',
-              }}
-            >
-              <LinearGradient colors={['#ffffff', item.color]} start={{ x: 0.5, y: -0.6 }} end={{ x: 0.5, y: 0.9 }}
-                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
-              <GameIcon name={item.icon} size={38} />
-            </TouchableOpacity>
-
-            {/* Label (right of button if left-positioned) */}
-            {!isRight && (
-              <View
-                style={[LABEL, { marginLeft: 10 }]}
-              >
-                <Text style={LABEL_TEXT}>
-                  {item.label}
-                </Text>
-              </View>
-            )}
+        <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Close menu' : 'Open menu'}
+          accessibilityHint={!open && rewardWaiting ? 'A collection reward is waiting' : undefined}
+          onPress={() => (open ? closeMenu() : openMenu())} hitSlop={8} style={styles.fab}>
+          <Image source={FAB} style={StyleSheet.absoluteFill} contentFit="contain" />
+          <Animated.View style={[styles.bars, barsStyle]}>
+            {[0, 1, 2].map(line => <View key={line} style={styles.bar} />)}
           </Animated.View>
-        ))}
-
-        {/* Main FAB button */}
-        <TouchableOpacity
-          onPress={toggleMenu}
-          style={{
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            backgroundColor: isOpen ? config.red : config.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 2, height: 4 },
-            shadowRadius: 6,
-            shadowOpacity: 0.4,
-            borderWidth: 3,
-            borderColor: 'white',
-          }}
-        >
-          <Animated.View
-            style={{
-              transform: [{ rotate: iconRotate }],
-            }}
-          >
-            <FontAwesomeIcon 
-              icon={isOpen ? faTimes : faBars} 
-              size={26} 
-              color="white" 
-            />
+          <Animated.View style={[StyleSheet.absoluteFill, closeStyle]}>
+            <Image source={CLOSE} style={StyleSheet.absoluteFill} contentFit="contain" />
           </Animated.View>
-        </TouchableOpacity>
+          {!open && rewardWaiting && <View style={styles.fabBadge}><GameIcon name="gift" size={22} /></View>}
+        </Pressable>
       </View>
     </>
   );
 }
+
+function MenuRow({ item, index, open, reduced, popped, isRight, badge, onPress }: {
+  readonly item: MenuItem; readonly index: number; readonly open: boolean; readonly reduced: boolean; readonly popped: boolean;
+  readonly isRight: boolean; readonly badge: boolean; readonly onPress: () => void;
+}) {
+  const t = useSharedValue(0);
+  const pop = useSharedValue(1);
+  useEffect(() => {
+    const delay = menuDelay(index, MENU_ITEMS.length, open);
+    if (reduced) t.value = withTiming(open ? 1 : 0, { duration: 150 });
+    else if (open) t.value = withDelay(delay, withSpring(1, { damping: 11, stiffness: 190 }));
+    else t.value = withDelay(delay, withTiming(0, { duration: 130 }));
+  }, [open, reduced, index, t]);
+  useEffect(() => {
+    if (popped && !reduced) pop.value = withSequence(withTiming(1.08, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 260 }));
+  }, [popped, reduced, pop]);
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, t.value * 1.4),
+    transform: [{ translateY: (1 - t.value) * 30 }, { scale: (0.9 + 0.1 * t.value) * pop.value }],
+  }));
+  const press = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
+  const round = (
+    <View style={styles.round}>
+      <Image source={ROUND[item.round]} style={StyleSheet.absoluteFill} contentFit="contain" />
+      <GameIcon name={item.icon} size={38} />
+      {badge && <View style={styles.badge}><GameIcon name="gift" size={20} /></View>}
+    </View>
+  );
+  const label = (
+    <View style={styles.label}>
+      <Image source={LABEL_BAR} style={StyleSheet.absoluteFill} contentFit="fill" />
+      <Text style={styles.labelText} numberOfLines={1}>{item.label}</Text>
+    </View>
+  );
+  return (
+    <Animated.View style={style}>
+      <Pressable accessibilityRole="button" accessibilityLabel={badge ? `${item.label}, a reward is waiting` : item.label}
+        onPress={onPress}
+        onPressIn={() => { press.value = withSpring(0.94, { damping: 15, stiffness: 420 }); }}
+        onPressOut={() => { press.value = withSpring(1, { damping: 8, stiffness: 260 }); }}>
+        <Animated.View style={[styles.row, { flexDirection: isRight ? 'row-reverse' : 'row' }, pressStyle]}>
+          {round}
+          {label}
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  stack: { position: 'absolute', zIndex: 99 },
+  header: { width: 190, height: 52, alignItems: 'center', justifyContent: 'center', marginBottom: 6, alignSelf: 'center' },
+  headerText: { fontFamily: 'Shark', fontSize: 22, color: '#7a3d00', marginTop: -4 },
+  row: { alignItems: 'center', minHeight: 66, marginBottom: 6 },
+  round: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute', top: -4, right: -4, width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,
+  },
+  label: { width: 168, height: 50, marginHorizontal: -6, justifyContent: 'center', paddingLeft: 18, paddingRight: 14, zIndex: -1 },
+  labelText: {
+    fontFamily: 'Shark', fontSize: 19, color: BRAND.white,
+    textShadowColor: 'rgba(5,52,110,0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+  },
+  fab: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
+  bars: { alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: -6 },
+  bar: { width: 28, height: 6, borderRadius: 3, backgroundColor: BRAND.white, borderWidth: 1.5, borderColor: '#0b3f78' },
+  fabBadge: {
+    position: 'absolute', top: -6, right: -6, width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,
+  },
+});
