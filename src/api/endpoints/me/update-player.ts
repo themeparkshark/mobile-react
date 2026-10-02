@@ -5,6 +5,7 @@ import client from '../../client';
 export default async function updatePlayer(payload: {
   readonly enabled_music?: boolean;
   readonly enabled_sound_effects?: boolean;
+  readonly wishlist_alerts?: boolean;
   readonly username?: string;
 }): Promise<PlayerType> {
   const { data } = await client.put<ApiResponseType<PlayerType>>(

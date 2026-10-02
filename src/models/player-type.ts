@@ -11,6 +11,8 @@ export interface PlayerType {
   readonly email: string;
   readonly enabled_music: boolean;
   readonly enabled_sound_effects: boolean;
+  /** Shark Shop wishlist pushes: null until asked on the first heart. */
+  readonly wishlist_alerts?: boolean | null;
   readonly experience: number;
   readonly experience_level: ExperienceLevelType;
   readonly friends_count: number;

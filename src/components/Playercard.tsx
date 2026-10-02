@@ -64,6 +64,7 @@ export default function Playercard({
   sharkTransform,
   onItemTap,
   popLayers = false,
+  still = false,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -72,6 +73,8 @@ export default function Playercard({
   readonly onItemTap?: (item: ItemType, slot: string) => void;
   /** Inventory stage: layers put on after the first frame pop in at their slot. */
   readonly popLayers?: boolean;
+  /** Reduce Motion: skip the idle bob. */
+  readonly still?: boolean;
 }) {
   const translate = useRef(new Animated.Value(0)).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -82,7 +85,9 @@ export default function Playercard({
   const containerSize = useRef({ width: 0, height: 0 });
 
   useEffect(() => {
-    Animated.loop(
+    // Reduce Motion (or a still preview): no idle bob at all.
+    if (still) { translate.setValue(0); return; }
+    const bob = Animated.loop(
       Animated.sequence([
         Animated.timing(translate, {
           toValue: 10,
@@ -95,8 +100,10 @@ export default function Playercard({
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, []);
+    );
+    bob.start();
+    return () => bob.stop();
+  }, [still]);
 
   // Check if shark is "naked" (no wearable items)
   const isNaked = !inventory?.head_item && !inventory?.face_item &&

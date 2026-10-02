@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -18,9 +18,9 @@ import getStore from '../api/endpoints/stores/get';
 import getStores from '../api/endpoints/stores/stores';
 import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
 import getShopToday from '../api/endpoints/stores/today';
-import { equipShopTitle } from '../api/endpoints/me/shop-sets';
 import { ShopToday } from '../models/shop-today';
 import ShopShelves from './StoreScreen/ShopShelves';
+import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -32,7 +32,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import usePurchaseItem, { currencyLabel } from '../hooks/usePurchaseItem';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { ws7Preview } from '../dev/ws7Preview';
-import { BRAND, SharkLoader } from '../ui';
+import { BRAND, GameIcon, SharkLoader } from '../ui';
 import currencyBalance from '../helpers/currency-balance';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -246,15 +246,29 @@ function SingleBubble({
 }
 
 /** Gear (cosmetics for Shark Coins) and Supplies (in-app purchases), on the Shark Shop only. */
-function ShopTabs({ tab, onChange }: { tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void }) {
+function ShopTabs({ tab, onChange, coins, wishes }: {
+  tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void;
+  /** Shop v2: the balance lives in the tab row (no separate pill row). */
+  coins?: number | null; wishes?: number;
+}) {
   return (
-    <View style={tabStyles.row} accessibilityRole="tablist">
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
+    <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }]} accessibilityRole="tablist">
       {(['gear', 'supplies'] as const).map(key => (
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
           accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
           <Text style={[tabStyles.label, tab === key && tabStyles.labelOn]}>{key === 'gear' ? 'GEAR' : 'SUPPLIES'}</Text>
         </Pressable>
       ))}
+    </View>
+    {coins != null && (
+      <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins${wishes ? `, ${wishes} on your wishlist` : ''}`}>
+        <GameIcon name="coins" size={20} />
+        <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
+        {!!wishes && <View style={tabStyles.wishBadge}><GameIcon name="heart" size={11} mono={BRAND.white} />
+          <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text></View>}
+      </View>
+    )}
     </View>
   );
 }
@@ -266,11 +280,19 @@ const tabStyles = StyleSheet.create({
   tabOn: { backgroundColor: '#ffcf3b' },
   label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
   labelOn: { color: '#6a3b00' },
+  coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
+    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
+  coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
+  wishBadge: { position: 'absolute', top: -8, right: -8, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#ff4f8b',
+    borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: '#fff' },
+  wishText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
 });
 
 export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus } = route.params as {
+  const { store, tab: initialTab, focus, focus_item: focusItem } = route.params as {
     store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
+    /** Wishlist push deep link: open this item's try-on. */
+    focus_item?: number;
   };
   const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
   const [currentStore, setCurrentStore] = useState<StoreType>();
@@ -286,16 +308,19 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const { startTutorial, hasCompleted } = useTutorial();
   const [today, setToday] = useState<ShopToday | null>(null);
   const storeIdRef = useRef<number | null>(null);
-  const reloadToday = async () => {
-    if (!storeIdRef.current) return;
+  // Server clock minus device clock: timers never trust a changed device clock.
+  const [clockSkew, setClockSkew] = useState(0);
+  const [wishCount, setWishCount] = useState(0);
+  const reloadToday = useCallback(async (): Promise<boolean> => {
+    if (!storeIdRef.current) return false;
     const next = await getShopToday(storeIdRef.current).catch(() => null);
-    if (next) setToday(next);
-  };
-  const { purchaseItem, purchaseModal } = usePurchaseItem({
-    // Shop v2: owned states, set progress and reserves all come from the server.
-    onPurchased: () => { void reloadToday(); },
-    onWearTitle: reward => { void equipShopTitle(reward.slug).catch(() => undefined); },
-  });
+    if (!next) return false;
+    setClockSkew(clockOffset(next.server_time, Date.now()));
+    setToday(next);
+    return true;
+  }, []);
+  // The classic grid (older backends, park stores) keeps the dialog purchase flow.
+  const { purchaseItem, purchaseModal } = usePurchaseItem();
   const [page, setPage] = useState<number>(1);
   // One page request at a time: two quick onEndReached calls must not skip a page.
   const loadingMore = useRef(false);
@@ -348,6 +373,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       ]);
       const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
       if (!live) return;
+      if (nextToday) setClockSkew(clockOffset(nextToday.server_time, Date.now()));
       setToday(nextToday);
       setCurrentStore(nextStore);
       setRotation(nextRotation);
@@ -407,7 +433,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       </Topbar>
       {sharkShop && (
         <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
-          <ShopTabs tab={tab} onChange={setTab} />
+          <ShopTabs tab={tab} onChange={setTab} coins={today && tab === 'gear' ? Number(player?.coins ?? 0) : null} wishes={wishCount} />
         </View>
       )}
       {sharkShop && tab === 'supplies' && (
@@ -442,10 +468,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
                 flexDirection: 'row',
                 columnGap: 16,
                 justifyContent: 'center',
-                paddingTop: 16,
+                paddingTop: today ? 0 : 16,
               }}
             >
-              {catalog &&
+              {catalog && !today &&
                 catalog.currencies.map((currency) => {
                   return (
                     <View
@@ -495,8 +521,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
                 })}
             </View>
             {today && (
-              <ShopShelves today={today} onRefresh={reloadToday} onTodayChange={setToday}
-                onBuy={item => { void purchaseItem(item); }} />
+              <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
+                focusItemId={focusItem} wishCount={setWishCount} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (

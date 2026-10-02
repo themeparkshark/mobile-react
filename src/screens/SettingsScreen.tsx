@@ -150,6 +150,7 @@ export default function SettingsScreen() {
   const [backgroundLocationBusy, setBackgroundLocationBusy] = useState(false);
   const [findingOriginal, setFindingOriginal] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
+  const [wishlistAlerts, setWishlistAlerts] = useState<boolean>(!!player?.wishlist_alerts);
   const accountAction = useRef(false);
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
@@ -158,6 +159,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
     setEnabledSoundEffects(player?.enabled_sound_effects);
+    setWishlistAlerts(!!player?.wishlist_alerts);
   }, [player]);
 
   useEffect(() => {
@@ -330,7 +332,6 @@ export default function SettingsScreen() {
           <SettingsRow
             art="sound"
             title="Sound Effects"
-            isLast
             accessory={
               <BrandSwitch
                 label="Sound effects"
@@ -338,6 +339,24 @@ export default function SettingsScreen() {
                 onValueChange={async () => {
                   setEnabledSoundEffects(!enabledSoundEffects);
                   await updatePlayer({ enabled_sound_effects: !player?.enabled_sound_effects }).catch(() => undefined);
+                  await refreshPlayer().catch(() => undefined);
+                }}
+              />
+            }
+          />
+          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
+          <SettingsRow
+            art="heart"
+            title="Wishlist Alerts"
+            isLast
+            accessory={
+              <BrandSwitch
+                label="Wishlist alerts"
+                value={!!wishlistAlerts}
+                onValueChange={async () => {
+                  const next = !wishlistAlerts;
+                  setWishlistAlerts(next);
+                  await updatePlayer({ wishlist_alerts: next }).catch(() => undefined);
                   await refreshPlayer().catch(() => undefined);
                 }}
               />
