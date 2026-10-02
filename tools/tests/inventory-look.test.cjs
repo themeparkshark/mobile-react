@@ -306,3 +306,17 @@ test('the save failure copy matches the spec', () => {
   assert.match(source, /"That item isn't in your closet\."/);
   assert.match(source, /"Couldn't save\. Your shark is back to your last look\."/);
 });
+
+test('tapping a worn item on the shark takes it off even though worn items carry no item_type', () => {
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/InventoryScreen.tsx'), 'utf8');
+  assert.match(screen, /onItemTap=\{\(item, slot\) => changeOutfit\(item, true, slot\)\}/);
+  const fn = screen.slice(screen.indexOf('const changeOutfit'), screen.indexOf('look.set(slot'));
+  assert.match(fn, /SLOT_KEYS\.find\(\(key\) => key === tappedSlot\)/);
+  assert.match(fn, /\?\.id === item\.id\)/);
+});
+
+test('the inventory shark keeps its original stage size (460 tall, lifted 50)', () => {
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/InventoryScreen.tsx'), 'utf8');
+  const card = screen.slice(screen.indexOf('<Playercard'), screen.indexOf('/>', screen.indexOf('<Playercard')));
+  assert.match(card, /height: 460,\s*marginTop: -50,/);
+});

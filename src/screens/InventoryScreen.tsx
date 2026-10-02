@@ -30,6 +30,7 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
 import { isRequiredSlot, requiredSlotCopy, slotForItem, wardrobeCategoryLabel } from '../helpers/wardrobe';
+import { SLOT_KEYS } from '../models/look-type';
 import useLook from '../hooks/useLook';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { LookNotice } from '../helpers/lookQueue';
@@ -106,8 +107,13 @@ export default function InventoryScreen() {
     look.clearNotice();
   }, [look.notice]);
 
-  const changeOutfit = (item: ItemType, fromAvatar = false) => {
-    const slot = slotForItem(item);
+  // Worn items on the shark arrive without item_type, so a tap on the shark
+  // passes its slot; otherwise find the slot already holding the item.
+  const changeOutfit = (item: ItemType, fromAvatar = false, tappedSlot?: string) => {
+    const slot = slotForItem(item)
+      ?? SLOT_KEYS.find((key) => key === tappedSlot)
+      ?? SLOT_KEYS.find((key) => (worn?.[key] as ItemType | null | undefined)?.id === item.id)
+      ?? null;
     if (!slot || !worn) return;
     const isWorn = (worn[slot] as ItemType | null | undefined)?.id === item.id;
     if (isWorn && isRequiredSlot(slot)) {
@@ -239,12 +245,13 @@ export default function InventoryScreen() {
           >
             <Playercard
               inventory={worn}
-              onItemTap={(item) => changeOutfit(item, true)}
+              onItemTap={(item, slot) => changeOutfit(item, true, slot)}
               popLayers={!reduceMotion}
               style={{
                 position: 'absolute',
                 width: Dimensions.get('window').width,
-                height: 380,
+                height: 460,
+                marginTop: -50,
               }}
             />
             {!!toast && (
