@@ -80,7 +80,7 @@ function StampTile({ stamp, size, accent, animate, reducedMotion, onPress }: Pro
               <Text style={[styles.secretMark, { color: accent }]}>?</Text>
             </View>
           ) : (
-            <Image source={stampArt(stamp)} style={[styles.art, styles.silhouette]} tintColor="#2A3F6B"
+            <Image source={stampArt(stamp)} style={[styles.art, styles.silhouette]} tintColor="#9DB3DB"
               contentFit="contain" transition={160} recyclingKey={String(stamp.id)} />
           )}
           {foil && (
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   artWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   art: { width: '100%', height: '100%' },
-  silhouette: { opacity: 0.55 },
+  silhouette: { opacity: 0.32 },
   foilClip: { overflow: 'hidden', borderRadius: 999 },
   foil: { position: 'absolute', width: 34, left: 0 },
   secret: {

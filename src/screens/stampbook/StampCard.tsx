@@ -169,7 +169,7 @@ function CardBody({ stamp, accent, reducedMotion, claiming, equipping, message, 
                 <View style={[styles.secret, { borderColor: accent }]}><Text style={[styles.secretMark, { color: accent }]}>?</Text></View>
               ) : (
                 <Image source={stampArt(stamp)} style={[styles.art, !stamp.earned && styles.silhouette]}
-                  tintColor={stamp.earned ? undefined : '#2A3F6B'} contentFit="contain" transition={120} />
+                  tintColor={stamp.earned ? undefined : '#7F97C4'} contentFit="contain" transition={120} />
               )}
               {shiny && !reducedMotion && (
                 <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.foilClip]}>
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   splat: { position: 'absolute', width: 12, height: 12, borderRadius: 6 },
   artBox: { width: ART, height: ART, alignItems: 'center', justifyContent: 'center' },
   art: { width: '100%', height: '100%' },
-  silhouette: { opacity: 0.5 },
+  silhouette: { opacity: 0.45 },
   foilClip: { overflow: 'hidden', borderRadius: ART / 2 },
   foil: { position: 'absolute', top: -ART * 0.3, left: 0, width: 54, height: ART * 1.6 },
   secret: {

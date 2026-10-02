@@ -57,6 +57,12 @@ export default function StampBookScreen() {
     if (previewMode) {
       setResponse(PREVIEW_BOOK);
       setStatus('ready');
+      // Dev-only visual checks: open a section or a stamp card straight away.
+      const tab = process.env.EXPO_PUBLIC_STAMP_BOOK_TAB;
+      if (tab) setFilter(tab);
+      const slug = process.env.EXPO_PUBLIC_STAMP_BOOK_OPEN;
+      const found = slug ? buildBook(PREVIEW_BOOK).flatMap(s => s.stamps).find(s => s.slug === slug) : undefined;
+      if (found) setTimeout(() => { if (active) setSelected(found); }, 900);
       return () => { active = false; };
     }
     setStatus(current => (current === 'ready' ? current : 'loading'));
