@@ -88,4 +88,6 @@ test('react-native-audio-api ships patched and linked (studio audio engine)', ()
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.scripts.postinstall, 'node tools/audio/patch-audio-api.mjs', 'EAS npm ci runs the JSI_DEBUG_ALLOCATIONS fix');
   assert.match(read('ios/Podfile.lock'), /^  - RNAudioAPI \(0\.6\.5\)/m);
+  // Xcode 26 (EAS image): Constants.h needs <cstddef> for size_t.
+  assert.match(read('tools/audio/patch-audio-api.mjs'), /#include <cstddef>/);
 });
