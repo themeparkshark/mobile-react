@@ -47,7 +47,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, extraControls }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -65,6 +65,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly sunOverride?: number;
   /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
   readonly projector?: MutableRefObject<MapProjector | null>;
+  /** Filled with a function that grabs a still of the map (a file URI), for a moment that blurs the map once instead of live. */
+  readonly snapshotter?: MutableRefObject<(() => Promise<string | null>) | null>;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
 }) {
@@ -202,6 +204,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     };
     return () => { projector.current = null; };
   }, [projector]);
+  useEffect(() => {
+    if (!snapshotter) return;
+    snapshotter.current = async () => {
+      try { return (await mapViewRef.current?.takeSnap(false)) ?? null; } catch { return null; }
+    };
+    return () => { snapshotter.current = null; };
+  }, [snapshotter]);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {

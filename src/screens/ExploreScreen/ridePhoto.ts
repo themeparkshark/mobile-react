@@ -29,12 +29,13 @@ export interface RideSpec {
   readonly returnMs: number;
 }
 
+// frameHalf is now only the lit frame's visual half width (grading is in ms, GRADE_WINDOWS_MS).
 const SPECS: Readonly<Record<1 | 2 | 3 | 4 | 5, RideSpec>> = {
   1: { style: 'chomp', track: 'family', passMs: 0, frameHalf: 1, litMs: null, photosNeeded: 0, maxRides: null, developBeats: 1, returnMs: 0 },
-  2: { style: 'ride_photo', track: 'family', passMs: 2600, frameHalf: 0.15, litMs: null, photosNeeded: 1, maxRides: null, developBeats: 1, returnMs: 650 },
-  3: { style: 'ride_photo', track: 'hill', passMs: 2300, frameHalf: 0.12, litMs: null, photosNeeded: 1, maxRides: null, developBeats: 2, returnMs: 600 },
-  4: { style: 'ride_photo', track: 'dark', passMs: 2100, frameHalf: 0.11, litMs: 650, photosNeeded: 2, maxRides: null, developBeats: 3, returnMs: 550 },
-  5: { style: 'ride_photo', track: 'launch', passMs: 1900, frameHalf: 0.1, litMs: null, photosNeeded: 1, maxRides: 3, developBeats: 3, returnMs: 700 },
+  2: { style: 'ride_photo', track: 'family', passMs: 2600, frameHalf: 0.15, litMs: null, photosNeeded: 1, maxRides: null, developBeats: 1, returnMs: 350 },
+  3: { style: 'ride_photo', track: 'hill', passMs: 2300, frameHalf: 0.14, litMs: null, photosNeeded: 1, maxRides: null, developBeats: 2, returnMs: 350 },
+  4: { style: 'ride_photo', track: 'dark', passMs: 2100, frameHalf: 0.13, litMs: 650, photosNeeded: 2, maxRides: null, developBeats: 3, returnMs: 350 },
+  5: { style: 'ride_photo', track: 'launch', passMs: 1900, frameHalf: 0.12, litMs: null, photosNeeded: 1, maxRides: 3, developBeats: 3, returnMs: 400 },
 };
 
 export function rideSpec(rarity: number | null | undefined): RideSpec {
@@ -44,22 +45,59 @@ export function rideSpec(rarity: number | null | undefined): RideSpec {
   return SPECS[clamped];
 }
 
-/** After each miss the frame grows a little (up to +60%), so nobody gets stuck. */
+/**
+ * Timing windows in milliseconds at the frame (half widths), the same for every
+ * rarity: rarity adds difficulty through speed, track shape and lighting only.
+ */
+export const GRADE_WINDOWS_MS = { frame_it: 35, great: 80, good: 150 } as const;
+/** A touch lands this long after the frame the player reacted to (input plus display latency). */
+export const INPUT_LATENCY_MS = 50;
+/** One 60 Hz frame: the best grade within one frame either side counts (coyote frame). */
+export const COYOTE_MS = 1000 / 60;
+/** A miss within this many Good windows is "So close!". */
+export const SO_CLOSE_FACTOR = 1.5;
+
+/** After each miss every window grows 20% (up to +60%), so nobody gets stuck. */
+export function windowScale(misses: number): number {
+  'worklet';
+  return 1 + 0.2 * Math.max(0, Math.min(3, misses));
+}
+
+/** Kept for the frame visuals: the frame grows with the windows. */
 export function frameHalfAfterMisses(spec: RideSpec, misses: number): number {
   'worklet';
-  return spec.frameHalf * (1 + 0.2 * Math.max(0, Math.min(3, misses)));
+  return spec.frameHalf * windowScale(misses);
 }
 
-/** The next pass comes back sooner after a miss: fail fast, retry fast. */
-export function returnDelayMs(spec: RideSpec, missedLastPass: boolean): number {
+/** Milliseconds from the car's arrival at the frame centre, latency compensated (negative = early). */
+export function shotOffsetMs(touchMsIntoPass: number, arrivalMsIntoPass: number): number {
   'worklet';
-  return missedLastPass ? Math.round(spec.returnMs * 0.45) : spec.returnMs;
+  return touchMsIntoPass - INPUT_LATENCY_MS - arrivalMsIntoPass;
 }
 
-/**
- * Grade from how far the car's centre was from the frame's centre when the
- * shutter went down, as a fraction of the frame's half width.
- */
+export interface ShotResult {
+  readonly grade: PhotoGrade;
+  readonly offsetMs: number;
+  /** For a miss: was the tap before or after the car reached the frame. */
+  readonly direction: 'early' | 'late' | null;
+  readonly soClose: boolean;
+}
+
+/** Grade a latency-compensated offset, taking the best result within one frame either side. */
+export function gradeOffset(offsetMs: number, misses = 0): ShotResult {
+  'worklet';
+  if (!Number.isFinite(offsetMs)) return { grade: 'blurry', offsetMs, direction: null, soClose: false };
+  const k = windowScale(misses);
+  const off = Math.max(0, Math.abs(offsetMs) - COYOTE_MS);
+  let grade: PhotoGrade = 'blurry';
+  if (off <= GRADE_WINDOWS_MS.frame_it * k) grade = 'frame_it';
+  else if (off <= GRADE_WINDOWS_MS.great * k) grade = 'great';
+  else if (off <= GRADE_WINDOWS_MS.good * k) grade = 'good';
+  const direction = grade === 'blurry' ? (offsetMs < 0 ? 'early' : 'late') : null;
+  return { grade, offsetMs, direction, soClose: grade === 'blurry' && off <= GRADE_WINDOWS_MS.good * k * SO_CLOSE_FACTOR };
+}
+
+/** Pre-v2 pixel grading, kept for callers that grade by position. */
 export function gradeShot(offsetFraction: number): PhotoGrade {
   'worklet';
   const off = Math.abs(offsetFraction);
@@ -67,6 +105,21 @@ export function gradeShot(offsetFraction: number): PhotoGrade {
   if (off <= 0.22) return 'frame_it';
   if (off <= 0.55) return 'great';
   return 'good';
+}
+
+/** How long the grade holds before the print flies, by grade (tap skips). */
+export const GRADE_HOLD_MS: Readonly<Record<PhotoGrade, number>> = { blurry: 900, good: 450, great: 650, frame_it: 1100 };
+/** Stars on the stamp, so the grade reads without colour. */
+export const GRADE_STARS: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 1, great: 2, frame_it: 3 };
+/** Ready pips before the car reaches the frame (ms to arrival) and their pitch (semitones). */
+export const READY_PIPS = [{ atMs: 600, semitones: 0 }, { atMs: 400, semitones: 3 }, { atMs: 200, semitones: 7 }] as const;
+/** The next chance after a miss comes within this long. */
+export const RETRY_MAX_MS = 1400;
+
+/** The car comes back sooner after a miss: fail fast, retry fast. */
+export function returnDelayMs(spec: RideSpec, missedLastPass: boolean): number {
+  'worklet';
+  return missedLastPass ? Math.round(spec.returnMs * 0.45) : spec.returnMs;
 }
 
 /** Reduce Motion: the car waits in the frame; any tap is a Great. */

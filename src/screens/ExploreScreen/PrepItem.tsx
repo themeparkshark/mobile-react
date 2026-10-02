@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { PrepItemType } from '../../models/prep-item-type';
 import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameIcon } from '../../ui';
+import { rideSpec } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { msUntilLeavesInChanges } from './homeFindCopy';
 import { findImageOrder, findLook, rarityColor } from './findPresentation';
@@ -94,6 +95,8 @@ interface Props {
   inRange?: boolean;
   /** Hidden while the catch moment flies its own copy of the art. */
   hidden?: boolean;
+  /** Full motion only for finds in range and the nearest few (battery); the rest sit still. */
+  animated?: boolean;
 }
 
 /** The find sits at the exact centre of the marker box, so its art is on its real spot. */
@@ -103,6 +106,11 @@ export const FIND_MARKER_BOX = 112;
 export const FIND_ART_SIZE = 58;
 /** Only the last few minutes earn a timer pill. */
 const LEAVING_SOON_MS = 5 * 60_000;
+
+const GLOW = require('../../../assets/images/ride-photo/glow.webp');
+const SPARKLE = require('../../../assets/images/ride-photo/sparkle.webp');
+const FOOTSTEPS = require('../../../assets/images/ride-photo/footsteps.webp');
+const FINGER = require('../../../assets/images/ride-photo/tap-hand.webp');
 
 /** "2 min" in the final five minutes, null before; calls onExpire once it is gone. Only ticks while the map is live. */
 function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
@@ -127,47 +135,58 @@ function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => voi
   return text;
 }
 
-/** Where the sparkles twinkle around the art (offsets from centre) and their phase. */
+/** Where the 4-point star sparkles twinkle around the art (offsets from centre) and their phase. */
 const SPARKLES = [
-  { x: -30, y: -26, size: 12, phase: 0 },
-  { x: 31, y: -14, size: 9, phase: 0.33 },
-  { x: -24, y: 22, size: 8, phase: 0.6 },
-  { x: 27, y: 25, size: 11, phase: 0.85 },
+  { x: -30, y: -26, size: 13, phase: 0 },
+  { x: 31, y: -14, size: 10, phase: 0.33 },
+  { x: -24, y: 22, size: 9, phase: 0.6 },
+  { x: 27, y: 25, size: 12, phase: 0.85 },
 ] as const;
 
-function Sparkle({ x, y, size, phase, color }: { x: number; y: number; size: number; phase: number; color: string }) {
+function Sparkle({ x, y, size, phase, color, animated }: { x: number; y: number; size: number; phase: number; color: string; animated: boolean }) {
   const { clock } = useMapAlive();
   const twinkle = useAnimatedStyle(() => {
+    if (!animated) return { opacity: 0.8, transform: [{ scale: 0.9 }] };
     const t = (clock.value * 0.8 + phase) % 1;
     const on = Math.max(0, Math.sin(t * Math.PI));
-    return { opacity: on, transform: [{ scale: 0.4 + 0.8 * on }, { rotate: `${t * 90}deg` }] };
-  });
+    return { opacity: on, transform: [{ scale: 0.5 + 0.7 * on }] };
+  }, [animated]);
   const half = FIND_MARKER_BOX / 2;
-  return <Animated.View pointerEvents="none" style={[styles.sparkle,
-    { left: half + x - size / 2, top: half + y - size / 2, width: size, height: size }, twinkle]}>
-    <View style={[styles.sparkleBar, { width: size, height: size / 4, backgroundColor: color }]} />
-    <View style={[styles.sparkleBar, { width: size / 4, height: size, backgroundColor: color }]} />
-  </Animated.View>;
+  return <Animated.Image source={SPARKLE}
+    style={[styles.sparkle, { tintColor: color, left: half + x - size / 2, top: half + y - size / 2, width: size, height: size }, twinkle]} />;
+}
+
+/** Colour-blind safe rarity mark: Uncommon 1 pip, Rare 2, Epic a gem, Legendary a crown. */
+function RarityMark({ tier, color }: { tier: number; color: string }) {
+  if (tier <= 1) return null;
+  return <View style={styles.mark} pointerEvents="none">
+    {tier >= 4 ? <Text style={[styles.markGlyph, { color }]}>{tier === 5 ? '♛' : '◆'}</Text>
+      : Array.from({ length: tier - 1 }, (_, i) => <View key={i} style={[styles.pip, { backgroundColor: color }]} />)}
+  </View>;
 }
 
 /**
- * A home find on the map, Pokemon GO style: the item itself, bobbing gently.
- * Rare and better finds glow and sparkle; a legendary turns slow light rays.
- * In range it hops and glows gold with a small TAP pill; out of range it sits
- * smaller and dimmer. All motion rides the map's shared ambient clock on the
- * UI thread, so it stops with the map (off screen, backgrounded, Reduce Motion).
+ * A home find on the map, as the item itself. In range it hops on a pulsing
+ * rarity-colour ground glow with a finger cue; far away it is small and faded
+ * with a footsteps cue. Ride Photo finds wear a camera badge. Rare and better
+ * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
+ * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   const imageSource = useMemo(() => findImageSource(prepItem),
     [prepItem.icon_url, prepItem.variant_slug, prepItem.name]); // eslint-disable-line react-hooks/exhaustive-deps
   const color = rarityColor(prepItem.rarity);
   const look = findLook(prepItem.rarity, inRange);
+  const tier = Math.max(1, Math.min(5, Math.round(prepItem.rarity || 1)));
+  const ridePhoto = rideSpec(prepItem.rarity).style === 'ride_photo';
+  const moving = animated && active;
   // Each find bobs on its own beat so a cluster never moves in lockstep.
   const phase = ((prepItem.pivot_id ?? prepItem.id) % 7) / 7;
 
   const bob = useAnimatedStyle(() => {
+    if (!moving) return { transform: [{ translateY: 0 }] };
     if (look.hop) {
       const hop = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI));
       const land = 1 - hop;
@@ -175,34 +194,32 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false }: Props
     }
     const drift = Math.sin((clock.value * 0.55 + phase) * Math.PI * 2);
     return { transform: [{ translateY: -3 * drift }, { rotate: `${2.5 * drift}deg` }] };
-  }, [look.hop, phase]);
-  const shadow = useAnimatedStyle(() => {
-    const lift = look.hop ? Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI))
-      : 0.5 + 0.5 * Math.sin((clock.value * 0.55 + phase) * Math.PI * 2);
-    return { opacity: 0.28 - 0.12 * lift, transform: [{ scaleX: 1 - 0.25 * lift }] };
-  }, [look.hop, phase]);
+  }, [look.hop, phase, moving]);
   const pulse = useAnimatedStyle(() => {
+    if (!moving) return { opacity: inRange ? 0.75 : 0.45, transform: [{ scale: 1 }] };
     const wave = 0.5 + 0.5 * Math.sin((clock.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
-    return { opacity: (inRange ? 0.5 : 0.32) + 0.3 * wave, transform: [{ scale: 0.9 + 0.18 * wave }] };
-  }, [inRange, phase]);
-  const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${(clock.value * 24) % 360}deg` }] }));
+    return { opacity: (inRange ? 0.6 : 0.35) + 0.35 * wave, transform: [{ scale: 0.9 + 0.2 * wave }] };
+  }, [inRange, phase, moving]);
+  const finger = useAnimatedStyle(() => {
+    if (!moving) return { transform: [{ translateY: 0 }] };
+    const tap = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
+    return { transform: [{ translateY: -4 * tap }, { rotate: '-20deg' }] };
+  }, [phase, moving]);
+  const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
 
-  const glowColor = inRange ? BRAND.gold : color;
   return (
     <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
       <View style={[styles.scaled, { opacity: look.opacity, transform: [{ scale: look.scale }] }]}>
-        <Animated.View style={[styles.groundShadow, shadow]} />
-        {look.groundGlow && <Animated.View style={[styles.groundGlow, { backgroundColor: glowColor, shadowColor: glowColor }, pulse]} />}
-        {inRange && <Animated.View style={[styles.groundRing, pulse]} />}
+        <View style={styles.groundShadow} />
+        {inRange && <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: color }, pulse]} />}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
           {[0, 45, 90, 135].map(angle => <View key={angle}
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
         </Animated.View>}
-        {look.aura && <Animated.View style={[styles.aura, { backgroundColor: `${color}55`, shadowColor: color }, pulse]} />}
+        {look.aura && <Animated.Image source={GLOW} style={[styles.aura, { tintColor: color }, pulse]} />}
         <Animated.View style={[styles.art, bob]}>
           {imageSource ? (
-            <Image source={imageSource} style={styles.image} contentFit="contain" transition={0}
-              cachePolicy="memory-disk" />
+            <Image source={imageSource} style={styles.image} contentFit="contain" transition={0} cachePolicy="memory-disk" />
           ) : (
             <View style={[styles.fallback, { backgroundColor: color }]}>
               <GameIcon name="gift" size={30} />
@@ -210,13 +227,16 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false }: Props
           )}
         </Animated.View>
         {SPARKLES.slice(0, look.sparkles).map(spark => <Sparkle key={spark.phase} {...spark}
-          color={look.rays ? BRAND.goldLight : BRAND.white} />)}
+          color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
+        <RarityMark tier={tier} color={color} />
       </View>
+      {ridePhoto && <View style={[styles.cameraBadge, !inRange && styles.cameraBadgeFar]}><GameIcon name="camera" size={inRange ? 18 : 14} /></View>}
       {prepItem.is_new_variant && !inRange && (
         <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
       )}
-      {inRange && <View style={styles.tapPill}><Text style={styles.tapText}>TAP!</Text></View>}
-      {leavingSoon && <View style={styles.timePill}><Text style={styles.timeText}>{leavingSoon}</Text></View>}
+      {inRange && <Animated.Image source={FINGER} style={[styles.finger, finger]} />}
+      {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
+      {leavingSoon && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
     </View>
   );
 }
@@ -229,32 +249,30 @@ const styles = StyleSheet.create({
   box: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   hidden: { opacity: 0 },
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
-  groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 8, width: 40, height: 10, borderRadius: 5,
-    backgroundColor: BRAND.navy },
-  // Soft light pools, not flat discs: a faint core and a wide shadow bloom.
-  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 10, width: 40, height: 10, borderRadius: 5, opacity: 0.6,
-    shadowOffset: { width: 0, height: 0 }, shadowRadius: 12, shadowOpacity: 1 },
-  groundRing: { position: 'absolute', top: B / 2 + A / 2 - 18, width: 78, height: 28, borderRadius: 14,
-    borderWidth: 3, borderColor: BRAND.gold },
-  rays: { position: 'absolute', width: 96, height: 96, alignItems: 'center', justifyContent: 'center', opacity: 0.35 },
+  groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 8, width: 38, height: 9, borderRadius: 5,
+    backgroundColor: 'rgba(5,52,110,0.22)' },
+  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 26, width: 92, height: 40 },
+  rays: { position: 'absolute', width: 96, height: 96, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
   ray: { position: 'absolute', width: 96, height: 8, borderRadius: 4 },
-  aura: { position: 'absolute', width: 38, height: 38, borderRadius: 19,
-    shadowOffset: { width: 0, height: 0 }, shadowRadius: 22, shadowOpacity: 1 },
-  art: { width: A, height: A, alignItems: 'center', justifyContent: 'center',
-    shadowColor: BRAND.navy, shadowOffset: { width: 0, height: 3 }, shadowRadius: 1.5, shadowOpacity: 0.35 },
+  aura: { position: 'absolute', width: 96, height: 96 },
+  art: { width: A, height: A, alignItems: 'center', justifyContent: 'center' },
   image: { width: A, height: A },
   fallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: BRAND.white },
-  sparkle: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  sparkleBar: { position: 'absolute', borderRadius: 4 },
-  newBadge: { position: 'absolute', top: B / 2 - A / 2 - 6, left: B / 2 - A / 2 - 6, backgroundColor: BRAND.gold,
+  sparkle: { position: 'absolute' },
+  mark: { position: 'absolute', top: B / 2 + A / 2 - 2, flexDirection: 'row', gap: 3, alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 2 },
+  pip: { width: 7, height: 7, borderRadius: 3.5 },
+  markGlyph: { fontSize: 12, lineHeight: 13 },
+  cameraBadge: { position: 'absolute', top: B / 2 - A / 2 - 6, right: B / 2 - A / 2 - 10, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#0b2f5c', borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  cameraBadgeFar: { width: 22, height: 22, borderRadius: 11, top: B / 2 - A / 2 + 6, right: B / 2 - A / 2 + 2 },
+  newBadge: { position: 'absolute', top: B / 2 - A / 2 + 4, left: B / 2 - A / 2 - 2, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 0 },
-  newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
-  tapPill: { position: 'absolute', top: 2, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white,
-    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1,
-    shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0, shadowOpacity: 0.3 },
-  tapText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 12, letterSpacing: 0.5 },
-  timePill: { position: 'absolute', bottom: 2, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
-    paddingHorizontal: 6, paddingVertical: 1 },
-  timeText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 10 },
+  newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14 },
+  finger: { position: 'absolute', top: -2, right: 6, width: 30, height: 38 },
+  footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
+  timePill: { position: 'absolute', bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
+    borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  timeText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 14 },
 });

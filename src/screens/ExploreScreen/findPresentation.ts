@@ -7,8 +7,13 @@ import { formatFindDistance } from './homeFindCopy';
  */
 
 /** Rarity ring colours, matching the v3 catalog (Common to Legendary). */
+/**
+ * Colour-blind safer than v1 (green and gold collapsed under deuteranopia):
+ * Uncommon is teal and Legendary deep orange, and every rarity also has a
+ * shape mark (pips, gem, crown), so colour is never the only cue.
+ */
 export const RARITY_COLORS: Readonly<Record<number, string>> = {
-  1: '#9AA4B2', 2: '#3BC46A', 3: '#2F8BFF', 4: '#A54BFF', 5: '#FFB800',
+  1: '#9AA4B2', 2: '#14B3A3', 3: '#2F7BFF', 4: '#A54BFF', 5: '#FF8A00',
 };
 export const RARITY_LABELS: Readonly<Record<number, string>> = {
   1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Legendary',
@@ -54,8 +59,8 @@ export interface FindLook {
 export function findLook(rarity: number | null | undefined, inRange: boolean): FindLook {
   const tier = rarityTier(rarity);
   return {
-    scale: inRange ? 1 : 0.74,
-    opacity: inRange ? 1 : 0.72,
+    scale: inRange ? 1 : 0.6,
+    opacity: inRange ? 1 : 0.55,
     hop: inRange,
     groundGlow: tier >= 2 || inRange,
     aura: tier >= 3,

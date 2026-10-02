@@ -97,7 +97,7 @@ test('track lookup table crosses the scene and passes through the flash frame', 
   assert.ok(lut.xs[0] < 0 && lut.xs[lut.xs.length - 1] > 380, 'enters and leaves off screen');
   const at = track.sampleTrack(lut, 0.5);
   assert.ok(Number.isFinite(at.x) && Number.isFinite(at.y) && Number.isFinite(at.angle));
-  assert.ok(Math.abs(lut.frameX - 380 * track.FRAME_AT) < 1e-9);
+  assert.ok(Math.abs(lut.frameX - 380 * track.FRAME_AT.hill) < 1e-9);
 });
 
 test('find look: in range hops bigger and brighter; rare and up glow and sparkle', () => {
@@ -157,12 +157,14 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
   assert.doesNotMatch(screen, /<PrepItemRedeemModal/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /onPrepItemNearby\(nearbyItem, nearbyItem\.pivot_id, 'auto'\)/);
-  assert.match(home, /if \(inRange\) onPrepItemNearby\(prepItem, prepItem\.pivot_id, 'tap'\);\s*else void nudge\(prepItem, distance\);/);
+  assert.match(home, /if \(!inRange\) \{ void nudge\(prepItem, distance\); return; \}/);
+  assert.match(home, /catchRef\.current\?\.primeRide\(prepItem/);
+  assert.match(home, /onPrepItemNearby\(prepItem, prepItem\.pivot_id, 'tap'\)/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(moment, /rideSpec\(item\.rarity\)\.style === 'ride_photo'/);
   assert.match(moment, /pointerEvents="box-none"/);
   const ridePhoto = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(ridePhoto, /Read the car where it is at touch-down/);
+  assert.match(ridePhoto, /shotOffsetMs\(t\.value \* passMs, arrivalMs\)/);
   for (const file of ['src/screens/ExploreScreen/ridePhoto.ts', 'src/screens/ExploreScreen/findPresentation.ts',
     'src/screens/ExploreScreen/HomeHuntChip.tsx', 'src/screens/ExploreScreen/HomeCatchMoment.tsx',
     'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx']) {
