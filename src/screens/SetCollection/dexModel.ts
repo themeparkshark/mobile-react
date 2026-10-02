@@ -125,14 +125,21 @@ export function ridePhotoOf(raw: Record<string, unknown> | null): { grade: Photo
   return { grade, url: grade ? url : null, goldenHour: grade != null && nested?.golden_hour === true };
 }
 
-export interface DexBook {
-  readonly sets: readonly DexSet[];
+export interface DailyRare {
+  readonly available: boolean;
+  readonly onMap: boolean;
+  readonly caughtToday: boolean;
+  readonly resetsAt: string | null;
 }
 
-export interface DexPage {
-  readonly set: DexSet;
-  readonly items: readonly DexItem[];
+export interface DexBook {
+  readonly sets: readonly DexSet[];
+  /** Distinct finds and items across the live book (retired sets excluded). */
+  readonly found: number;
+  readonly total: number;
+  readonly dailyRare: DailyRare | null;
 }
+
 
 const EM_DASH = new RegExp(String.fromCharCode(0x2014), 'g');
 const RARITY_LABEL: Record<number, string> = { 1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Legendary' };
@@ -363,25 +370,66 @@ export function overlayDexSet(base: DexSet, raw: unknown): DexSet {
 /** Merge the legacy list with an optional v3 dex payload, keyed by slug. */
 export function buildBook(legacy: readonly PrepItemSetListItem[] | null | undefined, dex?: unknown): DexBook {
   const list = Array.isArray(legacy) ? legacy : [];
-  const dexSets = Array.isArray(record(dex)?.sets) ? (record(dex)!.sets as unknown[]) : [];
+  const payload = record(dex);
+  const dexSets = Array.isArray(payload?.sets) ? (payload!.sets as unknown[]) : [];
   const bySlug = new Map<string, unknown>();
   for (const entry of dexSets) {
     const slug = record(entry)?.slug;
     if (typeof slug === 'string') bySlug.set(slug, entry);
   }
-  const sets = list.map((set, index) => overlayDexSet(fromLegacySet(set, index), bySlug.get(set.slug)));
-  return { sets: orderSets(sets) };
+  const sets = separateColors(orderSets(list.map((set, index) => overlayDexSet(fromLegacySet(set, index), bySlug.get(set.slug)))));
+  const live = sets.filter(set => set.status !== 'retired');
+  const rare = record(payload?.daily_rare);
+  return {
+    sets,
+    found: live.reduce((sum, set) => sum + set.found, 0),
+    total: live.reduce((sum, set) => sum + set.total, 0),
+    dailyRare: rare ? {
+      available: rare.available === true, onMap: rare.on_map === true, caughtToday: rare.caught_today === true,
+      resetsAt: str(rare.resets_at),
+    } : null,
+  };
+}
+
+function hueOf(hex: string): number | null {
+  const match = HEX.exec(hex) ? hex.slice(1) : null;
+  if (!match) return null;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(match.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b); const min = Math.min(r, g, b);
+  if (max - min < 0.08) return null; // grey: no hue clash
+  const d = max - min;
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return ((h * 60) + 360) % 360;
+}
+
+/** True when two set colors would read as the same family side by side (hues within 28 degrees). */
+export function similarColor(a: string, b: string): boolean {
+  const ha = hueOf(a); const hb = hueOf(b);
+  if (ha == null || hb == null) return false;
+  const diff = Math.abs(ha - hb);
+  return Math.min(diff, 360 - diff) < 28;
+}
+
+/** Keep the order, but never put two same-family colors next to each other inside one status group when a swap fixes it. */
+export function separateColors(sets: readonly DexSet[]): DexSet[] {
+  const out = sets.slice();
+  for (let i = 1; i < out.length; i += 1) {
+    if (!similarColor(out[i - 1].color, out[i].color)) continue;
+    const swap = out.findIndex((set, j) => j > i && set.status === out[i].status
+      && !similarColor(out[i - 1].color, set.color) && (j + 1 >= out.length || !similarColor(out[i].color, out[j + 1]?.color ?? '')));
+    if (swap > i) [out[i], out[swap]] = [out[swap], out[i]];
+  }
+  return out;
 }
 
 const STATUS_ORDER: Record<DexSetStatus, number> = { active: 0, resting: 1, upcoming: 2, retired: 3 };
 
-/** Live sets first (claimable rewards lead), then resting, upcoming, and old sets last. Retired sets with nothing found are hidden. */
+/** Live sets first (stable order, so cards never jump after a claim), then resting, upcoming, and old sets last. Retired sets with nothing found are hidden. */
 export function orderSets(sets: readonly DexSet[]): DexSet[] {
   return sets
     .filter(set => set.status !== 'retired' || set.found > 0)
     .map((set, index) => ({ set, index }))
     .sort((a, b) => STATUS_ORDER[a.set.status] - STATUS_ORDER[b.set.status]
-      || Number(hasClaimable(b.set)) - Number(hasClaimable(a.set))
       || a.set.sortOrder - b.set.sortOrder || a.index - b.index)
     .map(entry => entry.set);
 }
@@ -403,30 +451,10 @@ export function progressFraction(set: Pick<DexSet, 'found' | 'total'>): number {
   return set.total > 0 ? Math.max(0, Math.min(1, set.found / set.total)) : 0;
 }
 
-/** The single next step worth showing: one to claim, else the next locked one. Null when none. */
-export function nextStep(set: DexSet): DexReward | null {
-  return set.steps.find(step => step.status === 'claimable')
-    ?? set.steps.find(step => step.status === 'locked')
-    ?? null;
-}
 
-/** A small status chip for the set: "On now", "Back after sunset", "Opens October 15", "Retired". */
-export function setStatusLine(set: DexSet, now: Date = new Date()): string | null {
-  if (set.status === 'retired') return 'Old set: your finds are saved';
-  if (set.status === 'upcoming') {
-    const start = set.startsAt ? new Date(set.startsAt) : null;
-    if (start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()) {
-      return `Opens ${start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`;
-    }
-    return 'Coming soon';
-  }
-  if (set.spawningNow === true) return set.spawnHint ? `On now: ${set.spawnHint}` : 'On the map now';
-  if (set.spawningNow === false) return set.spawnHint ? `Resting: ${set.spawnHint}` : 'Resting right now';
-  return set.spawnHint;
-}
 
-/** One short line for a set card: when it spawns. "On now", "After sunset", "Weekends", "Opens October 15", "Saved". */
-export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text: string; readonly live: boolean } {
+/** The set card pill, only when it says something: "On now" for a timed set that is live, "After sunset", "Opens Oct 15", "Saved". Null for an always-on set. */
+export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text: string; readonly live: boolean } | null {
   if (set.status === 'retired') return { text: 'Saved', live: false };
   if (set.status === 'upcoming') {
     const start = set.startsAt ? new Date(set.startsAt) : null;
@@ -435,7 +463,17 @@ export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text:
     return { text, live: false };
   }
   if (set.spawningNow === false || set.status === 'resting') return { text: set.spawnHint ?? 'Resting', live: false };
-  return { text: 'On now', live: true };
+  if (set.spawnHint) return { text: 'On now', live: true };
+  return null;
+}
+
+/** An icon for a spawn hint: night and evening get the star, clock windows the timer, weather the sparkle, anytime the map. */
+export function spawnIcon(hint: string | null | undefined): 'star' | 'timer' | 'sparkle' | 'map' {
+  const text = (hint ?? '').toLowerCase();
+  if (/sunset|night|evening|dark|moon/.test(text)) return 'star';
+  if (/rain|hot|cold|snow|wind|weather|sunny/.test(text)) return 'sparkle';
+  if (/\d|am\b|pm\b|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug|sep/.test(text)) return 'timer';
+  return 'map';
 }
 
 function legacyHint(item: PrepItemSetItem, setHint: string | null): string {
@@ -503,11 +541,6 @@ export function buildItems(
   });
 }
 
-/** Tile copy: caught count for a find, the rarity for a silhouette. */
-export function tileCaption(item: DexItem): string {
-  if (!item.found) return item.rarityLabel;
-  return item.caught > 1 ? `x${item.caught}` : 'Caught';
-}
 
 /** The item card's catch line. */
 export function caughtLine(item: DexItem): string {
@@ -516,15 +549,60 @@ export function caughtLine(item: DexItem): string {
   return item.caught === 1 ? 'Caught 1 time' : `Caught ${item.caught} times`;
 }
 
-/** Exchange button copy for a missing item. */
-export function exchangeLine(item: DexItem, spares: number): string {
-  if (item.found) return '';
-  if (spares >= item.exchangeCost) return `Swap ${item.exchangeCost} spares for it`;
-  const need = item.exchangeCost - spares;
-  return `${need} more ${need === 1 ? 'spare' : 'spares'} to swap for it`;
+
+
+/** Spare progress toward swapping in one missing item. */
+export function swapProgress(item: Pick<DexItem, 'found' | 'exchangeCost' | 'canExchange'>, spares: number): {
+  readonly have: number; readonly need: number; readonly ready: boolean;
+} {
+  const need = Math.max(1, item.exchangeCost);
+  const have = Math.max(0, Math.min(need, spares));
+  return { have, need, ready: !item.found && (item.canExchange || spares >= need) };
 }
 
-/** Spare copies in a set, in kid words. */
-export function sparesLine(spares: number): string {
-  return spares === 1 ? '1 spare' : `${spares} spares`;
+/** Reuse the previous object when an item did not change, so memoized tiles skip the re-render. */
+export function mergeStable<T extends { readonly id: number }>(previous: readonly T[] | null | undefined, next: readonly T[]): T[] {
+  if (!previous || previous.length === 0) return next.slice();
+  const old = new Map(previous.map(item => [item.id, item]));
+  return next.map(item => {
+    const before = old.get(item.id);
+    if (!before) return item;
+    const keys = Object.keys(item) as (keyof T)[];
+    return keys.every(key => before[key] === item[key]) && Object.keys(before).length === keys.length ? before : item;
+  });
+}
+
+/** A set needs a fast refresh only while its window can open or close (a timed set). Others refresh on focus or every 5 minutes. */
+export function refreshEveryMs(set: Pick<DexSet, 'spawnHint' | 'spawningNow' | 'status'> | null | undefined): number {
+  if (!set) return 5 * 60_000;
+  return set.status !== 'retired' && set.spawnHint && set.spawningNow !== null ? 60_000 : 5 * 60_000;
+}
+
+export interface TrackNode {
+  readonly reward: DexReward;
+  /** 0..1 position on the set track. */
+  readonly at: number;
+  readonly final: boolean;
+}
+
+/** Reward nodes on one track: each earlier step at its target, the finish reward at the end. */
+export function rewardTrack(set: Pick<DexSet, 'total' | 'reward' | 'steps'>): TrackNode[] {
+  const total = Math.max(1, set.total);
+  const steps = set.steps.filter(step => step.target < total)
+    .map(step => ({ reward: step, at: Math.max(0.08, Math.min(0.92, step.target / total)), final: false }));
+  return [...steps.sort((a, b) => a.at - b.at), { reward: set.reward, at: 1, final: true }];
+}
+
+/** Prize chips for a reward: the icons the banner, track and reveal all use. */
+export function prizeChips(reward: Pick<DexReward, 'energy' | 'tickets' | 'experience' | 'coins' | 'wearableName' | 'title'>): {
+  readonly icon: 'energy' | 'ticket' | 'xp' | 'coins' | 'shark' | 'crown'; readonly value: string; readonly label: string;
+}[] {
+  const list: { icon: 'energy' | 'ticket' | 'xp' | 'coins' | 'shark' | 'crown'; value: string; label: string }[] = [];
+  if (reward.energy > 0) list.push({ icon: 'energy', value: `+${reward.energy}`, label: `${reward.energy} Energy` });
+  if (reward.tickets > 0) list.push({ icon: 'ticket', value: `+${reward.tickets}`, label: `${reward.tickets} ${reward.tickets === 1 ? 'Ticket' : 'Tickets'}` });
+  if (reward.experience > 0) list.push({ icon: 'xp', value: `+${reward.experience}`, label: `${reward.experience} XP` });
+  if (reward.coins > 0) list.push({ icon: 'coins', value: `+${reward.coins}`, label: `${reward.coins} coins` });
+  if (reward.wearableName) list.push({ icon: 'shark', value: reward.wearableName, label: reward.wearableName });
+  if (reward.title) list.push({ icon: 'crown', value: reward.title, label: `the ${reward.title} title` });
+  return list;
 }

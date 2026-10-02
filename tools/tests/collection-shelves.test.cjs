@@ -188,7 +188,7 @@ test('every WS3 modal dims the app with the brand navy scrim, never near-black',
     for (const [, value] of src.matchAll(/backdropOpacity=\{[^}]*?(0\.\d+)\s*\}/g))
       assert.ok(Number(value) <= 0.9, `${file} backdrop is too heavy`);
   }
-  for (const [file, style] of [['src/screens/StampBookScreen.tsx', 'overlay'], ['src/screens/SetCollection/DexParts.tsx', 'modalOverlay'], ['src/screens/SetCollectionScreen.tsx', 'giftOverlay']]) {
+  for (const [file, style] of [['src/screens/StampBookScreen.tsx', 'overlay'], ['src/screens/SetCollection/DexItemCard.tsx', 'overlay'], ['src/screens/SetCollectionScreen.tsx', 'sheetOverlay']]) {
     const src = fs.readFileSync(file, 'utf8');
     const block = src.slice(src.indexOf(`  ${style}: {`), src.indexOf('}', src.indexOf(`  ${style}: {`)));
     assert.match(block, /rgba\(5,\s*52,\s*110,/, `${file} ${style} is not the navy scrim`);
@@ -209,7 +209,8 @@ test('collection rarity and challenge cards use the blue, white and gold ramp: n
 });
 
 test('Set Collection text never falls back to the system font', () => {
-  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/RidePhoto.tsx']) {
+  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/RidePhoto.tsx',
+    'src/screens/SetCollection/DexTile.tsx', 'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx']) {
     const src = fs.readFileSync(file, 'utf8');
     const bare = [...src.matchAll(/(\w+): \{([^{}]*)\}/g)]
       .filter(([, , block]) => /fontSize/.test(block) && !/fontFamily/.test(block)).map(([, name]) => name);
