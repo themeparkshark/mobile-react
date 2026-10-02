@@ -156,6 +156,7 @@ function CardPage({ card, index, width, scrollX, active, reduced }: {
     <View style={{ width, paddingHorizontal: GUTTER, paddingTop: 16, paddingBottom: 8 }}>
       <Animated.View style={[styles.card, cardStyle]}>
         <LinearGradient colors={card.colors as [string, string]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
         <View style={styles.glow} />
         <Animated.View style={[styles.artWrap, artStyle]}>
           <Image source={ART[card.art]} style={styles.art} contentFit="contain" accessibilityIgnoresInvertColors />
@@ -196,6 +197,7 @@ const styles = StyleSheet.create({
     flex: 1, borderRadius: 30, overflow: 'hidden', borderWidth: 4, borderColor: BRAND.white,
     shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
   },
+  gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
   glow: {
     position: 'absolute', top: '6%', alignSelf: 'center', width: '82%', aspectRatio: 1, borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -211,7 +213,7 @@ const styles = StyleSheet.create({
   line: { fontFamily: 'Knockout', fontSize: 24, lineHeight: 29, color: BRAND.white, textAlign: 'center', marginTop: 8 },
   dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 12 },
   dot: { height: 12, borderRadius: 6 },
-  footer: { paddingHorizontal: GUTTER, paddingBottom: 26 },
-  moreLink: { alignSelf: 'center', marginTop: 10, paddingHorizontal: 16, paddingVertical: 6, borderRadius: RADIUS.pill },
+  footer: { paddingHorizontal: GUTTER, paddingBottom: 92 },
+  moreLink: { alignSelf: 'center', marginTop: 6, paddingHorizontal: 16, paddingVertical: 6, borderRadius: RADIUS.pill },
   moreText: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.blue, textDecorationLine: 'underline' },
 });

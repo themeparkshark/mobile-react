@@ -1,4 +1,3 @@
-import { faStore } from '@fortawesome/free-solid-svg-icons/faStore';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -9,21 +8,17 @@ import {
 } from 'react-native';
 import * as Haptics from '../helpers/haptics';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { 
-  faBars, 
-  faTimes, 
-  faLayerGroup, 
-  faBook,
-  faCircleQuestion,
-  faGear,
-} from '@fortawesome/free-solid-svg-icons';
+import { faBars, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as RootNavigation from '../RootNavigation';
 import config from '../config';
+import { playSfx } from '../gamekit/SFX';
+import { BRAND, GameIcon, type GameIconName } from '../ui';
 
 interface MenuItem {
   id: string;
   label: string;
-  icon: any;
+  icon: GameIconName;
   color: string;
   screen: string;
   params?: object;
@@ -33,21 +28,21 @@ const MENU_ITEMS: MenuItem[] = [
   {
     id: 'sets',
     label: 'Collections',
-    icon: faLayerGroup,
+    icon: 'chest',
     color: '#FF9800',
     screen: 'SetCollection',
   },
   {
     id: 'stamps',
     label: 'Stamp Book',
-    icon: faBook,
+    icon: 'medal1',
     color: '#4CAF50',
     screen: 'StampBook',
   },
   {
     id: 'shop',
     label: 'Shark Shop',
-    icon: faStore,
+    icon: 'coins',
     color: '#0b7fd1',
     screen: 'Store',
     params: { store: 'shark-shop' },
@@ -55,18 +50,32 @@ const MENU_ITEMS: MenuItem[] = [
   {
     id: 'help',
     label: 'How to Play',
-    icon: faCircleQuestion,
+    icon: 'info',
     color: '#0768b9',
     screen: 'HowToPlay',
   },
   {
     id: 'settings',
     label: 'Settings',
-    icon: faGear,
+    icon: 'settings',
     color: '#3d5f8c',
     screen: 'Settings',
   },
 ];
+
+const LABEL = {
+  backgroundColor: BRAND.white,
+  paddingHorizontal: 14,
+  paddingVertical: 7,
+  borderRadius: 14,
+  borderWidth: 2,
+  borderColor: BRAND.sky,
+  shadowColor: BRAND.shadow,
+  shadowOffset: { width: 0, height: 3 },
+  shadowRadius: 5,
+  shadowOpacity: 0.25,
+} as const;
+const LABEL_TEXT = { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy } as const;
 
 interface Props {
   position?: 'left' | 'right';
@@ -94,7 +103,7 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    
+    playSfx(isOpen ? 'ui.modalClose' : 'fx.whoosh', 0.45);
     setIsOpen(!isOpen);
   };
 
@@ -119,7 +128,8 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
             Animated.parallel([
               Animated.spring(anim.translateY, {
                 toValue: 0,
-                friction: 6,
+                friction: 5,
+                tension: 90,
                 useNativeDriver: true,
               }),
               Animated.timing(anim.opacity, {
@@ -167,7 +177,7 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    
+    playSfx('ui.tap', 0.6);
     setIsOpen(false);
     RootNavigation.navigate(item.screen, item.params);
   };
@@ -199,7 +209,7 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
           <Animated.View
             style={{
               flex: 1,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backgroundColor: 'rgba(5, 52, 110, 0.55)',
               opacity: bgOpacity,
             }}
           />
@@ -233,21 +243,9 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
             {/* Label (left of button if right-positioned) */}
             {isRight && (
               <View
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 8,
-                  marginRight: 8,
-                }}
+                style={[LABEL, { marginRight: 10 }]}
               >
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 14,
-                    color: 'white',
-                  }}
-                >
+                <Text style={LABEL_TEXT}>
                   {item.label}
                 </Text>
               </View>
@@ -255,43 +253,36 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
 
             {/* Button */}
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              activeOpacity={0.8}
               onPress={() => handleItemPress(item)}
               style={{
-                width: 50,
-                height: 50,
-                borderRadius: 25,
-                backgroundColor: item.color,
+                width: 58,
+                height: 58,
+                borderRadius: 29,
+                overflow: 'hidden',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 2, height: 2 },
-                shadowRadius: 4,
-                shadowOpacity: 0.3,
-                borderWidth: 2,
+                shadowColor: BRAND.shadow,
+                shadowOffset: { width: 0, height: 4 },
+                shadowRadius: 6,
+                shadowOpacity: 0.35,
+                borderWidth: 3,
                 borderColor: 'white',
               }}
             >
-              <FontAwesomeIcon icon={item.icon} size={22} color="white" />
+              <LinearGradient colors={['#ffffff', item.color]} start={{ x: 0.5, y: -0.6 }} end={{ x: 0.5, y: 0.9 }}
+                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+              <GameIcon name={item.icon} size={38} />
             </TouchableOpacity>
 
             {/* Label (right of button if left-positioned) */}
             {!isRight && (
               <View
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 8,
-                  marginLeft: 8,
-                }}
+                style={[LABEL, { marginLeft: 10 }]}
               >
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 14,
-                    color: 'white',
-                  }}
-                >
+                <Text style={LABEL_TEXT}>
                   {item.label}
                 </Text>
               </View>
