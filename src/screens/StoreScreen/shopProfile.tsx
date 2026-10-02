@@ -7,17 +7,22 @@ import { Profiler, type ReactNode } from 'react';
 
 const ENABLED = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_SHOP_PROFILE === '1';
 const counts = new Map<string, number>();
+const time = new Map<string, number>();
 let flush: ReturnType<typeof setTimeout> | undefined;
 
-function onRender(id: string) {
+function onRender(id: string, _phase: string, actualDuration: number) {
+  // A Profiler whose children all bailed out still reports, with ~0 ms: count real work only.
+  if (actualDuration < 0.05) return;
   counts.set(id, (counts.get(id) ?? 0) + 1);
+  time.set(id, (time.get(id) ?? 0) + actualDuration);
   if (flush) clearTimeout(flush);
   flush = setTimeout(() => {
     const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]);
     const tiles = rows.filter(([k]) => k.startsWith('tile-'));
     // One line per burst of commits: total tile commits, then every id that committed.
-    console.log(`[shop-profile] tiles=${tiles.reduce((n, [, c]) => n + c, 0)} tileIds=${tiles.length} ${rows.map(([k, c]) => `${k}:${c}`).join(' ')}`);
+    console.log(`[shop-profile] tiles=${tiles.reduce((n, [, c]) => n + c, 0)} tileIds=${tiles.length} ${rows.map(([k, c]) => `${k}:${c}(${(time.get(k) ?? 0).toFixed(1)}ms)`).join(' ')}`);
     counts.clear();
+    time.clear();
   }, 700);
 }
 

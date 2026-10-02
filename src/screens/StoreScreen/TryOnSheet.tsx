@@ -18,7 +18,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
+  Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import purchase from '../../api/endpoints/me/inventory/purchase-item';
@@ -43,7 +43,8 @@ const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const SHEET_H = Math.min(SCREEN_H * 0.88, 760);
 const STAGE_H = Math.round(Math.min(310, SHEET_H * 0.42));
 const STAGE_TOP = 52;
-const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: '6%' as const };
+// The art box has air under the tail: drop it so the tail meets the plinth.
+const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
 
 type Phase = 'idle' | 'confirm' | 'buying' | 'bought' | 'failed';
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
@@ -79,8 +80,11 @@ const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 /** The balance, counted on the UI thread (no React render per frame). */
 function CoinTicker({ value, still }: { value: number; still: boolean }) {
   const shown = useSharedValue(value);
+  // The first value only: later values arrive through the animated text, never a re-render.
+  const initial = useRef(formatCoins(value)).current;
   useEffect(() => {
-    shown.value = still ? value : withTiming(value, { duration: 700, easing: Easing.out(Easing.cubic) });
+    // Starts as the arcing coins reach the stage.
+    shown.value = still ? value : withDelay(380, withTiming(value, { duration: 700, easing: Easing.out(Easing.cubic) }));
   }, [value, still]);
   const props = useAnimatedProps(() => {
     const n = Math.max(0, Math.round(shown.value));
@@ -90,7 +94,7 @@ function CoinTicker({ value, still }: { value: number; still: boolean }) {
     return { text: s + out, defaultValue: s + out } as never;
   });
   return <AnimatedInput editable={false} underlineColorAndroid="transparent" animatedProps={props}
-    defaultValue={formatCoins(value)} style={styles.balanceText} />;
+    defaultValue={initial} style={styles.balanceText} />;
 }
 
 /** A real switch: the knob travels and shows a check when on. */
@@ -163,7 +167,15 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // Stage reactions: a wiggle when a piece goes on, a spin when you wear it.
   const stageScale = useSharedValue(1);
   const spin = useSharedValue(0);
-  const stageStyle = useAnimatedStyle(() => ({ transform: [{ perspective: 600 }, { scale: stageScale.value }, { rotateY: `${spin.value}deg` }] }));
+  // Wear it now: a happy hop with a wiggle (spin 0..1), never a flat 3D flip that halves the shark.
+  const stageStyle = useAnimatedStyle(() => {
+    const k = spin.value;
+    return { transform: [
+      { translateY: -26 * Math.sin(Math.PI * Math.min(1, k)) },
+      { rotate: `${Math.sin(k * Math.PI * 4) * 9 * (1 - k)}deg` },
+      { scale: stageScale.value * (1 + 0.06 * Math.sin(Math.PI * Math.min(1, k))) },
+    ] };
+  });
   const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
 
   // Pan down to dismiss; a release past the line slides the sheet away first.
@@ -186,7 +198,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   if (!item) return null;
   const badge = wearableBadge(item);
-  const owned = !!(item.shop?.is_owned ?? item.has_purchased) || phase === 'bought';
+  // The open item can be a stale copy; the set's piece list comes from the latest shelves.
+  const owned = !!(item.shop?.is_owned ?? item.has_purchased) || phase === 'bought' || !!pieces.find(p => p.id === item.id)?.owned;
   const vipLocked = !!item.is_member_item && !player?.is_subscribed;
   const name = itemDisplayName(item);
   const short = shortBy(balance, item.cost);
@@ -254,7 +267,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       playSound(require('../../../assets/sounds/whoosh.mp3'));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       setWear('spinning');
-      if (!still) spin.value = withTiming(360, { duration: 520, easing: Easing.out(Easing.back(1.4)) });
+      if (!still) spin.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) });
       later(() => { onClose(); showToast(`Now wearing ${name}!`, 'success', 2000); }, still ? 500 : 1200);
     } catch {
       setWear('failed');
@@ -357,7 +370,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     </Animated.View>
                   </ShopStage>
                   {owned ? (
-                    landed > 0 || phase === 'bought' ? (
+                    landed > 0 || phase === 'bought' || wear === 'spinning' ? (
                       <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
                         <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'NEW!'}</Text>
                       </Animated.View>
@@ -418,7 +431,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               )}
             </ScrollView>
 
-            <Animated.View key={phaseKey} entering={still ? undefined : FadeIn.duration(140)} style={styles.actions}>{actions}</Animated.View>
+            {/* Held invisible a beat so a button never shows before its label lays out. */}
+            <Animated.View key={phaseKey} entering={still ? undefined : FadeIn.delay(120).duration(140)} style={styles.actions}>{actions}</Animated.View>
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: stageW / 2 + 14, y: STAGE_TOP + STAGE_H * 0.45 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>

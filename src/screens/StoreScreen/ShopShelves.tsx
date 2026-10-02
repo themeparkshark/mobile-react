@@ -55,7 +55,8 @@ const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
 const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
 const NEW_SEEN_KEY = 'shop:new-seen-day';
-const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: '6%' as const };
+// The art box has air under the tail: drop it so the tail meets the plinth.
+const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
 type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
@@ -243,7 +244,8 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   };
 
   return (
-    <View style={[styles.hero, { height: HERO_H, borderColor: glow }]}>
+    <View style={[styles.hero, { height: HERO_H + (tease ? 44 : 0), borderColor: glow }]}>
+      <LinearGradient colors={['#dff3ff', '#9fd6f8']} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
         accessibilityLabel={`This week's star: ${itemDisplayName(item)}, ${owned ? 'owned' : `${formatCoins(item.cost)} Shark Coins`}. Tap to try it on.`}>
         <View style={styles.heroStage}>
@@ -530,6 +532,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
           onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onSetComplete={onSetComplete} />
       )}
       {reveal && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
+        laterXp={reveals.slice(1).reduce((n, r) => n + (r.reward.xp ?? 0), 0)}
         onDone={() => setReveals(list => list.slice(1))} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
@@ -569,9 +572,9 @@ const styles = StyleSheet.create({
   teaseShape: { width: 24, height: 24, opacity: 0.85 },
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: '#dff3ff', ...SHADOW.card },
-  heroStage: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '62%' },
+  heroStage: { position: 'absolute', right: 0, top: 0, height: HERO_H, width: '62%' },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroText: { position: 'absolute', left: 14, top: 14, bottom: 14, width: '46%', gap: 4 },
+  heroText: { position: 'absolute', left: 14, top: 14, height: HERO_H - 28, width: '46%', gap: 4 },
   heroKicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLip, letterSpacing: 1 },
   heroName: { fontFamily: FONT.display, fontSize: 24, lineHeight: 26, color: BRAND.navy },
   heroRarity: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
@@ -591,7 +594,7 @@ const styles = StyleSheet.create({
     borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white },
   wearingText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   heroTimer: { position: 'absolute', right: 10, top: 10 },
-  heroTease: { position: 'absolute', right: 10, bottom: 10 },
+  heroTease: { position: 'absolute', left: 10, right: 10, bottom: 6 },
   setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: '#fffdf4', padding: 10, gap: 8 },
   readyCard: { borderColor: BRAND.gold, backgroundColor: '#fffaf0' },
   readyTitle: { flex: 1, fontFamily: FONT.display, fontSize: 19, color: BRAND.navy },

@@ -8,7 +8,7 @@ import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View }
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getWishlist, removeFromWishlist, type WishlistItem } from '../../api/endpoints/me/wishlist';
-import { formatCoins, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins } from '../../helpers/shopShelves';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, WishHeart } from './shopUi';
 import { wishStore } from './wishStore';
@@ -73,7 +73,6 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
                 </Pressable>
               )} />
           )}
-          {items && items.length > 0 && <Text style={styles.foot}>{wishSavedCopy(alerts)}</Text>}
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -93,5 +92,4 @@ const styles = StyleSheet.create({
   name: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   state: { fontFamily: FONT.body, fontSize: 15, color: '#7c93ab' },
   stateIn: { color: BRAND.greenLip },
-  foot: { fontFamily: FONT.body, fontSize: 13, color: BRAND.navySoft, textAlign: 'center' },
 });

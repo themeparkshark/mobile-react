@@ -30,12 +30,14 @@ import { MAX_FONT, ShopStage } from './shopUi';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
-const CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: '6%' as const };
+const CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
-export default function SetCompleteReveal({ reward, set, still, onDone }: {
+export default function SetCompleteReveal({ reward, set, still, laterXp = 0, onDone }: {
   readonly reward: ShopSetReward | null;
+  /** XP from reveals queued after this one (Claim all): already on the server, not this set's. */
+  readonly laterXp?: number;
   readonly set: ShopSetSummary | null;
   readonly still: boolean;
   readonly onDone: () => void;
@@ -61,7 +63,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
     void refreshPlayer().then(fresh => {
       if (!live || !fresh) return;
       const need = Number(fresh.experience_level?.experience ?? 0) || 1;
-      const after = Number(fresh.experience ?? 0);
+      const after = Math.max(0, Number(fresh.experience ?? 0) - laterXp);
       const level = Number(fresh.experience_level?.level ?? fresh.player_level ?? 1);
       const crossed = after < reward.xp && (startPlayer.current?.experience_level?.level ?? level) < level;
       setXp(crossed ? { level, from: 0, to: after / need, levelUp: true }
