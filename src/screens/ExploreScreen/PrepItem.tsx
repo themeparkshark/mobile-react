@@ -97,6 +97,8 @@ interface Props {
   hidden?: boolean;
   /** Full motion only for finds in range and the nearest few (battery); the rest sit still. */
   animated?: boolean;
+  /** Which side the finger cue hovers on: away from the player's shark, so it never points at the player. */
+  fingerSide?: 'left' | 'right';
 }
 
 /** The find sits at the exact centre of the marker box, so its art is on its real spot. */
@@ -157,12 +159,10 @@ function Sparkle({ x, y, size, phase, color, animated }: { x: number; y: number;
 }
 
 /** Colour-blind safe rarity mark: Uncommon 1 pip, Rare 2, Epic a gem, Legendary a crown. */
-function RarityMark({ tier, color }: { tier: number; color: string }) {
+function RarityMark({ tier }: { tier: number }) {
   if (tier <= 1) return null;
-  return <View style={styles.mark} pointerEvents="none">
-    {tier >= 4 ? <Text style={[styles.markGlyph, { color }]}>{tier === 5 ? '♛' : '◆'}</Text>
-      : Array.from({ length: tier - 1 }, (_, i) => <View key={i} style={[styles.pip, { backgroundColor: color }]} />)}
-  </View>;
+  return tier >= 4 ? <Text style={styles.markGlyph}>{tier === 5 ? '♛' : '◆'}</Text>
+    : <>{Array.from({ length: tier - 1 }, (_, i) => <View key={i} style={styles.pip} />)}</>;
 }
 
 /**
@@ -172,7 +172,7 @@ function RarityMark({ tier, color }: { tier: number; color: string }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right' }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   const imageSource = useMemo(() => findImageSource(prepItem),
@@ -200,18 +200,21 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     const wave = 0.5 + 0.5 * Math.sin((clock.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
     return { opacity: (inRange ? 0.6 : 0.35) + 0.35 * wave, transform: [{ scale: 0.9 + 0.2 * wave }] };
   }, [inRange, phase, moving]);
+  const tilt = fingerSide === 'left' ? '-28deg' : '28deg';
   const finger = useAnimatedStyle(() => {
-    if (!moving) return { transform: [{ translateY: 0 }] };
+    if (!moving) return { transform: [{ translateY: 0 }, { rotate: tilt }] };
+    // Out of phase with the item's hop.
     const tap = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
-    return { transform: [{ translateY: -4 * tap }, { rotate: '-20deg' }] };
-  }, [phase, moving]);
+    return { transform: [{ translateY: -5 * tap }, { rotate: tilt }] };
+  }, [phase, moving, tilt]);
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
 
   return (
     <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
       <View style={[styles.scaled, { opacity: look.opacity, transform: [{ scale: look.scale }] }]}>
         <View style={styles.groundShadow} />
-        {inRange && <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: color }, pulse]} />}
+        {/* Commons glow warm gold in range (never the grey that read as a loading bar). */}
+        {inRange && <Animated.Image source={GLOW} style={[styles.groundGlow, { tintColor: tier === 1 ? BRAND.gold : color }, pulse]} />}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
           {[0, 45, 90, 135].map(angle => <View key={angle}
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
@@ -228,13 +231,16 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         </Animated.View>
         {SPARKLES.slice(0, look.sparkles).map(spark => <Sparkle key={spark.phase} {...spark}
           color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
-        <RarityMark tier={tier} color={color} />
       </View>
-      {ridePhoto && <View style={[styles.cameraBadge, !inRange && styles.cameraBadgeFar]}><GameIcon name="camera" size={inRange ? 18 : 14} /></View>}
-      {prepItem.is_new_variant && !inRange && (
-        <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
-      )}
-      {inRange && <Animated.Image source={FINGER} style={[styles.finger, finger]} />}
+      {/* Ride Photo finds wear a camera badge that also carries the rarity mark (pips, gem or crown). */}
+      {ridePhoto && <View style={[styles.cameraBadge, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
+        <GameIcon name="camera" size={inRange ? 16 : 12} />
+        {inRange && <RarityMark tier={tier} />}
+      </View>}
+      {prepItem.is_new_variant && (inRange
+        ? <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
+        : <View style={styles.newDot} />)}
+      {inRange && <Animated.Image source={FINGER} style={[styles.finger, fingerSide === 'left' ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
       {leavingSoon && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
     </View>
@@ -260,17 +266,20 @@ const styles = StyleSheet.create({
   fallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: BRAND.white },
   sparkle: { position: 'absolute' },
-  mark: { position: 'absolute', top: B / 2 + A / 2 - 2, flexDirection: 'row', gap: 3, alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 2 },
-  pip: { width: 7, height: 7, borderRadius: 3.5 },
-  markGlyph: { fontSize: 12, lineHeight: 13 },
-  cameraBadge: { position: 'absolute', top: B / 2 - A / 2 - 6, right: B / 2 - A / 2 - 10, width: 28, height: 28, borderRadius: 14,
-    backgroundColor: '#0b2f5c', borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
-  cameraBadgeFar: { width: 22, height: 22, borderRadius: 11, top: B / 2 - A / 2 + 6, right: B / 2 - A / 2 + 2 },
+  pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.white },
+  markGlyph: { fontSize: 12, lineHeight: 13, color: BRAND.white },
+  cameraBadge: { position: 'absolute', top: B / 2 - A / 2 - 6, right: B / 2 - A / 2 - 14, height: 26, borderRadius: 13, flexDirection: 'row',
+    gap: 3, paddingHorizontal: 6, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  cameraBadgeFar: { height: 16, minWidth: 16, borderRadius: 8, paddingHorizontal: 1, top: B / 2 - A / 2 + 8, right: B / 2 - A / 2 + 4 },
+  newDot: { position: 'absolute', top: B / 2 - A / 2 + 10, left: B / 2 - A / 2 + 6, width: 10, height: 10, borderRadius: 5,
+    backgroundColor: BRAND.gold, borderWidth: 1.5, borderColor: BRAND.white },
   newBadge: { position: 'absolute', top: B / 2 - A / 2 + 4, left: B / 2 - A / 2 - 2, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 0 },
   newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14 },
-  finger: { position: 'absolute', top: -2, right: 6, width: 30, height: 38 },
+  // Hovers 6 pt off the art with the fingertip toward the find, on the side away from the player.
+  finger: { position: 'absolute', top: B / 2 - A / 2 - 30, width: 30, height: 38 },
+  fingerRight: { left: B / 2 + A / 2 - 4 },
+  fingerLeft: { left: B / 2 - A / 2 - 26 },
   footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
   timePill: { position: 'absolute', bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
     borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },

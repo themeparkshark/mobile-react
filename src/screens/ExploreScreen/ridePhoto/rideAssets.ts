@@ -15,6 +15,7 @@ export const RIDE_ART = {
   carBack: require('../../../../assets/images/ride-photo/car-back.webp'),
   carFront: require('../../../../assets/images/ride-photo/car-front.webp'),
   camera: require('../../../../assets/images/ride-photo/camera.webp'),
+  cameraPole: require('../../../../assets/images/ride-photo/camera-pole.webp'),
   grain: require('../../../../assets/images/ride-photo/grain.webp'),
   sparkle: require('../../../../assets/images/ride-photo/sparkle.webp'),
 } as const;

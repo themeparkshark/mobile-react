@@ -46,10 +46,31 @@ export function rideSpec(rarity: number | null | undefined): RideSpec {
 }
 
 /**
- * Timing windows in milliseconds at the frame (half widths), the same for every
- * rarity: rarity adds difficulty through speed, track shape and lighting only.
+ * Timing windows in milliseconds at the frame (half widths). Frame It! stays
+ * tight on every rarity so mastery matters; Good is generous on the easy rides
+ * (ages 6 to 8 spread about ±150 to 200 ms) and tightens with rarity, which also
+ * adds speed, track shape and lighting.
+ *
+ * | Rarity    | Frame It! | Great | Good | Good total (with the coyote frame) |
+ * |-----------|-----------|-------|------|------------------------------------|
+ * | Uncommon  | ±40       | ±110  | ±250 | about 533 ms                       |
+ * | Rare      | ±35       | ±95   | ±225 | about 483 ms                       |
+ * | Epic      | ±35       | ±85   | ±190 | about 413 ms                       |
+ * | Legendary | ±35       | ±80   | ±150 | about 333 ms                       |
  */
-export const GRADE_WINDOWS_MS = { frame_it: 35, great: 80, good: 150 } as const;
+export const GRADE_WINDOWS_BY_TIER: Readonly<Record<2 | 3 | 4 | 5, { frame_it: number; great: number; good: number }>> = {
+  2: { frame_it: 40, great: 110, good: 250 },
+  3: { frame_it: 35, great: 95, good: 225 },
+  4: { frame_it: 35, great: 85, good: 190 },
+  5: { frame_it: 35, great: 80, good: 150 },
+};
+/** The strictest table (Legendary), kept for callers that do not pass a rarity. */
+export const GRADE_WINDOWS_MS = GRADE_WINDOWS_BY_TIER[5];
+export function gradeWindows(rarity: number | null | undefined): { frame_it: number; great: number; good: number } {
+  'worklet';
+  const tier = Math.max(2, Math.min(5, Math.round(Number(rarity) || 3))) as 2 | 3 | 4 | 5;
+  return GRADE_WINDOWS_BY_TIER[tier];
+}
 /** A touch lands this long after the frame the player reacted to (input plus display latency). */
 export const INPUT_LATENCY_MS = 50;
 /** One 60 Hz frame: the best grade within one frame either side counts (coyote frame). */
@@ -84,17 +105,42 @@ export interface ShotResult {
 }
 
 /** Grade a latency-compensated offset, taking the best result within one frame either side. */
-export function gradeOffset(offsetMs: number, misses = 0): ShotResult {
+export function gradeOffset(offsetMs: number, misses = 0, rarity: number = 5): ShotResult {
   'worklet';
   if (!Number.isFinite(offsetMs)) return { grade: 'blurry', offsetMs, direction: null, soClose: false };
+  const w = gradeWindows(rarity);
   const k = windowScale(misses);
   const off = Math.max(0, Math.abs(offsetMs) - COYOTE_MS);
   let grade: PhotoGrade = 'blurry';
-  if (off <= GRADE_WINDOWS_MS.frame_it * k) grade = 'frame_it';
-  else if (off <= GRADE_WINDOWS_MS.great * k) grade = 'great';
-  else if (off <= GRADE_WINDOWS_MS.good * k) grade = 'good';
+  if (off <= w.frame_it) grade = 'frame_it';
+  else if (off <= w.great * k) grade = 'great';
+  else if (off <= w.good * k) grade = 'good';
   const direction = grade === 'blurry' ? (offsetMs < 0 ? 'early' : 'late') : null;
-  return { grade, offsetMs, direction, soClose: grade === 'blurry' && off <= GRADE_WINDOWS_MS.good * k * SO_CLOSE_FACTOR };
+  return { grade, offsetMs, direction, soClose: grade === 'blurry' && off <= w.good * k * SO_CLOSE_FACTOR };
+}
+
+/** What a shutter tap does right now. One gesture is always attached; this decides. */
+export type ShutterAction = 'shoot' | 'skip' | 'not_yet' | 'ack';
+export function shutterAction(state: { holding: boolean; armed: boolean; hintWaiting: boolean }): ShutterAction {
+  'worklet';
+  if (state.holding) return 'skip';
+  if (!state.armed) return 'ack';
+  // First-ride hint: the car has not reached the frame yet, so a tap is a soft "not yet", never a miss.
+  if (state.hintWaiting) return 'not_yet';
+  return 'shoot';
+}
+
+/**
+ * The first-time hint. The guaranteed frozen Frame It! is for a first ride on
+ * Uncommon or Rare only, and only once (it turns off after the frozen shot).
+ * Silent passes bring the hand back, never the freeze. Epic and Legendary
+ * never freeze.
+ */
+export function hintMode(rarity: number | null | undefined, firstRide: boolean, silentPasses: number): 'freeze' | 'hand' | 'none' {
+  const tier = Math.round(Number(rarity) || 1);
+  if (firstRide && tier <= 3) return 'freeze';
+  if (silentPasses >= 2 || (firstRide && tier >= 4)) return 'hand';
+  return 'none';
 }
 
 /** Pre-v2 pixel grading, kept for callers that grade by position. */

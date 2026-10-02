@@ -34,7 +34,7 @@ const FIXTURES: Fixture[] = [
   { slug: 'mac-cheese-cone', name: 'Mac and Cheese Cone', rarity: 3, set: 'Snack Stand', color: '#FF8A3D', north: 26, east: 12, inRange: true },
   { slug: 'salted-pretzel', name: 'Giant Salted Pretzel', rarity: 1, set: 'Snack Stand', color: '#FF8A3D', north: -24, east: -20, inRange: true },
   { slug: 'nacho-tray', name: 'Loaded Nacho Tray', rarity: 2, set: 'Snack Stand', color: '#FF8A3D', north: 95, east: -55, inRange: false },
-  { slug: 'turkey-leg', name: 'Smoky Turkey Leg', rarity: 4, set: 'Snack Stand', color: '#FF8A3D', north: -110, east: 70, inRange: false },
+  { slug: 'turkey-leg', name: 'Smoky Turkey Leg', rarity: 4, set: 'Snack Stand', color: '#FF8A3D', north: -30, east: 34, inRange: true },
   { slug: 'golden-feast-platter', name: 'Golden Feast Platter', rarity: 5, set: 'Snack Stand', color: '#FF8A3D', north: 260, east: 90, inRange: false },
   { slug: 'popcorn-bucket', name: 'Striped Popcorn Bucket', rarity: 1, set: 'Snack Stand', color: '#FF8A3D', north: -70, east: -95, inRange: false },
 ];
@@ -46,6 +46,8 @@ export default function HomeCatchPreviewScreen() {
   const origin = base.current ?? { latitude: 28.3772, longitude: -81.5707 };
   const [caught, setCaught] = useState<Set<number>>(() => new Set());
   const [request, setRequest] = useState<CatchRequest | null>(null);
+  const [mapStill, setMapStill] = useState<string | null>(null);
+  const catches = useRef(0);
   const [chip, setChip] = useState<HuntChipMessage | null>(null);
   const projector = useRef<MapProjector | null>(null);
   const snapshotter = useRef<(() => Promise<string | null>) | null>(null);
@@ -133,7 +135,7 @@ export default function HomeCatchPreviewScreen() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplay]);
-  const stageItem = items[0];
+  const stageItem = request?.item ?? items[0];
 
   return (
     <Wrapper><View style={styles.root}>
@@ -142,8 +144,11 @@ export default function HomeCatchPreviewScreen() {
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
       onLayout={event => setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
-      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientPaused={catchOpen}
-        onZoomChange={() => void measure()}>
+      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientPaused={catchOpen} chromeHidden={catchOpen}
+        onZoomChange={() => {
+          void measure();
+          if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
+        }}>
         {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => {
           const fixture = FIXTURES[index];
           const onPress = async () => {
@@ -178,14 +183,17 @@ export default function HomeCatchPreviewScreen() {
       </View>
       <HomeCatchMoment ref={catchRef} request={request} stageItem={rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null}
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
-        snapshot={() => snapshotter.current?.() ?? Promise.resolve(null)}
-        autoShots={autoplay ? [-320, 6] : null} refreshAfterCatch={false}
+        mapStill={mapStill}
+        autoShots={autoplay ? (request?.item.rarity === 4 ? [-420, 6, 45] : [-650]) : null} refreshAfterCatch={false}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
           const pivot = request?.pivotId;
           setRequest(null);
           if (done && pivot != null) setCaught(current => new Set([...current, pivot]));
+          // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos).
+          catches.current += 1;
+          if (autoplay && catches.current === 1) setTimeout(() => void startCatch(items[3]), 2600);
         }} />
     </View>
     </View></Wrapper>

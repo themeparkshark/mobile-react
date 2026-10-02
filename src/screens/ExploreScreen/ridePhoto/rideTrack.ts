@@ -145,7 +145,7 @@ export function sampleTrackX(lut: TrackSamples, u: number): number {
  * way: the flash frame sits in one of three slots on the run-out, and the sky
  * is day or sunset.
  */
-export function rideVariant(seed: number): { frameShift: number; sky: 'day' | 'sunset' } {
+export function rideVariant(seed: number): { frameShift: number; sky: 'day' | 'sunset' | 'night' } {
   const n = Math.abs(Math.round(seed)) || 0;
-  return { frameShift: [0, -0.06, 0.05][n % 3], sky: n % 4 === 3 ? 'sunset' : 'day' };
+  return { frameShift: [0, -0.06, 0.05][n % 3], sky: n % 4 === 3 ? 'sunset' : n % 4 === 2 ? 'night' : 'day' };
 }

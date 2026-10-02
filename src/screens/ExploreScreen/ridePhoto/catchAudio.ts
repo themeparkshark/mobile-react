@@ -1,5 +1,6 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
+import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 
 /**
  * The catch's own audio channel: real camera sounds (licensed, Epidemic Sound),
@@ -42,7 +43,8 @@ const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinge
 };
 /** Borrowed house cues for the small beats. */
 const HOUSE: Partial<Record<CatchSound, string>> = { tick: 'ui.select', chime: 'fx.coin', sparkle: 'fx.reveal', aww: 'fx.nopeShort', whoosh: 'fx.whoosh' };
-const STINGERS = new Set<CatchSound>(['cheer', 'chime', 'sparkle']);
+// The chime is the fanfare that rides with the crowd; only the long tails queue.
+const STINGERS = new Set<CatchSound>(['cheer', 'sparkle']);
 const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, shutterGold: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3 };
 
 let registered = false;
@@ -62,9 +64,22 @@ export function preloadCatchAudio(): Promise<void> {
 }
 
 /** Play on the catch channel. A stinger waits for the previous stinger's tail instead of stacking. */
+/** Development: every sound and haptic is logged with a timestamp, for AUDIO_TIMELINE.md and sync review. */
+function trace(kind: string, name: string, extra = '') {
+  if (__DEV__) console.log(`[catch-av] ${Date.now()} ${kind} ${name}${extra}`);
+}
+export function catchMark(name: string): void { trace('mark', name); }
+
+export function catchHaptic(intent: HapticIntent, priority = 2): void {
+  trace('haptic', intent);
+  queueHaptic(intent, priority);
+}
+
 export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: number } = {}): void {
   const cue = HOUSE[name] ?? `ride.${name}`;
+
   const fire = () => {
+    trace('sound', name, opts.pitch ? ` pitch=${opts.pitch}` : '');
     const def = CUES[cue];
     const id = limiter.request(name, { priority: PRIORITY[name] ?? 2, durationMs: def?.durationMs ?? 400 });
     if (id == null) return;

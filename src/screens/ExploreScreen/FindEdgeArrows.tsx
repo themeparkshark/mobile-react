@@ -38,8 +38,10 @@ function FindEdgeArrows({ finds, size, onPress }: {
             <View style={[styles.arrow, { transform: [{ rotate: `${at.angleDeg}deg` }] }]}>
               <View style={[styles.tip, { borderBottomColor: color }]} />
             </View>
-            <View style={[styles.bubble, { borderColor: color }]}>
-              {art && <Image source={art} style={styles.art} contentFit="contain" transition={0} />}
+            {/* A rarity-coloured disc behind the thumbnail: never a blank white circle while it binds. */}
+            <View style={[styles.bubble, { borderColor: color, backgroundColor: `${color}33` }]}>
+              {art && <Image source={art} style={styles.art} contentFit="contain" transition={0} cachePolicy="memory-disk"
+                recyclingKey={String(find.item.pivot_id ?? find.item.id)} />}
             </View>
           </Pressable>
         );
@@ -55,7 +57,7 @@ const styles = StyleSheet.create({
   arrow: { position: 'absolute', width: 48, height: 48, alignItems: 'center' },
   tip: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 11, borderLeftColor: 'transparent',
     borderRightColor: 'transparent', marginTop: -6 },
-  bubble: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 2.5,
+  bubble: { width: 36, height: 36, borderRadius: 18, borderWidth: 2.5,
     alignItems: 'center', justifyContent: 'center', shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 2 },
     shadowRadius: 0, shadowOpacity: 0.25 },
   art: { width: 28, height: 28 },

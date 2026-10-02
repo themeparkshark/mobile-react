@@ -145,11 +145,13 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
+  const [findSides, setFindSides] = useState<Record<number, 'left' | 'right'>>({});
   // The catch reads GPS through a ref, so it never re-renders on a fix.
   const fixRef = useRef({ latestLocationSampleRef, location });
   fixRef.current = { latestLocationSampleRef, location };
   const getFix = useCallback(() => pickupFix(fixRef.current.latestLocationSampleRef.current, fixRef.current.location, Date.now()), []);
-  const snapshot = useCallback(() => snapshotter.current?.() ?? Promise.resolve(null), []);
+  // One still of the map, taken when a Ride Photo find comes in range (never on the tap), for the catch's open and close edges.
+  const [mapStill, setMapStill] = useState<string | null>(null);
   const catchAttempt = useRef(0);
   // One "a find is close" ping per find, so standing still never repeats it.
   const pingedPivots = useRef(new Set<number>());
@@ -376,15 +378,17 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   }, [mapSettled]);
 
   // Out of range: a tiny nudge with an arrow toward the find, gone on its own.
+  // Reads GPS through a ref, so it (and every marker's tap handler) stays stable across fixes.
   const nudge = useCallback(async (item: PrepItemType, distance: number | null) => {
     queueHaptic('tapLight', 1);
     const key = `far-${item.pivot_id ?? item.id}-${Date.now()}`;
     setChip({ key, text: walkCloserLine(distance) });
-    if (lat == null || lng == null || item.latitude == null || item.longitude == null) return;
-    const [shark, find] = await Promise.all([toLocal(lat, lng), toLocal(item.latitude, item.longitude)]);
+    const here = fixRef.current.location;
+    if (here?.latitude == null || here?.longitude == null || item.latitude == null || item.longitude == null) return;
+    const [shark, find] = await Promise.all([toLocal(here.latitude, here.longitude), toLocal(item.latitude, item.longitude)]);
     const arrowDeg = screenBearing(shark, find);
     if (arrowDeg != null) setChip(current => (current?.key === key ? { ...current, arrowDeg } : current));
-  }, [lat, lng, toLocal]);
+  }, [toLocal]);
 
   // The parent cleared a find for a catch: measure where it is and play the moment.
   useEffect(() => {
@@ -435,10 +439,42 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         if (off) edges.push({ item, point, distance });
       }
       findPoints.current = next;
+      // The finger cue goes on the side away from the player's shark (screen centre while following).
+      const sides: Record<number, 'left' | 'right'> = {};
+      next.forEach((point, pivot) => { sides[pivot] = point.x < containerSize.width / 2 ? 'left' : 'right'; });
+      setFindSides(current => (JSON.stringify(current) === JSON.stringify(sides) ? current : sides));
       setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 4));
     })();
     return () => { alive = false; };
   }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal]);
+
+  // Stable callbacks for the catch (refs, so memo holds across renders).
+  const callbacks = useRef({ onCatchCollected, onCatchUnavailable, onCatchDone, onPrepItemNearby, catchRequest });
+  callbacks.current = { onCatchCollected, onCatchUnavailable, onCatchDone, onPrepItemNearby, catchRequest };
+  const onCollectedStable = useCallback((data: RedeemPrepItemResponseType['data']) => callbacks.current.onCatchCollected?.(data), []);
+  const onUnavailableStable = useCallback(() => callbacks.current.onCatchUnavailable?.(), []);
+  const onFailedStable = useCallback((line: string, retryable: boolean) => {
+    const failed = callbacks.current.catchRequest;
+    setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error', ttlMs: 4000,
+      onPress: retryable && failed ? () => {
+        setChip(null);
+        callbacks.current.onPrepItemNearby(failed.item, failed.pivotId, 'tap');
+      } : undefined });
+  }, []);
+  const onDoneStable = useCallback((caught: boolean) => {
+    setCatchRequest(null);
+    callbacks.current.onCatchDone?.(caught);
+  }, []);
+  const onEdgePress = useCallback((entry: EdgeFind) => void nudge(entry.item, entry.distance), [nudge]);
+  // A still of the map for the catch's edges, taken once when a Ride Photo find comes in range.
+  useEffect(() => {
+    if (!stageItem?.pivot_id || mapSettled === 0) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      void snapshotter.current?.().then(uri => { if (alive && uri) setMapStill(uri); });
+    }, 800);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [stageItem?.pivot_id, mapSettled > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tapFind = useCallback((prepItem: PrepItemType, distance: number | null, inRange: boolean) => {
     if (loadError || !prepItem.pivot_id || catchingPivot != null) return;
@@ -474,16 +510,20 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled}
-        extraControls={chestButton} ambientPaused={catchOpen}>
+        extraControls={chestButton} ambientPaused={catchOpen} chromeHidden={catchOpen}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)} hidden={catchingPivot === prepItem.pivot_id}
-            onTap={tapFind} onExpire={handlePrepItemExpire} />
+            onTap={tapFind} onExpire={handlePrepItemExpire}
+            fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} />
         ))}
       </Map>
-      {!catchOpen && <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={entry => void nudge(entry.item, entry.distance)} />}
+      {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
+      <View style={[StyleSheet.absoluteFill, catchOpen && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+        <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} />
+      </View>
 
       {bottom && <View style={styles.bottomSlot} pointerEvents="box-none">{bottom}</View>}
 
@@ -501,21 +541,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
 
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
-        getFix={getFix} snapshot={snapshot}
-        onCollected={data => onCatchCollected?.(data)}
-        onUnavailable={() => onCatchUnavailable?.()}
-        onFailed={(line, retryable) => {
-          const failed = catchRequest;
-          setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error', ttlMs: 4000,
-            onPress: retryable && failed ? () => {
-              setChip(null);
-              onPrepItemNearby(failed.item, failed.pivotId, 'tap');
-            } : undefined });
-        }}
-        onDone={caught => {
-          setCatchRequest(null);
-          onCatchDone?.(caught);
-        }} />
+        getFix={getFix} mapStill={mapStill}
+        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onFailed={onFailedStable} onDone={onDoneStable} />
 
 
       {introOpen && <HomeIntro onDone={markIntroSeen} />}
@@ -528,6 +555,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dimmed: { opacity: 0.3 },
+  hidden: { opacity: 0 },
   bottomSlot: { position: 'absolute', left: EDGE, right: EDGE, bottom: BOTTOM_SLOT, zIndex: 12,
     alignItems: 'stretch', maxWidth: 420, alignSelf: 'center' },
 });

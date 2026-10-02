@@ -231,3 +231,59 @@ test('round 2: the map steps back during a catch and the catch never reads GPS o
   const markers = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.doesNotMatch(markers, /shadowRadius/);
 });
+
+test('round 3: per-rarity windows (Frame It! stays tight, Good is generous on easy rides)', () => {
+  assert.deepEqual(plain(ride.GRADE_WINDOWS_BY_TIER), {
+    2: { frame_it: 40, great: 110, good: 250 }, 3: { frame_it: 35, great: 95, good: 225 },
+    4: { frame_it: 35, great: 85, good: 190 }, 5: { frame_it: 35, great: 80, good: 150 },
+  });
+  // Ages 6 to 8: at least 450 ms total of Good or better on Uncommon and Rare.
+  for (const rarity of [2, 3]) {
+    const w = ride.gradeWindows(rarity);
+    assert.ok(2 * (w.good + ride.COYOTE_MS) >= 450, `rarity ${rarity}`);
+    assert.equal(ride.gradeOffset(w.good + 10, 0, rarity).grade, 'good');
+  }
+  assert.equal(ride.gradeOffset(200, 0, 2).grade, 'good');
+  assert.equal(ride.gradeOffset(200, 0, 5).grade, 'blurry');
+  // Frame It! never grows with misses.
+  assert.equal(ride.gradeOffset(70, 3, 3).grade, 'great');
+});
+
+test('round 3: one shutter gesture decides skip, not-yet, ack or shoot', () => {
+  assert.equal(ride.shutterAction({ holding: true, armed: false, hintWaiting: false }), 'skip');
+  assert.equal(ride.shutterAction({ holding: false, armed: false, hintWaiting: false }), 'ack');
+  assert.equal(ride.shutterAction({ holding: false, armed: true, hintWaiting: true }), 'not_yet');
+  assert.equal(ride.shutterAction({ holding: false, armed: true, hintWaiting: false }), 'shoot');
+});
+
+test('round 3: the hint freeze is first-ride Uncommon/Rare only; silent passes bring the hand, never a free Frame It!', () => {
+  assert.equal(ride.hintMode(3, true, 0), 'freeze');
+  assert.equal(ride.hintMode(2, true, 0), 'freeze');
+  assert.equal(ride.hintMode(4, true, 0), 'hand', 'Epic never freezes');
+  assert.equal(ride.hintMode(5, true, 0), 'hand', 'Legendary never freezes');
+  assert.equal(ride.hintMode(3, false, 2), 'hand');
+  assert.equal(ride.hintMode(5, false, 5), 'hand');
+  assert.equal(ride.hintMode(3, false, 1), 'none');
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  // The freeze turns off after the frozen shot, and an early first-ride tap is a "not yet", never a miss.
+  assert.match(src, /if \(frozen\.value\) \{\s*grade = 'frame_it';\s*\/\/[^\n]*\n\s*hintFreeze\.value = false;/);
+  assert.match(src, /else if \(action === 'not_yet'\)/);
+  // One gesture, always attached.
+  assert.match(src, /<GestureDetector gesture=\{tap\}>/);
+  assert.doesNotMatch(src, /gesture=\{print && !closing \? skip : tap\}/);
+});
+
+test('round 3: full screen, close outside the gesture, sharp photo, one hand-off', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  const gestureEnd = src.indexOf('</GestureDetector>');
+  assert.ok(src.indexOf('accessibilityLabel="Close the camera"') > gestureEnd, 'close sits outside the shutter gesture');
+  assert.match(src, /PixelRatio\.get\(\) \* 1\.4/);
+  assert.match(src, /catchSound\(grade === 'frame_it' \? 'shutterGold' : 'shutter'\);[\s\S]{0,200}const image = takePhoto/);
+  assert.match(read('src/components/Wrapper.tsx'), /useCatchOpen/);
+  assert.match(read('src/components/Topbar.tsx'), /useCatchOpen/);
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.doesNotMatch(moment, /snapshot\?\.\(\)/, 'no per-open map snapshot');
+  assert.match(moment, /closeRide\(true\);\s*setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /react-native-svg/);
+});

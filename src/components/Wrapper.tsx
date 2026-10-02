@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useCatchOpen } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -25,6 +27,11 @@ export default function Wrapper({
     : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
+  // A catch moment owns the whole screen: the tab bar slides away (220 ms) and back (180 ms).
+  const catchOpen = useCatchOpen();
+  const barSlide = useAnimatedStyle(() => ({
+    transform: [{ translateY: withTiming(catchOpen ? 160 : 0, { duration: catchOpen ? 220 : 180, easing: Easing.out(Easing.cubic) }) }],
+  }), [catchOpen]);
 
   const items = [
     {
@@ -75,10 +82,11 @@ export default function Wrapper({
           {children}
         </View>
       </View>
-      <View
-        style={{
+      <Animated.View
+        pointerEvents={catchOpen ? 'none' : 'auto'}
+        style={[{
           width: Dimensions.get('window').width,
-        }}
+        }, barSlide]}
       >
         <ImageBackground
           source={bottomBarSource}
@@ -158,7 +166,7 @@ export default function Wrapper({
             })}
           </View>
         </ImageBackground>
-      </View>
+      </Animated.View>
     </View>
   );
 }

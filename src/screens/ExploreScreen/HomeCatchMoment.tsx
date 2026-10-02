@@ -1,6 +1,7 @@
 import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AccessibilityInfo, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Canvas, Image as SkImageNode, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
 import Animated, {
@@ -13,7 +14,6 @@ import redeemPrepItem, { type RedeemCatchDetails } from '../../api/endpoints/me/
 import { AuthContext } from '../../context/AuthProvider';
 import { CurrencyContext } from '../../context/CurrencyProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
-import { queueHaptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { findDisplayName } from './homeFindCopy';
@@ -22,8 +22,8 @@ import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
-import RidePhotoCatch, { type RideStageHandle } from './ridePhoto/RidePhotoCatch';
-import { catchSound } from './ridePhoto/catchAudio';
+import RidePhotoCatch, { BLANK_IMAGE, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen } from './catchPresence';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
@@ -93,8 +93,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly redeem?: typeof redeemPrepItem;
   /** The freshest GPS fix at the moment of the catch (kept off this component's renders). */
   readonly getFix: () => Fix;
-  /** A still of the map, blurred once behind the open and close. */
-  readonly snapshot?: () => Promise<string | null>;
+  /** A still of the map taken earlier (when a Ride Photo find came in range), blurred behind the open and close. */
+  readonly mapStill?: string | null;
   readonly onCollected: (data: RedeemPrepItemResponseType['data']) => void;
   readonly onUnavailable: () => void;
   /** The moment is over; `caught` is false after a failure or a close (the find shows again). */
@@ -105,7 +105,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly autoShots?: number[] | null;
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
-}>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, snapshot,
+}>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
   onCollected, onUnavailable, onDone, onFailed, autoShots, refreshAfterCatch = true }, ref) {
   const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
@@ -122,7 +122,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [photo, setPhoto] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [cascade, setCascade] = useState(0);
   const [bonusXp, setBonusXp] = useState<number | null>(null);
-  const [mapStill, setMapStill] = useState<string | null>(null);
+  // The Ride Photo layer covers the whole screen (the header and tab bar slide away), so it is offset by
+  // where this map container sits in the window.
+  const window = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const redeemRun = useRef<Promise<CatchResult> | null>(null);
   const aliveRef = useRef(0);
 
@@ -141,33 +145,30 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromX = useSharedValue(0);
   const flyFromY = useSharedValue(0);
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, snapshot });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, snapshot };
+  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion });
+  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
   const fromPoint = (req: CatchRequest | null) => req?.from ?? { x: layer.width / 2, y: layer.height * 0.45 };
 
-  // The map behind steps back: one blurred still, a navy tint and a vignette, never a live blur.
+  // The map steps back: a cached blurred still, a navy tint and a vignette, never a live blur or a per-open snapshot.
   const showBackdrop = useCallback((on: boolean) => {
     backdrop.value = withTiming(on ? 1 : 0, { duration: latest.current.reducedMotion ? 1 : on ? 160 : 260 });
-    if (on) {
-      setMapStill(null);
-      void latest.current.snapshot?.().then(uri => { if (uri) setMapStill(uri); });
-    }
   }, [backdrop]);
 
   useImperativeHandle(ref, () => ({
     primeRide: (item, from) => {
       if (rideSpec(item.rarity).style !== 'ride_photo' || layer.width === 0) return false;
       setRideItem(item);
-      setPrimed({ item, from });
+      const full = from ? { x: from.x + offset.x, y: from.y + offset.y } : null;
+      setPrimed({ item, from: full });
       setCatchOpen(true);
       showBackdrop(true);
-      stage.current?.prime(from);
+      stage.current?.prime(full);
       return true;
     },
-  }), [layer.width, showBackdrop]);
+  }), [layer.width, showBackdrop, offset.x, offset.y]);
 
   // A prime that never becomes a catch (the tutorial took it, the park check moved) folds away.
   useEffect(() => {
@@ -207,7 +208,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     const tier = rarityTier(data.item?.rarity);
     catchSound('badge');
-    queueHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
+    catchHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
     badgeKick.value = motion ? withSequence(withTiming(1.22, { duration: 100 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
     ringPop.value = 0;
     ringPop.value = withTiming(1, { duration: motion ? 520 : 1 });
@@ -227,7 +228,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           flyTo({ imageSource: TICKET_ICON, amount: Math.min(data.rewards.tickets, 6), startX, startY, targetPosition: 'tickets' });
         }
       });
-      queueHaptic('tapLight', 1);
+      catchHaptic('tapLight', 1);
     });
     for (let i = 0; i < beats.length; i++) {
       await wait(120);
@@ -278,7 +279,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     itemGone.value = 0;
 
     void (async () => {
-      queueHaptic('hitMedium', 2);
+      catchHaptic('hitMedium', 2);
       catchSound('pop');
       pop.value = withTiming(1, { duration: motion ? CATCH_TIMING.pop * 2.6 : 1, easing: Easing.out(Easing.quad) });
       lift.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1;
@@ -291,7 +292,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       ]);
       if (!alive()) return;
       if (result.kind !== 'caught') {
-        queueHaptic('failBuzz', 3);
+        catchHaptic('failBuzz', 3);
         lift.value = withTiming(0, { duration: 220 });
         await wait(300);
         if (!alive()) return;
@@ -321,7 +322,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const closeRide = (caught: boolean) => {
     setRide(current => (current ? { ...current, closing: true } : current));
     showBackdrop(false);
-    if (!caught) setTimeout(() => setRide(null), 320);
+    // The header and tab bar slide back while the viewfinder irises out.
+    setCatchOpen(false);
+    if (!caught) setTimeout(() => setRide(null), 420);
   };
 
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
@@ -332,31 +335,31 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const result = await redeemRun.current;
     if (aliveRef.current !== token) return;
     if (result.kind !== 'caught') {
-      queueHaptic('failBuzz', 3);
+      catchHaptic('failBuzz', 3);
       closeRide(false);
       if (result.kind === 'gone') latest.current.onUnavailable();
       latest.current.onFailed(result.line, result.kind === 'failed');
       setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
       return;
     }
-    // The print itself flies into the badge; the viewfinder closes only once it lands.
+    // One hand-off: the viewfinder irises out behind the print, which flies into the badge on the map.
     setPhoto({ image, grade });
     pendingLand.current = { data: result.data, token, item: req.item };
+    closeRide(true);
+    setRide(current => (current ? { ...current, flyTo: { x: target.x + offset.x, y: target.y + offset.y } } : current));
     await land(req.item, result.data, token, true);
-    setRide(current => (current ? { ...current, flyTo: { x: target.x, y: target.y } } : current));
-  }, [request, land, target.x, target.y]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [request, land, target.x, target.y, offset.x, offset.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPrintLanded = useCallback(() => {
     const pending = pendingLand.current;
     if (!pending || aliveRef.current !== pending.token) return;
     pendingLand.current = null;
-    closeRide(true);
     void arrive(catchSummary(pending.item, pending.data), pending.data, pending.token);
   }, [arrive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRodeOff = useCallback(() => {
     const token = aliveRef.current;
-    queueHaptic('warning', 3);
+    catchHaptic('warning', 3);
     closeRide(false);
     latest.current.onFailed('It rode off. Might be back tomorrow.', false);
     setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
@@ -407,6 +410,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     setLayer(current => (current.width === width && current.height === height ? current : { width, height }));
+    layerRef.current?.measureInWindow((x, y) => {
+      if (Number.isFinite(x) && Number.isFinite(y)) setOffset(current => (current.x === x && current.y === y ? current : { x, y }));
+    });
   };
 
   const item = showing?.item ?? null;
@@ -432,11 +438,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         </Canvas>}
       </Animated.View>
 
-      {stageFor && layer.width > 0 && <RidePhotoCatch ref={stage} item={stageFor} active={!!ride}
-        from={showing?.from ?? primed?.from ?? null} layer={layer} reducedMotion={reducedMotion} showHint={ride?.hint ?? rideHintSeen !== true}
+      {stageFor && layer.width > 0 && <View pointerEvents="box-none"
+        style={{ position: 'absolute', left: -offset.x, top: -offset.y, width: window.width, height: window.height }}>
+        <RidePhotoCatch ref={stage} item={stageFor} active={!!ride} insets={insets}
+        from={primed?.from ?? (showing?.from ? { x: showing.from.x + offset.x, y: showing.from.y + offset.y } : null)}
+        layer={{ width: window.width, height: window.height }} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
         closing={ride?.closing ?? false} flyTarget={ride?.flyTo ?? null}
         onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose}
-        autoShots={autoShots} />}
+        autoShots={autoShots} /></View>}
 
       {item && <>
         <Animated.View style={[styles.ring, { borderColor: color }, ringStyle]} pointerEvents="none" />
@@ -453,9 +462,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           {/* Sticker: the photo (or the item) breaks out of the badge with a die-cut edge */}
           <Animated.View style={[styles.sticker, photo && styles.stickerPhoto,
             photo && { borderColor: photo.grade === 'frame_it' ? '#ffcf3b' : photo.grade === 'great' ? '#c9d5e3' : '#ffffff' }, stickerKick]}>
-            {photo?.image ? <Canvas style={{ width: STICKER - 10, height: STICKER - 10 }}>
-              <SkImageNode image={photo.image} x={0} y={0} width={STICKER - 10} height={STICKER - 10} fit="cover" />
-            </Canvas> : art ? <Image source={art} style={styles.stickerArt} contentFit="contain" transition={0} /> : null}
+            {/* The sticker canvas stays mounted; it shows the actual photo once there is one. */}
+            <Canvas style={[{ width: STICKER - 10, height: STICKER - 10 }, !photo?.image && styles.hiddenCanvas]}>
+              <SkImageNode image={photo?.image ?? BLANK_IMAGE} x={0} y={0} width={STICKER - 10} height={STICKER - 10} fit="cover" />
+            </Canvas>
+            {!photo?.image && art ? <Image source={art} style={[styles.stickerArt, styles.stickerOver]} contentFit="contain" transition={0} /> : null}
           </Animated.View>
           <Animated.View style={[styles.landRing, { borderColor: color }, landRing]} />
           <View style={styles.badgeCopy}>
@@ -500,6 +511,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', borderWidth: 4, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   stickerPhoto: { borderWidth: 5 },
   stickerArt: { width: STICKER - 8, height: STICKER - 8 },
+  stickerOver: { position: 'absolute' },
+  hiddenCanvas: { opacity: 0 },
   landRing: { position: 'absolute', left: STICKER_LEFT - 8, top: -22, width: STICKER + 16, height: STICKER + 16, borderRadius: 24, borderWidth: 3 },
   badgeCopy: { flex: 1, justifyContent: 'center' },
   badgeTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },

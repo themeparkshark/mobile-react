@@ -47,7 +47,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -69,6 +69,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly snapshotter?: MutableRefObject<(() => Promise<string | null>) | null>;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
+  /** A full-screen moment owns the screen: hide the map buttons and the data credit (shown again after). */
+  readonly chromeHidden?: boolean;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -403,12 +405,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     >
       {/* Map controls */}
       <View
+        pointerEvents={chromeHidden ? 'none' : 'box-none'}
         style={{
           position: 'absolute',
           top: controlsTop,
           right: 16,
           zIndex: 10,
           gap: 8,
+          opacity: chromeHidden ? 0 : 1,
         }}
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
@@ -552,11 +556,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
-      <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
+      {!chromeHidden && <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
         onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
         hitSlop={8} style={styles.attribution}>
         <Text style={styles.attributionText}>© OpenStreetMap</Text>
-      </Pressable>
+      </Pressable>}
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
