@@ -159,10 +159,15 @@ test('park header only calls a reviewed ride coin a ride; food stands get neutra
 });
 
 test('stamp book cards and detail are bright parchment, never dark or purple', () => {
-  const src = fs.readFileSync('src/screens/StampBookScreen.tsx', 'utf8');
-  for (const dark of ['#1a1510', 'rgba(60,40,20', '#9C27B0', "backgroundColor: 'rgba(0,0,0,0.4)'"])
-    assert.ok(!src.includes(dark), `StampBookScreen still has ${dark}`);
-  assert.match(src, /card: \{\n\s+backgroundColor: '#fff8e4'/);
+  // Stamp Book v2 split the screen: tiles in StampTile, the big card in StampCard.
+  const files = ['src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx', 'src/screens/stampbook/StampCard.tsx'];
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8');
+    for (const dark of ['#1a1510', 'rgba(60,40,20', '#9C27B0', "backgroundColor: 'rgba(0,0,0,0.4)'"])
+      assert.ok(!src.includes(dark), `${file} still has ${dark}`);
+  }
+  assert.match(fs.readFileSync(files[1], 'utf8'), /cardEarned: \{\n\s+backgroundColor: '#FFF8E4'/i);
+  assert.match(fs.readFileSync(files[2], 'utf8'), /inner: \{\n\s+backgroundColor: '#FFF8E4'/i);
 });
 
 test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part is singular for one', () => {
@@ -188,7 +193,7 @@ test('every WS3 modal dims the app with the brand navy scrim, never near-black',
     for (const [, value] of src.matchAll(/backdropOpacity=\{[^}]*?(0\.\d+)\s*\}/g))
       assert.ok(Number(value) <= 0.9, `${file} backdrop is too heavy`);
   }
-  for (const [file, style] of [['src/screens/StampBookScreen.tsx', 'overlay'], ['src/screens/SetCollectionScreen.tsx', 'modalOverlay']]) {
+  for (const [file, style] of [['src/screens/stampbook/StampCard.tsx', 'backdrop'], ['src/screens/SetCollectionScreen.tsx', 'modalOverlay']]) {
     const src = fs.readFileSync(file, 'utf8');
     const block = src.slice(src.indexOf(`  ${style}: {`), src.indexOf('}', src.indexOf(`  ${style}: {`)));
     assert.match(block, /rgba\(5,\s*52,\s*110,/, `${file} ${style} is not the navy scrim`);
@@ -201,7 +206,8 @@ test('collection rarity and challenge cards use the blue, white and gold ramp: n
   assert.equal(tiers.rarityToneByName('epic').color, '#e0a100');
   assert.equal(tiers.rarityToneByName('nope').name, 'common');
   const purple = /#(a855f7|ec4899|8b5cf6|a78bfa|c4b5fd|c084fc|f472b6|9c27b0|7c3aed|d946ef)\b|rgba\(\s*(168,\s*85,\s*247|236,\s*72,\s*153|139,\s*92,\s*246|196,\s*181,\s*253)/i;
-  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/components/RedeemRedeemableModal.tsx',
+  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx',
+    'src/screens/stampbook/StampCard.tsx', 'src/screens/stampbook/model.ts', 'src/components/RedeemRedeemableModal.tsx',
     'src/components/TicketPunch.tsx', 'src/constants/coinTiers.ts', 'src/components/UnfoundCoinModal.tsx',
     'src/components/CoinUpgradeDemo.tsx'])
     assert.ok(!purple.test(fs.readFileSync(file, 'utf8')), `${file} has a purple or pink surface`);

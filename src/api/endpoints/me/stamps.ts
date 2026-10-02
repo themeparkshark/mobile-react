@@ -29,6 +29,17 @@ export interface StampData {
   earned_at: string | null;
   reward_claimed: boolean;
   rewards: StampRewards;
+  /** Stamp Book v2 (optional: older servers omit them). */
+  section?: string;
+  icon_url?: string | null;
+  how_to?: string;
+}
+
+export interface StampSectionInfo {
+  key: string;
+  label: string;
+  color: string;
+  blurb: string;
 }
 
 export interface StampsResponse {
@@ -36,6 +47,8 @@ export interface StampsResponse {
   newly_earned: number[];
   unlocked_titles: { stamp_id: number; title: string }[];
   equipped_title: string | null;
+  /** Stamp Book v2 section order and colors (optional). */
+  sections?: StampSectionInfo[];
   summary: {
     total: number;
     earned: number;
