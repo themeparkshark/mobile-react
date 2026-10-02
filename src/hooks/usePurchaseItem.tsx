@@ -8,6 +8,7 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
+import { ShopSetReward } from '../models/shop-today';
 import { PlayerType } from '../models/player-type';
 import { BRAND, GameDialog, type GameDialogButton, type GameIconName } from '../ui';
 import useCrumbs from './useCrumbs';
@@ -17,7 +18,7 @@ type ModalState =
   | { type: 'owned'; item: ItemType }
   | { type: 'poor'; item: ItemType; shortfall: number }
   | { type: 'confirm'; item: ItemType; text: string }
-  | { type: 'success'; item: ItemType }
+  | { type: 'success'; item: ItemType; setReward?: ShopSetReward | null }
   | { type: 'failed'; item: ItemType };
 
 /** Player-facing currency names (docs/economy-glossary.md). */
@@ -48,7 +49,14 @@ export function affordability(player: PlayerType, item: ItemType) {
   return { balance, shortfall: Math.max(0, item.cost - balance) };
 }
 
-export default function usePurchaseItem() {
+export interface PurchaseOptions {
+  /** After a successful buy (Shop v2 refreshes its shelves; setReward when the buy finished a set). */
+  readonly onPurchased?: (item: ItemType, setReward: ShopSetReward | null) => void;
+  /** Shown as a button on the set-complete dialog. */
+  readonly onWearTitle?: (setReward: ShopSetReward) => void;
+}
+
+export default function usePurchaseItem(options: PurchaseOptions = {}) {
   const { playSound } = useContext(SoundEffectContext);
   const { prompts } = useCrumbs();
   const { player, isReady, refreshPlayer } = useContext(AuthContext);
@@ -89,11 +97,13 @@ export default function usePurchaseItem() {
     if (purchasing) return;
     setPurchasing(true);
     try {
-      await purchase(item);
+      const result = await purchase(item);
       await refreshPlayer();
-      playSound(require('../../assets/sounds/purchase_item_success.mp3'));
+      const setReward = result?.set_reward ?? null;
+      playSound(setReward ? require('../../assets/sounds/reward.mp3') : require('../../assets/sounds/purchase_item_success.mp3'));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      setModal({ type: 'success', item });
+      setModal({ type: 'success', item, setReward });
+      options.onPurchased?.(item, setReward);
     } catch (error: unknown) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       // The server says exactly how short the player is; otherwise nothing was charged.
@@ -109,7 +119,7 @@ export default function usePurchaseItem() {
     }
   };
 
-  const dialog = dialogFor(modal, { confirmPurchase, closeModal, playSound });
+  const dialog = dialogFor(modal, { confirmPurchase, closeModal, playSound, onWearTitle: options.onWearTitle });
   const current = modal;
   const purchaseModal = dialog ? (
     <GameDialog key={modal.type} visible title={dialog.title} message={dialog.message} icon={dialog.icon}
@@ -145,6 +155,7 @@ function dialogFor(modal: ModalState, actions: {
   confirmPurchase: (item: ItemType) => Promise<void>;
   closeModal: () => void;
   playSound: (sound: number) => void;
+  onWearTitle?: (setReward: ShopSetReward) => void;
 }): { title: string; message?: string; icon?: GameIconName; buttons: GameDialogButton[]; body?: JSX.Element;
   haptic?: 'warning' | 'success' | 'none' } | null {
   switch (modal.type) {
@@ -178,9 +189,25 @@ function dialogFor(modal: ModalState, actions: {
         ],
         body: <ItemArt item={modal.item} price />,
       };
-    case 'success':
+    case 'success': {
+      const reward = modal.setReward;
+      if (reward) {
+        const gets = [reward.title ? `the ${reward.title} title` : null, reward.xp > 0 ? `${reward.xp} XP` : null]
+          .filter(Boolean).join(' and ');
+        const wear = reward.title && actions.onWearTitle;
+        return {
+          title: 'Set complete!',
+          message: `You finished ${reward.name}${gets ? ` and got ${gets}` : ''}.`,
+          icon: 'trophy',
+          buttons: wear
+            ? [{ text: 'Wear my title', onPress: () => actions.onWearTitle?.(reward) }, { text: 'Awesome!', style: 'cancel' }]
+            : [{ text: 'Awesome!' }],
+          body: <ItemArt item={modal.item} />, haptic: 'success',
+        };
+      }
       return { title: 'It’s yours!', message: `${modal.item.name} is in your inventory. Dress your shark on your profile.`,
         buttons: [{ text: 'Awesome!' }], body: <ItemArt item={modal.item} />, haptic: 'success' };
+    }
     case 'failed':
       return {
         title: 'Purchase didn’t go through', message: 'You weren’t charged. Check your connection and try again.',

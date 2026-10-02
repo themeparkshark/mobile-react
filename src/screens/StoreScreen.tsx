@@ -17,6 +17,10 @@ import getItems from '../api/endpoints/catalogs/items';
 import getStore from '../api/endpoints/stores/get';
 import getStores from '../api/endpoints/stores/stores';
 import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
+import getShopToday from '../api/endpoints/stores/today';
+import { equipShopTitle } from '../api/endpoints/me/shop-sets';
+import { ShopToday } from '../models/shop-today';
+import ShopShelves from './StoreScreen/ShopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -280,7 +284,18 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted } = useTutorial();
-  const { purchaseItem, purchaseModal } = usePurchaseItem();
+  const [today, setToday] = useState<ShopToday | null>(null);
+  const storeIdRef = useRef<number | null>(null);
+  const reloadToday = async () => {
+    if (!storeIdRef.current) return;
+    const next = await getShopToday(storeIdRef.current).catch(() => null);
+    if (next) setToday(next);
+  };
+  const { purchaseItem, purchaseModal } = usePurchaseItem({
+    // Shop v2: owned states, set progress and reserves all come from the server.
+    onPurchased: () => { void reloadToday(); },
+    onWearTitle: reward => { void equipShopTitle(reward.slug).catch(() => undefined); },
+  });
   const [page, setPage] = useState<number>(1);
   // One page request at a time: two quick onEndReached calls must not skip a page.
   const loadingMore = useRef(false);
@@ -324,12 +339,16 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
         : Number((await getStores()).find(s => s.name === 'Shark Shop')?.id) || undefined;
       if (!id) throw new Error('Shark Shop not found');
       const nextStore = await getStore(id);
-      const [nextRotation, nextCatalog] = await Promise.all([
+      storeIdRef.current = id;
+      const [nextRotation, nextCatalog, nextToday] = await Promise.all([
         getStoreRotation(id).catch(() => null),
         getCatalog(nextStore.current_catalog_id),
+        // Shop v2 shelves; null on an older backend, which keeps the classic grid.
+        getShopToday(id).catch(() => null),
       ]);
-      const firstPage = await getItems(nextCatalog.id, 1);
+      const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
       if (!live) return;
+      setToday(nextToday);
       setCurrentStore(nextStore);
       setRotation(nextRotation);
       setCatalog(nextCatalog);
@@ -475,11 +494,15 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
                   );
                 })}
             </View>
+            {today && (
+              <ShopShelves today={today} onRefresh={reloadToday} onTodayChange={setToday}
+                onBuy={item => { void purchaseItem(item); }} />
+            )}
             {/* Countdown Timer */}
-            {rotation?.next_rotation_at && (
+            {!today && rotation?.next_rotation_at && (
               <StoreCountdown nextRotationAt={rotation.next_rotation_at} onElapsed={() => setRestockPending(true)} />
             )}
-            <View
+            {!today && <View
               style={{
                 height: 180,
                 paddingTop: 16,
@@ -491,12 +514,12 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
               {!reducedMotion && <StoreBubbles />}
               {/* Animated shark */}
               <AnimatedShark imageUrl={catalog?.promotion_image_url} still={reducedMotion} />
-            </View>
-            {items.length === 0 && (
+            </View>}
+            {!today && items.length === 0 && (
               <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way"
                 message="The Shark Shop restocks soon. Check back after the countdown." />
             )}
-            {items && items?.length > 0 && (
+            {!today && items && items?.length > 0 && (
               <View
                 style={{
                   borderTopWidth: 5,
