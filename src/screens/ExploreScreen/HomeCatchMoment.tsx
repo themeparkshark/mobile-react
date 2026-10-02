@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -165,10 +165,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       setPrimed({ item, from: full });
       setCatchOpen(true);
       showBackdrop(true);
-      stage.current?.prime(full);
       return true;
     },
   }), [layer.width, showBackdrop, offset.x, offset.y]);
+
+  // The stage opens on the commit that renders it with the primed find (its own rarity, speed and hints).
+  useLayoutEffect(() => {
+    if (primed) stage.current?.prime(primed.item, primed.from);
+  }, [primed]);
 
   // A prime that never becomes a catch (the tutorial took it, the park check moved) folds away.
   useEffect(() => {
@@ -246,7 +250,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   }, [target.x, target.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = (caught: boolean) => {
-    setShowing(null); setSummary(null); setRide(null); setPrimed(null); setPhoto(null); setCascade(0);
+    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules.
+    setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
     setCatchOpen(false);
     latest.current.onDone(caught);

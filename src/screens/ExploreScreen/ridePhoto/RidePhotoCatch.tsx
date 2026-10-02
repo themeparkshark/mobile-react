@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +22,7 @@ import { buildTrack, rideVariant, sampleTrack, tAtU, uAtX } from './rideTrack';
 import { useRideArt, useRider } from './rideAssets';
 import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
 import {
-  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, photoPayload, rideProgress,
+  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, photoPayload, rideProgress,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -81,8 +81,12 @@ function filmMatrix(d: number): number[] {
 export { BLANK as BLANK_IMAGE };
 
 export interface RideStageHandle {
-  /** Start opening now, on the tap's frame, before the catch request round trip. */
-  prime: (from: { x: number; y: number } | null) => void;
+  /**
+   * Start opening on the tap's frame, before the catch request round trip. The open runs once this
+   * stage renders with `item` (a layout effect keyed on the item id), so the pass speed, windows and
+   * hint rules are always that find's, never the previous find's.
+   */
+  prime: (item: PrepItemType, from: { x: number; y: number } | null) => void;
   unprime: () => void;
 }
 
@@ -309,7 +313,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     misses.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; printIn.value = 0; stampIn.value = 0; iris.value = 0;
     veil.value = 1; holding.value = false; approach.value = 0; ready.value = 0;
     t.value = anchors.tStation; armed.value = false; riderIn.value = 0; hop.value = 0; ghost.value = 0;
-    const mode = hintMode(item?.rarity, firstRide, 0);
+    const mode = openRules(item?.rarity, firstRide).hint;
     hintFreeze.value = mode === 'freeze' && !parkedMode;
     setHandOn(mode === 'hand');
     open.value = reducedMotion ? withTiming(1, { duration: 120 })
@@ -326,9 +330,23 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     later(reducedMotion ? 200 : 90 + HOP_MS + 420, () => runPass(owned ? anchors.tRetry : anchors.tStation));
   }, [clearTimers, layer.width, layer.height, anchors.tStation, anchors.tRetry, firstRide, parkedMode, reducedMotion, runPass, owned, item?.rarity]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A prime waits for the render that carries its item; then it opens with that item's rules.
+  const pendingPrime = useRef<{ id: number; at: { x: number; y: number } | null } | null>(null);
+  useLayoutEffect(() => {
+    const pending = pendingPrime.current;
+    if (!pending || pending.id !== item?.id) return;
+    pendingPrime.current = null;
+    startOpen(pending.at);
+  }, [item?.id, startOpen]);
+
   useImperativeHandle(ref, () => ({
-    prime: at => startOpen(at),
+    prime: (next, at) => {
+      if (opened.current) return;
+      if (next.id === item?.id) { startOpen(at); return; }
+      pendingPrime.current = { id: next.id, at };
+    },
     unprime: () => {
+      pendingPrime.current = null;
       if (!opened.current) return;
       opened.current = false;
       clearTimers();
@@ -336,7 +354,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       cancelAnimation(t);
       open.value = withTiming(0, { duration: 160 });
     },
-  }), [startOpen, clearTimers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [startOpen, clearTimers, item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (active) startOpen(from);

@@ -287,3 +287,24 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   assert.match(moment, /closeRide\(true\);\s*setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
   assert.doesNotMatch(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /react-native-svg/);
 });
+
+test('round 4: catch N+1 opens with its own rarity, speed and hint rules', () => {
+  // Stage A (Rare) has been seen; B (Epic, first ride) is primed next.
+  const a = ride.openRules(3, false);
+  const b = ride.openRules(4, true);
+  assert.equal(b.passMs, ride.rideSpec(4).passMs);
+  assert.notEqual(b.passMs, a.passMs);
+  assert.equal(b.hint, 'hand', 'Epic first ride gets the hand, never the freeze');
+  assert.deepEqual(b.windows, ride.gradeWindows(4));
+  assert.equal(ride.openRules(3, true).hint, 'freeze');
+
+  const stage = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(stage, /prime: \(item: PrepItemType, from:/, 'prime carries the item');
+  assert.match(stage, /useLayoutEffect\(\(\) => \{\s*const pending = pendingPrime\.current;[\s\S]*?\}, \[item\?\.id, startOpen\]\)/,
+    'the open waits for the render that carries the primed item');
+  assert.match(stage, /openRules\(item\?\.rarity, firstRide\)/, 'startOpen reads the rendered item rules');
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.doesNotMatch(moment, /setPrimed\([^)]*\);[\s\S]{0,120}stage\.current\?\.prime\(/, 'no synchronous prime before re-render');
+  assert.match(moment, /useLayoutEffect\(\(\) => \{\s*if \(primed\) stage\.current\?\.prime\(primed\.item, primed\.from\);/);
+  assert.match(moment, /const finish = [\s\S]{0,300}setRideItem\(null\)/, 'finish clears the ride item');
+});

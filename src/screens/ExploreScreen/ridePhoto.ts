@@ -143,6 +143,21 @@ export function hintMode(rarity: number | null | undefined, firstRide: boolean, 
   return 'none';
 }
 
+/**
+ * Everything one open of the viewfinder takes from its find, in one place. The stage computes this
+ * from the item it is rendering when it opens, so catch N+1 never runs on catch N's rules.
+ */
+export function openRules(rarity: number | null | undefined, firstRide: boolean) {
+  const spec = rideSpec(rarity);
+  return {
+    track: spec.track,
+    passMs: spec.passMs,
+    windows: gradeWindows(rarity ?? 3),
+    hint: hintMode(rarity, firstRide, 0),
+    photosNeeded: spec.photosNeeded,
+  };
+}
+
 /** Pre-v2 pixel grading, kept for callers that grade by position. */
 export function gradeShot(offsetFraction: number): PhotoGrade {
   'worklet';
