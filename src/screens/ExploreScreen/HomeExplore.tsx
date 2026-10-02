@@ -476,13 +476,18 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     return () => { alive = false; clearTimeout(timer); };
   }, [stageItem?.pivot_id, mapSettled > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Stable for the life of the screen (reads the latest state from a ref), so no find marker
+  // re-renders when a catch opens or finishes.
+  const tapState = useRef({ loadError, catchingPivot, nudge, onPrepItemNearby });
+  tapState.current = { loadError, catchingPivot, nudge, onPrepItemNearby };
   const tapFind = useCallback((prepItem: PrepItemType, distance: number | null, inRange: boolean) => {
-    if (loadError || !prepItem.pivot_id || catchingPivot != null) return;
-    if (!inRange) { void nudge(prepItem, distance); return; }
+    const state = tapState.current;
+    if (state.loadError || !prepItem.pivot_id || state.catchingPivot != null) return;
+    if (!inRange) { void state.nudge(prepItem, distance); return; }
     // Ride Photo opens on this frame, from the find's own spot.
     catchRef.current?.primeRide(prepItem, findPoints.current.get(prepItem.pivot_id) ?? null);
-    onPrepItemNearby(prepItem, prepItem.pivot_id, 'tap');
-  }, [loadError, catchingPivot, nudge, onPrepItemNearby]);
+    state.onPrepItemNearby(prepItem, prepItem.pivot_id, 'tap');
+  }, []);
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
 
   let bottom: React.ReactNode = null;
@@ -510,7 +515,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled}
-        extraControls={chestButton} ambientPaused={catchOpen} chromeHidden={catchOpen}>
+        extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.

@@ -2,7 +2,6 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { StyleSheet, Text, View } from 'react-native';
 import { runOnJS, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
-import { Marker } from '../../components/map/Marker';
 import { LocationContext } from '../../context/LocationProvider';
 import type { PrepItemType } from '../../models/prep-item-type';
 import type redeemPrepItem from '../../api/endpoints/me/prep-items/redeem';
@@ -11,11 +10,11 @@ import Wrapper from '../../components/Wrapper';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
-import PrepItemMarker, { PREP_MARKER_ANCHOR } from './PrepItem';
+import HomeFindMarker from './HomeFindMarker';
 import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { screenBearing, walkCloserLine } from './findPresentation';
+import { walkCloserLine } from './findPresentation';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen } from './catchPresence';
@@ -111,6 +110,23 @@ export default function HomeCatchPreviewScreen() {
     catchRef.current?.primeRide(item, from);
     setRequest({ item, pivotId: item.pivot_id!, from, attempt: Date.now() });
   };
+  // Stable handlers (as in HomeExplore), so the recording measures the app, not the harness.
+  const tapState = useRef({ request, startCatch, items });
+  tapState.current = { request, startCatch, items };
+  const tapFind = useCallback((item: PrepItemType) => {
+    const state = tapState.current;
+    if (state.request) return;
+    const index = state.items.findIndex(entry => entry.pivot_id === item.pivot_id);
+    const fixture = FIXTURES[index];
+    if (!fixture) return;
+    if (!fixture.inRange) {
+      const distance = Math.hypot(fixture.north, fixture.east);
+      setChip({ key: `far-${item.pivot_id}-${Date.now()}`, text: walkCloserLine(distance) });
+      return;
+    }
+    void state.startCatch(item);
+  }, []);
+  const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
   const autoplay = __DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1';
   // UI-thread frame times while a catch plays, logged once a second (performance review).
   const frameCount = useSharedValue(0), frameSlow = useSharedValue(0), frameWorst = useSharedValue(0), frameSum = useSharedValue(0);
@@ -144,36 +160,20 @@ export default function HomeCatchPreviewScreen() {
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
       onLayout={event => setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
-      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientPaused={catchOpen} chromeHidden={catchOpen}
+      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientFrozen={catchOpen} chromeHidden={catchOpen}
         onZoomChange={() => {
           void measure();
           if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
         }}>
-        {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => {
-          const fixture = FIXTURES[index];
-          const onPress = async () => {
-            if (request) return;
-            if (!fixture.inRange) {
-              const distance = Math.hypot(fixture.north, fixture.east);
-              const key = `far-${item.pivot_id}-${Date.now()}`;
-              setChip({ key, text: walkCloserLine(distance) });
-              const [shark, find] = await Promise.all([toLocal(origin.latitude, origin.longitude), toLocal(item.latitude!, item.longitude!)]);
-              const arrowDeg = screenBearing(shark, find);
-              if (arrowDeg != null) setChip(current => (current?.key === key ? { ...current, arrowDeg } : current));
-              return;
-            }
-            await startCatch(item);
-          };
-          return (
-            <Marker key={item.pivot_id} coordinate={{ latitude: item.latitude!, longitude: item.longitude! }} anchor={PREP_MARKER_ANCHOR}
-              onPress={onPress} onLongPress={onPress}>
-              <PrepItemMarker prepItem={item} onExpire={() => undefined} inRange={fixture.inRange} animated={index < 4}
-                hidden={request?.pivotId === item.pivot_id} />
-            </Marker>
-          );
-        })}
+        {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
+          <HomeFindMarker key={item.pivot_id} item={item} distance={null} inRange={FIXTURES[index].inRange}
+            animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop} />
+        ))}
       </Map>
-      {!catchOpen && <FindEdgeArrows finds={edges} size={size} onPress={entry => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) })} />}
+      {/* Same as the app: kept mounted, hidden and inert during a catch. */}
+      <View style={[StyleSheet.absoluteFill, catchOpen && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+        <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} />
+      </View>
       {!request && <View style={styles.bottom} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
       </View>}
@@ -200,7 +200,10 @@ export default function HomeCatchPreviewScreen() {
   );
 }
 
+const noop = () => undefined;
+
 const styles = StyleSheet.create({
+  hidden: { opacity: 0 },
   root: { flex: 1, backgroundColor: '#0768b9' },
   content: { flex: 1, marginTop: -8 },
   travel: { color: '#fff', fontFamily: 'Shark', fontSize: 16, letterSpacing: 2, textAlign: 'center' },

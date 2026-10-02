@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,7 +24,7 @@ import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
 import RidePhotoCatch, { BLANK_IMAGE, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
-import { setCatchOpen } from './catchPresence';
+import { setCatchOpen, showCatchChrome } from './catchPresence';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
 let rideHintSeen: boolean | null = null;
@@ -163,7 +163,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       setRideItem(item);
       const full = from ? { x: from.x + offset.x, y: from.y + offset.y } : null;
       setPrimed({ item, from: full });
-      setCatchOpen(true);
+      // Only the UI-thread chrome slide on the tap frame; React catch state commits once the map is covered.
+      showCatchChrome(true);
       showBackdrop(true);
       return true;
     },
@@ -180,6 +181,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const timer = setTimeout(() => {
       stage.current?.unprime();
       setPrimed(null);
+      showCatchChrome(false);
       setCatchOpen(false);
       showBackdrop(false);
     }, 600);
@@ -249,10 +251,20 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (aliveRef.current === token) finish(true);
   }, [target.x, target.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The photo sticker's image is native memory; free it once the sticker has re-rendered without it.
+  const photoRef = useRef<SkImage | null>(null);
+  photoRef.current = photo?.image ?? null;
+  const releasePhoto = () => {
+    const image = photoRef.current;
+    if (image) setTimeout(() => image.dispose(), 500);
+  };
+
   const finish = (caught: boolean) => {
+    releasePhoto();
     // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules.
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
+    showCatchChrome(false);
     setCatchOpen(false);
     latest.current.onDone(caught);
   };
@@ -267,7 +279,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     badgeKick.value = 1;
     setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null);
     setShowing(request);
-    setCatchOpen(true);
+    showCatchChrome(true);
     const start = fromPoint(request);
     flyFromX.value = start.x;
     flyFromY.value = start.y;
@@ -282,6 +294,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       return;
     }
     itemGone.value = 0;
+    setCatchOpen(true);
 
     void (async () => {
       catchHaptic('hitMedium', 2);
@@ -327,8 +340,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const closeRide = (caught: boolean) => {
     setRide(current => (current ? { ...current, closing: true } : current));
     showBackdrop(false);
-    // The header and tab bar slide back while the viewfinder irises out.
-    setCatchOpen(false);
+    // The header, tab bar and map chrome come back only once the iris has closed (onIrisClosed).
     if (!caught) setTimeout(() => setRide(null), 420);
   };
 
@@ -369,6 +381,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     latest.current.onFailed('It rode off. Might be back tomorrow.', false);
     setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The viewfinder covers the map: the React-level catch state (map chrome, ambient pause) commits unseen.
+  const onCovered = useCallback(() => setCatchOpen(true), []);
+  const onIrisClosed = useCallback(() => { showCatchChrome(false); setCatchOpen(false); }, []);
 
   const onClose = useCallback(() => {
     const token = ++aliveRef.current;
@@ -426,6 +442,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? stageItem;
+  // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
+  const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);
+  const showingFrom = showing?.from;
+  const stageFrom = useMemo(() => primed?.from
+    ?? (showingFrom ? { x: showingFrom.x + offset.x, y: showingFrom.y + offset.y } : null),
+  [primed?.from, showingFrom, offset.x, offset.y]);
   const total = summary?.total, collected = summary?.collected;
   const shownCount = collected != null && total != null ? (cascade >= 2 || !summary?.isNew ? collected : Math.max(0, collected - 1)) : null;
 
@@ -446,10 +468,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       {stageFor && layer.width > 0 && <View pointerEvents="box-none"
         style={{ position: 'absolute', left: -offset.x, top: -offset.y, width: window.width, height: window.height }}>
         <RidePhotoCatch ref={stage} item={stageFor} active={!!ride} insets={insets}
-        from={primed?.from ?? (showing?.from ? { x: showing.from.x + offset.x, y: showing.from.y + offset.y } : null)}
-        layer={{ width: window.width, height: window.height }} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
+        from={stageFrom}
+        layer={fullLayer} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
         closing={ride?.closing ?? false} flyTarget={ride?.flyTo ?? null}
-        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose}
+        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosed}
         autoShots={autoShots} /></View>}
 
       {item && <>

@@ -11,7 +11,7 @@ import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 
 const S = {
   shutter: require('../../../../assets/sounds/ride-photo/shutter.mp3'),
-  shutterGold: require('../../../../assets/sounds/ride-photo/shutter-gold.mp3'),
+  notYet: require('../../../../assets/sounds/ride-photo/not-yet.mp3'),
   flash: require('../../../../assets/sounds/ride-photo/flash.mp3'),
   charge: require('../../../../assets/sounds/ride-photo/flash-charge.mp3'),
   film: require('../../../../assets/sounds/ride-photo/film.mp3'),
@@ -24,12 +24,12 @@ const S = {
   pip7: require('../../../../assets/sounds/ride-photo/pip-7.mp3'),
 };
 
-export type CatchSound = 'shutter' | 'shutterGold' | 'flash' | 'charge' | 'film' | 'cheer' | 'pop' | 'badge' | 'clack'
+export type CatchSound = 'shutter' | 'notYet' | 'flash' | 'charge' | 'film' | 'cheer' | 'pop' | 'badge' | 'clack'
   | 'pip0' | 'pip3' | 'pip7' | 'tick' | 'chime' | 'sparkle' | 'aww' | 'whoosh';
 
 const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinger' | 'ui'; maxVoices: number; durationMs: number }> = {
   'ride.shutter': { src: S.shutter, gainDb: 0, bus: 'sfx', maxVoices: 2, durationMs: 350 },
-  'ride.shutterGold': { src: S.shutterGold, gainDb: -1, bus: 'sfx', maxVoices: 1, durationMs: 700 },
+  'ride.notYet': { src: S.notYet, gainDb: -2, bus: 'ui', maxVoices: 1, durationMs: 110 },
   'ride.flash': { src: S.flash, gainDb: -3, bus: 'sfx', maxVoices: 1, durationMs: 600 },
   'ride.charge': { src: S.charge, gainDb: -6, bus: 'sfx', maxVoices: 1, durationMs: 500 },
   'ride.film': { src: S.film, gainDb: -5, bus: 'sfx', maxVoices: 1, durationMs: 600 },
@@ -45,7 +45,7 @@ const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinge
 const HOUSE: Partial<Record<CatchSound, string>> = { tick: 'ui.select', chime: 'fx.coin', sparkle: 'fx.reveal', aww: 'fx.nopeShort', whoosh: 'fx.whoosh' };
 // The chime is the fanfare that rides with the crowd; only the long tails queue.
 const STINGERS = new Set<CatchSound>(['cheer', 'sparkle']);
-const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, shutterGold: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3 };
+const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3 };
 
 let registered = false;
 let ready: Promise<void> | null = null;

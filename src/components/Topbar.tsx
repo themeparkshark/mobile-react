@@ -7,8 +7,8 @@ import * as RootNavigation from '../RootNavigation';
 import { ThemeContext } from '../context/ThemeProvider';
 import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import Broadcasts from './Broadcasts';
-import ReAnimated, { Easing as REasing, useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { useCatchOpen } from '../screens/ExploreScreen/catchPresence';
+import ReAnimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { catchShown } from '../screens/ExploreScreen/catchPresence';
 
 const BACK_SOUND = require('../../assets/sounds/button_press.mp3');
 
@@ -101,16 +101,13 @@ export default function Topbar({
   readonly parkCoins?: number | null;
 }) {
   const { theme } = useContext(ThemeContext);
-  // A catch moment owns the whole screen: the header slides up (220 ms) and back (180 ms).
-  const catchOpen = useCatchOpen();
+  // A catch moment owns the whole screen: the header slides up on the UI thread (no re-render).
   const headerSlide = useAnimatedStyle(() => ({
-    transform: [{ translateY: withTiming(catchOpen ? -(90 + Constants.statusBarHeight) : 0,
-      { duration: catchOpen ? 220 : 180, easing: REasing.out(REasing.cubic) }) }],
-  }), [catchOpen]);
+    transform: [{ translateY: -(90 + Constants.statusBarHeight) * catchShown.value }],
+  }));
 
   return (
     <ReAnimated.View
-      pointerEvents={catchOpen ? 'none' : 'auto'}
       style={[{
         width: Dimensions.get('window').width,
         zIndex: 20,

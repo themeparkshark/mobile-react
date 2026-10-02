@@ -157,7 +157,7 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
   assert.doesNotMatch(screen, /<PrepItemRedeemModal/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /onPrepItemNearby\(nearbyItem, nearbyItem\.pivot_id, 'auto'\)/);
-  assert.match(home, /if \(!inRange\) \{ void nudge\(prepItem, distance\); return; \}/);
+  assert.match(home, /if \(!inRange\) \{ void state\.nudge\(prepItem, distance\); return; \}/);
   assert.match(home, /catchRef\.current\?\.primeRide\(prepItem/);
   assert.match(home, /onPrepItemNearby\(prepItem, prepItem\.pivot_id, 'tap'\)/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
@@ -221,7 +221,7 @@ test('round 2: per-find variety and edge arrows', () => {
 
 test('round 2: the map steps back during a catch and the catch never reads GPS on render', () => {
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /ambientPaused=\{catchOpen\}/);
+  assert.match(home, /ambientFrozen=\{catchOpen\}/);
   assert.match(home, /catchOpen && styles\.dimmed/);
   assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
   assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen\) return null;/);
@@ -277,10 +277,9 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   const gestureEnd = src.indexOf('</GestureDetector>');
   assert.ok(src.indexOf('accessibilityLabel="Close the camera"') > gestureEnd, 'close sits outside the shutter gesture');
-  assert.match(src, /PixelRatio\.get\(\) \* 1\.4/);
-  assert.match(src, /catchSound\(grade === 'frame_it' \? 'shutterGold' : 'shutter'\);[\s\S]{0,200}const image = takePhoto/);
-  assert.match(read('src/components/Wrapper.tsx'), /useCatchOpen/);
-  assert.match(read('src/components/Topbar.tsx'), /useCatchOpen/);
+  assert.match(src, /scale: \(PHOTO_W \/ crop\.w\) \* PixelRatio\.get\(\) \}/, 'photo at device resolution x1.0 (R4)');
+  assert.match(read('src/components/Wrapper.tsx'), /catchShown\.value/);
+  assert.match(read('src/components/Topbar.tsx'), /catchShown\.value/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.doesNotMatch(moment, /snapshot\?\.\(\)/, 'no per-open map snapshot');
@@ -307,4 +306,49 @@ test('round 4: catch N+1 opens with its own rarity, speed and hint rules', () =>
   assert.doesNotMatch(moment, /setPrimed\([^)]*\);[\s\S]{0,120}stage\.current\?\.prime\(/, 'no synchronous prime before re-render');
   assert.match(moment, /useLayoutEffect\(\(\) => \{\s*if \(primed\) stage\.current\?\.prime\(primed\.item, primed\.from\);/);
   assert.match(moment, /const finish = [\s\S]{0,300}setRideItem\(null\)/, 'finish clears the ride item');
+});
+
+test('round 4: a Blurry timer never touches a newer print (keyed prints)', () => {
+  const clock = ride.createPrintClock();
+  const blurry = clock.next();
+  // A good shot lands 850 ms later, inside the 900 ms Blurry hold.
+  assert.equal(clock.peekNext(), blurry + 1);
+  const good = clock.next();
+  assert.equal(clock.isCurrent(blurry), false, 'the old slide-out timer is a no-op');
+  assert.equal(clock.isCurrent(good), true);
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /later\(GRADE_HOLD_MS\.blurry, \(\) => \{\s*if \(printKey\.isCurrent\(key\)\)/);
+  assert.match(src, /if \(!printKey\.isCurrent\(key\)\) return;\s*catchSound\('aww'\)/, 'the aww buzz is keyed too');
+});
+
+test('round 4: open-second decoupling and sound sync', () => {
+  const alive = read('src/components/map/alive/MapAliveContext.tsx');
+  assert.match(alive, /frame\.setActive\(running && !frozen\)/, 'a catch only freezes the clock');
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /ambientFrozen=\{catchOpen\}/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/HomeExplore.tsx'), /ambientPaused=\{catchOpen\}/);
+  const presence = read('src/screens/ExploreScreen/catchPresence.ts');
+  assert.match(presence, /export const catchShown = makeMutable\(0\)/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const prime = moment.slice(moment.indexOf('primeRide: (item, from) =>'), moment.indexOf('return true;'));
+  assert.doesNotMatch(prime, /setCatchOpen\(true\)/, 'no React catch state on the tap frame');
+  assert.match(moment, /const onCovered = useCallback\(\(\) => setCatchOpen\(true\)/);
+  assert.match(moment, /const onIrisClosed = useCallback\(\(\) => \{ showCatchChrome\(false\); setCatchOpen\(false\); \}/);
+  const close = moment.slice(moment.indexOf('const closeRide'), moment.indexOf('const pendingLand'));
+  assert.doesNotMatch(close, /setCatchOpen\(false\)/, 'chrome waits for the iris');
+  assert.match(moment, /layer=\{fullLayer\}/);
+  const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(explore, /const tapFind = useCallback\([\s\S]*?\}, \[\]\);/, 'tapFind is stable');
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.doesNotMatch(src, /borderRadius: 44 \*/, 'no animated corner mask');
+  assert.match(src, /scaleY: iris\.value/);
+  assert.doesNotMatch(src, /height: \(layer\.height \/ 2\) \* iris\.value/);
+  assert.match(src, /setMissed\(m => \(m\.length \? \[\] : m\)\)/);
+  assert.doesNotMatch(src, /shutterGold/, 'one shutter sound for every grade');
+  assert.match(src, /runOnJS\(shutterNow\)\(\);\s*runOnJS\(onShot\)/, 'the click gets its own JS turn first');
+  assert.match(src, /requestAnimationFrame\(\(\) => \{\s*const image = takePhoto/, 'the photo renders a frame later');
+  assert.match(src, /READY_PIPS\.forEach\(\(step, i\) =>/, 'pips scheduled on the pass clock');
+  assert.match(src, /catchSound\('notYet'/, 'not-yet has its own sound');
+  assert.match(src, /image\.dispose\(\)/);
+  const sun = read('src/gamekit/fx/ShaderFx.tsx');
+  assert.match(sun, /intensity\.value > 0 \? width : 0/, 'idle sunburst covers no pixels');
 });

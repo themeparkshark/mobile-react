@@ -22,7 +22,7 @@ import { buildTrack, rideVariant, sampleTrack, tAtU, uAtX } from './rideTrack';
 import { useRideArt, useRider } from './rideAssets';
 import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
 import {
-  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, photoPayload, rideProgress,
+  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload, rideProgress,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -111,6 +111,10 @@ export interface RidePhotoProps {
   /** Close before a catch: nothing was taken. */
   readonly onClose: () => void;
   readonly closing: boolean;
+  /** The viewfinder fully covers the map (open >= 0.98): React-level catch state may commit now, unseen. */
+  readonly onCovered?: () => void;
+  /** The close iris has met in the middle: the map's chrome can come back behind the bars. */
+  readonly onIrisClosed?: () => void;
   /** Development recordings: latency-compensated shot offsets per pass (ms; negative is early). */
   readonly autoShots?: number[] | null;
 }
@@ -122,7 +126,7 @@ export interface RidePhotoProps {
  * attached and decides what a tap means. Grading is in milliseconds at the touch.
  */
 const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function RidePhotoCatch({ item, active, from, layer, insets,
-  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots }, ref) {
+  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots, onCovered, onIrisClosed }, ref) {
   const spec = useMemo(() => rideSpec(item?.rarity ?? 3), [item?.rarity]);
   const tier = rarityTier(item?.rarity);
   const bandH = insets.bottom + 128;
@@ -203,7 +207,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const rock = useSharedValue(0);
   const ready = useSharedValue(0);
   const approach = useSharedValue(0);
-  const pipStage = useSharedValue(0);
   const press = useSharedValue(1);
   const wobble = useSharedValue(0);
   const shake = useSharedValue(0);
@@ -244,9 +247,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     ready.value = ms > 1000 ? 0 : ms > 600 ? 1 : ms > 200 ? 2 : ms > -160 ? 3 : 0;
     approach.value = ms >= 600 ? 0 : ms > 0 ? 1 - ms / 600 : ms > -200 ? 1 : 0;
     lit.value = isDark ? Math.max(0, Math.min(1, 1 - (Math.abs(ms) - litHalf) / 120)) : 1;
-    for (let i = 0; i < READY_PIPS.length; i++) {
-      if (pipStage.value === i && ms <= READY_PIPS[i].atMs) { pipStage.value = i + 1; runOnJS(pip)(i); }
-    }
     if (hintFreeze.value && !frozen.value && ms <= 0) {
       frozen.value = true;
       cancelAnimation(t);
@@ -257,11 +257,14 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   });
 
   // ── A pass of the car ──────────────────────────────────────────────────
+  const passTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearPassTimers = useCallback(() => { passTimers.current.forEach(clearTimeout); passTimers.current = []; }, []);
+  useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
   const passEndRef = useRef<() => void>(() => undefined);
   const runPass = useCallback((fromT: number) => {
     shotThisPass.current = false;
-    pipStage.value = 0;
+    clearPassTimers();
     frozen.value = false;
     armed.value = true;
     if (parkedMode) { ready.value = 3; approach.value = 1; return; }
@@ -270,6 +273,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const end = () => passEndRef.current();
     t.value = withTiming(1, { duration: Math.max(200, (1 - fromT) * passMs), easing: Easing.linear }, done => {
       if (done) runOnJS(end)();
+    });
+    // The pips run on the pass's own clock (the pass is linear, so arrival is known now), scheduled
+    // at -600/-400/-200 ms, instead of hopping from a UI-thread reaction to JS mid-pass.
+    const startedAt = Date.now();
+    const arriveIn = (tFrame - fromT) * passMs;
+    READY_PIPS.forEach((step, i) => {
+      const delay = arriveIn - step.atMs;
+      if (delay < 0) return;
+      passTimers.current.push(setTimeout(() => {
+        if (shotThisPass.current) return;
+        if (__DEV__) catchMark(`pip${i} late=${Date.now() - startedAt - Math.round(delay)}`);
+        pip(i);
+      }, delay));
     });
     if (fromT <= anchors.tStation + 0.01 && (track === 'hill' || track === 'dark')) catchSound('clack', { volume: 0.8 });
     else catchSound('whoosh', { volume: 0.5 });
@@ -305,9 +321,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const startOpen = useCallback((at: { x: number; y: number } | null) => {
     if (opened.current) return;
     opened.current = true;
-    clearTimers();
+    clearTimers(); clearPassTimers();
     hopFrom.current = at ?? { x: layer.width / 2, y: layer.height / 2 };
-    setPrint(null); setPrintImage(null); setMissNote(null); setNudge(false); setMissed([]); setFrameStage('white');
+    setPrint(null); setPrintImage(null); setMissNote(null); setNudge(false); setMissed(m => (m.length ? [] : m)); setFrameStage('white');
     setRide(RIDE_START); setStreak(photoStreak);
     silentPasses.current = 0;
     misses.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; printIn.value = 0; stampIn.value = 0; iris.value = 0;
@@ -349,7 +365,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       pendingPrime.current = null;
       if (!opened.current) return;
       opened.current = false;
-      clearTimers();
+      clearTimers(); clearPassTimers();
       armed.value = false;
       cancelAnimation(t);
       open.value = withTiming(0, { duration: 160 });
@@ -359,23 +375,37 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   useEffect(() => {
     if (active) startOpen(from);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coverCalls = useRef({ onCovered, onIrisClosed });
+  coverCalls.current = { onCovered, onIrisClosed };
+  const covered = useCallback(() => coverCalls.current.onCovered?.(), []);
+  const irisClosed = useCallback(() => coverCalls.current.onIrisClosed?.(), []);
+  useAnimatedReaction(() => open.value >= 0.98, (on, was) => { if (on && !was) runOnJS(covered)(); });
   // Close: the viewfinder irises out behind the flying print (never shrinks into a card).
   useEffect(() => {
     if (!closing) return;
-    clearTimers();
+    clearTimers(); clearPassTimers();
     armed.value = false; holding.value = false;
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
-    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 200, easing: Easing.in(Easing.cubic) });
+    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 200, easing: Easing.in(Easing.cubic) }, done => {
+      if (done) runOnJS(irisClosed)();
+    });
     veil.value = withDelay(reducedMotion ? 0 : 180, withTiming(0, { duration: reducedMotion ? 120 : 200 }));
     later(1000, () => {
       opened.current = false;
       setPrint(null); setPrintImage(null); setMissed([]);
+      // Native photo memory is invisible to Hermes' GC: free every photo this ride made except the one
+      // handed to the badge (the catch layer frees that one once its sticker clears).
+      const handed = caughtRef.current ? printImageRef.current : null;
+      const made = madeImages.current;
+      madeImages.current = [];
+      printImageRef.current = null;
+      setTimeout(() => made.forEach(image => { if (image !== handed) image.dispose(); }), 400);
       open.value = 0; printIn.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; ghost.value = 0; iris.value = 0;
     });
   }, [closing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── The photo: only the crop, at device resolution x1.4, drawn by hand (no reconciler, no re-parse) ──
+  // ── The photo: only the crop, at device resolution, drawn by hand (no reconciler, no re-parse) ──
   const crop = useMemo(() => {
     const w = box.w * 1.9;
     const h = w * (PHOTO_H / PHOTO_W);
@@ -385,14 +415,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const takePhoto = useCallback((atU: number) => {
     try {
       return drawPhoto({ width: sceneW, height: sceneH, lut, art: images, rails, u: atU, golden, sky, crop,
-        scale: (PHOTO_W / crop.w) * PixelRatio.get() * 1.4 });
+        scale: (PHOTO_W / crop.w) * PixelRatio.get() });
     } catch { return null; }
   }, [sceneW, sceneH, lut, images, rails, golden, sky, crop]);
 
   const finishHold = useRef<(() => void) | null>(null);
+  const pendingReveal = useRef<(() => void) | null>(null);
+  const fastForward = useRef(false);
   const caughtRef = useRef(false);
+  // Every print gets a key; a Blurry's timers act only while that print is still the current one,
+  // so a good shot that lands inside the 900 ms Blurry hold is never slid away by the old timer.
+  const printKey = useRef(createPrintClock()).current;
   const developPrint = useCallback((grade: PhotoGrade, soClose: boolean, caught: boolean) => {
-    const key = Date.now();
+    const key = printKey.next();
     setPrint({ grade, soClose, key });
     setFrameStage('white');
     printIn.value = 0; develop.value = 0; stampIn.value = 0; printLift.value = 0; sheen.value = 0;
@@ -401,18 +436,26 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     if (grade === 'blurry') {
       develop.value = withTiming(1, { duration: 160 });
       stampIn.value = withDelay(120, withTiming(1, { duration: reducedMotion ? 1 : 140, easing: Easing.in(Easing.quad) }));
-      later(130, () => { catchSound('aww'); buzz('softBump', 2); later(90, () => buzz('softBump', 1)); });
-      later(GRADE_HOLD_MS.blurry, () => { printIn.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) }); });
+      later(130, () => {
+        if (!printKey.isCurrent(key)) return;
+        catchSound('aww'); buzz('softBump', 2);
+        later(90, () => { if (printKey.isCurrent(key)) buzz('softBump', 1); });
+      });
+      later(GRADE_HOLD_MS.blurry, () => {
+        if (printKey.isCurrent(key)) printIn.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) });
+      });
       later(GRADE_HOLD_MS.blurry + 220, () => setPrint(current => (current?.key === key ? null : current)));
       return;
     }
     holding.value = true;
+    fastForward.current = false;
     catchSound('film', { volume: 0.7 });
     const beats = spec.developBeats;
     const beatMs = 360;
     const tick = () => { printTick.value = withSequence(withTiming(1.04, { duration: 60 }), withTiming(1, { duration: 90 })); };
     for (let i = 0; i < beats; i++) {
       later(240 + i * beatMs, () => {
+        if (fastForward.current || !printKey.isCurrent(key)) return;
         develop.value = withTiming((i + 1) / (beats + 1), { duration: beatMs - 80, easing: Easing.out(Easing.quad) });
         printShake.value = reducedMotion ? 0 : withSequence(withTiming(1, { duration: 50 }), withTiming(-1, { duration: 70 }),
           withTiming(0.5, { duration: 60 }), withTiming(0, { duration: 60 }));
@@ -428,8 +471,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       });
     }
     // The held breath, then the reveal.
-    const reveal = 240 + beats * beatMs + 180;
-    later(reveal, () => {
+    const revealAt = 240 + beats * beatMs + 180;
+    const revealNow = () => {
+      if (pendingReveal.current !== revealNow) return;
+      pendingReveal.current = null;
       catchMark(`reveal-${grade}`);
       setFrameStage(STAGE_FOR[grade]);
       develop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
@@ -454,7 +499,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         }
         AccessibilityInfo.announceForAccessibility(`${GRADE_LABEL[grade]} ${caught ? 'Caught it!' : ''}`);
       });
-      const hold = Math.round(GRADE_HOLD_MS[grade] * (owned ? 0.6 : 1));
+      // x during the develop: the reveal plays at once and hands off with no hold.
+      const hold = fastForward.current ? 0 : Math.round(GRADE_HOLD_MS[grade] * (owned ? 0.6 : 1));
       const done = () => {
         finishHold.current = null;
         holding.value = false;
@@ -469,38 +515,60 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         }
       };
       finishHold.current = done;
-      later(200 + hold, () => { if (finishHold.current === done) done(); });
-    });
+      later(fastForward.current ? 260 : 200 + hold, () => { if (finishHold.current === done) done(); });
+    };
+    pendingReveal.current = revealNow;
+    later(revealAt, revealNow);
   }, [spec.developBeats, reducedMotion, later, layer.width, sceneH, onPrintReady, retry, owned]); // eslint-disable-line react-hooks/exhaustive-deps
   const printImageRef = useRef<SkImage | null>(null);
+  const madeImages = useRef<SkImage[]>([]);
+  // Shutter taps during the hold skip it; mashing during the develop never skips the suspense.
   const callSkip = useCallback(() => { const done = finishHold.current; if (done) done(); }, []);
+  // x: during the hold it skips; still developing a counted catch, it fast-forwards to the reveal
+  // and then straight to the hand-off.
+  const closeSkip = useCallback(() => {
+    const done = finishHold.current;
+    if (done) { done(); return; }
+    const reveal = pendingReveal.current;
+    if (reveal && caughtRef.current) { fastForward.current = true; reveal(); }
+  }, []);
   const notYet = useCallback(() => {
     // First ride, car not in the frame yet: no miss, just a soft "not yet".
-    catchSound('pip0', { volume: 0.4, pitch: -5 });
+    catchSound('notYet', { volume: 0.7 });
     buzz('softBump', 1);
     nudgeBlink.value = withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 140 }));
   }, [nudgeBlink]);
 
-  const onShot = useCallback((grade: PhotoGrade, offset: number, direction: 'early' | 'late' | null, soClose: boolean, shotUAt: number) => {
-    // Sound and haptic first; the photo render comes after.
-    catchMark(`shot-${grade} offset=${Math.round(offset)}`);
-    catchSound(grade === 'frame_it' ? 'shutterGold' : 'shutter');
+  // The click: its own tiny JS turn, queued from the gesture before anything else. One shutter sound
+  // for every grade; the grade is heard only at the reveal.
+  const shutterNow = useCallback(() => {
+    catchSound('shutter');
     catchSound('flash', { volume: 0.8 });
     buzz('hitRigid', 4);
+    clearPassTimers();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const onShot = useCallback((grade: PhotoGrade, offset: number, direction: 'early' | 'late' | null, soClose: boolean, shotUAt: number) => {
+    catchMark(`shot-${grade} offset=${Math.round(offset)}`);
     shotThisPass.current = true;
     silentPasses.current = 0;
     setHandOn(false);
     setMissNote(null);
-    const image = takePhoto(shotUAt);
-    printImageRef.current = image;
-    setPrintImage(image);
+    // The photo renders on the next frame, so the click's JS turn stays tiny.
+    const shotKey = printKey.peekNext();
+    requestAnimationFrame(() => {
+      const image = takePhoto(shotUAt);
+      if (image) madeImages.current.push(image);
+      if (!printKey.isCurrent(shotKey)) return;
+      printImageRef.current = image;
+      setPrintImage(image);
+      if (!isGoodShot(grade) && image) later(GRADE_HOLD_MS.blurry + 200, () => setMissed(list => [...list, image].slice(-3)));
+    });
     const next = rideStep(spec, rideRef.current, { type: 'shot', grade });
     setRide(next);
     AccessibilityInfo.announceForAccessibility(isGoodShot(grade) ? GRADE_LABEL[grade] : direction === 'early' ? 'Too soon. Try again.' : 'Too late. Try again.');
     if (!isGoodShot(grade)) {
       misses.value = Math.min(3, misses.value + 1);
       if (direction) setMissNote({ dir: direction, key: Date.now() });
-      later(GRADE_HOLD_MS.blurry + 200, () => { if (image) setMissed(list => [...list, image].slice(-3)); });
       photoStreak = 0;
       developPrint('blurry', soClose, false);
       // Replay: a ghost car slides to where the shot should have been.
@@ -546,8 +614,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     flash.value = withSequence(withTiming(0.9, { duration: 40 }), withTiming(0, { duration: 380, easing: Easing.out(Easing.quad) }));
     iris.value = withSequence(withTiming(0.55, { duration: 55 }), withTiming(0, { duration: 140 }));
     ready.value = 0;
+    runOnJS(shutterNow)();
     runOnJS(onShot)(grade, offset, direction, soClose, u.value);
-  }, [passMs, arrivalMs, onShot, rarity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [passMs, arrivalMs, onShot, shutterNow, rarity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One gesture, always attached: every touch gets a visible press, and the worklet decides what it means.
   const tap = useMemo(() => Gesture.Tap().maxDuration(100_000).onBegin(() => {
@@ -616,25 +685,22 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
 
   // Close (x): before a catch it closes; once the server has the catch it fast-forwards to the badge.
   const handleClose = useCallback(() => {
-    if (caughtRef.current) { callSkip(); return; }
+    if (caughtRef.current) { closeSkip(); return; }
     onClose();
-  }, [callSkip, onClose]);
+  }, [closeSkip, onClose]);
   useEffect(() => { if (active) { caughtRef.current = false; autoPass.value = 0; } }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Styles ─────────────────────────────────────────────────────────────
   const fromPt = from ?? hopFrom.current;
-  const viewStyle = useAnimatedStyle(() => {
-    const o = open.value;
-    const s = Math.min(1.03, 0.14 + 0.86 * o);
-    return {
-      opacity: Math.min(1, o * 2.2) * veil.value,
-      borderRadius: 44 * (1 - Math.min(1, o)),
-      transform: [{ translateX: (fromPt.x - layer.width / 2) * (1 - Math.min(1, o)) + shake.value },
-        { translateY: (fromPt.y - layer.height / 2) * (1 - Math.min(1, o)) }, { scale: s }],
-    };
-  });
-  const irisTop = useAnimatedStyle(() => ({ height: (layer.height / 2) * iris.value }));
-  const irisBottom = useAnimatedStyle(() => ({ height: (layer.height / 2) * iris.value }));
+  // Full-size from frame 1 (no shrunken card, no animated corner mask): the view fades up while the
+  // find hops from its pin into the seat. Only opacity and a shake transform animate.
+  const viewStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, open.value * 2.2) * veil.value,
+    transform: [{ translateX: shake.value }],
+  }));
+  // Iris bars are fixed half-screen views scaled on Y (a transform, not a layout prop).
+  const irisTop = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
+  const irisBottom = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
   // Shutter: the disc fills red, amber, then green; a gold arc fills as the car nears. Drawn in Skia.
   const shutterGroup = useDerivedValue(() => [{ translateX: SHUTTER / 2 + 10 }, { translateY: SHUTTER / 2 + 10 },
     { scale: press.value }, { rotate: wobble.value * 0.12 }]);
@@ -653,8 +719,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       withTiming(0, { duration: 520, easing: Easing.inOut(Easing.quad) })), -1, false);
     return () => cancelAnimation(handLoop);
   }, [handOn, handLoop]);
-  const handStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -8 * handLoop.value }, { translateY: -8 * handLoop.value }] }));
-  const haloStyle = useAnimatedStyle(() => ({ opacity: 0.9 - 0.6 * handLoop.value, transform: [{ scale: 1 + 0.25 * handLoop.value }] }));
+  // The hand sits above the shutter, fingertip down, and taps onto the disc (never over the band's labels).
+  const handStyle = useAnimatedStyle(() => ({ transform: [{ translateY: 10 * handLoop.value }] }));
+  // A clean gold halo just outside the disc's glow (never blended over the green), pulsing 1.0 to 1.08.
+  const haloStyle = useAnimatedStyle(() => ({ opacity: 1 - 0.35 * handLoop.value, transform: [{ scale: 1 + 0.08 * handLoop.value }] }));
 
   // Hop: the find's own art squashes on its map spot, then arcs into the seat.
   const seatStart = sampleTrack(samples, anchors.uStation);
@@ -792,8 +860,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             accessibilityHint="Double tap when the car is in the frame" onAccessibilityTap={accessibleShoot}
             style={[StyleSheet.absoluteFill, { top: insets.top + 56 }]} />
           {/* The iris: black bars that blink on the shot and close the viewfinder at the end */}
-          <Animated.View pointerEvents="none" style={[styles.iris, { top: 0 }, irisTop]} />
-          <Animated.View pointerEvents="none" style={[styles.iris, { bottom: 0 }, irisBottom]} />
+          <Animated.View pointerEvents="none" style={[styles.iris, { top: 0, height: layer.height / 2, transformOrigin: 'top' }, irisTop]} />
+          <Animated.View pointerEvents="none" style={[styles.iris, { bottom: 0, height: layer.height / 2, transformOrigin: 'bottom' }, irisBottom]} />
         </Animated.View>
       </GestureDetector>
 
@@ -855,8 +923,8 @@ const styles = StyleSheet.create({
   name: { color: '#ffffff', fontFamily: 'Shark', fontSize: 17 },
   sub: { color: '#bcd6f5', fontFamily: 'Knockout', fontSize: 14, marginTop: 4 },
   shutterWrap: { width: SHUTTER + 20, height: SHUTTER + 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
-  halo: { position: 'absolute', width: SHUTTER + 22, height: SHUTTER + 22, borderRadius: (SHUTTER + 22) / 2, borderWidth: 4, borderColor: '#ffcf3b' },
-  hand: { position: 'absolute', left: SHUTTER + 4, top: 18, width: 54, height: 69 },
+  halo: { position: 'absolute', width: SHUTTER + 18, height: SHUTTER + 18, borderRadius: (SHUTTER + 18) / 2, borderWidth: 3, borderColor: '#ffc93c' },
+  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 54 * 0.6, top: -69 - 2, width: 54, height: 69 },
   handArt: { width: 54, height: 69, transform: [{ rotate: '-60deg' }] },
   rarity: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },

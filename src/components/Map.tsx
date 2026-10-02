@@ -47,7 +47,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -59,6 +59,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
   /** A full-screen flow covers the map: hold every ambient loop still (battery). */
   readonly ambientPaused?: boolean;
+  /** Stop the ambient clock without re-rendering or unmounting anything (a short cover, like a catch). */
+  readonly ambientFrozen?: boolean;
   /** Park pulse: busy rides as weighted points; a soft warm haze gathers over them. */
   readonly crowdHaze?: GeoJSON.FeatureCollection | null;
   /** Development previews: pin the sun at this elevation (degrees) instead of the real sky. */
@@ -98,7 +100,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const pinnedSun = sunOverride ?? (Number.isFinite(devSun) ? devSun : undefined);
   const sun = pinnedSun ?? (skyLat === null || skyLng === null ? 45 : Math.round(sunElevation(skyNow, skyLat, skyLng) * 2) / 2);
   const light = useMemo(() => lightForElevation(sun), [sun]);
-  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light });
+  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, frozen: ambientFrozen, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.

@@ -267,3 +267,17 @@ export function photoPayload(spec: RideSpec, state: RideState): { catch_style: C
   return { catch_style: 'ride_photo', photo_quality: best === 'blurry' ? 'good' : best,
     rides: Math.max(1, state.passes), photos: state.photos.length };
 }
+
+/**
+ * Keys each print. Timers scheduled for one print (a Blurry's slide-out, its "aww" buzz) check
+ * `isCurrent(key)` before acting, so they never touch a newer print that landed inside their hold.
+ */
+export function createPrintClock() {
+  let current = 0;
+  return {
+    next: () => ++current,
+    /** The key the next print will get (a shot reads it before its print starts developing). */
+    peekNext: () => current + 1,
+    isCurrent: (key: number) => key === current,
+  };
+}

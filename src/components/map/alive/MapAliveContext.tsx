@@ -50,9 +50,14 @@ export function useMapAlive(): MapAlive {
 const WINDOW_MS = 2000;
 
 /** Drives the ambient clock for one map. `focused` and `paused` come from the screen. */
-export function useMapAliveEngine({ focused, paused, light }: {
+export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   readonly focused: boolean;
   readonly paused: boolean;
+  /**
+   * A short cover (a catch over the map) only stops the clock. Unlike `paused`, it never changes the
+   * context value, so no consumer re-renders and no ambient canvas or marker unmounts under it.
+   */
+  readonly frozen?: boolean;
   readonly light: SkyLight;
 }): MapAlive {
   const reducedMotion = useReducedGameMotion();
@@ -133,10 +138,10 @@ export function useMapAliveEngine({ focused, paused, light }: {
   useEffect(() => {
     windowSum.value = 0;
     windowFrames.value = 0;
-    frame.setActive(running);
+    frame.setActive(running && !frozen);
     return () => frame.setActive(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
+  }, [running, frozen]);
 
   return useMemo(() => ({ clock, tier, caps, running, active, reducedMotion, light }),
     [clock, tier, caps, running, active, reducedMotion, light]);
