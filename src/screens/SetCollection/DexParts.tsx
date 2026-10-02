@@ -25,7 +25,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW } from '../../ui';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
 import {
-  caughtLine, exchangeLine, progressFraction, setStatusLine, tileCaption,
+  caughtLine, exchangeLine, progressFraction, setStatusLine, tabStatus, tileCaption,
   type DexItem, type DexReward, type DexSet,
 } from './dexModel';
 
@@ -108,6 +108,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
   const claim = set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable');
   const dim = set.status === 'retired' || set.status === 'upcoming';
   const [badgeFailed, setBadgeFailed] = useState(false);
+  const status = tabStatus(set);
   // The picked card lifts and grows with an overshoot; the rest settle back.
   const lift = useSharedValue(selected ? 1 : 0);
   useEffect(() => { lift.value = withSpring(selected ? 1 : 0, { damping: 9, stiffness: 210 }); }, [selected, lift]);
@@ -115,7 +116,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
     transform: [{ translateY: -6 * lift.value }, { scale: 0.93 + 0.07 * lift.value }],
   }));
   return (
-    <SpringPress onPress={onPress} accessibilityLabel={`${set.name}, ${set.found} of ${set.total}`}
+    <SpringPress onPress={onPress} accessibilityLabel={`${set.name}, ${set.found} of ${set.total}, ${status.text}${set.focused ? ', your hunt' : ''}`}
       accessibilityState={{ selected }} style={[styles.tab, { opacity: dim && !selected ? 0.75 : 1 }]}>
       <Animated.View style={liftStyle}>
       <LinearGradient colors={[set.color, shade(set.color)]} style={[styles.tabFace, selected && styles.tabSelected]}>
@@ -128,9 +129,17 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
         </ProgressRing>
         <Text numberOfLines={1} style={styles.tabName}>{set.name}</Text>
         <Text style={styles.tabCount}>{set.found}/{set.total}</Text>
+        <View style={styles.tabStatus}>
+          {status.live ? <View style={styles.liveDot} /> : <GameIcon name="timer" size={14} />}
+          <Text numberOfLines={1} style={styles.tabStatusText}>{status.text}</Text>
+        </View>
+        {set.focused && (
+          <View style={styles.tabHunt} accessibilityLabel="Your hunt">
+            <GameIcon name="search" size={14} /><Text style={styles.tabHuntText}>My hunt</Text>
+          </View>
+        )}
         {claim && <View style={styles.tabDot}><GameIcon name="gift" size={20} /></View>}
         {done && !claim && <View style={styles.tabDot}><GameIcon name="star" size={20} /></View>}
-        {set.status === 'upcoming' && <View style={styles.tabSoon}><Text style={styles.tabSoonText}>Soon</Text></View>}
       </LinearGradient>
       </Animated.View>
     </SpringPress>
@@ -476,7 +485,11 @@ export function StepRow({ step, busy, onClaim }: { readonly step: DexReward; rea
     <View style={[styles.step, ready && styles.stepReady]}>
       <GameIcon name={ready ? 'gift' : 'lock'} size={28} />
       <Text style={styles.stepText} numberOfLines={2}>{step.label}</Text>
-      {ready && <GameButton label={busy ? '...' : step.needsPick ? 'Pick' : 'Claim'} size="compact" loading={busy} onPress={onClaim} />}
+      {ready && (
+        <View style={{ width: 112 }}>
+          <GameButton label={step.needsPick ? 'Pick' : 'Claim'} size="compact" loading={busy} onPress={onClaim} />
+        </View>
+      )}
     </View>
   );
 }
@@ -493,7 +506,7 @@ export function shade(hex: string, amount = 0.28): string {
 const styles = StyleSheet.create({
   tab: { marginRight: 10 },
   tabFace: {
-    width: 116, height: 150, borderRadius: 22, alignItems: 'center', paddingTop: 10, borderWidth: 3,
+    width: 120, height: 172, borderRadius: 22, alignItems: 'center', paddingTop: 10, borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.65)', ...SHADOW.card, shadowOpacity: 0.18,
   },
   tabSelected: { borderColor: BRAND.white, borderWidth: 4, shadowOpacity: 0.32, shadowRadius: 12 },
@@ -502,12 +515,21 @@ const styles = StyleSheet.create({
   tabBadge: { width: 44, height: 44 },
   tabName: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 6, paddingHorizontal: 6, textAlign: 'center' },
   tabCount: { fontFamily: 'Knockout', fontSize: 15, color: 'rgba(255,255,255,0.92)' },
+  tabStatus: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.32)', maxWidth: 108,
+  },
+  tabStatusText: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.white, flexShrink: 1 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#5df08a', borderWidth: 1, borderColor: BRAND.white },
+  tabHunt: {
+    position: 'absolute', top: -8, left: -6, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7,
+    paddingVertical: 2, borderRadius: 999, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.blue,
+  },
+  tabHuntText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.blue },
   tabDot: {
     position: 'absolute', top: -6, right: -6, width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,
   },
-  tabSoon: { position: 'absolute', top: 6, left: 6, backgroundColor: BRAND.navy, borderRadius: RADIUS.pill, paddingHorizontal: 7, paddingVertical: 1 },
-  tabSoonText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white },
   tile: {
     borderRadius: 18, borderWidth: 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', paddingTop: 4,
   },

@@ -425,6 +425,19 @@ export function setStatusLine(set: DexSet, now: Date = new Date()): string | nul
   return set.spawnHint;
 }
 
+/** One short line for a set card: when it spawns. "On now", "After sunset", "Weekends", "Opens October 15", "Saved". */
+export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text: string; readonly live: boolean } {
+  if (set.status === 'retired') return { text: 'Saved', live: false };
+  if (set.status === 'upcoming') {
+    const start = set.startsAt ? new Date(set.startsAt) : null;
+    const text = start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()
+      ? `Opens ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Soon';
+    return { text, live: false };
+  }
+  if (set.spawningNow === false || set.status === 'resting') return { text: set.spawnHint ?? 'Resting', live: false };
+  return { text: 'On now', live: true };
+}
+
 function legacyHint(item: PrepItemSetItem, setHint: string | null): string {
   const gate = str(item.gate?.explainer);
   if (gate) return gate;

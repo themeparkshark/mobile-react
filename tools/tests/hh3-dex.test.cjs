@@ -236,3 +236,17 @@ test('collection book files: no em dashes, no emoji, no purple', () => {
   }
   assert.ok(!fs.existsSync(path.join(root, 'src/data/mockChurroSet.ts')));
 });
+
+test('each set card says when it spawns and marks the focused set (moved from the home map card)', () => {
+  const base = dex.fromLegacySet(legacySet());
+  const now = new Date('2026-10-02T12:00:00Z');
+  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: true }, now)), { text: 'On now', live: true });
+  assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: false, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: false });
+  assert.deepEqual(plain(dex.tabStatus({ ...base, status: 'resting', spawnHint: 'Weekends' }, now)), { text: 'Weekends', live: false });
+  assert.equal(dex.tabStatus({ ...base, status: 'upcoming', startsAt: '2026-10-15T07:00:00Z' }, now).text, 'Opens Oct 15');
+  assert.equal(dex.tabStatus({ ...base, status: 'retired' }, now).text, 'Saved');
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  assert.match(parts, /set\.focused && \(/);
+  assert.match(parts, /My hunt/);
+  assert.match(parts, /tabStatus\(set\)/);
+});

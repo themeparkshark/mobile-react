@@ -13,9 +13,9 @@ const ART = process.env.EXPO_PUBLIC_DEX_PREVIEW_ART ?? '';
 const RARITY = ['', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 const HINTS: Record<string, string> = {
   always: 'Pops up near you, any time.',
-  time: 'After sunset near you.',
-  days: 'Weekends near you.',
-  seasonal: 'October only.',
+  time: 'After sunset',
+  days: 'Weekends',
+  seasonal: 'October only',
 };
 const DAY = 24 * 60 * 60 * 1000;
 
