@@ -9,17 +9,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Modal, PixelRatio, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle,
+  Modal, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { RARITY_TONES } from '../../constants/coinTiers';
 import { parkDayCaptureSize } from '../../components/parkDayShareMetrics';
 import { playSfx } from '../../gamekit/SFX';
+import * as Haptics from '../../helpers/haptics';
 import prepItemImage from '../../helpers/prepItemImages';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW } from '../../ui';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
 import {
@@ -105,13 +107,23 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
   const done = set.isComplete;
   const claim = set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable');
   const dim = set.status === 'retired' || set.status === 'upcoming';
+  const [badgeFailed, setBadgeFailed] = useState(false);
+  // The picked card lifts and grows with an overshoot; the rest settle back.
+  const lift = useSharedValue(selected ? 1 : 0);
+  useEffect(() => { lift.value = withSpring(selected ? 1 : 0, { damping: 9, stiffness: 210 }); }, [selected, lift]);
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -6 * lift.value }, { scale: 0.93 + 0.07 * lift.value }],
+  }));
   return (
     <SpringPress onPress={onPress} accessibilityLabel={`${set.name}, ${set.found} of ${set.total}`}
       accessibilityState={{ selected }} style={[styles.tab, { opacity: dim && !selected ? 0.75 : 1 }]}>
+      <Animated.View style={liftStyle}>
       <LinearGradient colors={[set.color, shade(set.color)]} style={[styles.tabFace, selected && styles.tabSelected]}>
+        <LinearGradient colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
         <ProgressRing progress={progressFraction(set)} size={74} stroke={7} color={done ? BRAND.gold : BRAND.white}>
           <View style={styles.tabBadgeWell}>
-            <Image source={setBadge(set)} style={styles.tabBadge} contentFit="contain" />
+            <Image source={badgeFailed ? GIFT : setBadge(set)} style={styles.tabBadge} contentFit="contain"
+              onError={() => setBadgeFailed(true)} />
           </View>
         </ProgressRing>
         <Text numberOfLines={1} style={styles.tabName}>{set.name}</Text>
@@ -120,6 +132,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
         {done && !claim && <View style={styles.tabDot}><GameIcon name="star" size={20} /></View>}
         {set.status === 'upcoming' && <View style={styles.tabSoon}><Text style={styles.tabSoonText}>Soon</Text></View>}
       </LinearGradient>
+      </Animated.View>
     </SpringPress>
   );
 });
@@ -130,6 +143,7 @@ export const ItemTile = memo(function ItemTile({ item, size, color, onPress, ind
   readonly index: number;
 }) {
   const tone = rarityColor(item.rarity);
+  const [artFailed, setArtFailed] = useState(false);
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.value = withDelay(Math.min(index, 12) * 28, withSpring(1, { damping: 12, stiffness: 180 }));
@@ -142,11 +156,14 @@ export const ItemTile = memo(function ItemTile({ item, size, color, onPress, ind
         style={[styles.tile, { width: size, height: size + 22 },
           item.found ? { backgroundColor: BRAND.white, borderColor: tone } : { backgroundColor: '#dfeaf5', borderColor: '#c6d8ea' }]}>
         {item.found && <View style={[styles.tileGlow, { backgroundColor: color }]} />}
-        <Image source={itemArt(item)} contentFit="contain" recyclingKey={String(item.id)}
+        <LinearGradient colors={item.found ? ['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+          style={styles.tileGloss} pointerEvents="none" />
+        <Image source={artFailed ? GIFT : itemArt(item)} contentFit="contain" recyclingKey={String(item.id)}
+          onError={() => setArtFailed(true)}
           tintColor={item.found ? undefined : SILHOUETTE}
           style={{ width: size * 0.72, height: size * 0.72, opacity: item.found ? 1 : 0.82 }} />
         <View style={[styles.tileFoot, { backgroundColor: item.found ? tone : 'transparent' }]}>
-          <Text numberOfLines={1} style={[styles.tileCaption, !item.found && { color: tone }]}>{tileCaption(item)}</Text>
+          <Text numberOfLines={1} style={[styles.tileCaption, !item.found && { color: item.rarity >= 2 ? tone : BRAND.navySoft }]}>{tileCaption(item)}</Text>
         </View>
         {item.isNew && <View style={styles.tileNew}><GameIcon name="new" size={34} /></View>}
         {!item.found && item.rarity >= 4 && <View style={styles.tileStar}><GameIcon name="star" size={18} /></View>}
@@ -194,6 +211,103 @@ export function RewardBanner({ set, reward, busy, onClaim, titleWorn, titleBusy,
         <GameButton label={titleBusy ? 'Saving...' : titleWorn ? 'Take off title' : `Wear title: ${reward.title}`}
           variant="secondary" size="compact" loading={titleBusy} onPress={onTitle} style={{ marginTop: 8 }} />
       )}
+    </Animated.View>
+  );
+}
+
+/** The big "Set complete" moment: rays, the badge pops, each prize lands with a tick, then the title ribbon. */
+export function RewardReveal({ reveal, onClose }: {
+  readonly reveal: { readonly set: DexSet; readonly reward: DexReward; readonly key: number } | null;
+  readonly onClose: () => void;
+}) {
+  const reduced = useUiReducedMotion();
+  const spin = useSharedValue(0);
+  const badge = useSharedValue(0);
+  const prizes = reveal ? prizeChips(reveal.reward) : [];
+  useEffect(() => {
+    if (!reveal) { cancelAnimation(spin); return; }
+    badge.value = 0;
+    badge.value = withSequence(withTiming(0, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 160 }));
+    spin.value = 0;
+    if (!reduced) spin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1, false);
+    // Each prize lands with a coin tick, in step with its spring.
+    const timers = prizeChips(reveal.reward).map((_, index) => setTimeout(() => {
+      playSfx('fx.coinTick', 0.8);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    }, 520 + index * 160));
+    return () => { timers.forEach(clearTimeout); cancelAnimation(spin); };
+  }, [reveal?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const raysStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+  const badgeStyle = useAnimatedStyle(() => ({ transform: [{ scale: badge.value }], opacity: Math.min(1, badge.value * 2) }));
+  if (!reveal) return null;
+  const { set, reward } = reveal;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.revealBack} onPress={onClose} accessibilityLabel="Close">
+        <Animated.View style={[styles.rays, raysStyle]} pointerEvents="none">
+          <Svg width={520} height={520}>
+            {Array.from({ length: 12 }, (_, index) => {
+              const a = (index / 12) * Math.PI * 2;
+              const b = a + Math.PI / 24;
+              return <Path key={index} d={`M260 260 L${260 + Math.cos(a) * 260} ${260 + Math.sin(a) * 260} L${260 + Math.cos(b) * 260} ${260 + Math.sin(b) * 260} Z`}
+                fill="rgba(255,224,122,0.13)" />;
+            })}
+          </Svg>
+        </Animated.View>
+        <Text style={styles.revealKicker}>{reward.id === set.reward.id ? 'Set complete!' : 'Reward unlocked!'}</Text>
+        <Animated.View style={[styles.revealBadgeWrap, badgeStyle]}>
+          <View style={styles.revealGlow} />
+          <View style={[styles.revealBadge, { borderColor: set.color }]}>
+            <LinearGradient colors={['#ffffff', '#dff1ff']} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']} style={styles.revealBadgeGloss} />
+            <Image source={setBadge(set)} style={{ width: 124, height: 124 }} contentFit="contain" />
+          </View>
+          <StarBurst key={reveal.key} size={320} />
+        </Animated.View>
+        <Text style={styles.revealName}>{set.name}</Text>
+        <View style={styles.revealPrizes}>
+          {prizes.map((prize, index) => <PrizeChip key={prize.label} prize={prize} index={index} />)}
+        </View>
+        {!!reward.title && (
+          <PrizeRibbon title={reward.title} delay={520 + prizes.length * 160} />
+        )}
+        <GameButton label="Awesome!" icon="star" onPress={onClose} style={{ marginTop: 22, minWidth: 220 }} />
+      </Pressable>
+    </Modal>
+  );
+}
+
+type PrizeIcon = 'energy' | 'ticket' | 'xp' | 'shark';
+function prizeChips(reward: DexReward): { icon: PrizeIcon; label: string }[] {
+  const list: { icon: PrizeIcon; label: string }[] = [];
+  if (reward.energy > 0) list.push({ icon: 'energy', label: `+${reward.energy}` });
+  if (reward.tickets > 0) list.push({ icon: 'ticket', label: `+${reward.tickets}` });
+  if (reward.experience > 0) list.push({ icon: 'xp', label: `+${reward.experience}` });
+  if (reward.wearableName) list.push({ icon: 'shark', label: reward.wearableName });
+  return list;
+}
+
+function PrizeChip({ prize, index }: { readonly prize: { icon: PrizeIcon; label: string }; readonly index: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => { t.value = withDelay(520 + index * 160, withSpring(1, { damping: 8, stiffness: 200 })); }, [t, index]);
+  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 1.5), transform: [{ translateY: (1 - t.value) * 30 }, { scale: 0.5 + 0.5 * t.value }] }));
+  return (
+    <Animated.View style={[styles.prize, style]}>
+      <GameIcon name={prize.icon} size={44} />
+      <Text style={styles.prizeText} numberOfLines={1}>{prize.label}</Text>
+    </Animated.View>
+  );
+}
+
+function PrizeRibbon({ title, delay }: { readonly title: string; readonly delay: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => { t.value = withDelay(delay, withSpring(1, { damping: 9, stiffness: 180 })); }, [t, delay]);
+  const style = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ scaleX: 0.3 + 0.7 * t.value }] }));
+  return (
+    <Animated.View style={[styles.ribbon, style]}>
+      <LinearGradient colors={['#ffe07a', '#e0a100']} style={[StyleSheet.absoluteFill, { borderRadius: 14 }]} />
+      <GameIcon name="crown" size={28} />
+      <Text style={styles.ribbonText}>New title: {title}</Text>
     </Animated.View>
   );
 }
@@ -257,7 +371,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
     if (!item) return;
     scale.value = 0.6;
     scale.value = withSpring(1, { damping: 11, stiffness: 200 });
-  }, [item?.id, scale]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item?.id, item?.found, scale]); // eslint-disable-line react-hooks/exhaustive-deps
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: Math.min(1, scale.value * 1.6 - 0.6) }));
   const tone = item ? rarityColor(item.rarity) : BRAND.sky;
   const color = set?.color ?? BRAND.blue;
@@ -270,7 +384,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
               <LinearGradient colors={item.found ? [color, shade(color)] : ['#3b5675', '#1b3a5c']}
                 style={[styles.itemHero, photo && styles.itemHeroPhoto]}>
                 <View style={styles.itemHalo} />
-                <View style={styles.heroGloss} pointerEvents="none" />
+                <LinearGradient colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.heroGloss} pointerEvents="none" />
                 {photo ? (
                   <RidePhoto grade={photo} art={itemArt(item)} photoUrl={item.photoUrl} width={Math.min(320, width - 96)} />
                 ) : (
@@ -324,7 +438,7 @@ export function SetChips({ set, onFocus, focusBusy, onOdds }: {
 }) {
   const status = setStatusLine(set);
   return (
-    <View style={styles.chips}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
       {!!status && (
         <View style={styles.chip}>
           <GameIcon name={set.spawningNow === false ? 'timer' : 'map'} size={20} />
@@ -346,7 +460,7 @@ export function SetChips({ set, onFocus, focusBusy, onOdds }: {
         <GameIcon name="info" size={20} />
         <Text style={styles.chipText}>Odds</Text>
       </SpringPress>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -377,7 +491,8 @@ const styles = StyleSheet.create({
     width: 116, height: 150, borderRadius: 22, alignItems: 'center', paddingTop: 10, borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.65)', ...SHADOW.card, shadowOpacity: 0.18,
   },
-  tabSelected: { borderColor: BRAND.white, borderWidth: 4, transform: [{ translateY: -2 }] },
+  tabSelected: { borderColor: BRAND.white, borderWidth: 4, shadowOpacity: 0.32, shadowRadius: 12 },
+  gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '48%', borderTopLeftRadius: 19, borderTopRightRadius: 19 },
   tabBadgeWell: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' },
   tabBadge: { width: 44, height: 44 },
   tabName: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 6, paddingHorizontal: 6, textAlign: 'center' },
@@ -392,6 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: 18, borderWidth: 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', paddingTop: 4,
   },
   tileGlow: { position: 'absolute', top: 8, width: '78%', aspectRatio: 1, borderRadius: 999, opacity: 0.16 },
+  tileGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
   tileFoot: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 24, alignItems: 'center', justifyContent: 'center' },
   tileCaption: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   tileNew: { position: 'absolute', top: 0, left: 2 },
@@ -408,6 +524,30 @@ const styles = StyleSheet.create({
   rewardNote: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.blue, marginTop: 8 },
   barTrack: { height: 12, borderRadius: 6, backgroundColor: '#e3eef8', overflow: 'hidden', marginTop: 10 },
   barFill: { height: '100%', borderRadius: 6 },
+  revealBack: { flex: 1, backgroundColor: 'rgba(5,52,110,0.82)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  rays: { position: 'absolute', width: 520, height: 520, top: '50%', left: '50%', marginLeft: -260, marginTop: -330 },
+  revealKicker: {
+    fontFamily: 'Shark', fontSize: 34, color: BRAND.gold, textAlign: 'center', marginBottom: 14,
+    textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
+  },
+  revealBadgeWrap: { width: 170, height: 170, alignItems: 'center', justifyContent: 'center' },
+  revealGlow: { position: 'absolute', width: 250, height: 250, borderRadius: 125, backgroundColor: 'rgba(255,207,59,0.28)' },
+  revealBadge: {
+    width: 170, height: 170, borderRadius: 85, borderWidth: 6, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  revealBadgeGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '45%' },
+  revealName: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, marginTop: 14, textAlign: 'center' },
+  revealPrizes: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16 },
+  prize: {
+    alignItems: 'center', minWidth: 78, paddingVertical: 8, paddingHorizontal: 10, borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
+  },
+  prizeText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2, maxWidth: 140 },
+  ribbon: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, paddingHorizontal: 18, paddingVertical: 8,
+    borderRadius: 14, borderWidth: 3, borderColor: BRAND.white,
+  },
+  ribbonText: { fontFamily: 'Shark', fontSize: 18, color: '#7a3d00' },
   spark: { position: 'absolute', width: 14, height: 14, borderRadius: 7 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.55)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   itemCard: {
@@ -418,7 +558,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch', marginHorizontal: -14, height: 250, alignItems: 'center', justifyContent: 'center',
   },
   itemHeroPhoto: { height: 300 },
-  heroGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '42%', backgroundColor: 'rgba(255,255,255,0.12)' },
+  heroGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '55%' },
   rarityPillPhoto: { top: 12, bottom: undefined },
   itemHalo: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.22)' },
   itemArt: { width: 190, height: 190 },
@@ -436,10 +576,10 @@ const styles = StyleSheet.create({
   },
   whereText: { flex: 1, fontFamily: 'Knockout', fontSize: 17, lineHeight: 21, color: BRAND.navy },
   itemError: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.redLip, marginTop: 8, textAlign: 'center' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginTop: 10 },
+  chips: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingVertical: 2, marginTop: 10 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill,
-    backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#cfe8fb', maxWidth: '100%',
+    backgroundColor: BRAND.white, borderWidth: 2, borderColor: '#cfe8fb',
   },
   chipOn: { backgroundColor: BRAND.blue, borderColor: BRAND.blue },
   chipText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, flexShrink: 1 },

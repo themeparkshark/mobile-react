@@ -93,7 +93,8 @@ function build(set: MockDexSet, setIndex: number) {
   };
   const grades = ['good', 'great', 'frame_it'];
   const dexSet = {
-    slug: set.slug, color: set.color, badge_url: ART ? `${ART}/sets/${set.slug.replace(/_/g, '-')}.png` : null,
+    // Set badges are still being drawn: the set's top item stands in.
+    slug: set.slug, color: set.color, badge_url: ART ? `${ART}/items/${set.items[set.items.length - 1].slug}.png` : null,
     status, spawning_now: scene.spawning ?? (status === 'active' ? true : null), spawn_hint: HINTS[set.spawn] ?? null,
   };
   const dexItems = items.map((item, index) => ({

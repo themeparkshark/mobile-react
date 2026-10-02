@@ -14,6 +14,7 @@
  * Hunt v3 dex endpoints (see dexModel.ts). Works against either server.
  */
 import { useIsFocused, useRoute } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -40,7 +41,7 @@ import { BRAND, GameButton, GameIcon, SharkLoader } from '../ui';
 import { showToast } from '../utils/toast';
 import GiftPrepVariantPanel from './GiftPrepVariantPanel';
 import {
-  ItemCard, ItemTile, itemArt, RewardBanner, SetChips, SetTab, StarBurst, StepRow,
+  ItemCard, ItemTile, itemArt, RewardBanner, RewardReveal, SetChips, setBadge, SetTab, StarBurst, StepRow,
 } from './SetCollection/DexParts';
 import {
   buildBook, buildItems, hasClaimable, initialSlug, nextStep,
@@ -96,6 +97,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const [wearing, setWearing] = useState(false);
   const [oddsOpen, setOddsOpen] = useState(false);
   const [popKey, setPopKey] = useState(0);
+  const [reveal, setReveal] = useState<{ set: DexSet; reward: DexReward; key: number } | null>(null);
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
 
@@ -171,10 +173,11 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     setSlug(next);
   };
 
-  const celebrate = () => {
+  const celebrate = (reward?: DexReward) => {
     playSfx('fx.reward', 0.9);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     setPopKey(key => key + 1);
+    if (reward && set) setReveal({ set, reward, key: Date.now() });
   };
 
   const claim = useCallback(async (reward: DexReward, itemId?: number) => {
@@ -205,7 +208,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         if (outcome.toast) showToast(outcome.toast, 'success');
       }
       setPicking(null);
-      celebrate();
+      celebrate(reward);
       if (!preview) {
         await refreshPlayer().catch(() => undefined);
         await reloadAll();
@@ -217,7 +220,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       const after = fresh ? [fresh.reward, ...fresh.steps].find(entry => entry.id === reward.id) : null;
       if (after && (after.status === 'claimed' || after.status === 'pending')) {
         setPicking(null);
-        celebrate();
+        celebrate(reward);
         await refreshPlayer().catch(() => undefined);
       } else {
         setError('That reward did not go through. Try again.');
@@ -280,14 +283,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   }, [set, busy, preview, loadSets]);
 
   const exchange = useCallback(async () => {
-    if (!set || !selectedItem || busy || preview) return;
+    if (!set || !selectedItem || busy) return;
     const target = selectedItem.id;
     setBusy('exchange');
     setError(null);
     try {
-      await exchangeSetDuplicates(set.slug, target);
-      await reloadAll();
-      setSelectedItem(current => current ? { ...current, found: true, caught: Math.max(1, current.caught) } : current);
+      if (preview) {
+        setDetail(current => current && {
+          ...current, items: current.items.map(item => item.id === target ? { ...item, found: true, caught: 1, foundInWorld: false } : item),
+        });
+      } else {
+        await exchangeSetDuplicates(set.slug, target);
+        await reloadAll();
+      }
+      setSelectedItem(current => current ? { ...current, found: true, isNew: true, foundInWorld: false, caught: Math.max(1, current.caught) } : current);
       playSfx('fx.reveal', 0.8);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch {
@@ -334,7 +343,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         <TopbarColumn stretch={false} />
       </Topbar>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}
+      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={BRAND.navySoft} />}>
         {loading ? (
           <View style={styles.center}><SharkLoader state="loading" /></View>
@@ -401,7 +410,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
       <ItemCard item={selectedItem} set={set} spares={spares} onClose={closeItem} error={error}
         sharkName={player?.username}
-        exchanging={busy === 'exchange'} onExchange={set && !preview ? () => void exchange() : null}
+        exchanging={busy === 'exchange'} onExchange={set ? () => void exchange() : null}
         onShare={preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1' ? null : () => {
           playSfx('ui.tap', 0.5);
           setGiftItem(selectedItem);
@@ -420,6 +429,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         </Pressable>
       </Modal>
 
+      <RewardReveal reveal={reveal} onClose={() => { playSfx('ui.tap', 0.5); setReveal(null); }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
       <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
@@ -438,7 +448,9 @@ function SetHeader({ set }: { readonly set: DexSet }) {
   const ready = hasClaimable(set);
   return (
     <Animated.View style={[styles.header, style]}>
-      <View style={[styles.headerBar, { backgroundColor: set.color }]} />
+      <View style={[styles.headerBadge, { borderColor: set.color }]}>
+        <Image source={setBadge(set)} style={{ width: 46, height: 46 }} contentFit="contain" />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.headerTitle} numberOfLines={1}>{set.name}</Text>
         {!!set.description && <Text style={styles.headerSub} numberOfLines={2}>{set.description}</Text>}
@@ -458,7 +470,9 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textAlign: 'center' },
   picker: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8 },
   header: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 8, gap: 10 },
-  headerBar: { width: 8, alignSelf: 'stretch', borderRadius: 4 },
+  headerBadge: {
+    width: 60, height: 60, borderRadius: 30, borderWidth: 4, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+  },
   headerTitle: { fontFamily: 'Shark', fontSize: 28, color: BRAND.navy },
   headerSub: { fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, color: BRAND.navySoft },
   headerCount: {
