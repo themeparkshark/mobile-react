@@ -72,7 +72,7 @@ async function run() {
   const dist = path.join(root, 'dist');
   // Export first, check the bundle, then upload exactly that export.
   const patterns = otaAssetPatterns(channel);
-  if (patterns) console.log(`[assets] ${patterns.length} changed media file(s) since ${channel} binary`);
+  if (patterns) console.log(`[assets] ${patterns[0] === '__no_changed_media__' ? 0 : patterns.length} changed media file(s) since ${channel} binary`);
   // The pattern env is for the export only: eas update must fingerprint the
   // same config the binary was built with.
   const exportEnv = patterns ? { ...env, TPS_OTA_ASSET_PATTERNS: JSON.stringify(patterns) } : env;
