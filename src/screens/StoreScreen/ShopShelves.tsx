@@ -83,7 +83,7 @@ const SetCallout = memo(function SetCallout({ set, todayIds, onTry, onClaim }: {
     <Pressable onPress={() => (ready ? onClaim(set) : onTry(set))} accessibilityRole="button" accessibilityLabel={setA11y(set)}
       style={[styles.setCard, { borderColor: set.color ?? BRAND.gold }]}>
       <View style={styles.setHead}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setTitle} numberOfLines={1}>{set.name}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setTitle} numberOfLines={1}>{ready ? `You finished ${set.name}!` : set.name}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setCount}>{setProgressText(set)}</Text>
       </View>
       <View style={styles.setPieces}>
@@ -120,7 +120,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, children
         <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventKicker, { color: section.last_chance ? '#ffe07a' : ink }]}>{eventKicker(section)}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventTitle, { color: ink }]} numberOfLines={1}>{section.title}</Text>
         {section.subtitle && section.subtitle !== section.wave?.title ? (
-          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventSub, { color: ink }]} numberOfLines={1}>{section.subtitle}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventSub, { color: ink }]} numberOfLines={2}>{section.subtitle}</Text>
         ) : null}
         <SectionPills section={section} offset={offset} still={still} />
       </View>
@@ -151,10 +151,10 @@ function Hero({ item, set, section, offset, still, onOpen }: {
       accessibilityLabel={`This week's star: ${itemDisplayName(item)}, ${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}
       style={[styles.hero, { height: HERO_H, borderColor: glow }]}>
       <LinearGradient colors={['#d7f0ff', '#8fd0f7']} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={[styles.heroSpot, { backgroundColor: glow }]} />
+      <View pointerEvents="none" style={styles.heroSpot} />
       <View pointerEvents="none" style={styles.heroFloor} />
       <View style={styles.heroStage}>
-        {look ? <Playercard inventory={look} still={still} style={{ position: 'absolute', width: '100%', height: '100%' }} />
+        {look ? <Playercard inventory={look} still={still} showBackground={false} style={{ position: 'absolute', width: '100%', height: '100%' }} />
           : <View style={styles.heroFlat}><TileArt item={item} size={170} torso={false} /></View>}
       </View>
       <View style={styles.heroText}>
@@ -417,10 +417,10 @@ const styles = StyleSheet.create({
   eventHead: { paddingHorizontal: 14, paddingTop: 14, minHeight: Math.round((SCREEN_W - 20) * 0.4) - 18 },
   eventKicker: { fontFamily: FONT.display, fontSize: 13, letterSpacing: 1.2, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
   eventTitle: { fontFamily: FONT.display, fontSize: 28, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 2 } },
-  eventSub: { fontFamily: FONT.body, fontSize: 17, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
+  eventSub: { maxWidth: '64%', fontFamily: FONT.body, fontSize: 17, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
   eventRow: { gap: GAP, paddingHorizontal: 14, paddingTop: 16, paddingBottom: 6 },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', ...SHADOW.card },
-  heroSpot: { position: 'absolute', right: -40, top: -80, width: 320, height: 320, borderRadius: 160, opacity: 0.3 },
+  heroSpot: { position: 'absolute', right: '6%', top: '8%', width: '50%', aspectRatio: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.5)' },
   heroFloor: { position: 'absolute', right: '12%', bottom: 18, width: '38%', height: 22, borderRadius: 99, backgroundColor: 'rgba(5,52,110,0.18)' },
   heroStage: { position: 'absolute', right: -10, top: 6, bottom: 0, width: '62%' },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },

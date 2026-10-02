@@ -30,7 +30,7 @@ import { InventoryType } from '../../models/inventory-type';
 import { ShopItem, ShopSetPiece, ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameButton, GameIcon, SHADOW } from '../../ui';
-import { Burst, MAX_FONT, PieceChip, Sheen } from './shopUi';
+import { Burst, MAX_FONT, PieceChip, Sheen, WishHeart } from './shopUi';
 import { TileArt } from './ShopTile';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -249,10 +249,10 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
       <View style={styles.row}>
         <Pressable onPress={() => onWish(item)} style={[styles.wish, wished && styles.wishOn]} accessibilityRole="button"
           accessibilityState={{ selected: wished }} accessibilityLabel={wished ? 'Remove from wishlist' : 'Add to wishlist'}>
-          <GameIcon name="heart" size={22} mono={wished ? BRAND.white : '#ff7aa6'} />
+          <WishHeart on={wished} size={26} />
         </Pressable>
         <View style={{ flex: 1, overflow: 'hidden', borderRadius: 18 }}>
-          <GameButton label={finishes ? 'Buy and complete the look' : `Buy for ${formatCoins(item.cost)}`} icon="coins" onPress={askToBuy} />
+          <GameButton label={finishes ? `Complete the look: ${formatCoins(item.cost)}` : `Buy for ${formatCoins(item.cost)}`} icon="coins" onPress={askToBuy} />
           {finishes && <Sheen still={still} delay={500} width={360} />}
         </View>
       </View>
@@ -283,7 +283,7 @@ export default function TryOnSheet({ item, set, todayIds, wished, still, startFu
                   <View pointerEvents="none" style={[styles.spot, { backgroundColor: glow }]} />
                   <View pointerEvents="none" style={styles.floor} />
                   {look ? (
-                    <Playercard inventory={look} popLayers still={still}
+                    <Playercard inventory={look} popLayers still={still} showBackground={false}
                       style={{ position: 'absolute', width: '100%', height: STAGE_H - 12 }} />
                   ) : (
                     <View style={styles.flatArt}><TileArt item={item} size={170} torso={false} /></View>
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 4, borderWidth: 2, borderColor: '#efe3bd' },
   balanceText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   stage: { marginHorizontal: 14, marginTop: 8, borderRadius: 22, overflow: 'hidden', borderWidth: 3, borderColor: BRAND.white },
-  spot: { position: 'absolute', alignSelf: 'center', top: -60, width: 300, height: 260, borderRadius: 150, opacity: 0.28 },
+  spot: { position: 'absolute', alignSelf: 'center', top: '6%', width: '62%', aspectRatio: 1, borderRadius: 999, opacity: 0.22 },
   floor: { position: 'absolute', alignSelf: 'center', bottom: 16, width: 180, height: 26, borderRadius: 90, backgroundColor: 'rgba(5,52,110,0.18)' },
   flatArt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   stamp: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wish: { width: 54, height: 54, borderRadius: 27, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#ff9bbf' },
-  wishOn: { borderColor: BRAND.white, backgroundColor: '#ff4f8b' },
+  wishOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   equation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: BRAND.white,
     borderRadius: 14, paddingVertical: 8, borderWidth: 2, borderColor: '#efe3bd' },
   op: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navySoft },

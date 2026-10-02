@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 import type { Pill, PieceState } from '../../helpers/shopShelves';
 import type { ShopSetPiece } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, type GameIconName } from '../../ui';
@@ -67,6 +68,16 @@ export const TimerPill = memo(function TimerPill({ pill, still, icon = 'timer', 
     </Animated.View>
   );
 });
+
+/** Wishlist heart: a full-opacity pink outline when off, solid pink when on (Alex's outline weight). */
+export function WishHeart({ on, size = 18 }: { on: boolean; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 21.2s-7.6-4.6-9.6-9.3C1 8.6 3 4.8 6.6 4.8c2.1 0 3.5 1.2 4.4 2.5.9-1.3 2.3-2.5 4.4-2.5 3.6 0 5.6 3.8 4.2 7.1-2 4.7-9.6 9.3-9.6 9.3z"
+        fill={on ? '#ff4f8b' : '#ffffff'} stroke={on ? '#c2185b' : '#ff4f8b'} strokeWidth={2.4} strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 /** A set piece chip: owned (full color + tick), on the shelf today (tap), away (silhouette, comes back). */
 export const PieceChip = memo(function PieceChip({ piece, state, size = 58, selected = false, onPress }: {

@@ -43,7 +43,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
   const look = useMemo(() => previewLook(player?.inventory, pieces.map(p => ({ id: p.id, name: p.name, icon_url: p.icon_url,
     paper_url: p.paper_url, no_eye_url: p.no_eye_url, item_type: { id: p.item_type_id } }))), [player?.inventory, pieces]);
 
-  const stamp = useSharedValue(still ? 1 : 2.4);
+  const stamp = useSharedValue(still ? 1 : 1.7);
   const stampOpacity = useSharedValue(still ? 1 : 0);
   const xp = useSharedValue(still ? 1 : 0);
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
     <Modal visible transparent animationType="none" onRequestClose={onDone} statusBarTranslucent>
       <Animated.View entering={FadeIn.duration(still ? 120 : 260)} style={styles.fill}>
         <LinearGradient colors={['#0b2a5e', '#05346e', '#0a1d3f']} style={StyleSheet.absoluteFill} />
-        <View pointerEvents="none" style={[styles.beam, { backgroundColor: color }]} />
+        <View pointerEvents="none" style={styles.beam} />
         {!still && <Confetti color={color} />}
         <View style={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
@@ -96,12 +96,14 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
           <View style={[styles.stage, { width: STAGE, height: STAGE }]}>
             <View style={[styles.spot, { backgroundColor: color }]} />
             <View style={styles.floor} />
-            {look && <Playercard inventory={look} still={still} popLayers style={{ position: 'absolute', width: '100%', height: '100%' }} />}
+            {look && <Playercard inventory={look} still={still} popLayers showBackground={false} style={{ position: 'absolute', width: '100%', height: '100%' }} />}
           </View>
           {reward.title && (
-            <Animated.View style={[styles.plate, stampStyle]} accessible accessibilityLabel={`New title: ${reward.title}`}>
-              <GameIcon name="crown" size={22} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.plateText}>{reward.title}</Text>
+            <Animated.View style={stampStyle} accessible accessibilityLabel={`New title: ${reward.title}`}>
+              <View style={styles.plate}>
+                <GameIcon name="crown" size={22} />
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.plateText}>{reward.title}</Text>
+              </View>
             </Animated.View>
           )}
           {reward.xp > 0 && (
@@ -114,11 +116,11 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
           <View style={styles.buttons}>
             {reward.title && (
               <GameButton label={title === 'done' ? 'Title on!' : title === 'failed' ? 'Try again: wear my title' : 'Wear my title'}
-                icon="crown" onPress={() => void wearTitle()} loading={title === 'busy'} disabled={title === 'done'} />
+                icon={title === 'done' ? 'check' : 'crown'} onPress={() => { if (title !== 'done') void wearTitle(); }} loading={title === 'busy'} />
             )}
             {pieces.length > 0 && (
               <GameButton label={lookState === 'done' ? 'Look on!' : lookState === 'failed' ? 'Try again: wear the look' : 'Wear the whole look'}
-                icon="shark" variant="secondary" onPress={() => void wearLook()} loading={lookState === 'busy'} disabled={lookState === 'done'} />
+                icon={lookState === 'done' ? 'check' : 'shark'} variant="secondary" onPress={() => { if (lookState !== 'done') void wearLook(); }} loading={lookState === 'busy'} />
             )}
             <GameButton label="Awesome!" variant="ghost" tone="onBlue" onPress={onDone} />
           </View>
@@ -153,15 +155,16 @@ function Bit({ index, color }: { index: number; color: string }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  beam: { position: 'absolute', alignSelf: 'center', top: H * 0.12, width: W * 1.1, height: W * 1.1, borderRadius: W, opacity: 0.18 },
+  beam: { position: 'absolute', alignSelf: 'center', top: H * 0.12, width: W * 1.1, height: W * 1.1, borderRadius: W, opacity: 0.12, backgroundColor: '#ffffff' },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 20, gap: 10 },
   kicker: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 2, color: BRAND.goldLight },
   setName: { fontFamily: FONT.display, fontSize: 34, color: BRAND.white, textAlign: 'center' },
   stage: { alignItems: 'center', justifyContent: 'center' },
-  spot: { position: 'absolute', top: 0, width: '90%', height: '90%', borderRadius: 999, opacity: 0.35 },
+  spot: { position: 'absolute', top: 0, width: '90%', height: '90%', borderRadius: 999, opacity: 0.75 },
   floor: { position: 'absolute', bottom: 10, width: '55%', height: 28, borderRadius: 99, backgroundColor: 'rgba(0,0,0,0.28)' },
   plate: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.gold, borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 8, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 5, borderBottomColor: BRAND.goldLip },
+    paddingHorizontal: 16, paddingVertical: 8, borderWidth: 3, borderColor: BRAND.white,
+    shadowColor: BRAND.goldLip, shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 } },
   plateText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
   xpRow: { flexDirection: 'row', alignItems: 'center', gap: 8, width: '80%' },
   xpTrack: { flex: 1, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },

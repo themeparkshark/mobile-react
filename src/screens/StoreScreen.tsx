@@ -20,6 +20,7 @@ import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotatio
 import getShopToday from '../api/endpoints/stores/today';
 import { ShopToday } from '../models/shop-today';
 import ShopShelves from './StoreScreen/ShopShelves';
+import { WishHeart } from './StoreScreen/shopUi';
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
@@ -265,7 +266,7 @@ function ShopTabs({ tab, onChange, coins, wishes }: {
       <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins${wishes ? `, ${wishes} on your wishlist` : ''}`}>
         <GameIcon name="coins" size={20} />
         <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
-        {!!wishes && <View style={tabStyles.wishBadge}><GameIcon name="heart" size={11} mono={BRAND.white} />
+        {!!wishes && <View style={tabStyles.wishBadge}><WishHeart on size={11} />
           <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text></View>}
       </View>
     )}
@@ -283,7 +284,7 @@ const tabStyles = StyleSheet.create({
   coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
   coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
-  wishBadge: { position: 'absolute', top: -8, right: -8, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#ff4f8b',
+  wishBadge: { position: 'absolute', top: -8, right: -8, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#c2185b',
     borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: '#fff' },
   wishText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
 });

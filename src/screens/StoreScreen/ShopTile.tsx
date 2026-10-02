@@ -13,7 +13,7 @@ import { TILE_TAG_LABEL, formatCoins, tileTag } from '../../helpers/shopShelves'
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
-import { MAX_FONT, Sheen, plateFor } from './shopUi';
+import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 
 const SHARK = require('../../../assets/images/screens/inventory/shark-colored-v2.png');
 
@@ -114,7 +114,7 @@ function ShopTile({ item, width, wished, vipLocked, affordable, still, justBough
         </View>
       )}
       {set && (
-        <View style={[styles.setRibbon, { backgroundColor: set.color ?? BRAND.gold }]}>
+        <View style={[styles.setRibbon, { backgroundColor: set.color ?? BRAND.gold, top: 12 + (width - 18) * 0.8 - 18 }]}>
           <GameIcon name="sparkle" size={13} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setRibbonText}>SET</Text>
         </View>
@@ -133,7 +133,7 @@ function ShopTile({ item, width, wished, vipLocked, affordable, still, justBough
           accessibilityRole="button" accessibilityState={{ selected: wished }}
           accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}>
           <Animated.View style={[styles.heart, wished && styles.heartOn, heartStyle]}>
-            <GameIcon name="heart" size={16} mono={wished ? BRAND.white : '#ff7aa6'} />
+            <WishHeart on={wished} size={18} />
           </Animated.View>
         </Pressable>
       )}
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   priceShort: { color: '#8b9bb0' },
   rarity: { position: 'absolute', top: 6, left: 6, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.4 },
-  setRibbon: { position: 'absolute', bottom: 34, left: -4, flexDirection: 'row', alignItems: 'center', gap: 2,
+  setRibbon: { position: 'absolute', left: 4, flexDirection: 'row', alignItems: 'center', gap: 2,
     borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
   setRibbonText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy },
   tag: { position: 'absolute', top: -11, alignSelf: 'center', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2,
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   corner: { position: 'absolute', top: -9, right: -9 },
   heart: { width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2.5, borderColor: '#ff9bbf' },
-  heartOn: { borderColor: BRAND.white, backgroundColor: '#ff4f8b' },
+  heartOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   stamp: { position: 'absolute', top: '32%', alignSelf: 'center', borderWidth: 3, borderColor: BRAND.greenLip, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
   stampText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.greenLip, letterSpacing: 1 },
