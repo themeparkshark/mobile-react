@@ -40,6 +40,8 @@ import type { Timeline } from '../../games/whack/timeline';
 /** Bot score curves sample every 250 ms of board time. */
 const CURVE_STEP_MS = 250;
 import TriviaSprintBoard from './TriviaSprintBoard';
+import LagoonDashBoard from '../../games/current-quest/party/LagoonDashBoard';
+import type { Board as LagoonBoardData } from '../../games/current-quest/rules';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -122,6 +124,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
   const game = round?.game ?? local?.game ?? 'bonk_race';
+  const isBonk = game === 'bonk_race';
   const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round && game === 'bonk_race' ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed, game]);
   // Crew seats play their own deterministic logs, bubbles included (display only; the server replays the same).
   const crewIncoming = useMemo(() => {
@@ -145,6 +148,14 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     return m;
   }, [round?.id, game]);
+  // Lagoon Dash (Current Quest): a registry sim with no score curve; bots are replayed per frame like the sprint.
+  const dash = round?.game === 'lagoon_dash' ? partySim('lagoon_dash') : null;
+  const dashBoard = useMemo(() => (dash && round ? (local?.roundId === round.id && local.board ? local.board : dash.build(round.seed)) : null), [round?.id, round?.seed, dash, local?.board]);
+  const dashBots = useMemo(() => {
+    const m = new Map<number, [number, number][]>();
+    if (dash && dashBoard && round) round.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, dash.botTaps(dashBoard, round.seed, s.seat, s.profile)); });
+    return m;
+  }, [round?.id, dash, dashBoard]);
   // Trivia Sprint rounds: the same seat logic, scored by the sprint sim (no Splashes, no SNATCH).
   const sprint = round?.game === 'trivia_sprint' ? partySim('trivia_sprint') : null;
   const sprintBoard = useMemo(() => (sprint && round ? (local?.roundId === round.id && local.board ? local.board : sprint.build(round.seed)) : null), [round?.id, round?.seed, sprint, local?.board]);
@@ -181,9 +192,9 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   }, [client]);
   const botSg = useMemo(() => {
     const m = new Map<number, number[]>();
-    botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgOffsets));
+    if (isBonk) botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgOffsets));
     return m;
-  }, [botLogs, spawns]);
+  }, [botLogs, spawns, isBonk]);
   const reactions: SeatReactions[] = useMemo(() => (round?.seats ?? []).map((seat) => {
     if (seat.kind === 'bot') return { key: `b:${seat.name}`, sg: botSg.get(seat.seat) ?? null };
     if (seat.user_id === state.userId) return { key: 'me', sg: mySg };
@@ -220,6 +231,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         const curve = botCurves.get(seat.seat);
         if (curve) score = curve[Math.max(0, Math.min(curve.length - 1, Math.floor(boardT / CURVE_STEP_MS)))] ?? 0;
         else if (sprint && sprintBoard) score = sprint.resolve(sprintBoard, (sprintBots.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
+        else if (dash && dashBoard) score = dash.resolve(dashBoard, (dashBots.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
         else score = resolve(spawns, (botLogs.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
@@ -238,7 +250,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, bonusNow, botLogs, botCurves, sprint, sprintBoard, sprintBots, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, bonusNow, botLogs, botCurves, sprint, sprintBoard, sprintBots, dash, dashBoard, dashBots, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -282,6 +294,20 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onTick={onTick}
             autoplay={!!autoplay}
           />
+        ) : playing && local && dash && dashBoard ? (
+          <LagoonDashBoard
+            key={local.roundId}
+            board={dashBoard as LagoonBoardData}
+            seed={local.seed}
+            goAt={local.goAt}
+            durationMs={local.durationMs}
+            perfNow={perfNow}
+            onTap={(action) => client.recordTap(action)}
+            onProgress={onProgress}
+            onTick={onTick}
+            autoplay={autoplay === 'ace' ? 'ace' : autoplay ?? null}
+            boardClock={boardClock}
+          />
         ) : playing && local && sprint ? (
           <TriviaSprintBoard
             key={local.roundId}
@@ -317,7 +343,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onSplash={onSplash}
           />
         ) : null}
-        {playing && !sprint ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
+        {playing && !sprint && !dash ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
         {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
         {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}

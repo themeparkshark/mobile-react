@@ -128,18 +128,19 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
 };
 
 /** Mini-game types the selector can start. */
-export type MiniGameKind = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo';
+export type MiniGameKind = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo' | 'current';
 
-export interface GameIntro { readonly name: string; readonly how: string; readonly win: string }
+interface GameIntro { readonly name: string; readonly how: string; readonly win: string }
 
 export const GAME_INTROS: Readonly<Record<MiniGameKind, GameIntro>> = {
-  tap: { name: 'Whack-a-Shark', how: 'Tap the sharks as they pop up. Golden sharks count twice.', win: 'Bop enough sharks before the timer runs out.' },
-  timing: { name: 'Rhythm Tap', how: 'Tap when the rings meet the target.', win: 'Land enough clean hits to earn a star.' },
+  tap: { name: 'Whack-a-Shark', how: 'Bonk the sharks inside the ring. Never bonk the anglerfish.', win: 'Bonk enough sharks before the timer runs out.' },
+  timing: { name: 'Parade Beat', how: 'Tap the drum as each note reaches the line. Blue is the middle, coral is the side.', win: 'Hit 3 of every 4 beats.' },
   memory: { name: 'Memory Match', how: 'Flip two cards at a time to find pairs.', win: 'Match every pair to win.' },
-  trivia: { name: 'Trivia', how: 'Read the question and tap your answer before time runs out.', win: 'Right answers earn the stars.' },
-  shark: { name: 'Sharky Swim', how: 'Tap to swim up through the gaps.', win: 'Swim as far as you can.' },
-  banana: { name: 'Banana Basket', how: 'Slide the basket to catch the churros. Dodge the bombs.', win: 'Catch as many as you can.' },
+  trivia: { name: 'Trivia', how: 'Tap your answer, then let go to lock it in. Faster right answers score more.', win: 'Right answers earn the stars.' },
+  shark: { name: 'Sharky Swim', how: 'Hold to swim up, let go to sink. Skim close for big points.', win: 'Reach the finish with hearts left.' },
+  banana: { name: 'Banana Basket', how: 'Slide the basket to catch the bananas and keep the beach ball up.', win: 'Catch as many as you can.' },
   photo: { name: 'Snap the Ride', how: 'Line up the shot and snap it before time runs out.', win: 'A good snap wins.' },
+  current: { name: 'Current Quest', how: 'Swipe to swim. Currents carry you along.', win: 'Reach the chest before your strokes run out.' },
 };
 
 export function gameIntroTip(kind: string): TipId {

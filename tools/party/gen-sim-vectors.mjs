@@ -79,6 +79,19 @@ function humanTaps(sim, board, seed) {
     // One landing per n, at most 400 entries.
     return taps.slice(0, sim.maxTaps);
   }
+  if (sim.key === 'lagoon_dash') {
+    // A walker's thumb: a slow solver line with stray swipes (bumps, wrong turns) and late undos mixed in.
+    const base = sim.botTaps(board, (seed ^ 0x55aa) >>> 0, 5, 'rookie');
+    for (const tap of base) {
+      taps.push(tap);
+      const roll = next() % 100;
+      if (roll < 18) taps.push([Math.min(sim.roundMs, tap[0] + 300 + (next() % 900)), next() % 4]);
+      if (roll < 6) taps.push([Math.min(sim.roundMs, tap[0] + 1400 + (next() % 400)), 5]);
+      if (roll === 99) taps.push([Math.min(sim.roundMs, tap[0] + 2000), 6]);
+    }
+    taps.sort((a, b) => a[0] - b[0]);
+    return taps.slice(0, sim.maxTaps);
+  }
   for (const q of board) {
     const roll = next() % 100;
     if (roll < 15) taps.push([q.unlockAt + (next() % 200), 10 + (next() % 4)]); // bump around the guard

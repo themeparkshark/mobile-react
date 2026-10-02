@@ -12,7 +12,7 @@ import { WhackAShark } from '../../games/whack';
 import { RhythmTapGame } from '../../games/rhythm';
 import { SharkySwim } from '../../games/sharky';
 import { MemoryGame } from '../../games/memory';
-import { CurrentQuestGame } from '../../games/current-quest';
+import { CurrentQuestQueueGame } from '../../games/current-quest';
 import SharkShowdown from '../../games/showdown/SharkShowdown';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import ActivitySlot from './components/ActivitySlot';
@@ -208,7 +208,7 @@ export default function CrewRelayPreviewScreen() {
         {gameOpen && view === 'finale' && finaleItem.kind === 'minigame' && finaleItem.gameId === 'shark' &&
           <SharkySwim visible seed={finaleItem.seed}
             onClose={() => setGameOpen(false)} onComplete={() => { setFinaleDone(true); setGameOpen(false); }} />}
-        {gameOpen && view === 'quest' && <CurrentQuestGame visible seed={314159}
+        {gameOpen && view === 'quest' && <CurrentQuestQueueGame visible seed={314159}
           taskName={previewCoin.ride_name} onClose={() => setGameOpen(false)}
           onComplete={() => setGameOpen(false)} />}
         {gameOpen && view === 'showdown' && <SharkShowdown visible seed={314159}

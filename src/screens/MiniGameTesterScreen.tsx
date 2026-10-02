@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -23,6 +23,9 @@ import EngineDemo from '../gamekit/demo/EngineDemo';
 import FxLab from '../gamekit/demo/FxLab';
 import FeelLab from '../gamekit/demo/FeelLab';
 import JuiceLab from '../gamekit/demo/JuiceLab';
+import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
+import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
+import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -66,6 +69,37 @@ export default function MiniGameTesterScreen() {
   // EXPO_PUBLIC_ENGINE_DEMO=juicelab opens the Juice Lab bench (engine pass 5) with its tour.
   const juiceLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'juicelab';
   const [juiceLab, setJuiceLab] = useState(juiceLabAuto);
+
+  // Current Quest lab (dev only, __DEV__ gated; inert in release builds):
+  // EXPO_PUBLIC_CQ_LAB=hub|quick|line|ride|showdown|daily|challenge|chart|dash. EXPO_PUBLIC_CQ_WALK=1 toggles walking every 5 s.
+  const cqLab = __DEV__ ? process.env.EXPO_PUBLIC_CQ_LAB : undefined;
+  const [cqPick, setCqPick] = useState<HubPick | null>(cqLab && cqLab !== 'hub' && cqLab !== 'dash' ? { context: (cqLab === 'chart' ? 'chart' : cqLab) as HubPick['context'], chartNodeId: cqLab === 'chart' ? 'ch1-02' : undefined } : null);
+  const [cqRound, setCqRound] = useState(0);
+  const [cqMoving, setCqMoving] = useState(false);
+  useEffect(() => {
+    if (!cqLab || process.env.EXPO_PUBLIC_CQ_WALK !== '1') return undefined;
+    const id = setInterval(() => setCqMoving((m) => !m), 5000);
+    return () => clearInterval(id);
+  }, [cqLab]);
+  const cqMovement = useMemo(() => ({ moving: cqMoving, onResume: () => undefined }), [cqMoving]);
+  if (cqLab === 'dash') return <LagoonDashPreview key={cqRound} seed={2026 + cqRound} autoplay="regular" />;
+  if (cqLab) {
+    const back = () => { setCqPick(cqLab === 'hub' ? null : cqPick); setCqRound((r) => r + 1); };
+    return (
+      <LinePlayMovementContext.Provider value={(process.env.EXPO_PUBLIC_CQ_WALK === '1' ? cqMovement : null) as any}>
+        <View style={{ flex: 1, backgroundColor: '#3fc1ef', alignSelf: 'center', width: Number(process.env.EXPO_PUBLIC_CQ_W ?? 0) || '100%' }}>
+          {cqLab === 'hub' && !cqPick ? <CurrentQuestHub key={cqRound} refreshKey={cqRound} liveHumans={Number(process.env.EXPO_PUBLIC_CQ_HUMANS ?? 1)} onPlay={setCqPick} /> : null}
+          {cqPick ? (
+            <CurrentQuestGame key={`${cqRound}:${cqPick.context}:${cqPick.chartNodeId ?? ''}`} visible context={cqPick.context} chartNodeId={cqPick.chartNodeId}
+              parkName="Lagoon Park" seed={cqPick.context === 'quick' || cqPick.context === 'daily' ? undefined : 424242 + cqRound}
+              challenge={cqPick.challenge ?? (cqPick.context === 'challenge' && process.env.EXPO_PUBLIC_CQ_FRIEND === '1' ? { seed: 424242, name: 'Maya', shells: 5, strokes: 11 } : null)}
+              onClose={() => { setTimeout(back, 300); }}
+              onComplete={() => { setTimeout(back, 300); }} />
+          ) : null}
+        </View>
+      </LinePlayMovementContext.Provider>
+    );
+  }
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);

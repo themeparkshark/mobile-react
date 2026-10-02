@@ -16,8 +16,9 @@
 import * as bonk from '../games/party/bonkRace';
 import * as sprint from '../games/trivia-duel/party/triviaSprint';
 import * as rush from '../games/whack/party/whackRush';
+import * as dash from '../games/current-quest/party/lagoonDash';
 
-export type PartySimKey = 'bonk_race' | 'trivia_sprint' | 'whack_rush';
+export type PartySimKey = 'bonk_race' | 'trivia_sprint' | 'whack_rush' | 'lagoon_dash';
 export type SimTap = [number, number];
 export type SimProfile = 'rookie' | 'regular' | 'ace';
 
@@ -105,6 +106,24 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     ghostFill: rush.ghostFill,
     resultHash: rush.resultHash,
     scoreCurve: rush.scoreCurve,
+    settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
+    explain: () => null,
+    splashEarned: () => [],
+    bandCheck: () => 0,
+    bandOk: () => true,
+  },
+  // Current Quest's Same-Board Showdown as a 45 s micro-round (ranked by shells, strokes, undos; never time).
+  lagoon_dash: {
+    key: 'lagoon_dash',
+    version: dash.LAGOON_DASH_VERSION,
+    roundMs: dash.ROUND_MS,
+    maxTaps: dash.MAX_TAPS,
+    build: dash.buildBoard,
+    validTaps: dash.validTaps,
+    resolve: dash.resolve,
+    botTaps: (board, seed, seat, profile, fromMs) => dash.botTaps(board, seed, seat, profile === 'ace' ? 'ace' : profile, fromMs),
+    ghostFill: (board, seed, seat, own, untilMs, profile) => dash.ghostFill(board, seed, seat, own, untilMs, profile),
+    resultHash: dash.resultHash,
     settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
     explain: () => null,
     splashEarned: () => [],

@@ -7,7 +7,7 @@ const { plain } = require('./helpers/plain.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const bonus = loadTs('src/services/lineplay/bonusRounds.ts');
-const logic = loadTs('src/games/current-quest/logic.ts');
+const logic = loadTs('src/games/current-quest/v1/logic.ts');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 function summary(overrides = {}) {

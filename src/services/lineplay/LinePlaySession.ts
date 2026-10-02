@@ -50,7 +50,7 @@ import type { LineBonusClaim, LineBonusEncore, LineBonusSummary, LineWaitScreenS
   LineSessionResponse } from '../../api/endpoints/me/inline-timer/types';
 import { ExitSpeedDetector, forcedHeartbeatDelaysMs, isWalkingSample, nextBonusSeconds,
   takeNewBonusEvents } from './bonusRounds';
-import type { CurrentTier } from '../../games/current-quest/logic';
+import type { CurrentTier } from '../../games/current-quest/v1/logic';
 import { RidePartType } from '../../models/ride-part-type';
 import { linePlayRewardQueue, subscribeLinePlayRewardRecovery } from './rewardRecovery';
 import {

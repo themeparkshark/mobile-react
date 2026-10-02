@@ -18,6 +18,7 @@ import { TriviaDuel } from '../games/trivia-duel';
 import { SharkySwim } from '../games/sharky';
 import { BananaBasketGame } from '../games/banana-basket';
 import BananaLab from '../games/banana-basket/BananaLab';
+import { CurrentQuestGame } from '../games/current-quest';
 import { TaskAttemptGame, TaskGameProof } from '../api/endpoints/me/task-attempts';
 import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
@@ -35,7 +36,8 @@ const WHACK_DEV: { format?: WhackFormat; unlock?: number; theme?: WhackTheme } =
   theme: (process.env.EXPO_PUBLIC_WHACK_THEME as WhackTheme) || undefined,
 } : {};
 
-type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo';
+// 'current' is opt-in (preferredGame) until the ride pool's server verifier accepts its v3 proof (WS7).
+type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo' | 'current';
 
 interface Props {
   visible: boolean;
@@ -155,6 +157,8 @@ export default function MiniGameSelector({
           seed: Number.isInteger(attemptSeed) ? attemptSeed! :
             Number.isInteger(extra?.seed) ? extra.seed : 0,
           ...(selectedGame === 'tap' && Number.isInteger(extra?.hits) ? { hits: extra.hits } : {}),
+          // Current Quest: the full replayable v2 proof (TaskGameProofService 'current', design 15.3).
+          ...(selectedGame === 'current' && extra?.proof ? { current: extra.proof, shells: extra.shells } : {}),
           ...(selectedGame === 'trivia' ? {
             correct_count: Number.isInteger(extra?.correctCount) ? extra.correctCount : 0,
             total_answered: Number.isInteger(extra?.totalAnswered) ? extra.totalAnswered : 0,
@@ -261,6 +265,11 @@ export default function MiniGameSelector({
           <SharkySwim visible={visible} seed={seed} taskName={taskName} onClose={onClose} onQuit={handleQuit}
             mode={rewardMode === 'task-attempt' ? 'ride' : 'queue'}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+      case 'current':
+        return (
+          <CurrentQuestGame visible={visible} seed={seed} context={rewardMode === 'task-attempt' ? 'ride' : 'quick'}
+            onClose={onClose} onQuit={handleQuit} onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'banana':
         return (
