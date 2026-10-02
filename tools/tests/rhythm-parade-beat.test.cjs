@@ -824,3 +824,29 @@ test('Ghost Dares: rival Fever launches dare the next bar, never the Finale last
   assert.ok(noteI(dA) > 0.9, 'visible without a dare');
   assert.equal(noteI(dB), 0, 'hidden in the last half of the read zone');
 });
+
+test('audio rev 7 (7.3-7.6): every launch format has bed, Drumline, guide and Fever decks; gates hold on the decoded files; the old pitched thuds are gone', () => {
+  const rep = JSON.parse(fs.readFileSync(path.join(root, 'tools/rhythm/drumline_report.json'), 'utf8'));
+  for (const key of ['waiting_room_a_queue', 'waiting_room_a_ride', 'shark_shop_a_queue']) {
+    for (const part of ['bed', 'acc', 'guide', 'fever']) {
+      assert.ok(fs.existsSync(path.join(root, `src/games/rhythm/audio/${key}_${part}.mp3`)), `${key}_${part}.mp3`);
+    }
+    const r = rep.stems[key];
+    for (const part of ['acc', 'guide', 'fever']) {
+      assert.ok(r[part].dbtp <= -1.0, `${key} ${part} true peak ${r[part].dbtp}`);
+      assert.ok(Math.abs(r[part].ms - r.bed_ms) <= 30, `${key} ${part} length matches the bed`);
+    }
+    assert.ok(r.acc.lufs < r.bed_lufs - 3 && r.acc.lufs > r.bed_lufs - 8, `${key} Drumline sits under the bed`);
+    assert.ok(r.guide.lufs < r.acc.lufs, `${key} guide under the accompaniment`);
+  }
+  const k = rep.keysounds;
+  for (const cue of ['rh_drum_hit', 'rh_drum_hit_plus', 'rh_rim_hit', 'rh_rim_hit_plus', 'rh_big_crash']) {
+    assert.ok(fs.existsSync(path.join(root, `src/games/rhythm/audio/sfx/${cue}.wav`)), cue);
+    assert.ok(k[cue].dbtp <= -1.0, `${cue} true peak`);
+  }
+  // Phone-speaker band (7.6 gate 3): DRUM carries 150-300 Hz knock and a 2-5 kHz click.
+  assert.ok(k.rh_drum_hit.e150_300 >= 0.15 && k.rh_drum_hit.e2_5k >= 0.05, 'layered DRUM hit band check');
+  for (const gone of ['rh_thud.wav', 'rh_tick.wav']) assert.ok(!fs.existsSync(path.join(root, 'src/games/rhythm/audio/sfx', gone)), gone);
+  const idx = fs.readFileSync(path.join(root, 'src/games/rhythm/stages/index.ts'), 'utf8');
+  assert.ok(!/waiting_room_a_(queue|ride)(_fever)?\.m4a|shark_shop_a_queue(_fever)?\.m4a/.test(idx), 'launch stages no longer require the AAC beds');
+});

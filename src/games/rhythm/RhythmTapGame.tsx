@@ -22,7 +22,8 @@
  * replays the bar before the pause as a counted pre-roll.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { MusicContext } from '../../context/MusicProvider';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
@@ -55,6 +56,7 @@ import {
   EV_BAR_LAYER,
   EV_BIG_DOUBLE,
   EV_FEVER_ARMED,
+  EV_FEVER_DEPLOY,
   EV_FEVER_END,
   EV_FEVER_START,
   EV_FLICK,
@@ -89,7 +91,10 @@ import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type Gri
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
 import { ParadeField, fieldGeom } from './field/ParadeField';
 import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_DARE, RB_FULL, RB_HOLD, RB_MARCH, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
-import { SongPlayer, type SongAnchor } from './audio/SongPlayer';
+import type { SongAnchor } from './audio/SongPlayer';
+import { ParadeAudio } from './audio/ParadeAudio';
+import { stagePlayer, hasFormat, type StagePlayer } from './audio/stagePlayer';
+import { KEYSOUND_CUES, playKeysound, registerKeysounds } from './audio/keysounds';
 import {
   effectiveDifficulty,
   emptyProgress,
@@ -157,8 +162,6 @@ interface RoundPlan {
   /** Easy Beat (3.5): Easy windows, approach ring on every note, d1 chart. */
   easy: boolean;
   chart: Chart;
-  songSrc: number;
-  feverSrc: number;
 }
 
 function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: number, easyPick: boolean): RoundPlan {
@@ -173,7 +176,7 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
   let difficulty: Difficulty = ride ? 1 : ((props.difficulty ?? 2) as Difficulty);
   let ftue = false;
   if (ride) {
-    stage = props.stageId && STAGES[props.stageId].audio.ride ? props.stageId : RIDE_STAGES[(runSeed >>> 0) % RIDE_STAGES.length];
+    stage = props.stageId && hasFormat(STAGES[props.stageId], 'ride') ? props.stageId : RIDE_STAGES[(runSeed >>> 0) % RIDE_STAGES.length];
   } else if (!p.firstParadeDone && !props.stageId) {
     // First Parade (3.8): Waiting Room, a 12-bar sprint, DRUM and one BIG, cannot fail.
     stage = 'waiting_room_a';
@@ -186,7 +189,6 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
     difficulty = DEV_DIFF ? (Math.min(2, DEV_DIFF) as Difficulty) : effectiveDifficulty(p, stage, Math.min(2, difficulty));
   }
   const entry = STAGES[stage];
-  const audio = entry.audio[format] ?? entry.audio.queue!;
   // Easy Beat always plays the d1 chart (3.4); FTUE is already the easiest.
   const easy = !ftue && (easyPick || !!props.easyBeat);
   if (easy) difficulty = 1;
@@ -199,34 +201,37 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
     ftue,
     easy,
     chart,
-    songSrc: audio.song,
-    feverSrc: audio.fever,
   };
 }
 
 const PRELOAD = [
-  'rh_bass_drum', 'rh_rim', 'rh_cymbal', 'rh_snare_tap', 'rh_glock', 'rh_firework', 'rh_whistle_call', 'rh_win', 'rh_clear', 'rh_stall',
+  'rh_cymbal', 'rh_glock', 'rh_firework', 'rh_whistle_call', 'rh_win', 'rh_clear', 'rh_stall',
   'sh_popper', 'sh_combo_break', 'sh_whistle', 'sh_powerup', 'sh_crowd_cheer', 'fx.reveal', 'fx.whoosh', 'fx.nope', 'fx.coin', 'fx.purchase',
-  'rh_thud', 'rh_tick',
+  ...KEYSOUND_CUES,
 ];
-
-// Always-on hit thuds (design 5.3): a quiet cut of the drum one-shots, 14 dB
-// under the song, on every GOOD-or-better hit and on every backend.
-let thudsRegistered = false;
-function registerThuds(): void {
-  if (thudsRegistered) return;
-  thudsRegistered = true;
-  GameAudio.registerCues({
-    rh_thud: { src: require('./audio/sfx/rh_thud.wav'), durationMs: 120, maxVoices: 4, priority: 1, fallback: 'ui.tap' },
-    rh_tick: { src: require('./audio/sfx/rh_tick.wav'), durationMs: 60, maxVoices: 4, priority: 1, fallback: 'ui.tap' },
-  });
-}
-const THUD_VOL = 0.42;
 
 export function RhythmTapGame(props: RhythmTapGameProps) {
   const { visible, seed: roundSeed, onComplete, onClose, onQuit } = props;
   const reducedMotion = useReducedGameMotion();
   const perfProbe = usePerfProbe(DEV_PERF);
+  // The app's own music steps aside while the parade plays (7.4) and comes back on close.
+  const appMusic = useContext(MusicContext);
+  useEffect(() => {
+    if (!visible) return undefined;
+    try {
+      void appMusic?.stopMusic?.();
+    } catch {
+      // App music is optional.
+    }
+    return () => {
+      try {
+        void appMusic?.restoreMusic?.();
+      } catch {
+        // App music is optional.
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
   const shellRef = useRef<GameShellV2Handle>(null);
   const baseSeed = useMemo(() => (roundSeed ?? (Math.floor(Math.random() * 0xffffffff) ^ Date.now())) >>> 0, [roundSeed]);
   const [runIndex, setRunIndex] = useState(0);
@@ -314,7 +319,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const auto = useSharedValue<{ err: number[]; skip: number[]; i: number; relT: number[]; relP: number[]; popLast: number }>({ err: [], skip: [], i: 0, relT: [], relP: [], popLast: 0 });
 
   // -- Audio ------------------------------------------------------------------------
-  const song = useRef<SongPlayer | null>(null);
+  const song = useRef<StagePlayer | null>(null);
   const hitSounds = useRef(false);
   const startWall = useRef(0);
   const pauseSpans = useRef<[number, number][]>([]);
@@ -364,7 +369,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
 
   useEffect(() => {
     registerStudioAudio('rhythm');
-    registerThuds();
+    registerKeysounds();
     void GameAudio.init().then(() => {
       hitSounds.current = GameAudio.backendName !== 'expo-av';
       return GameAudio.preload(PRELOAD);
@@ -443,7 +448,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     } else {
       auto.value = { err: [], skip: [], i: 0, relT: [], relP: [], popLast: 0 };
     }
-    const player = new SongPlayer(plan.songSrc, plan.feverSrc);
+    const player = stagePlayer(STAGES[plan.stage], plan.format)!;
     song.current = player;
     player.onAnchor((a) => {
       anchor.value = a;
@@ -451,6 +456,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     void player.load().then(() => {
       if (!alive) return;
       player.setGain(pocket ? 0.35 : 1);
+      // The guide voices every note at d1; at d2 your hits are the drums (7.3).
+      if (player instanceof ParadeAudio) player.setGuide(plan.difficulty === 1, 0);
       setReady(true);
     }).catch(() => {
       if (alive) setReady(true);
@@ -517,14 +524,21 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   }, [plan]);
 
   // -- JS side of every judge batch: sound, haptics, HUD -----------------------------
+  // Song time on the JS thread (anchor + wall clock - offset), for audio feel timing.
+  const clockNowRef = useRef<() => number>(() => 0);
+  clockNowRef.current = () => {
+    const a = anchor.value;
+    return (a.playing ? a.pos + (Date.now() - a.wall) : a.pos) - offset.value;
+  };
   const onBatch = useCallback((batch: number[], sc: number, combo: number, fever: number, hits: number) => {
     const s = judgeMirror.current;
-    forEachEvent(batch, (kind, a, b) => {
+    forEachEvent(batch, (kind, a, b, c) => {
       if (kind === EV_HIT) {
         const k = s?.kind[a] ?? 0;
         const rim = k === K_RIM;
-        // Always-on thud (DRUM, BIG, ROLL head) or rim tick, quiet under the song.
-        GameAudio.play(rim ? 'rh_tick' : 'rh_thud', { volume: pocket ? THUD_VOL * 0.7 : THUD_VOL });
+        // Your drum (7.5): layered keysound, PERFECT brighter; the Drumline ducks under it.
+        playKeysound(k, b, c, pocket);
+        if (song.current instanceof ParadeAudio) song.current.hitDuck();
         if (b <= J_PERFECT) {
           perfRunJs.current += 1;
           if (hitSounds.current && perfRunJs.current % 4 === 0) {
@@ -540,6 +554,16 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         else Haptic.tickSelection();
       } else if (kind === EV_MISS) {
         perfRunJs.current = 0;
+        // Miss mute (7.3): the Drumline drops out to the next beat, back over one beat.
+        const pl = song.current;
+        if (pl instanceof ParadeAudio && s) {
+          const now = clockNowRef.current();
+          let i = 0;
+          while (i + 1 < s.barStart.length && s.barStart[i + 1] <= now) i++;
+          const beatMs = (s.barStart[i + 1] - s.barStart[i]) / 4 || 450;
+          const into = (now - s.barStart[i]) % beatMs;
+          pl.missMute(beatMs - into, beatMs);
+        }
         if (b === 1) {
           GameAudio.play('sh_combo_break', { volume: 0.6 });
           Haptic.tapLight();
@@ -550,7 +574,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('fx.nope', { volume: 0.5 });
         Haptic.failBuzz();
       } else if (kind === EV_ROLL_TICK) {
-        GameAudio.play('rh_thud', { volume: THUD_VOL * 0.6 });
+        GameAudio.play('rh_drum_hit', { volume: 0.4 });
         if (b % 2 === 0) Haptic.tickSelection();
       } else if (kind === EV_ROLL_BREAK) {
         GameAudio.play('sh_combo_break', { volume: 0.45 });
@@ -569,6 +593,13 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('sh_powerup', { volume: 0.65 });
         Haptic.success();
         setArmedJs(true);
+      } else if (kind === EV_FEVER_DEPLOY) {
+        // The inhale (6.6): bed and Drumline duck across the rest beat before the drop.
+        const pl = song.current;
+        if (pl instanceof ParadeAudio && s) {
+          const beatMs = (s.barStart[a + 1] - s.barStart[a]) / 4;
+          pl.inhale(Math.max(0, s.barStart[a] - beatMs - clockNowRef.current()), beatMs);
+        }
       } else if (kind === EV_FEVER_START) {
         GameAudio.play('rh_firework');
         GameAudio.play('fx.whoosh');
@@ -610,6 +641,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   // one start time (no drift), dropped if more than 40 ms late.
   const onBar = useCallback((bar: number, barWallStart: number, beatMs: number, march: number, noteBeats: number) => {
     setMarchLive(!!march);
+    // Guide voices (7.3): always at d1, in MARCH sections at d2, never in d2 standing.
+    const pl = song.current;
+    if (pl instanceof ParadeAudio && plan) pl.setGuide(plan.difficulty === 1 || !!march, 30);
     if (marchWantRef.current === !!march) setMarchFrom(null);
     // A rival's Fever dares the next bar: one bar of warning (whistle + coral rail stripes).
     if (dareBarsRef.current.includes(bar + 1) && !march) {

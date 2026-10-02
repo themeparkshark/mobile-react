@@ -20,7 +20,10 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, runOnUI, useFrameCallback, useSharedValue, type FrameInfo } from 'react-native-reanimated';
 import { GameAudio, Haptic, drainEvents, forEachEvent, registerStudioAudio } from '../../../gamekit';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import { SongPlayer, type SongAnchor } from '../audio/SongPlayer';
+import { stagePlayer, type StagePlayer } from '../audio/stagePlayer';
+import { ParadeAudio } from '../audio/ParadeAudio';
+import { playKeysound, registerKeysounds } from '../audio/keysounds';
+import type { SongAnchor } from '../audio/SongPlayer';
 import {
   EV_FEVER_END,
   EV_FEVER_START,
@@ -62,7 +65,6 @@ export interface ParadeBoardProps {
   offsetMs?: number;
 }
 
-const THUD_VOL = 0.42;
 const NO_DARES: number[] = [];
 
 export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgress, autoplay, offsetMs = 25 }: ParadeBoardProps) {
@@ -125,13 +127,14 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
   }, [bars, chart.firstBar]);
 
   // -- Audio -------------------------------------------------------------------
-  const song = useRef<SongPlayer | null>(null);
+  const song = useRef<StagePlayer | null>(null);
   const started = useRef(false);
   useEffect(() => {
     registerStudioAudio('rhythm');
-    const audio = STAGES[board.stage as StageId]?.audio.ride;
-    if (!audio) return undefined;
-    const player = new SongPlayer(audio.song, audio.fever);
+    registerKeysounds();
+    const entry = STAGES[board.stage as StageId];
+    const player = entry ? stagePlayer(entry, 'ride') : null;
+    if (!player) return undefined;
     song.current = player;
     started.current = false;
     player.onAnchor((a) => {
@@ -191,7 +194,7 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
   // -- JS side of every judge batch --------------------------------------------
   const onBatch = useCallback((batch: number[], combo: number) => {
     const p = pts.current;
-    forEachEvent(batch, (kind, a, b) => {
+    forEachEvent(batch, (kind, a, b, c) => {
       if (kind === EV_HIT || kind === EV_MISS || kind === EV_WRONG) {
         const bi = chart.bar[a] - chart.firstBar;
         if (bi >= 0 && bi < bars) {
@@ -201,13 +204,14 @@ export function ParadeBoard({ board, seed, boardClock, held, recordAt, onProgres
       }
       if (kind === EV_HIT) {
         const k = chart.kind[a];
-        GameAudio.play(k === K_RIM ? 'rh_tick' : 'rh_thud', { volume: THUD_VOL });
+        playKeysound(k, b, c);
+        if (song.current instanceof ParadeAudio) song.current.hitDuck();
         if (k === K_BIG) Haptic.comboHeavy();
         else if (b <= J_PERFECT) (k === K_RIM ? Haptic.hitRigid : Haptic.hitMedium)();
         else if (b === J_GREAT) (k === K_RIM ? Haptic.tapLight : Haptic.hitSoft)();
         else if (b === J_GOOD) Haptic.tickSelection();
       } else if (kind === EV_ROLL_TICK) {
-        GameAudio.play('rh_thud', { volume: THUD_VOL * 0.6 });
+        GameAudio.play('rh_drum_hit', { volume: 0.4 });
       } else if (kind === EV_FEVER_START) {
         p.feverFrom = a;
         GameAudio.play('rh_firework');

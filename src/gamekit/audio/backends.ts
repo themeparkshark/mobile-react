@@ -624,6 +624,12 @@ export class HybridBackend implements AudioBackend {
     return this.routes.get(key)?.isLoaded(key) ?? false;
   }
 
+  /** Which engine a loaded key plays on ('audio-api' or 'expo-av'). */
+  routeOf(key: string): string | null {
+    const b = this.routes.get(key);
+    return b ? b.name : null;
+  }
+
   async load(key: string, src: number, voices: number): Promise<boolean> {
     if (!AV_ONLY_TYPES.has(assetType(src)) && (await this.api.load(key, src))) {
       this.routes.set(key, this.api);
