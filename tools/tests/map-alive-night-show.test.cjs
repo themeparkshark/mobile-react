@@ -33,6 +33,8 @@ test('phases: teaser in the hour before, live during, done after', () => {
 
 test('time zones: the teaser reads park time whatever the phone is set to, and phases are absolute instants', () => {
   assert.equal(night.teaserText(MK, -240), 'Fireworks tonight at 9:00 PM');
+  assert.equal(night.teaserText(show('2026-10-05T12:34:00-04:00', '2026-10-05T12:50:00-04:00'), -240), 'Fireworks today at 12:34 PM',
+    'a daytime show is today, not tonight');
   const anaheim = show('2026-10-01T21:30:00-07:00', '2026-10-01T21:40:00-07:00', { timezone: 'America/Los_Angeles' });
   assert.equal(night.teaserText(anaheim, -420), 'Fireworks tonight at 9:30 PM');
   // The same instant in UTC: 04:30Z is 9:30 PM in Anaheim, live there.
@@ -75,13 +77,22 @@ test('USF lagoon show (themeparks.wiki, Oct 2): the 12:00 AM performance reads "
 test('the longest teasers fit a 375 pt row (SE) at the pill title\'s smallest font scale', () => {
   const labels = ['Fireworks', 'Water show', 'Lagoon show', 'Castle lights', 'River show', 'Light show', 'Projection show'];
   for (const label of labels) {
+    // Unzoned too: evening, daytime and after midnight.
+    for (const at of ['2026-10-02T21:45:00-04:00', '2026-10-02T12:34:00-04:00', '2026-10-03T00:45:00-04:00']) {
+      const text = night.teaserText(show(at, at.replace(/:\d{2}:00-/, ':59:00-'), { label }), -240);
+      assert.ok(text.length <= night.TEASER_FIT_CHARS, `${text} (${text.length})`);
+    }
     const midnight = night.teaserText(show('2026-10-03T00:00:00-04:00', '2026-10-03T00:12:00-04:00', { label }), -420);
     assert.ok(midnight.length <= night.TEASER_FIT_CHARS, midnight);
     const zoned = night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label }), -420);
     assert.ok(zoned.length <= night.TEASER_FIT_CHARS, `${zoned} (${zoned.length})`);
   }
   assert.equal(night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label: 'Projection show' }), -420),
-    'Projection show 10:15 PM ET', 'the panel\'s longest case keeps its time and zone');
+    'Projection show at 10:15 PM ET', 'the panel\'s longest case keeps its time and zone');
+  assert.equal(night.teaserText(show('2026-10-02T21:45:00-04:00', '2026-10-02T22:00:00-04:00', { label: 'Projection show' }), -240),
+    'Projection show at 9:45 PM', 'unzoned, too long with "tonight" (34): drops it');
+  assert.equal(night.teaserText(show('2026-10-02T21:45:00-04:00', '2026-10-02T22:00:00-04:00', { label: 'Lagoon show' }), -240),
+    'Lagoon show tonight at 9:45 PM', 'when it fits, "tonight" stays');
   assert.match(read('src/components/map/alive/NightShowPill.tsx'), /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.85\}>\{text\}/);
 });
 
