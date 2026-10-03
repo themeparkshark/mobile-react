@@ -28,6 +28,7 @@ import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import { BRAND, GameButton, gameAlert } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { captureFlex, openShareSheet } from './capture';
 import { flexCopy } from './copy';
 import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
@@ -51,6 +52,7 @@ export const REVEAL_TAP_GUARD_MS = 900;
 export const SHOW_WATCHDOG_MS = 1500;
 /** One close word everywhere. */
 export const CLOSE_WORD = 'Nice!';
+export const PREVIEW_HOLD_MS = 400;
 
 const FPS_PROBE = __DEV__ && process.env.EXPO_PUBLIC_SHARE_STUDIO_FPS === '1';
 
@@ -199,6 +201,12 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
   const { width, height } = useWindowDimensions();
   useEffect(() => { event('opened'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useFpsProbe('sheet');
+  // No pop-in: the preview stays hidden until its art has drawn, at most PREVIEW_HOLD_MS.
+  const [previewShown, setPreviewShown] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewShown(true), PREVIEW_HOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
   const close = () => finishFlex(request.id);
   useDevAutoPress(['sheet_share', `sheet_share@${request.options.surface}`], () => { void share(); });
   useDevAutoPress(['sheet_close', `sheet_close@${request.options.surface}`], close);
@@ -211,8 +219,8 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
         {offscreen}
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={CLOSE_WORD} accessibilityRole="button" />
         <View style={[styles.previewBox, { width: size.width * scale, height: size.height * scale }]} pointerEvents="none">
-          <View style={{ width: size.width, height: size.height, transform: [{ scale }], transformOrigin: 'top left' }}>
-            <FlexCard kind={request.kind} payload={request.payload} format={format} inventory={inventory} />
+          <View style={{ width: size.width, height: size.height, transform: [{ scale }], transformOrigin: 'top left', opacity: previewShown ? 1 : 0 }}>
+            <FlexCard kind={request.kind} payload={request.payload} format={format} inventory={inventory} onReadyChange={ready => { if (ready) setPreviewShown(true); }} />
           </View>
         </View>
         <View style={styles.toggle} accessibilityRole="radiogroup">
@@ -309,7 +317,8 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
       playSfx('fx.reveal', 0.9);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Heavy).catch(() => undefined);
       burst.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-      flash.value = withSequence(withTiming(0.75, { duration: 60 }), withTiming(0, { duration: 260 }));
+      // The white flash follows the system's Dim Flashing Lights setting as well as Reduce Motion.
+      if (!isDimFlashingLightsEnabled()) flash.value = withSequence(withTiming(0.75, { duration: 60 }), withTiming(0, { duration: 260 }));
       shine.value = withDelay(260, withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }));
       if (intensity === 'big') shake.value = withSequence(...[8, -7, 5, -3, 0].map(v => withTiming(v, { duration: 45 })));
     });

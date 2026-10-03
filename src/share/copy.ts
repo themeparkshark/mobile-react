@@ -4,7 +4,7 @@
  * percent-of-players line shows) are unit tested in one place.
  */
 import { PLACE_NAMES } from './placeNames';
-import { US_CITIES } from './usCities';
+import { CITY_SAFE_NAMES, STATE_CODES, US_CITIES } from './usCities';
 import type { FlexCopy, FlexKind, FlexPayload, FlexPayloads, FlexRarity, FrameKey, RarityInput } from './types';
 
 export const RARITY_LABELS: Readonly<Record<FlexRarity, string>> = {
@@ -40,8 +40,18 @@ const LONG_DIGITS = /\d{5,}/g;
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Any park, resort, land, franchise or ride name, as a whole phrase, any case. */
 const PLACE = new RegExp(`(^|[^A-Za-z0-9])(?:${PLACE_NAMES.map(escapeRe).join('|')})(?:['’]s)?(?=$|[^A-Za-z0-9])`, 'gi');
-/** Any US city (home areas are labelled by city): built once, longest first. */
-const CITY = new RegExp(`(^|[^A-Za-z0-9])(?:${US_CITIES.map(escapeRe).join('|')})(?:['’]s)?(?=$|[^A-Za-z0-9])`, 'gi');
+/**
+ * Any US city or resort town (home areas are labelled by city), taken whole with a direction or
+ * Saint/Fort prefix and a Bay/Beach/school suffix, so no fragment is left ("Tampa Bay", "Lincoln Elementary").
+ */
+const CITY = new RegExp(
+  `(^|[^A-Za-z0-9])(?:(?:North|South|East|West|New|Lake|Greater|Downtown|Old)\\s+)?(?:${US_CITIES.map(escapeRe).join('|')})(?:['’]s)?`
+  + `(?:\\s+(?:Bay|Beach|Springs|Heights|City|Lakes?|Elementary|Middle|High|School|Academy|Primary))*(?=$|[^A-Za-z0-9])`, 'gi');
+/** State and city abbreviations: case-sensitive, so ordinary lowercase words never match. */
+const STATE = new RegExp(`(^|[^A-Za-z0-9])(?:${STATE_CODES.map(escapeRe).join('|')})(?=$|[^A-Za-z0-9])`, 'g');
+/** Catalog names that contain a town word ("Giant Celebration Cupcake") are kept whole. */
+const SAFE = new RegExp(`(?:${CITY_SAFE_NAMES.map(escapeRe).join('|') || '(?!)'})`, 'gi');
+
 /** A home-area label ("Tampa Area", "Phoenix Region", "Your Area", "Orange County"): never on a card. */
 const AREA = /(?:\b[A-Za-z][\w.'’-]*\s+){0,3}(?:Area|Region|County|Metro)\b(?:\s+\d+\b)?/gi;
 /** A possessive a removed name leaves behind ("'s Coin"). */
@@ -58,7 +68,10 @@ export function cleanName(value: string | null | undefined, max = 34): string {
     .replace(URL_LIKE, '')
     .replace(HANDLE, '')
     .replace(LONG_DIGITS, '');
-  const unplaced = raw.replace(PLACE, '$1').replace(AREA, '').replace(CITY, '$1').replace(ORPHAN_POSSESSIVE, '$1');
+  const kept: string[] = [];
+  const shielded = raw.replace(SAFE, match => `\u0000${kept.push(match) - 1}\u0000`);
+  const unplaced = shielded.replace(PLACE, '$1').replace(AREA, '').replace(CITY, '$1').replace(PLACE, '$1').replace(STATE, '$1')
+    .replace(ORPHAN_POSSESSIVE, '$1').replace(/\u0000(\d+)\u0000/g, (_, i: string) => kept[Number(i)]);
   // "survived at Universal!" -> "survived!": drop the preposition a removed place leaves behind.
   const text = (unplaced === raw ? raw : unplaced.replace(/\s+(?:at|in|on|from|to|of)(?=\s*(?:[!.?,]|$))/gi, ''))
     .replace(/\s+([,.!?:])/g, '$1')

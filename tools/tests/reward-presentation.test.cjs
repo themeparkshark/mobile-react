@@ -137,7 +137,7 @@ function coinUpgrade({ success = false, reduced = true } = {}) {
   let calls = 0, resolve;
   const request = new Promise(done => { resolve = done; });
   const view = runtime('src/components/CoinLevelingModal.tsx', {
-    '../share/devDrive': { useDevAutoPress() {} },
+    '../share/devDrive': { useDevAutoPress() {}, isDevStub: () => false },
     '../context/AuthProvider': { AuthContext: { value: { refreshPlayer: async () => {} } } },
     '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound() {} } } },
     '../hooks/useReducedGameMotion': { default: () => reduced },
@@ -158,7 +158,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     './YellowButton': {}, './CoinUpgradeDemo': {}, '../context/AuthProvider': {}, '../context/SoundEffectProvider': {},
     '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {}, '../services/purchases': { storeAvailable: () => false },
     ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {}, './help/OneTimeTip': {},
-    '../share': {}, '../share/devDrive': { useDevAutoPress() {} },
+    '../share': {}, '../share/devDrive': { useDevAutoPress() {}, isDevStub: () => false },
   });
   assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');
   assert.equal(missingResourceAction(3, 0).label, 'Get 3 Ride Parts');

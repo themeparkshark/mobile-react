@@ -16,6 +16,7 @@ import { PREVIEW_BOSS, PREVIEW_LEVEL_XP, previewPerkTrack, previewUnlocks } from
 import type { RideCoinLevelType } from '../models/ride-coin-level-type';
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
+import { markDevStub } from '../share/devDrive';
 
 const SCENARIO = process.env.EXPO_PUBLIC_SHARE_EVIDENCE ?? 'coin5';
 const PROD = 'https://assets.themeparkshark.com/mobile/production/assets';
@@ -60,8 +61,8 @@ export default function ShareModalEvidenceScreen() {
               board_label: 'Tampa Area', points: 1840, finds: 46, rewards: {} }} />
         : <CoinLevelingModal visible={open} rideCoin={coin} playerEnergy={1000} playerParts={80}
             onClose={() => setOpen(false)}
-            onLevelUp={async () => ({ success: true, ride_coin: next, spent: { energy: coin.energy_to_next_level, ride_parts: coin.parts_to_next_level },
-              xp: PREVIEW_LEVEL_XP[from + 1] ?? 0, unlocks: previewUnlocks(from + 1) })}
+            onLevelUp={markDevStub(async () => ({ success: true, ride_coin: next, spent: { energy: coin.energy_to_next_level, ride_parts: coin.parts_to_next_level },
+              xp: PREVIEW_LEVEL_XP[from + 1] ?? 0, unlocks: previewUnlocks(from + 1) }))}
             onFeature={async () => true} />}
     </SafeAreaView>
   );
