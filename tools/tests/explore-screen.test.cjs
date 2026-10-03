@@ -45,7 +45,7 @@ test('the server flag hides every Adventure Ticket surface when off', async () =
   assert.equal(off.find(named('AdventureTicketCard')), undefined);
 });
 
-test('stacked rides fold into one island; tapping it zooms in instead of selecting', async () => {
+test('stacked rides: every island stays mounted in a stable order (MapLibre insert crash); the solver folds them and tapping the "+N" host zooms in', async () => {
   const stack = [0, 1, 2].map(i => ({ ...task, id: 20 + i, name: `Ride ${i}`, latitude: 34.13808 + i * 0.00001 }));
   const app = exploreScreen({ trip: null, redeemables: { ...redeemables, tasks: stack } });
   await app.settle(); await app.settle();
@@ -53,11 +53,17 @@ test('stacked rides fold into one island; tapping it zooms in instead of selecti
   const walk = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
     if (named('TaskMarker')(node)) islands.push(node); walk(node.props?.children); };
   walk(app.tree);
-  assert.equal(islands.length, 1);
-  assert.equal(islands[0].props.clusterCount, 2);
-  islands[0].props.onPress(islands[0].props.task); app.render();
+  assert.deepEqual(islands.map(island => island.props.task.id), [20, 21, 22], 'all three mounted, in first-seen order');
+  assert.match(require('node:fs').readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /\{orderedRides\.map\(task => \{[\s\S]{0,200}key=\{task\.id\}/,
+    'keyed by ride, never by fold or goal state');
+  // The solver folded rides 20 and 21 into 22 (the store is what the map's camera pass publishes).
   const map = app.find(named('Map'));
-  assert.ok(map.props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
+  const v = { visible: true, scale: 1, folded: 0, foldedInto: null, reason: null };
+  map.props.declutter.store.publish(new Map([['ride:22', { ...v, folded: 2 }], ['ride:20', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }],
+    ['ride:21', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }]]));
+  const host = islands.find(island => island.props.task.id === 22);
+  host.props.onPress(host.props.task); app.render();
+  assert.ok(app.find(named('Map')).props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
   assert.equal(app.find(label('Play queue games for')), undefined);
 });
 
@@ -86,20 +92,19 @@ test('Find this coin selects the ride and lays a guide toward it', async () => {
   assert.equal(app.find(named('Map')).props.guideTarget, null, 'tapping the map clears the guide');
 });
 
-test('the Park Project pill sits on the same row as the other suggestion slots, below Ride Control and Live Events', async () => {
+test('the Park Project pill sits on the same row as the other suggestion slots, under the one HUD row', async () => {
   const { loadTs } = require('./helpers/ts-module.cjs');
   const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
-  assert.equal(q.suggestionSlotTop(false), 64);
-  assert.equal(q.suggestionSlotTop(true), 124);
+  // One HUD row (12 + 54 + 10), whatever it shows: no slot jumps when a Rush or the night mode arrives.
+  assert.equal(q.suggestionSlotTop(), 76);
   // Header (70 + status bar) minus the map's 8pt tuck, then the in-map slot row.
-  assert.equal(q.suggestionSlotScreenTop(54, false), 54 + 62 + 64);
-  assert.equal(q.suggestionSlotScreenTop(54, true), 54 + 62 + 124);
+  assert.equal(q.suggestionSlotScreenTop(54), 54 + 62 + 76);
   const app = exploreScreen(); await app.settle();
   const widget = app.find(named('ParkProjectWidget'));
   assert.ok(widget, 'project widget renders at the park');
-  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, false));
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0));
   // The recenter compass clears the tallest chip in the right slot (the Park Story pill).
-  assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop(false) + 76);
+  assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop() + 76);
 });
 
 test('one suggestion leads: a live raid plus an adventure plus a Park Story shows exactly one full chip', async () => {
@@ -120,9 +125,9 @@ test('one suggestion leads: a live raid plus an adventure plus a Park Story show
   assert.equal(fullChips.length, 1, 'exactly one full suggestion chip');
   assert.equal(card.props.collapsed, false, 'the adventure leads');
   assert.equal(widget.props.pillCollapsed, true, 'the Park Story folds into its stub');
-  // Both slots sit under the Live Events row.
-  assert.equal(card.props.top, q.suggestionSlotTop(true));
-  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, true));
+  // Both slots sit under the one HUD row (the raid leads it).
+  assert.equal(card.props.top, q.suggestionSlotTop());
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0));
 });
 
 test('a selected queue ride leads and the adventure folds into its stub', async () => {

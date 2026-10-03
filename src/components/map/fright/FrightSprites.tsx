@@ -80,10 +80,12 @@ function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType; x: 
 
 const NO_ROWS = [0, -1, -1];
 
-function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, index, cx, cy, animated, lite }: {
+function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, index, cx, cy, animated, lite, on = true }: {
   seed: number; clock: SharedValue<number>; wander: number; watch: number; jumpStart: SharedValue<number>;
   jumper: boolean; slug: string | null; asset: FrightSheetAsset | null; index: number; cx: number; cy: number;
   animated: boolean; lite: boolean;
+  /** Drawn or not (opacity): the slot stays mounted (see ReefCritters). */
+  on?: boolean;
 }) {
   const look = useMemo(() => critterLook(slug, index), [slug, index]);
   const sheet = useRemoteImage(asset?.sheet);
@@ -116,7 +118,7 @@ function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, i
   const fw = asset?.frame[0] ?? 128;
   const fh = asset?.frame[1] ?? 128;
   return (
-    <Group>
+    <Group opacity={on ? 1 : 0}>
       <Group transform={shadow}><Oval x={-10} y={-3} width={20} height={6} color="rgba(10,6,30,0.35)" /></Group>
       <Group transform={body}>
         {useSheet && sheet
@@ -131,12 +133,19 @@ function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, i
 }
 
 /** Critters wandering a reef, over a still ground mist (fog is thicker at reefs). */
-export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets, count, wanderPts, clock, animated, lite, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
+export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets, count, slots, wanderPts, clock, animated, lite, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
   readonly reefKey: string;
   readonly slugs: readonly string[];
   /** Each slug's sheet (null: placeholder). */
   readonly assets: readonly (FrightSheetAsset | null)[];
+  /** Critters drawn now. */
   readonly count: number;
+  /**
+   * Critter slots always mounted (the reef's most). Budget and motion changes
+   * only show or hide slots: mounting and unmounting Skia nodes that a moving
+   * clock still animates crashed RN Skia (JsiDomDeclarationNode::invalidateContext).
+   */
+  readonly slots: number;
   readonly wanderPts: number;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
@@ -164,12 +173,12 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
   return (
     <Canvas style={{ width: W, height: H }} pointerEvents="none">
       {mist && <FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
-      {Array.from({ length: count }, (_, i) => {
+      {Array.from({ length: Math.max(slots, count) }, (_, i) => {
         const k = slugs.length ? i % slugs.length : 0;
         return (
           <Critter key={i} seed={seed + i * 37} clock={clock} wander={wanderPts} watch={watch} jumpStart={jumpStart}
             jumper={i === jumpIndex % Math.max(1, count)} slug={slugs[k] ?? null} asset={assets[k] ?? null} index={i}
-            cx={cx} cy={cy} animated={animated} lite={lite} />
+            cx={cx} cy={cy} animated={animated && i < count} lite={lite} on={i < count} />
         );
       })}
     </Canvas>
@@ -314,7 +323,10 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
       {windowsImg && timelines.map((toggles, i) => (
         <LayerWindow key={i} i={i} image={windowsImg} fw={fw} fh={fh} x={x} y={y} toggles={toggles} clock={clock} rate={rate} dim={dim} />
       ))}
-      {ghostImg && ghosts && !dim && <SheetFrame image={ghostImg} fw={fw} fh={fh} frame={ghostIdx} row={zero} x={x} y={y} opacity={ghostShown} />}
+      {/* Always mounted once the art is in: ghosts on or off only changes opacity (RN Skia unmount race). */}
+      {ghostImg && <Group opacity={ghosts && !dim ? 1 : 0}>
+        <SheetFrame image={ghostImg} fw={fw} fh={fh} frame={ghostIdx} row={zero} x={x} y={y} opacity={ghostShown} />
+      </Group>}
       {doorImg && <SheetFrame image={doorImg} fw={fw} fh={fh} frame={doorFrame} row={zero} x={x} y={y} opacity={doorGlow} />}
     </Group>
   );
@@ -428,11 +440,14 @@ const NO_HUDS: readonly HudRect[] = [];
 
 /* ── Spot props ───────────────────────────────────────────────────────── */
 
+/** Bats a prop spot can show (FrightMapSources allocates at most 2). */
+const MAX_BATS = 2;
 const PW = 200;
 const PH = 150;
 
-function Bat({ k, seed, clock, sheet, fw, fh, frames, animated }: {
+function Bat({ k, seed, clock, sheet, fw, fh, frames, animated, on = true }: {
   k: number; seed: number; clock: SharedValue<number>; sheet: SkImageType | null; fw: number; fh: number; frames: number; animated: boolean;
+  on?: boolean;
 }) {
   const speed = 0.35 + hash01(seed + k * 7) * 0.25;
   const phase = hash01(seed + k * 7 + 1) * 6.283;
@@ -448,7 +463,7 @@ function Bat({ k, seed, clock, sheet, fw, fh, frames, animated }: {
   const clip = useMemo(() => Skia.XYWHRect(-fw / 2, -fh / 2, fw, fh), [fw, fh]);
   if (!sheet) return null;
   return (
-    <Group transform={transform}>
+    <Group transform={transform} opacity={on ? 1 : 0}>
       <Group clip={clip}>
         <Group transform={offset}><SkImage image={sheet} x={0} y={0} width={sheet.width()} height={sheet.height()} fit="fill" /></Group>
       </Group>
@@ -586,9 +601,11 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
       {props.includes('eyes') && <Eyes seed={seed} clock={clock} sheet={eyesSheet} bush={bush} animated={take(true)} />}
       {props.includes('pumpkin') && <Pumpkin clock={clock} animated={take(false)} art={jack} asset={ambient?.['jack-o-lantern'] ?? null} />}
       {props.includes('lantern') && <HangingLantern seed={seed} clock={clock} animated={take(true)} art={lantern} asset={ambient?.lantern ?? null} />}
-      {props.includes('skid-fins') && take(false) && <SkidSparks seed={seed} clock={clock} />}
-      {animated && !lite && Array.from({ length: bats }, (_, k) => (
-        <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames} animated />
+      {/* Fixed Skia trees: budget, tier and motion only show or hide (RN Skia unmount race under a moving map). */}
+      {props.includes('skid-fins') && <Group opacity={take(false) ? 1 : 0}><SkidSparks seed={seed} clock={clock} /></Group>}
+      {props.includes('bats') && Array.from({ length: MAX_BATS }, (_, k) => (
+        <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames}
+          animated={animated && !lite && k < bats} on={animated && !lite && k < bats} />
       ))}
     </Canvas>
   );

@@ -19,12 +19,14 @@ import type { FrightEngine } from './useFrightEngine';
 /** The real Deep Lantern art, bundled, so every player sees it (server art only overrides). */
 const LANTERN = require('./art/lantern.webp');
 
-export default function FrightPill({ night, engine, onHelp }: {
+export default function FrightPill({ night, engine, onHelp, inline = false }: {
   readonly night: FrightNight;
   readonly engine: FrightEngine;
   /** Replay the tutorial ("?"). */
   /** Optional own "?" (off on the map: the map's one "?" opens a chooser while the mode is on). */
   readonly onHelp?: () => void;
+  /** Inside the map's status row: no outer margin (the row owns spacing). */
+  readonly inline?: boolean;
 }) {
   const [, setTick] = useState(0);
   const rowRef = useRef<View>(null);
@@ -47,7 +49,7 @@ export default function FrightPill({ night, engine, onHelp }: {
   });
   const label = `${title}. ${hauntCountText(done, haunts.length)}. ${sub}. Open the haunt list.`;
   return (
-    <View ref={rowRef} style={styles.row} onLayout={() => {
+    <View ref={rowRef} style={[styles.row, inline && styles.inline]} onLayout={() => {
       // Coach marks and toasts sit just under the pill, never on top of it.
       rowRef.current?.measureInWindow((_x, y, _w, h) => { if (Number.isFinite(y) && h > 0) setPillBottom(y + h); });
     }}>
@@ -78,6 +80,7 @@ export default function FrightPill({ night, engine, onHelp }: {
 }
 
 const styles = StyleSheet.create({
+  inline: { marginHorizontal: 0, marginTop: 0 },
   row: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 8, gap: 6 },
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: NIGHT.fog,
     backgroundColor: NIGHT.haunt, paddingVertical: 5, paddingLeft: 6, paddingRight: 10, minHeight: 48,

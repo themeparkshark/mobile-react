@@ -60,11 +60,9 @@ test('facades stay while half visible (40 pt slack); farther off they hide (corn
   assert.equal(fb.onScreen(at(375 / 2 + 60), c, 17, 0, 375, 667, 40), false, '60 pt past: hidden');
 });
 
-test('Map hides the panned-away player shark while it is off screen (no corner shark)', () => {
+test('Map hides the panned-away player shark while it is off screen (no corner shark; the declutter owns it)', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /const off = !onScreen\(loc, cam, cam\.zoom, cam\.heading, size\.width, size\.height, 40\);/);
-  assert.match(map, /onRegionIsChanging=\{feature => trackCamera\(feature\)\}/);
-  assert.match(map, /<View style=\{\{ opacity: playerOff \? 0 : 1 \}\}>\{playerShark\}<\/View>/);
+  assert.match(map, /<View style=\{\{ opacity: focusedOnPlayer \|\| !playerOnScreen \? 0 : 1 \}\}>\{playerShark\}<\/View>/);
   assert.match(map, /<FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} hud=\{rail\} \/>/);
 });
 

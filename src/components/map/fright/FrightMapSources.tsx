@@ -8,12 +8,13 @@
  */
 import { FillLayer, ShapeSource, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { useWindowDimensions, View } from 'react-native';
-import { memo, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
 import type { FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
+import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
 import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
 import { critterSlugs } from './frightArt';
 import { critterAsset, hauntLayers, iconAsset, isChaosHour } from './frightAssets';
@@ -242,15 +243,21 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         // Capped at 90 pt: a reef canvas is (2 x wander + 90) points square at 3x, and four of them add up.
         const wander = Math.max(18, Math.min(90, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
-        const glyph = lod === 'glyph' || st.tier === 'calm' || n === 0;
+        // Glyph by zoom and tier only: standing still keeps the critters (one, still) instead of
+        // swapping canvases each time the player stops (RN Skia unmount race under a moving map).
+        const glyph = lod === 'glyph' || st.tier === 'calm';
+        const slots = critterWant(reef.fx);
         const sheets = slugs.map(slug => critterAsset(assets, slug));
         return (
           <Marker key={`fr-${reef.key}`} coordinate={reef}>
-            {glyph
-              ? <ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />
-              : <ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n} wanderPts={wander} clock={alive.clock}
-                  animated={animate} lite={lite} watch={watch} jumpToken={tokens[`jump:${reef.key}`] ?? 0}
-                  jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible} mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+            <PlacedSpot id={`reef:${reef.key}`}>
+              {glyph
+                ? <ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />
+                : <ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
+                    wanderPts={wander} clock={alive.clock} animated={animate && n > 0} lite={lite} watch={watch}
+                    jumpToken={tokens[`jump:${reef.key}`] ?? 0} jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible}
+                    mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+            </PlacedSpot>
           </Marker>
         );
       })}
@@ -278,7 +285,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
             onPress={drawn && onHauntPress ? () => onHauntPress(haunt.key) : undefined}
             accessibilityLabel={drawn ? `${haunt.name}, haunt` : undefined}>
             {drawn
-              ? <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
+              ? <PlacedSpot id={`haunt:${haunt.key}`} anchor={HAUNT_GROUND} fold><HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
                   animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
                   rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
                   ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
@@ -291,7 +298,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
                   survivedPin={assets?.event_pins?.['ev-survived']?.['256'] ?? null}
                   done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)}
                   index={rankIndex.get(haunt.key) ?? 0}
-                  iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+                  iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} /></PlacedSpot>
               : <HiddenSpot />}
           </Marker>
         );
@@ -317,6 +324,29 @@ export const DRAW_MARGIN_SCREENS = 1;
 export const ON_SCREEN_SLACK = 40;
 /** The chip's top sits this far below the facade's anchor point (glow pool to chip). */
 export const CHIP_BELOW_ANCHOR = 20;
+
+/** The haunt lantern's ground point inside its 168 x 136 box (FrightSprites HAUNT_ANCHOR), in points. */
+const HAUNT_GROUND = { x: 84, y: 82 } as const;
+
+/**
+ * A spot's art under the map declutter: fades or shrinks with its placement
+ * (opacity and transform only, never a prop of the Skia art) and shows "+N"
+ * for haunts folded into it. Only this spot re-renders when its placement moves.
+ */
+function PlacedSpot({ id, anchor, fold = false, children }: {
+  readonly id: string;
+  readonly anchor?: { readonly x: number; readonly y: number };
+  readonly fold?: boolean;
+  readonly children: ReactNode;
+}) {
+  const placement = usePlacement(id);
+  return (
+    <Placed placement={placement} anchor={anchor}
+      overlay={fold ? <FoldBadge count={placement.folded} style={{ left: 40, top: 6 }} /> : undefined}>
+      {children}
+    </Placed>
+  );
+}
 
 /** A mounted, invisible stand-in: the Marker stays, nothing draws and nothing takes touches. */
 function HiddenSpot() {

@@ -103,7 +103,8 @@ test('R2-18 "EVERY RIDE IS OPEN" never shows on an event night at an event park 
 
 test('R2-19 one "?": the pill has no own help on the map; the map "?" offers Fin-ister first while the mode is on', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /<FrightPill night=\{frightNight\} engine=\{frightEngine\} \/>/);
+  // In the map's one status row (declutter) the pill is inline; still no own help.
+  assert.match(explore, /<FrightPill (inline )?night=\{frightNight\} engine=\{frightEngine\} \/>/);
   assert.match(explore, /onPress=\{frightNight\.modeOn \? \(\) => gameAlert\('How to play', undefined, frightHelpChoices\(/);
   const choices = hooks.frightHelpChoices({ title: 'Fin-ister Nights', onFright: () => {}, onPark: () => {} });
   assert.equal(choices[0].text, 'Fin-ister Nights');

@@ -15,6 +15,10 @@ const adventure = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.
 const timing = loadTs('src/screens/ExploreScreen/mapOpportunityTiming.ts');
 const queue = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
 const chestPresence = loadTs('src/screens/ExploreScreen/dailyChestPresence.ts');
+const statusStack = loadTs('src/components/map/statusStack.ts');
+const parkMapLayout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+const declutterStore = loadTs('src/components/map/declutter/store.ts');
+const frightGeo = loadTs('src/components/map/fright/geo.ts');
 
 // Modules the runtime implements itself; the stub proxy must not shadow them.
 const RUNTIME_OWNED = new Set(['react', 'react/jsx-runtime', 'react-native', 'react-native-reanimated',
@@ -80,6 +84,10 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/adventureTicketPresentation': adventure,
     './ExploreScreen/mapPresentationQueue': queue,
     './ExploreScreen/dailyChestPresence': chestPresence,
+    '../components/map/statusStack': statusStack,
+    './ExploreScreen/parkMapLayout': parkMapLayout,
+    '../components/map/declutter/store': declutterStore,
+    '../components/map/fright/geo': frightGeo,
     './ExploreScreen/ws2Profiler': { withWs2Profiler: component => component },
     './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null },
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },

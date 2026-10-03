@@ -3,6 +3,9 @@ import { Image } from 'expo-image';
 import { useContext } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import { Text, View } from 'react-native';
+import { TagSlot } from '../../components/map/declutter/Placed';
+import type { TagPlacement } from '../../components/map/declutter/solver';
+import { COIN_BODY, FIND_BOX, FIND_ROOT, FIND_TAG } from './parkMapLayout';
 import { useTimeoutWhen } from 'rooks';
 import { CurrencyContext } from '../../context/CurrencyProvider';
 import { KeyType } from '../../models/key-type';
@@ -14,9 +17,12 @@ import { KeyType } from '../../models/key-type';
 export default function Key({
   model,
   onExpire,
+  tag,
 }: {
   readonly model: KeyType;
   readonly onExpire: () => void;
+  /** Where the declutter put the timer chip (undefined: default, null: hidden). */
+  readonly tag?: TagPlacement | null;
 }) {
   const { currencies } = useContext(CurrencyContext);
 
@@ -29,36 +35,38 @@ export default function Key({
   );
 
   return (
-    <View style={{ alignItems: 'center', width: 70 }}>
-      {/* Timer badge */}
-      <View style={{
-        backgroundColor: '#E8F4FD',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 5,
-        marginBottom: 8,
-        borderWidth: 2,
-        borderColor: '#4FC3F7',
-        shadowColor: '#4FC3F7',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 4,
-      }}>
-        <Countdown
-          date={Date.parse(model.active_to)}
-          renderer={({ minutes, seconds }) => (
-            <Text style={{
-              fontFamily: 'Shark',
-              fontSize: 15,
-              color: '#0288D1',
-              textAlign: 'center',
-            }}>
-              {minutes}:{zeroPad(seconds)}
-            </Text>
-          )}
-        />
-      </View>
+    <View style={FIND_ROOT}>
+      {/* Timer chip: the declutter places it on a free side (TagSlot). */}
+      <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
+        fallback={{ x: -FIND_TAG.w / 2, y: COIN_BODY.y - FIND_TAG.h - 3 }}>
+        <View style={{
+          backgroundColor: '#E8F4FD',
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 5,
+          borderWidth: 2,
+          borderColor: '#4FC3F7',
+          shadowColor: '#4FC3F7',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 4,
+        }}>
+          <Countdown
+            date={Date.parse(model.active_to)}
+            renderer={({ minutes, seconds }) => (
+              <Text style={{
+                fontFamily: 'Shark',
+                fontSize: 15,
+                color: '#0288D1',
+                textAlign: 'center',
+              }}>
+                {minutes}:{zeroPad(seconds)}
+              </Text>
+            )}
+          />
+        </View>
+      </TagSlot>
 
       {/* Key with static glow */}
       <View>

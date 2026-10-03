@@ -176,10 +176,14 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
           <ImageShader image={fogFar} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={farTransform} />
         </Rect>
       )}
-      {fogNear && full && (
-        <Rect x={0} y={0} width={width} height={height} opacity={nearOpacity}>
-          <ImageShader image={fogNear} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={nearTransform} />
-        </Rect>
+      {/* Tier changes only show or hide (opacity): mounting or unmounting Skia nodes that the
+          ambient clock still animates crashed RN Skia (invalidateContext) under a moving map. */}
+      {fogNear && (
+        <Group opacity={full ? 1 : 0}>
+          <Rect x={0} y={0} width={width} height={height} opacity={nearOpacity}>
+            <ImageShader image={fogNear} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={nearTransform} />
+          </Rect>
+        </Group>
       )}
     </Group>
   );
@@ -198,16 +202,16 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
               <Circle cx={moonX + 6} cy={moonY + 5} r={2.5} color="#F1DC92" />
             </Group>
           )}
-          {clouds && full && (
-            <Group transform={[{ translateY: moonY - CLOUDS_H * 0.45 }]}>
+          {clouds && (
+            <Group transform={[{ translateY: moonY - CLOUDS_H * 0.45 }]} opacity={full ? 1 : 0}>
               <SkImage image={clouds} x={cloudX} y={0} width={CLOUDS_W} height={CLOUDS_H} fit="fill" opacity={0.85} />
             </Group>
           )}
         </Group>
         {fogLayers}
         {/* Lightning: a soft violet-white flash and a small bolt by the moon. */}
-        {caps.frightBolts > 0 && (
-          <Group>
+        {(
+          <Group opacity={caps.frightBolts > 0 ? 1 : 0}>
             <Rect x={0} y={0} width={width} height={height} color={NIGHT.fogLight} opacity={flash} />
             {boltSheet && boltAsset?.frame
               ? <BoltSprite image={boltSheet} fw={boltAsset.frame[0]} fh={boltAsset.frame[1]} frame={boltFrame} row={boltRow} x={boltX} shown={boltShown} />
