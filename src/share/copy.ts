@@ -38,7 +38,11 @@ const LONG_DIGITS = /\d{5,}/g;
 
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Any park, resort, land, franchise or ride name, as a whole phrase, any case. */
-const PLACE = new RegExp(`(^|[^A-Za-z0-9])(?:${PLACE_NAMES.map(escapeRe).join('|')})(?=$|[^A-Za-z0-9])`, 'gi');
+const PLACE = new RegExp(`(^|[^A-Za-z0-9])(?:${PLACE_NAMES.map(escapeRe).join('|')})(?:['’]s)?(?=$|[^A-Za-z0-9])`, 'gi');
+/** A home-area label ("Tampa Area", "Phoenix Region", "Your Area", "Orange County"): never on a card. */
+const AREA = /(?:\b[A-Za-z][\w.'’-]*\s+){0,3}(?:Area|Region|County|Metro)\b/g;
+/** A possessive a removed name leaves behind ("'s Coin"). */
+const ORPHAN_POSSESSIVE = /(^|\s)['’]s\b/g;
 
 /**
  * Catalog names and server lines only, but scrub anything that could carry
@@ -51,7 +55,7 @@ export function cleanName(value: string | null | undefined, max = 34): string {
     .replace(URL_LIKE, '')
     .replace(HANDLE, '')
     .replace(LONG_DIGITS, '');
-  const unplaced = raw.replace(PLACE, '$1');
+  const unplaced = raw.replace(PLACE, '$1').replace(AREA, '').replace(ORPHAN_POSSESSIVE, '$1');
   // "survived at Universal!" -> "survived!": drop the preposition a removed place leaves behind.
   const text = (unplaced === raw ? raw : unplaced.replace(/\s+(?:at|in|on|from|to|of)(?=\s*(?:[!.?,]|$))/gi, ''))
     .replace(/\s+([,.!?:])/g, '$1')
@@ -75,37 +79,67 @@ function count(n: number | null | undefined): number {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
-type CopyFn<K extends FlexKind> = (p: FlexPayloads[K]) => Omit<FlexCopy, 'a11y'>;
 
-const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
-  crowned: p => ({
+/** Percent-of-players line: only kinds the server can actually count (GET /me/flex/rarity). */
+export const OWNED_KINDS: ReadonlySet<FlexKind> = new Set<FlexKind>(['find', 'stamp', 'set_complete', 'coin_level', 'crowned']);
+
+/** "3%" for the giant number, or null when it isn't a real brag. */
+function ownedBig(pct: number | null | undefined): string | null {
+  if (pct == null || !Number.isFinite(pct) || pct < 0 || pct > OWNED_PCT_MAX) return null;
+  return pct < 0.01 ? '<1%' : `${Math.max(1, Math.round(pct * 100))}%`;
+}
+
+/** Event titles carry no year (cards never carry dates). */
+function noYear(text: string): string {
+  return text.replace(/\s*\b(?:19|20)\d\d\b\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** "Legendary Golden Churro" on a Legendary chip reads twice: drop the leading rarity word. */
+function noRarityWord(name: string, label: string): string {
+  const stripped = name.replace(new RegExp(`^${label}\\s+`, 'i'), '');
+  return stripped.length >= 3 ? stripped : name;
+}
+
+const RARITY_FRAME: Readonly<Record<FlexRarity, FrameKey>> = {
+  1: 'common', 2: 'uncommon', 3: 'rare', 4: 'epic', 5: 'legendary',
+};
+
+type CopyCore = Omit<FlexCopy, 'a11y' | 'bigLabel' | 'prop' | 'hideShark'> & Partial<Pick<FlexCopy, 'bigLabel' | 'prop' | 'hideShark'>>;
+type CopyFnCore<K extends FlexKind> = (p: FlexPayloads[K], owned: number | null) => CopyCore;
+
+const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
+  crowned: (p, owned) => ({
     ribbon: 'SHARK CROWN!',
     kicker: 'My Crowned Ride Coin',
-    title: cleanName(p.tierName || 'Shark Crown'),
+    title: 'Shark Crown',
     big: 'LV 10',
-    stat: ownedLine(p.ownedPct, 'have crowned one') ?? 'Maxed out to Level 10',
+    stat: ownedLine(owned, 'have crowned one') ?? 'Maxed out, the top tier',
     sub: count(p.timesCollected) ? `Ridden and won ${plural(count(p.timesCollected), 'time')}` : null,
     cta: 'Can you crown one?',
     frame: 'royal',
+    prop: 'trophy',
     rarity: null,
   }),
 
-  find: p => {
+  find: (p, owned) => {
     const rarity = normalizeRarity(p.rarity);
     const label = RARITY_LABELS[rarity];
-    const brag = ownedLine(p.ownedPct, 'have found one')
-      ?? (p.goldenHour ? 'Caught in the Golden Hour' : null)
-      ?? (p.dailyRare ? 'The Daily Rare' : null)
-      ?? `A ${label} find`;
+    const pct = ownedBig(owned);
+    const found = count(p.setFound);
+    const total = count(p.setTotal);
+    const setName = p.setName ? cleanName(p.setName, 22) : '';
+    const progress = total && found ? `${Math.min(found, total)} of ${total}${setName ? ` ${setName}` : ''}` : setName ? `${setName} set` : null;
     return {
       ribbon: p.goldenHour ? 'GOLDEN HOUR!' : rarity >= 3 ? `${label.toUpperCase()} FIND!` : 'NEW FIND!',
       kicker: `My ${label} Find`,
-      title: cleanName(p.itemName),
-      big: null,
-      stat: brag,
-      sub: p.setName ? `${cleanName(p.setName, 24)} set` : null,
+      title: noRarityWord(cleanName(p.itemName), label),
+      big: pct ?? (total && found ? `${Math.min(found, total)}/${total}` : null),
+      bigLabel: pct ? 'OF PLAYERS HAVE ONE' : total && found ? 'IN THE SET' : null,
+      stat: p.goldenHour ? 'Caught in the Golden Hour' : p.dailyRare ? 'The Daily Rare' : `A ${label} find`,
+      sub: pct ? progress : (total && found ? (setName ? `${setName} set` : null) : progress),
       cta: 'Can you find one?',
-      frame: 'collection',
+      frame: p.goldenHour ? 'golden' : RARITY_FRAME[rarity],
+      prop: 'magnifier',
       rarity,
     };
   },
@@ -116,17 +150,18 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
     return {
       ribbon: p.grade === 'frame_it' ? 'FRAME IT!' : p.grade === 'great' ? 'GREAT SHOT!' : 'NICE SHOT!',
       kicker: 'My Ride Photo',
-      title: cleanName(p.itemName),
+      title: noRarityWord(cleanName(p.itemName), RARITY_LABELS[rarity]),
       big: null,
       stat: `${grade} on a${rarity === 2 || rarity === 4 ? 'n' : ''} ${RARITY_LABELS[rarity]}`,
-      sub: p.goldenHour ? 'Golden Hour light' : ownedLine(p.ownedPct, 'have found one'),
+      sub: p.goldenHour ? 'Golden Hour light' : null,
       cta: 'Snap one yourself!',
-      frame: 'photo',
+      frame: p.goldenHour ? 'golden' : 'photo',
+      hideShark: true,
       rarity,
     };
   },
 
-  set_complete: p => {
+  set_complete: (p, owned) => {
     const total = count(p.total);
     const found = Math.min(count(p.found), total || count(p.found));
     return {
@@ -134,10 +169,12 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
       kicker: p.source === 'shop' ? 'My Complete Look' : 'My Collection',
       title: cleanName(p.setName),
       big: total ? `${found}/${total}` : null,
-      stat: ownedLine(p.ownedPct, 'have finished it') ?? 'The whole set, collected',
+      bigLabel: total ? 'COLLECTED' : null,
+      stat: ownedLine(owned, 'have finished it') ?? 'The whole set, done!',
       sub: p.title ? `Title earned: ${cleanName(p.title, 24)}` : null,
       cta: 'Can you finish it?',
-      frame: 'collection',
+      frame: 'legendary',
+      prop: 'treasure',
       rarity: null,
     };
   },
@@ -146,90 +183,105 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
     ribbon: 'BOSS TAMED!',
     kicker: 'My Ride Boss Win',
     title: cleanName(p.bossName),
-    big: null,
+    big: 'KO!',
     stat: p.difficulty === 'shark' ? 'Tamed on Shark mode' : p.difficulty === 'hard' ? 'Tamed on Hard mode' : 'Tamed it!',
-    sub: ownedLine(p.ownedPct, 'have done it')
-      ?? (p.mvp ? 'MVP of the fight' : null)
-      ?? (p.title ? `Title earned: ${cleanName(p.title, 24)}` : null),
+    sub: p.mvp ? 'MVP of the fight' : p.title ? `Title earned: ${cleanName(p.title, 24)}` : null,
     cta: 'Think you can tame it?',
     frame: 'boss',
+    prop: 'foam-finger',
     rarity: null,
   }),
 
-  stamp: p => {
+  stamp: (p, owned) => {
     const rarity = normalizeRarity(p.rarity);
+    const pct = ownedBig(owned);
     return {
       ribbon: rarity >= 4 ? `${RARITY_LABELS[rarity].toUpperCase()} STAMP!` : 'NEW STAMP!',
       kicker: 'My Stamp Book',
       title: cleanName(p.name),
-      big: null,
-      stat: ownedLine(p.ownedPct) ?? (p.how ? cleanName(p.how, 40) : `A ${RARITY_LABELS[rarity]} stamp`),
+      big: pct,
+      bigLabel: pct ? 'OF PLAYERS HAVE IT' : null,
+      stat: p.how ? cleanName(p.how, 40) : `A ${RARITY_LABELS[rarity]} stamp`,
       sub: p.title ? `Title earned: ${cleanName(p.title, 24)}` : null,
       cta: 'Start your Stamp Book!',
       frame: 'passport',
+      prop: 'compass',
+      hideShark: !!p.artHasShark,
       rarity,
     };
   },
 
-  coin_level: p => {
+  coin_level: (p, owned) => {
     const level = Math.max(1, Math.min(10, count(p.level) || 1));
+    const tier = cleanName(p.tierName || 'New', 20);
     return {
       ribbon: 'COIN LEVEL UP!',
       kicker: 'My Ride Coin',
-      title: `${cleanName(p.tierName || 'Ride', 20)} Coin`,
+      title: `${tier} Coin`,
       big: `LV ${level}`,
-      stat: ownedLine(p.ownedPct, 'have one this high') ?? `${cleanName(p.tierName || 'New', 20)} tier unlocked`,
+      stat: ownedLine(owned, 'have one this high') ?? `${tier} tier unlocked`,
       sub: count(p.timesCollected) ? `Ridden and won ${plural(count(p.timesCollected), 'time')}` : null,
       cta: 'Level up yours!',
       frame: 'coins',
+      prop: 'coins',
       rarity: null,
     };
   },
 
   standings: p => {
-    const tier = cleanName(p.tierLabel, 20);
+    const tier = cleanName(p.tierLabel, 20) || 'Hunter';
     const rank = count(p.rank);
     const pct = p.percentile != null && Number.isFinite(p.percentile) ? Math.max(1, Math.round(p.percentile)) : null;
+    const podium = rank >= 1 && rank <= 3;
     return {
-      ribbon: `${tier.toUpperCase()}!`,
-      kicker: 'My Week',
-      title: cleanName(p.boardLabel),
-      big: rank && rank <= 3 ? `#${rank}` : pct && pct <= 50 ? `TOP ${pct}%` : null,
-      stat: rank && rank <= 3 ? `${ordinal(rank)} place this week` : pct && pct <= 50 ? `Top ${pct}% of all players` : `Finished ${tier}`,
-      sub: count(p.points) ? `${count(p.points).toLocaleString('en-US')} points` : null,
+      ribbon: podium ? 'PODIUM!' : `${tier.toUpperCase()}!`,
+      kicker: 'My Home Hunt Week',
+      title: podium ? `${ordinal(rank)} Place!` : pct && pct <= 50 ? `Top ${pct}%` : tier,
+      big: podium ? `#${rank}` : pct && pct <= 50 ? `TOP ${pct}%` : null,
+      bigLabel: podium ? 'THIS WEEK' : pct && pct <= 50 ? 'OF ALL PLAYERS' : null,
+      stat: count(p.points) ? `${count(p.points).toLocaleString('en-US')} points` : 'Out-hunted almost everyone',
+      sub: null,
       cta: 'Beat my score!',
       frame: 'standings',
+      prop: 'foam-finger',
       rarity: null,
     };
   },
 
   fright_night: p => {
     const haunts = count(p.haunts);
+    const line = (p.statLines ?? []).map(item => cleanName(item, 40)).filter(Boolean)[0];
     return {
       ribbon: 'NIGHT SURVIVED!',
       kicker: count(p.nightNumber) ? `My Night ${count(p.nightNumber)}` : 'My Night',
-      title: cleanName(p.cardTitle),
+      title: noYear(cleanName(p.cardTitle)) || 'Fright Night',
       big: String(haunts),
-      stat: cleanName(p.headline, 40) || `${plural(haunts, 'haunt')} survived!`,
-      sub: (p.statLines ?? []).map(line => cleanName(line, 40)).filter(Boolean).slice(0, 1)[0]
-        ?? (haunts >= 2 ? `${plural(haunts, 'haunt')} in one night` : null),
+      bigLabel: haunts === 1 ? 'HAUNT SURVIVED' : 'HAUNTS SURVIVED',
+      stat: line ?? (haunts >= 2 ? 'All in one night' : 'Brave enough!'),
+      sub: null,
       cta: 'Dare to swim in?',
       frame: 'fright',
+      prop: 'lantern',
       rarity: null,
     };
   },
 
-  fright_badge: p => ({
-    ribbon: 'HAUNT SURVIVED!',
-    kicker: `My ${cleanName(p.cardTitle, 26)}`,
-    title: cleanName(p.hauntName),
-    big: null,
-    stat: count(p.runs) > 1 ? `Survived it ${count(p.runs)} times` : 'Survived it!',
-    sub: ownedLine(p.ownedPct, 'have survived it'),
-    cta: 'Dare to swim in?',
-    frame: 'fright',
-    rarity: null,
-  }),
+  fright_badge: p => {
+    const runs = count(p.runs);
+    return {
+      ribbon: 'HAUNT SURVIVED!',
+      kicker: `My ${noYear(cleanName(p.cardTitle, 26)) || 'Fright Night'}`,
+      title: cleanName(p.hauntName),
+      big: runs > 1 ? `x${runs}` : null,
+      bigLabel: runs > 1 ? 'TIMES THROUGH' : null,
+      stat: runs >= 3 ? 'Brave enough to swim back in' : 'Survived it!',
+      sub: null,
+      cta: 'Dare to swim in?',
+      frame: 'fright',
+      prop: 'lantern',
+      rarity: null,
+    };
+  },
 
   fright_lifetime: p => {
     const n = count(p.hauntsSurvived);
@@ -240,12 +292,14 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
     return {
       ribbon: 'FIN-VESTIGATOR!',
       kicker: 'My Lifetime Count',
-      title: p.cardTitle ? cleanName(p.cardTitle) : 'Haunts Survived',
-      big: null,
-      stat: `${plural(n, 'haunt')} survived`,
-      sub: bits.length ? bits.join(' · ') : null,
+      title: 'All My Fright Nights',
+      big: String(n),
+      bigLabel: n === 1 ? 'HAUNT SURVIVED' : 'HAUNTS SURVIVED',
+      stat: bits.length ? bits.join(' · ') : 'And counting',
+      sub: count(p.events) > 1 ? `${plural(count(p.events), 'season')} strong` : null,
       cta: 'Dare to swim in?',
       frame: 'fright',
+      prop: 'lantern',
       rarity: null,
     };
   },
@@ -253,15 +307,18 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
   ride_coin: p => {
     const m = p.milestone;
     const pct = m && Number.isFinite(m.percent) ? Math.round(m.percent) : null;
+    const show = pct != null && pct >= 50;
     return {
       ribbon: p.limited ? 'LIMITED COIN!' : 'NEW RIDE COIN!',
       kicker: 'My Ride Coin',
-      title: p.edition?.name ? cleanName(p.edition.name) : p.limited ? 'Limited Ride Coin' : 'Ride Coin',
-      big: null,
-      stat: pct === 100 ? "Every coin at this park" : pct && pct > 0 ? `${pct}% of this park's coins` : 'Ridden and won',
-      sub: ownedLine(p.ownedPct, 'have it'),
+      title: p.edition?.name ? cleanName(p.edition.name) || 'Ride Coin Edition' : p.limited ? 'Limited Ride Coin' : 'New Ride Coin',
+      big: show ? `${pct}%` : null,
+      bigLabel: show ? "OF THIS PARK'S COINS" : null,
+      stat: p.limited ? 'Here for a limited time only' : 'Ridden and won',
+      sub: show && pct === 100 ? 'Every coin, collected' : null,
       cta: 'Ride and win your own!',
       frame: 'coins',
+      prop: 'coins',
       rarity: null,
     };
   },
@@ -271,12 +328,14 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
     return {
       ribbon: 'ON FIRE!',
       kicker: 'My Streak',
-      title: `${days}-Day Streak`,
-      big: null,
-      stat: `${plural(days, 'day')} in a row`,
-      sub: count(p.best) > days ? `Best ever: ${plural(count(p.best), 'day')}` : null,
+      title: 'Every Single Day',
+      big: String(days),
+      bigLabel: 'DAYS IN A ROW',
+      stat: count(p.best) > days ? `Best ever: ${plural(count(p.best), 'day')}` : 'My best streak yet',
+      sub: null,
       cta: 'Can you beat my streak?',
       frame: 'streak',
+      prop: 'flame',
       rarity: null,
     };
   },
@@ -288,10 +347,11 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
       kicker: 'My Shark',
       title: `Level ${level}`,
       big: null,
-      stat: `Reached Level ${level}`,
-      sub: p.unlockName ? `Unlocked: ${cleanName(p.unlockName, 24)}` : null,
+      stat: p.unlockName ? `Unlocked: ${cleanName(p.unlockName, 24)}` : 'Leveled up!',
+      sub: null,
       cta: 'Catch up to me!',
       frame: 'progress',
+      prop: 'xp',
       rarity: null,
     };
   },
@@ -301,24 +361,28 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
     kicker: 'My Title',
     title: cleanName(p.title, 26),
     big: null,
-    stat: ownedLine(p.ownedPct) ?? (p.how ? cleanName(p.how, 40) : 'Earned, not bought'),
+    stat: p.how ? cleanName(p.how, 40) : 'Earned, not bought',
     sub: null,
     cta: 'Earn yours!',
     frame: 'royal',
+    prop: null,
     rarity: null,
   }),
 
   park_day: p => {
     const n = count(p.coinsCaught);
+    const fresh = count(p.newCoins);
     return {
       ribbon: 'PARK DAY!',
-      kicker: 'My Park Day',
-      title: `${plural(n, 'Ride Coin')}`,
+      kicker: 'My Ride Coins',
+      title: 'In One Park Day',
       big: String(n),
-      stat: n === 1 ? 'Ride coin in one day' : 'Ride coins in one day',
-      sub: count(p.newCoins) ? `${plural(count(p.newCoins), 'new one')} for my shelf` : null,
+      bigLabel: n === 1 ? 'RIDE COIN' : 'RIDE COINS',
+      stat: fresh ? `${fresh} new for my shelf` : 'Ridden and won',
+      sub: null,
       cta: 'Catch the coins I missed!',
       frame: 'coins',
+      prop: 'coins',
       rarity: null,
     };
   },
@@ -331,12 +395,16 @@ const FALLBACK_TITLE: Readonly<Record<FlexKind, string>> = {
 };
 
 export function flexCopy<K extends FlexKind>(kind: K, payload: FlexPayload<K>): FlexCopy {
-  const fn = COPY[kind] as CopyFn<K> | undefined;
+  const fn = COPY[kind] as CopyFnCore<K> | undefined;
   if (!fn) throw new Error(`Unknown flex kind: ${String(kind)}`);
-  const raw = fn(payload);
-  // A name scrubbed down to nothing still needs a title.
-  const base = raw.title ? raw : { ...raw, title: FALLBACK_TITLE[kind] };
-  const a11y = [base.ribbon, base.kicker, base.title, base.big, base.stat, base.sub].filter(Boolean).join('. ');
+  const owned = OWNED_KINDS.has(kind) ? payload.ownedPct ?? null : null;
+  const raw = fn(payload as FlexPayloads[K], owned);
+  const base: Omit<FlexCopy, 'a11y'> = {
+    bigLabel: null, prop: null, hideShark: false, ...raw,
+    // A name scrubbed down to nothing still needs a title.
+    title: raw.title || FALLBACK_TITLE[kind],
+  };
+  const a11y = [base.ribbon, base.kicker, base.title, base.big, base.bigLabel, base.stat, base.sub].filter(Boolean).join('. ');
   return { ...base, a11y };
 }
 

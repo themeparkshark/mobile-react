@@ -78,5 +78,43 @@ export function subscribeFlex(listener: Listener): () => void {
 export function __resetFlexQueue(): void {
   queue.splice(0, queue.length);
   held.splice(0, held.length);
+  hosts.splice(0, hosts.length);
   nextId = 1;
+}
+
+/* ------------------------------------------------------------------ hosts */
+/**
+ * Every mounted ShareStudioHost registers here; only the newest one shows the
+ * current request. Root mounts the base host, and a screen that is itself an
+ * RN Modal mounts its own (<ShareStudioHost portal />) so the sheet presents
+ * from that modal instead of from a root that is already presenting (iOS would
+ * silently refuse).
+ */
+const hosts: { readonly id: number; readonly portal: boolean }[] = [];
+let nextHost = 1;
+const hostListeners = new Set<Listener>();
+
+/** Portal hosts (inside a modal) always outrank Root's host, whatever order they mounted in. */
+export function registerFlexHost(portal = false): number {
+  const id = nextHost++;
+  hosts.push({ id, portal });
+  hostListeners.forEach(listener => listener());
+  return id;
+}
+
+export function unregisterFlexHost(id: number): void {
+  const index = hosts.findIndex(host => host.id === id);
+  if (index >= 0) hosts.splice(index, 1);
+  hostListeners.forEach(listener => listener());
+}
+
+export function topFlexHost(): number | null {
+  const portals = hosts.filter(host => host.portal);
+  const pool = portals.length ? portals : hosts;
+  return pool.length ? pool[pool.length - 1].id : null;
+}
+
+export function subscribeFlexHosts(listener: Listener): () => void {
+  hostListeners.add(listener);
+  return () => { hostListeners.delete(listener); };
 }

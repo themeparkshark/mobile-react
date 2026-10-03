@@ -32,6 +32,8 @@ export default function ShareStudioPreviewScreen() {
   }, []);
   if (RENDER) return <RenderAll />;
   if (PROBE) return <RenderProbes />;
+  // A bare background (no 22-card gallery behind) for fps traces and screenshots of one moment.
+  if (process.env.EXPO_PUBLIC_SHARE_STUDIO_BARE === '1') return <View style={styles.root} />;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.h1}>Share Studio</Text>

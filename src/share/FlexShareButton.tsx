@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from '../helpers/haptics';
 import { BRAND } from '../ui/tokens';
+import { useDevAutoPress } from './devDrive';
 import { shareFlex } from './store';
 import type { FlexKind, FlexPayload } from './types';
 
@@ -31,6 +32,7 @@ export function FlexShareButton<K extends FlexKind>({ kind, payload, surface, si
     void Haptics.selectionAsync();
     shareFlex(kind, payload, { surface });
   };
+  useDevAutoPress('flex_button', open);
   return (
     <Pressable onPress={open} hitSlop={size === 'sm' ? 6 : 0} accessibilityRole="button" accessibilityLabel="Share"
       accessibilityHint="Make a card to show it off" style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }, style]}>

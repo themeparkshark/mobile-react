@@ -18,7 +18,7 @@ import { showToast } from '../../utils/toast';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Ribbon from '../Ribbon';
-import { FlexShareButton, SHARE_IN_MODALS, shouldFlexReveal, type FlexPayload } from '../../share';
+import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost, shouldFlexReveal, type FlexPayload } from '../../share';
 import {
   HELD_COPY, RANK_COUNTDOWN_MS, canClaim, extraRows, isHeld, rankCountdownValue, rankLabel, revealTimeline, ribbonLabel, rewardRows,
 } from './homeHuntResultsModel';
@@ -48,8 +48,8 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
   const rank = result?.rank != null && Number.isFinite(result.rank) ? result.rank : null;
   // Share Studio: a podium finish or a Top 25% week gets a Share button.
   const flex: FlexPayload<'standings'> | null = result ? {
-    // Never the server's area name ('Tampa Area'): it reveals where the kid lives.
-    boardLabel: 'Home Hunt', tierLabel: result.tier_label || 'Hunter',
+    // The payload has no board label: the server's board name is the kid's home area ('Tampa Area').
+    tierLabel: result.tier_label || 'Hunter',
     rank: rank ?? undefined, percentile: result.percentile ?? undefined, points: result.points ?? undefined,
   } : null;
   const canFlex = !!flex && shouldFlexReveal('standings', flex);
@@ -193,6 +193,8 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
           </ScrollView>
         </View>
       </View>
+      {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
+      {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
     </Modal>
   );
 }

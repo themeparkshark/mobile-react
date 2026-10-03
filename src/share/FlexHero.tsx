@@ -2,37 +2,44 @@
  * The hero of each flex card: the thing itself, big and glorious, inside an
  * Alex-style frame (navy outline, two-tone body, darker lip, one gloss band).
  * Every hero draws in a square box of `size` pt.
+ *
+ * Art is real only (ART_RULES.md): the payload's own item/coin/stamp/badge art,
+ * Alex's originals (references/alex, copied to assets/images/share/props) and
+ * art the app already ships as Alex originals (star, trophies, gift, xp).
+ * Frames, plates and rays are code-drawn shapes, never generated pictures.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { coinTier } from '../constants/coinTiers';
+import type { InventoryType } from '../models/inventory-type';
 import { normalizeRarity } from './copy';
 import { FlexArtwork } from './FlexArtwork';
-import { Outlined } from './Outlined';
 import { RARITY_RAMP, type FlexFrame } from './frames';
 import { FlexShark } from './FlexShark';
-import type { InventoryType } from '../models/inventory-type';
+import { Outlined } from './Outlined';
 import type { FlexArt, FlexKind, FlexPayload, FlexPayloads } from './types';
 
 export const HERO_ART = {
   coin: require('../../assets/images/coingold.png'),
   gift: require('../../assets/icons/game/gift.png'),
-  crown: require('../../assets/icons/game/crown.png'),
-  sparkle: require('../../assets/icons/game/sparkle.png'),
-  streak: require('../../assets/icons/game/streak.png'),
-  medal1: require('../../assets/icons/game/medal1.png'),
-  medal2: require('../../assets/icons/game/medal2.png'),
-  medal3: require('../../assets/icons/game/medal3.png'),
-  trophy: require('../../assets/images/screens/park/gold.png'),
   star: require('../../assets/images/screens/pin-collections/star.png'),
+  trophy: require('../../assets/images/screens/park/gold.png'),
+  trophySilver: require('../../assets/images/screens/park/silver.png'),
+  trophyBronze: require('../../assets/images/screens/park/bronze.png'),
   xp: require('../../assets/images/screens/explore/xp.png'),
   fin: require('../../assets/icons/game/fin.png'),
+  diamond: require('../../assets/images/share/props/diamond.webp'),
+  goldRound: require('../../assets/images/share/props/gold-round.webp'),
+  flame: require('../../assets/images/share/props/fire-ball.webp'),
+  lantern: require('../../assets/images/share/props/haunted-lantern.webp'),
+  photos: require('../../assets/images/share/props/photos.webp'),
+  treasure: require('../../assets/images/share/props/treasure.webp'),
 };
 
 const NAVY = '#05346e';
 
-export function FlexHero({ kind, payload, frame, size, inventory }: {
+export const FlexHero = memo(function FlexHero({ kind, payload, frame, size, inventory }: {
   readonly inventory?: InventoryType | null;
   readonly kind: FlexKind;
   readonly payload: FlexPayload;
@@ -45,10 +52,7 @@ export function FlexHero({ kind, payload, frame, size, inventory }: {
     case 'set_complete': return <SetHero p={payload as FlexPayloads['set_complete']} frame={frame} size={size} />;
     case 'boss_win': return <BossHero p={payload as FlexPayloads['boss_win']} frame={frame} size={size} />;
     case 'stamp': return <StampHero p={payload as FlexPayloads['stamp']} frame={frame} size={size} />;
-    case 'crowned': {
-      const p = payload as FlexPayloads['crowned'];
-      return <CoinHero art={p.coinUrl} level={10} size={size} crown />;
-    }
+    case 'crowned': return <CoinHero art={(payload as FlexPayloads['crowned']).coinUrl} level={10} size={size} />;
     case 'coin_level': {
       const p = payload as FlexPayloads['coin_level'];
       return <CoinHero art={p.coinUrl} level={p.tierIndex ?? p.level} size={size} />;
@@ -61,18 +65,18 @@ export function FlexHero({ kind, payload, frame, size, inventory }: {
     case 'standings': return <StandingsHero p={payload as FlexPayloads['standings']} size={size} />;
     case 'fright_night': return <MarqueeHero p={payload as FlexPayloads['fright_night']} frame={frame} size={size} />;
     case 'fright_badge': return <HauntBadgeHero p={payload as FlexPayloads['fright_badge']} frame={frame} size={size} />;
-    case 'fright_lifetime': return <MoonHero n={(payload as FlexPayloads['fright_lifetime']).hauntsSurvived} frame={frame} size={size} />;
-    case 'streak': return <StreakHero days={(payload as FlexPayloads['streak']).days} size={size} />;
+    case 'fright_lifetime': return <LanternHero size={size} />;
+    case 'streak': return <StreakHero size={size} />;
     case 'level_up': return <LevelHero level={(payload as FlexPayloads['level_up']).level} size={size} />;
-    case 'title': return <TitleHero title={(payload as FlexPayloads['title']).title} size={size} />;
+    case 'title': return <TitleHero frame={frame} size={size} />;
     case 'park_day': return <CoinGridHero arts={(payload as FlexPayloads['park_day']).coinUrls} frame={frame} size={size} />;
   }
   return null;
-}
+});
 
 /* ------------------------------------------------------------------ parts */
 
-/** Alex's sticker-slot panel: navy outline, two-tone body, darker lip, gloss band, colored rim. */
+/** Alex's sticker-slot panel: outline, two-tone body, darker lip, gloss band, colored rim. */
 export function Panel({ size, colors, lip, rim, round = false, children, outline = NAVY, radius, gloss = 0.32 }: {
   readonly size: number;
   readonly colors: readonly [string, string];
@@ -82,7 +86,7 @@ export function Panel({ size, colors, lip, rim, round = false, children, outline
   readonly children?: ReactNode;
   readonly outline?: string;
   readonly radius?: number;
-  /** Gloss band strength (lower on dark night panels). */
+  /** Gloss band strength (0 on dark night panels). */
   readonly gloss?: number;
 }) {
   const r = round ? size / 2 : radius ?? size * 0.16;
@@ -90,13 +94,11 @@ export function Panel({ size, colors, lip, rim, round = false, children, outline
   const rimW = Math.max(4, size * 0.04);
   return (
     <View style={{ width: size, height: size }}>
-      {/* lip */}
       <View style={[StyleSheet.absoluteFill, { top: size * 0.04, borderRadius: r, backgroundColor: lip, borderWidth: border, borderColor: outline }]} />
       <View style={{ width: size, height: size * 0.96, borderRadius: r, borderWidth: border, borderColor: outline, overflow: 'hidden', backgroundColor: rim }}>
         <View style={{ flex: 1, margin: rimW, borderRadius: Math.max(0, r - rimW), overflow: 'hidden', borderWidth: Math.max(2, border * 0.6), borderColor: outline }}>
           <LinearGradient colors={[colors[0], colors[1]]} style={StyleSheet.absoluteFill} />
-          {/* gloss band */}
-          <View style={{ position: 'absolute', left: '8%', right: '8%', top: '4%', height: '22%', borderRadius: size, backgroundColor: `rgba(255,255,255,${gloss})` }} />
+          {gloss > 0 && <View style={{ position: 'absolute', left: '8%', right: '8%', top: '4%', height: '22%', borderRadius: size, backgroundColor: `rgba(255,255,255,${gloss})` }} />}
           <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>{children}</View>
         </View>
       </View>
@@ -104,17 +106,17 @@ export function Panel({ size, colors, lip, rim, round = false, children, outline
   );
 }
 
-/** Fixed sparkle constellation (deterministic so every capture matches). */
-function Sparkles({ size, count = 4 }: { readonly size: number; readonly count?: number }) {
+/** Alex's stars in a fixed constellation (deterministic so every capture matches). */
+export function Stars({ size, count = 4 }: { readonly size: number; readonly count?: number }) {
   const spots = [
-    { x: 0.02, y: 0.06, s: 0.16 }, { x: 0.84, y: 0.02, s: 0.13 }, { x: 0.9, y: 0.7, s: 0.11 },
-    { x: -0.04, y: 0.66, s: 0.1 }, { x: 0.46, y: -0.08, s: 0.09 }, { x: 0.74, y: 0.9, s: 0.08 },
+    { x: 0.0, y: 0.04, s: 0.17 }, { x: 0.84, y: 0.0, s: 0.14 }, { x: 0.9, y: 0.66, s: 0.12 },
+    { x: -0.06, y: 0.58, s: 0.11 }, { x: 0.46, y: -0.1, s: 0.1 }, { x: 0.72, y: 0.88, s: 0.09 },
   ].slice(0, count);
   return (
     <>
       {spots.map((spot, i) => (
-        <FlexArtwork key={i} id={`sparkle${i}`} art={HERO_ART.sparkle} fallback={HERO_ART.sparkle}
-          style={{ position: 'absolute', left: spot.x * size, top: spot.y * size, width: spot.s * size, height: spot.s * size }} />
+        <FlexArtwork key={i} id={`star${i}`} art={HERO_ART.star} fallback={HERO_ART.star}
+          style={{ position: 'absolute', left: spot.x * size, top: spot.y * size, width: spot.s * size, height: spot.s * size, transform: [{ rotate: `${(i % 2 ? 12 : -10)}deg` }] }} />
       ))}
     </>
   );
@@ -137,10 +139,10 @@ function FindHero({ p, size }: { readonly p: FlexPayloads['find']; readonly size
   return (
     <View style={{ width: size, height: size }}>
       <Panel size={size} colors={colors} lip={p.goldenHour ? '#d99a00' : look.frame} rim={look.frame}>
-        <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ width: size * 0.74, height: size * 0.74 }} />
+        <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ width: size * 0.76, height: size * 0.76 }} />
       </Panel>
-      {(rarity >= 4 || p.goldenHour) && <Sparkles size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
-      {p.dailyRare && <View style={{ position: 'absolute', left: -size * 0.04, top: size * 0.04 }}><Tag text="DAILY RARE" color="#9b4dff" size={size} /></View>}
+      {(rarity >= 4 || p.goldenHour) && <Stars size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
+      {p.dailyRare && <View style={{ position: 'absolute', right: -size * 0.06, top: size * 0.02 }}><Tag text="DAILY RARE" color="#9b4dff" size={size} /></View>}
     </View>
   );
 }
@@ -148,10 +150,10 @@ function FindHero({ p, size }: { readonly p: FlexPayloads['find']; readonly size
 function PhotoHero({ p, size, inventory }: { readonly p: FlexPayloads['ride_photo']; readonly size: number; readonly inventory?: InventoryType | null }) {
   const frameIt = p.grade === 'frame_it';
   const great = p.grade === 'great';
-  const outer = frameIt ? '#ffcf3b' : great ? '#ffffff' : '#ffffff';
+  const outer = frameIt ? '#ffcf3b' : '#ffffff';
   const mat = frameIt ? '#fff1c2' : great ? '#bfe5ff' : '#ffffff';
-  const w = size * 1.12;
-  const h = size * 0.9;
+  const w = size * 1.14;
+  const h = size * 0.94;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <View style={[styles.photoOuter, { width: w, height: h, backgroundColor: outer, borderColor: NAVY, borderRadius: size * 0.06 }]}>
@@ -163,65 +165,73 @@ function PhotoHero({ p, size, inventory }: { readonly p: FlexPayloads['ride_phot
           </View>
         </View>
       </View>
-      {frameIt && <>
-        <FlexArtwork id="starL" art={HERO_ART.star} fallback={HERO_ART.star} style={{ position: 'absolute', left: -w * 0.08, top: -size * 0.06, width: size * 0.2, height: size * 0.2 }} />
-        <FlexArtwork id="starR" art={HERO_ART.star} fallback={HERO_ART.star} style={{ position: 'absolute', right: -w * 0.08, top: -size * 0.06, width: size * 0.2, height: size * 0.2 }} />
-      </>}
+      {frameIt && <Stars size={size} count={6} />}
     </View>
   );
 }
 
-/** Without a captured photo: a sunny scene with the find and the player's shark. */
+/** Without a captured photo: a sunny park scene (Alex's water, sky, hills) with the find and the player's shark. */
 function PhotoScene({ p, inventory, width, height }: { readonly p: FlexPayloads['ride_photo']; readonly inventory?: InventoryType | null; readonly width: number; readonly height: number }) {
   return (
     <View style={{ width, height }}>
-      <LinearGradient colors={p.goldenHour ? ['#ffb347', '#ffe9a8'] : ['#7cc6f5', '#d8f0ff']} style={StyleSheet.absoluteFill} />
-      <View style={[styles.hill, { backgroundColor: p.goldenHour ? '#9bc65a' : '#5fc46a', width: width * 1.4, height: height * 0.5, left: -width * 0.2, bottom: -height * 0.28, borderRadius: width }]} />
-      <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ position: 'absolute', left: width * 0.04, bottom: height * 0.12, width: width * 0.5, height: width * 0.5 }} />
-      <View style={{ position: 'absolute', right: -width * 0.06, bottom: -height * 0.05 }}>
-        <FlexShark inventory={inventory} height={height * 0.9} />
+      <LinearGradient colors={p.goldenHour ? ['#ff9a5a', '#ffe0a0'] : ['#5fbff5', '#d8f0ff']} style={StyleSheet.absoluteFill} />
+      <View style={[styles.sun, { width: height * 0.36, height: height * 0.36, right: width * 0.06, top: height * 0.06, backgroundColor: p.goldenHour ? '#fff1a8' : '#ffe680' }]} />
+      <View style={[styles.hill, { backgroundColor: '#7fd36f', width: width * 0.9, height: height * 0.6, left: -width * 0.25, bottom: -height * 0.34, borderRadius: width }]} />
+      <View style={[styles.hill, { backgroundColor: '#55b85a', width: width * 1.1, height: height * 0.6, right: -width * 0.4, bottom: -height * 0.4, borderRadius: width }]} />
+      <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ position: 'absolute', left: width * 0.04, bottom: height * 0.14, width: width * 0.48, height: width * 0.48 }} />
+      <View style={{ position: 'absolute', right: -width * 0.04, bottom: -height * 0.06 }}>
+        <FlexShark inventory={inventory} height={height * 0.94} />
       </View>
     </View>
   );
 }
 
 function SetHero({ p, frame, size }: { readonly p: FlexPayloads['set_complete']; readonly frame: FlexFrame; readonly size: number }) {
-  const arts = (p.artUrls ?? []).slice(0, 6);
+  const arts = (p.artUrls ?? []).slice(0, 5);
+  // A fan of the set's items across the top, all inside the hero box.
+  const s = size * 0.27;
   const fan = arts.map((art, i) => {
     const t = arts.length === 1 ? 0.5 : i / (arts.length - 1);
-    const angle = -150 + t * 120; // arc across the top
+    const angle = -160 + t * 140;
     const rad = (angle * Math.PI) / 180;
-    const r = size * 0.44;
-    const s = size * 0.3;
-    return { art, left: size / 2 + r * Math.cos(rad) - s / 2, top: size * 0.52 + r * Math.sin(rad) - s / 2, s, rot: (angle + 90) * 0.4 };
+    const r = size * 0.36;
+    return { art, left: size / 2 + r * Math.cos(rad) - s / 2, top: size * 0.5 + r * Math.sin(rad) - s / 2, rot: (angle + 90) * 0.35 };
   });
   return (
     <View style={{ width: size, height: size }}>
       {fan.map((f, i) => (
         <View key={i} style={{ position: 'absolute', left: f.left, top: f.top, transform: [{ rotate: `${f.rot}deg` }] }}>
-          <Panel size={f.s} colors={['#ffffff', '#e6f4ff']} lip="#9ccdf0" rim={frame.rim} radius={f.s * 0.2}>
-            <FlexArtwork id={`fan${i}`} art={f.art} fallback={HERO_ART.gift} style={{ width: f.s * 0.72, height: f.s * 0.72 }} />
+          <Panel size={s} colors={['#ffffff', '#fff6dc']} lip="#d9b25a" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={s * 0.2}>
+            <FlexArtwork id={`fan${i}`} art={f.art} fallback={HERO_ART.gift} style={{ width: s * 0.72, height: s * 0.72 }} />
           </Panel>
         </View>
       ))}
-      <View style={{ position: 'absolute', left: size * 0.16, top: size * 0.24 }}>
-        <FlexArtwork art={p.badgeUrl} fallback={HERO_ART.trophy} style={{ width: size * 0.68, height: size * 0.68 }} />
+      <View style={{ position: 'absolute', left: size * 0.19, top: size * 0.27 }}>
+        <FlexArtwork art={p.badgeUrl} fallback={HERO_ART.trophy} style={{ width: size * 0.62, height: size * 0.62 }} />
       </View>
-      <Sparkles size={size} count={3} />
+      {/* A rubber-stamp "COMPLETE!" across the medallion: no reading needed past one word. */}
+      <View style={[styles.completeStamp, { top: size * 0.68, left: size * 0.36, paddingHorizontal: size * 0.05, borderRadius: size * 0.04 }]}>
+        <Outlined text="COMPLETE!" outline="#7a1610" style={{ fontFamily: 'Shark', fontSize: size * 0.12, color: '#ffffff' }} />
+      </View>
     </View>
   );
 }
 
+/** The boss knocked back: tilted, dizzy stars over it, a "KO" panel. */
 function BossHero({ p, frame, size }: { readonly p: FlexPayloads['boss_win']; readonly frame: FlexFrame; readonly size: number }) {
   return (
     <View style={{ width: size, height: size }}>
       <Panel size={size} colors={frame.panel} lip={frame.panelLip} rim={frame.rim} outline={frame.outline}>
-        <View style={{ transform: [{ rotate: '-8deg' }] }}>
-          <FlexArtwork art={p.artUrl} fallback={HERO_ART.trophy} style={{ width: size * 0.78, height: size * 0.78 }} />
+        <View style={{ transform: [{ rotate: '-18deg' }, { translateX: -size * 0.06 }, { translateY: size * 0.08 }] }}>
+          <FlexArtwork art={p.artUrl} fallback={HERO_ART.trophy} style={{ width: size * 0.74, height: size * 0.74 }} />
         </View>
       </Panel>
-      <FlexArtwork art={HERO_ART.trophy} fallback={HERO_ART.trophy} style={{ position: 'absolute', right: -size * 0.06, bottom: -size * 0.02, width: size * 0.3, height: size * 0.36 }} />
-      <View style={{ position: 'absolute', left: -size * 0.06, top: size * 0.02 }}>
+      {/* Dizzy ring of Alex stars over its head. */}
+      {[0, 1, 2].map(i => (
+        <FlexArtwork key={i} id={`dizzy${i}`} art={HERO_ART.star} fallback={HERO_ART.star}
+          style={{ position: 'absolute', left: size * (0.18 + i * 0.16), top: size * (0.08 + (i % 2) * 0.05), width: size * 0.13, height: size * 0.13 }} />
+      ))}
+      <View style={{ position: 'absolute', right: size * 0.06, top: -size * 0.06 }}>
         <Tag text={p.difficulty === 'shark' ? 'SHARK MODE' : p.difficulty === 'hard' ? 'HARD MODE' : 'TAMED!'} color="#ef4a3c" size={size} />
       </View>
     </View>
@@ -236,41 +246,52 @@ function StampHero({ p, frame, size }: { readonly p: FlexPayloads['stamp']; read
         <View style={[styles.passportDash, { width: size * 0.84, height: size * 0.84, borderRadius: size * 0.1 }]} />
         <FlexArtwork art={p.artUrl} fallback={HERO_ART.star} style={{ position: 'absolute', width: size * 0.82, height: size * 0.82 }} />
       </Panel>
-      {rarity >= 4 && <Sparkles size={size} count={rarity === 5 ? 5 : 3} />}
+      {rarity >= 4 && <Stars size={size} count={rarity === 5 ? 5 : 3} />}
     </View>
   );
 }
 
-function CoinHero({ art, level, size, crown = false, tag }: {
-  readonly art: FlexArt; readonly level: number; readonly size: number; readonly crown?: boolean;
+/**
+ * A ride coin, full colour and uncropped: the coin art is Alex's coin body
+ * recoloured per park (with its own thick edge on the right), so it is drawn
+ * whole on a cream medallion inside the tier ring (Lv10: navy inside gold, the royal pair).
+ */
+function CoinHero({ art, level, size, tag }: {
+  readonly art: FlexArt; readonly level: number; readonly size: number;
   readonly tag?: { readonly text: string; readonly color: string };
 }) {
   const tier = coinTier(level);
-  const ring = Math.max(6, size * 0.035 * (tier.ringWidth / 3));
-  const coin = size * 0.78;
+  const top = level >= 10;
+  const ring = Math.max(5, size * 0.03 * (tier.ringWidth / 3));
+  const disc = size * 0.94;
+  const coinW = size * 0.74;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size * 0.98, height: size * 0.98, borderRadius: size, backgroundColor: tier.halo, opacity: 0.55 }} />
-      <View style={{ width: coin + ring * 4, height: coin + ring * 4, borderRadius: coin, backgroundColor: tier.ringDeep, borderWidth: 3, borderColor: NAVY, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ width: coin + ring * 2, height: coin + ring * 2, borderRadius: coin, backgroundColor: tier.ring, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: NAVY }}>
-          <FlexArtwork art={art} fallback={HERO_ART.coin} style={{ width: coin, height: coin, borderRadius: coin / 2 }} />
+      <View style={{ position: 'absolute', width: disc, height: disc, borderRadius: disc, backgroundColor: tier.ringDeep, borderWidth: 3, borderColor: NAVY }}>
+        <View style={{ flex: 1, margin: ring, borderRadius: disc, backgroundColor: tier.ring, borderWidth: 2, borderColor: NAVY, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: '84%', height: '84%', borderRadius: disc, backgroundColor: top ? '#0b3d91' : '#fff8e4', borderWidth: 2, borderColor: NAVY }} />
         </View>
       </View>
-      {crown && <FlexArtwork art={HERO_ART.crown} fallback={HERO_ART.crown} style={{ position: 'absolute', top: -size * 0.2, width: size * 0.46, height: size * 0.46 }} />}
-      {(crown || level >= 5) && <Sparkles size={size} count={crown ? 5 : 3} />}
-      {tag && <View style={{ position: 'absolute', bottom: -size * 0.02 }}><Tag text={tag.text} color={tag.color} size={size} /></View>}
+      <FlexArtwork art={art} fallback={HERO_ART.coin} style={{ width: coinW, height: coinW * (484 / 517), transform: [{ rotate: '-6deg' }] }} />
+      {(top || level >= 5) && <Stars size={size} count={top ? 6 : 3} />}
+      {tag && <View style={{ position: 'absolute', bottom: -size * 0.02, right: -size * 0.02 }}><Tag text={tag.text} color={tag.color} size={size} /></View>}
     </View>
   );
 }
 
+/** Podium: Alex's trophy (gold, silver, bronze by rank) on a numbered podium block. */
 function StandingsHero({ p, size }: { readonly p: FlexPayloads['standings']; readonly size: number }) {
   const rank = Math.floor(Number(p.rank));
-  const art = rank === 1 ? HERO_ART.medal1 : rank === 2 ? HERO_ART.medal2 : rank === 3 ? HERO_ART.medal3 : HERO_ART.trophy;
+  const art = rank === 2 ? HERO_ART.trophySilver : rank === 3 ? HERO_ART.trophyBronze : HERO_ART.trophy;
+  const block = rank >= 1 && rank <= 3 ? ['#ffcf3b', '#c9d6e3', '#e0a070'][rank - 1] : '#ffcf3b';
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size * 0.9, height: size * 0.9, borderRadius: size, backgroundColor: 'rgba(255,207,59,0.28)' }} />
-      <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.8, height: size * 0.9 }} />
-      <Sparkles size={size} count={4} />
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+      <View style={{ position: 'absolute', top: size * 0.04, width: size * 0.86, height: size * 0.86, borderRadius: size, backgroundColor: 'rgba(255,255,255,0.18)' }} />
+      <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.62, height: size * 0.66, marginBottom: -size * 0.02 }} />
+      <View style={[styles.podium, { width: size * 0.74, height: size * 0.28, backgroundColor: block, borderRadius: size * 0.05 }]}>
+        <View style={{ position: 'absolute', left: '6%', right: '6%', top: 3, height: '26%', borderRadius: size, backgroundColor: 'rgba(255,255,255,0.4)' }} />
+      </View>
+      <Stars size={size} count={3} />
     </View>
   );
 }
@@ -293,7 +314,6 @@ function MarqueeHero({ p, frame, size }: { readonly p: FlexPayloads['fright_nigh
           ))}
         </View>
       </Panel>
-      {/* marquee bulbs along the top and bottom rims */}
       {[0, 1].map(row => Array.from({ length: bulbs }, (_, i) => (
         <View key={`${row}-${i}`} style={[styles.bulb, {
           left: size * 0.1 + (i * size * 0.8) / (bulbs - 1) - size * 0.022,
@@ -305,7 +325,7 @@ function MarqueeHero({ p, frame, size }: { readonly p: FlexPayloads['fright_nigh
   );
 }
 
-/** A haunt badge in a pumpkin-rimmed coin; a fin glyph when the art is not there yet. */
+/** A haunt badge in a pumpkin-rimmed coin; the fin glyph when the art is not there yet. */
 function HauntCoin({ art, size, frame, id }: { readonly art: FlexArt | null; readonly size: number; readonly frame: FlexFrame; readonly id: string }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size, backgroundColor: frame.rim, borderWidth: 2.5, borderColor: frame.outline, alignItems: 'center', justifyContent: 'center' }}>
@@ -317,81 +337,85 @@ function HauntCoin({ art, size, frame, id }: { readonly art: FlexArt | null; rea
 }
 
 function HauntBadgeHero({ p, frame, size }: { readonly p: FlexPayloads['fright_badge']; readonly frame: FlexFrame; readonly size: number }) {
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size, backgroundColor: 'rgba(255,138,31,0.22)' }} />
-      <HauntCoin art={p.badgeUrl} size={size * 0.86} frame={frame} id="badge" />
-      {p.pinUrl != null && <View style={{ position: 'absolute', right: -size * 0.02, bottom: -size * 0.02 }}>
-        <Panel size={size * 0.34} colors={frame.panel} lip={frame.panelLip} rim={frame.rim} round outline={frame.outline}>
-          <FlexArtwork id="pin" art={p.pinUrl} fallback={HERO_ART.fin} style={{ width: size * 0.22, height: size * 0.22 }} />
-        </Panel>
-      </View>}
-    </View>
-  );
-}
-
-/** Flat cream moon with two craters and the lifetime count on it. */
-function MoonHero({ n, frame, size }: { readonly n: number; readonly frame: FlexFrame; readonly size: number }) {
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size, backgroundColor: 'rgba(255,241,214,0.14)' }} />
-      <View style={{ width: size * 0.84, height: size * 0.84, borderRadius: size, backgroundColor: '#fff1d6', borderWidth: 4, borderColor: frame.outline, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ position: 'absolute', left: size * 0.1, top: size * 0.12, width: size * 0.2, height: size * 0.2, borderRadius: size, backgroundColor: '#f2d9a8' }} />
-        <View style={{ position: 'absolute', right: size * 0.12, bottom: size * 0.14, width: size * 0.14, height: size * 0.14, borderRadius: size, backgroundColor: '#f2d9a8' }} />
-        <View style={{ position: 'absolute', left: '10%', right: '10%', top: '5%', height: '18%', borderRadius: size, backgroundColor: 'rgba(255,255,255,0.5)' }} />
-        <Outlined text={String(Math.max(0, Math.floor(n)))} outline={frame.outline} style={{ fontFamily: 'Shark', fontSize: size * 0.34, color: '#ff8a1f', textAlign: 'center' }} />
-      </View>
-    </View>
-  );
-}
-
-function StreakHero({ days, size }: { readonly days: number; readonly size: number }) {
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <FlexArtwork art={HERO_ART.streak} fallback={HERO_ART.streak} style={{ width: size * 0.82, height: size * 0.95 }} />
-      <View style={{ position: 'absolute', bottom: size * 0.1 }}>
-        <Outlined text={String(Math.max(0, Math.floor(days)))} outline="#5a2306" style={{ fontFamily: 'Shark', fontSize: size * 0.3, color: '#ffffff', textAlign: 'center' }} />
-      </View>
-    </View>
-  );
-}
-
-function LevelHero({ level, size }: { readonly level: number; readonly size: number }) {
+  const coin = size * 0.8;
   return (
     <View style={{ width: size, height: size }}>
-      <Panel size={size} colors={['#ffe07a', '#ffb400']} lip="#d99a00" rim="#ffffff" round>
-        <Text style={{ fontFamily: 'Shark', fontSize: size * 0.13, color: NAVY, marginBottom: -size * 0.04 }}>LEVEL</Text>
-        <Outlined text={String(Math.max(1, Math.floor(level)))} outline={NAVY} style={{ fontFamily: 'Shark', fontSize: size * 0.4, color: '#ffffff', textAlign: 'center' }} />
-      </Panel>
-      <FlexArtwork art={HERO_ART.xp} fallback={HERO_ART.xp} style={{ position: 'absolute', right: -size * 0.04, bottom: 0, width: size * 0.3, height: size * 0.3 }} />
-      <Sparkles size={size} count={3} />
+      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size, backgroundColor: 'rgba(255,138,31,0.2)' }} />
+      <View style={{ position: 'absolute', left: 0, top: 0 }}>
+        <HauntCoin art={p.badgeUrl} size={coin} frame={frame} id="badge" />
+      </View>
+      {p.pinUrl != null && (
+        // The pin sits clear of the badge rim, on its own corner.
+        <View style={{ position: 'absolute', right: -size * 0.02, bottom: -size * 0.02 }}>
+          <Panel size={size * 0.38} colors={frame.panel} lip={frame.panelLip} rim={frame.rim} round outline={frame.outline} gloss={0}>
+            <FlexArtwork id="pin" art={p.pinUrl} fallback={HERO_ART.fin} style={{ width: size * 0.24, height: size * 0.24 }} />
+          </Panel>
+        </View>
+      )}
     </View>
   );
 }
 
-function TitleHero({ title, size }: { readonly title: string; readonly size: number }) {
+/** The Deep Lantern: a real lantern (shipped Haunted Lantern art) glowing in the dark. */
+function LanternHero({ size }: { readonly size: number }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <FlexArtwork art={HERO_ART.crown} fallback={HERO_ART.crown} style={{ width: size * 0.5, height: size * 0.5, marginBottom: -size * 0.08, zIndex: 1 }} />
-      <View style={[styles.plaque, { width: size * 1.05, paddingVertical: size * 0.07, borderRadius: size * 0.08 }]}>
-        <LinearGradient colors={['#ffe07a', '#ffb400']} style={[StyleSheet.absoluteFill, { borderRadius: size * 0.06 }]} />
-        <Outlined text={title} lines={2} outline="#7a3d00" style={{ fontFamily: 'Shark', fontSize: size * 0.13, color: '#ffffff', textAlign: 'center', paddingHorizontal: size * 0.05 }} />
-      </View>
-      <Sparkles size={size} count={4} />
+      {[1, 0.74, 0.5].map((k, i) => (
+        <View key={i} style={{ position: 'absolute', width: size * k, height: size * k, borderRadius: size, backgroundColor: `rgba(255,170,60,${0.12 + i * 0.1})` }} />
+      ))}
+      <FlexArtwork art={HERO_ART.lantern} fallback={HERO_ART.lantern} style={{ width: size * 0.4, height: size * 0.94 }} />
+      <Stars size={size} count={2} />
     </View>
   );
 }
 
+/** Streak: Alex-era production flame, big, on a warm glow (the giant number rides over it). */
+function StreakHero({ size }: { readonly size: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', width: size * 0.9, height: size * 0.9, borderRadius: size, backgroundColor: 'rgba(255,240,160,0.35)' }} />
+      <FlexArtwork art={HERO_ART.flame} fallback={HERO_ART.flame} style={{ width: size * 0.7, height: size * 1.0, marginTop: -size * 0.06 }} />
+    </View>
+  );
+}
+
+/** Level medallion: Alex's gold coin body with the level in it (the shark holds the XP gem). */
+function LevelHero({ level, size }: { readonly level: number; readonly size: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <FlexArtwork art={HERO_ART.goldRound} fallback={HERO_ART.goldRound} style={{ position: 'absolute', width: size, height: size * 0.935 }} />
+      <Text style={{ fontFamily: 'Shark', fontSize: size * 0.12, color: '#7a3d00', marginBottom: -size * 0.05, marginTop: -size * 0.04 }}>LEVEL</Text>
+      <Outlined text={String(Math.max(1, Math.floor(level)))} outline="#7a3d00" style={{ fontFamily: 'Shark', fontSize: size * 0.38, color: '#ffffff', textAlign: 'center' }} />
+      <Stars size={size} count={3} />
+    </View>
+  );
+}
+
+/** New title: Alex's gold trophy on a navy plinth (the title itself is the card's headline). */
+function TitleHero({ frame, size }: { readonly frame: FlexFrame; readonly size: number }) {
+  return (
+    <View style={{ width: size, height: size }}>
+      <Panel size={size} colors={frame.panel} lip={frame.panelLip} rim={frame.rim} round>
+        <FlexArtwork art={HERO_ART.trophy} fallback={HERO_ART.trophy} style={{ width: size * 0.62, height: size * 0.66 }} />
+      </Panel>
+      <Stars size={size} count={5} />
+    </View>
+  );
+}
+
+/** Park day: the day's coins, full colour, in a grid sized to the count. */
 function CoinGridHero({ arts, frame, size }: { readonly arts: readonly FlexArt[]; readonly frame: FlexFrame; readonly size: number }) {
   const shown = arts.slice(0, 9);
-  const cols = shown.length <= 4 ? 2 : 3;
-  const cell = (size * 0.78) / cols;
+  const n = Math.max(1, shown.length);
+  const cols = n === 1 ? 1 : n <= 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const cell = (size * 0.82) / Math.max(cols, rows);
   return (
     <Panel size={size} colors={frame.panel} lip={frame.panelLip} rim={frame.rim}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: cell * cols, justifyContent: 'center' }}>
+      <View style={{ width: cell * cols, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
         {shown.map((art, i) => (
           <View key={i} style={{ width: cell, height: cell, alignItems: 'center', justifyContent: 'center' }}>
-            <FlexArtwork id={`coin${i}`} art={art} fallback={HERO_ART.coin} style={{ width: cell * 0.9, height: cell * 0.9 }} />
+            <FlexArtwork id={`coin${i}`} art={art} fallback={HERO_ART.coin} style={{ width: cell * 0.96, height: cell * 0.96 * (484 / 517) }} />
           </View>
         ))}
       </View>
@@ -403,8 +427,10 @@ const styles = StyleSheet.create({
   tag: { borderWidth: 2.5, borderColor: NAVY, alignItems: 'center', justifyContent: 'center' },
   photoOuter: { borderWidth: 3, borderBottomWidth: 7 },
   photoWindow: { flex: 1, overflow: 'hidden', borderWidth: 2 },
-  hill: { position: 'absolute' },
+  hill: { position: 'absolute', borderWidth: 2, borderColor: '#2f7d2a' },
+  sun: { position: 'absolute', borderRadius: 999, borderWidth: 2, borderColor: '#e0a100' },
   passportDash: { position: 'absolute', borderWidth: 2.5, borderStyle: 'dashed', borderColor: 'rgba(239,74,60,0.45)' },
   bulb: { position: 'absolute', backgroundColor: '#fff1a8', borderWidth: 1.5, borderColor: '#7a3d00' },
-  plaque: { borderWidth: 3, borderBottomWidth: 7, borderColor: '#7a3d00', alignItems: 'center', justifyContent: 'center' },
+  completeStamp: { position: 'absolute', backgroundColor: '#ef4a3c', borderWidth: 2.5, borderColor: '#7a1610', transform: [{ rotate: '-10deg' }] },
+  podium: { borderWidth: 3, borderBottomWidth: 6, borderColor: NAVY },
 });

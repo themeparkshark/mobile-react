@@ -24,6 +24,7 @@ export function isStandalonePreviewMode(): boolean {
     process.env.EXPO_PUBLIC_TRIP_GOAL_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_PARK_DAY_RECAP_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_SHARE_STUDIO_PREVIEW === '1' ||
+    process.env.EXPO_PUBLIC_SHARE_EVIDENCE_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_POST_WIN_REWARDS_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_COIN_LEVELING_PREVIEW === '1' ||

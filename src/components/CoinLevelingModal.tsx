@@ -43,7 +43,8 @@ import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import { FlexShareButton, SHARE_IN_MODALS } from '../share';
+import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
+import { useDevAutoPress } from '../share/devDrive';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -304,6 +305,9 @@ export default function CoinLevelingModal({
       upgradeBusy.current = false;
     }
   };
+  // Dev-only evidence driver (no-op in release builds).
+  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => { void handleLevelUp(); }, 2500);
+
 
   const handleClose = () => {
     if (upgradeBusy.current) return;
@@ -458,9 +462,10 @@ export default function CoinLevelingModal({
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
                 </Text>
 
-                {/* Share Studio: a fresh level-up (below the Crowning, which has its own) can be shown off. */}
-                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 2 && nextLevel < 10 && (
-                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="md" style={{ marginVertical: 6 }}
+                {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
+                    over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
+                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
+                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
                     payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
                 )}
 
@@ -1046,6 +1051,8 @@ export default function CoinLevelingModal({
         name={rideCoin.ride_name}
         onClose={() => setHoloVisible(false)}
       />
+      {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
+      {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
     </Modal>
   );
 }

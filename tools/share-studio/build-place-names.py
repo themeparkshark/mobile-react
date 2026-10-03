@@ -39,6 +39,25 @@ PLACES = [
     'Super Nintendo World', 'Nintendo', 'Pixar', 'Mickey', 'Minnie', 'Minion', 'Minions', 'Toy Story',
     'Jurassic Park', 'Jurassic World', 'Fantasyland', 'Tomorrowland', 'Frontierland', 'Adventureland',
     'Halloween Horror Nights', 'Horror Nights', 'HHN',
+    'Kissimmee', 'Knotts Berry Farm', "Knott's", 'Knotts', 'Lake Buena Vista',
+    # characters and rides the seeds don't spell out (panel r2-fasttrack)
+    'Hagrid', 'Gringotts', 'Spider-Man', 'Spiderman', 'Mario Kart', 'Simpsons', 'Hogsmeade', 'Wizarding World',
+    # Epic Universe rides
+    'Stardust Racers', 'Mine-Cart Madness', 'Monsters Unchained', 'Battle at the Ministry', "Hiccup's Wing Gliders",
+    "Dragon Racer's Rally", 'Fyre Drill', 'Curse of the Werewolf', "Yoshi's Adventure", "Bowser Jr. Challenge",
+    'Constellation Carousel', 'Isle of Berk', 'Dark Universe', 'Celestial Park', 'Ministry of Magic',
+    # Walt Disney World and Disneyland attractions not in the ride seeds
+    'Seven Dwarfs Mine Train', 'Tiana\'s Bayou Adventure', 'Expedition Everest', 'Flight of Passage', 'Avatar',
+    'Na\'vi River Journey', 'Kilimanjaro Safaris', 'Test Track', 'Guardians of the Galaxy', 'Cosmic Rewind',
+    "Remy's Ratatouille Adventure", 'Frozen Ever After', 'Spaceship Earth', 'Tower of Terror', 'Rock n Roller Coaster',
+    "Rock 'n' Roller Coaster", 'Slinky Dog Dash', 'Mickey & Minnie\'s Runaway Railway', 'Runaway Railway', 'Toy Story Land',
+    'Peoplemover', 'PeopleMover', 'Carousel of Progress', 'Winnie the Pooh', 'Dumbo', 'Big Thunder',
+    'Splash Mountain', 'Matterhorn', 'Indiana Jones', 'Radiator Springs', 'Cars Land', 'Pixar Place', 'Incredicoaster',
+    'Mission: Breakout', 'Web Slingers', 'WEB SLINGERS', 'Soarin', 'Grizzly River', 'Jungle Cruise', 'Haunted Mansion',
+    'Pirates of the Caribbean', 'Space Mountain', 'Tomorrowland Speedway', 'Astro Orbiter', 'Mad Tea Party',
+    "Peter Pan's Flight", "It's a Small World", 'Small World', 'Liberty Square', 'Main Street', 'Cinderella Castle',
+    'Sleeping Beauty Castle', 'Hollywood Rip Ride Rockit', 'Velocicoaster', 'Jurassic', 'Transformers', 'Minion',
+    'Despicable Me', 'Kong', 'Hulk', 'Men in Black', 'E.T.', 'Fast & Furious', 'Fast and Furious', 'Shrek',
 ]
 rides = sorted({n.strip() for n in names if n.strip() and n.strip() not in GENERIC and len(n.strip()) >= 4})
 all_names = sorted(set(PLACES) | set(rides), key=lambda s: (-len(s), s.lower()))
