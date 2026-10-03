@@ -70,6 +70,12 @@ export function findLook(rarity: number | null | undefined, inRange: boolean): F
   };
 }
 
+/** "Golden Crisp Churro · walk closer · 70 m": one line, the find's name first. */
+export function peekLine(name: string | null | undefined, distance: number | null): string {
+  const far = distance != null && Number.isFinite(distance) ? formatFindDistance(distance) : '';
+  return [name?.trim() || null, 'walk closer', far || null].filter(Boolean).join(' · ');
+}
+
 /** "Walk closer · 65 m", or just "Walk closer" while the distance is unknown. */
 export function walkCloserLine(distanceMeters: number | null | undefined): string {
   const distance = distanceMeters != null && Number.isFinite(distanceMeters) ? formatFindDistance(distanceMeters) : '';
@@ -188,4 +194,24 @@ export function catchErrorLine(status: number | null, serverError: string | null
 export function findImageOrder<T>(iconUrl: string | null | undefined, bySlug: T | null, byName: T | null): T | { uri: string } | null {
   if (typeof iconUrl === 'string' && /^https?:\/\//i.test(iconUrl)) return { uri: iconUrl };
   return bySlug ?? byName ?? (typeof iconUrl === 'string' && iconUrl ? { uri: iconUrl } : null);
+}
+
+export interface MapStatusLine {
+  readonly text: string;
+  readonly tone: 'info' | 'error';
+  readonly action: 'retry' | 'collections' | 'standings' | null;
+}
+
+/** The home map's state as one short line (a chip, never a card), or null while finds are up. */
+export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadError, rankLine = null }: {
+  homeLocationConfirmed: boolean; isLoading: boolean; empty: boolean; loadError: boolean; rankLine?: string | null;
+}): MapStatusLine | null {
+  if (!homeLocationConfirmed) return { text: 'Checking your map...', tone: 'info', action: null };
+  if (isLoading) return { text: 'Scouting for finds...', tone: 'info', action: null };
+  if (empty && loadError) return { text: 'Map signal lost · tap to retry', tone: 'error', action: 'retry' };
+  // A quiet map still shows this week's standing when there is one (tap opens the board).
+  if (empty) return rankLine ? { text: `All quiet · ${rankLine}`, tone: 'info', action: 'standings' }
+    : { text: 'All quiet · tap for your collection', tone: 'info', action: 'collections' };
+  if (loadError) return { text: 'Saved map · tap to refresh', tone: 'info', action: 'retry' };
+  return null;
 }

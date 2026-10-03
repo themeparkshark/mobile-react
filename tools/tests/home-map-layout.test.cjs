@@ -5,6 +5,7 @@ const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
 
 const chest = loadTs('src/screens/ExploreScreen/dailyChestPresence.ts');
+const look = loadTs('src/screens/ExploreScreen/findPresentation.ts');
 const read = file => fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8');
 
 // Home Hunt v3 (Oct 2, 2026): Dustin cut the GRAB ZONE circle, the big find
@@ -28,20 +29,49 @@ test('home map: no big find card, no Next Park Trip chip, no focused-set corner 
   assert.ok(fs.existsSync(path.resolve(__dirname, '../../src/screens/ExploreScreen/TripGoalCard.tsx')));
 });
 
-test('home map: the find marker has no distance or timer label until its last minutes', () => {
+test('home map: find info lives on the marker as one small tag (distance far away, timer in the last minutes)', () => {
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.doesNotMatch(marker, /TAP TO GRAB/);
   assert.doesNotMatch(marker, /WALK CLOSER/);
   assert.doesNotMatch(marker, /formatLeavesIn/);
   assert.match(marker, /LEAVING_SOON_MS = 5 \* 60_000/);
+  assert.match(marker, /const far = !inRange && distance != null \? formatFindDistance\(distance\) : '';/);
+  assert.match(marker, /\[far \|\| null, leavingSoon\]\.filter\(Boolean\)\.join\(' · '\)/);
+  // Always mounted: a marker view never changes its layout.
+  assert.match(marker, /<View style=\{\[styles\.timePill, \(chromeless \|\| !tag\) && styles\.chromeOff\]\}>/);
+  assert.match(read('src/screens/ExploreScreen/HomeFindMarker.tsx'), /distance=\{distance\}/);
 });
 
-test('home map: only a slim chip ever sits over the map while finds are up', () => {
+test('home map: only a slim one-line chip ever sits over the map (peeks, map states), never a card', () => {
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /<HomeHuntChip message=\{chip\} onDismiss=\{dismissChip\} \/>/);
+  assert.match(home, /<HomeHuntChip message=\{chip \?\? statusChip\} onDismiss=\{chip \? dismissChip : noop\} \/>/);
+  for (const card of ['HomeHuntCard', 'TripGoalCard', 'HomeTicketProgress', 'HomeFocusCard', 'HomeMapStatusCard']) {
+    assert.doesNotMatch(home, new RegExp(`<${card}\\b`), `${card} never renders on the home map`);
+  }
+  // A tapped far find: a one-line peek with its name, gone after about 4 s.
+  assert.match(home, /const PEEK_TTL_MS = 4000;/);
+  assert.match(home, /text: peekLine\(item\.name, distance\), ttlMs: PEEK_TTL_MS/);
   const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');
   assert.match(chip, /Gesture\.Pan\(\)/, 'swipe to dismiss');
   assert.match(chip, /setTimeout\(onDismiss/, 'auto-dismiss');
+  assert.match(chip, /numberOfLines=\{1\}/, 'one line');
+  assert.match(chip, /wrap: \{ alignSelf: 'center', maxWidth: 320 \}/, 'sized to its content');
+  // Ticket progress and the park story are small chips in the top HUD row; the park pill never shows at home.
+  assert.match(home, /<HomeHudChips top=\{rowTop\}/);
+  assert.match(read('src/screens/ExploreScreen/HomeHudChips.tsx'), /height: 30,/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /pillHidden=\{!park \|\| suggestionSlots\.right !== 'project'\}/);
+});
+
+test('home map: peek and map-state lines', () => {
+  assert.equal(look.peekLine('Golden Crisp Churro', 70), 'Golden Crisp Churro · walk closer · 70 m');
+  assert.equal(look.peekLine(null, null), 'walk closer');
+  const base = { homeLocationConfirmed: true, isLoading: false, empty: false, loadError: false };
+  assert.equal(look.mapStatusLine(base), null, 'finds up: no line at all');
+  assert.equal(look.mapStatusLine({ ...base, homeLocationConfirmed: false }).text, 'Checking your map...');
+  assert.equal(look.mapStatusLine({ ...base, empty: true, loadError: true }).action, 'retry');
+  assert.equal(look.mapStatusLine({ ...base, empty: true }).action, 'collections');
+  assert.equal(look.mapStatusLine({ ...base, empty: true, rankLine: '#4 this week' }).text, 'All quiet · #4 this week');
+  assert.equal(look.mapStatusLine({ ...base, loadError: true }).text, 'Saved map · tap to refresh');
 });
 
 test('home map only asks the native map for screen points after it has settled (MapLibre "Invalid react tag")', () => {

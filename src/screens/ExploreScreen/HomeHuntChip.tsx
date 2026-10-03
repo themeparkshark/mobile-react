@@ -11,7 +11,7 @@ export interface HuntChipMessage {
   /** Degrees clockwise from screen-up; draws a direction arrow. */
   readonly arrowDeg?: number | null;
   readonly tone?: 'info' | 'error';
-  /** Auto-dismiss after this long. */
+  /** Auto-dismiss after this long; 0 keeps it up while the state lasts (status lines). */
   readonly ttlMs?: number;
   readonly onPress?: () => void;
 }
@@ -29,7 +29,7 @@ export default function HomeHuntChip({ message, onDismiss }: {
   const dx = useSharedValue(0);
   useEffect(() => {
     dx.value = 0;
-    if (!message) return;
+    if (!message || message.ttlMs === 0) return;
     const timer = setTimeout(onDismiss, message.ttlMs ?? HUNT_CHIP_TTL_MS);
     return () => clearTimeout(timer);
   }, [message?.key]); // eslint-disable-line react-hooks/exhaustive-deps

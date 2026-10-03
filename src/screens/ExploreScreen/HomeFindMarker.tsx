@@ -39,7 +39,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
     <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press}
       accessibilityLabel={findLabel(item, distance, inRange)}>
-      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} />
+      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} />
     </Marker>
   );
 }
