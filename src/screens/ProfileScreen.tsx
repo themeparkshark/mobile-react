@@ -45,6 +45,7 @@ import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
+import ProfileEventChip from '../components/profile/ProfileEventChip';
 import { StoreType } from '../models/store-type';
 
 export default function ProfileScreen() {
@@ -443,6 +444,8 @@ export default function ProfileScreen() {
                     textAlign: 'center' }} numberOfLines={1}>{player.title}</Text>
                 </View>
               )}
+              {/* Deep Lantern chip (renders nothing without a card). Same component as claude/release-rc. */}
+              <View style={{ alignSelf: 'center', marginTop: 10 }}><ProfileEventChip /></View>
               {!!player.featured_ride_coin && (
                 <View style={{ marginHorizontal: 16 }}>
                   <FeaturedRideCoinCard coin={player.featured_ride_coin}

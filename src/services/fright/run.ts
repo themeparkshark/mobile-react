@@ -2,8 +2,12 @@
  * Haunt run state machine (DESIGN 3.3, H1 to H6). Pure, unit tested.
  *
  *   none --enter (tap "I'm in line": within radius, accuracy <= 50, fresh fix)--> quiet
- *   quiet (phones-down: no prompts, sound or haptics) --min_done_at--> ready
- *   ready --exit fix > 90 m | next app open | "I survived it!"--> finishing --server ok--> done
+ *   quiet (in line: no prompts, sound or haptics; Line Play is welcome) --min_done_at--> ready
+ *   ready --GPS exit (2 fixes > 150 m, 60 s apart) | "I survived it!"--> finishing --server ok--> done
+ *
+ * min_done_at mirrors the server: max(walk + 2, round(0.4 x posted wait at
+ * entry)) minutes after entry, so a 60-minute line can't be credited at 7.
+ * There is no next-app-open finish: unlocking the phone in line never credits.
  *
  * The server owns the timing (min_done_at is server-computed). When an entry is
  * queued offline the app writes an optimistic local run from the fix time so
@@ -44,14 +48,20 @@ function ms(iso: string | null | undefined): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** Earliest finish: server min_done_at, else entered + walk + 2 min. */
+/** Minimum dwell in minutes: max(walk + 2, round(0.4 x posted wait at entry)). */
+export function minDwellMinutes(walkMinutes = 5, postedMinutes: number | null | undefined = null,
+  extraMinutes: number = FRIGHT_DEFAULTS.minDwellExtraMinutes): number {
+  return Math.max(walkMinutes + extraMinutes, Math.round(0.4 * Math.max(0, postedMinutes ?? 0)));
+}
+
+/** Earliest finish: the server's min_done_at (authoritative), else the same formula from entered_at. */
 export function minDoneAt(run: FrightRun | null | undefined, walkMinutes = 5,
   extraMinutes: number = FRIGHT_DEFAULTS.minDwellExtraMinutes): number | null {
   if (!run) return null;
   const server = ms(run.min_done_at);
   if (server != null) return server;
   const entered = ms(run.entered_at);
-  return entered == null ? null : entered + (walkMinutes + extraMinutes) * 60_000;
+  return entered == null ? null : entered + minDwellMinutes(walkMinutes, run.posted_minutes, extraMinutes) * 60_000;
 }
 
 export function runStage(run: FrightRun | null | undefined, now: number, walkMinutes?: number): RunStage {
@@ -73,38 +83,53 @@ export function mayPrompt(run: FrightRun | null | undefined, now: number, walkMi
   return runStage(run, now, walkMinutes) !== 'quiet';
 }
 
-/** H6a: one fix more than 90 m from the entrance after the minimum dwell finishes the run. */
-export function exitDetected(run: FrightRun | null | undefined,
-  spot: Pick<FrightSpot, 'latitude' | 'longitude'> | null | undefined, fix: FrightFixSample | null | undefined,
-  now: number, walkMinutes?: number): boolean {
-  if (!spot || !fix || runStage(run, now, walkMinutes) !== 'ready') return false;
-  const min = minDoneAt(run, walkMinutes);
-  // The exit fix itself must come after the minimum dwell (an old queued fix never counts).
-  if (min != null && fix.at < min) return false;
-  if (fix.accuracy != null && fix.accuracy > 100) return false;
-  return distanceMeters(fix, spot) > FRIGHT_DEFAULTS.exitFarM;
+/** H6a exit rule: 2 consecutive fixes, each accuracy <= 50 m and > 150 m from the haunt pin, at least 60 s apart. */
+export const EXIT_FAR_M = 150;
+export const EXIT_GAP_MS = 60_000;
+export const EXIT_ACCURACY_M = 50;
+
+export interface ExitHold {
+  readonly key: string;
+  readonly first: FrightFixSample;
 }
 
-export type FinishMethod = 'exit' | 'next_open' | 'button';
+function exitQualifies(run: FrightRun, spot: Pick<FrightSpot, 'latitude' | 'longitude'>, fix: FrightFixSample, min: number | null): boolean {
+  if (min != null && fix.at < min) return false;
+  if (fix.accuracy == null || fix.accuracy > EXIT_ACCURACY_M) return false;
+  return distanceMeters(fix, spot) > EXIT_FAR_M;
+}
 
 /**
- * H6: decide whether to finish now. `appOpened` is true on the first tick after
- * the app comes to the foreground (next-app-open finish).
+ * H6a: feed one fix. Returns the new hold and whether the exit is confirmed.
+ * A fix that doesn't qualify (too close, rough, or before min dwell) resets.
  */
+export function exitStep(hold: ExitHold | null, run: FrightRun | null | undefined,
+  spot: Pick<FrightSpot, 'latitude' | 'longitude' | 'walk_minutes'> | null | undefined,
+  fix: FrightFixSample | null | undefined, now: number): { hold: ExitHold | null; exit: boolean } {
+  if (!run || !spot || !fix || runStage(run, now, spot.walk_minutes) !== 'ready') return { hold: null, exit: false };
+  const min = minDoneAt(run, spot.walk_minutes);
+  if (!exitQualifies(run, spot, fix, min)) return { hold: null, exit: false };
+  if (hold && hold.key === run.key) {
+    if (fix.at - hold.first.at >= EXIT_GAP_MS) return { hold: null, exit: true };
+    return { hold, exit: false };
+  }
+  return { hold: { key: run.key, first: fix }, exit: false };
+}
+
+export type FinishMethod = 'exit' | 'button';
+
+/** H6: finish only on a confirmed GPS exit or the button, and never before min_done_at. */
 export function finishDecision(input: {
   readonly run: FrightRun | null | undefined;
-  readonly spot: Pick<FrightSpot, 'latitude' | 'longitude' | 'walk_minutes'> | null | undefined;
-  readonly fix: FrightFixSample | null | undefined;
+  readonly spot: Pick<FrightSpot, 'walk_minutes'> | null | undefined;
   readonly now: number;
-  readonly appOpened: boolean;
+  readonly exitConfirmed?: boolean;
   readonly buttonPressed?: boolean;
 }): FinishMethod | null {
-  const { run, spot, fix, now, appOpened, buttonPressed } = input;
-  const walk = spot?.walk_minutes;
-  if (runStage(run, now, walk) !== 'ready') return null;
+  const { run, spot, now, exitConfirmed, buttonPressed } = input;
+  if (runStage(run, now, spot?.walk_minutes) !== 'ready') return null;
   if (buttonPressed) return 'button';
-  if (exitDetected(run, spot, fix, now, walk)) return 'exit';
-  if (appOpened) return 'next_open';
+  if (exitConfirmed) return 'exit';
   return null;
 }
 
@@ -113,12 +138,18 @@ export function localRun(key: string, enteredAt: number, walkMinutes: number, po
   extraMinutes: number = FRIGHT_DEFAULTS.minDwellExtraMinutes): FrightRun {
   return {
     key, entered_at: new Date(enteredAt).toISOString(), done_at: null,
-    min_done_at: new Date(enteredAt + (walkMinutes + extraMinutes) * 60_000).toISOString(),
+    min_done_at: new Date(enteredAt + minDwellMinutes(walkMinutes, postedMinutes, extraMinutes) * 60_000).toISOString(),
     wait_minutes: null, posted_minutes: postedMinutes, score: null, reaction: null, re_swim: false,
   };
 }
 
-/** Minutes left in the quiet window (rounded up), for "Phones down: 4 min". */
+/** Minutes since entry, for the pill: "In line: The Robot City · 12 min". */
+export function minutesInLine(run: FrightRun | null | undefined, now: number): number {
+  const entered = ms(run?.entered_at);
+  return entered == null ? 0 : Math.max(0, Math.floor((now - entered) / 60_000));
+}
+
+/** Minutes left before "I survived it!" unlocks (rounded up). */
 export function quietMinutesLeft(run: FrightRun | null | undefined, now: number, walkMinutes?: number): number {
   const min = minDoneAt(run, walkMinutes);
   return min == null ? 0 : Math.max(0, Math.ceil((min - now) / 60_000));

@@ -45,7 +45,7 @@ test('the server flag hides every Adventure Ticket surface when off', async () =
   assert.equal(off.find(named('AdventureTicketCard')), undefined);
 });
 
-test('stacked rides fold into one island; tapping it zooms in instead of selecting', async () => {
+test('stacked rides: every island stays mounted in a stable order (MapLibre insert crash); the solver folds them and tapping the "+N" host zooms in', async () => {
   const stack = [0, 1, 2].map(i => ({ ...task, id: 20 + i, name: `Ride ${i}`, latitude: 34.13808 + i * 0.00001 }));
   const app = exploreScreen({ trip: null, redeemables: { ...redeemables, tasks: stack } });
   await app.settle(); await app.settle();
@@ -53,11 +53,17 @@ test('stacked rides fold into one island; tapping it zooms in instead of selecti
   const walk = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
     if (named('TaskMarker')(node)) islands.push(node); walk(node.props?.children); };
   walk(app.tree);
-  assert.equal(islands.length, 1);
-  assert.equal(islands[0].props.clusterCount, 2);
-  islands[0].props.onPress(islands[0].props.task); app.render();
+  assert.deepEqual(islands.map(island => island.props.task.id), [20, 21, 22], 'all three mounted, in first-seen order');
+  assert.match(require('node:fs').readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /\{orderedRides\.map\(task => \{[\s\S]{0,200}key=\{task\.id\}/,
+    'keyed by ride, never by fold or goal state');
+  // The solver folded rides 20 and 21 into 22 (the store is what the map's camera pass publishes).
   const map = app.find(named('Map'));
-  assert.ok(map.props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
+  const v = { visible: true, scale: 1, folded: 0, foldedInto: null, reason: null };
+  map.props.declutter.store.publish(new Map([['ride:22', { ...v, folded: 2 }], ['ride:20', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }],
+    ['ride:21', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }]]));
+  const host = islands.find(island => island.props.task.id === 22);
+  host.props.onPress(host.props.task); app.render();
+  assert.ok(app.find(named('Map')).props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
   assert.equal(app.find(label('Play queue games for')), undefined);
 });
 

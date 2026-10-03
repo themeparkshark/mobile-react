@@ -20,7 +20,8 @@ test('a pinch that leaves the shark centered resumes following; a real pan does 
 });
 
 test('both shark copies stay mounted and swap by opacity, so dragging never reloads the outfit', () => {
-  assert.match(source, /opacity: focusedOnPlayer \? 0 : 1/);
+  // Panned away it shows, unless its spot is off screen (iOS parks off-screen marker views at the top-left).
+  assert.match(source, /opacity: focusedOnPlayer \|\| !playerOnScreen \? 0 : 1/);
   assert.match(source, /opacity: focusedOnPlayer \? 1 : 0/);
   assert.doesNotMatch(source, /location && !focusedOnPlayer && \(/);
   assert.doesNotMatch(source, /location && focusedOnPlayer && \(/);

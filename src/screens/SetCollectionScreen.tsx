@@ -54,6 +54,7 @@ import { showToast } from '../utils/toast';
 import {
   ClaimResultCard, ExchangeCostsRow, GateBadge, MilestonePickSheet, MilestoneTrack, SetHeroRow,
 } from './SetCollection/SetHuntSections';
+import FrightEventShelf from '../components/fright/FrightEventShelf';
 import {
   authoredMilestones, claimOutcome, exchangeCostRows, gateIcon, gateLabel, heroItems, itemExchangeCost, milestoneTrack, wearNavigationParams,
   type ClaimOutcome, type MilestoneView,
@@ -1514,6 +1515,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                 </TouchableOpacity>}
               </>
             )}
+            {/* Events: the Deep Lantern tile, all season, after the Home Hunt sets (fright-nights CONTRACT 6). */}
+            <FrightEventShelf />
           </ScrollView>
         )}
 

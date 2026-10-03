@@ -32,10 +32,8 @@ test('Fin-ister Nights at USF: Fin-ister leads the one row, Ride Control and the
   assert.equal(stacks.filter(Boolean).length, 1, 'exactly one status row');
   const entries = stacks[0].props.entries;
   assert.deepEqual(plain(entries.map(e => e.key)), ['fright', 'show', 'control']);
-  const lead = entries[0].node({ lead: true, open: false, alone: false });
-  assert.equal(lead.props.showHelp, false, 'collapsed, the stack button takes the "?" spot on the lead pill');
-  assert.equal(entries[0].node({ lead: true, open: true, alone: false }).props.showHelp, true, 'open, the tutorial replay is one tap away');
-  assert.equal(entries[0].node({ lead: true, open: false, alone: true }).props.showHelp, true);
+  const lead = entries[0].node;
+  assert.equal(lead.props.onHelp, undefined, 'the map\'s one "?" carries the Fin-ister tutorial');
   assert.equal(lead.props.inline, true);
   // Nothing else stacks a banner over the map.
   for (const name of ['RideControlBar', 'NightShowPill', 'FrightPill', 'LiveEventsPill']) {
@@ -51,20 +49,20 @@ test('the map gets the declutter: every marker footprint, the HUD row and both b
   assert.ok(declutter && declutter.store, 'a placement store');
   const ids = declutter.items.map(item => item.id);
   assert.ok(ids.includes('ride:11') && ids.includes('coin:4'));
-  assert.deepEqual(plain(declutter.insets[0]), { left: 0, top: 0, width: 9999, height: 76 }, 'the status row');
+  assert.deepEqual(plain(declutter.insets[0]), { left: 0, top: 0, width: 9999, height: 76, share: 0.1 }, 'the status row: art barely under it hides');
   assert.ok(declutter.insets.some(inset => inset.left === 0 && inset.bottom === 0), 'bottom-left buttons');
   assert.ok(declutter.insets.some(inset => inset.right === 0 && inset.bottom === 0), 'bottom-right buttons');
   // Timed finds draw through FindMarker so their chip can move.
   assert.ok(app.find(node => named('FindMarker')(node) && node.props.id === 'coin:4'));
 });
 
-test('the map runs the solver on settled camera moves only, and the shark is a chip obstacle, never an art one', () => {
+test('the map solves on settled moves and, during a gesture, in held passes every 100 ms (never per frame); the shark is a chip obstacle only', () => {
   const map = fs.readFileSync('src/components/Map.tsx', 'utf8');
   assert.match(map, /onRegionDidChange=\{\(feature\) => \{[\s\S]*feedDeclutter\(/);
-  assert.doesNotMatch(map, /onRegionIsChanging/, 'nothing per frame');
+  assert.match(map, /onRegionIsChanging=\{\(feature\) => \{[\s\S]*if \(now - lastMoveFeed\.current < \(feature\.properties\?\.isUserInteraction \? 100 : 200\)\) return;[\s\S]*feedDeclutter\([\s\S]*, true\);/);
   assert.match(map, /tagObstacleOnly: true/);
   const hook = fs.readFileSync('src/components/map/declutter/useMapDeclutter.ts', 'utf8');
-  assert.match(hook, /THROTTLE_MS = 300/);
+  assert.match(hook, /HOLD_MS = 100/);
   // Soft round shadow: no hard ring border under the player shark.
   const styles = map.slice(map.indexOf('groundRing: {'), map.lastIndexOf('sharkDirectionCone'));
   assert.doesNotMatch(styles, /borderWidth/);

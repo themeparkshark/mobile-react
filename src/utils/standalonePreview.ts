@@ -38,5 +38,6 @@ export function isStandalonePreviewMode(): boolean {
     || process.env.EXPO_PUBLIC_RIDE_LOG_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_RIDE_BATCH_PREVIEW === '1'
     || process.env.EXPO_PUBLIC_RIDE_DETECTION_PREVIEW === '1'
+    || !!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW
   );
 }

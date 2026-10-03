@@ -4,9 +4,9 @@
  * mounted when hidden: mounting and unmounting many MapLibre marker views at
  * once crashed the map's subview insert in testing.
  */
-import { createContext, memo, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, memo, useContext, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { BRAND } from '../../../ui';
 import { VISIBLE, type Placement, type TagPlacement } from './solver';
 import type { DeclutterStore } from './store';
@@ -24,32 +24,46 @@ export function usePlacement(id: string): Placement {
   );
 }
 
-const FADE_MS = 180;
-/** A receded marker (a closed ride while the night mode leads) steps back, still readable. */
-const DIM = 0.72;
+const FADE_MS = 120;
 
 /**
  * Wraps a marker's art. `anchor` is the geo point inside this box (points), so
- * a receded marker shrinks toward the ground it stands on.
+ * a receded marker shrinks toward the ground it stands on. `overlay` (the chip)
+ * sits in the same box but is never scaled: the solver already placed it
+ * around the scaled art. Only opacity and transforms change here, never what
+ * is mounted, and never a prop of the art itself (Skia canvases inside map
+ * markers crash when their props churn under a moving map).
  */
-export const Placed = memo(function Placed({ placement, anchor, style, children }: {
+export const Placed = memo(function Placed({ placement, anchor, style, overlay, children }: {
   readonly placement: Placement;
   /** The geo point inside this box; the centre when left out. */
   readonly anchor?: { readonly x: number; readonly y: number };
   readonly style?: ViewStyle;
+  /** Unscaled content over the art (the chip and its leader line). */
+  readonly overlay?: ReactNode;
   readonly children: ReactNode;
 }) {
-  const opacity = useSharedValue(placement.visible ? (placement.dim ? DIM : 1) : 0);
+  const opacity = useSharedValue(placement.visible ? 1 : 0);
   const scale = useSharedValue(placement.scale);
+  const pop = useSharedValue(1);
+  const wasVisible = useRef(placement.visible);
   useEffect(() => {
-    opacity.value = withTiming(placement.visible ? (placement.dim ? DIM : 1) : 0, { duration: FADE_MS });
-    scale.value = withTiming(placement.visible ? placement.scale : Math.min(placement.scale, 0.85), { duration: FADE_MS });
-  }, [placement.visible, placement.dim, placement.scale, opacity, scale]);
-  const animated = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+    opacity.value = withTiming(placement.visible ? 1 : 0, { duration: FADE_MS });
+    scale.value = withTiming(placement.scale, { duration: FADE_MS });
+    // Newly freed art arrives with a small settle (0.92 to 1), never a jump.
+    if (placement.visible && !wasVisible.current) {
+      pop.value = 0.92;
+      pop.value = withSpring(1, { damping: 14, stiffness: 320 });
+    }
+    wasVisible.current = placement.visible;
+  }, [placement.visible, placement.scale, opacity, scale, pop]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const art = useAnimatedStyle(() => ({ transform: [{ scale: scale.value * pop.value }] }));
+  const origin = { transformOrigin: anchor ? `${anchor.x}px ${anchor.y}px 0px` : 'center' } as ViewStyle;
   return (
-    <Animated.View pointerEvents={placement.visible ? 'box-none' : 'none'}
-      style={[style, { transformOrigin: anchor ? `${anchor.x}px ${anchor.y}px 0px` : 'center' } as ViewStyle, animated]}>
-      {children}
+    <Animated.View pointerEvents={placement.visible ? 'box-none' : 'none'} style={fade}>
+      <Animated.View style={[style, origin, art]}>{children}</Animated.View>
+      {overlay}
     </Animated.View>
   );
 });

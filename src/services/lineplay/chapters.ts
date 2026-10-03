@@ -1082,7 +1082,7 @@ function frightChapter(parkId: number | undefined, rideSlug: string, rideName: s
   const cached = frightChapters.get(id);
   if (cached) return cached;
   const chapter: LinePlayChapter = {
-    id, palette: 'night', introLine: 'shh. phones away soon. play while the line moves.',
+    id, palette: 'night', introLine: 'The fog is thick. Play while the line moves.',
     parkLabel: 'FIN-ISTER NIGHTS', title: `The Line to ${name}`,
     story: 'The fog is rolling in and the line is long. Solve a spooky-silly clue, spot something odd, then race the Lantern before the doors open.',
     completedTitle: 'Brave in line!',

@@ -353,14 +353,15 @@ function TaskMarker({
   const closed = live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT';
   const resting = down || closed || restingUntil !== null;
   const owned = (task.times_completed ?? 0) > 0;
-  const timerUrgent = minsLeft !== null && minsLeft < 5;
+  // A closed ride never hurries the player: no countdown and no red on it.
+  const timerUrgent = !resting && minsLeft !== null && minsLeft < 5;
 
   // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
   const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
   // A limited coin on the map is in rotation: "Limited · leaves Oct 31".
   const limited = task.limited?.active ? limitedLabel(task.limited) : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
-  const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
+  const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
   const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '');
@@ -440,10 +441,9 @@ function TaskMarker({
       stopPropagation={true}
       anchor={{ x: 0.5, y: 0.9 }}
     >
-      <Placed placement={placement} anchor={RIDE_BOX.anchor}>
-      <Animated.View style={[styles.container, dropStyle]}>
-        {/* One chip at a time keeps the map calm, on the free side the declutter picked; the info card replaces it when selected. */}
-        {tagKind && tagSize && (
+      {/* One chip at a time keeps the map calm, on the free side the declutter picked (unscaled: the
+          solver sized it around the scaled art); the info card replaces it when selected. */}
+      <Placed placement={placement} anchor={RIDE_BOX.anchor} overlay={tagKind && tagSize ? (
           <TagSlot tag={placement.tag} anchor={RIDE_BOX.anchor} width={tagSize.w} height={tagSize.h}
             fallback={{ x: -tagSize.w / 2, y: RIDE_BODY.y - tagSize.h - 3 }}>
             {tagKind === 'rush' && rush && (
@@ -462,7 +462,8 @@ function TaskMarker({
               </View>
             )}
           </TagSlot>
-        )}
+      ) : undefined}>
+      <Animated.View style={[styles.container, dropStyle]}>
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
           <View style={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]}>
