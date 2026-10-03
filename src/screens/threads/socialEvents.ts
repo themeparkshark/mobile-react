@@ -8,6 +8,7 @@ export type SocialEvent =
   | { readonly type: 'thread-updated'; readonly thread: Partial<ThreadType> & { id: number } }
   | { readonly type: 'thread-gone'; readonly id: number }
   | { readonly type: 'player-blocked'; readonly playerId: number }
+  | { readonly type: 'player-unblocked'; readonly playerId: number }
   | { readonly type: 'replies-changed'; readonly id: number; readonly delta: number };
 
 type Listener = (event: SocialEvent) => void;

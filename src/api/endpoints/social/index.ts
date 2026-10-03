@@ -12,7 +12,8 @@ import type { PlayerType } from '../../../models/player-type';
 import type { FeedTab, Page, TopicKey } from '../../../screens/threads/socialModel';
 
 export async function fetchFeed(page: number, tab: FeedTab, options: { team?: string | null; topic?: TopicKey | null } = {}): Promise<Page<ThreadType>> {
-  const params: Record<string, string | number | boolean> = { page, pinned: false };
+  // lean: v2 reads reaction_counts, so the server skips the older grouped reactions load.
+  const params: Record<string, string | number | boolean> = { page, pinned: false, lean: 1 };
   if (tab === 'friends') {
     params.friends = true;
     params.sort = 'latest';
@@ -47,10 +48,10 @@ export async function fetchReplies(commentId: number, page: number): Promise<Pag
   return { data: data.data, hasMore: Boolean(data.links?.next) };
 }
 
-export async function postThread(body: { content: string; title: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
+/** No title: the server makes it from the first line (sending it made the filter read the words twice). */
+export async function postThread(body: { content: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
   const { data } = await client.post<ApiResponseType<ThreadType>>('/threads', {
     content: body.content,
-    title: body.title,
     topic: body.topic ?? null,
     team: body.team ?? null,
   });
@@ -66,8 +67,13 @@ export async function removeThread(id: number): Promise<void> {
   await client.delete(`/threads/${id}`);
 }
 
-export async function postComment(threadId: number, content: string, parentId?: number | null): Promise<CommentType> {
-  const { data } = await client.post<ApiResponseType<CommentType>>(`/threads/${threadId}/comments`, { content, comment_id: parentId ?? null });
+/** parentId keeps display one level deep; replyToId is the reply being answered (its author is notified). */
+export async function postComment(threadId: number, content: string, parentId?: number | null, replyToId?: number | null): Promise<CommentType> {
+  const { data } = await client.post<ApiResponseType<CommentType>>(`/threads/${threadId}/comments`, {
+    content,
+    comment_id: parentId ?? null,
+    reply_to_id: replyToId ?? null,
+  });
   return data.data;
 }
 

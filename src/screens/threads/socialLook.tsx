@@ -5,9 +5,11 @@
  * for topics. Every press springs on the UI thread and has a Reduce Motion path.
  */
 import { Image } from 'expo-image';
-import { memo, useEffect, type ReactNode } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
+  FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -15,7 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from '../../helpers/haptics';
-import { BRAND, SHADOW } from '../../ui';
+import { BRAND, GameIcon, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { countFor, shortCount, topicFor, type ReactionState, type TopicKey } from './socialModel';
 import type { ReactionTypeType } from '../../models/reaction-type-type';
@@ -120,6 +122,28 @@ export const card = StyleSheet.create({
   },
 });
 
+// ── Official author ────────────────────────────────────────────────
+
+const TPS_SHARK = require('../../../assets/images/screens/pin-collections/shark.png');
+
+/** Theme Park Shark's own posts: the real TPS shark in a gold ring, the name and a check. Never a kid-looking username. */
+export function OfficialAvatar({ size = 50 }: { readonly size?: number }) {
+  return (
+    <View style={[styles.officialRing, { width: size, height: size, borderRadius: size / 2 }]} accessibilityLabel="Theme Park Shark">
+      <Image source={TPS_SHARK} style={{ width: size * 0.92, height: size * 0.92 }} contentFit="contain" />
+    </View>
+  );
+}
+
+export function OfficialName({ size = 18 }: { readonly size?: number }) {
+  return (
+    <View style={styles.officialName}>
+      <Text style={[styles.officialText, { fontSize: size }]} numberOfLines={1}>Theme Park Shark</Text>
+      <GameIcon name="check" size={size + 2} accessibilityLabel="Official" />
+    </View>
+  );
+}
+
 // ── Topic badge ───────────────────────────────────────────────────────
 
 export const TopicBadge = memo(function TopicBadge({
@@ -186,6 +210,12 @@ function ReactionFace({
   const reduced = useUiReducedMotion();
   const pop = useSharedValue(1);
   const lift = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const [named, setNamed] = useState(false);
+  useEffect(() => {
+    if (!named) return undefined;
+    const id = setTimeout(() => setNamed(false), 1400);
+    return () => clearTimeout(id);
+  }, [named]);
 
   useEffect(() => {
     if (mine && !reduced) {
@@ -196,6 +226,7 @@ function ReactionFace({
   return (
     <PressScale
       onPress={onPress}
+      onLongPress={() => setNamed(true)}
       disabled={disabled}
       scaleTo={0.85}
       accessibilityLabel={`${type.name}${count ? `, ${count}` : ''}`}
@@ -208,6 +239,11 @@ function ReactionFace({
         <Image source={{ uri: type.image_url }} style={{ width: size, height: size }} contentFit="contain" />
       </Animated.View>
       {count > 0 && <Text style={[styles.faceCount, mine && { color: '#7a3d00' }]}>{shortCount(count)}</Text>}
+      {named && (
+        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(150)} style={styles.faceName} pointerEvents="none">
+          <Text style={styles.faceNameText}>{type.name}</Text>
+        </Animated.View>
+      )}
     </PressScale>
   );
 }
@@ -219,6 +255,7 @@ export function ReactionBar({
   onToggle,
   size = 28,
   disabled,
+  compact = false,
 }: {
   readonly state: ReactionState;
   /** Faces offered in the picker (kid-positive set). */
@@ -228,11 +265,21 @@ export function ReactionBar({
   readonly onToggle: (typeId: number) => void;
   readonly size?: number;
   readonly disabled?: boolean;
+  /**
+   * Feed cards: only faces someone used, plus one "+" that opens the rest.
+   * Four unused grey faces on every card read as noise.
+   */
+  readonly compact?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const leftovers = extraTypes.filter((type) => countFor(state, type.id) > 0);
+  const used = types.filter((type) => countFor(state, type.id) > 0 || state.mine === type.id);
+  const shown = !compact || open ? types : used;
+  const hiddenCount = types.length - shown.length;
+
   return (
     <View style={styles.reactionRow} accessibilityRole="toolbar" accessibilityLabel="Reactions">
-      {types.map((type) => (
+      {shown.map((type) => (
         <ReactionFace
           key={type.id}
           type={type}
@@ -240,9 +287,24 @@ export function ReactionBar({
           count={countFor(state, type.id)}
           mine={state.mine === type.id}
           disabled={disabled}
-          onPress={() => onToggle(type.id)}
+          onPress={() => {
+            onToggle(type.id);
+            if (compact) setOpen(false);
+          }}
         />
       ))}
+      {compact && hiddenCount > 0 && !disabled && (
+        <PressScale
+          onPress={() => setOpen(true)}
+          scaleTo={0.85}
+          style={styles.plus}
+          accessibilityLabel="React"
+          accessibilityHint="Shows the shark faces"
+        >
+          <Image source={types[0]?.image_url ? { uri: types[0].image_url } : undefined} style={{ width: size * 0.8, height: size * 0.8, opacity: 0.55 }} contentFit="contain" />
+          <Text style={styles.plusText}>+</Text>
+        </PressScale>
+      )}
       {leftovers.map((type) => (
         <View key={type.id} style={styles.extraFace} accessibilityLabel={`${type.name}, ${countFor(state, type.id)}`}>
           <Image source={{ uri: type.image_url }} style={{ width: size * 0.7, height: size * 0.7 }} contentFit="contain" />
@@ -259,6 +321,7 @@ export function GoldPill({
   label,
   onPress,
   disabled,
+  dimmed,
   loading,
   accessibilityLabel,
   small,
@@ -266,6 +329,8 @@ export function GoldPill({
   readonly label: string;
   readonly onPress: () => void;
   readonly disabled?: boolean;
+  /** Looks resting but still answers a tap (so an empty POST can explain itself). */
+  readonly dimmed?: boolean;
   readonly loading?: boolean;
   readonly accessibilityLabel?: string;
   readonly small?: boolean;
@@ -292,7 +357,7 @@ export function GoldPill({
       haptic="medium"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: Boolean(disabled || loading) }}
-      style={[styles.gold, small && styles.goldSmall, (disabled && !loading) && styles.goldDisabled]}
+      style={[styles.gold, small && styles.goldSmall, ((disabled || dimmed) && !loading) && styles.goldDisabled]}
     >
       <Animated.Text style={[styles.goldText, small && { fontSize: 16 }, fade]}>{label}</Animated.Text>
     </PressScale>
@@ -300,6 +365,9 @@ export function GoldPill({
 }
 
 const styles = StyleSheet.create({
+  officialRing: { backgroundColor: '#dbefff', borderWidth: 3, borderColor: BRAND.gold, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  officialName: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  officialText: { fontFamily: 'Shark', color: BRAND.navy, marginTop: 2 },
   topic: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,6 +409,16 @@ const styles = StyleSheet.create({
   },
   faceMine: { backgroundColor: '#fff1c2', borderColor: BRAND.gold },
   faceCount: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft, marginTop: 2 },
+  plus: {
+    flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 52, justifyContent: 'center',
+    paddingHorizontal: 8, borderRadius: 999, borderWidth: 2, borderStyle: 'dashed', borderColor: '#9fc3e8',
+  },
+  plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navySoft, marginTop: 2 },
+  faceName: {
+    position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  faceNameText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white, marginTop: 2 },
   extraFace: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 4, opacity: 0.85 },
   extraCount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft, marginTop: 2 },
   gold: {

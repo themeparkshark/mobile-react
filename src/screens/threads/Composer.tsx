@@ -17,9 +17,7 @@ import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,7 +30,9 @@ import Animated, {
   FadeInDown,
   FadeOut,
   ZoomIn,
+  useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
@@ -48,6 +48,7 @@ import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { GoldPill, PressScale, WATER, card, topicArt } from './socialLook';
+import useKeyboardInset from './useKeyboardInset';
 import {
   DEFAULT_PROMPT,
   DRAFT_LINES,
@@ -55,7 +56,6 @@ import {
   TOPICS,
   checkDraft,
   errorLine,
-  titleFrom,
   topicFor,
   type TopicKey,
 } from './socialModel';
@@ -85,6 +85,7 @@ export default function Composer({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const reduced = useUiReducedMotion();
+  const keyboard = useKeyboardInset(height, reduced);
   const { player } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const playerTeam = (player as { team?: { team?: string } } | null)?.team?.team;
@@ -98,6 +99,11 @@ export default function Composer({
   const [touched, setTouched] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const burst = useSharedValue(0);
+  const wiggle = useSharedValue(0);
+  const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: wiggle.value }] }));
+  const scrollRef = useRef<ScrollView>(null);
+  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (doneTimer.current) clearTimeout(doneTimer.current); }, []);
 
   // Load the saved draft (or the post being edited) each time the screen opens.
   useEffect(() => {
@@ -156,10 +162,18 @@ export default function Composer({
 
   const submit = async () => {
     setTouched(true);
+    if (phase !== 'write') return;
     if (!canPost) {
+      // An empty or unsafe post never just sits there: the card wiggles, a soft "nope", and the cursor is ready.
       playSound(NOPE, { volume: 0.5 });
       void Haptics.notificationAsync('warning');
-      if (problem === 'empty') inputRef.current?.focus();
+      if (!reduced) {
+        wiggle.value = withSequence(
+          withTiming(-10, { duration: 50 }), withTiming(10, { duration: 70 }),
+          withTiming(-7, { duration: 60 }), withTiming(5, { duration: 60 }), withTiming(0, { duration: 50 }),
+        );
+      }
+      inputRef.current?.focus();
       return;
     }
     Keyboard.dismiss();
@@ -169,13 +183,13 @@ export default function Composer({
     try {
       const thread = editing
         ? await editThread(editing.id, content)
-        : await postThread({ content, title: titleFrom(content), topic, team: toTeam && playerTeam ? playerTeam : null });
+        : await postThread({ content, topic, team: toTeam && playerTeam ? playerTeam : null });
       setPhase('done');
       playSound(SUCCESS, { volume: 0.7 });
       void Haptics.notificationAsync('success');
       if (!reduced) burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
       if (!editing) AsyncStorage.removeItem(draftKey(player?.id)).catch(() => undefined);
-      setTimeout(() => {
+      doneTimer.current = setTimeout(() => {
         onPosted({ ...thread, player: thread.player ?? (player as ThreadType['player']) }, Boolean(editing));
       }, reduced ? 700 : 1150);
     } catch (error) {
@@ -190,7 +204,8 @@ export default function Composer({
     <Modal visible={visible} animationType={reduced ? 'fade' : 'slide'} presentationStyle="fullScreen" onRequestClose={close}>
       <View style={styles.root}>
         <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Full-screen modal: the keyboard's own height is the exact bottom padding. */}
+        <View style={{ flex: 1, paddingBottom: keyboard }}>
           {/* Header: never moves, never hides. */}
           <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
             <PressScale onPress={close} hitSlop={8} accessibilityLabel="Close" accessibilityHint="Your words are saved for later">
@@ -201,14 +216,14 @@ export default function Composer({
               label={phase === 'posting' ? 'Posting' : editing ? 'Save' : 'Post'}
               onPress={submit}
               loading={phase === 'posting'}
-              disabled={!canPost && phase === 'write'}
-              small
+              dimmed={!canPost && phase === 'write'}
               accessibilityLabel={editing ? 'Save post' : 'Post it'}
             />
           </View>
 
           <ScrollView
-            contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+            ref={scrollRef}
+            contentContainerStyle={[styles.scroll, { paddingBottom: keyboard > 0 ? 16 : insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
@@ -260,7 +275,7 @@ export default function Composer({
             )}
 
             {/* The card the post will look like. */}
-            <View style={[card.shell, styles.preview, touched && problem === 'empty' && { borderColor: BRAND.red }]}>
+            <Animated.View style={[card.shell, styles.preview, touched && problem === 'empty' && { borderColor: BRAND.red }, wiggleStyle]}>
               <View style={styles.previewHead}>
                 <Avatar player={player as ThreadType['player']} size="sm" />
                 <View style={{ flex: 1 }}>
@@ -282,6 +297,7 @@ export default function Composer({
                 multiline
                 maxLength={POST_MAX + 50}
                 style={styles.input}
+                onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: !reduced }), 280)}
                 accessibilityLabel="Your post"
                 accessibilityHint={def?.prompt ?? DEFAULT_PROMPT}
                 textAlignVertical="top"
@@ -301,14 +317,16 @@ export default function Composer({
                 )}
                 {left < 60 && <Text style={[styles.left, left < 0 && { color: BRAND.red }]}>{left}</Text>}
               </View>
-            </View>
+            </Animated.View>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
 
         {phase === 'done' && (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <RewardBurst progress={burst} x={width / 2} y={height * 0.42} />
-            <Animated.View entering={reduced ? FadeIn : ZoomIn.springify().damping(10)} style={[styles.doneWrap, { top: height * 0.42 - 110 }]}>
+            {/* Its own moment: the form fades behind a navy scrim, the shark and ribbon sit dead center. */}
+            <Animated.View entering={FadeIn.duration(180)} style={[StyleSheet.absoluteFill, styles.doneScrim]} />
+            <RewardBurst progress={burst} x={width / 2} y={height * 0.5} />
+            <Animated.View entering={reduced ? FadeIn : ZoomIn.springify().damping(10)} style={[styles.doneWrap, { top: height * 0.5 - 110 }]}>
               <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
               <View style={styles.doneRibbon}>
                 <Text style={styles.doneText}>{editing ? 'Saved!' : 'Posted!'}</Text>
@@ -368,6 +386,7 @@ const styles = StyleSheet.create({
   kind: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
   left: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft },
   doneWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  doneScrim: { backgroundColor: 'rgba(5,52,110,0.62)' },
   doneShark: { width: 170, height: 150 },
   doneRibbon: {
     marginTop: -14,

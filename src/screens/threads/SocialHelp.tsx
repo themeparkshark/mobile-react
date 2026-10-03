@@ -5,7 +5,9 @@
  */
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
+import * as RootNavigation from '../../RootNavigation';
+import { SUPPORT_EMAIL } from '../Settings/accountDeletion';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
@@ -57,6 +59,24 @@ export default function SocialHelp() {
               </View>
             </View>
           ))}
+          <View style={styles.links}>
+            <PressScale
+              onPress={() => { setOpen(false); setTimeout(() => RootNavigation.navigate('BlockedPlayers'), 350); }}
+              style={styles.link}
+              accessibilityLabel="Blocked players"
+            >
+              <GameIcon name="lock" size={22} />
+              <Text style={styles.linkText}>Blocked players</Text>
+            </PressScale>
+            <PressScale
+              onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`)}
+              style={styles.link}
+              accessibilityLabel={`Parents: email ${SUPPORT_EMAIL}`}
+            >
+              <GameIcon name="info" size={22} />
+              <Text style={styles.linkText}>Parents: email us</Text>
+            </PressScale>
+          </View>
           <GameButton label="Got it" onPress={() => setOpen(false)} />
         </View>
       </Modal>
@@ -83,4 +103,7 @@ const styles = StyleSheet.create({
   badge: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#e8f4ff', alignItems: 'center', justifyContent: 'center' },
   ruleTitle: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy, marginTop: 2 },
   ruleLine: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navySoft },
+  links: { flexDirection: 'row', gap: 10 },
+  link: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 48, borderRadius: 999, backgroundColor: '#e8f4ff', borderWidth: 2, borderColor: '#bcd8f5' },
+  linkText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 3 },
 });

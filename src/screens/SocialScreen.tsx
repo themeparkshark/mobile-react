@@ -11,7 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,10 +35,11 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SocialHelp from './threads/SocialHelp';
+import RulesCard, { hasPromised } from './threads/RulesCard';
 import ThreadCard from './threads/ThreadCard';
 import { applySocialEvent, emitSocial, onSocial } from './threads/socialEvents';
-import { COMPOSE_ART, PressScale, WATER } from './threads/socialLook';
-import { DEFAULT_PROMPT, mergePage, topicFor, type FeedTab, type TopicKey } from './threads/socialModel';
+import { COMPOSE_ART, PressScale, WATER, topicArt } from './threads/socialLook';
+import { DEFAULT_PROMPT, TOPICS, mergePage, topicFor, type FeedTab, type TopicKey } from './threads/socialModel';
 
 const TAB_SOUND = require('../../assets/sounds/tap.mp3');
 
@@ -68,6 +69,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [menuThread, setMenuThread] = useState<ThreadType | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
+  const [rules, setRules] = useState(false);
   const [freshId, setFreshId] = useState<number | null>(null);
   const listRef = useRef<FlashList<ThreadType>>(null);
   const request = useRef(0);
@@ -108,9 +110,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
 
   // Changes made on the post screen land here without a refetch.
   useEffect(() => onSocial((event) => {
+    if (event.type === 'player-unblocked') {
+      void load(1, 'refresh');
+      return;
+    }
     setThreads((current) => applySocialEvent(current, event));
     setPinned((current) => applySocialEvent(current, event));
-  }), []);
+  }), [load]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -137,18 +143,25 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
 
   const openMenu = useCallback((thread: ThreadType) => {
     setMenuThread(thread);
+    const official = Boolean(thread.is_official);
     setMenu({
       kind: 'thread',
       id: thread.id,
-      authorId: thread.player?.id ?? null,
-      authorName: thread.player?.screen_name ?? 'this player',
-      mine: thread.player?.id === player?.id,
+      // Theme Park Shark's own posts can be reported but not blocked.
+      authorId: official ? null : thread.player?.id ?? null,
+      authorName: official ? 'Theme Park Shark' : thread.player?.screen_name ?? 'this player',
+      mine: !official && thread.player?.id === player?.id,
     });
   }, [player?.id]);
 
-  const openComposer = () => {
+  const openComposer = async () => {
     if (!player) return;
     if (!checkPermission(PermissionEnums.CreateThreads)) return;
+    // The very first time: the three rules and "I promise" before the composer.
+    if (!(await hasPromised(player.id))) {
+      setRules(true);
+      return;
+    }
     setComposer({ open: true, editing: null });
   };
 
@@ -167,13 +180,21 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     setThreads((current) => [thread, ...current.filter((item) => item.id !== thread.id)]);
     setFreshId(thread.id);
     setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced }), 50);
-    setTimeout(() => setFreshId(null), 4000);
   };
 
+  // The glow fades after 4 seconds (and never fires on an unmounted screen).
+  useEffect(() => {
+    if (freshId === null) return undefined;
+    const id = setTimeout(() => setFreshId(null), 4000);
+    return () => clearTimeout(id);
+  }, [freshId]);
+
   const items = useMemo(() => {
-    const seen = new Set(pinned.map((item) => item.id));
-    return [...pinned, ...threads.filter((item) => !seen.has(item.id))];
-  }, [pinned, threads]);
+    // A post I just made sits on top (above the pin) while it glows, fully in view.
+    const fresh = freshId !== null ? threads.find((item) => item.id === freshId) : undefined;
+    const seen = new Set([...pinned.map((item) => item.id), ...(fresh ? [fresh.id] : [])]);
+    return [...(fresh ? [fresh] : []), ...pinned, ...threads.filter((item) => !seen.has(item.id))];
+  }, [pinned, threads, freshId]);
 
   const tabs: { key: FeedTab; label: string; icon?: 'streak' | 'sparkle' | 'shark'; badge?: number }[] = [
     { key: 'hottest', label: 'Hot', icon: 'streak' },
@@ -186,7 +207,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const header = (
     <View>
       {player ? (
-        <PressScale onPress={openComposer} scaleTo={0.97} haptic="medium" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
+        <PressScale onPress={() => void openComposer()} scaleTo={0.97} haptic="medium" style={styles.compose} accessibilityLabel="Write a post" accessibilityHint="Opens the new post screen">
           <Avatar player={player as ThreadType['player']} size="sm" />
           <View style={styles.composeField}>
             <Text style={styles.composeText} numberOfLines={1}>{DEFAULT_PROMPT}</Text>
@@ -219,14 +240,34 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         })}
       </View>
 
-      {topicDef && (
-        <Animated.View entering={reduced ? undefined : FadeIn} style={styles.filterRow}>
-          <PressScale onPress={() => setTopic(null)} style={[styles.filter, { borderColor: topicDef.color, backgroundColor: topicDef.chip }]} accessibilityLabel={`Showing ${topicDef.label} posts. Tap to show all`}>
-            <Text style={styles.filterText}>Only {topicDef.label}</Text>
-            <GameIcon name="close" size={20} />
-          </PressScale>
-        </Animated.View>
-      )}
+      {/* Topics are visible, not hidden behind a badge tap. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow} accessibilityLabel="Topics">
+        <PressScale
+          onPress={() => setTopic(null)}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: topic === null }}
+          style={[styles.topicChip, topic === null && styles.topicChipOn]}
+          accessibilityLabel="All topics"
+        >
+          <Text style={styles.topicChipText}>All</Text>
+        </PressScale>
+        {TOPICS.map((item) => {
+          const on = topic === item.key;
+          return (
+            <PressScale
+              key={item.key}
+              onPress={() => setTopic(on ? null : item.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${item.label} posts`}
+              style={[styles.topicChip, on && { backgroundColor: item.chip, borderColor: item.color }]}
+            >
+              <Image source={topicArt(item.key)} style={{ width: 24, height: 24 }} contentFit="contain" />
+              <Text style={styles.topicChipText}>{item.label}</Text>
+            </PressScale>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 
@@ -249,7 +290,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       tone="onBlue"
       title={tab === 'team' && team ? `Be the first ${team.name} post!` : 'Be the first to post!'}
       message="Share your park day with the Shark fam."
-      action={player ? { label: 'Write a post', icon: 'edit', onPress: openComposer } : undefined}
+      action={player ? { label: 'Write a post', icon: 'edit', onPress: () => void openComposer() } : undefined}
       style={styles.state}
     />
   );
@@ -258,8 +299,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: shop, pin trading, redeem" hitSlop={8}>
-            <GameIcon name="chest" size={40} />
+          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: Member, Merch, Pin Trading, Redeem" hitSlop={8} style={styles.more}>
+            <GameIcon name="chest" size={36} />
+            <Text style={styles.moreText}>{player && !player.is_subscribed ? 'Member' : 'More'}</Text>
           </PressScale>
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
@@ -299,6 +341,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         editing={composer.editing}
         onClose={() => setComposer({ open: false, editing: null })}
         onPosted={onPosted}
+      />
+
+      <RulesCard
+        visible={rules}
+        playerId={player?.id}
+        onCancel={() => setRules(false)}
+        onPromise={() => setComposer({ open: true, editing: null })}
       />
 
       <PostMenu
@@ -399,9 +448,15 @@ const styles = StyleSheet.create({
   tabOn: { backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 4, borderColor: '#7a3d00' },
   tabText: { fontFamily: 'Shark', fontSize: 16, color: '#cfe6ff', marginTop: 3 },
   tabTextOn: { color: '#7a3d00' },
-  filterRow: { flexDirection: 'row', marginHorizontal: 14, marginBottom: 10 },
-  filter: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 2, borderRadius: 999, paddingLeft: 14, paddingRight: 6, minHeight: 40 },
-  filterText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 3 },
+  topicRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+  topicChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 999,
+    backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4, borderColor: '#0a4f9c',
+  },
+  topicChipOn: { backgroundColor: BRAND.gold, borderColor: '#7a3d00' },
+  topicChipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 3 },
+  more: { alignItems: 'center', minWidth: 48 },
+  moreText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   state: { marginTop: 40, paddingHorizontal: 24 },
   shortcuts: {
     backgroundColor: BRAND.cream,
