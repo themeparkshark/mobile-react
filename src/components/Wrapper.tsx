@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext } from 'react';
+import { ReactNode, useContext, useEffect } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -7,6 +7,8 @@ import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
+import { AuthContext } from '../context/AuthProvider';
+import { warmStandings } from '../screens/LeaderboardsScreen/standingsV2Store';
 
 export default function Wrapper({
   children,
@@ -18,6 +20,9 @@ export default function Wrapper({
   readonly onNavigate?: (screen: string) => void;
 }) {
   const { theme } = useContext(ThemeContext);
+  const { player } = useContext(AuthContext);
+  // Standings v2: warm This Week and Friends once, so the first tap paints a real board.
+  useEffect(() => { if (!previewMode) warmStandings(player?.id); }, [player?.id, previewMode]);
   
   // Default theme URLs if theme not loaded
   const bottomBarSource = theme?.bottom_bar_url

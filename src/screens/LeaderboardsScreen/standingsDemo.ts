@@ -3,7 +3,8 @@
  * It plays a fixed tour (scroll to you, switch boards, pick a park) so screen
  * recordings need no taps. Never active outside __DEV__.
  */
-type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly type: 'scrollMe' } | { readonly type: 'park'; readonly parkId: number | null };
+type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly type: 'scrollMe' } | { readonly type: 'park'; readonly parkId: number | null }
+  | { readonly type: 'dismiss' } | { readonly type: 'card' };
 
 const listeners = new Set<(event: DemoEvent) => void>();
 
@@ -15,13 +16,15 @@ export function onStandingsDemo(listener: (event: DemoEvent) => void): () => voi
 }
 
 const TOUR: readonly (readonly [number, DemoEvent])[] = [
-  [6000, { type: 'scrollMe' }],
-  [10000, { type: 'tab', index: 1 }],
-  [16000, { type: 'scrollMe' }],
-  [20000, { type: 'tab', index: 2 }],
-  [26000, { type: 'park', parkId: 8 }],
-  [31000, { type: 'scrollMe' }],
-  [36000, { type: 'tab', index: 0 }],
+  [5000, { type: 'dismiss' }],
+  [8000, { type: 'scrollMe' }],
+  [12000, { type: 'tab', index: 1 }],
+  [17000, { type: 'tab', index: 2 }],
+  [22000, { type: 'park', parkId: 8 }],
+  [26000, { type: 'scrollMe' }],
+  [29000, { type: 'card' }],
+  [33000, { type: 'dismiss' }],
+  [35000, { type: 'tab', index: 0 }],
 ];
 
 export function startStandingsDemo(): () => void {

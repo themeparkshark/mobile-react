@@ -320,7 +320,7 @@ function DevJoystickHost() {
   const onMove = useCallback((dx: number, dy: number, speed: number) => moveDevLocation(dx, dy, speed), [moveDevLocation]);
   const onStop = useCallback(() => {}, []);
   // Dev only: Standings screen captures run without the joystick over the board.
-  if (process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') return null;
+  if (__DEV__ && process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') return null;
   if (!location) return null;
   return <DevJoystick onMove={onMove} onStop={onStop} currentLat={location.latitude} currentLng={location.longitude} />;
 }

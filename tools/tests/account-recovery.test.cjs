@@ -158,6 +158,7 @@ function provider({ me } = {}) {
     '../services/lineplay/backgroundQueueHeartbeat': { async clearQueueBackgroundHeartbeat() {} },
     '../utils/apiCache': { async clearCache() { events.push(['clearAccountCache']); } },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => undefined },
     '../services/push': { refreshPushRegistration: async () => undefined, listenForPushTaps: () => () => undefined },
   };
   vm.runInNewContext(output, {

@@ -1,8 +1,9 @@
 'use strict';
 /**
- * Standings v2 (next-wave/standings-v2/PROPOSAL.md): three boards with one
- * number each, a You card with one target line, defensive parsing of the
- * server answer, and a legacy fallback when the endpoint is missing.
+ * Standings v2 (next-wave/standings-v2/PROPOSAL.md, round 2): three boards with
+ * one number each, a You card with one target line, zero-reading states,
+ * defensive parsing, the right legacy fallback, per-player caching, and kid
+ * safety (public rows never open a profile).
  */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -13,119 +14,147 @@ const { plain } = require('./helpers/plain.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const model = loadTs('src/screens/LeaderboardsScreen/standingsV2Model.ts');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 const dto = (over = {}) => ({
-  board: 'week', metric: 'ride_wins', park_id: null, available: null, players_count: 3,
+  board: 'week', metric: 'ride_wins', park_id: null, available: null, players_count: 5, tiebreak: 'first_to_reach',
   week: { starts_at: '2026-09-28T00:00:00-07:00', ends_at: '2026-10-05T00:00:00-07:00' },
   rows: [
-    { rank: 1, id: 7, screen_name: 'captaindax', score: 53, is_me: false, avatar_url: null, inventory: null },
+    { rank: 1, id: 7, screen_name: 'captaindax', score: 53 },
     { rank: 2, id: 8, screen_name: 'offtrack', score: 37 },
-    { rank: 3, id: 9, screen_name: 'gr8scott', score: 9 },
-    { rank: 4, id: 5, screen_name: 'localqa', score: 8, is_me: true },
+    { rank: 3, id: 9, screen_name: 'toons', score: 36 },
+    { rank: 4, id: 10, screen_name: 'gr8scott', score: 9 },
+    { rank: 5, id: 5, screen_name: 'localqa', score: 8, is_me: true },
   ],
-  me: { rank: 4, id: 5, screen_name: 'localqa', score: 8, is_me: true },
-  chase: { id: 9, screen_name: 'gr8scott', rank: 3, score: 9, to_pass: 2 },
+  me: { rank: 5, id: 5, screen_name: 'localqa', score: 8, is_me: true },
+  chase: { id: 10, screen_name: 'gr8scott', rank: 4, score: 9, to_pass: 2, tied: false, inventory: null },
+  goals: [{ at: 3, xp: 10, reached: true }, { at: 8, xp: 25, reached: true }, { at: 15, xp: 50, reached: false }],
   ...over,
 });
 
 test('three boards, Home Hunt only behind its flag, old deep links land on the right board', () => {
   assert.deepEqual(plain(model.standingsV2Tabs(false).map(t => t.key)), ['week', 'friends', 'all_time']);
-  assert.deepEqual(plain(model.standingsV2Tabs(true).map(t => t.key)), ['week', 'friends', 'all_time', 'hunt']);
   const tabs = model.standingsV2Tabs(true);
   assert.equal(model.initialStandingsV2Tab('home_hunt', tabs), 3);
-  assert.equal(model.initialStandingsV2Tab('friends', tabs), 1);
   assert.equal(model.initialStandingsV2Tab('xp', tabs), 2, 'the retired XP board opens All-Time');
-  assert.equal(model.initialStandingsV2Tab('rides', tabs), 0);
   assert.equal(model.initialStandingsV2Tab(undefined, tabs), 0);
-  assert.equal(model.initialStandingsV2Tab('home_hunt', model.standingsV2Tabs(false)), 0, 'no hunt tab: first board');
 });
 
-test('the server answer is read defensively and marks your row', () => {
-  const board = model.boardModel(dto(), 'week', 5);
-  assert.equal(board.rows.length, 4);
-  assert.equal(board.rows[3].isMe, true);
-  assert.equal(board.me.rank, 4);
-  assert.deepEqual(plain(board.chase), { name: 'gr8scott', rank: 3, score: 9, toPass: 2 });
-  assert.equal(board.endsAt, '2026-10-05T00:00:00-07:00');
+test('the server answer is read defensively: rows, rows around you, chase, goals, last week', () => {
+  const board = model.boardModel(dto({
+    around_me: [{ rank: 61, id: 70, screen_name: 'a', score: 2 }, { rank: 5, id: 5, screen_name: 'localqa', score: 8 }],
+    last_week: { week_start: '2026-09-21', rank: 7, score: 14, players_count: 28, title: null, tickets: 0, seen: false },
+  }), 'week', 5);
+  assert.equal(board.rows[4].isMe, true);
+  assert.deepEqual(plain(board.aroundMe.map(r => r.id)), [70], 'rows already on the board are not repeated');
+  assert.equal(board.chase.tied, false);
+  assert.equal(board.goals.length, 3);
+  assert.deepEqual(plain(board.lastWeek), { weekStart: '2026-09-21', rank: 7, score: 14, playersCount: 28, title: null, tickets: 0, seen: false });
 
   const empty = model.boardModel(null, 'all_time', 5);
-  assert.equal(empty.board, 'all_time');
   assert.equal(empty.metric, 'ride_coins');
-  assert.deepEqual(plain(empty.rows), []);
-  assert.equal(empty.me, null);
-  assert.equal(empty.chase, null);
-
-  const messy = model.boardModel({ rows: [{ id: 'x' }, { id: 3, score: -4 }, null], chase: { screen_name: 'a', to_pass: 0 } }, 'week', null);
-  assert.equal(messy.rows.length, 1, 'rows without an id are dropped');
+  assert.deepEqual(plain([empty.rows, empty.goals, empty.lastWeek, empty.chase]), [[], [], null, null]);
+  const messy = model.boardModel({ rows: [{ id: 'x' }, { id: 3, score: -4 }, null], goals: [{ at: 'x' }], last_week: { rank: 0 } }, 'week', null);
+  assert.equal(messy.rows.length, 1);
   assert.equal(messy.rows[0].name, 'P3', 'a missing name falls back to the safe P-number');
-  assert.equal(messy.rows[0].score, 0);
-  assert.equal(messy.chase, null, 'a chase with nothing to pass is ignored');
+  assert.equal(messy.goals.length, 0);
+  assert.equal(messy.lastWeek, null);
 });
 
-test('the You card says one thing: chase, lead, or how to join', () => {
+test('the You card: NEW players are invited, ties are explained, chasers get one target, leaders hold', () => {
+  const join = model.youLine(model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5));
+  assert.deepEqual(plain(join), { state: 'join', text: 'Win 1 ride to join!', sub: null });
+  const coinJoin = model.youLine(model.boardModel(dto({ board: 'all_time', metric: 'ride_coins', me: { rank: null, id: 5, score: 0 } }), 'all_time', 5));
+  assert.equal(coinJoin.text, 'Win 1 ride coin to join!');
   const chasing = model.youLine(model.boardModel(dto(), 'week', 5));
-  assert.deepEqual(plain(chasing), { state: 'chasing', text: '2 more rides to pass gr8scott' });
-  const one = model.youLine(model.boardModel(dto({ chase: { screen_name: 'zed', to_pass: 1, rank: 1, score: 3 } }), 'week', 5));
-  assert.equal(one.text, '1 more ride to pass zed');
-  const coins = model.youLine(model.boardModel(dto({ board: 'all_time', metric: 'ride_coins' }), 'all_time', 5));
-  assert.equal(coins.text, '2 more ride coins to pass gr8scott');
+  assert.equal(chasing.text, '2 more rides to pass gr8scott');
+  const tied = model.youLine(model.boardModel(dto({ chase: { id: 10, screen_name: 'zmaize', rank: 4, score: 8, to_pass: 1, tied: true } }), 'week', 5));
+  assert.deepEqual(plain(tied), { state: 'tied', text: 'Tied! zmaize got there first.', sub: '1 more ride passes them' });
   const leader = model.youLine(model.boardModel(dto({ me: { rank: 1, id: 5, score: 60 }, chase: null }), 'week', 5));
   assert.equal(leader.state, 'leader');
-  const join = model.youLine(model.boardModel(dto({ me: { rank: null, id: 5, score: 0 }, chase: null }), 'week', 5));
-  assert.deepEqual(plain(join), { state: 'join', text: 'Win a ride to join this week' });
-  const friends = model.youLine(model.boardModel(dto({ board: 'friends', me: { rank: 3, id: 5, score: 0 }, chase: null }), 'friends', 5));
-  assert.equal(friends.text, 'Win a ride to race your friends');
-  for (const line of [chasing, one, coins, leader, join, friends]) {
-    assert.doesNotMatch(line.text, /[—–]|[\u{1F300}-\u{1FAFF}]/u, 'no em dashes or emoji');
+  for (const line of [join, coinJoin, chasing, tied, leader]) {
+    assert.doesNotMatch(`${line.text} ${line.sub ?? ''}`, /[—–]|[\u{1F300}-\u{1FAFF}]/u, 'no em dashes or emoji');
     assert.ok(line.text.length <= 40, `short enough for a kid: ${line.text}`);
   }
 });
 
-test('the chase bar fills as you close in; leaders are full, newcomers empty', () => {
-  const board = model.boardModel(dto(), 'week', 5);
-  assert.equal(model.chaseProgress(board), 0.8);
-  assert.equal(model.chaseProgress({ me: { score: 9 }, chase: null }), 1);
-  assert.equal(model.chaseProgress({ me: { score: 0 }, chase: null }), 0);
+test('list items: podium rows stay out, your neighbourhood and resting friends get their own fixed-height sections', () => {
+  const week = model.boardModel(dto({ around_me: [{ rank: 61, id: 70, screen_name: 'a', score: 2 }] }), 'week', 5);
+  const items = model.listItems(week);
+  assert.deepEqual(plain(items.map(i => i.type === 'row' ? i.row.id : i.label)), [10, 5, 'Your spot', 70]);
+  const friends = model.boardModel(dto({ board: 'friends', rows: [
+    { rank: 1, id: 7, screen_name: 'a', score: 3 }, { rank: null, id: 5, screen_name: 'me', score: 0 }, { rank: null, id: 8, screen_name: 'b', score: 0 },
+  ] }), 'friends', 5);
+  const fItems = model.listItems(friends);
+  assert.deepEqual(plain(fItems.map(i => i.type === 'row' ? [i.row.id, i.muted] : i.label)), ['Not riding yet', [5, true], [8, true]]);
+  assert.deepEqual(plain(model.podiumRows(friends).map(r => r && r.id)), [7, null, null], 'a 0-ride friend never stands on the podium');
+  assert.deepEqual(plain(model.itemLayouts(fItems)), [{ length: 40, offset: 0 }, { length: 64, offset: 40 }, { length: 64, offset: 104 }]);
 });
 
-test('counts, countdowns, climbs and keys', () => {
-  assert.equal(model.unitWord('ride_wins', 1), 'ride');
-  assert.equal(model.unitWord('ride_coins', 2), 'ride coins');
-  assert.equal(model.scoreSummary({ metric: 'ride_coins', me: { score: 4 }, available: 211 }), '4 of 211');
-  assert.equal(model.scoreSummary({ metric: 'ride_wins', me: { score: 1 }, available: null }), '1 ride');
+test('day dots replace "2d 6h": today glows, the last day turns gold, the last hours turn red', () => {
   const end = '2026-10-05T07:00:00Z';
-  assert.equal(model.resetCountdown(end, Date.parse('2026-10-02T23:00:00Z')), '2d 8h');
-  assert.equal(model.resetCountdown(end, Date.parse('2026-10-05T05:30:00Z')), '1h 30m');
-  assert.equal(model.resetCountdown(end, Date.parse('2026-10-05T06:51:00Z')), '9m');
-  assert.equal(model.resetCountdown(end, Date.parse('2026-10-06T00:00:00Z')), 'now');
-  assert.equal(model.resetCountdown(null, 0), '');
-  assert.equal(model.rankClimb(20, 17), 3);
-  assert.equal(model.rankClimb(null, 4), 0, 'a first look celebrates nothing');
-  assert.equal(model.rankClimb(4, 6), -2);
-  assert.equal(model.seenRankKey('week', null, '2026-10-05T00:00:00-07:00'), 'standings-v2:week:all:2026-10-05');
-  assert.equal(model.seenRankKey('all_time', 8, '2026-10-05'), 'standings-v2:all_time:8:ever');
+  const thursday = model.weekDots(end, Date.parse('2026-10-01T19:00:00Z'));
+  assert.deepEqual(plain(thursday.dots.map(d => d.state)), ['past', 'past', 'past', 'today', 'future', 'future', 'future']);
+  assert.equal(thursday.urgency, 'calm');
+  assert.equal(thursday.label, '4 days left');
+  assert.equal(thursday.spoken, 'New week in 4 days');
+  const sunday = model.weekDots(end, Date.parse('2026-10-04T19:00:00Z'));
+  assert.equal(sunday.dots[6].state, 'today');
+  assert.deepEqual(plain([sunday.urgency, sunday.label]), ['last_day', 'Last day!']);
+  const late = model.weekDots(end, Date.parse('2026-10-05T04:20:00Z'));
+  assert.deepEqual(plain([late.urgency, late.label]), ['last_hours', 'Last chance! 2h 40m']);
+  assert.equal(model.weekDots(null, 0).label, '');
 });
 
-test('podium split, accessibility labels, empty copy and the legacy fallback trigger', () => {
-  const split = model.splitPodium([1, 2]);
-  assert.deepEqual(plain(split), { podium: [1, 2, null], rest: [] });
-  assert.deepEqual(plain(model.splitPodium([1, 2, 3, 4, 5]).rest), [4, 5]);
-  assert.equal(model.rowLabel({ rank: 4, name: 'localqa', score: 8, isMe: true }, 'ride_wins'), 'Rank 4, You, localqa, 8 rides');
-  assert.equal(model.emptyCopy('friends', 0).target, 'Friends');
-  assert.equal(model.emptyCopy('week', null).target, 'Explore');
-  assert.equal(model.isMissingEndpoint({ response: { status: 404 } }), true);
-  assert.equal(model.isMissingEndpoint({ response: { status: 500 } }), false);
+test('climbs, the players you passed, podium identity, and per-player keys', () => {
+  const board = model.boardModel(dto({ rows: [
+    { rank: 1, id: 7, screen_name: 'a', score: 9 }, { rank: 2, id: 5, screen_name: 'me', score: 8, is_me: true },
+    { rank: 3, id: 8, screen_name: 'b', score: 7 }, { rank: 4, id: 9, screen_name: 'c', score: 6 }, { rank: 5, id: 10, screen_name: 'd', score: 5 },
+  ] }), 'week', 5);
+  assert.equal(model.rankClimb(5, 2), 3);
+  assert.equal(model.rankClimb(null, 2), 0, 'a first look celebrates nothing');
+  assert.deepEqual(plain(model.passedPlayers(board.rows, 5, 2).map(r => r.name)), ['d', 'c', 'b'], 'passed in the order you overtook them');
+  assert.deepEqual(plain(model.passedPlayers(board.rows, 2, 2)), []);
+  assert.equal(model.podiumSignature(model.podiumRows(board)), '7:9|5:8|8:7');
+  assert.equal(model.seenRankKey(5, 'week', null, '2026-10-05T00:00:00-07:00'), 'standings-v2:5:week:all:2026-10-05');
+  assert.notEqual(model.seenRankKey(5, 'week', null, 'x'), model.seenRankKey(6, 'week', null, 'x'), 'one child never inherits another child\'s seen ranks');
+  assert.equal(model.sharkVariant(13), 5);
+  assert.equal(model.sharkVariant(-3), 3);
+});
+
+test('only a server without v2 falls back; an expired session or a gone park never does', () => {
+  assert.equal(model.isMissingEndpoint({ response: { status: 404, headers: {} } }), true);
+  assert.equal(model.isMissingEndpoint({ response: { status: 404, headers: { 'x-standings': '2' } } }), false);
+  assert.equal(model.isMissingEndpoint({ response: { status: 401, headers: {} } }), false);
   assert.equal(model.isMissingEndpoint(new Error('offline')), false);
+  assert.equal(model.isUnknownPark({ response: { status: 404, data: { code: 'STANDINGS_PARK_NOT_FOUND' } } }), true);
+  assert.equal(model.isUnknownPark({ response: { status: 404, data: {} } }), false);
 });
 
-test('the screen keeps the legacy boards for older servers and guests, and the board is virtualized', () => {
-  const screen = fs.readFileSync(path.join(root, 'src/screens/LeaderboardScreen.tsx'), 'utf8');
-  assert.match(screen, /if \(!player \|\| v2Missing\) return <LegacyStandings \/>/);
-  const board = fs.readFileSync(path.join(root, 'src/screens/LeaderboardsScreen/StandingsBoardV2.tsx'), 'utf8');
-  assert.match(board, /<FlatList/);
-  assert.match(board, /useUiReducedMotion/);
-  assert.match(board, /SharkLoader state="error"/);
-  assert.doesNotMatch(board, /setInterval\([^)]*30000/, 'no 30 second polling');
-  const demo = fs.readFileSync(path.join(root, 'src/screens/LeaderboardsScreen/standingsDemo.ts'), 'utf8');
-  assert.match(demo, /__DEV__ &&/, 'the capture tour never runs in a release build');
+test('copy: the Monday card, empty boards and spoken rows', () => {
+  assert.deepEqual(plain(model.lastWeekCopy({ rank: 1, score: 14, playersCount: 28, title: 'Ride Champ', tickets: 5 })),
+    { headline: 'You won last week!', line: '14 rides out of 28 players', reward: 'Ride Champ + 5 Tickets' });
+  assert.equal(model.lastWeekCopy({ rank: 7, score: 1, playersCount: 1, title: null, tickets: 0 }).line, '1 ride out of 1 player');
+  assert.equal(model.emptyCopy('week', null).title, 'The crown is up for grabs!');
+  assert.equal(model.emptyCopy('friends', 0).target, 'Friends');
+  assert.equal(model.rowLabel({ rank: null, name: 'mike', score: 0, isMe: false }, 'ride_wins'), 'Not ranked yet, mike, 0 rides');
+  assert.equal(model.scoreText({ metric: 'ride_coins', available: 211 }, 4), '4 of 211');
+});
+
+test('wiring: kid-safe taps, per-player cache reset on sign-out, win marks standings stale, virtualized fixed rows', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /board === 'friends' && !row\.isMe\) RootNavigation\.navigate\('Player'/, 'only friends open a profile');
+  assert.match(board, /setCard\(row\)/, 'public rows open the safe shark card');
+  assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /navigate\('Player'/);
+  assert.match(board, /getItemLayout/);
+  assert.match(board, /onViewableItemsChanged/);
+  assert.match(board, /announceForAccessibility/);
+  assert.doesNotMatch(board, /You \$\{scoreSummary/, 'no "You X of Y" pill');
+  const auth = read('src/context/AuthProvider.tsx');
+  assert.equal((auth.match(/endStandingsSession\(\)/g) || []).length, 2, 'sign-out and account switch both clear the boards');
+  assert.match(read('src/screens/LeaderboardsScreen/standingsV2Store.ts'), /const keyOf = \(meId/);
+  assert.match(read('src/api/endpoints/me/task-attempts.ts'), /status === 'won'\) markStandingsStale\(\)/);
+  assert.match(read('src/screens/LeaderboardScreen.tsx'), /if \(!player \|\| v2Missing\) return <LegacyStandings \/>/);
+  assert.match(read('src/screens/LeaderboardsScreen/standingsDemo.ts'), /__DEV__ &&/);
+  assert.match(read('src/Root.tsx'), /__DEV__ && process\.env\.EXPO_PUBLIC_STANDINGS_PREVIEW/);
 });

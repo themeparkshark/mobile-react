@@ -1,3 +1,4 @@
+import { endStandingsSession } from '../screens/LeaderboardsScreen/standingsCache';
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -154,6 +155,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     // The old session's account no longer exists: drop what was cached for it.
     await clearCache().catch(() => undefined);
+    endStandingsSession();
     await SecureStore.setItemAsync('token', nextToken);
     await AsyncStorage.setItem('player', JSON.stringify(adopted)).catch(() => undefined);
 
@@ -180,6 +182,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const logout = async () => {
     hasInitialNavigated.current = false; // Allow navigation on next login
+    // Standings boards (friends' photos included) never outlive the session.
+    endStandingsSession();
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);
     setPlayer(null);
