@@ -30,6 +30,7 @@ import { clusterFinds } from './findEdges';
 import type { FingerSide } from './PrepItem';
 import { screenBearing, walkCloserLine } from './findPresentation';
 import { nearestFind } from './nearestFind';
+import { catchSound } from './ridePhoto/catchAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
 import * as RootNavigation from '../../RootNavigation';
@@ -377,6 +378,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // How to Play hand-off: glide to the nearest find once per request (waits for the first finds to load).
   const [findFocus, setFindFocus] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
   const handledHighlight = useRef<number | null>(null);
+  const [pulse, setPulse] = useState<{ pivot: number; key: number } | null>(null);
   useEffect(() => {
     if (highlightNearestFind == null || handledHighlight.current === highlightNearestFind || !homeLocationConfirmed) return;
     const nearest = nearestFind(placed);
@@ -384,6 +386,13 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     handledHighlight.current = highlightNearestFind;
     setFindFocus({ latitude: nearest.latitude, longitude: nearest.longitude, requestId: highlightNearestFind });
     queueHaptic('tickSelection', 1);
+    // ...and the find itself pulses once with a soft sound as the camera arrives (no motion under Reduce Motion).
+    const target = placed.find(entry => entry.item.latitude === nearest.latitude && entry.item.longitude === nearest.longitude);
+    if (target?.item.pivot_id != null) {
+      const pivot = target.item.pivot_id;
+      const key = highlightNearestFind;
+      setTimeout(() => { setPulse({ pivot, key }); catchSound('tick', { volume: 0.55, pitch: 7 }); }, 650);
+    }
   }, [highlightNearestFind, placed, homeLocationConfirmed]);
   useEffect(() => {
     if (safetyLineShown || !homeLocationConfirmed) return;
@@ -567,7 +576,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
             hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1} chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1)}
             onTap={tapFind} onExpire={handlePrepItemExpire}
-            fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot} />
+            fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
+            pulseKey={pulse && pulse.pivot === prepItem.pivot_id ? pulse.key : null} />
         ))}
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
