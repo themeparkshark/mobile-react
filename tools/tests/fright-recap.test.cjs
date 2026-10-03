@@ -16,13 +16,18 @@ test('F4a: leaving the park after 9 PM park time with 1+ haunts offers the Marqu
     parkLeft: true }), null, 'no haunts: no exit recap');
 });
 
-test('F4b: the phase reaching after offers it (zero haunts too), for the same night only', () => {
-  const r = recap.recapTrigger({ record: record({ haunts: 0 }), now: T('2026-10-10T02:05:00-04:00'), phase: 'after',
-    phaseNightOn: '2026-10-09' });
+test('F4b: the phase reaching after offers it, for the same night only', () => {
+  const r = recap.recapTrigger({ record: record(), now: T('2026-10-10T02:05:00-04:00'), phase: 'after', phaseNightOn: '2026-10-09' });
   assert.equal(r.reason, 'after');
   assert.equal(r.nightOn, '2026-10-09');
   assert.equal(recap.recapTrigger({ record: record(), now: 0, phase: 'after', phaseNightOn: '2026-10-08' }), null);
-  assert.equal(recap.SCOUTED_LINE, 'Scouted the reefs tonight.');
+});
+
+test('F4 recap needs a logged haunt: a zero-haunt night never offers the exit card or the Marquee', () => {
+  const zero = record({ haunts: 0 });
+  assert.equal(recap.recapTrigger({ record: zero, now: T('2026-10-10T02:05:00-04:00'), phase: 'after', phaseNightOn: '2026-10-09' }), null);
+  assert.equal(recap.recapTrigger({ record: zero, now: T('2026-10-10T11:00:00-04:00'), phase: 'off', appOpened: true }), null);
+  assert.equal(recap.recapTrigger({ record: zero, now: T('2026-10-09T22:00:00-04:00'), phase: 'off', parkLeft: true }), null);
 });
 
 test('F4c: the next app open within 36 h of close offers it; later it moves to the Deep Lantern history', () => {

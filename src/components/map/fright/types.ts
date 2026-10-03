@@ -31,4 +31,13 @@ export interface FrightMapInput {
    * the fright sprites hold still and the sky stays clear of lightning.
    */
   readonly showLive?: boolean;
+  /** A haunt facade was tapped (open the haunt sheet at that haunt). */
+  readonly onHauntPress?: (spotKey: string) => void;
+  /**
+   * Highest FX tier (server config.fx_tier_cap). Absent: 'lite' while the mode
+   * is ON, until battery use is measured.
+   */
+  readonly tierCap?: 'full' | 'lite' | 'calm' | null;
+  /** The ambient sound bed (eerie loop, gusts, lantern buzz) is opt-in. Default off. */
+  readonly ambience?: boolean;
 }

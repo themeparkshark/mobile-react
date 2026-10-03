@@ -11,7 +11,7 @@
  */
 import { ALIVE_CAPS, frightSpriteBudget, type AliveCaps, type AliveTier } from '../alive/ambientBudget';
 import type { FrightNightWindow, FrightPhase, FrightSpot } from '../../../api/endpoints/fright/types';
-import { distanceMeters, type LatLng } from './geo';
+import { distanceMeters, pointsPerMeter, type LatLng } from './geo';
 
 /* ── Phase to intensity ───────────────────────────────────────────────── */
 
@@ -67,8 +67,10 @@ export const LOW_BATTERY = 0.2;
  * the player's toggle, Reduce Motion and power. `lowPower` and `batteryLevel`
  * are optional: this build has no battery module, so they stay undefined.
  */
-export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLevel }: {
+export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLevel, cap }: {
   readonly alive: AliveTier;
+  /** Highest tier allowed (server config.fx_tier_cap). */
+  readonly cap?: AliveTier | null;
   readonly spooky: boolean;
   readonly reducedMotion: boolean;
   readonly lowPower?: boolean;
@@ -76,9 +78,141 @@ export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLeve
 }): AliveTier {
   if (!spooky || reducedMotion || alive === 'calm') return 'calm';
   if (typeof batteryLevel === 'number' && batteryLevel >= 0 && batteryLevel < LOW_BATTERY) return 'calm';
-  if (lowPower) return 'lite';
-  return alive;
+  const computed: AliveTier = lowPower && alive === 'full' ? 'lite' : alive;
+  return cap ? minTier(computed, cap) : computed;
 }
+
+const TIER_RANK: Readonly<Record<AliveTier, number>> = { calm: 0, lite: 1, full: 2 };
+
+export function minTier(a: AliveTier, b: AliveTier): AliveTier {
+  return TIER_RANK[a] <= TIER_RANK[b] ? a : b;
+}
+
+/**
+ * The cap in force: the server's when sent; otherwise `lite` while the mode is
+ * ON (battery is not measured yet), none when the mode is off.
+ */
+export function frightTierCap(serverCap: AliveTier | null | undefined, modeOn: boolean): AliveTier | null {
+  if (serverCap === 'full' || serverCap === 'lite' || serverCap === 'calm') return serverCap;
+  return modeOn ? 'lite' : null;
+}
+
+/** The ambient sound bed is opt-in (`ambience: true`) and needs effects on. Thunder and pops do not need it. */
+export function ambienceOn(input: { readonly ambience?: boolean }, effectsOn: boolean): boolean {
+  return input.ambience === true && effectsOn;
+}
+
+/** The chip under a haunt: "The Robot City · 25m", just the name without a wait, "Closed" when closed. */
+export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'posted_minutes'>, survived = false): string {
+  // Survived tonight: just the name (the check badge on the facade says the rest).
+  if (survived) return spot.name;
+  const closed = spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT';
+  if (closed) return `${spot.name} · Closed`;
+  const wait = spot.posted_minutes;
+  return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)} min` : spot.name;
+}
+
+/** Chips stay this far inside the screen edges (points). */
+export const CHIP_EDGE_MARGIN = 12;
+
+/** A chip's rough width for its label (Knockout 11 pt plus padding), capped at the marker width. */
+export function chipWidth(label: string, maxWidth = 168): number {
+  return Math.min(maxWidth, Math.round(label.length * 5.9 + 20));
+}
+
+/**
+ * Where a map point lands on screen horizontally (points from the left), from
+ * the camera center, zoom and heading (the map turns with the phone).
+ */
+export function screenX(point: LatLng, center: LatLng, zoom: number, heading: number | null | undefined, screenW: number): number {
+  const ppm = pointsPerMeter(zoom, center.latitude);
+  const east = (point.longitude - center.longitude) * 111_320 * Math.cos(center.latitude * Math.PI / 180);
+  const north = (point.latitude - center.latitude) * 111_320;
+  const h = ((heading ?? 0) * Math.PI) / 180;
+  return screenW / 2 + (east * Math.cos(h) - north * Math.sin(h)) * ppm;
+}
+
+/** Where a map point lands on screen vertically (points from the top). */
+export function screenY(point: LatLng, center: LatLng, zoom: number, heading: number | null | undefined, screenH: number): number {
+  const ppm = pointsPerMeter(zoom, center.latitude);
+  const east = (point.longitude - center.longitude) * 111_320 * Math.cos(center.latitude * Math.PI / 180);
+  const north = (point.latitude - center.latitude) * 111_320;
+  const h = ((heading ?? 0) * Math.PI) / 180;
+  return screenH / 2 - (east * Math.sin(h) + north * Math.cos(h)) * ppm;
+}
+
+/**
+ * The spot's anchor point is on screen (with `slack` points of room). MapLibre
+ * iOS parks a MarkerView whose coordinate is off screen at the screen's top-left
+ * corner, so a spot draws only while its point is really on screen.
+ */
+export function onScreen(point: LatLng, center: LatLng | null, zoom: number, heading: number | null | undefined,
+  screenW: number, screenH: number, slack = 0): boolean {
+  if (!center || !(screenW > 0) || !(screenH > 0)) return true;
+  const x = screenX(point, center, zoom, heading, screenW);
+  const y = screenY(point, center, zoom, heading, screenH);
+  return x >= -slack && x <= screenW + slack && y >= -slack && y <= screenH + slack;
+}
+
+/**
+ * How far to slide a chip centered on screen x so it stays CHIP_EDGE_MARGIN
+ * inside both edges (0 when it already fits; a chip wider than the screen
+ * centers).
+ */
+export function chipShift(x: number, width: number, screenW: number, margin = CHIP_EDGE_MARGIN): number {
+  if (!Number.isFinite(x) || !(screenW > 0)) return 0;
+  const left = x - width / 2;
+  const right = x + width / 2;
+  if (width > screenW - margin * 2) return Math.round(screenW / 2 - x);
+  if (left < margin) return Math.round(margin - left);
+  if (right > screenW - margin) return Math.round(screenW - margin - right);
+  return 0;
+}
+
+/**
+ * The camera center for chip placement: the player while the map follows them
+ * (the visible bounds center is within 30 m of the player), else that center.
+ */
+export function cameraCenter(player: LatLng | null, bounds: Bounds | null): LatLng | null {
+  const mid = bounds ? boundsCenter(bounds) : null;
+  if (player && (!mid || distanceMeters(player, mid) < 30)) return player;
+  return mid ?? player;
+}
+
+/**
+ * Intro cue edges: 'hold' when the intro starts (haunts unlit, no flash or
+ * thunder: the tutorial plays the night's one thunder), 'light' when it ends.
+ */
+export function introStep(prev: 'intro' | null, next: 'intro' | null): 'hold' | 'light' | 'none' {
+  if (next === 'intro' && prev !== 'intro') return 'hold';
+  if (prev === 'intro' && next !== 'intro') return 'light';
+  return 'none';
+}
+
+/** Chips closer than this (points on screen) to a chip already shown are hidden. */
+export const CHIP_MIN_GAP_PT = 72;
+
+/**
+ * Which haunts show their chip: in rank order (nearest first), skipping any
+ * haunt whose chip would land within CHIP_MIN_GAP_PT of one already shown,
+ * so two neighbouring haunts never stack unreadable chips.
+ */
+export function chipKeys(ranked: readonly { readonly key: string; readonly latitude: number; readonly longitude: number }[],
+  zoom: number): Set<string> {
+  const shown: { latitude: number; longitude: number }[] = [];
+  const keys = new Set<string>();
+  if (!Number.isFinite(zoom) || zoom < HAUNT_CHIP_ZOOM) return keys;
+  for (const h of ranked) {
+    const ppm = pointsPerMeter(zoom, h.latitude);
+    if (shown.some(o => distanceMeters(o, h) * ppm < CHIP_MIN_GAP_PT)) continue;
+    shown.push(h);
+    keys.add(h.key);
+  }
+  return keys;
+}
+
+/** Haunt chips show from this zoom in (they would crowd ride markers further out). */
+export const HAUNT_CHIP_ZOOM = 16;
 
 export type FrightCaps = Pick<AliveCaps, 'frightCritters' | 'frightFog' | 'frightBats' | 'frightWindows' | 'frightBolts' | 'frightProps'>;
 
@@ -213,3 +347,20 @@ export function frameStats(samples: readonly number[]): { avg: number; p95: numb
 function round3(v: number): number {
   return Math.round(v * 1000) / 1000;
 }
+
+/**
+ * The fixed Marker order for a payload: reefs, prop spots, haunts, each by key.
+ * Pure (tools/tests/fright-mapfx-markers.test.cjs): the same payload always
+ * gives the same list, whatever the camera, ranking or tier.
+ */
+export function stableMarkerSpots(spots: readonly FrightSpot[]): {
+  readonly reefs: readonly FrightSpot[]; readonly props: readonly FrightSpot[]; readonly haunts: readonly FrightSpot[];
+  readonly all: readonly FrightSpot[];
+} {
+  const byKey = (a: FrightSpot, b: FrightSpot) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const reefs = spots.filter(s => s.kind === 'reef').slice().sort(byKey);
+  const props = spots.filter(s => spotProps(s.fx).length > 0).slice().sort(byKey);
+  const haunts = spots.filter(s => s.kind === 'haunt').slice().sort(byKey);
+  return { reefs, props, haunts, all: [...reefs, ...props, ...haunts] };
+}
+

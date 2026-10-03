@@ -50,8 +50,10 @@ export function TeamChip({ team, count, yours, leading }: {
  * Today's fight for the park: how many rides each team holds, who leads, and
  * (on tap) the rides that are up for grabs right now.
  */
-export default function RideControlBar({ control, tasks, onFocusTask, compact = false }: {
+export default function RideControlBar({ control, tasks, onFocusTask, compact = false, hideAllOpen = false }: {
   readonly control: RideControlPark | null;
+  /** Fin-ister Nights: most rides close for the event, so never claim "every ride is open". */
+  readonly hideAllOpen?: boolean;
   /** While a boss is live: just the team chips, tucked to the right, so the map stays clear. */
   readonly compact?: boolean;
   readonly tasks: readonly TaskType[];
@@ -73,7 +75,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   const unclaimed = tasks.filter(t => !(control?.rides ?? []).some(r => r.asset_id === Number(t.asset_id))).length;
 
   const headline = !control ? 'RIDE CONTROL'
-    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : 'EVERY RIDE IS OPEN';
+    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : hideAllOpen ? 'RIDE CONTROL' : 'EVERY RIDE IS OPEN';
 
   return (
     <>

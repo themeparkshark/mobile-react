@@ -30,7 +30,8 @@ test('season reset: a new event slug starts with nothing seen; the local mirror 
   assert.equal(tut.FRIGHT_SEEN_KEYS.length, 9);
   assert.equal(tut.isSeenKey('exit'), true);
   assert.equal(tut.TUTORIAL_CARDS.length, 5);
-  assert.ok(tut.TUTORIAL_CARDS.every(card => card.line.split(/\s+/).length <= 12), 'one short line each');
+  assert.ok(tut.TUTORIAL_CARDS.every(card => card.line.split(/\s+/).length <= 7), 'one short line each, 7 words or fewer');
+  assert.ok(!tut.TUTORIAL_CARDS.some(card => /chaos/i.test(card.title + card.line)), 'no Chaos Hour promise while the encounter is off');
 });
 
 test('coach marks: queued, max one visible, min 20 s apart, never while phones-down, once per season', () => {

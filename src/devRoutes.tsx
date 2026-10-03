@@ -33,6 +33,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'ShareStudioPreview', getComponent: () => require('./screens/ShareStudioPreviewScreen').default },
+      { name: 'ShareModalEvidence', getComponent: () => require('./screens/ShareModalEvidenceScreen').default },
       { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'MenuPreview', getComponent: () => require('./screens/MenuPreviewScreen').default },
@@ -43,6 +44,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ProfilePreview', getComponent: () => require('./screens/ProfilePreviewScreen').default },
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
+      { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
     ]
   : [];
 
@@ -90,12 +92,14 @@ export function devInitialRoute(): string | null {
     [on(process.env.EXPO_PUBLIC_HOW_TO_PLAY_PREVIEW), 'HowToPlay'],
     [on(process.env.EXPO_PUBLIC_CREW_GRID_PREVIEW), 'CrewGridPreview'],
     [on(process.env.EXPO_PUBLIC_PARK_DAY_RECAP_PREVIEW), 'ParkDayRecapPreview'],
+    [on(process.env.EXPO_PUBLIC_SHARE_EVIDENCE_PREVIEW), 'ShareModalEvidence'],
     [on(process.env.EXPO_PUBLIC_SHARE_STUDIO_PREVIEW), 'ShareStudioPreview'],
     [on(process.env.EXPO_PUBLIC_TRIP_GOAL_PREVIEW), 'TripGoalPreview'],
     [on(process.env.EXPO_PUBLIC_PARK_PROJECT_PREVIEW), 'ParkProjectPreview'],
     [on(process.env.EXPO_PUBLIC_CREW_RELAY_PREVIEW), 'CrewRelayPreview'],
     [on(process.env.EXPO_PUBLIC_POST_WIN_REWARDS_PREVIEW) || on(process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW), 'PostWinRewardsPreview'],
     [on(process.env.EXPO_PUBLIC_UI_KIT_PREVIEW), 'UiKitGym'],
+    [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;
 }

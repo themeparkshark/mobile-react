@@ -7,6 +7,7 @@
  * nearest spots spend the tier's sprite budget.
  */
 import { FillLayer, ShapeSource, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { memo, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
@@ -20,11 +21,11 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, cameraCenter, onScreen, screenX, stableMarkerSpots, chipKeys, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
-import { EncounterSprite, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
+import { EncounterSprite, HAUNT_ANCHOR, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
 import type { FrightMapInput } from './types';
 import { useFrightState } from './useFrightState';
 
@@ -36,7 +37,8 @@ export const NIGHT_TINT_MAX = 0.44;
 
 function sameBounds(a: Bounds | null, b: Bounds): boolean {
   if (!a) return false;
-  const tol = Math.abs(b.north - b.south) * 0.1;
+  // Tight enough that the projected chip and on-screen checks stay within a few points.
+  const tol = Math.abs(b.north - b.south) * 0.02;
   return Math.abs(a.north - b.north) < tol && Math.abs(a.south - b.south) < tol &&
     Math.abs(a.east - b.east) < tol * 1.5 && Math.abs(a.west - b.west) < tol * 1.5;
 }
@@ -53,7 +55,8 @@ function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: 
       }).catch(() => undefined);
     };
     read();
-    const timer = setInterval(read, 2000);
+    // Often enough that a spot leaving the view hides before MapLibre parks it in the corner.
+    const timer = setInterval(read, 600);
     return () => { live = false; clearInterval(timer); };
   }, [on, zoom, mapRef]);
   return bounds;
@@ -69,13 +72,15 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 }) {
   const st = useFrightState(input);
   const { heading } = useContext(HeadingContext);
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const { alive, caps, visible, moving } = st;
   const on = visible > 0 && alive.active;
   const bounds = useViewBounds(mapRef, on, zoom);
   const player = validPoint(input.player) ? input.player : null;
 
   const spots = useMemo(() => input.tonight.spots.filter(s => validPoint(s)), [input.tonight.spots]);
-  const near = useMemo(() => spots.filter(s => nearView(s, bounds, 1)), [spots, bounds]);
+  // Budget ranking looks a little past the view; drawing is stricter (below).
+  const near = useMemo(() => spots.filter(s => nearView(s, bounds, DRAW_MARGIN_SCREENS)), [spots, bounds]);
   const from = player ?? (bounds ? boundsCenter(bounds) : null);
   // Rank by ~20 m steps so walking does not reshuffle budgets every fix.
   const fromKey = from ? `${from.latitude.toFixed(4)},${from.longitude.toFixed(4)}` : '';
@@ -86,6 +91,12 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   const order = (kind: FrightSpot['kind']) => ranked.map(k => byKey.get(k)!).filter(s => s.kind === kind);
   const haunts = order('haunt');
   const reefs = order('reef');
+  // MapLibre crash guard (NSRangeException in -[MLRNMapView insertReactSubview:atIndex:]): the
+  // Marker set never changes while the payload is the same. Every spot keeps its Marker in a
+  // fixed order; culling, fading, calm and ranking only change what is drawn inside it.
+  const stable = useMemo(() => stableMarkerSpots(spots), [spots]);
+  const nearKeys = useMemo(() => new Set(near.map(s => s.key)), [near]);
+  const rankIndex = useMemo(() => new Map(ranked.map((k, i) => [k, i])), [ranked]);
   const animate = moving;
   const assets = input.tonight.assets ?? null;
   const lite = st.tier === 'lite';
@@ -130,6 +141,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   }, [player?.latitude, player?.longitude, reefCircles, st.effectsOn, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lod = critterLod(zoom);
+  const onHauntPress = input.onHauntPress;
+  const chips = chipKeys(haunts, zoom);
   const reefCount = (key: string) => (lod === 'sprites' ? critterAlloc[key] ?? 0 : 0);
   const sources: AmbientSource[] = [];
   if (animate) {
@@ -196,17 +209,27 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     const end = Date.parse(encounter.ends_at);
     return Number.isFinite(start) && Number.isFinite(end) && st.serverNow >= start && st.serverNow < end;
   })();
-  const intro = input.cinematic === 'intro';
 
-  if (visible <= 0) return null;
+  // Chips stay 12 pt inside the screen edges: project each facade and slide its chip in.
+  const chipCenter = cameraCenter(player, bounds);
+  // MapLibre iOS draws a MarkerView whose point is off screen at the top-left corner (the
+  // "facade in the corner" and edge-clipped chips). Every Marker stays mounted (the crash
+  // guard); a spot whose point is off screen draws the hidden stand-in instead.
+  const spotAt = useMemo(() => new Map(spots.map(s => [s.key, s.kind === 'haunt' && s.fx?.offset?.length === 2
+    ? offsetMeters(s, Number(s.fx.offset[0]) || 0, Number(s.fx.offset[1]) || 0) : s])), [spots]);
+  const shown = (key: string) => {
+    if (visible <= 0 || !nearKeys.has(key)) return false;
+    const at = spotAt.get(key);
+    return !at || onScreen(at, chipCenter, zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  };
+  const encounterShown = encounterLive && !!encounter && visible > 0 && nearView(encounter, bounds, 1);
+  const encounterOnScreen = encounterShown && !!encounter && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  // One encounter Marker, always mounted; it parks on the first spot when no encounter is live.
+  const encounterAt = encounter && validPoint(encounter) ? encounter : stable.all[0] ?? PARKED;
   return (
     <>
-      <ShapeSource id="fright-night-tint" shape={WORLD}>
-        <FillLayer id="fright-night-tint" aboveLayerID="tps-sky-tint" style={{
-          fillColor: NIGHT_TINT, fillOpacity: NIGHT_TINT_MAX * visible,
-          fillOpacityTransition: { duration: intro ? 900 : 4000, delay: 0 } }} />
-      </ShapeSource>
-      {reefs.map(reef => {
+      {stable.reefs.map(reef => {
+        if (!shown(reef.key)) return <Marker key={`fr-${reef.key}`} coordinate={reef}><HiddenSpot /></Marker>;
         const slugs = critterSlugs(reef.fx?.critter);
         const d = player ? distanceMeters(player, reef) : Infinity;
         const reaction = reefReaction(d, reef.radius);
@@ -226,43 +249,91 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
           </Marker>
         );
       })}
-      {propSpots.map(spot => {
+      {stable.props.map(spot => {
         const props = spotProps(spot.fx);
         const bats = batAlloc[spot.key] ?? 0;
-        const moving = propAlloc[spot.key] ?? 0;
-        if (st.tier === 'calm' && !props.includes('fog-thick')) return null;
+        const movingNow = propAlloc[spot.key] ?? 0;
+        const drawn = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
         return (
           <Marker key={`fp-${spot.key}`} coordinate={spot}>
-            <SpotProps spotKey={spot.key} props={props} bats={bats} movingAllowed={moving} clock={alive.clock}
-              animated={animate} lite={lite} intensity={visible} ambient={assets?.ambient ?? null}
-              mistUrl={assets?.fog_night?.ground_mist ?? null} />
+            {drawn
+              ? <SpotProps spotKey={spot.key} props={props} bats={bats} movingAllowed={movingNow} clock={alive.clock}
+                  animated={animate} lite={lite} intensity={visible} ambient={assets?.ambient ?? null}
+                  mistUrl={assets?.fog_night?.ground_mist ?? null} />
+              : <HiddenSpot />}
           </Marker>
         );
       })}
-      {haunts.map((haunt, i) => {
+      {stable.haunts.map(haunt => {
         const offset = haunt.fx?.offset;
         const at = offset && offset.length === 2 ? offsetMeters(haunt, Number(offset[0]) || 0, Number(offset[1]) || 0) : haunt;
+        const drawn = shown(haunt.key);
         return (
-          <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={{ x: 0.5, y: 0.82 }}>
-            <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
-              animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
-              rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
-              ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-              layers={layersOf(haunt)}
-              done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)} index={i}
-              iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+          <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={HAUNT_ANCHOR}
+            onPress={drawn && onHauntPress ? () => onHauntPress(haunt.key) : undefined}
+            accessibilityLabel={drawn ? `${haunt.name}, haunt` : undefined}>
+            {drawn
+              ? <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
+                  animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
+                  rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
+                  ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
+                  layers={layersOf(haunt)} label={chips.has(haunt.key) ? hauntChipLabel(haunt, beads[haunt.key] !== undefined) : null}
+                  chipX={chipCenter && chips.has(haunt.key) ? screenX(at, chipCenter, zoom, heading, screenW) : null} screenW={screenW}
+                  survivedPin={assets?.event_pins?.['ev-survived']?.['256'] ?? null}
+                  done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)}
+                  index={rankIndex.get(haunt.key) ?? 0}
+                  iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+              : <HiddenSpot />}
           </Marker>
         );
       })}
-      {encounterLive && encounter && nearView(encounter, bounds, 1) && (
-        <Marker key={`fe-${encounter.key}`} coordinate={encounter}>
-          <EncounterSprite critter={encounter.critter} asset={iconAsset(assets, encounter.critter)}
-            chaos={isChaosHour(encounter.starts_at, encounter.ends_at)} lite={lite}
-            ringPts={Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude)))}
-            trail={caps.frightCritters > 0 ? Math.min(6, Math.round(caps.frightCritters * 0.75)) : 0}
-            clock={alive.clock} animated={animate} />
+      {(
+        <Marker key="fe" coordinate={encounterShown && encounter ? encounter : encounterAt}>
+          {encounterOnScreen && encounter
+            ? <EncounterSprite critter={encounter.critter} asset={iconAsset(assets, encounter.critter)}
+                chaos={isChaosHour(encounter.starts_at, encounter.ends_at)} lite={lite}
+                ringPts={Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude)))}
+                trail={caps.frightCritters > 0 ? Math.min(6, Math.round(caps.frightCritters * 0.75)) : 0}
+                clock={alive.clock} animated={animate} />
+            : <HiddenSpot />}
         </Marker>
       )}
     </>
   );
 });
+
+/** How far past the view (in screens) a spot still counts for budget ranking. */
+export const DRAW_MARGIN_SCREENS = 1;
+/** A spot draws while its point is on screen, give or take this many points. */
+export const ON_SCREEN_SLACK = 0;
+
+/** A mounted, invisible stand-in: the Marker stays, nothing draws and nothing takes touches. */
+function HiddenSpot() {
+  return <View pointerEvents="none" style={HIDDEN_STYLE} />;
+}
+const HIDDEN_STYLE = { width: 1, height: 1, opacity: 0 } as const;
+/** Where the hidden encounter Marker waits when a payload has no spots at all. */
+const PARKED = { latitude: 0, longitude: 0 } as const;
+
+
+/**
+ * The night tint over the tiles. Map.tsx keeps it mounted at all times (opacity
+ * 0 without an input), so turning the mode on never inserts a source mid-list.
+ */
+export const FrightNightTint = memo(function FrightNightTint({ input }: { readonly input: FrightMapInput | null }) {
+  return input ? <ActiveTint input={input} /> : <TintSource opacity={0} intro={false} />;
+});
+
+function ActiveTint({ input }: { readonly input: FrightMapInput }) {
+  const st = useFrightState(input);
+  return <TintSource opacity={NIGHT_TINT_MAX * Math.max(0, st.visible)} intro={input.cinematic === 'intro'} />;
+}
+
+function TintSource({ opacity, intro }: { readonly opacity: number; readonly intro: boolean }) {
+  return (
+    <ShapeSource id="fright-night-tint" shape={WORLD}>
+      <FillLayer id="fright-night-tint" aboveLayerID="tps-sky-tint" style={{
+        fillColor: NIGHT_TINT, fillOpacity: opacity, fillOpacityTransition: { duration: intro ? 900 : 4000, delay: 0 } }} />
+    </ShapeSource>
+  );
+}

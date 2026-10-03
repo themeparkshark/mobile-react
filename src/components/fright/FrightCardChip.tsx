@@ -3,6 +3,7 @@
  * for the profile's player. Latest card art (or a lantern glyph) plus
  * "{haunts_done} haunts". Tap opens the read-only Deep Lantern.
  */
+import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getFrightCards, type FrightCardSummary } from '../../api/endpoints/fright';
@@ -27,11 +28,11 @@ export default function FrightCardChip({ playerId, cards: given }: {
   const latest = cards?.slice().sort((a, b) => b.year - a.year || (b.last_night_on ?? '').localeCompare(a.last_night_on ?? ''))[0];
   if (!latest) return null;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${latest.card_title}. ${latest.haunts_done} haunts. Open the card.`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${latest.card_title}. ${latest.haunts_done} ${latest.haunts_done === 1 ? 'haunt' : 'haunts'}. Open the card.`}
       onPress={() => RootNavigation.navigate('FrightCard', { eventSlug: latest.event_slug, playerId: playerId ?? undefined })}
       style={({ pressed }) => [styles.chip, latest.ten_in_one && styles.gold, pressed && { opacity: 0.85 }]}>
       <View style={styles.icon}>
-        <ArtImage uri={latest.art.chip} style={{ width: 26, height: 26 }} fallback={<GameIcon name="sparkle" size={20} />} />
+        <ArtImage uri={latest.art.chip} style={{ width: 26, height: 26 }} fallback={<Image source={require('./art/lantern.webp')} style={{ width: 26, height: 26 }} contentFit="contain" />} />
       </View>
       <Text style={styles.text}>{`${latest.haunts_done} haunt${latest.haunts_done === 1 ? '' : 's'}`}</Text>
     </Pressable>

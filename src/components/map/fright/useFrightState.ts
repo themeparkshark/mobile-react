@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { makeMutable } from 'react-native-reanimated';
 import { useMapAlive } from '../alive/MapAliveContext';
-import { frightCaps, frightTier, frightVisibility, isLivePhase, showLiveFromSpots } from './frightBudget';
+export { introStep } from './frightBudget';
+import { frightCaps, frightTier, frightTierCap, frightVisibility, isLivePhase, showLiveFromSpots } from './frightBudget';
 import type { FrightMapInput } from './types';
 
 /**
@@ -32,7 +33,8 @@ export function useFrightState(input: FrightMapInput) {
   if (livePhase) wasActive.current = true;
   else if (phase === 'off') wasActive.current = false;
   const visible = enabled ? frightVisibility({ active: input.active, phase, serverNowMs: serverNow, night, wasActive: wasActive.current }) : 0;
-  const tier = frightTier({ alive: alive.tier, spooky: input.spooky, reducedMotion: alive.reducedMotion });
+  const tier = frightTier({ alive: alive.tier, spooky: input.spooky, reducedMotion: alive.reducedMotion,
+    cap: frightTierCap(input.tierCap, livePhase) });
   const caps = frightCaps(tier);
   const showLive = !!input.showLive || showLiveFromSpots(spots, serverNow);
   const quiet = !!input.quiet;

@@ -16,7 +16,7 @@ import { WaterGlints } from './map/alive/WaterGlints';
 import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
-import { FrightMapLayer, FrightMapSources, type FrightMapInput } from './map/fright';
+import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
@@ -300,7 +300,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     followRef.current = false;
     cameraRef.current?.setCamera({ centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
       heading: 0, zoomLevel: focusCoordinate.zoom ?? 17.9, animationDuration: reducedMotion ? 0 : 450, animationMode: reducedMotion ? 'moveTo' : 'easeTo' });
-  }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId, reducedMotion]);
+  // `covered`: a request made before the map first drew (a mount-time focus) is dropped by the
+  // native camera, so it is applied again once the map is revealed.
+  }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId, reducedMotion, covered]);
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
   const lastUserHeadingRef = useRef<number>(0);
@@ -509,8 +511,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
             fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
         </ShapeSource>
-        {/* Fin-ister Nights: night tint over the tiles, lanterns, reef critters (map anchored). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
+        {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
+        <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
         {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
           <ShapeSource id="tps-lamps" shape={lampPoints}>
@@ -557,6 +559,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             <View style={{ opacity: focusedOnPlayer ? 0 : 1 }}>{playerShark}</View>
           </Marker>
         )}
+        {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
+            mount appends instead of inserting mid-list, and a fixed set that never mounts or
+            unmounts afterwards (MapLibre insertReactSubview crash). */}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
       </MapView>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}

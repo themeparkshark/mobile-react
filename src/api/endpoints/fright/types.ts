@@ -137,6 +137,12 @@ export interface FrightConfig {
   readonly reef_dwell_seconds: number;
   readonly poll_seconds: number;
   readonly fan_min_raters: number;
+  /** Highest map FX tier tonight ('lite' caps battery use). */
+  readonly fx_tier_cap?: 'full' | 'lite' | 'calm' | null;
+  /** Looping ambience default (false: opt-in from the haunt sheet). */
+  readonly ambience_default?: boolean | null;
+  /** Chaos Hour (the Lantern Star encounter) is switched on server-side. */
+  readonly encounters_enabled?: boolean | null;
 }
 
 /** GET /parks/{id}/fright */
@@ -205,6 +211,8 @@ export interface FrightAssets {
   } | null;
   /** File names ("recap-bg.webp") to URLs. */
   readonly card?: Readonly<Record<string, string | null>> | null;
+  /** Event pins by slug ("ev-survived"): sizes ("256", "512", "locked") to URLs. */
+  readonly event_pins?: Readonly<Record<string, Readonly<Record<string, string | null>> | null>> | null;
   readonly haunts?: Readonly<Record<string, {
     readonly icon?: Readonly<Record<string, string | null>> | null;
     readonly layers?: FrightHauntLayers | null;

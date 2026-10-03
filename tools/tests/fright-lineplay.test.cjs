@@ -7,10 +7,11 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 const root = path.resolve(__dirname, '../..');
 const chapters = loadTs('src/services/lineplay/chapters.ts');
 
-test('L2: a fright- slug gets the Fin-ister chapter (night palette, Shusher intro, spooky-silly deck)', () => {
+test('L2: a fright- slug gets the Fin-ister chapter (night palette, queue-friendly intro, spooky-silly deck)', () => {
   const chapter = chapters.getLinePlayChapter(3, 'fright-usf26-robot-city', 'The Robot City');
   assert.equal(chapter.palette, 'night');
-  assert.match(chapter.introLine, /^shh\./);
+  assert.doesNotMatch(chapter.introLine, /phones away|eyes up/i, 'no phones-away copy in the queue');
+  assert.match(chapter.introLine, /Play while the line moves/);
   assert.equal(chapter.parkLabel, 'FIN-ISTER NIGHTS');
   assert.ok(chapter.trivia.length >= 5);
   assert.ok(chapter.trivia.every(q => q.correctIndex >= 0 && q.correctIndex < q.choices.length));
