@@ -17,10 +17,10 @@ import QuickAccessMenu from '../../components/QuickAccessMenu';
 import { useMenuCardFade } from './menuCardFade';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { shouldThrottleHomeRequest } from './homeRefresh';
-import HomeMapStatusCard from './HomeMapStatusCard';
 import { isInPickupRange } from './homeFindCopy';
 import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
+import HomeHudChips, { type ParkStoryChip } from './HomeHudChips';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
 import { rideSpec } from './ridePhoto';
@@ -29,7 +29,7 @@ import { useCatchOpen, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, clusterFinds } from './findEdges';
 import type { FingerSide } from './PrepItem';
-import { screenBearing, walkCloserLine } from './findPresentation';
+import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
 import { nearestFind } from './nearestFind';
 import { catchSound } from './ridePhoto/catchAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
@@ -49,6 +49,10 @@ const EDGE = 16;
 const TOP = 12;
 const LIVE_BAR_ROW = 58; // bar (50) + gap
 const BOTTOM_SLOT = 100 + 76 + 14;
+/** A tapped find's one-line peek stays this long, then leaves on its own. */
+const PEEK_TTL_MS = 4000;
+const noop = () => undefined;
+
 
 
 // ── Throttle thresholds ──────────────────────────────────────────────
@@ -106,6 +110,8 @@ interface Props {
   onIntroOpenChange?: (open: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
+  /** The park story, as a small chip in the top HUD row. */
+  parkStory?: ParkStoryChip | null;
   /**
    * How to Play's "Let's go!" sends `highlightNearestFind` (a timestamp) with
    * Explore: each new value glides the camera to the nearest find once.
@@ -119,7 +125,7 @@ interface Props {
  */
 export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null, parkStory = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -149,6 +155,13 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const containerRef = useRef<View>(null);
   const [chip, setChip] = useState<HuntChipMessage | null>(null);
   const dismissChip = useCallback(() => setChip(null), []);
+  // The free-Ticket countdown from the finds response (a small top-HUD chip, never a card).
+  const [ticket, setTicket] = useState<{ until: number | null; capped: boolean }>({ until: null, capped: false });
+  const takeStats = useCallback((stats: { ticket_guarantee_in?: number; home_tickets_capped?: boolean } | null | undefined) => {
+    const until = stats?.ticket_guarantee_in ?? null, capped = stats?.home_tickets_capped === true;
+    setTicket(current => (current.until === until && current.capped === capped ? current : { until, capped }));
+  }, []);
+  const showTicketLine = useCallback((line: string) => setChip({ key: `ticket-${Date.now()}`, text: line, ttlMs: PEEK_TTL_MS }), []);
   const [catchRequest, setCatchRequest] = useState<CatchRequest | null>(null);
   const catchRef = useRef<HomeCatchHandle>(null);
   const snapshotter = useRef<(() => Promise<string | null>) | null>(null);
@@ -242,6 +255,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         const cached = await getCachedPrepItems(lat, lng, playerId);
         if (cached) {
           setPrepItems(Array.isArray(cached.data) ? cached.data : []);
+          takeStats(cached.player_stats);
           setIsLoading(false);
         }
       }
@@ -249,6 +263,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       try {
         const response = await getPrepItems(lat, lng, playerId);
         setPrepItems(Array.isArray(response.data) ? response.data : []);
+        takeStats(response.player_stats);
         setLoadError(false);
         recordFetch(lat, lng, lastFetchLocation, lastFetchTime);
 
@@ -419,7 +434,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const nudge = useCallback(async (item: PrepItemType, distance: number | null) => {
     queueHaptic('tapLight', 1);
     const key = `far-${item.pivot_id ?? item.id}-${Date.now()}`;
-    setChip({ key, text: walkCloserLine(distance) });
+    setChip({ key, text: peekLine(item.name, distance), ttlMs: PEEK_TTL_MS });
     const here = fixRef.current.location;
     if (here?.latitude == null || here?.longitude == null || item.latitude == null || item.longitude == null) return;
     const [shark, find] = await Promise.all([toLocal(here.latitude, here.longitude), toLocal(item.latitude, item.longitude)]);
@@ -546,22 +561,18 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   }, []);
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
 
-  let bottom: React.ReactNode = null;
-  if (!homeLocationConfirmed) {
-    bottom = <HomeMapStatusCard mode="park_check" inline />;
-  } else if (isLoading) {
-    bottom = <HomeMapStatusCard mode="loading" inline />;
-  } else if (activePrepItems.length === 0) {
-    bottom = <HomeMapStatusCard mode={loadError ? 'error' : 'empty'} inline rankLine={rankLine}
-      onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })}
-      onOpenCollections={() => RootNavigation.navigate('SetCollection')}
-      onRetry={() => void loadPrepItems(true)} />;
-  } else if (loadError) {
-    bottom = <HomeMapStatusCard mode="saved" inline rankLine={rankLine}
-      onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })} onRetry={() => void loadPrepItems(true)} />;
-  } else if (!catchRequest) {
-    bottom = <HomeHuntChip message={chip} onDismiss={dismissChip} />;
-  }
+  // Map states are one-line chips too: nothing over the map is ever a card.
+  const status = mapStatusLine({ homeLocationConfirmed, isLoading, empty: activePrepItems.length === 0, loadError, rankLine });
+  const statusChip = useMemo<HuntChipMessage | null>(() => {
+    if (!status) return null;
+    const retry = () => void loadPrepItems(true);
+    const onPress = status.action === 'retry' ? retry
+      : status.action === 'collections' ? () => RootNavigation.navigate('SetCollection')
+        : status.action === 'standings' ? () => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' }) : undefined;
+    return { key: `status-${status.text}`, text: status.text, tone: status.tone, ttlMs: 0, onPress };
+  }, [status?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bottom: React.ReactNode = catchRequest ? null
+    : <HomeHuntChip message={chip ?? statusChip} onDismiss={chip ? dismissChip : noop} />;
 
   return (
     <View ref={containerRef} collapsable={false} style={styles.container}
@@ -594,6 +605,13 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
 
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
       <HomeLive top={TOP} onBarChange={setLiveBar} />
+
+      {homeLocationConfirmed && (
+        <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+          <HomeHudChips top={rowTop} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
+            parkStory={parkStory} />
+        </Animated.View>
+      )}
 
       {/* Menus step back (dimmed, not tappable) while a catch is open. */}
       <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>

@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { LogBox, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Dimensions, LogBox, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Canvas, Group, Picture, Skia, createPicture } from '@shopify/react-native-skia';
 import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
@@ -18,7 +18,8 @@ import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeC
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers } from './findEdges';
-import { walkCloserLine } from './findPresentation';
+import { peekLine, walkCloserLine } from './findPresentation';
+import HomeHudChips from './HomeHudChips';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
@@ -62,6 +63,9 @@ type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; ra
  * the picker choose every ride and sky (the production pick-and-warm path).
  */
 const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
+/** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
+const STILL = EXP.startsWith('still');
+const BARE = EXP === 'still-bare';
 const BASE_SCRIPT: ScriptStep[] = [
   // Five different finds (tall, wide and round art), every ride, three skies, an owned find and the Epic.
   { index: 0, kind: 'coaster', sky: 'day', shots: [-650] },
@@ -221,13 +225,19 @@ function HomeCatchPreview() {
     if (!fixture) return;
     if (!fixture.inRange) {
       const distance = Math.hypot(fixture.north, fixture.east);
-      setChip({ key: `far-${item.pivot_id}-${Date.now()}`, text: walkCloserLine(distance) });
+      setChip({ key: `far-${item.pivot_id}-${Date.now()}`, text: peekLine(item.name, distance), ttlMs: 4000 });
       return;
     }
     void state.startCatch(item);
   }, []);
   const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
   const [step, setStep] = useState(0);
+  // 'still-peek': a far find tapped, its one-line peek held for the capture.
+  useEffect(() => {
+    if (EXP !== 'still-peek') return;
+    const timer = setTimeout(() => setChip({ key: 'peek', text: peekLine(items[1]?.name ?? 'Find', 70), ttlMs: 120_000 }), 2500);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sides, setSides] = useState<Record<number, FingerSide>>({});
   const [cascadeOn, setCascadeOn] = useState(false);
   const stepItem = useRef<PrepItemType | null>(null);
@@ -289,29 +299,39 @@ function HomeCatchPreview() {
       <TopbarColumn><Text style={styles.travel}>TRAVEL MODE</Text></TopbarColumn>
     </Topbar>
     <View ref={container} collapsable={false} style={styles.content}
-      onLayout={event => setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
-      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientFrozen={catchOpen} chromeHidden={catchOpen}
+      onLayout={event => {
+        setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height });
+        container.current?.measureInWindow((x, y, w, h) => {
+          // The map area for the chrome budget: this view (the status HUD is above it, the tab bar below).
+          if (STILL) void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}map-chrome.json`,
+            JSON.stringify({ x, y, w, h, screenW: Dimensions.get("window").width })).catch(() => undefined);
+        });
+      }}>
+      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientFrozen={catchOpen || STILL} chromeHidden={catchOpen || BARE}
         onZoomChange={() => {
           void measure();
           if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
         }}>
         {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
-          <HomeFindMarker key={item.pivot_id} item={item} distance={null} inRange={FIXTURES[index].inRange}
-            animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
+          <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
+            animated={!STILL && index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
             chromeless={cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} />
       </Animated.View>
-      {!request && <Animated.View style={[styles.bottom, chromeFade]} pointerEvents="box-none">
+      {!request && <Animated.View style={[styles.bottom, chromeFade, BARE && styles.hidden]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
       </Animated.View>}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <QuickAccessMenu position="left" />
         <RadialStatsMenu />
+        {/* As in the app: the top HUD row (free-Ticket countdown, park story). */}
+        <HomeHudChips top={12} findsUntilTicket={2} onTicketPress={line => setChip({ key: `t-${Date.now()}`, text: line, ttlMs: 4000 })}
+          parkStory={{ title: 'Park story', points: 3, goal: 10, onPress: () => undefined }} />
       </Animated.View>
       <HomeCatchMoment ref={catchRef} request={request} stageItem={rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null}
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}

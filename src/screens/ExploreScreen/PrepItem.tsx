@@ -8,7 +8,7 @@ import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameIcon } from '../../ui';
 import { rideSpec } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
-import { msUntilLeavesInChanges } from './homeFindCopy';
+import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
 import { findImageOrder, findLook, rarityColor } from './findPresentation';
 
 // Local churro images map - React Native requires static imports
@@ -107,6 +107,8 @@ interface Props {
   showFinger?: boolean;
   pulseKey?: number | null;
   chromeless?: boolean;
+  /** Metres to the find: out of range it shows as a small tag under the art (with the timer when it is leaving). */
+  distance?: number | null;
 }
 
 /** The find sits at the exact centre of the marker box, so its art is on its real spot. */
@@ -180,9 +182,12 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
+  // One small tag: "70 m", "70 m · 2 min" or just "2 min" in range. Always mounted (a marker never changes layout).
+  const far = !inRange && distance != null ? formatFindDistance(distance) : '';
+  const tag = [far || null, leavingSoon].filter(Boolean).join(' · ');
   const imageSource = useMemo(() => findImageSource(prepItem),
     [prepItem.icon_url, prepItem.variant_slug, prepItem.name]); // eslint-disable-line react-hooks/exhaustive-deps
   const color = rarityColor(prepItem.rarity);
@@ -267,7 +272,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         : <View style={[styles.newDot, chromeless && styles.chromeOff]} />)}
       {inRange && showFinger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
-      {leavingSoon && <View style={[styles.timePill, chromeless && styles.chromeOff]}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
+      <View style={[styles.timePill, (chromeless || !tag) && styles.chromeOff]}>
+        {leavingSoon && <GameIcon name="timer" size={12} />}<Text style={styles.timeText}>{tag}</Text>
+      </View>
     </View>
   );
 }
@@ -318,5 +325,5 @@ const styles = StyleSheet.create({
   footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
   timePill: { position: 'absolute', bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
     borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
-  timeText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 14 },
+  timeText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 13 },
 });

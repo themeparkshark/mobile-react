@@ -554,7 +554,7 @@ test('round 5: floating cards leave while the quick menu is open (opacity 0, no 
   assert.match(fade, /menuOpen \? 'none' : 'box-none'/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
   const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
-  assert.match(preview, /cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
+  assert.match(preview, /cardFade\.style, BARE && \{ opacity: 0 \}\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
 });
 
 test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride', () => {
