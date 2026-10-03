@@ -123,7 +123,7 @@ test('Friends opens on Requests when someone is waiting; search says how many le
 });
 
 test('the social store shares answers and the waiting count, and only emits on change', () => {
-  const store = loadTs('src/screens/social/socialStore.ts', { react: { useSyncExternalStore: () => null } });
+  const store = loadTs('src/screens/social/socialStore.ts', { react: { useSyncExternalStore: () => null, createContext: value => ({ value }) } });
   let emits = 0;
   const off = store.subscribe(() => { emits += 1; });
   store.setStatus(5, 'friends');
@@ -138,6 +138,19 @@ test('the social store shares answers and the waiting count, and only emits on c
   store.adjustPendingIncoming(-1);
   store.adjustPendingIncoming(-5);
   assert.equal(store.getPendingIncoming(), 0, 'never below zero');
+  // A new-friend moment plays once, only on the surface that made it, and only briefly.
+  store.markJustFriended(9, 'tab-requests', 1000);
+  assert.equal(store.takeJustFriended(9, 'tab-friends', 1100), false, 'a hidden tab never steals it');
+  assert.equal(store.takeJustFriended(9, 'tab-requests', 1200), true);
+  assert.equal(store.takeJustFriended(9, 'tab-requests', 1300), false, 'once');
+  store.markJustFriended(9, 'bell', 1000);
+  assert.equal(store.takeJustFriended(9, 'bell', 5000), false, 'too late: a recycled row does not replay it');
+  // Hearts are per signed-in player and per local day.
+  store.setHearted(5, 34, true, new Date(2026, 9, 3, 10));
+  assert.equal(store.wasHearted(5, 34, new Date(2026, 9, 3, 20)), true);
+  assert.equal(store.wasHearted(5, 34, new Date(2026, 9, 4, 8)), false, 'a new day');
+  store.setHearted(5, 34, true, new Date(2026, 9, 4, 8));
+  assert.equal(store.wasHearted(6, 34, new Date(2026, 9, 4, 9)), false, 'another account on this device');
   store.resetSocialStore();
   assert.equal(store.getOverrides().size, 0);
   off();

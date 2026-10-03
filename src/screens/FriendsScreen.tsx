@@ -36,7 +36,7 @@ import SearchField from './social/SearchField';
 import { CountBadge, INK, Pill, SectionHeader, SocialBackdrop, SocialError, kit, useSquash } from './social/SocialKit';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
-import { setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
+import { SurfaceContext, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
@@ -78,13 +78,13 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
         {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}
         <View style={{ flex: 1 }}>
           <View style={[styles.pane, tab !== 'friends' && styles.hidden]} accessibilityElementsHidden={tab !== 'friends'} importantForAccessibility={tab === 'friends' ? 'auto' : 'no-hide-descendants'}>
-            <FriendsTabView onReady={() => setListReady(true)} onFind={() => setTab('find')} total={player?.friends_count ?? 0} />
+            <SurfaceContext.Provider value="tab-friends"><FriendsTabView onReady={() => setListReady(true)} onFind={() => setTab('find')} total={player?.friends_count ?? 0} /></SurfaceContext.Provider>
           </View>
           <View style={[styles.pane, tab !== 'requests' && styles.hidden]} accessibilityElementsHidden={tab !== 'requests'} importantForAccessibility={tab === 'requests' ? 'auto' : 'no-hide-descendants'}>
-            <RequestsTabView onFind={() => setTab('find')} />
+            <SurfaceContext.Provider value="tab-requests"><RequestsTabView onFind={() => setTab('find')} /></SurfaceContext.Provider>
           </View>
           <View style={[styles.pane, tab !== 'find' && styles.hidden]} accessibilityElementsHidden={tab !== 'find'} importantForAccessibility={tab === 'find' ? 'auto' : 'no-hide-descendants'}>
-            <FindTabView active={tab === 'find'} onInvite={invite} />
+            <SurfaceContext.Provider value="tab-find"><FindTabView active={tab === 'find'} onInvite={invite} /></SurfaceContext.Provider>
           </View>
         </View>
       </SocialBackdrop>
@@ -184,9 +184,7 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
         if (item.type === 'header') return <SectionHeader label={item.label} icon={item.icon} count={item.count} />;
         if (item.type === 'hint') return <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{item.text}</Text>;
         const row = <PlayerRow player={item.player} status={effectiveStatus(item.player, overrides, item.fallback)} />;
-        return first.current && !reduced && index < 8
-          ? <Animated.View entering={FadeInDown.delay(index * 40).springify().damping(16)}>{row}</Animated.View>
-          : row;
+        return <Animated.View entering={first.current && !reduced && index < 8 ? FadeInDown.delay(index * 40).springify().damping(16) : undefined}>{row}</Animated.View>;
       }}
     />
   );

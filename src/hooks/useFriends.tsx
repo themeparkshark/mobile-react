@@ -12,7 +12,7 @@ import { playSfx } from '../gamekit/SFX';
 import { PlayerType } from '../models/player-type';
 import { nextStatus, statusOf, type FriendStatus, type FriendVerb } from '../screens/social/socialModel';
 import {
-  adjustPendingIncoming, getOverrides, markJustFriended, setHearted, setStatus, wasHearted,
+  SurfaceContext, adjustPendingIncoming, getOverrides, markJustFriended, setHearted, setStatus, wasHearted,
 } from '../screens/social/socialStore';
 import { confirmGame, gameAlert } from '../ui';
 
@@ -35,6 +35,7 @@ const inFlight = new Set<number>();
 export function useFriendActions() {
   const { refreshPlayer, player: viewer } = useContext(AuthContext);
   const viewerId = viewer?.id ?? null;
+  const surface = useContext(SurfaceContext);
 
   const run = useCallback(async (player: Target, verb: FriendVerb, call: () => Promise<unknown>, onError: string) => {
     const before = getOverrides().get(player.id) ?? statusOf(player);
@@ -42,7 +43,7 @@ export function useFriendActions() {
     if (after === before || inFlight.has(player.id)) return null;
     inFlight.add(player.id);
     setStatus(player.id, after);
-    if (after === 'friends') markJustFriended(player.id);
+    if (after === 'friends') markJustFriended(player.id, surface);
     if (before === 'incoming' && after !== 'incoming') adjustPendingIncoming(-1);
     try {
       await call();
@@ -58,7 +59,7 @@ export function useFriendActions() {
     } finally {
       inFlight.delete(player.id);
     }
-  }, [refreshPlayer]);
+  }, [refreshPlayer, surface]);
 
   return useMemo(() => ({
     /** Add (or, if they already asked, this is a Yes). */

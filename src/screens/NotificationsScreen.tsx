@@ -32,7 +32,7 @@ import { BRAND, FONT, GameIcon, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type InboxRow } from './social/socialModel';
 import { INK, Pill, SectionHeader, SocialBackdrop, SocialError } from './social/SocialKit';
-import { useFriendOverrides } from './social/socialStore';
+import { SurfaceContext, useFriendOverrides } from './social/socialStore';
 
 /** Mark-all-read only makes sense when something is unread. */
 export function showMarkAllRead(notifications: readonly { read_at?: string | null; id?: string }[], readIds?: ReadonlySet<string>): boolean {
@@ -208,9 +208,8 @@ export default function NotificationsScreen() {
         onAnswered={answered}
       />
     );
-    return firstPaint.current && !reduced && index < 7
-      ? <Reanimated.View entering={FadeInDown.delay(index * 45).springify().damping(16)}>{row}</Reanimated.View>
-      : row;
+    // Always the same wrapper, so a row never remounts (and reloads its shark) when the entrance window ends.
+    return <Reanimated.View entering={firstPaint.current && !reduced && index < 7 ? FadeInDown.delay(index * 45).springify().damping(16) : undefined}>{row}</Reanimated.View>;
   }, [readIds, overrides, open, clear, answered, reduced, readAll, markingAll, firstHeader]);
 
   return (
@@ -220,6 +219,7 @@ export default function NotificationsScreen() {
         <TopbarColumn><TopbarText>Notifications</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
+      <SurfaceContext.Provider value="bell">
       <SocialBackdrop>
         {load === 'loading' && <SharkLoader state="loading" tone="onBlue" title="Checking your bell" />}
         {load === 'error' && (
@@ -248,6 +248,7 @@ export default function NotificationsScreen() {
           </>
         )}
       </SocialBackdrop>
+      </SurfaceContext.Provider>
     </>
   );
 }

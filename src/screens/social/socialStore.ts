@@ -4,7 +4,7 @@
  * refetch. Snapshots are immutable so React only re-renders when something
  * actually changed.
  */
-import { useSyncExternalStore } from 'react';
+import { createContext, useSyncExternalStore } from 'react';
 import type { FriendStatus } from './socialModel';
 
 type Listener = () => void;
@@ -62,19 +62,22 @@ export function adjustPendingIncoming(delta: number): void {
 }
 
 // ---- Moments: a friendship just made here, played once by whichever row shows it.
-const justFriended = new Map<number, number>();
+const justFriended = new Map<number, { at: number; surface: string }>();
 const CELEBRATE_MS = 2500;
 
-export function markJustFriended(id: number, now: number = Date.now()): void {
-  justFriended.set(id, now);
+/** Where the Yes was tapped (a screen or tab): only that surface celebrates. */
+export const SurfaceContext = createContext<string>('app');
+
+export function markJustFriended(id: number, surface: string, now: number = Date.now()): void {
+  justFriended.set(id, { at: now, surface });
 }
 
-/** True once per new friendship, within a short window (a recycled row never replays it). */
-export function takeJustFriended(id: number, now: number = Date.now()): boolean {
-  const at = justFriended.get(id);
-  if (at == null) return false;
+/** True once per new friendship, on the surface that made it (hidden tabs and recycled rows never replay it). */
+export function takeJustFriended(id: number, surface: string, now: number = Date.now()): boolean {
+  const entry = justFriended.get(id);
+  if (!entry || entry.surface !== surface) return false;
   justFriended.delete(id);
-  return now - at < CELEBRATE_MS;
+  return now - entry.at < CELEBRATE_MS;
 }
 
 // ---- Hearts sent today, per signed-in player and local day.

@@ -39,6 +39,11 @@ const Stack = createNativeStackNavigator();
 /** Dev only: screenshots and recordings without the joystick or the LogBox toast. */
 const CLEAN_CAPTURE = __DEV__ && process.env.EXPO_PUBLIC_CLEAN_CAPTURE === '1';
 if (CLEAN_CAPTURE) LogBox.ignoreAllLogs(true);
+const FPS_OVERLAY = __DEV__ && process.env.EXPO_PUBLIC_FPS_OVERLAY === '1';
+function FpsOverlayHost() {
+  const Overlay = require('./dev/FpsOverlay').default;
+  return <Overlay />;
+}
 
 export default function App() {
   const isLinePlayFlowPreview = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1';
@@ -305,6 +310,7 @@ export default function App() {
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
     {(__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
+    {FPS_OVERLAY && <FpsOverlayHost />}
     </View>
   );
 }

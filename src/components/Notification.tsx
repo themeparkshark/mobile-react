@@ -10,7 +10,7 @@
  * read state or friend answer changed re-renders.
  */
 import { Image } from 'expo-image';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { useFriendActions } from '../hooks/useFriends';
@@ -19,7 +19,7 @@ import type { NotificationType } from '../models/notification-type';
 import { actorOf, canAnswerInline, kidMessage, kindOf, KIND_LOOK, shortAgo, spokenAgo, type FriendStatus } from '../screens/social/socialModel';
 import { INK, Pill, kit, useSquash } from '../screens/social/SocialKit';
 import { Burst } from '../screens/social/SocialFx';
-import { takeJustFriended } from '../screens/social/socialStore';
+import { SurfaceContext, takeJustFriended } from '../screens/social/socialStore';
 
 const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
 import { BRAND, FONT, GameIcon, GameRichText } from '../ui';
@@ -49,6 +49,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const [heartBack, setHeartBack] = useState<'idle' | 'sent'>('idle');
   const [burst, setBurst] = useState(false);
   const endBurst = useCallback(() => setBurst(false), []);
+  const surface = useContext(SurfaceContext);
   const overrides = new Map(answer && actor ? [[actor, answer]] : []);
   const answerable = canAnswerInline(notification, overrides);
   const answeredYes = kind === 'friend_request' && answer === 'friends';
@@ -63,8 +64,8 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   // The row only offers Yes/No while the request waits, so the answer starts from 'incoming'.
   // The Yes moment: a burst on this row, once.
   useEffect(() => {
-    if (answeredYes && actor !== null && takeJustFriended(actor)) setBurst(true);
-  }, [answeredYes, actor]);
+    if (answeredYes && actor !== null && takeJustFriended(actor, surface)) setBurst(true);
+  }, [answeredYes, actor, surface]);
   const actorFace = !faceFailed ? (notification.actor_avatar_url ?? null) : null;
   const canHeartBack = kind === 'compliment' && actor !== null && (answer ?? notification.friend_status) === 'friends';
   const target = actor ? { id: actor, screen_name: nameFrom(stored), friend_status: 'incoming' as const } : null;

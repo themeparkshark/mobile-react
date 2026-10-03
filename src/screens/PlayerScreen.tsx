@@ -21,7 +21,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { useFriendActions } from '../hooks/useFriends';
 import { ICON_SOURCES, SharkLoader, confirmGame, gameAlert, showGameDialog } from '../ui';
 import { effectiveStatus } from './social/socialModel';
-import { takeJustFriended, useFriendOverrides } from './social/socialStore';
+import { SurfaceContext, takeJustFriended, useFriendOverrides } from './social/socialStore';
 import { Burst } from './social/SocialFx';
 import { Pill, SocialBackdrop, SocialError, kit } from './social/SocialKit';
 import { BRAND } from '../ui/tokens';
@@ -114,12 +114,14 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           image: ICON_SOURCES.info,
           onPress: async () => {
             if (!checkPermission(PermissionEnums.CreateReports)) return;
-            const reasons = ['inappropriate_username', 'mean_to_me', 'something_else'] as const;
+            // The dialog shows its last button first: listed so they read Mean name, Mean to me, Something else.
+            const reasons = ['mean_to_me', 'something_else', 'inappropriate_username'] as const;
             const choice = await showGameDialog({
               title: `Tell us about ${currentPlayer.screen_name}`,
               message: 'A grown-up on our team will check it.',
               icon: 'info',
-              buttons: [{ text: 'Mean name' }, { text: 'Mean to me' }, { text: 'Something else' }, { text: 'Cancel', style: 'cancel' }],
+              // Three equal choices.
+              buttons: [{ text: 'Mean to me', variant: 'secondary' }, { text: 'Something else', variant: 'secondary' }, { text: 'Mean name', variant: 'secondary' }, { text: 'Cancel', style: 'cancel' }],
             });
             if (choice == null || choice > 2) return;
             try {
@@ -144,7 +146,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     : [];
 
   return (
-    <>
+    <SurfaceContext.Provider value={`profile-${player}`}>
       {purchaseModal}
       <Topbar>
         <TopbarColumn stretch={false}>
@@ -207,7 +209,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           </ScrollView>
         )}
       </SocialBackdrop>
-    </>
+    </SurfaceContext.Provider>
   );
 }
 
@@ -251,9 +253,10 @@ function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
 function FriendMoment({ status, name, onBurst }: { readonly status: string; readonly name: string; readonly onBurst: (on: boolean) => void }) {
   const { params } = useRoute() as { params?: { player?: number } };
   const id = Number(params?.player);
+  const surface = useContext(SurfaceContext);
   useEffect(() => {
-    if (status === 'friends' && id && takeJustFriended(id)) onBurst(true);
-  }, [status, id, onBurst]);
+    if (status === 'friends' && id && takeJustFriended(id, surface)) onBurst(true);
+  }, [status, id, onBurst, surface]);
   return status === 'friends' ? (
     <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#237A3B', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
       maxFontSizeMultiplier={1.2}>You and {name} are friends!</Text>
