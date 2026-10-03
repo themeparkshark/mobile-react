@@ -11,7 +11,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useRef } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { Image as RNImage, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ParticleField, type ParticleHandle } from '../../gamekit/Particles';
@@ -21,7 +21,8 @@ import { CROWN_ART, RANK_RING } from './PodiumSpot';
 import StandingsShark from './StandingsShark';
 import { rowLabel, type StandingsMetric, type StandingsRowModel } from './standingsV2Model';
 
-const BARREL = require('../../../assets/images/screens/leaderboard/barrel.png');
+// Alex's barrels, flipped and re-lit from the top left (ART_QA round 4), so silver stands on the taller barrel.
+const BARREL = require('../../../assets/images/screens/leaderboard/barrel-flipped.png');
 const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 const revealSound = require('../../../assets/sounds/reveal.mp3');
 
@@ -37,6 +38,9 @@ export function ScoreIcon({ metric, size }: { readonly metric: StandingsMetric; 
     : <GameIcon name="ride" size={size} />;
 }
 
+/** Each spot's score chip rests on its barrel rim (flipped art: center, then left, then right). */
+const SEAT: Record<1 | 2 | 3, number> = { 1: 52, 2: 2, 3: -16 };
+
 function Spot({ rank, row, metric, progress, onPress }: {
   readonly rank: 1 | 2 | 3;
   readonly row: StandingsRowModel | null;
@@ -51,7 +55,7 @@ function Spot({ rank, row, metric, progress, onPress }: {
     transform: [{ translateY: (1 - progress.value) * 34 }, { scale: 0.86 + 0.14 * progress.value }],
   }));
   return (
-    <Animated.View style={[{ alignItems: 'center', width: first ? 132 : 112, marginBottom: first ? 26 : 0 }, style]}>
+    <Animated.View style={[{ alignItems: 'center', width: first ? 132 : 112, marginBottom: SEAT[rank] }, style]}>
       {row ? (
         <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric)} hitSlop={6}
           onPress={() => onPress(row)} style={({ pressed }) => ({ alignItems: 'center', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
@@ -133,10 +137,10 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress }: {
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: BARREL_SHOWN, overflow: 'hidden' }}>
         {/* Alex's art, flipped: the taller barrel sits under silver (left), the shorter under bronze,
             so the bases read 1 > 2 > 3. Crop and flip only (ART_RULES). */}
-        <Image source={BARREL} style={{ width, height: width * 683 / 1079, transform: [{ scaleX: -1 }] }} contentFit="cover" />
+        <RNImage source={BARREL} fadeDuration={0} resizeMode="cover" style={{ width, height: width * 683 / 1079 }} />
       </View>
       <View pointerEvents="box-none" style={{
-        position: 'absolute', left: 0, right: 0, bottom: BARREL_SHOWN - 30, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',
+        position: 'absolute', left: 0, right: 0, bottom: 42, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',
       }}>
         <Spot rank={2} row={podium[1]} metric={metric} progress={p2} onPress={onPress} />
         <Spot rank={1} row={podium[0]} metric={metric} progress={p1} onPress={onPress} />

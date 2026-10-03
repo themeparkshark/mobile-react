@@ -36,6 +36,8 @@ import GameIcon from '../ui/GameIcon';
 import type { GameIconName } from '../ui/iconNames';
 import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
+import { takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
+import { showToast } from '../utils/toast';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -231,6 +233,12 @@ export default function PostWinRewardsModal({
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
+  // Standings: the weekly goal note lands right as the coin reveal ends.
+  useEffect(() => {
+    if (!caught || !visible) return;
+    const note = takeWinNote();
+    if (note) showToast(note.text, note.big ? 'reward' : 'success', note.big ? 4000 : 2200);
+  }, [caught, visible]);
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
   useEffect(() => {

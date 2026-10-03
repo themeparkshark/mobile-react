@@ -217,7 +217,7 @@ export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
 
 /**
  * The You card's line. One number per state, short words, no em dashes:
- *   review   "Your rides are being checked"  (+ their real count)
+ *   review   "Keep riding! Your rides are safe." (benched only; the number is their counted rides)
  *   join     "Win 1 ride to join!"            (chip "+1", a Go ride button)
  *   chasing  "2 more rides to pass gr8scott"
  *   tied     "Tied! zmaize got there first."  (+ "1 more ride passes them")
@@ -225,9 +225,9 @@ export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
  */
 export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review'] }): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
   const score = model.me?.score ?? 0;
-  if (model.review && model.board !== 'all_time') {
-    const n = model.review.rides;
-    return { state: 'review', text: 'Your rides are being checked', sub: `${n} ${unitWord('ride_wins', n)} this week` };
+  if (model.review?.benched && model.board !== 'all_time') {
+    // Benched (two impossible hops): reassure, one number, no blame.
+    return { state: 'review', text: 'Keep riding! Your rides are safe.', sub: 'The shark crew is double-checking a ride' };
   }
   if (score <= 0 || model.me?.rank == null) {
     const what = model.metric === 'ride_coins' ? 'ride coin' : 'ride';
@@ -354,18 +354,34 @@ export function emptyCopy(board: StandingsBoardKey, friendsCount: number | null)
   return { title: 'The crown is up for grabs!', message: 'Nobody has won a ride this week. Win one and take the top spot.', action: 'Find a ride', target: 'Explore' };
 }
 
-/** The Monday results card's lines. */
+/**
+ * The Monday results card's lines. It leads with the rides you won, the rank
+ * is small, and winner words appear only for a paid top-three result.
+ */
 export function lastWeekCopy(result: LastWeekResult): { readonly headline: string; readonly line: string; readonly reward: string | null } {
-  const headline = result.rank === 1 ? 'You won last week!' : result.rank <= 3 ? `#${result.rank} last week!` : `You finished #${result.rank}`;
-  const line = `${result.score} ${unitWord('ride_wins', result.score)} out of ${result.playersCount} ${result.playersCount === 1 ? 'player' : 'players'}`;
-  const reward = result.title ? `${result.title}${result.tickets > 0 ? ` + ${result.tickets} Tickets` : ''}` : null;
+  const headline = `${result.score} ${unitWord('ride_wins', result.score)} last week!`;
+  const paid = result.tickets > 0 && !!result.title;
+  const line = paid ? `#${result.rank} this week. ${result.title}!` : `You finished #${result.rank}`;
+  const reward = paid ? `+${result.tickets} Tickets` : null;
   return { headline, line, reward };
+}
+
+/** Spoken You card label: one number, no "0" while rides are being checked. */
+export function youLabel(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase' | 'available' | 'review'>, climb: number): string {
+  const line = youLine(model);
+  if (line.state === 'review') {
+    const n = model.review?.rides ?? 0;
+    return `Your ${n} ${unitWord('ride_wins', n)} this week are safe. The shark crew is double-checking a ride. Keep riding!`;
+  }
+  const me = model.me;
+  const head = me?.rank ? `You are number ${me.rank} with ${scoreText(model, me.score)}` : `You are new on this board with ${scoreText(model, me?.score ?? 0)}`;
+  return `${head}. ${line.text}.${line.sub ? ` ${line.sub}.` : ''}${climb > 0 ? ` Up ${climb} places.` : ''}`;
 }
 
 /**
  * The note a ride win leaves for Standings (rewards.standings from the resolve
- * answer): a reached weekly goal is the big one, otherwise a quiet "+1 ride
- * this week". Null when the ride did not count (a replay today, or a check).
+ * answer): a reached weekly goal is the big one, otherwise "5 rides this week!".
+ * Null when the ride did not count (a replay today, or a check).
  */
 export function winNote(standings: unknown): { readonly text: string; readonly big: boolean } | null {
   const s = standings as { counted?: boolean; week_rides?: unknown; goals_reached?: { goal?: unknown; xp?: unknown }[] } | null | undefined;
@@ -375,6 +391,6 @@ export function winNote(standings: unknown): { readonly text: string; readonly b
     const best = goals[goals.length - 1];
     return { text: `Weekly goal: ${num(best.goal)} rides! +${goals.reduce((sum, g) => sum + num(g.xp), 0)} XP`, big: true };
   }
-  const week = num(s.week_rides);
-  return { text: week > 0 ? `+1 ride this week (${week})` : '+1 ride this week', big: false };
+  const week = Math.max(1, num(s.week_rides));
+  return { text: `${week} ${week === 1 ? 'ride' : 'rides'} this week!`, big: false };
 }

@@ -27,14 +27,15 @@ export default function LastWeekCard({ result, me, onClose }: {
   const copy = result ? lastWeekCopy(result) : null;
   useEffect(() => {
     if (!result || !copy) return;
-    if (result.rank <= 3) {
+    if (result.tickets > 0) {
       playSound(rewardSound);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     }
     AccessibilityInfo.announceForAccessibility(`${copy.headline}. ${copy.line}.${copy.reward ? ` You earned ${copy.reward}.` : ''}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.weekStart]);
-  const crown = result && result.rank <= 3 ? CROWN_ART[result.rank as 1 | 2 | 3] : null;
+  // Crowns and winner words only for a paid top-three result.
+  const crown = result && result.tickets > 0 && result.rank <= 3 ? CROWN_ART[result.rank as 1 | 2 | 3] : null;
   return (
     <Modal visible={!!result} transparent animationType="none" onRequestClose={onClose} accessibilityViewIsModal>
       {result && copy && (
@@ -46,8 +47,11 @@ export default function LastWeekCard({ result, me, onClose }: {
             <Text style={[textPreset('label'), { color: BRAND.goldLip }]}>LAST WEEK</Text>
             {crown && <Image source={crown} style={{ width: 54, height: 54, marginBottom: -10, marginTop: 4, zIndex: 2 }} contentFit="contain" />}
             {me && <StandingsShark avatar={me.avatar} size={104} ring={BRAND.gold} />}
-            <Text style={[textPreset('title'), { marginTop: 10, textAlign: 'center' }]}>{copy.headline}</Text>
-            <Text style={[textPreset('body'), { color: BRAND.navySoft, textAlign: 'center', marginTop: 2 }]}>{copy.line}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+              <GameIcon name="ride" size={30} />
+              <Text style={[textPreset('title'), { textAlign: 'center' }]}>{copy.headline}</Text>
+            </View>
+            <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, textAlign: 'center', marginTop: 2 }]}>{copy.line}</Text>
             {copy.reward && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingHorizontal: 14, height: 40,
                 borderRadius: RADIUS.pill, backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.goldLip }}>

@@ -1,4 +1,4 @@
-import { markStandingsStale } from '../../../screens/LeaderboardsScreen/standingsCache';
+import { markStandingsStale, parkWinNote } from '../../../screens/LeaderboardsScreen/standingsCache';
 import { winNote } from '../../../screens/LeaderboardsScreen/standingsV2Model';
 import { showToast } from '../../../utils/toast';
 import type { PerkChipData } from '../../../components/coin/progressionModel';
@@ -144,9 +144,9 @@ export async function resolveTaskAttempt(
   // look refetches (and can celebrate the climb) instead of showing the old board.
   if (data?.data?.attempt?.status === 'won') {
     markStandingsStale();
-    // The weekly goal moment: after the win reveal, "Weekly goal: 8 rides! +25 XP".
+    // The weekly goal moment: the win screen shows it when its coin reveal ends.
     const note = winNote((data.data.attempt.rewards as { standings?: unknown } | null | undefined)?.standings);
-    if (note) setTimeout(() => showToast(note.text, note.big ? 'reward' : 'success', note.big ? 4000 : 2200), 2600);
+    if (note) parkWinNote(note, left => showToast(left.text, left.big ? 'reward' : 'success', left.big ? 4000 : 2200));
   }
   return data.data;
 }
