@@ -30,10 +30,18 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
     getWishlist().then(r => setItems(r.items)).catch(() => setFailed(true));
   }, [visible]);
 
+  const [note, setNote] = useState<string | null>(null);
   const unheart = async (id: number) => {
+    const before = items;
     setItems(list => list?.filter(i => i.id !== id) ?? null);
     wishStore.set(id, false);
-    try { await removeFromWishlist(id); } catch { wishStore.set(id, true); }
+    try { await removeFromWishlist(id); }
+    catch {
+      // Put the row back where it was and say so.
+      wishStore.set(id, true);
+      setItems(before);
+      setNote('Couldn’t remove that. Try again.');
+    }
   };
 
   if (!visible) return null;
@@ -53,6 +61,7 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
             {alerts ? 'Items come back. We’ll tell you next time one of these is in the shop.' : 'Items come back. Check the shop each day, or turn on Wishlist Alerts in Settings.'}
           </Text>
           {items === null && !failed && <ActivityIndicator color={BRAND.navy} style={{ marginVertical: 24 }} />}
+          {note && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.note, { color: BRAND.red }]}>{note}</Text>}
           {failed && <Text style={styles.empty}>Couldn’t load your wishlist. Try again in a moment.</Text>}
           {items && items.length === 0 && <Text style={styles.empty}>Heart anything in the shop to save it here.</Text>}
           {items && items.length > 0 && (

@@ -24,7 +24,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Dimensions, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInUp, type SharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOutUp, LinearTransition, type SharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { claimShopSet } from '../../api/endpoints/me/shop-sets';
 import updatePlayer from '../../api/endpoints/me/update-player';
 import { addToWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
@@ -32,18 +32,22 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  dailyPill, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, pieceState, readySummary,
-  restockBackoffMs, sectionAccent, setA11y, setProgressText, shortDate, stableOrder, wishSavedCopy,
+  dailyPill, dropReveal, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, newCountLabel, pieceState,
+  queueReveal, readySummary, restockBackoffMs, sectionAccent, setA11y, setProgressText, settleClaims, shortDate, stableOrder, wishSavedCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopTease, ShopToday } from '../../models/shop-today';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW } from '../../ui';
-import { showToast } from '../../utils/toast';
 import SetCompleteReveal from './SetCompleteReveal';
 import ShopTile, { TileArt } from './ShopTile';
 import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, PieceChip, Sheen, ShopStage, TimerPill, useShopNow } from './shopUi';
+import { MAX_FONT, PieceChip, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
+
+function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
+  const still = useReducedGameMotion();
+  return <ShopCta label={label} icon="crown" width={Math.min(300, SCREEN_W - 80)} onPress={onPress} loading={busy} still={still} />;
+}
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
 
@@ -54,7 +58,8 @@ const GRID_PAD = 8;
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
 const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
-const NEW_SEEN_KEY = 'shop:new-seen-day';
+const FIRST_OPEN_KEY = 'shop:first-open-day';
+const PENDING_REVEALS_KEY = 'shop:pending-reveals';
 // The art box has air under the tail: drop it so the tail meets the plinth.
 const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
@@ -91,15 +96,19 @@ const TeaseChip = memo(function TeaseChip({ tease, label }: { tease: ShopTease; 
   );
 });
 
-const Grid = memo(function Grid({ items, vip, balance, still, bought, showNew, width = TILE_W, horizontal = false, onOpen, onWish }: {
-  items: ShopItem[]; vip: boolean; balance: number; still: boolean; bought: number[]; showNew: boolean; width?: number; horizontal?: boolean;
+const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = false, flipIn = false, width = TILE_W, horizontal = false, onOpen, onWish }: {
+  items: ShopItem[]; vip: boolean; balance: number; still: boolean; bought: number[]; quiet?: boolean;
+  /** First open of the shop day: tiles flip in one by one. */
+  flipIn?: boolean; width?: number; horizontal?: boolean;
   onOpen: (item: ShopItem) => void; onWish: (item: ShopItem) => void;
 }) {
-  const tiles = items.map(item => (
+  const tiles = items.map((item, i) => (
     <ShopProfile key={item.id} id={`tile-${item.id}`}>
-      <ShopTile item={item} width={width} still={still} showNew={showNew}
-        vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
-        onOpen={onOpen} onWish={onWish} />
+      <Animated.View entering={flipIn && !still ? FadeInUp.delay(120 + i * 70).springify().damping(14) : undefined}>
+        <ShopTile item={item} width={width} still={still} quiet={quiet}
+          vipLocked={!!item.is_member_item && !vip} affordable={balance >= item.cost} justBought={bought.includes(item.id)}
+          onOpen={onOpen} onWish={onWish} />
+      </Animated.View>
     </ShopProfile>
   ));
   return horizontal
@@ -114,7 +123,7 @@ const SetPortrait = memo(function SetPortrait({ set }: { set: ShopSetSummary }) 
   if (!stage) return null;
   return (
     <View style={[styles.portrait, { borderColor: set.color ?? BRAND.gold }]}>
-      <Playercard inventory={stage.look} still showBackground={false} pinAnchor="body" style={MINI_CARD_STYLE} />
+      <Playercard inventory={stage.look} still showBackground={false} pinAnchor="body" shadow style={MINI_CARD_STYLE} />
     </View>
   );
 });
@@ -161,37 +170,38 @@ const SetCallout = memo(function SetCallout({ set, todayIds, onTry }: {
   );
 });
 
-/** Every set waiting for its title in one card, with one "Claim all". */
-const ReadyCard = memo(function ReadyCard({ sets, todayIds, onClaimAll }: {
-  sets: ShopSetSummary[]; todayIds: number[]; onClaimAll: () => void;
+/** Every set waiting for its title in one card (stacked, no hidden pages), with one "Claim all". */
+const ReadyCard = memo(function ReadyCard({ sets, todayIds, busy, onClaimAll }: {
+  sets: ShopSetSummary[]; todayIds: number[]; busy: boolean; onClaimAll: () => void;
 }) {
   const summary = readySummary(sets);
   if (!summary) return null;
+  const shown = sets.slice(0, 3);
   return (
     <View style={[styles.setCard, styles.readyCard]}>
       <View style={styles.setHead}>
         <GameIcon name="trophy" size={24} />
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.readyTitle} numberOfLines={1}>{summary.title}</Text>
       </View>
-      <ScrollView horizontal pagingEnabled={sets.length > 1} showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-        {sets.map(set => (
-          <View key={set.slug} style={styles.readySet}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.readySetName}>{set.name}</Text>
-            <View style={styles.setPieces}>
-              {(set.pieces ?? []).map(piece => <PieceChip key={piece.id} piece={piece} state={pieceState(piece, todayIds)} size={44} />)}
-            </View>
-            {set.title && <View style={[styles.titleChip, { alignSelf: 'flex-start' }]}><GameIcon name="crown" size={15} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.titleChipText}>{set.title}</Text></View>}
+      {shown.map(set => (
+        <View key={set.slug} style={styles.readySet}>
+          <View style={styles.readyRow}>
+            {(set.pieces ?? []).slice(0, 5).map(piece => <PieceChip key={piece.id} piece={piece} state={pieceState(piece, todayIds)} size={40} />)}
           </View>
-        ))}
-      </ScrollView>
-      <GameButton label={sets.length > 1 ? `Claim all ${sets.length}!` : 'Claim your title!'} icon="crown" onPress={onClaimAll} />
+          {set.title && <View style={[styles.titleChip, { alignSelf: 'flex-start' }]}><GameIcon name="crown" size={15} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.titleChipText}>{set.title}</Text></View>}
+        </View>
+      ))}
+      {sets.length > shown.length && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.readyMore}>and {sets.length - shown.length} more</Text>}
+      <View style={{ alignItems: 'center' }}>
+        <ShopCtaInline label={sets.length > 1 ? `Claim all ${sets.length}!` : 'Claim your title!'} onPress={onClaimAll} busy={busy} />
+      </View>
     </View>
   );
 });
 
-const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, showNew, todayIds, setsBySlug, onOpen, onWish, onTrySet }: {
-  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; showNew: boolean;
+const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, flipIn, todayIds, setsBySlug, onOpen, onWish, onTrySet }: {
+  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; flipIn: boolean;
   todayIds: number[]; setsBySlug: Map<string, ShopSetSummary>;
   onOpen: OpenFn; onWish: (item: ShopItem) => void; onTrySet: (set: ShopSetSummary) => void;
 }) {
@@ -214,7 +224,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
         <SectionPills section={section} offset={offset} still={still} />
         {section.next_wave && <View style={{ marginTop: 8 }}><TeaseChip tease={section.next_wave} label="NEXT" /></View>}
       </View>
-      <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew}
+      <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} quiet={!!section.quiet_tiles} flipIn={flipIn}
         width={EVENT_TILE_W} horizontal onOpen={openHere} onWish={onWish} />
       {section.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
         <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={onTrySet} />
@@ -236,6 +246,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   // The star alone on your shark's own skin: the brightest thing in the panel.
   const stage = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
     paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type }], 'base'), [player?.inventory?.skin_item?.id, item.id]);
+  // Four 36pt chips fit one row of the text column; more shows three and "+N".
   const extra = pieces.length > 4 ? pieces.length - 3 : 0;
 
   const openPiece = (pieceId: number) => {
@@ -247,11 +258,11 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
     <View style={[styles.hero, { height: HERO_H + (tease ? 44 : 0), borderColor: glow }]}>
       <LinearGradient colors={['#dff3ff', '#9fd6f8']} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`This week's star: ${itemDisplayName(item)}, ${owned ? 'owned' : `${formatCoins(item.cost)} Shark Coins`}. Tap to try it on.`}>
+        accessibilityLabel={`This week's star: ${itemDisplayName(item)}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
           <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
-            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" style={HERO_CARD_STYLE} />
-              : <View style={styles.heroFlat}><TileArt item={item} size={170} torso={false} thumb={false} /></View>}
+            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow style={HERO_CARD_STYLE} />
+              : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
         </View>
       </Pressable>
@@ -264,7 +275,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
         {pieces.length > 1 && (
           <View style={styles.heroPieces}>
             {pieces.slice(0, extra ? 3 : 4).map(p => (
-              <PieceChip key={p.id} piece={p} state={pieceState(p, todayItems.map(i => i.id))} size={44} onPress={() => openPiece(p.id)} />
+              <PieceChip key={p.id} piece={p} state={pieceState(p, todayItems.map(i => i.id))} size={36} onPress={() => openPiece(p.id)} />
             ))}
             {extra > 0 && <View style={styles.heroMore}><Text style={styles.heroMoreText}>+{extra}</Text></View>}
           </View>
@@ -295,14 +306,14 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   );
 });
 
-export default function ShopShelves({ today, setToday, onRefresh, offset, focusItemId, scrollY }: {
+export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY }: {
   readonly today: ShopToday;
   readonly setToday: Dispatch<SetStateAction<ShopToday | null>>;
   readonly onRefresh: () => Promise<boolean>;
   /** Server clock minus device clock, measured at load. */
   readonly offset: number;
-  /** Opens this item's try-on once (wishlist push deep link). */
-  readonly focusItemId?: number;
+  /** Open this item's try-on (wishlist push or My Wishlist). A new nonce re-opens the same item. */
+  readonly focusRequest?: { id: number; nonce: number } | null;
   /** The screen collapses its header from this. */
   readonly scrollY?: SharedValue<number>;
 }) {
@@ -314,29 +325,41 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   const playSound = useCallback((sound: number, options?: { volume?: number }) => soundRef.current(sound, options), []);
   const still = useReducedGameMotion();
   const [open, setOpen] = useState<Open>(null);
+  const [pending, setPending] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null }[]>([]);
   const [reveals, setReveals] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null }[]>([]);
   const [askAlerts, setAskAlerts] = useState(false);
   const [bought, setBought] = useState<number[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [showNew, setShowNew] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [firstOpenToday, setFirstOpenToday] = useState(false);
+  const [toast, setToast] = useShopToast();
   const vip = !!player?.is_subscribed;
   const balance = Number(player?.coins ?? 0);
 
   // The wishlist store follows the server copy (never a per-tap re-render of the shelves).
   useEffect(() => { wishStore.seed(today.wishlist_ids ?? [], today.wishlist_alerts); }, [today.wishlist_ids, today.wishlist_alerts]);
 
-  // NEW! ribbons show on the first open of each shop day, for that visit.
+  // The first open of each shop day gets a moment: tiles flip in one by one and the Daily header shines.
   useEffect(() => {
     let live = true;
-    void AsyncStorage.getItem(NEW_SEEN_KEY).then(seen => {
-      if (!live) return;
-      if (seen !== today.shop_day) {
-        setShowNew(true);
-        void AsyncStorage.setItem(NEW_SEEN_KEY, today.shop_day).catch(() => undefined);
-      }
+    void AsyncStorage.getItem(FIRST_OPEN_KEY).then(seen => {
+      if (!live || seen === today.shop_day) return;
+      setFirstOpenToday(true);
+      void AsyncStorage.setItem(FIRST_OPEN_KEY, today.shop_day).catch(() => undefined);
     }).catch(() => undefined);
     return () => { live = false; };
   }, [today.shop_day]);
+
+  // A Set Complete won but not yet shown (the app closed mid-celebration) plays on the next open.
+  useEffect(() => {
+    void AsyncStorage.getItem(PENDING_REVEALS_KEY).then(raw => {
+      const saved = raw ? (JSON.parse(raw) as { reward: ShopSetReward; set: ShopSetSummary | null }[]) : [];
+      if (saved.length) setReveals(list => saved.reduce((acc, r) => (acc.some(x => x.reward.slug === r.reward.slug) ? acc : [...acc, r]), list));
+    }).catch(() => undefined);
+  }, []);
+  const persistReveals = useCallback((list: { reward: ShopSetReward; set: ShopSetSummary | null }[]) => {
+    void AsyncStorage.setItem(PENDING_REVEALS_KEY, JSON.stringify(list)).catch(() => undefined);
+  }, []);
 
   // A tile stays where the kid saw it for this visit (per shop day).
   const seenOrder = useRef<{ day: string; order: Record<string, number[]> }>({ day: '', order: {} });
@@ -368,13 +391,12 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   }, [playSound]);
   const openTile = useCallback((item: ShopItem) => openItem(item), [openItem]);
 
-  // Deep link from a wishlist push: open that item's try-on once.
-  const focused = useRef(false);
+  // Wishlist push or My Wishlist: open that item's try-on (every request, even the same item twice).
   useEffect(() => {
-    if (focused.current || !focusItemId) return;
-    const item = allItems.find(i => i.id === focusItemId);
-    if (item) { focused.current = true; setOpen({ item, fullLook: false, bought: false, accent: null }); }
-  }, [focusItemId, allItems]);
+    if (!focusRequest) return;
+    const item = allItems.find(i => i.id === focusRequest.id);
+    if (item) setOpen({ item, fullLook: false, bought: false, accent: null });
+  }, [focusRequest?.nonce]);
 
   // Stable heart: the store holds the truth per id; the server answer reconciles that id only.
   const wish = useCallback(async (item: ShopItem) => {
@@ -384,48 +406,75 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
     void Haptics.impactAsync(adding ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     wishStore.set(id, adding);
     if (adding && wishStore.alerts() == null) setAskAlerts(true);
-    else if (adding) showToast(wishSavedCopy(wishStore.alerts()), 'success', 2200);
+    else if (adding) setToast(wishSavedCopy(wishStore.alerts()));
     try {
       const server = adding ? await addToWishlist(id) : await removeFromWishlist(id);
       wishStore.set(id, server.includes(id));
     } catch (error: unknown) {
       wishStore.set(id, !adding);
       const full = (error as { response?: { data?: { code?: string } } })?.response?.data?.code === 'wishlist_full';
-      showToast(full ? 'Your wishlist is full. Remove one to add another.' : 'Couldn’t save that. Try again.', 'warning');
+      setToast(full ? 'Your wishlist is full. Remove one first.' : 'Couldn’t save that. Try again.');
     }
-  }, [playSound]);
+  }, [playSound, setToast]);
 
   const answerAlerts = useCallback(async (on: boolean) => {
     setAskAlerts(false);
     wishStore.setAlerts(on);
-    showToast(wishSavedCopy(on), 'success', 2200);
+    setToast(wishSavedCopy(on));
     await updatePlayer({ wishlist_alerts: on }).catch(() => undefined);
-  }, []);
+  }, [setToast]);
 
-  const onPurchased = useCallback((item: ShopItem) => {
+  // The reward is the shelf's the moment the server grants it: closing the try-on early never loses it.
+  const onPurchased = useCallback((item: ShopItem, reward: ShopSetReward | null) => {
     setBought(list => (list.includes(item.id) ? list : [...list, item.id]));
+    if (reward) {
+      const entry = { reward, set: setsBySlug.get(reward.slug) ?? null };
+      setPending(list => {
+        const next = queueReveal(list.map(x => ({ ...x, slug: x.reward.slug })), { ...entry, slug: reward.slug }).map(({ slug: _s, ...x }) => x);
+        persistReveals(next);
+        return next;
+      });
+    }
     void onRefresh();
-  }, [onRefresh]);
+  }, [onRefresh, setsBySlug, persistReveals]);
 
-  const onSetComplete = useCallback((reward: ShopSetReward) => {
-    setOpen(null);
-    setTimeout(() => setReveals(list => [...list, { reward, set: setsBySlug.get(reward.slug) ?? null }]), 280);
-  }, [setsBySlug]);
+  // Play pending reveals once the sheet is gone; if the kid lingers, close it after the landing (1.5 s).
+  useEffect(() => {
+    if (!pending.length) return;
+    if (!open) {
+      setReveals(list => pending.reduce((acc, r) => (acc.some(x => x.reward.slug === r.reward.slug) ? acc : [...acc, r]), list));
+      setPending([]);
+      return;
+    }
+    const t = setTimeout(() => setOpen(null), 1500);
+    return () => clearTimeout(t);
+  }, [pending, open]);
 
-  // Claim every waiting set, then play their reveals one after another.
+  const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${itemDisplayName(item)}!`), [setToast]);
+
+  // Claim all: the card leaves at once (failed claims come back), then the reveals play in order.
   const claimAll = useCallback(async () => {
     const ready = today.ready_sets ?? [];
-    const queue: { reward: ShopSetReward; set: ShopSetSummary }[] = [];
-    for (const set of ready) {
-      try {
-        const reward = await claimShopSet(set.slug);
-        queue.push({ reward: { ...reward, item_ids: reward.item_ids ?? set.item_ids }, set });
-      } catch { /* already claimed elsewhere: skip */ }
-    }
-    if (!queue.length) showToast('Couldn’t claim that yet. Try again.', 'warning');
-    setReveals(list => [...list, ...queue]);
+    if (!ready.length || claiming) return;
+    setClaiming(true);
+    const results = await Promise.all(ready.map(set => claimShopSet(set.slug).then(r => r, () => null)));
+    const { won, failed } = settleClaims(ready, results);
+    setToday(t => (t ? { ...t, ready_sets: failed, ready_set_slugs: failed.map(f => f.slug) } as ShopToday : t));
+    setClaiming(false);
+    if (failed.length) setToast(failed.length === ready.length ? 'Couldn’t claim that yet. Try again.' : 'Some sets will be ready to claim in a moment.');
+    const queue = won.map(({ set, reward }) => ({ reward: { ...reward, item_ids: reward.item_ids ?? set.item_ids }, set }));
+    setReveals(list => { const next = [...list, ...queue]; persistReveals(next); return next; });
     void onRefresh();
-  }, [today.ready_sets, onRefresh]);
+  }, [today.ready_sets, claiming, onRefresh, setToday, setToast, persistReveals]);
+
+  const finishReveal = useCallback(() => {
+    setReveals(list => {
+      const next = list.slice(1);
+      const saved = list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : next;
+      persistReveals(saved);
+      return next;
+    });
+  }, [persistReveals]);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
@@ -463,6 +512,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
   const openSet = open?.item.shop?.set ? setsBySlug.get(open.item.shop.set.slug) ?? null : null;
   const enter = (i: number) => (still ? undefined : FadeInUp.delay(60 * i).springify().damping(16));
   const reveal = reveals[0] ?? null;
+  const dailyNew = newCountLabel(daily?.new_count);
 
   return (
     <ShopProfile id="shelves">
@@ -475,65 +525,69 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusI
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>Today’s shop is opening. Back in a moment!</Text></View>
           )}
           {readySets.length > 0 && (
-            <Animated.View entering={enter(0)}>
-              <ReadyCard sets={readySets} todayIds={todayIds} onClaimAll={() => void claimAll()} />
+            <Animated.View entering={enter(0)} exiting={still ? undefined : FadeOutUp.duration(220)}>
+              <ReadyCard sets={readySets} todayIds={todayIds} busy={claiming} onClaimAll={() => void claimAll()} />
             </Animated.View>
           )}
 
-          {featured && hero && (
-            <Animated.View entering={enter(0)}>
-              <ShopProfile id="hero">
-                <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
-                  tease={today.next_featured} onOpen={openItem} />
-              </ShopProfile>
-            </Animated.View>
-          )}
+          <Animated.View layout={still ? undefined : LinearTransition.duration(220)} style={{ gap: 14 }}>
+            {featured && hero && (
+              <Animated.View entering={enter(0)}>
+                <ShopProfile id="hero">
+                  <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
+                    tease={today.next_featured} onOpen={openItem} />
+                </ShopProfile>
+              </Animated.View>
+            )}
 
-          {events.map((section, index) => (
-            <Animated.View key={section.key} entering={enter(index + 1)}>
-              <ShopProfile id={`banner-${section.key}`}>
-                <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} showNew={showNew}
-                  todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
-              </ShopProfile>
-            </Animated.View>
-          ))}
+            {events.map((section, index) => (
+              <Animated.View key={section.key} entering={enter(index + 1)}>
+                <ShopProfile id={`banner-${section.key}`}>
+                  <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} flipIn={firstOpenToday}
+                    todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
+                </ShopProfile>
+              </Animated.View>
+            ))}
 
-          {featured && (
-            <Animated.View entering={enter(events.length + 1)} style={styles.panel}>
-              <View style={styles.header}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>FEATURED</Text>
-                <SectionPills section={featured} offset={offset} still={still} />
-              </View>
-              {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
-                <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />
-              ))}
-              <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew} onOpen={openTile} onWish={wish} />
-            </Animated.View>
-          )}
+            {featured && (
+              <Animated.View entering={enter(events.length + 1)} style={styles.panel}>
+                <View style={styles.header}>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>FEATURED</Text>
+                  <SectionPills section={featured} offset={offset} still={still} />
+                </View>
+                {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
+                  <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />
+                ))}
+                <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish} />
+              </Animated.View>
+            )}
 
-          {daily && (
-            <Animated.View entering={enter(events.length + 2)} style={styles.panel}>
-              <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
-                {showNew && <Sheen still={still} delay={700} width={SCREEN_W} />}
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>DAILY</Text>
-                <SectionPills section={daily} offset={offset} still={still} />
-              </View>
-              <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} showNew={showNew} onOpen={openTile} onWish={wish} />
-            </Animated.View>
-          )}
+            {daily && (
+              <Animated.View entering={enter(events.length + 2)} style={styles.panel}>
+                <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
+                  {firstOpenToday && <Sheen still={still} delay={700} width={SCREEN_W} />}
+                  <View style={{ flexShrink: 1, gap: 4 }}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>DAILY</Text>
+                    {dailyNew && <View style={styles.newChip}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.newChipText}>{dailyNew}</Text></View>}
+                  </View>
+                  <SectionPills section={daily} offset={offset} still={still} />
+                </View>
+                <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish} />
+              </Animated.View>
+            )}
+          </Animated.View>
         </Animated.ScrollView>
         {/* Content fades under the tab row instead of a hard cut. */}
         <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
+        <ShopToast message={toast} still={still} />
       </View>
 
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
-          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onSetComplete={onSetComplete} />
+          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn} />
       )}
-      {reveal && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
-        laterXp={reveals.slice(1).reduce((n, r) => n + (r.reward.xp ?? 0), 0)}
-        onDone={() => setReveals(list => list.slice(1))} />}
+      {reveal && !open && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
@@ -580,15 +634,15 @@ const styles = StyleSheet.create({
   heroRarity: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
   heroRarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
   heroSet: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft },
-  heroPieces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  heroMore: { width: 44, height: 44, borderRadius: 14, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  heroPieces: { flexDirection: 'row', gap: 6, marginTop: 4 },
+  heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
-  heroCta: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8,
+  heroCta: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16,
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   heroCtaText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
-  heroGhost: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7, borderWidth: 3, borderColor: BRAND.navy },
+  heroGhost: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 18, borderWidth: 3, borderColor: BRAND.navy },
   heroGhostText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
   wearingChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: BRAND.green,
     borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white },
@@ -598,7 +652,11 @@ const styles = StyleSheet.create({
   setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: '#fffdf4', padding: 10, gap: 8 },
   readyCard: { borderColor: BRAND.gold, backgroundColor: '#fffaf0' },
   readyTitle: { flex: 1, fontFamily: FONT.display, fontSize: 19, color: BRAND.navy },
-  readySet: { width: SCREEN_W - 70, gap: 6 },
+  readySet: { gap: 6, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#f0e2b6' },
+  readyRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  readyMore: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft },
+  newChip: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  newChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy },
   readySetName: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft },
   setHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   setTitle: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },

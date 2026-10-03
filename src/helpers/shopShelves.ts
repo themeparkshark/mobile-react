@@ -285,17 +285,93 @@ export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
  * full-width top ribbon for a time tag that replaces (never overlaps) the
  * rarity chip. LAST CHANCE beats BACK AGAIN beats NEW. Owned tiles show no ribbon.
  */
-export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?: boolean } }, showNew: boolean): { ribbon: TileRibbon; showRarity: boolean } {
-  if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null, showRarity: true };
-  const ribbon: TileRibbon = item.shop?.last_chance ? 'last_chance' : item.shop?.returning ? 'returning'
-    : showNew && item.shop?.is_new ? 'new' : null;
-  return { ribbon, showRarity: ribbon === null };
+export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?: boolean } }, quiet = false): { ribbon: TileRibbon } {
+  if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null };
+  // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
+  const ribbon: TileRibbon = item.shop?.last_chance && !quiet ? 'last_chance' : item.shop?.returning ? 'returning'
+    : item.shop?.is_new ? 'new' : null;
+  return { ribbon };
+}
+
+/** "3 new today" for a section header, or null. */
+export function newCountLabel(n: number | undefined): string | null {
+  if (!n || n <= 0) return null;
+  return n === 1 ? '1 new today' : `${n} new today`;
 }
 
 /** One card for every finished-but-unclaimed set. */
 export function readySummary(sets: { name: string }[]): { count: number; title: string } | null {
   if (!sets.length) return null;
   return { count: sets.length, title: sets.length === 1 ? `You finished ${sets[0].name}!` : `You finished ${sets.length} sets!` };
+}
+
+interface XpLike { readonly level: number; readonly experience: number; readonly needed: number }
+
+/**
+ * The reveal's XP bar from the server's exact before/after: fractions for the
+ * bar, the level shown at the end, and a kid caption (no percentages).
+ */
+export function xpBar(before: XpLike | undefined, after: XpLike | undefined, gained: number):
+  { level: number; from: number; to: number; levelUp: boolean; caption: string } | null {
+  if (!before || !after) return null;
+  const levelUp = after.level > before.level;
+  return {
+    level: after.level,
+    from: levelUp ? 0 : Math.min(1, before.experience / Math.max(1, before.needed)),
+    to: Math.min(1, after.experience / Math.max(1, after.needed)),
+    levelUp,
+    caption: levelUp ? `Level up! You're level ${after.level}` : `+${gained} XP`,
+  };
+}
+
+/** Pending Set Complete reveals: one per set, in the order they were won. */
+export function queueReveal<T extends { slug: string }>(list: T[], reward: T): T[] {
+  return list.some(r => r.slug === reward.slug) ? list : [...list, reward];
+}
+
+export function dropReveal<T extends { slug: string }>(list: T[], slug: string): T[] {
+  return list.filter(r => r.slug !== slug);
+}
+
+/** Claim all: rewards to reveal in order, and the sets whose claim failed (they stay on the card). */
+export function settleClaims<S extends { slug: string }, R>(sets: S[], results: (R | null)[]): { won: { set: S; reward: R }[]; failed: S[] } {
+  const won: { set: S; reward: R }[] = [];
+  const failed: S[] = [];
+  sets.forEach((set, i) => { const r = results[i]; if (r) won.push({ set, reward: r }); else failed.push(set); });
+  return { won, failed };
+}
+
+/**
+ * After a buy request errors (timeout, 500), what is true? Never claim "you
+ * weren't charged" without checking: a refreshed player who owns the item, or
+ * whose balance dropped by the price, did buy it.
+ */
+export function afterBuyError(balanceBefore: number, cost: number, fresh: { coins: number; owns: boolean } | null): 'bought' | 'not_charged' | 'unknown' {
+  if (!fresh) return 'unknown';
+  if (fresh.owns || fresh.coins === balanceBefore - cost) return 'bought';
+  if (fresh.coins === balanceBefore) return 'not_charged';
+  return 'unknown';
+}
+
+export type TryOnState = {
+  readonly owned: boolean; readonly worn: boolean; readonly vipLocked: boolean; readonly short: number;
+  readonly phase: 'idle' | 'confirm' | 'buying' | 'bought' | 'failed' | 'unknown';
+  readonly wear: 'idle' | 'busy' | 'spinning' | 'failed'; readonly finishes: boolean; readonly cost: number;
+};
+
+/** The try-on's one primary button and its message, for every state (the label cross-fades). */
+export function tryOnCta(s: TryOnState): { label: string; action: 'wear' | 'close' | 'vip' | 'retry_buy' | 'earn' | 'buy' | 'ask' | 'none'; note: string | null } {
+  if (s.owned) {
+    if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.' };
+    if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null };
+    return { label: 'Wear it now', action: 'wear', note: null };
+  }
+  if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null };
+  if (s.phase === 'failed') return { label: 'Try again', action: 'retry_buy', note: 'That didn’t go through. You weren’t charged.' };
+  if (s.phase === 'unknown') return { label: 'Check again', action: 'retry_buy', note: 'We couldn’t reach the shop. Check your coins, then try again.' };
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Catch ride coins or open your daily chest to earn more.' };
+  if (s.phase === 'confirm' || s.phase === 'buying') return { label: 'Yes, buy it!', action: 'buy', note: null };
+  return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null };
 }
 
 /** "Level 12 · 48% to 62%" for the reveal's XP bar (fractions 0..1). */

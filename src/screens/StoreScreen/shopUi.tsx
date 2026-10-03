@@ -1,19 +1,21 @@
 /**
  * Shared Shark Shop v2 pieces: the per-pill clock, timer pills, rarity
- * backplates, the set piece strip and a small burst. Kept here so the shelf,
- * tiles and try-on stay in one visual language.
+ * backplates, set piece chips, the stage kit, the buy payoff (coin arc, land
+ * flash), the shop CTA whose label cross-fades, and the docked shop toast.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useState, type ReactNode } from 'react';
+import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 import type { Pill, PieceState } from '../../helpers/shopShelves';
 import type { ShopSetPiece } from '../../models/shop-today';
-import { BRAND, FONT, GameIcon, type GameIconName } from '../../ui';
+import { BRAND, BUTTON, BUTTON_ART, FONT, GameIcon, type GameIconName } from '../../ui';
+import { artButtonFontSize } from '../../ui/artButtonText';
 
 /** Max Dynamic Type growth inside tiles and pills, so a big font never breaks a tile. */
 export const MAX_FONT = 1.3;
@@ -54,7 +56,7 @@ export const TimerPill = memo(function TimerPill({ pill, still, icon = 'timer', 
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (!pill.urgent || still) { pulse.value = 1; return; }
-    pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 560 }), withTiming(1, { duration: 560 })), -1, false);
+    pulse.value = withRepeat(withSequence(withTiming(1.08, { duration: 520 }), withTiming(1, { duration: 520 })), -1, false);
     return () => { pulse.value = 1; };
   }, [pill.urgent, still]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
@@ -69,7 +71,7 @@ export const TimerPill = memo(function TimerPill({ pill, still, icon = 'timer', 
   );
 });
 
-/** Wishlist heart: a full-opacity pink outline when off, solid pink when on (Alex's outline weight). */
+/** Wishlist heart: a full-opacity pink outline when off, solid pink when on. */
 export function WishHeart({ on, size = 18 }: { on: boolean; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -79,58 +81,36 @@ export function WishHeart({ on, size = 18 }: { on: boolean; size?: number }) {
   );
 }
 
-/** A set piece chip: owned (full color + tick), on the shelf today (tap), away (silhouette, comes back). */
+/**
+ * A set piece chip: owned (full colour + tick), on the shelf today (tap),
+ * away (silhouette, LATER). Labels are a 12pt ribbon inside the chip.
+ */
 export const PieceChip = memo(function PieceChip({ piece, state, size = 58, selected = false, trying = false, onPress }: {
   piece: ShopSetPiece; state: PieceState; size?: number; selected?: boolean;
-  /** The item this try-on is about: a gold outline and a TRYING label. */
   trying?: boolean; onPress?: (piece: ShopSetPiece) => void;
 }) {
   const away = state === 'away';
-  const label = `${piece.name}, ${state === 'owned' ? 'owned' : state === 'in_shop' ? 'in the shop today' : 'comes back later'}`;
+  const label = `${piece.name}, ${trying ? 'trying it on' : state === 'owned' ? 'owned' : state === 'in_shop' ? 'in the shop today' : 'comes back later'}`;
+  const ribbon = trying ? 'TRYING' : away ? 'LATER' : null;
   return (
     <Pressable disabled={!onPress} onPress={() => onPress?.(piece)} accessibilityRole={onPress ? 'button' : 'image'}
-      accessibilityLabel={label} accessibilityState={{ selected }}
+      accessibilityLabel={label} accessibilityState={{ selected }} hitSlop={4}
       style={[styles.piece, { width: size, height: size },
         state === 'owned' && styles.pieceOwned, selected && styles.pieceOn, away && styles.pieceAway, trying && styles.pieceTrying]}>
       {piece.icon_url ? (
         <Image source={piece.icon_thumb_url ?? piece.icon_url} recyclingKey={`piece-${piece.id}`} cachePolicy="memory-disk"
-          style={{ width: size * 0.74, height: size * 0.74, opacity: away ? 0.55 : 1 }} contentFit="contain"
+          style={{ width: size * 0.72, height: size * (ribbon ? 0.6 : 0.72), opacity: away ? 0.55 : 1 }} contentFit="contain"
           tintColor={away ? '#8aa0b8' : undefined} />
       ) : null}
-      {state === 'owned' && <View style={styles.pieceBadge}><GameIcon name="check" size={18} /></View>}
-      {away && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pieceAwayText}>LATER</Text>}
-      {trying && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pieceTryingText}>TRYING</Text>}
+      {state === 'owned' && !trying && <View style={styles.pieceBadge}><GameIcon name="check" size={18} /></View>}
+      {ribbon && size >= 44 && (
+        <View style={[styles.pieceRibbon, trying && { backgroundColor: BRAND.gold }]}>
+          <Text maxFontSizeMultiplier={1} style={[styles.pieceRibbonText, trying && { color: BRAND.navy }]}>{ribbon}</Text>
+        </View>
+      )}
     </Pressable>
   );
 });
-
-/** A one-shot burst of dots in a colour (purchase land, heart pop). Nothing renders under Reduce Motion. */
-export function Burst({ color, still, size = 160, count = 14, trigger }: {
-  color: string; still: boolean; size?: number; count?: number; trigger: number;
-}) {
-  if (still || !trigger) return null;
-  return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
-      {Array.from({ length: count }, (_, i) => (
-        <BurstDot key={`${trigger}-${i}`} angle={(i / count) * Math.PI * 2} distance={size / 2} color={i % 3 === 0 ? BRAND.gold : color} />
-      ))}
-    </View>
-  );
-}
-
-function BurstDot({ angle, distance, color }: { angle: number; distance: number; color: string }) {
-  const t = useSharedValue(0);
-  useEffect(() => { t.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) }); }, []);
-  const style = useAnimatedStyle(() => ({
-    opacity: 1 - t.value,
-    transform: [
-      { translateX: Math.cos(angle) * distance * t.value },
-      { translateY: Math.sin(angle) * distance * t.value },
-      { scale: 1.2 - t.value * 0.6 },
-    ],
-  }));
-  return <Animated.View style={[styles.dot, { backgroundColor: color }, style]} />;
-}
 
 /** One diagonal sheen sweep (Epic tiles, the "complete the look" CTA). Runs once, never loops off screen. */
 export function Sheen({ still, delay = 300, width = 140 }: { still: boolean; delay?: number; width?: number }) {
@@ -149,39 +129,89 @@ export function Sheen({ still, delay = 300, width = 140 }: { still: boolean; del
   );
 }
 
-const styles = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  pillText: { fontFamily: FONT.display, fontSize: 13 },
-  piece: { borderRadius: 14, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2.5, borderColor: '#d7e6f5' },
-  pieceOwned: { borderColor: BRAND.green, backgroundColor: '#effbf2' },
-  pieceOn: { borderColor: BRAND.gold, backgroundColor: '#fff6d6' },
-  pieceAway: { borderStyle: 'dashed', backgroundColor: '#f2f5f9' },
-  pieceBadge: { position: 'absolute', top: -7, right: -7 },
-  pieceTrying: { borderColor: BRAND.gold, borderWidth: 3.5 },
-  pieceTryingText: { position: 'absolute', bottom: -9, backgroundColor: BRAND.gold, borderRadius: 5, paddingHorizontal: 4,
-    fontFamily: FONT.display, fontSize: 9, color: BRAND.navy, overflow: 'hidden' },
-  pieceAwayText: { position: 'absolute', bottom: 2, fontFamily: FONT.display, fontSize: 9, color: '#6f849c', letterSpacing: 0.5 },
-  dot: { position: 'absolute', width: 10, height: 10, borderRadius: 5 },
-  sheen: { position: 'absolute', top: -40, bottom: -40, width: 46, left: -46 },
-  plinthWrap: { position: 'absolute', left: '14%', right: '14%', bottom: '3%', aspectRatio: 200 / 64 },
-  rays: { position: 'absolute', alignSelf: 'center', top: '-25%', width: '150%', aspectRatio: 1, left: '-25%' },
-  arcCoin: { position: 'absolute', left: 0, top: 0 },
-  flash: { position: 'absolute', width: 240, height: 240 },
-  ring: { borderRadius: 120, borderWidth: 10 },
-});
-
+/**
+ * The shop's primary button (Dustin's yellow art with the 3D lip). The face
+ * mounts once and stays; only the label cross-fades between states, so there
+ * is never a frame with the face but no label. Width is known up front, so the
+ * label size never waits for a layout pass.
+ */
+export function ShopCta({ label, icon, width, onPress, loading = false, disabled = false, done = false, still, accessibilityHint }: {
+  label: string; icon?: GameIconName; width: number; onPress: () => void; loading?: boolean; disabled?: boolean;
+  /** A green confirmed state with a check (no washed-out disabled look). */
+  done?: boolean; still: boolean; accessibilityHint?: string;
+}) {
+  const height = width / BUTTON.aspectRatio;
+  const fontSize = Math.min(26, artButtonFontSize(width / BUTTON.labelAspectRatio));
+  const press = useSharedValue(1);
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (loading && !still) pulse.value = withRepeat(withSequence(withTiming(0.5, { duration: 480 }), withTiming(1, { duration: 480 })), -1, false);
+    else pulse.value = 1;
+  }, [loading, still]);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  const content = (
+    <Animated.View key={`${done ? 'done' : 'go'}:${label}`} entering={still ? undefined : FadeIn.duration(160)} exiting={still ? undefined : FadeOut.duration(120)}
+      style={[StyleSheet.absoluteFill, styles.ctaLabel, labelStyle]}>
+      {(done || icon) && <GameIcon name={done ? 'check' : icon!} size={Math.round(fontSize * 1.2)} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.2}
+        style={[styles.ctaText, { fontSize }]}>{label}</Text>
+    </Animated.View>
+  );
+  return (
+    <Pressable onPress={() => { if (!loading && !disabled) onPress(); }} disabled={disabled} accessibilityRole="button"
+      accessibilityLabel={label} accessibilityHint={accessibilityHint} accessibilityState={{ disabled, busy: loading }}
+      onPressIn={() => { if (!still) press.value = withTiming(0.97, { duration: 65 }); }}
+      onPressOut={() => { press.value = withTiming(1, { duration: 95 }); }}>
+      <Animated.View style={[{ width, height }, pressStyle]}>
+        {done ? (
+          <View style={[styles.ctaDone, { borderRadius: height / 2.4 }]}>{content}</View>
+        ) : (
+          <ImageBackground source={BUTTON_ART.yellow} resizeMode="contain" style={{ width, height }}>{content}</ImageBackground>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 /**
- * One stage kit for the hero, try-on and reveal (Alex style): a sky or the
- * worn backdrop, a soft radial light, a cel-shaded round plinth with a rarity
- * rim light, and a contact shadow where the tail meets the plinth. Children
- * (the Playercard) render between the plinth and the light.
+ * The shop's compact toast: one line, docked just above the home indicator,
+ * never over tile names or headers. Max 48pt tall.
+ */
+export function ShopToast({ message, icon = 'check', still }: { message: string | null; icon?: GameIconName; still: boolean }) {
+  const insets = useSafeAreaInsets();
+  if (!message) return null;
+  return (
+    <Animated.View key={message} entering={still ? undefined : FadeInDown.duration(180)} exiting={still ? undefined : FadeOutDown.duration(160)}
+      pointerEvents="none" style={[styles.toast, { bottom: Math.max(8, insets.bottom - 6) }]} accessibilityLiveRegion="polite">
+      <GameIcon name={icon} size={20} />
+      <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.toastText}>{message}</Text>
+    </Animated.View>
+  );
+}
+
+/** A toast message that clears itself (one at a time). */
+export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), ms);
+    return () => clearTimeout(t);
+  }, [msg]);
+  return [msg, setMsg];
+}
+
+/**
+ * One stage kit for the hero, try-on and reveal (Alex style):
+ * - the sky, or the worn backdrop, behind everything
+ * - a soft white light (rarity colour lives only in the plinth rim, so commons never go olive)
+ * - a cel-shaded round plinth with a top-left highlight band and a gloss tick
+ * Children (the Playercard, which draws its own bobbing contact shadow) sit on top.
  */
 export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', rays = false, still, children }: {
-  rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night'; rays?: boolean; still: boolean; children?: React.ReactNode;
+  rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night'; rays?: boolean; still: boolean; children?: ReactNode;
 }) {
-  const sky = tone === 'night' ? ['#0f3b7a', '#0a2a5c'] as const : ['#dff3ff', '#9fd6f8'] as const;
+  const sky = tone === 'night' ? ['#123f80', '#0a2a5c'] as const : ['#e3f4ff', '#a4d8f8'] as const;
   return (
     <View style={StyleSheet.absoluteFill}>
       {backdropUrl ? (
@@ -190,25 +220,27 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky
         <LinearGradient colors={[...sky]} style={StyleSheet.absoluteFill} />
       )}
       {rays && <Rays still={still} />}
-      {/* Soft light: white core fading to the rarity colour, never a flat disc. */}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id="light" cx="50%" cy="46%" r="46%">
-            <Stop offset="0" stopColor="#ffffff" stopOpacity={tone === 'night' ? 0.55 : 0.75} />
-            <Stop offset="0.65" stopColor={rim} stopOpacity={0.22} />
-            <Stop offset="1" stopColor={rim} stopOpacity={0} />
+          <RadialGradient id="light" cx="50%" cy="44%" r="46%">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={tone === 'night' ? 0.42 : 0.7} />
+            <Stop offset="0.7" stopColor="#ffffff" stopOpacity={0.12} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Ellipse cx="50" cy="46" rx="46" ry="44" fill="url(#light)" />
+        <Ellipse cx="50" cy="44" rx="46" ry="44" fill="url(#light)" />
       </Svg>
       <View pointerEvents="none" style={styles.plinthWrap}>
         <Svg width="100%" height="100%" viewBox="0 0 200 64">
-          <Ellipse cx="100" cy="36" rx="94" ry="24" fill="#2f6ea6" stroke="#05346e" strokeWidth={3} />
-          <Ellipse cx="100" cy="27" rx="94" ry="22" fill="#cfe8fa" stroke="#05346e" strokeWidth={3} />
-          <Path d="M10 27 A90 20 0 0 1 190 27" fill="none" stroke={rim} strokeWidth={4} strokeOpacity={0.95} />
-          <Ellipse cx="100" cy="29" rx="78" ry="15" fill="#e8f5ff" />
-          {/* Contact shadow under the tail (right of centre, where the tail rests). */}
-          <Ellipse cx="116" cy="29" rx="34" ry="7" fill="#05346e" fillOpacity={0.24} />
+          {/* Side band, then the top face. Dark slate outlines, flat cel fills. */}
+          <Ellipse cx="100" cy="36" rx="94" ry="24" fill="#2b679e" stroke="#123a63" strokeWidth={3} />
+          <Path d="M8 36 A92 22 0 0 0 192 36" fill="none" stroke="#3f84bf" strokeWidth={5} strokeOpacity={0.9} />
+          <Ellipse cx="100" cy="27" rx="94" ry="22" fill="#d6ecfb" stroke="#123a63" strokeWidth={3} />
+          {/* Rarity rim light on the back edge only. */}
+          <Path d="M12 25 A90 19 0 0 1 188 25" fill="none" stroke={rim} strokeWidth={4.5} />
+          {/* Top-left cel highlight band and a gloss tick. */}
+          <Path d="M30 22 A70 13 0 0 1 120 12" fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" strokeOpacity={0.85} />
+          <Path d="M134 13 L146 14" stroke="#ffffff" strokeWidth={4} strokeLinecap="round" />
         </Svg>
       </View>
       {children}
@@ -231,12 +263,15 @@ function Rays({ still }: { still: boolean }) {
   }).join(' ');
   return (
     <Animated.View pointerEvents="none" style={[styles.rays, style]}>
-      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill="#ffffff" fillOpacity={0.09} /></Svg>
+      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill="#ffffff" fillOpacity={0.1} /></Svg>
     </Animated.View>
   );
 }
 
-/** Coins arc from the balance pill into the stage (the purchase payoff). */
+/**
+ * Coins pour from the balance pill DOWN into the stage, inside the sheet,
+ * each with a sparkle trail. Lands on the stage centre for the absorb pop.
+ */
 export function CoinArc({ from, to, count = 7, still, trigger }: {
   from: { x: number; y: number }; to: { x: number; y: number }; count?: number; still: boolean; trigger: number;
 }) {
@@ -250,38 +285,106 @@ export function CoinArc({ from, to, count = 7, still, trigger }: {
 
 function ArcCoin({ i, from, to }: { i: number; from: { x: number; y: number }; to: { x: number; y: number } }) {
   const t = useSharedValue(0);
-  useEffect(() => { t.value = withDelay(i * 55, withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) })); }, []);
-  const lift = 80 + (i % 3) * 22;
-  const style = useAnimatedStyle(() => {
-    const x = from.x + (to.x - from.x) * t.value + (i - 3) * 6 * t.value;
-    const y = from.y + (to.y - from.y) * t.value - lift * 4 * t.value * (1 - t.value);
-    return { opacity: t.value < 0.95 ? 1 : (1 - t.value) * 20, transform: [{ translateX: x - 11 }, { translateY: y - 11 }, { scale: 1 - t.value * 0.35 }] };
+  const trail = useSharedValue(0);
+  useEffect(() => {
+    t.value = withDelay(i * 55, withTiming(1, { duration: 480, easing: Easing.in(Easing.quad) }));
+    trail.value = withDelay(i * 55 + 70, withTiming(1, { duration: 480, easing: Easing.in(Easing.quad) }));
+  }, []);
+  // Bulges sideways (never up), so the pour stays inside the sheet.
+  const side = (i % 2 ? 1 : -1) * (30 + (i % 3) * 14);
+  const at = (k: number) => {
+    'worklet';
+    return { x: from.x + (to.x - from.x) * k + side * 4 * k * (1 - k), y: from.y + (to.y - from.y) * k };
+  };
+  const coin = useAnimatedStyle(() => {
+    const p = at(t.value);
+    return { opacity: t.value < 0.97 ? 1 : 0, transform: [{ translateX: p.x - 11 }, { translateY: p.y - 11 }, { scale: 1 - t.value * 0.3 }] };
   });
-  return <Animated.View style={[styles.arcCoin, style]}><GameIcon name="coin" size={22} /></Animated.View>;
+  const spark = useAnimatedStyle(() => {
+    const p = at(trail.value);
+    return { opacity: trail.value > 0 && trail.value < 0.95 ? 0.9 : 0, transform: [{ translateX: p.x - 4 }, { translateY: p.y - 4 }] };
+  });
+  return (
+    <>
+      <Animated.View style={[styles.spark, spark]} />
+      <Animated.View style={[styles.arcCoin, coin]}><GameIcon name="coin" size={22} /></Animated.View>
+    </>
+  );
 }
 
-/** A rarity ring and starburst that flash behind the shark when a piece lands. */
+/**
+ * When a piece lands: a white stage flash, a full-opacity starburst with a
+ * white core in the rarity colour, a thick double ring, and 8 sparkles.
+ */
 export function LandFlash({ color, still, trigger }: { color: string; still: boolean; trigger: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (still || !trigger) return;
     t.value = 0;
-    t.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+    t.value = withTiming(1, { duration: 760, easing: Easing.out(Easing.cubic) });
   }, [trigger]);
-  const ring = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : 1 - t.value, transform: [{ scale: 0.4 + t.value * 1.3 }] }));
-  const burst = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : Math.max(0, 1 - t.value * 1.4), transform: [{ scale: 0.6 + t.value * 0.9 }, { rotate: `${t.value * 40}deg` }] }));
+  const flash = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : Math.max(0, 0.7 - t.value * 3) }));
+  const ring1 = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : 1 - t.value, transform: [{ scale: 0.35 + t.value * 1.2 }] }));
+  const ring2 = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : Math.max(0, 1 - t.value * 1.3), transform: [{ scale: 0.2 + t.value * 0.95 }] }));
+  const burst = useAnimatedStyle(() => ({ opacity: t.value === 0 ? 0 : Math.max(0, 1 - t.value * 1.25), transform: [{ scale: 0.55 + t.value * 0.8 }, { rotate: `${t.value * 35}deg` }] }));
   if (still || !trigger) return null;
   const star = Array.from({ length: 16 }, (_, i) => {
-    const r = i % 2 === 0 ? 96 : 52;
+    const r = i % 2 === 0 ? 98 : 50;
     const a = (i / 16) * Math.PI * 2;
     return `${i === 0 ? 'M' : 'L'}${100 + Math.cos(a) * r} ${100 + Math.sin(a) * r}`;
   }).join(' ') + ' Z';
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#ffffff' }, flash]} />
       <Animated.View style={[styles.flash, burst]}>
-        <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={star} fill={color} fillOpacity={0.55} /></Svg>
+        <Svg width="100%" height="100%" viewBox="0 0 200 200">
+          <Path d={star} fill={color} stroke="#ffffff" strokeWidth={3} />
+          <Ellipse cx="100" cy="100" rx="34" ry="34" fill="#ffffff" />
+        </Svg>
       </Animated.View>
-      <Animated.View style={[styles.flash, styles.ring, { borderColor: color }, ring]} />
+      <Animated.View style={[styles.flash, styles.ring, { borderColor: color }, ring1]} />
+      <Animated.View style={[styles.flash, styles.ring, { borderColor: '#ffffff', borderWidth: 6 }, ring2]} />
+      {Array.from({ length: 8 }, (_, i) => <Sparkle key={`${trigger}-${i}`} i={i} color={color} />)}
     </View>
   );
 }
+
+function Sparkle({ i, color }: { i: number; color: string }) {
+  const t = useSharedValue(0);
+  useEffect(() => { t.value = withDelay(60, withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) })); }, []);
+  const a = (i / 8) * Math.PI * 2 + 0.2;
+  const style = useAnimatedStyle(() => ({
+    opacity: 1 - t.value,
+    transform: [{ translateX: Math.cos(a) * 130 * t.value }, { translateY: Math.sin(a) * 110 * t.value }, { rotate: '45deg' }, { scale: 1.3 - t.value * 0.7 }],
+  }));
+  return <Animated.View style={[styles.sparkle, { backgroundColor: i % 2 ? '#ffffff' : color }, style]} />;
+}
+
+const styles = StyleSheet.create({
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  pillText: { fontFamily: FONT.display, fontSize: 13 },
+  piece: { borderRadius: 14, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: '#d7e6f5', overflow: 'hidden' },
+  pieceOwned: { borderColor: BRAND.green, backgroundColor: '#effbf2', overflow: 'visible' },
+  pieceOn: { borderColor: BRAND.gold, backgroundColor: '#fff6d6' },
+  pieceAway: { borderStyle: 'dashed', backgroundColor: '#f2f5f9' },
+  pieceTrying: { borderColor: BRAND.gold, borderWidth: 3.5 },
+  pieceBadge: { position: 'absolute', top: -7, right: -7 },
+  pieceRibbon: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 16, backgroundColor: '#8aa0b8', alignItems: 'center', justifyContent: 'center' },
+  pieceRibbonText: { fontFamily: FONT.display, fontSize: 12, lineHeight: 15, color: BRAND.white, letterSpacing: 0.4 },
+  sheen: { position: 'absolute', top: -40, bottom: -40, width: 46, left: -46 },
+  ctaLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingBottom: 4 },
+  ctaText: { flexShrink: 1, textAlign: 'center', color: 'white', fontFamily: FONT.display, textTransform: 'uppercase',
+    textShadowColor: 'rgba(0, 0, 0, .5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  ctaDone: { flex: 1, backgroundColor: BRAND.green, borderWidth: 3, borderColor: '#14532d', borderBottomWidth: 7, margin: 2 },
+  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '92%', minHeight: 40, maxHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(5,52,110,0.94)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white },
+  toastText: { flexShrink: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
+  plinthWrap: { position: 'absolute', left: '14%', right: '14%', bottom: '3%', aspectRatio: 200 / 64 },
+  rays: { position: 'absolute', alignSelf: 'center', top: '-25%', width: '150%', aspectRatio: 1, left: '-25%' },
+  arcCoin: { position: 'absolute', left: 0, top: 0 },
+  spark: { position: 'absolute', left: 0, top: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff6c2' },
+  flash: { position: 'absolute', width: 240, height: 240 },
+  ring: { borderRadius: 120, borderWidth: 8 },
+  sparkle: { position: 'absolute', width: 12, height: 12, borderRadius: 2 },
+});

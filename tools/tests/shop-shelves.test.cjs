@@ -137,12 +137,14 @@ test('accent ink stays readable', () => {
   assert.equal(shelves.sectionAccent({ type: 'event', color: '#ff7a00', ends_at: '' }), '#ff7a00');
 });
 
-test('round 3: tile lanes put one ribbon up and hide the rarity chip under it', () => {
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } }, true)), { ribbon: 'last_chance', showRarity: false });
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } }, true)), { ribbon: 'returning', showRarity: false });
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { is_new: true } }, true)), { ribbon: 'new', showRarity: false });
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { is_new: true } }, false)), { ribbon: null, showRarity: true }, 'NEW only on the first open of the day');
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, has_purchased: true, shop: { last_chance: true } }, true)), { ribbon: null, showRarity: true }, 'owned: no ribbon');
+test('round 4: one ribbon per tile; a quiet finale banner keeps tiles calm', () => {
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } })), { ribbon: 'last_chance' });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, is_new: true } }, true)), { ribbon: 'new' }, 'quiet: no red wall');
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true } }, true)), { ribbon: null });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } })), { ribbon: 'returning' });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, has_purchased: true, shop: { is_new: true } })), { ribbon: null }, 'owned: no ribbon');
+  assert.equal(shelves.newCountLabel(3), '3 new today');
+  assert.equal(shelves.newCountLabel(0), null);
 });
 
 test('round 3: honest wishlist copy', () => {
@@ -187,4 +189,67 @@ test('round 3: the wishlist store notifies once per real change', () => {
   s.set(1, false);
   assert.equal(s.has(1), false);
   off();
+});
+
+test('round 4: XP bar from the server, level-up shown, no percentages', () => {
+  const up = shelves.xpBar({ level: 4, experience: 380, needed: 400 }, { level: 5, experience: 100, needed: 500 }, 120);
+  assert.equal(up.levelUp, true);
+  assert.equal(up.level, 5);
+  assert.equal(up.from, 0);
+  assert.equal(up.to, 0.2);
+  assert.equal(up.caption, "Level up! You're level 5");
+  // Exactly reaching the next level (leftover 0) is a level-up too.
+  assert.equal(shelves.xpBar({ level: 4, experience: 280, needed: 400 }, { level: 5, experience: 0, needed: 500 }, 120).levelUp, true);
+  const step = shelves.xpBar({ level: 2, experience: 40, needed: 200 }, { level: 2, experience: 160, needed: 200 }, 120);
+  assert.deepEqual(plain(step), { level: 2, from: 0.2, to: 0.8, levelUp: false, caption: '+120 XP' });
+  assert.doesNotMatch(step.caption, /%/);
+  assert.equal(shelves.xpBar(undefined, undefined, 10), null);
+});
+
+test('round 4: claim-all reveals chain (each starts where the last ended)', () => {
+  const a = shelves.xpBar({ level: 2, experience: 40, needed: 200 }, { level: 2, experience: 160, needed: 200 }, 120);
+  const b = shelves.xpBar({ level: 2, experience: 160, needed: 200 }, { level: 3, experience: 120, needed: 300 }, 160);
+  assert.equal(a.to, 0.8);
+  assert.equal(b.levelUp, true);
+  assert.equal(b.level, 3);
+});
+
+test('round 4: a set reward survives an early close (queued once, dropped once)', () => {
+  let q = [];
+  q = shelves.queueReveal(q, { slug: 'pumpkin-patch' });
+  q = shelves.queueReveal(q, { slug: 'pumpkin-patch' });
+  assert.equal(q.length, 1, 'never twice');
+  q = shelves.queueReveal(q, { slug: 'snow-day' });
+  assert.deepEqual(plain(q.map(r => r.slug)), ['pumpkin-patch', 'snow-day']);
+  assert.deepEqual(plain(shelves.dropReveal(q, 'pumpkin-patch').map(r => r.slug)), ['snow-day']);
+});
+
+test('round 4: claim all with one failed claim keeps that set on the card', () => {
+  const sets = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }];
+  const out = shelves.settleClaims(sets, [{ xp: 1 }, null, { xp: 2 }]);
+  assert.deepEqual(plain(out.won.map(w => w.set.slug)), ['a', 'c']);
+  assert.deepEqual(plain(out.failed.map(s => s.slug)), ['b']);
+});
+
+test('round 4: never say "you weren\'t charged" without checking', () => {
+  assert.equal(shelves.afterBuyError(1000, 200, { coins: 800, owns: false }), 'bought');
+  assert.equal(shelves.afterBuyError(1000, 200, { coins: 1000, owns: true }), 'bought');
+  assert.equal(shelves.afterBuyError(1000, 200, { coins: 1000, owns: false }), 'not_charged');
+  assert.equal(shelves.afterBuyError(1000, 200, null), 'unknown');
+  assert.equal(shelves.afterBuyError(1000, 200, { coins: 950, owns: false }), 'unknown');
+});
+
+test('round 4: wear failure has its own message and retry, never a buy', () => {
+  const base = { owned: true, worn: false, vipLocked: false, short: 0, phase: 'bought', wear: 'idle', finishes: false, cost: 200 };
+  assert.deepEqual(plain(shelves.tryOnCta(base)), { label: 'Wear it now', action: 'wear', note: null });
+  const failed = shelves.tryOnCta({ ...base, wear: 'failed' });
+  assert.equal(failed.action, 'wear');
+  assert.doesNotMatch(failed.note, /charged/);
+  assert.equal(shelves.tryOnCta({ ...base, worn: true }).label, 'Wearing it');
+  const idle = { ...base, owned: false, phase: 'idle', wear: 'idle' };
+  assert.equal(shelves.tryOnCta(idle).label, 'Buy for 200');
+  assert.equal(shelves.tryOnCta({ ...idle, finishes: true }).label, 'Complete the look: 200');
+  assert.equal(shelves.tryOnCta({ ...idle, phase: 'confirm' }).action, 'buy');
+  assert.equal(shelves.tryOnCta({ ...idle, short: 120 }).label, 'Need 120 more coins');
+  assert.equal(shelves.tryOnCta({ ...idle, phase: 'unknown' }).action, 'retry_buy');
 });

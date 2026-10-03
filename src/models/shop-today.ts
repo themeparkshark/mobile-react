@@ -53,6 +53,8 @@ export type ShopItem = ItemType & {
   /** 256 px WebP tile art (shop:thumbnails); tiles fall back to the full art. */
   readonly icon_thumb_url?: string | null;
   readonly paper_thumb_url?: string | null;
+  /** Body pieces: the garment cropped from its paper layer, 256 px (no mini shark). */
+  readonly paper_torso_thumb_url?: string | null;
   readonly no_eye_url?: string | null;
 };
 
@@ -91,6 +93,10 @@ export interface ShopSection {
   readonly hero_id: number | null;
   readonly set_slugs: string[];
   readonly items: ShopItem[];
+  /** Unseen-by-you items on this shelf ("3 new today"). */
+  readonly new_count?: number;
+  /** The banner says LAST CHANCE once; tiles show no red ribbon. */
+  readonly quiet_tiles?: boolean;
 }
 
 export interface ShopToday {
@@ -113,10 +119,21 @@ export interface ShopToday {
   readonly wishlist_alerts?: boolean | null;
 }
 
+export interface XpState {
+  readonly level: number;
+  /** Progress inside the level. */
+  readonly experience: number;
+  /** What the level takes to finish. */
+  readonly needed: number;
+}
+
 export interface ShopSetReward {
   readonly slug: string;
   readonly name: string;
   readonly title: string | null;
   readonly xp: number;
   readonly item_ids?: number[];
+  /** Exact XP before and after this claim (server), so chained reveals and level-ups are true. */
+  readonly xp_before?: XpState;
+  readonly xp_after?: XpState;
 }

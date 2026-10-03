@@ -13,7 +13,7 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { formatCoins, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
@@ -23,38 +23,30 @@ import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 import { useWished } from './wishStore';
 
-const SHARK = require('../../../assets/images/screens/inventory/shark-colored-v2.png');
-
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
   last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
 
-/** Body pieces are drawn on the shark, then zoomed to the torso so the shirt fills the tile. */
-export function TileArt({ item, size, torso = true, thumb = true }: {
-  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_thumb_url?: string | null };
-  readonly size: number; readonly torso?: boolean; readonly thumb?: boolean;
+/**
+ * Tile art. Body pieces show the garment alone (the server crops it from the
+ * paper layer, then resizes: sharp, no mini shark); the flat icon is the
+ * fallback. Everything else uses the 256 px icon thumbnail.
+ */
+export function TileArt({ item, size, thumb = true }: {
+  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_torso_thumb_url?: string | null };
+  readonly size: number; readonly thumb?: boolean;
 }) {
   const h = size * 0.8;
-  if (item.item_type?.id === 4) {
-    const zoom = torso ? 2.5 : 1;
-    const paper = (thumb && item.paper_thumb_url) || item.paper_url;
-    return (
-      <View style={{ width: size, height: h, overflow: 'hidden' }}>
-        <View style={{ position: 'absolute', width: size * zoom, height: h * zoom,
-          left: size * (0.5 - 0.52 * zoom), top: h * (0.5 - 0.64 * zoom) }}>
-          <Image source={SHARK} style={StyleSheet.absoluteFill} contentFit="contain" />
-          <Image source={paper} recyclingKey={`paper-${item.id}`} cachePolicy="memory-disk" style={StyleSheet.absoluteFill} contentFit="contain" />
-        </View>
-      </View>
-    );
-  }
-  return <Image source={(thumb && item.icon_thumb_url) || item.icon_url} recyclingKey={`icon-${item.id}`} cachePolicy="memory-disk"
+  const source = item.item_type?.id === 4
+    ? (item.paper_torso_thumb_url || item.icon_url)
+    : ((thumb && item.icon_thumb_url) || item.icon_url);
+  return <Image source={source} recyclingKey={`art-${item.id}`} cachePolicy="memory-disk"
     style={{ width: size, height: h }} contentFit="contain" transition={120} />;
 }
 
-function ShopTile({ item, width, vipLocked, affordable, still, justBought, showNew, onOpen, onWish }: {
+function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet = false, onOpen, onWish }: {
   readonly item: ShopItem;
   readonly width: number;
   readonly vipLocked: boolean;
@@ -62,15 +54,15 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, showN
   readonly still: boolean;
   /** Bought this visit: a one-second OWNED slam, then the normal owned look. */
   readonly justBought?: boolean;
-  /** First open of the shop day: today's new items wear a NEW! ribbon. */
-  readonly showNew: boolean;
+  /** The banner already says LAST CHANCE: no red ribbon on this tile. */
+  readonly quiet?: boolean;
   readonly onOpen: (item: ShopItem) => void;
   readonly onWish: (item: ShopItem) => void;
 }) {
   const wished = useWished(item.id);
   const badge = wearableBadge(item);
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
-  const { ribbon, showRarity } = tileLanes(item, showNew);
+  const { ribbon } = tileLanes(item, quiet);
   const name = itemDisplayName(item);
   const plate = plateFor(item.rarity);
   const set = item.shop?.set;
@@ -78,9 +70,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, showN
 
   // Heart pop on toggle (skipped under Reduce Motion).
   const heart = useSharedValue(1);
-  const [firstHeart, setFirstHeart] = useState(true);
+  const firstHeart = useRef(true);
   useEffect(() => {
-    if (firstHeart) { setFirstHeart(false); return; }
+    if (firstHeart.current) { firstHeart.current = false; return; }
     if (still) return;
     heart.value = withSequence(withTiming(1.45, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 }));
   }, [wished]);
@@ -126,7 +118,21 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, showN
       <View style={[styles.art, { marginTop: ribbon ? 10 : 0 }, owned && { opacity: 0.6 }]}>
         <TileArt item={item} size={artSize} />
       </View>
-      <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={MAX_FONT}>{name}</Text>
+      {/* Reserved chip band: rarity and SET never sit on the art. */}
+      <View style={styles.band}>
+        {badge.label && !owned && (
+          <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
+            <Text maxFontSizeMultiplier={1.1} style={styles.rarityText}>{badge.label}</Text>
+          </View>
+        )}
+        {set && !owned && (
+          <View style={[styles.setChip, { backgroundColor: set.color ?? BRAND.gold }]}>
+            <GameIcon name="sparkle" size={12} />
+            <Text maxFontSizeMultiplier={1.1} style={styles.setChipText}>SET</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
       <View style={styles.priceRow}>
         {owned ? (
           slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
@@ -139,17 +145,6 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, showN
           </>
         )}
       </View>
-      {showRarity && badge.label && !owned && (
-        <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text>
-        </View>
-      )}
-      {set && !owned && (
-        <View style={[styles.setChip, { backgroundColor: set.color ?? BRAND.gold, top: (ribbon ? 22 : 12) + artSize * 0.8 - 20 }]}>
-          <GameIcon name="sparkle" size={13} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setChipText}>SET</Text>
-        </View>
-      )}
       {owned ? (
         <>
           {!slam && <View style={styles.corner}><GameIcon name="check" size={26} /></View>}
@@ -179,16 +174,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   ribbonText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 0.6 },
   art: { marginHorizontal: 6 },
-  name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 15, color: BRAND.navy, marginTop: 4, paddingHorizontal: 6,
-    textAlign: 'center', minHeight: 30 },
+  band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2 },
+  name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
   coin: { width: 17, height: 17, marginRight: 3 },
   price: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
   priceShort: { color: '#8b9bb0' },
   ownedText: { fontFamily: FONT.display, fontSize: 14, color: '#7c93ab' },
-  rarity: { position: 'absolute', top: 6, left: 6, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
+  rarity: { borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.4 },
-  setChip: { position: 'absolute', left: 6, flexDirection: 'row', alignItems: 'center', gap: 2,
+  setChip: { flexDirection: 'row', alignItems: 'center', gap: 2,
     borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
   setChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy },
   corner: { position: 'absolute', top: -9, right: -9 },

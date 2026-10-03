@@ -8,6 +8,7 @@ import {
   ImageBackground,
   Pressable,
   SafeAreaView,
+  useWindowDimensions,
   StyleSheet,
   Text,
   View,
@@ -23,6 +24,7 @@ import ShopShelves from './StoreScreen/ShopShelves';
 import { WishHeart } from './StoreScreen/shopUi';
 import WishlistSheet from './StoreScreen/WishlistSheet';
 import { useWishCount } from './StoreScreen/wishStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
@@ -250,20 +252,19 @@ function SingleBubble({
 }
 
 /** Gear (cosmetics for Shark Coins) and Supplies (in-app purchases), on the Shark Shop only. */
-function ShopTabs({ tab, onChange, coins, onWishlist, collapse }: {
+function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
   tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void;
   /** Shop v2: the balance lives in the tab row (no separate pill row). */
   coins?: number | null;
   onWishlist?: () => void;
-  /** 0..1 as the shop scrolls: a compact back button slides in when the title bar collapses. */
-  collapse?: SharedValue<number>;
+  /** Shop v2: the back button lives in the tab row, so the title bar can fold away by transform only. */
+  withBack?: boolean;
 }) {
   const wishes = useWishCount();
-  const back = useAnimatedStyle(() => ({ width: (collapse?.value ?? 0) * 44, opacity: collapse?.value ?? 0 }));
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
-    {collapse && <Reanimated.View style={[{ overflow: 'hidden', marginLeft: 10, marginTop: 10 }, back]}><BackButton /></Reanimated.View>}
-    <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }]} accessibilityRole="tablist">
+    {withBack && <View style={{ marginLeft: 12, marginTop: 10 }}><BackButton /></View>}
+    <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }, withBack && { marginLeft: 8 }]} accessibilityRole="tablist">
       {(['gear', 'supplies'] as const).map(key => (
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
           accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
@@ -326,13 +327,21 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   // Server clock minus device clock: timers never trust a changed device clock.
   const [clockSkew, setClockSkew] = useState(0);
   const [wishlistOpen, setWishlistOpen] = useState(false);
-  const [focusFromWishlist, setFocusFromWishlist] = useState<number | undefined>();
+  // Wishlist push or My Wishlist: a new nonce opens the try-on, even for the same item twice.
+  const [focusRequest, setFocusRequest] = useState<{ id: number; nonce: number } | null>(
+    () => (focusItem ? { id: focusItem, nonce: 1 } : null));
   const shopStill = useReducedGameMotion();
   // The title bar folds into the tab row after 40pt of shop scroll.
   const scrollY = useSharedValue(0);
   const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
   const [barH, setBarH] = useState(0);
-  const barStyle = useAnimatedStyle(() => (barH ? { height: barH - (barH - 54) * collapse.value, overflow: 'hidden' } : {}));
+  const { height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // The title bar folds away by transform and opacity only (no layout per scroll frame): the whole
+  // stack slides up by the bar's height, and is that much taller so the shelf fills the screen.
+  const fold = Math.max(0, barH - insets.top);
+  const stackStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -fold * collapse.value }] }));
+  const titleStyle = useAnimatedStyle(() => ({ opacity: 1 - collapse.value }));
   const reloadToday = useCallback(async (): Promise<boolean> => {
     if (!storeIdRef.current) return false;
     const next = await getShopToday(storeIdRef.current).catch(() => null);
@@ -421,6 +430,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
 
   // Supplies sit on the Shark Shop only; secret and park stores stay gear-only.
   const sharkShop = store === 'shark-shop' || currentStore?.name === 'Shark Shop';
+  // Shop v2 shelves (the title bar folds away as the shelf scrolls).
+  const v2 = !!today && sharkShop && tab === 'gear';
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
@@ -443,12 +454,14 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
     <>
       {purchaseModal}
       <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
-        onOpenItem={id => setFocusFromWishlist(id)} />
-      <Reanimated.View style={today && tab === 'gear' ? barStyle : undefined}
+        onOpenItem={id => setFocusRequest(r => ({ id, nonce: (r?.nonce ?? 0) + 1 }))} />
+      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: BRAND.blue }}>
+      <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: winH + fold }, stackStyle] : { flex: 1 }}>
+      <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       <Topbar purple={currentStore?.is_secret_store ?? false}>
         <TopbarColumn stretch={false}>
-          <BackButton />
+          {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>{currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
@@ -460,8 +473,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       </Reanimated.View>
       {sharkShop && (
         <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
-          <ShopTabs tab={tab} onChange={setTab} coins={today && tab === 'gear' ? Number(player?.coins ?? 0) : null}
-            onWishlist={() => setWishlistOpen(true)} collapse={today && tab === 'gear' ? collapse : undefined} />
+          <ShopTabs tab={tab} onChange={setTab} coins={v2 ? Number(player?.coins ?? 0) : null}
+            onWishlist={() => setWishlistOpen(true)} withBack={v2} />
         </View>
       )}
       {sharkShop && tab === 'supplies' && (
@@ -550,7 +563,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusItemId={focusFromWishlist ?? focusItem} scrollY={scrollY} key={focusFromWishlist ? `focus-${focusFromWishlist}` : 'shelves'} />
+                focusRequest={focusRequest} scrollY={scrollY} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (
@@ -602,6 +615,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           </SafeAreaView>
         </ImageBackground>
       )}
+      </Reanimated.View>
+      </View>
     </>
   );
 }
