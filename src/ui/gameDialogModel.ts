@@ -34,6 +34,8 @@ export type GameDialogOptions = {
   /** Tapping the scrim or the Android back button picks the cancel button. Default true when one exists. */
   readonly dismissible?: boolean;
   readonly haptic?: 'warning' | 'success' | 'none';
+  /** Equal choices shown in the order given (no primary is moved to the top). */
+  readonly equalChoices?: boolean;
 };
 
 export type DialogAction = GameDialogButton & { readonly index: number; readonly variant: GameButtonVariant };
@@ -51,11 +53,17 @@ const OK: GameDialogButton = { text: 'OK' };
  * danger button, other actions as secondaries (the same yellow button at 240
  * wide), and cancel last as a quiet ghost text action.
  */
-export function layoutActions(buttons: readonly GameDialogButton[] | undefined): DialogAction[] {
+export function layoutActions(buttons: readonly GameDialogButton[] | undefined, equalChoices = false): DialogAction[] {
   const list = buttons && buttons.length ? buttons : [OK];
   const indexed = list.map((button, index) => ({ ...button, index }));
   const cancel = indexed.filter(button => button.style === 'cancel');
   const rest = indexed.filter(button => button.style !== 'cancel');
+  if (equalChoices) {
+    return [
+      ...rest.map(button => ({ ...button, variant: button.variant ?? 'secondary' as GameButtonVariant })),
+      ...cancel.map(button => ({ ...button, variant: button.variant ?? 'ghost' as GameButtonVariant })),
+    ];
+  }
   const primaryIndex = rest.length ? rest[rest.length - 1].index : -1;
   const ordered = [...rest].sort((a, b) => (a.index === primaryIndex ? -1 : b.index === primaryIndex ? 1 : a.index - b.index));
   return [

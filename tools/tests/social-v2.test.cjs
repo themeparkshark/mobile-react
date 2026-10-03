@@ -123,7 +123,7 @@ test('Friends opens on Requests when someone is waiting; search says how many le
 });
 
 test('the social store shares answers and the waiting count, and only emits on change', () => {
-  const store = loadTs('src/screens/social/socialStore.ts', { react: { useSyncExternalStore: () => null } });
+  const store = loadTs('src/screens/social/socialStore.ts', { react: { useSyncExternalStore: () => null, createContext: value => ({ value }) } });
   let emits = 0;
   const off = store.subscribe(() => { emits += 1; });
   store.setStatus(5, 'friends');
@@ -138,6 +138,19 @@ test('the social store shares answers and the waiting count, and only emits on c
   store.adjustPendingIncoming(-1);
   store.adjustPendingIncoming(-5);
   assert.equal(store.getPendingIncoming(), 0, 'never below zero');
+  // A new-friend moment plays once, only on the surface that made it, and only briefly.
+  store.markJustFriended(9, 'tab-requests', 1000);
+  assert.equal(store.takeJustFriended(9, 'tab-friends', 1100), false, 'a hidden tab never steals it');
+  assert.equal(store.takeJustFriended(9, 'tab-requests', 1200), true);
+  assert.equal(store.takeJustFriended(9, 'tab-requests', 1300), false, 'once');
+  store.markJustFriended(9, 'bell', 1000);
+  assert.equal(store.takeJustFriended(9, 'bell', 5000), false, 'too late: a recycled row does not replay it');
+  // Hearts are per signed-in player and per local day.
+  store.setHearted(5, 34, true, new Date(2026, 9, 3, 10));
+  assert.equal(store.wasHearted(5, 34, new Date(2026, 9, 3, 20)), true);
+  assert.equal(store.wasHearted(5, 34, new Date(2026, 9, 4, 8)), false, 'a new day');
+  store.setHearted(5, 34, true, new Date(2026, 9, 4, 8));
+  assert.equal(store.wasHearted(6, 34, new Date(2026, 9, 4, 9)), false, 'another account on this device');
   store.resetSocialStore();
   assert.equal(store.getOverrides().size, 0);
   off();
@@ -168,4 +181,28 @@ test('audit regressions stay fixed in the screens', () => {
   assert.match(profile, /Block \$\{currentPlayer\.screen_name\} too\?/, 'report offers Block too');
   assert.doesNotMatch(profile, /Alert\.alert|explore\/base\.png/, 'B18: game dialogs and real art');
   assert.match(profile, /actions\.block/);
+});
+
+test('round 3: Find tells the truth, asks a grown-up, and never nudges discovery', () => {
+  const friends = read('src/screens/FriendsScreen.tsx');
+  assert.match(friends, /Sharks can add you only if they type your exact shark name\./);
+  assert.match(friends, /Sharks can find you by part of your name\./);
+  assert.match(friends, /if \(next && !\(await confirmGame\(\{\s*title: 'Ask a grown-up first'/, 'turning it on needs a grown-up');
+  assert.match(friends, /if \(saving\.current\) return;/, 'no racing toggles');
+  assert.doesNotMatch(friends, /Turn on Let sharks find me/, 'never suggest turning discovery on');
+  assert.match(friends, /Share your shark name!/);
+});
+
+test('round 3: strangers see Friends only, Block and Unblock have their own art, a No collapses', () => {
+  const profile = read('src/screens/PlayerScreen.tsx');
+  assert.match(profile, /Friends only/);
+  assert.match(profile, /friends\/block\.png/);
+  assert.match(profile, /ICON_SOURCES\.retry/);
+  assert.match(profile, /equalChoices: true/);
+  const bell = read('src/screens/NotificationsScreen.tsx');
+  assert.match(bell, /prepareForLayoutAnimationRender\(\)/);
+  assert.match(bell, /extraData=\{\[overrides, readIds\]\}/);
+  const row = read('src/components/Notification.tsx');
+  assert.match(row, /request_sticker\.png/);
+  assert.match(row, /useHop\(burst\)/);
 });

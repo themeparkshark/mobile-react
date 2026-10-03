@@ -10,7 +10,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Reanimated, {
   cancelAnimation, Easing, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -32,7 +32,7 @@ import { BRAND, FONT, GameIcon, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type InboxRow } from './social/socialModel';
 import { INK, Pill, SectionHeader, SocialBackdrop, SocialError } from './social/SocialKit';
-import { useFriendOverrides } from './social/socialStore';
+import { SurfaceContext, useFriendOverrides } from './social/socialStore';
 
 /** Mark-all-read only makes sense when something is unread. */
 export function showMarkAllRead(notifications: readonly { read_at?: string | null; id?: string }[], readIds?: ReadonlySet<string>): boolean {
@@ -90,6 +90,8 @@ export default function NotificationsScreen() {
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const pendingClears = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
 
   const loadFirst = useCallback(async () => {
     const result = await getNotificationsPage(1);
@@ -180,10 +182,26 @@ export default function NotificationsScreen() {
   }, [markingAll, refreshNotificationCount, showToast]);
 
   // A request answered No leaves the bell at once (the server deletes it too).
+  // A request answered No fades for 180 ms, then its space closes with a
+  // layout animation (instant with Reduce Motion). The server deletes it too.
+  const listRef = useRef<FlashList<InboxRow<NotificationType>>>(null);
+  const [gone, setGone] = useState<ReadonlySet<number>>(() => new Set());
+  useEffect(() => {
+    const declined = items.map(actorOf).filter((a): a is number => a !== null && overrides.get(a) === 'none' && !gone.has(a));
+    if (!declined.length) return;
+    const t = setTimeout(() => {
+      if (!reduced) {
+        listRef.current?.prepareForLayoutAnimationRender();
+        LayoutAnimation.configureNext({ duration: 180, update: { type: 'easeInEaseOut' }, delete: { type: 'easeInEaseOut', property: 'opacity' } });
+      }
+      setGone(prev => new Set([...prev, ...declined]));
+    }, reduced ? 0 : 180);
+    return () => clearTimeout(t);
+  }, [items, overrides, gone, reduced]);
   const shown = useMemo(() => items.filter(n => {
     const actor = actorOf(n);
-    return !(kindOf(n) === 'friend_request' && actor !== null && overrides.get(actor) === 'none');
-  }), [items, overrides]);
+    return !(kindOf(n) === 'friend_request' && actor !== null && gone.has(actor));
+  }), [items, gone]);
   const rows = useMemo(() => sectionize(shown, readIds), [shown, readIds]);
   const firstHeader = rows.find(r => r.type === 'header')?.key;
   const unreadCount = useMemo(() => items.filter(n => isUnread(n, readIds)).length, [items, readIds]);
@@ -201,17 +219,17 @@ export default function NotificationsScreen() {
     const row = (
       <Notification
         notification={item.item}
-        unread={isUnread(item.item, readIds)}
-        answer={actor ? overrides.get(actor) : undefined}
+        unread={isUnread(item.item, readRef.current)}
+        answer={actor ? overridesRef.current.get(actor) : undefined}
         onOpen={open}
         onClear={clear}
         onAnswered={answered}
       />
     );
-    return firstPaint.current && !reduced && index < 7
-      ? <Reanimated.View entering={FadeInDown.delay(index * 45).springify().damping(16)}>{row}</Reanimated.View>
-      : row;
-  }, [readIds, overrides, open, clear, answered, reduced, readAll, markingAll, firstHeader]);
+    // Always the same wrapper, so a row never remounts (and reloads its shark) when the entrance window ends.
+    return <Reanimated.View entering={firstPaint.current && !reduced && index < 7 ? FadeInDown.delay(index * 45).springify().damping(16) : undefined}>{row}</Reanimated.View>;
+  // Stable: read and answer state come through refs; extraData re-runs it, and memoized rows skip unchanged items.
+  }, [open, clear, answered, reduced, readAll, markingAll, firstHeader]);
 
   return (
     <>
@@ -220,6 +238,7 @@ export default function NotificationsScreen() {
         <TopbarColumn><TopbarText>Notifications</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
+      <SurfaceContext.Provider value="bell">
       <SocialBackdrop>
         {load === 'loading' && <SharkLoader state="loading" tone="onBlue" title="Checking your bell" />}
         {load === 'error' && (
@@ -229,8 +248,9 @@ export default function NotificationsScreen() {
         {load === 'ready' && (
           <>
             <FlashList
+              ref={listRef}
               data={rows}
-              extraData={overrides}
+              extraData={[overrides, readIds]}
               keyExtractor={row => row.key}
               getItemType={row => row.type}
               estimatedItemSize={NOTIFICATION_ROW_HEIGHT}
@@ -248,6 +268,7 @@ export default function NotificationsScreen() {
           </>
         )}
       </SocialBackdrop>
+      </SurfaceContext.Provider>
     </>
   );
 }

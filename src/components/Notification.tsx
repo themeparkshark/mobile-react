@@ -10,18 +10,18 @@
  * read state or friend answer changed re-renders.
  */
 import { Image } from 'expo-image';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, ZoomIn, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useFriendActions } from '../hooks/useFriends';
 import { DEFAULT_PORTRAIT } from './Avatar';
 import type { NotificationType } from '../models/notification-type';
 import { actorOf, canAnswerInline, kidMessage, kindOf, KIND_LOOK, shortAgo, spokenAgo, type FriendStatus } from '../screens/social/socialModel';
 import { INK, Pill, kit, useSquash } from '../screens/social/SocialKit';
-import { Burst } from '../screens/social/SocialFx';
-import { takeJustFriended } from '../screens/social/socialStore';
+import { Burst, useHop } from '../screens/social/SocialFx';
+import { SurfaceContext, takeJustFriended } from '../screens/social/socialStore';
 
-const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
+const REQUEST_STICKER = require('../../assets/images/screens/friends/request_sticker.png');
 import { BRAND, FONT, GameIcon, GameRichText } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { notificationMessage } from './notificationCopy';
@@ -49,6 +49,14 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const [heartBack, setHeartBack] = useState<'idle' | 'sent'>('idle');
   const [burst, setBurst] = useState(false);
   const endBurst = useCallback(() => setBurst(false), []);
+  const surface = useContext(SurfaceContext);
+  const hop = useHop(burst);
+  // A No fades and shrinks for 180 ms; the screen then collapses the row.
+  const leaving = kind === 'friend_request' && answer === 'none';
+  const fade = useAnimatedStyle(() => ({
+    opacity: withTiming(leaving ? 0 : 1, { duration: reduced ? 0 : 180 }),
+    transform: [{ scale: withTiming(leaving ? 0.94 : 1, { duration: reduced ? 0 : 180 }) }],
+  }), [leaving, reduced]);
   const overrides = new Map(answer && actor ? [[actor, answer]] : []);
   const answerable = canAnswerInline(notification, overrides);
   const answeredYes = kind === 'friend_request' && answer === 'friends';
@@ -63,14 +71,14 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   // The row only offers Yes/No while the request waits, so the answer starts from 'incoming'.
   // The Yes moment: a burst on this row, once.
   useEffect(() => {
-    if (answeredYes && actor !== null && takeJustFriended(actor)) setBurst(true);
-  }, [answeredYes, actor]);
+    if (answeredYes && actor !== null && takeJustFriended(actor, surface)) setBurst(true);
+  }, [answeredYes, actor, surface]);
   const actorFace = !faceFailed ? (notification.actor_avatar_url ?? null) : null;
   const canHeartBack = kind === 'compliment' && actor !== null && (answer ?? notification.friend_status) === 'friends';
   const target = actor ? { id: actor, screen_name: nameFrom(stored), friend_status: 'incoming' as const } : null;
 
   return (
-    <View style={styles.wrap}>
+    <Animated.View style={[styles.wrap, fade]}>
       <View style={[kit.card, styles.card, unread ? styles.cardUnread : styles.cardRead, answeredYes && styles.cardYes]}>
         {unread && <View style={[styles.stripe, { backgroundColor: look.color }]} />}
         <Pressable
@@ -87,17 +95,16 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
         >
           <Animated.View style={[styles.row, squash.style]}>
             {actorFace ? (
-              <View style={styles.faceWrap}>
+              <Animated.View style={[styles.faceWrap, hop]}>
                 <View style={[styles.badge, { backgroundColor: '#BFE5FF', borderBottomColor: look.lip }]}>
                   <Image source={{ uri: actorFace }} placeholder={DEFAULT_PORTRAIT} placeholderContentFit="contain" style={styles.faceArt}
                     contentFit="cover" contentPosition="top" recyclingKey={`${notification.id}-face`} transition={120} onError={() => setFaceFailed(true)} />
                 </View>
-                <View style={[styles.sticker, { backgroundColor: look.color }]}>
-                  {kind === 'friend_request' && !answeredYes
-                    ? <Image source={REQUEST_ART} style={{ width: 24, height: 24, borderRadius: 12 }} contentFit="cover" />
-                    : <GameIcon name={look.icon} size={18} />}
-                </View>
-              </View>
+                {kind === 'friend_request' && !answeredYes
+                  // A plain envelope that reads at sticker size.
+                  ? <Image source={REQUEST_STICKER} style={styles.stickerArt} contentFit="contain" accessibilityIgnoresInvertColors />
+                  : <View style={[styles.sticker, { backgroundColor: look.color }]}><GameIcon name={look.icon} size={18} /></View>}
+              </Animated.View>
             ) : (
               <View style={[styles.badge, { backgroundColor: look.color, borderBottomColor: look.lip }]}>
                 {art
@@ -137,7 +144,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
             <Text style={[styles.answeredText, { color: BRAND.greenLip }]} maxFontSizeMultiplier={1.2}>New friend!</Text>
           </Animated.View>
         )}
-        {burst && <Burst style={{ left: 47, top: 44 }} onDone={endBurst} />}
+        {burst && <Burst big={1.6} style={{ left: 47, top: 44 }} onDone={endBurst} />}
         {canHeartBack && target && (
           <View style={styles.answer}>
             <Pill compact tone={heartBack === 'sent' || actions.hearted(actor!) ? 'grey' : 'white'} icon="heart"
@@ -148,7 +155,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
           </View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -187,6 +194,7 @@ const styles = StyleSheet.create({
   answered: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 86, paddingBottom: 12 },
   faceWrap: { width: 62, height: 62 },
   faceArt: { width: 52, height: 60 },
+  stickerArt: { position: 'absolute', right: -4, bottom: -4, width: 32, height: 32 },
   sticker: {
     position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, borderWidth: 2.5, borderColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center',

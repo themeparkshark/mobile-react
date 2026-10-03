@@ -29,6 +29,8 @@ export interface PlayerType {
   readonly pending_friend_requests_count?: number;
   /** "Let sharks find me" (on /me only; off by default). */
   readonly discoverable?: boolean;
+  /** self | friend | public: how much of another player's profile I may see. */
+  readonly profile_access?: 'self' | 'friend' | 'public';
   readonly is_subscribed: boolean;
   readonly keys: number | null;
   readonly last_read_notifications_at: string;

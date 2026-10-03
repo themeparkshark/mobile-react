@@ -22,9 +22,9 @@ import TopbarText from '../components/Topbar/TopbarText';
 import VisitedParks from '../components/VisitedParks';
 import { AuthContext } from '../context/AuthProvider';
 import { useFriendActions } from '../hooks/useFriends';
-import { confirmGame, gameAlert, showGameDialog } from '../ui';
+import { GameIcon, ICON_SOURCES, confirmGame, gameAlert, showGameDialog } from '../ui';
 import { effectiveStatus } from './social/socialModel';
-import { takeJustFriended, useFriendOverrides } from './social/socialStore';
+import { SurfaceContext, takeJustFriended, useFriendOverrides } from './social/socialStore';
 import { Burst } from './social/SocialFx';
 import { Pill, kit } from './social/SocialKit';
 import { BRAND } from '../ui/tokens';
@@ -102,7 +102,9 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
       title: `Tell us about ${currentPlayer.screen_name}`,
       message: 'A grown-up on our team will check it.',
       icon: 'info',
+      // Three equal choices.
       buttons: [{ text: 'Mean name' }, { text: 'Mean to me' }, { text: 'Something else' }, { text: 'Cancel', style: 'cancel' }],
+      equalChoices: true,
     });
     if (choice == null || choice > 2) return;
     try {
@@ -116,7 +118,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     }
   };
 
-  // Friendly actions first; Unfriend always last. Adding or answering a friend
+  // Friendly actions first, then Unfriend, then Block. Adding or answering a friend
   // request lives in the FriendPanel above the row.
   const shortcuts: ProfileShortcut[] = currentPlayer
     ? [
@@ -152,11 +154,19 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           hint: `Removes ${currentPlayer.screen_name} from your friends`,
           onPress: () => { void actions.remove(currentPlayer); },
         }] : []),
+        {
+          // Block: a red no-entry sign. Unblock: the undo arrow. Neither is the No X (Social v2 r3).
+          key: 'block',
+          label: status === 'blocked' ? 'Unblock' : 'Block',
+          image: status === 'blocked' ? ICON_SOURCES.retry : require('../../assets/images/screens/friends/block.png'),
+          hint: `${status === 'blocked' ? 'Unblocks' : 'Blocks'} ${currentPlayer.screen_name}`,
+          onPress: () => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); },
+        },
       ]
     : [];
 
   return (
-    <>
+    <SurfaceContext.Provider value={`profile-${player}`}>
       {purchaseModal}
       <Topbar>
         <TopbarColumn stretch={false}>
@@ -242,8 +252,22 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 <ProfileShortcuts items={shortcuts} />
               </View>
               <StatusBadges isVip={!!currentPlayer.is_subscribed} isVerified={!!currentPlayer.verified_at} own={false} />
-              <Heading text="Statistics" />
-              <Stats player={currentPlayer} hideBalances={!isFriend} />
+              {!isFriend && (currentPlayer.profile_access ?? 'public') !== 'self' ? (
+                // Social v2 r3: strangers see who they are, not a wall of zeros.
+                <View style={[kit.card, { marginTop: 18, padding: 16, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
+                  accessible accessibilityLabel={`Friends only. Become friends with ${currentPlayer.screen_name} to see their stats and parks.`}>
+                  <View><GameIcon name="trophy" size={52} /><View style={{ position: 'absolute', right: -6, bottom: -6 }}><GameIcon name="lock" size={26} /></View></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', textTransform: 'uppercase' }} maxFontSizeMultiplier={1.2}>Friends only</Text>
+                    <Text style={{ fontFamily: 'Knockout', fontSize: 17, color: BRAND.navySoft }} maxFontSizeMultiplier={1.3}>Become friends to see their stats and parks.</Text>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <Heading text="Statistics" />
+                  <Stats player={currentPlayer} hideBalances={!isFriend} />
+                </>
+              )}
               {/* Park history is for friends only; strangers see the shark, title, level and stats. */}
               {isFriend && parks.length > 0 && (
                 <>
@@ -278,23 +302,11 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                   </Text>
                 </Pressable>
               )}
-              <Pressable
-                onPress={() => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); }}
-                accessibilityRole="button"
-                accessibilityLabel={`${status === 'blocked' ? 'Unblock' : 'Block'} ${currentPlayer.screen_name}`}
-                style={{ alignSelf: 'center', marginTop: 4, minHeight: 44, paddingHorizontal: 16,
-                  justifyContent: 'center' }}
-              >
-                <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#526477',
-                  textDecorationLine: 'underline' }}>
-                  {status === 'blocked' ? 'Unblock this player' : 'Block this player'}
-                </Text>
-              </Pressable>
             </View>
           </View>
         </ScrollView>
       )}
-    </>
+    </SurfaceContext.Provider>
   );
 }
 
@@ -338,9 +350,10 @@ function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
 function FriendMoment({ status, name, onBurst }: { readonly status: string; readonly name: string; readonly onBurst: (on: boolean) => void }) {
   const { params } = useRoute() as { params?: { player?: number } };
   const id = Number(params?.player);
+  const surface = useContext(SurfaceContext);
   useEffect(() => {
-    if (status === 'friends' && id && takeJustFriended(id)) onBurst(true);
-  }, [status, id, onBurst]);
+    if (status === 'friends' && id && takeJustFriended(id, surface)) onBurst(true);
+  }, [status, id, onBurst, surface]);
   return status === 'friends' ? (
     <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#237A3B', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
       maxFontSizeMultiplier={1.2}>You and {name} are friends!</Text>
