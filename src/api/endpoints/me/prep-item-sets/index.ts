@@ -93,7 +93,8 @@ export interface PrepItemSetListItem {
   spare_count: number;
   recent_gift_count?: number;
   exchange_cost: number;
-  rewards_claimed: boolean;
+  /** Absent from the live list endpoint; getPrepItemSets fills it from the detail for finished sets. */
+  rewards_claimed?: boolean;
   starter_milestone: StarterMilestone | null;
   milestones?: SetMilestone[] | null;
   completion_rewards: {
@@ -109,7 +110,25 @@ export default async function getPrepItemSets(location?: LocationType): Promise<
   const { data } = await client.get<PrepItemSetsResponse>('/me/prep-item-sets', {
     params: { ...(location ? { lat: location.latitude, lng: location.longitude } : {}), timezone: deviceTimeZone() },
   });
-  return data.data;
+  return withClaimState(data.data, location);
+}
+
+/**
+ * The live list endpoint leaves `rewards_claimed` out (only the set detail sends it, as progress.rewards_claimed),
+ * so a finished, already-claimed set would read as claimable forever. For finished sets missing the field, ask the
+ * detail once. A server that sends the field costs no extra call; a failed detail keeps the entry as it came.
+ */
+export async function withClaimState(sets: PrepItemSetListItem[], location?: LocationType): Promise<PrepItemSetListItem[]> {
+  const unknown = sets.filter(set => set.is_complete && typeof set.rewards_claimed !== 'boolean');
+  if (!unknown.length) return sets;
+  const claimed = new Map<string, boolean>();
+  await Promise.all(unknown.map(async set => {
+    try {
+      const detail = await getPrepItemSet(set.slug, location);
+      if (typeof detail?.progress?.rewards_claimed === 'boolean') claimed.set(set.slug, detail.progress.rewards_claimed);
+    } catch { /* keep the list entry as sent */ }
+  }));
+  return sets.map(set => (claimed.has(set.slug) ? { ...set, rewards_claimed: claimed.get(set.slug)! } : set));
 }
 
 /**
