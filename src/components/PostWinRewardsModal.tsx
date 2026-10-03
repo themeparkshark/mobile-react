@@ -17,6 +17,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
 import Ribbon from './Ribbon';
@@ -37,7 +38,6 @@ import type { GameIconName } from '../ui/iconNames';
 import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 import { takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
-import { showToast } from '../utils/toast';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -233,11 +233,17 @@ export default function PostWinRewardsModal({
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
-  // Standings: the weekly goal note lands right as the coin reveal ends.
+  // Standings: the weekly goal note lands on this screen right as the coin reveal ends.
+  // It is drawn inside the modal (an app toast would sit under the native modal window).
+  const [goalNote, setGoalNote] = useState<{ text: string; big: boolean } | null>(null);
   useEffect(() => {
     if (!caught || !visible) return;
     const note = takeWinNote();
-    if (note) showToast(note.text, note.big ? 'reward' : 'success', note.big ? 4000 : 2200);
+    if (!note) return;
+    setGoalNote(note);
+    if (note.big) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    const timer = setTimeout(() => setGoalNote(null), note.big ? 4200 : 2600);
+    return () => clearTimeout(timer);
   }, [caught, visible]);
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
@@ -347,6 +353,18 @@ export default function PostWinRewardsModal({
       backdropColor="#05346e"
       backdropOpacity={0.6}
     >
+      {goalNote && (
+        <Animated.View entering={reducedMotion ? undefined : FadeInDown.springify().damping(14)} pointerEvents="none"
+          accessibilityLiveRegion="polite" accessibilityLabel={goalNote.text}
+          style={{ position: 'absolute', bottom: insets.bottom + 128, left: 16, right: 16, zIndex: 50, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 46, borderRadius: 23,
+            backgroundColor: goalNote.big ? '#ffcf3b' : '#ffffff', borderWidth: 3, borderBottomWidth: 5,
+            borderColor: goalNote.big ? '#d99a00' : '#7cc6f5' }}>
+            <GameIcon name={goalNote.big ? 'star' : 'ride'} size={26} />
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e' }}>{goalNote.text}</Text>
+          </View>
+        </Animated.View>
+      )}
       {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
       <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}

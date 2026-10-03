@@ -442,9 +442,11 @@ function Skeleton() {
   );
 }
 
-export default function StandingsBoardV2({ board, meId, onMissing }: {
+export default function StandingsBoardV2({ board, meId, onMissing, active = true }: {
   readonly board: StandingsBoardKey;
   readonly meId: number | null;
+  /** The chosen tab. Hidden boards stay mounted but stay quiet (no climb, no cards). */
+  readonly active?: boolean;
   /** The server has no v2 endpoint: show the legacy screen. */
   readonly onMissing: () => void;
 }) {
@@ -502,7 +504,11 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const react = useCallback(async (next: StandingsBoardModel) => {
+    // A hidden board saves its moments for when the kid opens it.
+    if (!activeRef.current) return;
     const seen = await readSeenRank(meId, next);
     const up = rankClimb(seen, next.me?.rank);
     writeSeenRank(meId, next);
@@ -560,6 +566,12 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => { load(false); }, [load]);
+  // Returning to this tab: refresh if stale and play any moment saved while hidden.
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (active && !wasActive.current) loadRef.current(false);
+    wasActive.current = active;
+  }, [active]);
   useEffect(() => { const t = setTimeout(() => { entered.current = true; }, 900); return () => clearTimeout(t); }, []);
 
   const items = useMemo(() => (model ? listItems(model) : []), [model]);
@@ -599,10 +611,12 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const scrollRef = useRef(scrollToMe);
   scrollRef.current = scrollToMe;
   useEffect(() => onStandingsDemo(event => {
+    if (!activeRef.current) return;
     if (event.type === 'scrollMe') scrollRef.current();
     if (event.type === 'park' && board === 'all_time') { chooseAllTimePark(event.parkId); setParkId(event.parkId); }
     if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
     if (event.type === 'card') setCard(cardRef.current);
+    if (event.type === 'refresh' && board === 'week') loadRef.current(true);
   }), [board]);
 
   const onScroll = useAnimatedScrollHandler(event => { scrollY.value = event.contentOffset.y; });
@@ -610,9 +624,13 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
   });
   const viewability = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  // Your row's visibility is tracked even while this tab is hidden, and applied when it shows.
+  const myRowSeen = useRef(false);
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    setMyRowVisible(viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe)));
+    myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
+    if (activeRef.current) setMyRowVisible(myRowSeen.current);
   }).current;
+  useEffect(() => { if (active) setMyRowVisible(myRowSeen.current); }, [active]);
 
   const renderItem: ListRenderItem<ListItem> = useCallback(({ item, index }) => {
     if (item.type === 'divider') return <Divider label={item.label} />;

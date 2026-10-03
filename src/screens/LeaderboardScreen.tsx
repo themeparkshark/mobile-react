@@ -136,9 +136,17 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
         if (activeTab !== index) playSound(whooshSound);
         setActiveTab(index);
       }} />
-      {/* Each board remounts for its own podium entrance; cached boards skip the loader. */}
+      {/* The three boards stay mounted (hidden when not chosen), so a tab switch never paints a
+          blank frame: faces, barrels and rows are already decoded. */}
       <View style={{ flex: 1 }}>
-        {key === 'hunt' ? <HomeHunt /> : <StandingsBoardV2 key={key} board={key} meId={meId} onMissing={onMissing} />}
+        {(['week', 'friends', 'all_time'] as const).map(board => (
+          <View key={board} pointerEvents={key === board ? 'box-none' : 'none'}
+            accessibilityElementsHidden={key !== board} importantForAccessibility={key === board ? 'auto' : 'no-hide-descendants'}
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: key === board ? 1 : 0, zIndex: key === board ? 1 : 0 }}>
+            <StandingsBoardV2 board={board} meId={meId} onMissing={onMissing} active={key === board} />
+          </View>
+        ))}
+        {key === 'hunt' && <HomeHunt />}
       </View>
     </StandingsShell>
   );
