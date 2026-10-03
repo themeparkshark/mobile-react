@@ -563,8 +563,8 @@ export default function ProfileScreen() {
                 {friends.length > 0 && (
                   <>
                     {/* Three rows at most: a plain map, no nested list. */}
-                    {friends.map((item) => (
-                      <FriendPlayer key={item.id} player={item} isFriend inset />
+                    {friends.map((friend) => (
+                      <FriendPlayer key={friend.id} player={friend} isFriend inset />
                     ))}
                     <View
                       style={{
