@@ -14,7 +14,7 @@
  * state (Add then "Take back?").
  */
 import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import { haptic } from '../../gamekit/Haptics';
@@ -31,6 +31,7 @@ import { SurfaceContext, takeJustFriended } from './socialStore';
 
 export const ROW_HEIGHT = 92;
 const ADD_ART = require('../../../assets/images/screens/friends/add_friend.png');
+const BLOCK_ART = require('../../../assets/images/screens/friends/block.png');
 const LOCK_MS = 600;
 
 function PlayerRow({ player, status, inset }: { readonly player: PlayerType; readonly status: FriendStatus; readonly inset?: boolean }) {
@@ -42,7 +43,8 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
   const [hearted, setHearted] = useState(() => actions.hearted(player.id));
   const [burst, setBurst] = useState(false);
   const [fresh, setFresh] = useState(false);
-  const [cardW, setCardW] = useState(360);
+  // Fixed from the window (no onLayout pass on every mount and recycle).
+  const cardW = Dimensions.get('window').width - (inset ? 60 : 28);
   const [flying, setFlying] = useState(false);
   const look = friendButton(status);
   const level = player.experience_level?.level;
@@ -94,7 +96,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
 
   return (
     <Animated.View style={[styles.wrap, inset && styles.wrapInset, popStyle]}>
-      <View onLayout={e => setCardW(e.nativeEvent.layout.width)} style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk, status === 'incoming' && styles.cardStack, justMade && styles.cardNew]}>
+      <View style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk, status === 'incoming' && styles.cardStack, justMade && styles.cardNew]}>
         <Pressable
           onPress={open}
           onPressIn={squash.onPressIn}
@@ -149,7 +151,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
             <Pill compact tone="gold" image={ADD_ART} label="Add" accessibilityLabel={look.a11y(player.screen_name)} onPress={guard(() => actions.add(me))} />
           )}
           {status === 'blocked' && (
-            <Pill compact tone="grey" icon="close" label="Blocked" accessibilityLabel={look.a11y(player.screen_name)} onPress={open} />
+            <Pill compact tone="grey" image={BLOCK_ART} label="Blocked" accessibilityLabel={look.a11y(player.screen_name)} onPress={open} />
           )}
         </View>
         {flying && <View style={styles.flyFrom}><FlyHeart dx={-(cardW - 62 - 46)} dy={0} onDone={endFly} /></View>}

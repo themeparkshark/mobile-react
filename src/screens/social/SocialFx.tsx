@@ -26,10 +26,12 @@ const PIECES: readonly { icon: GameIconName; angle: number; dist: number; size: 
   size: 18 + (i % 2) * 6,
 }));
 
-function Piece({ icon, angle, dist, size, delay }: { icon: GameIconName; angle: number; dist: number; size: number; delay: number }) {
+function Piece({ icon, angle, dist, size, delay, big }: { icon: GameIconName; angle: number; dist: number; size: number; delay: number; big: number }) {
   const t = useSharedValue(0);
+  dist *= big;
+  size = Math.round(size * (0.8 + 0.25 * big));
   useEffect(() => {
-    t.value = withDelay(delay, withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }));
+    t.value = withDelay(delay, withTiming(1, { duration: 650 + 250 * big, easing: Easing.out(Easing.cubic) }));
   }, [t, delay]);
   const style = useAnimatedStyle(() => ({
     opacity: t.value < 0.7 ? 1 : 1 - (t.value - 0.7) / 0.3,
@@ -44,17 +46,17 @@ function Piece({ icon, angle, dist, size, delay }: { icon: GameIconName; angle: 
 }
 
 /** Pops once where it is mounted; with Reduce Motion it draws nothing. */
-export const Burst = memo(function Burst({ style, onDone }: { readonly style?: StyleProp<ViewStyle>; readonly onDone?: () => void }) {
+export const Burst = memo(function Burst({ style, onDone, big = 1 }: { readonly style?: StyleProp<ViewStyle>; readonly onDone?: () => void; readonly big?: number }) {
   const reduced = useUiReducedMotion();
   const ring = useSharedValue(0);
   useEffect(() => {
     if (reduced) { const t = setTimeout(() => onDone?.(), 900); return () => clearTimeout(t); }
-    ring.value = withSequence(withTiming(1, { duration: 380 }), withTiming(2, { duration: 380 }, f => { if (f && onDone) runOnJS(onDone)(); }));
+    ring.value = withSequence(withTiming(1, { duration: 380 }), withTiming(2, { duration: 380 + 300 * (big - 1) }, f => { if (f && onDone) runOnJS(onDone)(); }));
     return undefined;
   }, [reduced, ring, onDone]);
   const ringStyle = useAnimatedStyle(() => ({
     opacity: ring.value < 1 ? 0.9 : 0.9 * (2 - ring.value),
-    transform: [{ scale: 0.3 + 0.9 * Math.min(1, ring.value) }],
+    transform: [{ scale: (0.3 + 0.9 * Math.min(1, ring.value)) * big }],
   }));
   return (
     <View pointerEvents="none" style={[styles.burst, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
@@ -62,7 +64,8 @@ export const Burst = memo(function Burst({ style, onDone }: { readonly style?: S
       {reduced ? null : (
         <>
           <Animated.View style={[styles.ring, ringStyle]} />
-          {PIECES.map((p, i) => <Piece key={i} {...p} delay={i * 18} />)}
+          {(big > 1 ? [...PIECES, ...PIECES.map(p => ({ ...p, angle: p.angle + 0.3, dist: p.dist * 0.6 }))] : PIECES)
+            .map((p, i) => <Piece key={i} {...p} big={big} delay={i * 14} />)}
         </>
       )}
     </View>
@@ -131,3 +134,17 @@ const styles = StyleSheet.create({
   flyCoin: { position: 'absolute', left: 2, top: 2 },
   faceRing: { borderWidth: 3, borderColor: INK, backgroundColor: '#BFE5FF', alignItems: 'center', justifyContent: 'center' },
 });
+
+/** A shark that hops in its circle: up, squash on landing, settle (a new friend). */
+export function useHop(active: boolean) {
+  const reduced = useUiReducedMotion();
+  const y = useSharedValue(0);
+  const sq = useSharedValue(0);
+  useEffect(() => {
+    if (!active || reduced) return;
+    y.value = withSequence(withTiming(-14, { duration: 160, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) }),
+      withTiming(-7, { duration: 120 }), withTiming(0, { duration: 120 }));
+    sq.value = withDelay(320, withSequence(withTiming(1, { duration: 70 }), withSpring(0, { damping: 6, stiffness: 300 })));
+  }, [active, reduced, y, sq]);
+  return useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { scaleX: 1 + 0.12 * sq.value }, { scaleY: 1 - 0.12 * sq.value }] }));
+}

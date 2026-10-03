@@ -143,6 +143,8 @@ test('dialog buttons: main action on top in gold, destructive in red, cancel las
   assert.deepEqual(plain(laid.map(a => [a.text, a.variant, a.index])), [
     ['I reached boarding', 'primary', 2], ['I left the line', 'secondary', 1], ['Keep playing', 'ghost', 0]]);
   assert.deepEqual(plain(dialogModel.layoutActions(undefined).map(a => [a.text, a.variant])), [['OK', 'primary']]);
+  assert.deepEqual(plain(dialogModel.layoutActions([{ text: 'A' }, { text: 'B' }, { text: 'C' }, { text: 'No', style: 'cancel' }], true).map(a => [a.text, a.variant])),
+    [['A', 'secondary'], ['B', 'secondary'], ['C', 'secondary'], ['No', 'ghost']], 'equal choices keep their order');
   assert.deepEqual(plain(dialogModel.layoutActions([{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive' }])
     .map(a => a.variant)), ['danger', 'ghost']);
   assert.deepEqual(plain(dialogModel.layoutActions([{ text: 'Close', style: 'cancel' }]).map(a => a.variant)), ['primary']);

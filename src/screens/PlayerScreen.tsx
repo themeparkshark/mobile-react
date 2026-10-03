@@ -19,7 +19,7 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import { AuthContext } from '../context/AuthProvider';
 import { useFriendActions } from '../hooks/useFriends';
-import { ICON_SOURCES, SharkLoader, confirmGame, gameAlert, showGameDialog } from '../ui';
+import { GameIcon, ICON_SOURCES, SharkLoader, confirmGame, gameAlert, showGameDialog } from '../ui';
 import { effectiveStatus } from './social/socialModel';
 import { SurfaceContext, takeJustFriended, useFriendOverrides } from './social/socialStore';
 import { Burst } from './social/SocialFx';
@@ -114,14 +114,14 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           image: ICON_SOURCES.info,
           onPress: async () => {
             if (!checkPermission(PermissionEnums.CreateReports)) return;
-            // The dialog shows its last button first: listed so they read Mean name, Mean to me, Something else.
-            const reasons = ['mean_to_me', 'something_else', 'inappropriate_username'] as const;
+            const reasons = ['inappropriate_username', 'mean_to_me', 'something_else'] as const;
             const choice = await showGameDialog({
               title: `Tell us about ${currentPlayer.screen_name}`,
               message: 'A grown-up on our team will check it.',
               icon: 'info',
               // Three equal choices.
-              buttons: [{ text: 'Mean to me', variant: 'secondary' }, { text: 'Something else', variant: 'secondary' }, { text: 'Mean name', variant: 'secondary' }, { text: 'Cancel', style: 'cancel' }],
+              buttons: [{ text: 'Mean name' }, { text: 'Mean to me' }, { text: 'Something else' }, { text: 'Cancel', style: 'cancel' }],
+              equalChoices: true,
             });
             if (choice == null || choice > 2) return;
             try {
@@ -138,7 +138,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           permission: PermissionEnums.CreateReports,
         },
         {
-          image: ICON_SOURCES.close,
+          // Block: a red no-entry sign. Unblock: the undo arrow. Neither is the No X.
+          image: status === 'blocked' ? ICON_SOURCES.retry : require('../../assets/images/screens/friends/block.png'),
           onPress: () => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); },
           text: status === 'blocked' ? 'Unblock' : 'Block',
         },
@@ -196,6 +197,17 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 {currentPlayer.verified_at && <View style={{ flex: 1 }}><Verified /></View>}
               </View>
             )}
+            {!isFriend && (currentPlayer.profile_access ?? 'public') !== 'self' ? (
+              // Strangers see who they are, not six zeros.
+              <View style={[kit.card, { padding: 16, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
+                accessible accessibilityLabel={`Friends only. Become friends with ${currentPlayer.screen_name} to see their stats and parks.`}>
+                <View><GameIcon name="trophy" size={52} /><View style={{ position: 'absolute', right: -6, bottom: -6 }}><GameIcon name="lock" size={26} /></View></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', textTransform: 'uppercase' }} maxFontSizeMultiplier={1.2}>Friends only</Text>
+                  <Text style={{ fontFamily: 'Knockout', fontSize: 17, color: BRAND.navySoft }} maxFontSizeMultiplier={1.3}>Become friends to see their stats and parks.</Text>
+                </View>
+              </View>
+            ) : (
             <View style={[kit.card, { padding: 12, backgroundColor: BRAND.cream }]}>
               <Heading text="Statistics" />
               <Stats player={currentPlayer} />
@@ -206,6 +218,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 </>
               )}
             </View>
+            )}
           </ScrollView>
         )}
       </SocialBackdrop>

@@ -179,3 +179,27 @@ test('audit regressions stay fixed in the screens', () => {
   assert.doesNotMatch(profile, /Alert\.alert|explore\/base\.png/, 'B18: game dialogs and real art');
   assert.match(profile, /actions\.block/);
 });
+
+test('round 3: Find tells the truth, asks a grown-up, and never nudges discovery', () => {
+  const friends = read('src/screens/FriendsScreen.tsx');
+  assert.match(friends, /Sharks can add you only if they type your exact shark name\./);
+  assert.match(friends, /Sharks can find you by part of your name\./);
+  assert.match(friends, /if \(next && !\(await confirmGame\(\{\s*title: 'Ask a grown-up first'/, 'turning it on needs a grown-up');
+  assert.match(friends, /if \(saving\.current\) return;/, 'no racing toggles');
+  assert.doesNotMatch(friends, /Turn on Let sharks find me/, 'never suggest turning discovery on');
+  assert.match(friends, /Share your shark name!/);
+});
+
+test('round 3: strangers see Friends only, Block and Unblock have their own art, a No collapses', () => {
+  const profile = read('src/screens/PlayerScreen.tsx');
+  assert.match(profile, /Friends only/);
+  assert.match(profile, /friends\/block\.png/);
+  assert.match(profile, /ICON_SOURCES\.retry/);
+  assert.match(profile, /equalChoices: true/);
+  const bell = read('src/screens/NotificationsScreen.tsx');
+  assert.match(bell, /prepareForLayoutAnimationRender\(\)/);
+  assert.match(bell, /extraData=\{\[overrides, readIds\]\}/);
+  const row = read('src/components/Notification.tsx');
+  assert.match(row, /request_sticker\.png/);
+  assert.match(row, /useHop\(burst\)/);
+});

@@ -4,10 +4,10 @@
  * pill buttons that squash on press (UI thread springs; instant with reduced
  * motion). Every touch target is at least 44 pt and every label at least 14 pt.
  */
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import GameIcon from '../../ui/GameIcon';
 import type { GameIconName } from '../../ui/iconNames';
 import { BRAND, FONT } from '../../ui/tokens';
@@ -122,7 +122,7 @@ export const SectionHeader = memo(function SectionHeader({ label, count, icon, r
       <View style={kit.sectionLeft} accessibilityRole="header" accessible accessibilityLabel={count ? `${label}, ${count}` : label}>
         {icon && <GameIcon name={icon} size={26} />}
         <Text style={kit.sectionText} maxFontSizeMultiplier={1.2}>{label}</Text>
-        {count != null && count > 0 && <View style={kit.sectionCount}><Text style={kit.sectionCountText}>{count}</Text></View>}
+        {count != null && count > 0 && <BouncyCount count={count} />}
       </View>
       {right}
     </View>
@@ -193,3 +193,16 @@ const kitError = StyleSheet.create({
     textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
   },
 });
+
+/** A header count that ticks with a little bounce when it changes. */
+function BouncyCount({ count }: { readonly count: number }) {
+  const reduced = useUiReducedMotion();
+  const b = useSharedValue(0);
+  const last = useRef(count);
+  useEffect(() => {
+    if (count !== last.current && !reduced) b.value = withSequence(withTiming(1, { duration: 110 }), withSpring(0, { damping: 6, stiffness: 260 }));
+    last.current = count;
+  }, [count, reduced, b]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.35 * b.value }] }));
+  return <Animated.View style={[kit.sectionCount, style]}><Text style={kit.sectionCountText}>{count}</Text></Animated.View>;
+}

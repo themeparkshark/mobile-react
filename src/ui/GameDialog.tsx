@@ -134,6 +134,7 @@ export function GameDialog({
   runButtonHandlers = true,
   avoidKeyboard = false,
   testID,
+  equalChoices = false,
 }: GameDialogProps) {
   const reducedMotion = useUiReducedMotion();
   const [mounted, setMounted] = useState(visible);
@@ -141,7 +142,7 @@ export function GameDialog({
   const chosen = useRef<number | null>(null);
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
-  const actions = layoutActions(buttons);
+  const actions = layoutActions(buttons, equalChoices);
   const request = { title, message, icon, buttons, dismissible };
   const titleLayout = dialogTitleLayout(title);
   useEffect(() => {
@@ -264,7 +265,7 @@ export function GameDialogHost() {
   }), []);
   if (!request) return null;
   return <GameDialog key={request.id} visible={visible} title={request.title} message={request.message}
-    icon={request.icon} buttons={request.buttons} dismissible={request.dismissible} haptic={request.haptic}
+    icon={request.icon} buttons={request.buttons} dismissible={request.dismissible} haptic={request.haptic} equalChoices={request.equalChoices}
     runButtonHandlers={false}
     onAnswer={index => { if (current.current) store.answer(current.current.id, index); }} />;
 }
