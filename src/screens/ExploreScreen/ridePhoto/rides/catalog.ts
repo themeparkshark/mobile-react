@@ -169,14 +169,14 @@ export function ridesSnappedLine(snapped: readonly RideKind[], ready: readonly R
 }
 
 /**
- * The rides stamp row: every ready ride (snapped or still open) and, after them, the unbuilt rides as locked
+ * The rides stamp row: every ready ride (snapped or still open) and, after them, the unbuilt rides as dim
  * silhouettes with no number. Wordless for kids.
  */
 export function rideStamps(snapped: readonly RideKind[], fresh: RideKind | null, ready: readonly RideKind[] = READY_RIDES)
-  : { kind: RideKind; state: 'new' | 'snapped' | 'open' | 'locked' }[] {
+  : { kind: RideKind; state: 'new' | 'snapped' | 'open' | 'soon' }[] {
   const have = new Set(snapped);
   return [
     ...ready.map(kind => ({ kind, state: kind === fresh ? 'new' as const : have.has(kind) ? 'snapped' as const : 'open' as const })),
-    ...ALL_RIDES.filter(kind => !ready.includes(kind)).map(kind => ({ kind, state: 'locked' as const })),
+    ...ALL_RIDES.filter(kind => !ready.includes(kind)).map(kind => ({ kind, state: 'soon' as const })),
   ];
 }

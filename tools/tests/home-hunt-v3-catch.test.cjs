@@ -432,7 +432,7 @@ test('round 4 variety: scene sky, season, photobombs and the rides-snapped line'
   assert.equal(rides.ridesSnappedLine([]).split(' of ')[1], String(takeable.size), 'denominator = rides pickRide can return');
   const stamps = plain(rides.rideStamps(['coaster'], 'flume'));
   assert.deepEqual(stamps.slice(0, 3).map(s => s.state), ['snapped', 'new', 'open']);
-  assert.equal(stamps.filter(s => s.state === 'locked').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are locks, no number');
+  assert.equal(stamps.filter(s => s.state === 'soon').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are dim coming-soon silhouettes, no number');
 });
 
 test('round 4 variety: every ride is a config with one paint for the live scene and the photo', () => {

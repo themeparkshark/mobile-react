@@ -628,15 +628,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
             {bonusXp ? <View style={styles.xpPill}><Text style={styles.xpText} numberOfLines={1}>+{bonusXp} XP</Text></View> : null}
           </Animated.View>}
-          {/* A ride the player never snapped: "New ride!" and a stamp row (the new ride pops, unbuilt rides are locks) */}
+          {/* A ride the player never snapped: "New ride!", the 3 ride stamps, "n of 3", then (after a divider) the
+              unbuilt rides as dim "coming soon" silhouettes, no locks and no number. No progress-bar fill. */}
           {newRide && <View style={styles.rideRow} pointerEvents="none"><Animated.View style={[styles.rideChip, rideStyle]}>
             <Text style={styles.rideText} numberOfLines={1}>New ride!</Text>
-            {newRide.stamps.map(stamp => stamp.state === 'locked'
-              ? <View key={stamp.kind} style={[styles.stamp, styles.stampLocked]}><GameIcon name="lock" size={9} /></View>
-              : <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
-                  <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
-                </View>)}
+            {newRide.stamps.filter(stamp => stamp.state !== 'soon').map(stamp => (
+              <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
+                <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
+              </View>))}
             <Text style={styles.rideCount} numberOfLines={1}>{newRide.line}</Text>
+            <View style={styles.rideDivider} />
+            {newRide.stamps.filter(stamp => stamp.state === 'soon').map(stamp => (
+              <View key={stamp.kind} style={styles.stampSoon}><GameIcon name="ride" size={10} /></View>))}
           </Animated.View></View>}
         </Animated.View>
       </>
@@ -687,10 +690,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   stampNew: { borderColor: '#ff8a00', transform: [{ scale: 1.15 }] },
   stampOpen: { opacity: 0.45 },
-  stampLocked: { backgroundColor: '#6f7f96', borderColor: '#3f4d63', width: 15, height: 15, borderRadius: 8, borderWidth: 1.5 },
+  // Coming soon: a dim ride silhouette at 60% of a stamp, no lock (there is no key in play).
+  stampSoon: { width: 12, height: 12, alignItems: 'center', justifyContent: 'center', opacity: 0.35 },
+  rideDivider: { width: 1.5, height: 14, marginHorizontal: 2, backgroundColor: 'rgba(255,255,255,0.45)' },
   stampArt: { width: 16, height: 12 },
-  rideCount: { color: '#0b2f5c', fontFamily: 'Knockout', fontSize: 14 },
+  rideCount: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   rideChip: { maxWidth: BADGE_WIDTH, flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
-  rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#0b2f5c', borderWidth: 2, borderColor: '#ffcf3b' },
+  rideText: { color: '#ffcf3b', fontFamily: 'Shark', fontSize: 13 },
 });
