@@ -196,7 +196,7 @@ const STAMPS: StampData[] = [
  {
   "id": 906,
   "slug": "park-hopper",
-  "name": "Park Hopper",
+  "name": "Hop Star",
   "category": "parks",
   "goal": "Visit 5 different parks",
   "metric": "",
@@ -218,7 +218,7 @@ const STAMPS: StampData[] = [
    "tickets": 20,
    "xp": 750,
    "coins": 0,
-   "title": "Park Hopper"
+   "title": "Hop Star"
   },
   "section": "parks",
   "icon_url": null,
@@ -661,7 +661,7 @@ const STAMPS: StampData[] = [
  {
   "id": 921,
   "slug": "shark-week",
-  "name": "Shark Week",
+  "name": "Shark Streak",
   "category": "streaks",
   "goal": "Catch a find 7 days in a row",
   "metric": "",
@@ -816,7 +816,7 @@ const STAMPS: StampData[] = [
  {
   "id": 926,
   "slug": "coin-master",
-  "name": "Coin Master",
+  "name": "Vault Boss",
   "category": "milestones",
   "goal": "Save up 10,000 coins",
   "metric": "",
@@ -838,7 +838,7 @@ const STAMPS: StampData[] = [
    "tickets": 25,
    "xp": 1000,
    "coins": 0,
-   "title": "Coin Master"
+   "title": "Vault Boss"
   },
   "section": "milestones",
   "icon_url": null,

@@ -121,7 +121,8 @@ test('art comes from the server in four variants; one small bundled fallback; fa
   assert.match(artView, /onLoad=\{onReady\}/);
   assert.match(read('src/screens/stampbook/StampTile.tsx'), /<StampArt stamp=\{stamp\} size="thumb"/);
   // The 768 px art for every stamp that will slam is prefetched after load.
-  assert.match(read('src/screens/StampBookScreen.tsx'), /\.filter\(s => s\.is_earned && s\.icon_url && \(!s\.reward_claimed \|\| !seen\?\.has\(String\(s\.id\)\)\)\)/);
+  // Gated on the seen set having loaded (otherwise every earned stamp would count as unseen).
+  assert.match(read('src/screens/StampBookScreen.tsx'), /\.filter\(s => s\.is_earned && s\.icon_url && \(!s\.reward_claimed \|\| \(!!seen && !seen\.has\(String\(s\.id\)\)\)\)\)/);
   assert.ok(!/^import .*preview/m.test(read('src/screens/StampBookScreen.tsx')));
 });
 
@@ -142,7 +143,16 @@ test('the slam: staged after the art loads (cap 350 ms), no Modal fade, navy ink
   assert.match(src, /<Pressable style=\{StyleSheet\.absoluteFill\} onPress=\{onClose\} accessible=\{false\}/);
   // Repeat opens of rare+ still get one foil sweep; the landed tilt matches the slam.
   assert.match(src, /if \(hasShine\(stamp\)\) \{ foil\.value = 0; foil\.value = withDelay\(300,/);
-  assert.match(src, /const tilt = useSharedValue\(stamp\.earned \? -3 : 0\);/);
+  assert.match(src, /const tilt = useSharedValue\(hover \? -12 : stamp\.earned \? -3 : 0\);/);
+  // Never an empty stage: art visible from the first frame, a fresh slam starts in its hover pose.
+  assert.match(src, /const fade = useSharedValue\(1\);/);
+  assert.match(src, /const hover = stamp\.earned && fresh && !reducedMotion;/);
+  // The ink settles, holds about 400 ms and fades away; the flash is badge-shaped; HUD above the sunburst.
+  assert.match(read('src/screens/stampbook/SlamFx.tsx'), /hit\.value < 0\.7 \? 0\.25 : 0\.25 \* \(1 - \(hit\.value - 0\.7\) \/ 0\.3\)/);
+  assert.match(src, /flash: \{ position: 'absolute', width: ART \* 0\.72, height: ART \* 0\.72, borderRadius: ART/);
+  assert.match(src, /hud: \{ zIndex: 3/);
+  assert.match(src, /useLayoutEffect\(\(\) => \{ setPhase\('idle'\); \}, \[stamp\.id\]\);/);
+  assert.match(src, /styles\.preload/);
 });
 
 test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh wallet, announced, one persistent button', () => {
@@ -159,7 +169,9 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   // Status is not a button, and the action button lives in the Frame (not remounted per chained stamp).
   assert.match(src, /accessibilityRole="text" accessibilityLabel=\{status\}/);
   assert.match(src, /<Content key=\{stamp\.id\} ref=\{content\}/);
-  assert.ok(src.indexOf('<GameButton label={action?.label') > src.indexOf('<Content key={stamp.id}'));
+  assert.ok(src.indexOf("<GameButton label={phase === 'claiming'") > src.indexOf('<Content key={stamp.id}'));
+  // Pending stays yellow: the button is not disabled while the claim is in flight.
+  assert.match(src, /disabled=\{!action \|\| phase === 'cascading' \|\| phase === 'gotIt'\}/);
 });
 
 test('clocks truly rest: JS-kicked sweeps, per-tile gate, tags mounted only where needed, stable open', () => {
@@ -233,10 +245,19 @@ test('locked bleed never reads as earned; postmark sits in the free corner; rari
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'nope' })).freeCorner, 'tr');
   const tile = read('src/screens/stampbook/StampTile.tsx');
   assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, stamp\.claimable \|\| isNew \|\| almost\)\]\]\}/);
-  assert.match(tile, /5: \{ outline: '#8A5A00', page: '#FFC21A'/);
+  // App-wide ramp (mirrors dexLook RARITY_LOOK on claude/hh3-menu-dex): gold is Legendary only, gems give a shape cue.
+  const rarity = loadTs('src/screens/stampbook/rarity.ts');
+  assert.deepEqual(plain(['common', 'uncommon', 'rare', 'epic', 'legendary'].map(k => rarity.STAMP_RARITY[k].frame)),
+    ['#8a9bb0', '#2fb35d', '#9b4dff', '#ff5a2b', '#f5b400']);
+  assert.deepEqual(plain(Object.values(rarity.STAMP_RARITY).map(r => r.gems)), [1, 2, 3, 4, 5]);
+  assert.match(tile, /Array\.from\(\{ length: look\.gems \}/);
+  assert.match(read('src/screens/stampbook/StampCard.tsx'), /backgroundColor: tone\.chip, borderColor: tone\.frame/);
+  // Postmark always in a bottom corner (tags own the top).
+  const tileMod = read('src/screens/stampbook/StampTile.tsx');
+  assert.match(tileMod, /return free === 'tr' \? 'br' : free === 'tl' \? 'bl' : free;/);
   const card = read('src/screens/stampbook/StampCard.tsx');
   assert.match(card, /<View pointerEvents="none" style=\{\[styles\.stampHere/);
-  assert.match(card, /<InkEdge width=\{ART\}/);
+  assert.match(card, /<InkEdge width=\{ART \* 0\.68\}/);
   assert.match(card, /<SoftShadow /);
 });
 

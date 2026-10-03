@@ -16,7 +16,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import type { ReactNode } from 'react';
-import { rarityToneByName } from '../../constants/coinTiers';
+import { stampRarity } from './rarity';
 import GameIcon from '../../ui/GameIcon';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -44,8 +44,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
   const fx = useBookFx();
   const press = useSharedValue(1);
   const localY = useSharedValue(0);
-  const tone = rarityToneByName(stamp.rarity);
-  const legendary = stamp.earned && stamp.rarity === 'legendary';
+  const look = stampRarity(stamp.rarity);
   const art = Math.round(size * 0.78);
   const req = requirement(stamp);
   const almost = almostThere(stamp);
@@ -55,7 +54,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
   const shine = useTileClock(fx.shine, top, height, 1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const rank = rarityRank(stamp.rarity);
-  const ring = stamp.earned ? RARITY_RING[rank] : null;
+  const ring = stamp.earned && rank > 1 ? { outline: look.frame, page: look.chip, width: rank >= 5 ? 3.5 : 3 } : null;
 
   const onLayout = (e: LayoutChangeEvent) => { localY.value = e.nativeEvent.layout.y; };
 
@@ -70,7 +69,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
         style={styles.fill}
       >
         {/* Alex card: lip, navy outline, white stroke, page, gloss */}
-        <View style={[styles.lip, { backgroundColor: stamp.earned ? (legendary ? '#B8860B' : LIP) : 'rgba(5,30,70,0.55)' }]} />
+        <View style={[styles.lip, { backgroundColor: stamp.earned ? (rank > 1 ? look.lip : LIP) : 'rgba(5,30,70,0.55)' }]} />
         <View style={[styles.outline, ring && { borderColor: ring.outline, borderWidth: ring.width }]}>
           <View style={[styles.page, stamp.earned ? styles.pageEarned : styles.pageLocked, ring && { borderColor: ring.page }]}>
             {stamp.earned && <LinearGradient colors={['rgba(255,255,255,0.75)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
@@ -125,9 +124,11 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
           </View>
         </View>
 
-        {/* rarity gem, earned or locked */}
-        <View style={[styles.gem, { backgroundColor: tone.color }]} accessible={false}>
-          <View style={styles.gemShine} />
+        {/* rarity gems (1 to 5, the shape cue), earned or locked */}
+        <View style={styles.gems} accessible={false}>
+          {Array.from({ length: look.gems }, (_, i) => (
+            <View key={i} style={[styles.gem, { backgroundColor: look.frame }]}><View style={styles.gemShine} /></View>
+          ))}
         </View>
 
         {stamp.claimable ? (
@@ -147,19 +148,10 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
 
 export default memo(StampTile);
 
-/** Rarity on earned tiles: common keeps the navy card, higher tiers get their colour (epic and legendary gold). */
-const RARITY_RING: Record<number, { outline: string; page: string; width: number } | null> = {
-  1: null,
-  2: { outline: '#1d9bf0', page: '#BFE3FF', width: 2.5 },
-  3: { outline: '#0a5fb0', page: '#9FC8F0', width: 2.5 },
-  4: { outline: '#B07C00', page: '#FFD54A', width: 3 },
-  5: { outline: '#8A5A00', page: '#FFC21A', width: 3.5 },
-};
-
 /** Postmark inside the art box, in the corner the art leaves empty (never on the name below). */
 /** A tag (CLAIM, NEW, Almost) sits on the top-right of the tile: the postmark then drops to the bottom corner on its side. */
 export function postmarkCorner(free: Corner, tagged: boolean): Corner {
-  if (!tagged) return free;
+  void tagged; // tags own the top of the tile, so the postmark always uses a bottom corner (the art pipeline picks the emptier one)
   return free === 'tr' ? 'br' : free === 'tl' ? 'bl' : free;
 }
 
@@ -196,7 +188,7 @@ const styles = StyleSheet.create({
   stampHere: { position: 'absolute', left: '4%', top: '4%', right: '4%', bottom: '4%', borderRadius: 999, borderWidth: 2.5, borderStyle: 'dashed' },
   secret: { width: '80%', height: '80%', borderRadius: 999, borderWidth: 3, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.12)' },
   postmark: {
-    position: 'absolute', width: 34, height: 34, borderRadius: 17, borderWidth: 2,
+    position: 'absolute', width: 30, height: 30, borderRadius: 15, borderWidth: 2,
     borderColor: 'rgba(11,42,85,0.72)', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }],
     backgroundColor: 'rgba(255,248,228,0.6)',
   },
@@ -219,11 +211,9 @@ const styles = StyleSheet.create({
   barText: { fontFamily: 'Shark', fontSize: 12, color: '#FFFFFF', textAlign: 'center', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
   pips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 4, width: '94%' },
   pip: { height: 9, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
-  gem: {
-    position: 'absolute', left: 9, top: 9, width: 14, height: 14, borderRadius: 3, borderWidth: 2, borderColor: '#FFFFFF',
-    transform: [{ rotate: '45deg' }],
-  },
-  gemShine: { position: 'absolute', left: 1, top: 1, width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.85)' },
+  gems: { position: 'absolute', left: 8, top: 8, flexDirection: 'row', gap: 1 },
+  gem: { width: 9, height: 9, borderRadius: 2, borderWidth: 1.5, borderColor: '#FFFFFF', transform: [{ rotate: '45deg' }] },
+  gemShine: { position: 'absolute', left: 1, top: 1, width: 2.5, height: 2.5, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.85)' },
   claim: {
     position: 'absolute', top: -9, right: -6, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#E3262E',
     borderRadius: 11, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 2.5, borderColor: '#FFFFFF',

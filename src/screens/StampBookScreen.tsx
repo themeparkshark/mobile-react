@@ -64,7 +64,6 @@ export default function StampBookScreen() {
 
   const [response, setResponse] = useState<StampsResponse | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [reloadKey, setReloadKey] = useState(0);
   const [filter, setFilter] = useState<string>('all');
   const [selected, setSelected] = useState<BookStamp | null>(null);
   const [fresh, setFresh] = useState(false);
@@ -119,8 +118,9 @@ export default function StampBookScreen() {
         if (urls.length) Image.prefetch(urls, 'disk').catch(() => undefined);
         // The big art for every stamp that will slam (claimable or unseen) is fetched before it is opened.
         const seen = seenRef.current;
+        // Until the seen set has loaded every earned stamp would count as unseen: only prefetch claimables then.
         const big = Object.values(data.stamps).flat()
-          .filter(s => s.is_earned && s.icon_url && (!s.reward_claimed || !seen?.has(String(s.id))))
+          .filter(s => s.is_earned && s.icon_url && (!s.reward_claimed || (!!seen && !seen.has(String(s.id)))))
           .map(s => s.icon_url as string);
         if (big.length) Image.prefetch(big, 'disk').catch(() => undefined);
       })
@@ -131,7 +131,7 @@ export default function StampBookScreen() {
     const force = forceNext.current;
     forceNext.current = false;
     load(force);
-  }, [load, reloadKey]));
+  }, [load]));
 
   // Dev-only visual checks: open a section or a stamp card straight away.
   const devHooks = __DEV__ && (previewMode || process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE === '1');
@@ -299,7 +299,7 @@ export default function StampBookScreen() {
             <View style={styles.state}>
               <Text style={styles.stateText}>{status === 'loading' ? 'Opening your Stamp Book...' : 'Your Stamp Book could not load.'}</Text>
               {status === 'error' && (
-                <Pressable onPress={() => { forceNext.current = true; lastFetch.current = 0; load(true); setReloadKey(k => k + 1); }} style={styles.retry} accessibilityRole="button">
+                <Pressable onPress={() => { lastFetch.current = 0; load(true); }} style={styles.retry} accessibilityRole="button">
                   <Text style={styles.retryText}>Try again</Text>
                 </Pressable>
               )}

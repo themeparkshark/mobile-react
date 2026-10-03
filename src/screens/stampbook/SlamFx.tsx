@@ -67,7 +67,10 @@ export const InkBurst = memo(function InkBurst({ seed, size, color, hit }: InkPr
   }, [seed, size]);
   // Ink on paper: dark at the hit, then it holds as a faint 25% bleed under the sticker.
   const blot = useAnimatedStyle(() => ({
-    opacity: hit.value === 0 ? 0 : 0.25 + 0.6 * Math.max(0, 1 - hit.value * 1.4),
+    // hit 0 -> 1 over 1.2 s: dark at impact, settles to 0.25, holds ~400 ms, then fades out (no smudge left behind).
+    opacity: hit.value === 0 || hit.value >= 1 ? 0
+      : hit.value < 0.35 ? 0.85 - (hit.value / 0.35) * 0.6
+      : hit.value < 0.7 ? 0.25 : 0.25 * (1 - (hit.value - 0.7) / 0.3),
     transform: [{ scale: hit.value === 0 ? 0.6 : Math.min(1, 0.6 + hit.value * 4) }],
   }));
   return (
