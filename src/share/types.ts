@@ -48,8 +48,8 @@ export interface FlexPayloads {
   };
   readonly stamp: FlexBase & {
     readonly name: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly how?: string; readonly title?: string;
-    /** The stamp art already shows the shark: the card leaves the player's shark out. */
-    readonly artHasShark?: boolean;
+    /** Required: does the stamp art already show the shark? Then the card leaves the player's shark out. */
+    readonly artHasShark: boolean;
   };
   readonly coin_level: FlexBase & { readonly coinUrl: FlexArt; readonly level: number; readonly tierName?: string; readonly tierIndex?: number; readonly timesCollected?: number };
   /** Home Hunt weekly result. No board or area label: the server's board name is the player's home area. */

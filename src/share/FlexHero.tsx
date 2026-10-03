@@ -52,7 +52,7 @@ export const FlexHero = memo(function FlexHero({ kind, payload, frame, size, inv
     case 'set_complete': return <SetHero p={payload as FlexPayloads['set_complete']} frame={frame} size={size} />;
     case 'boss_win': return <BossHero p={payload as FlexPayloads['boss_win']} frame={frame} size={size} />;
     case 'stamp': return <StampHero p={payload as FlexPayloads['stamp']} frame={frame} size={size} />;
-    case 'crowned': return <CoinHero art={(payload as FlexPayloads['crowned']).coinUrl} level={10} size={size} />;
+    case 'crowned': return <CoinHero art={(payload as FlexPayloads['crowned']).coinUrl} level={10} size={size} crest />;
     case 'coin_level': {
       const p = payload as FlexPayloads['coin_level'];
       return <CoinHero art={p.coinUrl} level={p.tierIndex ?? p.level} size={size} />;
@@ -209,10 +209,10 @@ function SetHero({ p, frame, size }: { readonly p: FlexPayloads['set_complete'];
       <View style={{ position: 'absolute', left: size * 0.19, top: size * 0.27 }}>
         <FlexArtwork art={p.badgeUrl} fallback={HERO_ART.trophy} style={{ width: size * 0.62, height: size * 0.62 }} />
       </View>
-      {/* A rubber-stamp "COMPLETE!" across the medallion: no reading needed past one word. */}
-      <View style={[styles.completeStamp, { top: size * 0.68, left: size * 0.36, paddingHorizontal: size * 0.05, borderRadius: size * 0.04 }]}>
+      {/* A rubber-stamp "COMPLETE!" across the medallion, only when the giant "12/12" isn't already saying it. */}
+      {!(p.total > 0) && <View style={[styles.completeStamp, { top: size * 0.68, left: size * 0.36, paddingHorizontal: size * 0.05, borderRadius: size * 0.04 }]}>
         <Outlined text="COMPLETE!" outline="#7a1610" style={{ fontFamily: 'Shark', fontSize: size * 0.12, color: '#ffffff' }} />
-      </View>
+      </View>}
     </View>
   );
 }
@@ -256,9 +256,11 @@ function StampHero({ p, frame, size }: { readonly p: FlexPayloads['stamp']; read
  * recoloured per park (with its own thick edge on the right), so it is drawn
  * whole on a cream medallion inside the tier ring (Lv10: navy inside gold, the royal pair).
  */
-function CoinHero({ art, level, size, tag }: {
+function CoinHero({ art, level, size, tag, crest = false }: {
   readonly art: FlexArt; readonly level: number; readonly size: number;
   readonly tag?: { readonly text: string; readonly color: string };
+  /** Shark Crown: Alex's gold trophy crests the medallion where a crown would sit (no Alex crown exists). */
+  readonly crest?: boolean;
 }) {
   const tier = coinTier(level);
   const top = level >= 10;
@@ -274,23 +276,24 @@ function CoinHero({ art, level, size, tag }: {
       </View>
       <FlexArtwork art={art} fallback={HERO_ART.coin} style={{ width: coinW, height: coinW * (484 / 517), transform: [{ rotate: '-6deg' }] }} />
       {(top || level >= 5) && <Stars size={size} count={top ? 6 : 3} />}
+      {crest && (
+        <View style={{ position: 'absolute', top: -size * 0.2, alignItems: 'center' }}>
+          <FlexArtwork id="crest" art={HERO_ART.trophy} fallback={HERO_ART.trophy} style={{ width: size * 0.34, height: size * 0.37 }} />
+        </View>
+      )}
       {tag && <View style={{ position: 'absolute', bottom: -size * 0.02, right: -size * 0.02 }}><Tag text={tag.text} color={tag.color} size={size} /></View>}
     </View>
   );
 }
 
-/** Podium: Alex's trophy (gold, silver, bronze by rank) on a numbered podium block. */
+/** Podium: Alex's trophy (gold, silver, bronze by rank); the giant "#2" sticker carries the rank. */
 function StandingsHero({ p, size }: { readonly p: FlexPayloads['standings']; readonly size: number }) {
   const rank = Math.floor(Number(p.rank));
   const art = rank === 2 ? HERO_ART.trophySilver : rank === 3 ? HERO_ART.trophyBronze : HERO_ART.trophy;
-  const block = rank >= 1 && rank <= 3 ? ['#ffcf3b', '#c9d6e3', '#e0a070'][rank - 1] : '#ffcf3b';
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
       <View style={{ position: 'absolute', top: size * 0.04, width: size * 0.86, height: size * 0.86, borderRadius: size, backgroundColor: 'rgba(255,255,255,0.18)' }} />
-      <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.62, height: size * 0.66, marginBottom: -size * 0.02 }} />
-      <View style={[styles.podium, { width: size * 0.74, height: size * 0.28, backgroundColor: block, borderRadius: size * 0.05 }]}>
-        <View style={{ position: 'absolute', left: '6%', right: '6%', top: 3, height: '26%', borderRadius: size, backgroundColor: 'rgba(255,255,255,0.4)' }} />
-      </View>
+      <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.78, height: size * 0.84, marginBottom: size * 0.04 }} />
       <Stars size={size} count={3} />
     </View>
   );
@@ -432,5 +435,4 @@ const styles = StyleSheet.create({
   passportDash: { position: 'absolute', borderWidth: 2.5, borderStyle: 'dashed', borderColor: 'rgba(239,74,60,0.45)' },
   bulb: { position: 'absolute', backgroundColor: '#fff1a8', borderWidth: 1.5, borderColor: '#7a3d00' },
   completeStamp: { position: 'absolute', backgroundColor: '#ef4a3c', borderWidth: 2.5, borderColor: '#7a1610', transform: [{ rotate: '-10deg' }] },
-  podium: { borderWidth: 3, borderBottomWidth: 6, borderColor: NAVY },
 });

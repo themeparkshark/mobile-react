@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate src/share/placeNames.ts from the backend's ride seeds.
 
-usage: build-place-names.py <backend checkout>
+usage: build-place-names.py <backend checkout> <GeoNames cities15000.txt>
 Ride and task names come from database/seeders/RideSeeder.php and
 database/seeders/data/tasks.json. Parks, resorts and IP franchises are listed
 here. Generic words (Bridge, Castle, Games...) are skipped so catalog names
@@ -39,6 +39,7 @@ PLACES = [
     'Super Nintendo World', 'Nintendo', 'Pixar', 'Mickey', 'Minnie', 'Minion', 'Minions', 'Toy Story',
     'Jurassic Park', 'Jurassic World', 'Fantasyland', 'Tomorrowland', 'Frontierland', 'Adventureland',
     'Halloween Horror Nights', 'Horror Nights', 'HHN',
+    'Galaxys Edge', 'Galaxy Edge', 'Tron Lightcycle', 'Mine-Train', 'Mine Train', 'Pandora',
     'Kissimmee', 'Knotts Berry Farm', "Knott's", 'Knotts', 'Lake Buena Vista',
     # characters and rides the seeds don't spell out (panel r2-fasttrack)
     'Hagrid', 'Gringotts', 'Spider-Man', 'Spiderman', 'Mario Kart', 'Simpsons', 'Hogsmeade', 'Wizarding World',
@@ -61,6 +62,28 @@ PLACES = [
 ]
 rides = sorted({n.strip() for n in names if n.strip() and n.strip() not in GENERIC and len(n.strip()) >= 4})
 all_names = sorted(set(PLACES) | set(rides), key=lambda s: (-len(s), s.lower()))
+
+# US cities (the same GeoNames cities15000 file HomeHuntZoneResolver labels zones from).
+# A one-word city that is also an everyday word ("Mobile", "Surprise") is skipped unless it
+# is a big metro (500k+) or near a park; catalog names were checked for collisions.
+cities = set()
+if len(sys.argv) > 2:
+    words = {w.strip() for w in open('/usr/share/dict/words') if w.strip().islower()}
+    for row in open(sys.argv[2], encoding='utf8'):
+        r = row.rstrip('\n').split('\t')
+        if r[8] != 'US':
+            continue
+        name = r[2] if r[2].isascii() else r[1]
+        single = ' ' not in name and '-' not in name
+        if single and name.lower() in words and int(r[14] or 0) < 500000:
+            continue
+        cities.add(name)
+    cities |= {'Lakeland', 'Davenport', 'Kissimmee', 'Clermont', 'Ocoee', 'Sanford', 'Buena Park', 'Garden Grove', 'Fullerton'}
+city_list = sorted(cities, key=lambda s: (-len(s), s.lower()))
+(pathlib.Path(__file__).resolve().parents[2] / 'src/share/usCities.ts').write_text(
+    '/** US cities (GeoNames cities15000, filtered: see tools/share-studio/build-place-names.py). Never on a card. Do not edit by hand. */\n'
+    'export const US_CITIES: readonly string[] = ' + json.dumps(city_list, ensure_ascii=False) + ';\n')
+print(f'{len(city_list)} US cities')
 
 out = pathlib.Path(__file__).resolve().parents[2] / 'src/share/placeNames.ts'
 body = ',\n'.join(f'  {json.dumps(n)}' for n in all_names)

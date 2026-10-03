@@ -39,9 +39,9 @@ import { QR_BY_KIND } from './qr';
 import { resolveFlexPayload, RESOLVE_BUDGET_MS } from './resolve';
 import {
   currentFlex, finishFlex, holdFlex, holdWhileInPark, registerFlexHost, releaseHeldFlex, subscribeFlex,
-  subscribeFlexHosts, topFlexHost, unregisterFlexHost,
+  subscribeFlexHosts, subscribeWarm, topFlexHost, unregisterFlexHost, warmKinds,
 } from './store';
-import { BURST, countTarget, revealIntensity } from './reveal';
+import { BURST, countSteps, countTarget, revealIntensity } from './reveal';
 import { useDevAutoPress } from './devDrive';
 import { trackShare } from './track';
 import type { FlexFormat, FlexPayload, FlexRequest } from './types';
@@ -90,25 +90,33 @@ function Resolved({ request }: { readonly request: FlexRequest }) {
   return request.mode === 'reveal' ? <FlexMoment request={resolved} /> : <FlexSheet request={resolved} />;
 }
 
+/** The props a kind's card can show (warmed with it). */
+const KIND_PROPS: Partial<Record<FlexRequest['kind'], readonly (keyof typeof PROP_ART)[]>> = {
+  find: ['magnifier'], set_complete: ['treasure'], boss_win: ['foam-finger'], stamp: ['compass'], coin_level: ['coins'],
+  ride_coin: ['coins'], park_day: ['coins'], standings: ['foam-finger'], fright_night: ['lantern'], fright_badge: ['lantern'],
+  fright_lifetime: ['lantern'], streak: ['flame'], level_up: ['xp'],
+};
+
 /**
- * Decodes the card chrome (wordmark, ribbon, water, QR codes, stars, props)
- * once, a few seconds after launch, so a Flex moment never slams in with blank
- * art. Tiny, invisible, and unmounted once drawn.
+ * Decodes a kind's art ahead of time: the card chrome and hero art once, then
+ * that kind's QR and props. Nothing happens at launch: it starts when a
+ * share-eligible screen mounts a FlexShareButton or a share is asked for.
+ * Tiny, invisible, and unmounted once drawn.
  */
 function WarmChrome() {
-  const [phase, setPhase] = useState<'wait' | 'warm' | 'done'>('wait');
-  const left = useRef(0);
-  useEffect(() => {
-    const t = setTimeout(() => setPhase('warm'), 3000);
-    return () => clearTimeout(t);
-  }, []);
-  if (phase !== 'warm') return null;
-  const sources = [...Object.values(CARD_CHROME), ...Object.values(HERO_ART), ...Object.values(PROP_ART), ...Object.values(QR_BY_KIND)];
-  left.current = left.current || sources.length;
-  const loaded = () => { left.current -= 1; if (left.current <= 0) setPhase('done'); };
+  const [kinds, setKinds] = useState<readonly FlexRequest['kind'][]>(warmKinds);
+  useEffect(() => subscribeWarm(() => setKinds(warmKinds())), []);
+  const sources = useMemo(() => {
+    if (!kinds.length) return [];
+    const out = new Set<number>([...Object.values(CARD_CHROME), ...Object.values(HERO_ART)]);
+    kinds.forEach(kind => { out.add(QR_BY_KIND[kind]); (KIND_PROPS[kind] ?? []).forEach(prop => out.add(PROP_ART[prop])); });
+    return [...out];
+  }, [kinds]);
+  const [done, setDone] = useState(0);
+  if (!sources.length || done >= sources.length) return null;
   return (
     <View style={styles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {sources.map((source, i) => <Image key={i} source={source} style={styles.warm} onLoad={loaded} onError={loaded} />)}
+      {sources.map((source, i) => <Image key={String(source)} source={source} style={styles.warm} onLoad={() => setDone(n => n + 1)} onError={() => setDone(n => n + 1)} />)}
     </View>
   );
 }
@@ -255,7 +263,14 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   const sharkPop = useSharedValue(reduced ? 1 : 0);
   const bigPunch = useSharedValue(1);
   const cta = useSharedValue(reduced ? 1 : 0);
-  const [tick, setTick] = useState<number | null>(reduced || target == null ? null : 0);
+  const flash = useSharedValue(0);
+  const shine = useSharedValue(0);
+  const sharkHop = useSharedValue(0);
+  const sharkTilt = useSharedValue(0);
+  const flourish = useSharedValue(0);
+  const [tick, setTick] = useState<number | null>(null);
+  // The giant number stays hidden until its first tick, so a "0" never shows.
+  const bigIn = useSharedValue(reduced || target == null ? 1 : 0);
   useFpsProbe('reveal');
 
   // The slam waits for the card's art, at most RESOLVE_BUDGET_MS.
@@ -274,6 +289,17 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
     if (reduced) { setTick(null); return; }
     const timers: ReturnType<typeof setTimeout>[] = [];
     const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+    // The shark reacts: a happy hop with a wiggle (after it pops in, and again when the number lands).
+    const hop = (height: number) => {
+      sharkHop.value = withSequence(withTiming(-height, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(0, { damping: 6, stiffness: 220 }));
+      sharkTilt.value = withSequence(withTiming(-8, { duration: 90 }), withTiming(7, { duration: 120 }), withSpring(0, { damping: 6, stiffness: 200 }));
+    };
+    const land = () => {
+      bigPunch.value = withSequence(withTiming(1.35, { duration: 90 }), withSpring(1, { damping: 7, stiffness: 220 }));
+      flourish.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
+      hop(intensity === 'big' ? 22 : 14);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Success).catch(() => undefined);
+    };
     spin.value = withRepeat(withTiming(1, { duration: 10_000, easing: Easing.linear }), -1, false);
     slam.value = withDelay(80, withSequence(
       withTiming(1.06, { duration: 220, easing: Easing.out(Easing.back(1.6)) }),
@@ -282,33 +308,34 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
     at(260, () => {
       playSfx('fx.reveal', 0.9);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Heavy).catch(() => undefined);
-      burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+      burst.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
+      flash.value = withSequence(withTiming(0.75, { duration: 60 }), withTiming(0, { duration: 260 }));
+      shine.value = withDelay(260, withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }));
       if (intensity === 'big') shake.value = withSequence(...[8, -7, 5, -3, 0].map(v => withTiming(v, { duration: 45 })));
     });
     sharkPop.value = withDelay(450, withSpring(1, { damping: 8, stiffness: 170 }));
-    if (target != null && target > 0) {
-      const steps = Math.min(target, 10);
-      for (let i = 1; i <= steps; i++) {
-        at(330 + i * 45, () => {
-          setTick(Math.round((target * i) / steps));
-          playSfx('fx.coinTick', 0.6);
-          void Haptics.selectionAsync();
-        });
-      }
-      at(330 + steps * 45 + 20, () => {
-        setTick(null);
-        bigPunch.value = withSequence(withTiming(1.3, { duration: 90 }), withSpring(1, { damping: 7, stiffness: 220 }));
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Success).catch(() => undefined);
-      });
+    at(780, () => hop(16));
+    const steps = countSteps(target);
+    if (steps.length) {
+      steps.forEach((value, i) => at(330 + (i + 1) * 45, () => {
+        if (i === 0) bigIn.value = 1;
+        setTick(value);
+        playSfx('fx.coinTick', 0.6);
+        void Haptics.selectionAsync();
+      }));
+      at(Math.max(330 + steps.length * 45 + 20, 1100), () => { setTick(null); land(); });
     } else {
-      at(330, () => { bigPunch.value = withSequence(withTiming(1.3, { duration: 90 }), withSpring(1, { damping: 7, stiffness: 220 })); });
+      at(330, () => { bigIn.value = 1; });
+      at(1100, land);
     }
     cta.value = withDelay(900, withSpring(1, { damping: 12, stiffness: 160 }));
     return () => timers.forEach(clearTimeout);
   }, [go]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Never leave the endless ray loop ticking under the next screen.
-  useEffect(() => () => { cancelAnimation(spin); cancelAnimation(slam); cancelAnimation(burst); cancelAnimation(sharkPop); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    [spin, slam, burst, sharkPop, sharkHop, sharkTilt, flash, shine, flourish, bigPunch, cta].forEach(value => cancelAnimation(value));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = () => {
     if (Date.now() - openedAt.current < REVEAL_TAP_GUARD_MS) return;
@@ -317,6 +344,8 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   const size = FLEX_SIZE.story;
   const scale = Math.min((width - 56) / size.width, (height - 230) / size.height);
   const raysSize = Math.max(width, height) * 1.3;
+  // Where the hero sits on the story card (left of the shark, or centred when there is no shark).
+  const heroX = copy.hideShark ? 0.5 : 0.3;
 
   const raysStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -325,9 +354,14 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
   }));
   const sharkStyle = useAnimatedStyle(() => ({
     opacity: sharkPop.value,
-    transform: [{ translateY: (1 - sharkPop.value) * 40 }, { scale: 0.6 + 0.4 * sharkPop.value }],
+    transform: [{ translateY: (1 - sharkPop.value) * 40 + sharkHop.value }, { rotate: `${sharkTilt.value}deg` }, { scale: 0.6 + 0.4 * sharkPop.value }],
   }));
-  const bigStyle = useAnimatedStyle(() => ({ transform: [{ rotate: '-8deg' }, { scale: bigPunch.value }] }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const shineStyle = useAnimatedStyle(() => ({
+    opacity: shine.value > 0 && shine.value < 1 ? 0.55 : 0,
+    transform: [{ translateX: -size.width * scale + shine.value * size.width * scale * 2.2 }, { rotate: '20deg' }],
+  }));
+  const bigStyle = useAnimatedStyle(() => ({ opacity: bigIn.value, transform: [{ rotate: '-8deg' }, { scale: bigPunch.value }] }));
   const ctaStyle = useAnimatedStyle(() => ({ opacity: cta.value, transform: [{ translateY: (1 - cta.value) * 40 }] }));
   const bigText = tick != null && copy.big ? copy.big.replace(/\d+/, String(tick)) : undefined;
 
@@ -345,8 +379,11 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
               <FlexCard kind={request.kind} payload={request.payload} format="story" inventory={inventory} onReadyChange={setArtReady}
                 motion={reduced ? undefined : { bigText, bigStyle, sharkStyle }} />
             </View>
+            {!reduced && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, flashStyle]} />}
+            {!reduced && <Animated.View pointerEvents="none" style={[styles.shine, { height: size.height * scale * 1.6, top: -size.height * scale * 0.3 }, shineStyle]} />}
           </Animated.View>
-          {!reduced && <StarBurst progress={burst} count={BURST[intensity]} cx={size.width * scale * 0.42} cy={size.height * scale * 0.36} reach={size.width * scale * 0.62} />}
+          {!reduced && <StarBurst progress={burst} count={BURST[intensity]} cx={heroX * size.width * scale} cy={size.height * scale * 0.36} reach={size.width * scale * 0.7} />}
+          {!reduced && <Flourish kind={request.kind} progress={flourish} cx={heroX * size.width * scale} cy={size.height * scale * 0.36} unit={size.width * scale} />}
         </View>
         <Animated.View style={[styles.actions, ctaStyle]}>
           <GameButton label="Share" onPress={share} loading={busy} accessibilityHint="Opens your share sheet" />
@@ -372,9 +409,10 @@ function StarBurst({ progress, count, cx, cy, reach }: {
 function BurstStar({ i, count, progress, cx, cy, reach }: {
   readonly i: number; readonly count: number; readonly progress: SharedValue<number>; readonly cx: number; readonly cy: number; readonly reach: number;
 }) {
+  const inner = i % 3 === 0;
   const angle = (i / count) * Math.PI * 2 + (i % 2 ? 0.2 : -0.1);
-  const dist = reach * (0.7 + ((i * 37) % 30) / 100);
-  const size = 18 + ((i * 53) % 16);
+  const dist = reach * (inner ? 0.42 : 0.72 + ((i * 37) % 30) / 100);
+  const size = inner ? 26 + ((i * 29) % 12) : 36 + ((i * 53) % 28);
   const style = useAnimatedStyle(() => {
     const p = progress.value;
     return {
@@ -441,10 +479,66 @@ function RaysSvg({ size, color }: { readonly size: number; readonly color: strin
     const a1 = a0 + Math.PI / n;
     return `M${r},${r} L${r + r * Math.cos(a0)},${r + r * Math.sin(a0)} L${r + r * Math.cos(a1)},${r + r * Math.sin(a1)} Z`;
   }).join(' ');
-  return <Svg width={size} height={size}><Path d={d} fill={color} opacity={0.14} /></Svg>;
+  return <Svg width={size} height={size}><Path d={d} fill={color} opacity={0.25} /></Svg>;
+}
+
+/**
+ * One category flourish when the number lands, all real art: a trophy drops onto
+ * the Shark Crown medallion, the streak flame flares, KO stars ring the boss, the
+ * lantern glows; anything else gets an Alex diamond pop.
+ */
+const FLOURISH_ART: Partial<Record<FlexRequest['kind'], number>> = {
+  crowned: HERO_ART.trophy, title: HERO_ART.trophy, streak: HERO_ART.flame, boss_win: HERO_ART.star,
+  fright_night: HERO_ART.lantern, fright_badge: HERO_ART.lantern, fright_lifetime: HERO_ART.lantern,
+};
+
+function Flourish({ kind, progress, cx, cy, unit }: {
+  readonly kind: FlexRequest['kind']; readonly progress: SharedValue<number>; readonly cx: number; readonly cy: number; readonly unit: number;
+}) {
+  const art = FLOURISH_ART[kind] ?? HERO_ART.diamond;
+  const ring = kind === 'boss_win';
+  const drop = kind === 'crowned' || kind === 'title';
+  const size = unit * (ring ? 0.12 : drop ? 0.34 : 0.3);
+  const pieces = ring ? 5 : 1;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {Array.from({ length: pieces }, (_, i) => <FlourishPiece key={i} i={i} pieces={pieces} art={art} size={size} progress={progress}
+        cx={cx} cy={cy} unit={unit} mode={ring ? 'ring' : drop ? 'drop' : 'flare'} />)}
+    </View>
+  );
+}
+
+function FlourishPiece({ i, pieces, art, size, progress, cx, cy, unit, mode }: {
+  readonly i: number; readonly pieces: number; readonly art: number; readonly size: number; readonly progress: SharedValue<number>;
+  readonly cx: number; readonly cy: number; readonly unit: number; readonly mode: 'ring' | 'drop' | 'flare';
+}) {
+  const style = useAnimatedStyle(() => {
+    const p = progress.value;
+    if (p <= 0 || p >= 1) return { opacity: 0 };
+    if (mode === 'ring') {
+      const a = (i / pieces) * Math.PI * 2 + p * Math.PI * 2;
+      return { opacity: p < 0.8 ? 1 : (1 - p) / 0.2, transform: [
+        { translateX: cx - size / 2 + Math.cos(a) * unit * 0.2 }, { translateY: cy - unit * 0.22 - size / 2 + Math.sin(a) * unit * 0.07 }] };
+    }
+    if (mode === 'drop') {
+      const fall = Math.min(1, p / 0.35);
+      const bounce = p < 0.35 ? 0 : Math.sin(((p - 0.35) / 0.65) * Math.PI) * 0.06;
+      return { opacity: p < 0.75 ? 1 : (1 - p) / 0.25, transform: [
+        { translateX: cx - size / 2 }, { translateY: cy - unit * 0.42 - size / 2 - (1 - fall) * unit * 0.5 - bounce * unit }, { scale: 1 + (1 - fall) * 0.3 }] };
+    }
+    return { opacity: p < 0.5 ? 1 : (1 - p) / 0.5, transform: [
+      { translateX: cx - size / 2 }, { translateY: cy - size / 2 - p * unit * 0.1 }, { scale: 0.6 + Math.sin(p * Math.PI) * 1.1 }] };
+  });
+  return (
+    <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size }, style]}>
+      <Image source={art} style={{ width: size, height: size }} contentFit="contain" />
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
+  flash: { backgroundColor: '#ffffff' },
+  shine: { position: 'absolute', left: 0, width: 46, backgroundColor: 'rgba(255,255,255,0.75)' },
   offscreen: { position: 'absolute', left: -4000, top: 0 },
   warm: { width: 48, height: 48 },
   // Opaque: nothing behind the sheet bleeds through.

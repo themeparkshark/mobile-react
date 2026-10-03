@@ -341,7 +341,7 @@ test('a sheet that never shows is dropped after the watchdog, so the queue never
   assert.match(host, /SHOW_WATCHDOG_MS = 1500/);
   assert.match(host, /onShow=\{onShow\}[\s\S]*onShow=\{onShow\}/, 'both the sheet and the reveal report onShow');
   assert.match(host, /if \(shown\.current\) return;[\s\S]*finishFlex\(request\.id\)/);
-  assert.match(host, /cancelAnimation\(spin\)/);
+  assert.match(host, /\[spin, slam, burst[^\]]*\]\.forEach\(value => cancelAnimation\(value\)\)/);
 });
 
 test('the card link and QR carry a per-kind campaign and nothing about the player', () => {
@@ -361,4 +361,56 @@ test('the reveal counts up to the giant number and scales its burst by rarity', 
   assert.equal(host.revealIntensity('find', 5), 'big');
   assert.equal(host.revealIntensity('find', 3), 'medium');
   assert.equal(host.revealIntensity('streak', null), 'small');
+});
+
+/* ---------------- Round 3 ---------------- */
+test('the count-up starts at 1, never 0, and ends on the number', () => {
+  const r0 = loadTs('src/share/reveal.ts');
+  const r = { countSteps: n => JSON.parse(JSON.stringify(r0.countSteps(n))) };
+  assert.deepEqual(r.countSteps(10), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(r.countSteps(3), [1, 2, 3]);
+  const big = r.countSteps(1840);
+  assert.equal(big[0] > 0, true); assert.equal(big[big.length - 1], 1840); assert.ok(big.length <= 10);
+  assert.deepEqual(r.countSteps(0), []); assert.deepEqual(r.countSteps(null), []);
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /useState<number \| null>\(null\)/);
+  assert.match(host, /opacity: bigIn\.value/);
+});
+
+test('second place never holds a "#1" finger; the crowned card drops the trophy prop for the crest', () => {
+  for (const rank of [2, 3, undefined]) assert.notEqual(copy.flexCopy('standings', { tierLabel: 'Podium', rank, percentile: 10 }).prop, 'foam-finger', String(rank));
+  assert.equal(copy.flexCopy('standings', { tierLabel: 'Champion', rank: 1 }).prop, 'foam-finger');
+  assert.equal(copy.flexCopy('crowned', { coinUrl: 'x' }).prop, null);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/FlexHero.tsx'), 'utf8'), /crest/);
+});
+
+test('cities, lowercase areas and leftover region numbers never print; catalog names survive', () => {
+  for (const t of ['tampa area', 'TAMPA AREA', 'Tampa', 'Phoenix', 'Winter Park', 'Orlando', 'Anaheim', 'Kissimmee', 'Busch Gardens Tampa', 'Galaxys Edge'])
+    assert.equal(copy.cleanName(t), '', t);
+  assert.equal(copy.cleanName('Region 5 Champ'), 'Champ');
+  assert.equal(copy.cleanName('Orlando Hero'), 'Hero');
+  const catalog = JSON.parse(fs.readFileSync(pathMod.join(repo, '../../tps-prime-time-audit/next-wave/home-hunt-v3/catalog.json'), 'utf8'));
+  for (const name of [...catalog.items.map(i => i.name), ...catalog.sets.map(s => s.name)]) assert.equal(copy.cleanName(name), name, name);
+  for (const city of ['Tampa', 'Phoenix', 'Winter Park']) {
+    for (const sample of FLEX_SAMPLES) {
+      const c = copy.flexCopy(sample.kind, poison(sample.payload, `${city} Legend`));
+      assert.ok(!c.a11y.includes(city), `${sample.name} printed ${city}`);
+    }
+  }
+});
+
+test('art is warmed per kind when a share-eligible screen or a share asks, never at launch', () => {
+  store.__resetFlexQueue();
+  assert.deepEqual([...store.warmKinds()], []);
+  store.shareFlex('park_day', { coinsCaught: 1, coinUrls: [] }, { surface: 'park_day' });
+  assert.deepEqual([...store.warmKinds()], ['park_day']);
+  store.warmFlex('coin_level'); store.warmFlex('coin_level');
+  assert.deepEqual([...store.warmKinds()].sort(), ['coin_level', 'park_day']);
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.doesNotMatch(host, /setTimeout\(\(\) => setPhase\('warm'\), 3000\)/);
+});
+
+test('the coin sheet Share icon carries a word and the stamp payload must say whether its art has a shark', () => {
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
 });

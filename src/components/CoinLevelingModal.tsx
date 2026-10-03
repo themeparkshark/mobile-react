@@ -465,7 +465,7 @@ export default function CoinLevelingModal({
                 {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
                     over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
                 {SHARE_IN_MODALS && state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
-                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
+                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" caption style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
                     payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
                 )}
 

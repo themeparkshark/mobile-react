@@ -34,16 +34,17 @@ export const PROP_ART: Readonly<Record<PropKey, number>> = {
 
 /** Where each prop sits against the shark box (fractions of its width/height), facing left. */
 const PROP_SPOT: Readonly<Record<PropKey, { x: number; y: number; w: number; h: number; rotate: number; behind?: boolean }>> = {
-  trophy: { x: -0.18, y: 0.38, w: 0.48, h: 0.5, rotate: -10 },
-  magnifier: { x: -0.24, y: 0.36, w: 0.5, h: 0.52, rotate: -14 },
-  treasure: { x: -0.26, y: 0.56, w: 0.56, h: 0.48, rotate: -6 },
-  'foam-finger': { x: -0.2, y: 0.22, w: 0.5, h: 0.56, rotate: -12 },
-  compass: { x: -0.2, y: 0.42, w: 0.44, h: 0.48, rotate: -10 },
-  coins: { x: -0.22, y: 0.56, w: 0.48, h: 0.52, rotate: 0 },
-  lantern: { x: -0.12, y: 0.3, w: 0.26, h: 0.58, rotate: -6 },
+  // Held at the front fin (the fin sits near x 0.19, y 0.54 of the paper): each prop overlaps it by ~15%.
+  trophy: { x: -0.2, y: 0.3, w: 0.42, h: 0.46, rotate: -10 },
+  magnifier: { x: -0.22, y: 0.28, w: 0.44, h: 0.48, rotate: -14 },
+  treasure: { x: -0.24, y: 0.42, w: 0.48, h: 0.42, rotate: -6 },
+  'foam-finger': { x: -0.18, y: 0.16, w: 0.42, h: 0.48, rotate: -12 },
+  compass: { x: -0.18, y: 0.34, w: 0.4, h: 0.44, rotate: -10 },
+  coins: { x: -0.14, y: 0.42, w: 0.38, h: 0.42, rotate: 0 },
+  lantern: { x: -0.06, y: 0.24, w: 0.24, h: 0.54, rotate: -6 },
   flame: { x: 0.52, y: -0.06, w: 0.5, h: 0.66, rotate: 14, behind: true },
-  xp: { x: -0.16, y: 0.46, w: 0.4, h: 0.4, rotate: -8 },
-  photos: { x: -0.24, y: 0.46, w: 0.56, h: 0.44, rotate: -8 },
+  xp: { x: -0.14, y: 0.38, w: 0.36, h: 0.36, rotate: -8 },
+  photos: { x: -0.22, y: 0.4, w: 0.48, h: 0.38, rotate: -8 },
 };
 
 export const FlexShark = memo(function FlexShark({ inventory, height, flip = false, prop = null, style }: {

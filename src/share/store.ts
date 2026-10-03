@@ -30,13 +30,35 @@ function push(request: FlexRequest): void {
   listeners.forEach(listener => listener());
 }
 
+/* ------------------------------------------------------------------- warm */
+/** Kinds whose art should be decoded ahead of time (a share-eligible screen is up, or a share was asked for). */
+const warm = new Set<FlexKind>();
+const warmListeners = new Set<Listener>();
+
+export function warmFlex(kind: FlexKind): void {
+  if (warm.has(kind)) return;
+  warm.add(kind);
+  warmListeners.forEach(listener => listener());
+}
+
+export function warmKinds(): readonly FlexKind[] {
+  return [...warm];
+}
+
+export function subscribeWarm(listener: Listener): () => void {
+  warmListeners.add(listener);
+  return () => { warmListeners.delete(listener); };
+}
+
 /** Full-screen Flex moment right after an earn, with a big Share button. */
 export function flexReveal<K extends FlexKind>(kind: K, payload: FlexPayload<K>, options: FlexOptions): void {
+  warmFlex(kind);
   push({ id: nextId++, mode: 'reveal', kind, payload, options } as FlexRequest);
 }
 
 /** The Flex sheet (preview, Story/Square, Share) for re-sharing where the thing lives. */
 export function shareFlex<K extends FlexKind>(kind: K, payload: FlexPayload<K>, options: FlexOptions): void {
+  warmFlex(kind);
   push({ id: nextId++, mode: 'sheet', kind, payload, options } as FlexRequest);
 }
 
@@ -79,6 +101,7 @@ export function __resetFlexQueue(): void {
   queue.splice(0, queue.length);
   held.splice(0, held.length);
   hosts.splice(0, hosts.length);
+  warm.clear();
   nextId = 1;
 }
 

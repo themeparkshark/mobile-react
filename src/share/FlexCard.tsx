@@ -94,84 +94,135 @@ export const STORY_SHARK_H = 170;
 
 function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
   return (
-    <View style={styles.storyBody}>
-      <Ribbon text={copy.ribbon} width={256} />
-      <View style={styles.storyHero}>
-        <Rays frame={frame} size={420} />
-        <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
-          <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
-            <FlexHero kind={kind} payload={payload} frame={frame} size={STORY_HERO} inventory={inventory} />
-            {!!copy.big && <BigNumber copy={copy} frame={frame} size={62} width={200} text={motion.bigText} style={[styles.storyBig, motion.bigStyle]} />}
+    <>
+      <StoryBands frame={frame} />
+      <View style={styles.storyBody}>
+        <Ribbon text={copy.ribbon} width={256} />
+        <View style={styles.storyHero}>
+          <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
+            <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
+              <FlexHero kind={kind} payload={payload} frame={frame} size={STORY_HERO} inventory={inventory} />
+              {!!copy.big && <BigNumber copy={copy} frame={frame} size={62} width={210} text={motion.bigText}
+                labelSide={LABEL_BESIDE.has(kind) ? 'right' : 'top'} style={[styles.storyBig, motion.bigStyle]} />}
+            </Animated.View>
+            {showShark && (
+              <Animated.View style={[styles.storyShark, motion.sharkStyle]}>
+                <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} />
+              </Animated.View>
+            )}
+          </View>
+        </View>
+        <View style={styles.words}>
+          <Text style={[styles.kicker, { color: frame.ink }]} numberOfLines={1}>{copy.kicker}</Text>
+          <Outlined text={copy.title} style={[styles.storyTitle, titleSize(copy.title, 'story')]} outline={frame.outline} lines={1} />
+          {copy.rarity && <RarityChip rarity={copy.rarity} />}
+        </View>
+        <StatPlate copy={copy} frame={frame} compact={false} />
+        <Footer kind={kind} copy={copy} frame={frame} logoWidth={120} qr={56} />
+      </View>
+    </>
+  );
+}
+
+/** Heroes that are grids of art: the number's caption sits beside it, never across the grid. */
+const LABEL_BESIDE: ReadonlySet<FlexKind> = new Set<FlexKind>(['fright_night', 'park_day']);
+
+/**
+ * Story chrome bands (y 0..252 and 1578..1920 px) sit under Instagram's UI, so
+ * they carry only decoration: the rays run the full card from the hero, and a
+ * few of Alex's stars and bubbles float in each band, so a saved or iMessage
+ * copy never looks empty.
+ */
+const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFrame }) {
+  const stars = [
+    { x: 30, y: 22, s: 22 }, { x: 300, y: 36, s: 18 }, { x: 196, y: 12, s: 12 }, { x: 96, y: 60, s: 12 },
+    { x: 42, y: 560, s: 18 }, { x: 290, y: 592, s: 24 }, { x: 170, y: 612, s: 12 }, { x: 236, y: 548, s: 14 },
+  ];
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={{ position: 'absolute', left: 180, top: 236 }}>
+        <Rays frame={frame} size={1180} />
+      </View>
+      {stars.map((star, i) => (
+        <FlexArtwork key={i} id={`band-star${i}`} art={BAND_STAR} fallback={BAND_STAR}
+          style={{ position: 'absolute', left: star.x, top: star.y, width: star.s, height: star.s, opacity: 0.85, transform: [{ rotate: `${i % 2 ? 14 : -12}deg` }] }} />
+      ))}
+      {[{ x: 250, y: 70, r: 7 }, { x: 128, y: 30, r: 4 }, { x: 80, y: 600, r: 6 }, { x: 330, y: 560, r: 4 }].map((b, i) => (
+        <View key={`b${i}`} style={{ position: 'absolute', left: b.x, top: b.y, width: b.r * 2, height: b.r * 2, borderRadius: b.r,
+          borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.15)' }} />
+      ))}
+    </View>
+  );
+});
+
+const BAND_STAR = require('../../assets/images/screens/pin-collections/star.png');
+
+function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
+  // Square (Instagram feed): ribbon / the hero and the player's shark side by side (the shark is a
+  // co-star holding its prop, ~37% of the width) / the giant number beside the words / wordmark,
+  // CTA, link and QR. Nothing overlaps and nothing leaves the canvas.
+  const heroSize = 124;
+  const big = !!copy.big;
+  return (
+    <View style={styles.squareBody}>
+      <Ribbon text={copy.ribbon} width={226} />
+      <View style={styles.squareStage}>
+        <Rays frame={frame} size={360} />
+        <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
+          <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
+            <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
           </Animated.View>
           {showShark && (
-            <Animated.View style={[styles.storyShark, motion.sharkStyle]}>
-              <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} />
+            <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
+              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={copy.prop} />
             </Animated.View>
           )}
         </View>
       </View>
-      <View style={styles.words}>
-        <Text style={[styles.kicker, { color: frame.ink }]} numberOfLines={1}>{copy.kicker}</Text>
-        <Outlined text={copy.title} style={[styles.storyTitle, titleSize(copy.title, 'story')]} outline={frame.outline} lines={1} />
-        {copy.rarity && <RarityChip rarity={copy.rarity} />}
-      </View>
-      <StatPlate copy={copy} frame={frame} compact={false} />
-      <Footer kind={kind} copy={copy} frame={frame} logoWidth={120} qr={56} />
-    </View>
-  );
-}
-
-function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
-  // Three bands, nothing overlapping and nothing off the canvas:
-  // ribbon / hero (with the giant number) + words / the player's shark, CTA and QR along the bottom.
-  const heroSize = 140;
-  return (
-    <View style={styles.squareBody}>
-      <Ribbon text={copy.ribbon} width={244} />
-      <View style={styles.squareMid}>
-        <View style={styles.squareHeroCol}>
-          <Rays frame={frame} size={280} />
-          <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
-            <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
-            {!!copy.big && <BigNumber copy={copy} frame={frame} size={40} width={150} text={motion.bigText} style={[styles.squareBig, motion.bigStyle]} />}
-          </Animated.View>
-        </View>
-        <View style={styles.squareWords}>
+      <View style={styles.squareWordsRow}>
+        {big && (
+          <View style={styles.squareBigCol}>
+            <BigNumber copy={copy} frame={frame} size={52} width={128} text={motion.bigText} labelSide="bottom" inline style={motion.bigStyle} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
           <Text style={[styles.kickerSmall, { color: frame.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
-          <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={3} />
-          {copy.rarity && <RarityChip rarity={copy.rarity} small />}
+          <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={1} />
           <StatPlate copy={copy} frame={frame} compact />
         </View>
       </View>
-      <View style={styles.squareFooter}>
-        {showShark
-          ? <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
-              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} flip />
-            </Animated.View>
-          : <View style={{ width: Math.round(SQUARE_SHARK_H * SHARK_ASPECT) }} />}
-        <Footer kind={kind} copy={copy} frame={frame} logoWidth={128} qr={50} compact />
-      </View>
+      <Footer kind={kind} copy={copy} frame={frame} logoWidth={104} qr={42} compact />
     </View>
   );
 }
 
-/** The square card's shark: its whole paper box sits inside the footer band. */
-export const SQUARE_SHARK_H = 104;
+/** The square card's shark: a co-star beside the hero (~37% of the width), holding its prop. */
+export const SQUARE_SHARK_H = 150;
 
-/** The giant brag number: a tilted outlined sticker over the hero's lower-left corner, caption under it. */
-function BigNumber({ copy, frame, size, width, text, style }: {
+/** The giant brag number: a tilted outlined sticker (over the hero on Story), caption above, beside or under it. */
+function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', inline = false }: {
   readonly copy: FlexCopy; readonly frame: FlexFrame; readonly size: number; readonly width: number;
   readonly text?: string; readonly style?: StyleProp<ViewStyle>;
+  readonly labelSide?: 'top' | 'right' | 'bottom';
+  /** In the layout flow (Square) instead of an absolute sticker. */
+  readonly inline?: boolean;
 }) {
+  const label = copy.bigLabel ? (
+    <View style={[styles.bigLabel, labelSide === 'right' && styles.bigLabelRight, labelSide === 'bottom' && styles.bigLabelBottom, { backgroundColor: frame.outline }]}>
+      <Text style={[styles.bigLabelText, { fontSize: size >= 50 ? 11 : 9 }]} numberOfLines={labelSide === 'bottom' ? 2 : 1}>{copy.bigLabel}</Text>
+    </View>
+  ) : null;
+  const number = (
+    <Outlined text={text ?? copy.big ?? ''} outline={frame.outline} weight={Math.max(2.5, size * 0.075)}
+      style={{ fontFamily: 'Shark', fontSize: size, lineHeight: Math.round(size * 1.08), color: frame.bigFill, textAlign: 'left' }} />
+  );
   return (
-    <Animated.View pointerEvents="none" style={[styles.bigWrap, { width }, style]}>
-      {!!copy.bigLabel && (
-        <View style={[styles.bigLabel, { backgroundColor: frame.outline }]}>
-          <Text style={[styles.bigLabelText, { fontSize: size >= 50 ? 11 : 9 }]} numberOfLines={1}>{copy.bigLabel}</Text>
-        </View>
-      )}
-      <Outlined text={text ?? copy.big ?? ''} outline={frame.outline} weight={Math.max(2.5, size * 0.075)}
-        style={{ fontFamily: 'Shark', fontSize: size, lineHeight: Math.round(size * 1.08), color: frame.bigFill, textAlign: 'left' }} />
+    <Animated.View pointerEvents="none" style={[inline ? styles.bigInline : styles.bigWrap, { width }, style]}>
+      {labelSide === 'top' && label}
+      {labelSide === 'right'
+        ? <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}><View>{number}</View>{label}</View>
+        : number}
+      {labelSide === 'bottom' && label}
     </Animated.View>
   );
 }
@@ -291,6 +342,9 @@ const styles = StyleSheet.create({
 
   bigWrap: { position: 'absolute', alignItems: 'flex-start' },
   bigLabel: { marginBottom: -4, marginLeft: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, zIndex: 1 },
+  bigLabelRight: { marginBottom: 10, marginLeft: 6 },
+  bigLabelBottom: { marginBottom: 0, marginTop: -2, marginLeft: 2, alignSelf: 'flex-start', maxWidth: 124 },
+  bigInline: { alignItems: 'flex-start', transform: [{ rotate: '-6deg' }] },
   bigLabelText: { fontFamily: 'Shark', color: '#ffffff', letterSpacing: 0.5 },
 
   footer: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 8, gap: 10 },
@@ -313,13 +367,12 @@ const styles = StyleSheet.create({
   subLine: { fontFamily: 'Knockout', fontSize: 14, marginTop: 1, opacity: 0.85 },
   subLineCompact: { fontSize: 11 },
 
-  squareBody: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 10, paddingHorizontal: 14 },
-  squareMid: { flex: 1, flexDirection: 'row', width: '100%', alignItems: 'center' },
-  squareHeroCol: { width: 160, height: '100%', alignItems: 'center', justifyContent: 'center' },
-  squareBig: { left: -14, bottom: -6, transform: [{ rotate: '-8deg' }] },
-  squareShark: { marginLeft: -6, marginBottom: -8 },
-  squareWords: { flex: 1, paddingLeft: 12, justifyContent: 'center' },
-  kickerSmall: { fontFamily: 'Shark', fontSize: 15, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
-  squareTitle: { fontFamily: 'Shark', fontSize: 23, lineHeight: 26, color: '#ffffff' },
-  squareFooter: { flexDirection: 'row', alignItems: 'flex-end', width: '100%', gap: 6, height: 96 },
+  squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 8, paddingHorizontal: 14 },
+  squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 14 },
+  squareStageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
+  squareShark: { marginRight: -14, marginTop: 6, marginBottom: -14 },
+  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 2 },
+  squareBigCol: { width: 128, alignItems: 'flex-start' },
+  kickerSmall: { fontFamily: 'Shark', fontSize: 14, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  squareTitle: { fontFamily: 'Shark', fontSize: 20, lineHeight: 23, color: '#ffffff' },
 });

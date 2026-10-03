@@ -4,6 +4,7 @@
  * percent-of-players line shows) are unit tested in one place.
  */
 import { PLACE_NAMES } from './placeNames';
+import { US_CITIES } from './usCities';
 import type { FlexCopy, FlexKind, FlexPayload, FlexPayloads, FlexRarity, FrameKey, RarityInput } from './types';
 
 export const RARITY_LABELS: Readonly<Record<FlexRarity, string>> = {
@@ -39,8 +40,10 @@ const LONG_DIGITS = /\d{5,}/g;
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Any park, resort, land, franchise or ride name, as a whole phrase, any case. */
 const PLACE = new RegExp(`(^|[^A-Za-z0-9])(?:${PLACE_NAMES.map(escapeRe).join('|')})(?:['’]s)?(?=$|[^A-Za-z0-9])`, 'gi');
+/** Any US city (home areas are labelled by city): built once, longest first. */
+const CITY = new RegExp(`(^|[^A-Za-z0-9])(?:${US_CITIES.map(escapeRe).join('|')})(?:['’]s)?(?=$|[^A-Za-z0-9])`, 'gi');
 /** A home-area label ("Tampa Area", "Phoenix Region", "Your Area", "Orange County"): never on a card. */
-const AREA = /(?:\b[A-Za-z][\w.'’-]*\s+){0,3}(?:Area|Region|County|Metro)\b/g;
+const AREA = /(?:\b[A-Za-z][\w.'’-]*\s+){0,3}(?:Area|Region|County|Metro)\b(?:\s+\d+\b)?/gi;
 /** A possessive a removed name leaves behind ("'s Coin"). */
 const ORPHAN_POSSESSIVE = /(^|\s)['’]s\b/g;
 
@@ -55,7 +58,7 @@ export function cleanName(value: string | null | undefined, max = 34): string {
     .replace(URL_LIKE, '')
     .replace(HANDLE, '')
     .replace(LONG_DIGITS, '');
-  const unplaced = raw.replace(PLACE, '$1').replace(AREA, '').replace(ORPHAN_POSSESSIVE, '$1');
+  const unplaced = raw.replace(PLACE, '$1').replace(AREA, '').replace(CITY, '$1').replace(ORPHAN_POSSESSIVE, '$1');
   // "survived at Universal!" -> "survived!": drop the preposition a removed place leaves behind.
   const text = (unplaced === raw ? raw : unplaced.replace(/\s+(?:at|in|on|from|to|of)(?=\s*(?:[!.?,]|$))/gi, ''))
     .replace(/\s+([,.!?:])/g, '$1')
@@ -117,7 +120,7 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     sub: count(p.timesCollected) ? `Ridden and won ${plural(count(p.timesCollected), 'time')}` : null,
     cta: 'Can you crown one?',
     frame: 'royal',
-    prop: 'trophy',
+    prop: null,
     rarity: null,
   }),
 
@@ -243,7 +246,8 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       sub: null,
       cta: 'Beat my score!',
       frame: 'standings',
-      prop: 'foam-finger',
+      // The "#1" finger only for a first place; the trophy is already the hero.
+      prop: rank === 1 ? 'foam-finger' : null,
       rarity: null,
     };
   },
