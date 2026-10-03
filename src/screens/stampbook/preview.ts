@@ -444,7 +444,7 @@ const STAMPS: StampData[] = [
  {
   "id": 914,
   "slug": "first-ride-coin",
-  "name": "First Park Coin",
+  "name": "First Ride Coin",
   "category": "rides",
   "goal": "Collect your first park coin",
   "metric": "",
@@ -475,7 +475,7 @@ const STAMPS: StampData[] = [
  {
   "id": 915,
   "slug": "ride-coin-collector",
-  "name": "Park Coin Collector",
+  "name": "Ride Coin Collector",
   "category": "rides",
   "goal": "Collect five different park coins",
   "metric": "",
@@ -497,7 +497,7 @@ const STAMPS: StampData[] = [
    "tickets": 0,
    "xp": 250,
    "coins": 0,
-   "title": "Park Collector"
+   "title": "Ride Collector"
   },
   "section": "rides",
   "icon_url": null,

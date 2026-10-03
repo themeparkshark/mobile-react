@@ -29,7 +29,10 @@ export const useAxiosSetup = () => {
     const interceptorId = client.interceptors.response.use(
       (response: AxiosResponse) => {
         consecutive500Count = 0;
-        if (response.data && Array.isArray(response.data.broadcasts)) {
+        // A screen that shows the result itself (the stamp claim cascade and level-up plate) opts out,
+        // so the player never gets the same news twice.
+        const quiet = (response.config as { skipBroadcasts?: boolean } | undefined)?.skipBroadcasts === true;
+        if (!quiet && response.data && Array.isArray(response.data.broadcasts)) {
           enqueueRef.current(response.data.broadcasts);
         }
         return response;

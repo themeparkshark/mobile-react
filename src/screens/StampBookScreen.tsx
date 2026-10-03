@@ -196,7 +196,14 @@ export default function StampBookScreen() {
     if (stamp.earned) openedRef.current.push(stamp.id);
   }, []);
 
+  // A pending hand-off never opens a card after the book closed it (or unmounted).
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffCancelled = useRef(false);
+  useEffect(() => () => { handoffCancelled.current = true; if (handoffTimer.current) clearTimeout(handoffTimer.current); }, []);
+
   const close = useCallback(() => {
+    handoffCancelled.current = true;
+    if (handoffTimer.current) clearTimeout(handoffTimer.current);
     playSfx('ui.modalClose', 0.5);
     setSelected(null);
     flushPatches();
@@ -217,9 +224,10 @@ export default function StampBookScreen() {
     const thumb = target.thumbUrl ?? target.iconUrl;
     if (!thumb) { open(target); return; }
     let opened = false;
-    const go = () => { if (!opened) { opened = true; open(target); } };
+    const go = () => { if (!opened && !handoffCancelled.current) { opened = true; open(target); } };
+    handoffCancelled.current = false;
     Image.prefetch([thumb], 'memory-disk').then(go, go);
-    setTimeout(go, 350);
+    handoffTimer.current = setTimeout(go, 350);
   }, [queue, selected, open]);
 
   const claim = useCallback(async (): Promise<ClaimResult> => {
