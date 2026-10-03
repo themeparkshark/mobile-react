@@ -265,9 +265,12 @@ function TitleStamp({ text, reduced }: { readonly text: string; readonly reduced
   }, [reduced, t]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: t.value }, { rotate: '-7deg' }] }));
   return (
-    <Animated.View style={[styles.titleStamp, style]} accessible accessibilityLabel={`New title: ${text}`}>
+    // The transform lives on a bare wrapper: iOS left a stale scaled copy of the bordered plate when both shared one view.
+    <Animated.View style={[styles.titleStampWrap, style]} accessible accessibilityLabel={`New title: ${text}`}>
+      <View style={styles.titleStamp}>
       <GameIcon name="crown" size={22} />
       <Text style={styles.titleStampText} numberOfLines={1}>{text}</Text>
+    </View>
     </Animated.View>
   );
 }
@@ -527,8 +530,9 @@ const styles = StyleSheet.create({
   },
   ribbonWrap: { flex: 1, height: 58, marginLeft: -16, justifyContent: 'center', paddingLeft: 26, paddingRight: 16 },
   ribbonText: { fontFamily: 'Shark', fontSize: 23, color: '#7a3d00', marginTop: -6 },
+  titleStampWrap: { position: 'absolute', right: 4, bottom: -18 },
   titleStamp: {
-    position: 'absolute', right: 4, bottom: -18, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10,
     height: 34, borderRadius: 9, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: '#7a3d00', borderBottomWidth: 5,
     maxWidth: 190,
   },

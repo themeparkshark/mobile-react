@@ -123,7 +123,7 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
             </Animated.View>
           )}
           {item.rarity >= 5 && item.found && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
-          <RarityGems rarity={item.rarity} size={10} style={styles.gems} />
+          <RarityGems rarity={item.rarity} size={Math.min(10, Math.floor((width - 16) / (Math.max(1, item.rarity) * 1.6)))} style={styles.gems} />
           {item.caught > 1 && (
             <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>x{item.caught}</Text></View>
           )}

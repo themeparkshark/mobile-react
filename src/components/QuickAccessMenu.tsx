@@ -171,7 +171,7 @@ export default function QuickAccessMenu(_props: Props) {
       <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => closeMenu()}>
         <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
           <AnimatedBlur animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} />
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.6)' }, scrimStyle]} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.74)' }, scrimStyle]} />
           <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
         </View>
         {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   stack: { position: 'absolute', zIndex: 99 },
   header: { width: 190, height: 52, alignItems: 'center', justifyContent: 'center', marginBottom: 6, alignSelf: 'center' },
   headerText: { fontFamily: 'Shark', fontSize: 22, color: '#7a3d00', marginTop: -4 },
-  row: { alignItems: 'center', minHeight: 66, marginBottom: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 66, marginBottom: 6 },
   round: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
   badge: {
     position: 'absolute', top: -4, right: -4, width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white,

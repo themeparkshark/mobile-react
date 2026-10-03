@@ -433,8 +433,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const goal = swapGoal(items ?? [], spares, detail?.raw.progress.exchange_cost ?? 4);
   const cell = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
   const status = set ? tabStatus(set) : null;
-  const special = status && (status.live ? null : status);
-  const daily = !!book.dailyRare?.available && !book.dailyRare.caughtToday;
+  // The chip under the header shows special timing, live or not ("Sunset to 9 PM" with the live dot meaning on now).
+  const special = status;
+  // Today's rare is worth a trip until it is caught: not spawned yet (available) or waiting on the map (onMap).
+  const daily = !!book.dailyRare && !book.dailyRare.caughtToday && (book.dailyRare.available || book.dailyRare.onMap);
 
   const header = (
     <View>

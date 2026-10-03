@@ -419,7 +419,7 @@ test('round 4: instant book, menu above the map, swap slot, grades, shimmer, tit
   assert.match(cache, /has_claimable/);
   // The open menu is a Modal: nothing from the map draws above its scrim.
   assert.match(menu, /<Modal visible=\{mounted\}/);
-  assert.match(menu, /rgba\(5,52,110,0\.6\)/);
+  assert.match(menu, /rgba\(5,52,110,0\.74\)/);
   assert.match(menu, /intensity: 32 \* scrim\.value/);
   assert.doesNotMatch(menu, /isRight|row-reverse/, 'the unused right-side layout is gone');
   // The swap slot keeps its height; the burst draws behind the art.
