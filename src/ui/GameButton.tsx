@@ -123,7 +123,8 @@ export default function GameButton({
   const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   const press = (down: boolean) => {
-    if (inactive || reducedMotion) return;
+    // No press-scale on a button with nothing to do (busy or display-only).
+    if (inactive || reducedMotion || !onPress) return;
     scale.value = withTiming(down ? BUTTON.pressScale : 1, { duration: down ? BUTTON.pressInMs : BUTTON.pressOutMs });
   };
 
@@ -163,7 +164,7 @@ export default function GameButton({
       onPressIn={() => press(true)}
       onPressOut={() => press(false)}
       onPress={() => {
-        if (inactive) return;
+        if (inactive || !onPress) return;
         if (haptics) haptic('tapLight');
         onPress?.();
       }}
