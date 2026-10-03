@@ -208,7 +208,7 @@ export const BLEED_CAP = 0.65;
 
 // ── Zero-reading: what to do, as a picture ─────────────────────────────
 
-export type Pictogram = 'pin' | 'streak' | 'map' | 'member' | 'coins' | 'xp' | 'chest' | 'coin' | 'queue' | 'trophy' | 'ride' | 'star' | 'moon';
+export type Pictogram = 'pin' | 'streak' | 'map' | 'member' | 'coins' | 'xp' | 'chest' | 'coin' | 'queue' | 'trophy' | 'ride' | 'star' | 'moon' | 'gift' | 'sparkle';
 
 export interface Requirement {
   readonly icon: Pictogram;
@@ -235,7 +235,7 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   const r = (icon: Pictogram, unit: [string, string], go: GoTarget | null, count: number | null = n, pips = false): Requirement =>
     ({ icon, count: count !== null && count > 1 ? count : null, unit, go, pips });
   if (m === 'prep_items_collected') return r('pin', ['find', 'finds'], 'Explore');
-  if (m === 'wild_legendary_variants') return r('star', ['legendary find', 'legendary finds'], 'Explore');
+  if (m === 'wild_legendary_variants') return r('sparkle', ['legendary find', 'legendary finds'], 'Explore');
   if (m === 'sets_completed') return r('chest', ['set', 'sets'], 'SetCollection');
   if (['longest_streak', 'current_streak', 'login_streak_7'].includes(m)) return r('streak', ['day', 'days'], 'Explore', n, n <= 14);
   if (m === 'parks_visited') return r('map', ['park', 'parks'], 'Explore');
@@ -246,6 +246,7 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (m === 'verified_lineplay_sessions') return r('queue', ['line', 'lines'], 'Explore', null);
   if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'CoinShelf');
   if (m === 'night_show') return r('moon', ['night', 'nights'], 'Explore', null);
+  if (m === 'holiday_login') return r('gift', ['holiday', 'holidays'], null, null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
   return r('star', ['step', 'steps'], null, null);

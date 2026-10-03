@@ -156,7 +156,7 @@ export function postmarkCorner(free: Corner, tagged: boolean): Corner {
 }
 
 const CORNER: Record<Corner, object> = {
-  tl: { left: -2, top: -2 }, tr: { right: -2, top: -2 }, bl: { left: -2, bottom: -2 }, br: { right: -2, bottom: -2 },
+  tl: { left: -12, top: -10 }, tr: { right: -12, top: -10 }, bl: { left: -12, bottom: -10 }, br: { right: -12, bottom: -10 },
 };
 
 /**
@@ -188,13 +188,14 @@ const styles = StyleSheet.create({
   stampHere: { position: 'absolute', left: '4%', top: '4%', right: '4%', bottom: '4%', borderRadius: 999, borderWidth: 2.5, borderStyle: 'dashed' },
   secret: { width: '80%', height: '80%', borderRadius: 999, borderWidth: 3, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.12)' },
   postmark: {
-    position: 'absolute', width: 30, height: 30, borderRadius: 15, borderWidth: 2,
+    // Small and pushed out past the art box, so it covers well under 10% of the badge disc.
+    position: 'absolute', width: 26, height: 26, borderRadius: 13, borderWidth: 1.5,
     borderColor: 'rgba(11,42,85,0.72)', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }],
     backgroundColor: 'rgba(255,248,228,0.6)',
   },
-  pmMonth: { fontFamily: 'Knockout', fontSize: 8, lineHeight: 9, color: 'rgba(11,42,85,0.85)', letterSpacing: 0.5 },
-  pmDay: { fontFamily: 'Shark', fontSize: 12, lineHeight: 13, color: 'rgba(11,42,85,0.85)' },
-  pmYear: { fontFamily: 'Knockout', fontSize: 7, lineHeight: 8, color: 'rgba(11,42,85,0.85)' },
+  pmMonth: { fontFamily: 'Knockout', fontSize: 7, lineHeight: 8, color: 'rgba(11,42,85,0.85)', letterSpacing: 0.5 },
+  pmDay: { fontFamily: 'Shark', fontSize: 10, lineHeight: 11, color: 'rgba(11,42,85,0.85)' },
+  pmYear: { fontFamily: 'Knockout', fontSize: 6, lineHeight: 7, color: 'rgba(11,42,85,0.85)' },
   lock: {
     position: 'absolute', right: 0, bottom: 2, width: 26, height: 26, borderRadius: 13, backgroundColor: '#0B2A55',
     borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',

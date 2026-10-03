@@ -162,8 +162,9 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.ok(claimFn.indexOf('repress(false)') < claimFn.indexOf('await onClaim()'), 'press feedback must come before the request');
   assert.match(src, /const step = n;/);
   assert.match(src, /pitch: Math\.min\(12, step\)/);
-  assert.match(src, /setShown\(w => \(\{ \.\.\.w, \[kind\]: w\[kind\] \+ share \}\)\)/);
-  assert.match(src, /useEffect\(\(\) => \{ if \(!cascading\.current\) setShown\(wallet\); \}, \[wallet\]\);/);
+  assert.match(src, /bus\.add\(kind, share\);/);
+  assert.match(src, /add: \(kind, n\) => setShown\(w => \(\{ \.\.\.w, \[kind\]: w\[kind\] \+ n \}\)\)/);
+  assert.match(src, /useEffect\(\(\) => \{ if \(!cascadingRef\.current\) setShown\(wallet\); \}, \[wallet\]\);/);
   assert.match(src, /AccessibilityInfo\.announceForAccessibility/);
   assert.match(src, /tokenShake\.value = withSequence/);
   // Status is not a button, and the action button lives in the Frame (not remounted per chained stamp).
@@ -317,4 +318,29 @@ test('preview data is dev only and the API keeps v2 fields optional', () => {
   const api = read('src/api/endpoints/me/stamps.ts');
   for (const field of ['section?: string;', 'icon_url?: string | null;', 'how_to?: string;', 'sections?: StampSectionInfo[];'])
     assert.ok(api.includes(field), field);
+});
+
+test('round 6: hand-off prefetches the next art, HUD lives outside the remounting content, level-up from the claim', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  // HUD rendered in Frame, before the keyed Content.
+  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('<Content key={stamp.id}'));
+  assert.ok(card.indexOf('<View style={styles.hud}') > card.indexOf('function Frame('));
+  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('const Content = forwardRef'));
+  assert.match(card, /if \(phase !== 'cascading' \|\| !nextStamp\) return;/);
+  assert.match(card, /Image\.prefetch\(urls, 'memory-disk'\)/);
+  assert.match(card, /if \(levelled\) later\(lastLanding \+ 650, \(\) => bus\.levelUp\(result\.level as number\)\);/);
+  assert.match(card, /function LevelUp\(/);
+  const screen = read('src/screens/StampBookScreen.tsx');
+  assert.match(screen, /Image\.prefetch\(\[thumb\], 'memory-disk'\)\.then\(go, go\);\n\s+setTimeout\(go, 350\);/);
+  assert.match(screen, /levelsGained: Number\(res\?\.levels_gained \?\? 0\)/);
+  assert.match(screen, /coins: player\?\.coins \?\? 0/);
+});
+
+test('round 6: coin stamps show coins in the HUD; Holiday Shark and Wild Legend have their own pictograms', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /stamp\.metric === 'coins_held' \|\| stamp\.metric === 'coins_earned'/);
+  assert.equal(model.requirement({ metric: 'holiday_login', target: 1 }).icon, 'gift');
+  assert.equal(model.requirement({ metric: 'wild_legendary_variants', target: 2 }).icon, 'sparkle');
+  const icons = read('src/ui/iconNames.ts');
+  for (const n of ['gift', 'sparkle', 'moon']) assert.ok(icons.includes(`'${n}'`), n);
 });
