@@ -207,6 +207,6 @@ test('final round: weird-report reason, server rules promise, unblock confirm, p
   assert.match(screen, /onLongPress=\{\(\) => onMenu\(comment\)\}/);
   assert.match(screen, /hitSlop=\{14\}/);
   const composer = read('src/screens/threads/Composer.tsx');
-  assert.match(composer, /compactTopics/);
+  assert.match(composer, /const compactTopics = keyboard > 0/);
   assert.match(composer, /styles\.headerFade/);
 });

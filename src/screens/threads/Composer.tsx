@@ -155,16 +155,13 @@ export default function Composer({
   const def = topicFor(topic);
   const left = POST_MAX - text.trim().length;
 
-  const [showTiles, setShowTiles] = useState(false);
-  useEffect(() => { if (keyboard === 0) setShowTiles(false); }, [keyboard]);
-  const compactTopics = keyboard > 0 && topic !== null && !showTiles;
+  const compactTopics = keyboard > 0;
 
   const pickTopic = (key: TopicKey) => {
     playSound(TAP, { volume: 0.5, rate: 1.1 });
     setTopic((current) => (current === key ? null : key));
-    setShowTiles(false);
     setServerLine(null);
-    if (!text.trim()) setTimeout(() => inputRef.current?.focus(), 120);
+    if (!text.trim() && keyboard === 0) setTimeout(() => inputRef.current?.focus(), 120);
   };
 
   const close = async () => {
@@ -246,17 +243,26 @@ export default function Composer({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-            {!editing && compactTopics && def ? (
-              // Typing with a topic picked: the six tiles fold into one chip so the card stays big.
-              <View style={styles.compactRow}>
-                <View style={[styles.badge, styles.compactChip, { backgroundColor: def.chip, borderColor: def.color }]}>
-                  <Image source={topicArt(def.key)} style={{ width: 24, height: 24 }} contentFit="contain" />
-                  <Text style={styles.badgeText}>{def.label}</Text>
-                </View>
-                <PressScale onPress={() => setShowTiles(true)} style={styles.changeTopic} accessibilityLabel="Change topic" hitSlop={8}>
-                  <Text style={styles.changeTopicText}>Change</Text>
-                </PressScale>
-              </View>
+            {!editing && compactTopics ? (
+              // Keyboard up: the six tiles fold into one row of small chips so the card stays in view.
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.compactRow} accessibilityLabel="Topics">
+                {TOPICS.map((item) => {
+                  const on = topic === item.key;
+                  return (
+                    <PressScale
+                      key={item.key}
+                      onPress={() => pickTopic(item.key)}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.label}
+                      accessibilityState={{ selected: on }}
+                      style={[styles.badge, styles.compactChip, { backgroundColor: on ? item.chip : BRAND.white, borderColor: on ? item.color : '#bcd8f5' }]}
+                    >
+                      <Image source={topicArt(item.key)} style={{ width: 22, height: 22 }} contentFit="contain" />
+                      <Text style={styles.badgeText}>{item.label}</Text>
+                    </PressScale>
+                  );
+                })}
+              </ScrollView>
             ) : !editing && (
               <>
                 <Text style={styles.step}>What's it about?</Text>
@@ -420,10 +426,8 @@ const styles = StyleSheet.create({
   doneScrim: { backgroundColor: 'rgba(5,52,110,0.82)' },
   doneGlow: { position: 'absolute', top: -30, width: 230, height: 230, borderRadius: 115, backgroundColor: 'rgba(255,207,59,0.35)', borderWidth: 8, borderColor: 'rgba(255,224,122,0.45)' },
   headerFade: { position: 'absolute', left: 0, right: 0, top: 0, height: 22, zIndex: 2 },
-  compactRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  compactChip: { marginTop: 0, paddingVertical: 4, paddingLeft: 6, paddingRight: 14 },
-  changeTopic: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.45)' },
-  changeTopicText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
+  compactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  compactChip: { marginTop: 0, minHeight: 40, paddingVertical: 4, paddingLeft: 6, paddingRight: 14, alignItems: 'center' },
   doneShark: { width: 170, height: 150 },
   doneRibbon: {
     marginTop: -14,
