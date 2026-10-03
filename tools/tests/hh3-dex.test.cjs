@@ -507,7 +507,7 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.match(celebrate, /setBusy\(null\)/);
   assert.match(screen, /void refreshPlayer\(\)\.catch\(\(\) => undefined\)\.then\(\(\) => reloadAll\(\)\)/);
   assert.doesNotMatch(screen, /await refreshPlayer\(\)\.catch\(\(\) => undefined\);\s*await reloadAll\(\);/);
-  assert.match(screen, /<Modal visible=\{claimWaiting\}/, 'the whole window dims during the wait');
+  assert.match(screen, /<Modal visible=\{claimWaiting && !picking\}/, 'the whole window dims during the wait');
   assert.match(screen, /function ClaimBuildUp/);
   assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,260}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
   assert.match(screen, /if \(firstLand\.current\) \{/, 'the jump is first land only');
@@ -522,4 +522,11 @@ test('round 7b: the after-stamp scroll only moves down and never stops with the 
   assert.match(onClose, /const offset = Math\.max\(overflow, pickerBottom\.current\)/);
   assert.match(onClose, /overflow > scrollY\.current \+ 2/);
   assert.match(screen, /onScroll=\{event => \{ scrollY\.current = event\.nativeEvent\.contentOffset\.y; \}\}/);
+});
+
+test('round 7b: a wearable pick claim shows the build-up inside the sheet (one iOS modal at a time)', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /overlay=\{claimWaiting \? buildUp : null\}/);
+  const sheet = read('src/screens/SetCollection/SetHuntSections.tsx');
+  assert.match(sheet, /\{overlay\}\s*<\/Modal>/);
 });

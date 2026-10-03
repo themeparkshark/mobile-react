@@ -128,6 +128,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // While the claim is in flight the whole window dims (top bar and tab bar too) and the wait builds up.
   const [claimWaiting, setClaimWaiting] = useState(false);
   const claimDimStyle = useAnimatedStyle(() => ({ opacity: claimDim.value }));
+  const buildUp = (
+    <>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
+      <ClaimBuildUp reduced={reduced} />
+    </>
+  );
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
 
@@ -616,9 +622,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </Modal>
 
       <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
-      <Modal visible={claimWaiting} transparent animationType="none" statusBarTranslucent>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
-        <ClaimBuildUp reduced={reduced} />
+      {/* The build-up rides in its own window, or inside the wearable sheet when the claim came from there
+          (iOS shows one modal at a time, so a second window would never cover the sheet). */}
+      <Modal visible={claimWaiting && !picking} transparent animationType="none" statusBarTranslucent>
+        {buildUp}
       </Modal>
       <RewardReveal reveal={reveal} onClose={() => {
         const won = reveal;
@@ -638,6 +645,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         }, 700);
       }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
+        overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
       <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
         loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />
