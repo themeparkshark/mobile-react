@@ -462,7 +462,8 @@ test('round 4 map: overlapping finds collapse into one marker with a count; find
   assert.deepEqual(plain(out.hidden), [1]);
   assert.deepEqual(plain(out.chromeless), [4]);
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
-  assert.match(marker, /is_new_variant && !chromeless && count === 1/, 'never two NEW tags stacked');
+  assert.match(marker, /is_new_variant && count === 1/, "never two NEW tags stacked");
+  assert.match(marker, /newBadge, chromeless && styles.chromeOff/, "chrome hides by opacity, never by unmounting");
   assert.match(marker, /groundShadow: \{[^}]*borderRadius: 18[\s\S]*?scaleY: 0\.28/, 'round ground shadow, not a bar');
 });
 

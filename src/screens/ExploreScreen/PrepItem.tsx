@@ -257,17 +257,17 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
           color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
       </View>
       {/* Ride Photo finds wear a camera badge that also carries the rarity mark (pips, gem or crown). */}
-      {ridePhoto && !chromeless && <View style={[styles.cameraBadge, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
+      {ridePhoto && <View style={[styles.cameraBadge, chromeless && styles.chromeOff, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
         <GameIcon name="camera" size={inRange ? 16 : 12} />
         {inRange && <RarityMark tier={tier} />}
       </View>}
-      {count > 1 && !chromeless && <View style={styles.countBadge}><Text style={styles.countText}>×{count}</Text></View>}
-      {prepItem.is_new_variant && !chromeless && count === 1 && (inRange
-        ? <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
-        : <View style={styles.newDot} />)}
-      {inRange && !chromeless && showFinger && <Animated.Image source={FINGER} style={[styles.finger, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
+      {count > 1 && <View style={[styles.countBadge, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
+      {prepItem.is_new_variant && count === 1 && (inRange
+        ? <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>
+        : <View style={[styles.newDot, chromeless && styles.chromeOff]} />)}
+      {inRange && showFinger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
-      {leavingSoon && !chromeless && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
+      {leavingSoon && <View style={[styles.timePill, chromeless && styles.chromeOff]}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
     </View>
   );
 }
@@ -279,6 +279,9 @@ const A = FIND_ART_SIZE;
 const styles = StyleSheet.create({
   box: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   hidden: { opacity: 0 },
+  // Chrome hides by opacity, never by unmounting: a map marker view never changes its layout (MapLibre
+  // re-measures marker views on any child mount).
+  chromeOff: { opacity: 0 },
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   // Round, soft ground marks (an ellipse, never a pill that reads as a loading bar).
   groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 24, width: 36, height: 36, borderRadius: 18,
