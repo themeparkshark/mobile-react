@@ -18,6 +18,7 @@ import { showToast } from '../../utils/toast';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Ribbon from '../Ribbon';
+import { FlexShareButton, shouldFlexReveal, type FlexPayload } from '../../share';
 import {
   HELD_COPY, RANK_COUNTDOWN_MS, canClaim, extraRows, isHeld, rankCountdownValue, rankLabel, revealTimeline, ribbonLabel, rewardRows,
 } from './homeHuntResultsModel';
@@ -45,6 +46,12 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
   const weekKey = result?.week_key ?? null;
   const held = isHeld(result);
   const rank = result?.rank != null && Number.isFinite(result.rank) ? result.rank : null;
+  // Share Studio: a podium finish or a Top 25% week gets a Share button.
+  const flex: FlexPayload<'standings'> | null = result ? {
+    boardLabel: result.board_label || 'Home Hunt', tierLabel: result.tier_label || 'Hunter',
+    rank: rank ?? undefined, percentile: result.percentile ?? undefined, points: result.points ?? undefined,
+  } : null;
+  const canFlex = !!flex && shouldFlexReveal('standings', flex);
 
   // Phase 1 countdown, 2 ribbon, 3 chest opens, 4 rewards, 5 claim.
   useEffect(() => {
@@ -179,6 +186,7 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
                 ) : (
                   <GameButton label={claiming ? HOME_HUNT_COPY.claiming : HOME_HUNT_COPY.claim} loading={claiming} onPress={() => void claim()} />
                 )}
+                {canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="md" style={{ alignSelf: 'center', marginTop: 10 }} />}
               </Animated.View>
             )}
           </ScrollView>

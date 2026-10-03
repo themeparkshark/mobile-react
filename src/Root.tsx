@@ -29,6 +29,7 @@ import OfflineBanner from './components/OfflineBanner';
 import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
+import { ShareStudioHost } from './share';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
@@ -302,6 +303,8 @@ export default function App() {
       <SharkDropHandler />
     </NavigationContainer>
     <OfflineBanner />
+    {/* Share Studio: Flex moments and share sheets (share-studio/CONTRACT.md). */}
+    <ShareStudioHost />
     {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}
     <GameDialogHost />
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}

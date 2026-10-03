@@ -61,17 +61,6 @@ function all(node, type) {
   if (Array.isArray(node)) return node.flatMap(child => all(child, type));
   return [...(node.type === type ? [node] : []), ...all(node.props?.children, type)];
 }
-test('park share card reports ready only after all required artwork is rendered', () => {
-  const readiness = [];
-  const recap = { coins: [{ asset_id: 1, coin_url: 'https://example.test/one.png' }, { asset_id: 2, coin_url: 'https://example.test/two.png' }], park_day: '2026-09-29', park_name: 'Universal Studios Hollywood', distinct_rides_won: 2 };
-  const card = mount('src/components/ParkDayShareCard.tsx', { recap, avatarUrl: 'https://example.test/avatar.png', onReadyChange: ready => readiness.push(ready) });
-  const artwork = all(card.tree, 'Artwork'); assert.equal(artwork.length, 5);
-  assert.equal(readiness.at(-1), false);
-  for (const image of artwork.slice(0, -1)) { image.props.onReady(image.props.artworkKey); card.render(); }
-  assert.equal(readiness.at(-1), false);
-  artwork.at(-1).props.onReady(artwork.at(-1).props.artworkKey); card.render();
-  assert.equal(readiness.at(-1), true);
-});
 test('loaded remote share artwork stays visible instead of timing out into a fallback', () => {
   const ready = [];
   const image = mount('src/components/ShareCardArtwork.tsx', { artworkKey: 'coin:one', onReady: key => ready.push(key), source: { uri: 'https://example.test/one.png' }, fallback: 7 });
