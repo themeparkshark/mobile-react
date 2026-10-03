@@ -17,7 +17,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchComments, fetchReplies, fetchThread, postComment } from '../api/endpoints/social';
+import { fetchComments, fetchReplies, fetchThread, postComment, reportFilterHit } from '../api/endpoints/social';
 import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
 import RichText from '../components/RichText';
@@ -37,7 +37,7 @@ import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import { emitSocial } from './threads/socialEvents';
 import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
-import { DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -257,12 +257,16 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   };
 
   /** Send the typed reply, or a one-tap quick reply (fixed kind phrases, nothing to filter). */
+  const draftProblem = useMemo(() => checkDraft(text, REPLY_MAX), [text]);
+  const reportedDraft = useRef<string | null>(null);
+
   const send = async (quick?: string) => {
     if (!thread || sending) return;
     const words = (quick ?? text).trim();
-    const problem = checkDraft(words, REPLY_MAX);
+    const problem = quick ? checkDraft(words, REPLY_MAX) : draftProblem;
     if (problem) {
       setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
+      void reportBlockedDraft(problem, words, reportedDraft, reportFilterHit).then((pause) => { if (pause) setLine(pause); });
       playSound(NOPE, { volume: 0.5 });
       void Haptics.notificationAsync('warning');
       if (problem === 'empty') inputRef.current?.focus();
@@ -323,7 +327,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     setMenu({ kind: 'comment', id: comment.id, authorId: comment.player?.id ?? null, authorName: comment.player?.screen_name ?? 'this player', mine: comment.player?.id === player?.id });
   };
 
-  const draftProblem = checkDraft(text, REPLY_MAX);
+
   const replyName = replyTo?.player?.screen_name;
 
   if (status === 'gone') {
@@ -531,10 +535,10 @@ const styles = StyleSheet.create({
   postActions: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTopWidth: 2, borderTopColor: '#e3eefb' },
   more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   dotRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.navySoft },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#9fb4ca' },
   bubbleFoot: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 18, marginTop: 2 },
   footAction: { paddingVertical: 2, paddingHorizontal: 2 },
-  footReply: { fontFamily: 'Shark', fontSize: 13, color: BRAND.blueBright, marginTop: 2 },
+  footReply: { fontFamily: 'Shark', fontSize: 12, color: '#7d95b5', marginTop: 2 },
   dotBig: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.navySoft },
   repliesHead: { flexDirection: 'row', marginHorizontal: 14, marginTop: 14, marginBottom: 8 },
   noReplies: { alignItems: 'center', marginTop: 18, gap: 2 },

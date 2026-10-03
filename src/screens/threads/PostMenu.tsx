@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   },
   rowDanger: { borderColor: BRAND.redLip },
   rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e8f4ff', alignItems: 'center', justifyContent: 'center' },
-  rowText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 3 },
+  rowText: { flex: 1, flexWrap: 'wrap', fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 3 },
   cancel: { alignSelf: 'center', minHeight: 48, justifyContent: 'center', paddingHorizontal: 24 },
   cancelText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, marginTop: 3 },
 });
