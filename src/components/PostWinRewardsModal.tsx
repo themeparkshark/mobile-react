@@ -37,7 +37,7 @@ import GameIcon from '../ui/GameIcon';
 import type { GameIconName } from '../ui/iconNames';
 import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
-import { takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
+import { holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -237,6 +237,10 @@ export default function PostWinRewardsModal({
   // It is drawn inside the modal (an app toast would sit under the native modal window).
   const [goalNote, setGoalNote] = useState<{ text: string; big: boolean } | null>(null);
   useEffect(() => {
+    holdWinNotes(visible);
+    return () => holdWinNotes(false);
+  }, [visible]);
+  useEffect(() => {
     if (!caught || !visible) return;
     const note = takeWinNote();
     if (!note) return;
@@ -353,18 +357,6 @@ export default function PostWinRewardsModal({
       backdropColor="#05346e"
       backdropOpacity={0.6}
     >
-      {goalNote && (
-        <Animated.View entering={reducedMotion ? undefined : FadeInDown.springify().damping(14)} pointerEvents="none"
-          accessibilityLiveRegion="polite" accessibilityLabel={goalNote.text}
-          style={{ position: 'absolute', bottom: insets.bottom + 128, left: 16, right: 16, zIndex: 50, alignItems: 'center' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 46, borderRadius: 23,
-            backgroundColor: goalNote.big ? '#ffcf3b' : '#ffffff', borderWidth: 3, borderBottomWidth: 5,
-            borderColor: goalNote.big ? '#d99a00' : '#7cc6f5' }}>
-            <GameIcon name={goalNote.big ? 'star' : 'ride'} size={26} />
-            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e' }}>{goalNote.text}</Text>
-          </View>
-        </Animated.View>
-      )}
       {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
       <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}
@@ -516,6 +508,17 @@ export default function PostWinRewardsModal({
           covered by the center compass button. */}
       <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 12) + 4 }, footerStyle]}>
         <View style={styles.footer}>
+          {/* Standings goal note: in the footer flow above the button, so it never covers a reward card. */}
+          {goalNote && (
+            <Animated.View entering={reducedMotion ? undefined : FadeInDown.springify().damping(14)}
+              accessibilityLiveRegion="polite" accessibilityLabel={goalNote.text}
+              style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 42,
+                marginBottom: 8, borderRadius: 21, backgroundColor: goalNote.big ? '#ffcf3b' : '#ffffff', borderWidth: 3,
+                borderBottomWidth: 5, borderColor: goalNote.big ? '#d99a00' : '#7cc6f5' }}>
+              <GameIcon name={goalNote.big ? 'star' : 'ride'} size={24} />
+              <Text style={{ fontFamily: 'Shark', fontSize: 17, color: '#05346e' }}>{goalNote.text}</Text>
+            </Animated.View>
+          )}
           <YellowButton text={primaryLabel}
             onPress={hasCoin && onViewCoin ? () => onViewCoin(upgradeReady && !isNewCoin) : onClose} />
           {hasCoin && onViewCoin && (

@@ -361,7 +361,9 @@ export function emptyCopy(board: StandingsBoardKey, friendsCount: number | null)
 export function lastWeekCopy(result: LastWeekResult): { readonly headline: string; readonly line: string; readonly reward: string | null } {
   const headline = `${result.score} ${unitWord('ride_wins', result.score)} last week!`;
   const paid = result.tickets > 0 && !!result.title;
-  const line = paid ? `#${result.rank} this week. ${result.title}!` : `You finished #${result.rank}`;
+  // A top-three place that was not paid (a late, reviewed row) never shows a rank.
+  const line = paid ? `${result.title}! #${result.rank} last week`
+    : result.rank <= 3 ? 'Great riding last week!' : `You finished #${result.rank}`;
   const reward = paid ? `+${result.tickets} Tickets` : null;
   return { headline, line, reward };
 }
@@ -393,4 +395,15 @@ export function winNote(standings: unknown): { readonly text: string; readonly b
   }
   const week = Math.max(1, num(s.week_rides));
   return { text: `${week} ${week === 1 ? 'ride' : 'rides'} this week!`, big: false };
+}
+
+/**
+ * Whether your row is on screen, from geometry alone (a board that just
+ * became the active tab cannot trust viewability events from while hidden).
+ * At least 60% of the row must be inside the visible list area.
+ */
+export function rowOnScreen(rowTop: number, rowHeight: number, scrollTop: number, viewport: number): boolean {
+  if (!(viewport > 0) || !(rowHeight > 0)) return false;
+  const visible = Math.min(rowTop + rowHeight, scrollTop + viewport) - Math.max(rowTop, scrollTop);
+  return visible >= rowHeight * 0.6;
 }

@@ -41,13 +41,24 @@ export interface PendingWinNote { readonly text: string; readonly big: boolean }
 let pendingNote: PendingWinNote | null = null;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
+let held = false;
+
+/** The win screen holds the note while it is open, so the fallback never fires over it. */
+export function holdWinNotes(on: boolean): void {
+  held = on;
+}
+
 export function parkWinNote(note: PendingWinNote, fallback: (note: PendingWinNote) => void): void {
   pendingNote = note;
   if (pendingTimer) clearTimeout(pendingTimer);
-  pendingTimer = setTimeout(() => {
-    const left = takeWinNote();
-    if (left) fallback(left);
-  }, 15_000);
+  const arm = () => {
+    pendingTimer = setTimeout(() => {
+      if (held && pendingNote) { arm(); return; }
+      const left = takeWinNote();
+      if (left) fallback(left);
+    }, 15_000);
+  };
+  arm();
 }
 
 export function takeWinNote(): PendingWinNote | null {

@@ -41,7 +41,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  chaseChip, chaseProgress, DIVIDER_HEIGHT, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  chaseChip, chaseProgress, DIVIDER_HEIGHT, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, weekDots, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -630,7 +630,18 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
   }).current;
-  useEffect(() => { if (active) setMyRowVisible(myRowSeen.current); }, [active]);
+  // Becoming the active tab: wake the list and work out from geometry whether your
+  // row is on screen, so the You card never duplicates a visible row.
+  const viewport = useRef(0);
+  useEffect(() => {
+    if (!active) return;
+    list.current?.recordInteraction();
+    const index = items.findIndex(item => item.type === 'row' && item.row.isMe);
+    const onScreen = index >= 0 && rowOnScreen(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
+    myRowSeen.current = onScreen;
+    setMyRowVisible(onScreen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, items]);
 
   const renderItem: ListRenderItem<ListItem> = useCallback(({ item, index }) => {
     if (item.type === 'divider') return <Divider label={item.label} />;
@@ -721,7 +732,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   return (
     <View style={{ flex: 1 }}>
       {strip}
-      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }}>
+      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => { viewport.current = event.nativeEvent.layout.height; }}>
         <Animated.FlatList
           ref={list as never}
           data={items as ListItem[]}
@@ -732,7 +743,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
             length: layouts[index]?.length ?? ROW_HEIGHT, offset: HEADER_HEIGHT + (layouts[index]?.offset ?? index * ROW_HEIGHT), index,
           })}
           initialNumToRender={10}
-          windowSize={9}
+          // A hidden tab keeps only what is near its viewport. (No clipped-subview
+          // removal: re-attaching on activation would paint a blank first frame.)
+          windowSize={active ? 9 : 3}
           maxToRenderPerBatch={10}
           onScroll={onScroll}
           scrollEventThrottle={16}

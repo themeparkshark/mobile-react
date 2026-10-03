@@ -52,6 +52,8 @@ const BACK_ONLINE_ICON = require('../../assets/images/offline/back-online.png');
 const ICON_SIZE = 34;
 // Topbar: 70pt art under the status bar, plus a small gap.
 export const HEADER_CLEARANCE = 70 + 8;
+/** Screens with a control right under the header: the banner drops below it (Standings: its tab rail). */
+export const ROUTE_EXTRA_TOP: Readonly<Record<string, number>> = { Leaderboard: 66 };
 
 function probe(): Promise<unknown> {
   // Any HTTP response marks the app reachable (client.ts interceptor).
@@ -193,7 +195,7 @@ export default function OfflineBanner() {
   const back = phase === 'back';
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.
-  const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE;
+  const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE + (routeName ? ROUTE_EXTRA_TOP[routeName] ?? 0 : 0);
 
   return (
     <View
