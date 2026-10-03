@@ -3,6 +3,7 @@
  * generic game help sheet that talked about Shark Park and never mentioned
  * posting, kindness or safety.
  */
+import { SERVER_HAS_BLOCKING } from '../../previewCompat';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
@@ -60,6 +61,7 @@ export default function SocialHelp() {
             </View>
           ))}
           <View style={styles.links}>
+            {SERVER_HAS_BLOCKING && (
             <PressScale
               onPress={() => { setOpen(false); setTimeout(() => RootNavigation.navigate('BlockedPlayers'), 350); }}
               style={styles.link}
@@ -68,6 +70,7 @@ export default function SocialHelp() {
               <GameIcon name="lock" size={22} />
               <Text style={styles.linkText}>Blocked players</Text>
             </PressScale>
+            )}
             <PressScale
               onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`)}
               style={styles.link}

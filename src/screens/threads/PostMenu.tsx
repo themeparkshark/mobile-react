@@ -9,6 +9,7 @@ import { useContext, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SERVER_HAS_BLOCKING } from '../../previewCompat';
 import { blockPlayer, removeComment, removeThread, report, type ReportReason } from '../../api/endpoints/social';
 import { useToast } from '../../components/Toast';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
@@ -161,7 +162,7 @@ export default function PostMenu({
             ) : (
               <>
                 <Row icon="info" label="Report" onPress={() => setStep('report')} />
-                {target?.authorId ? <Row icon="lock" label={`Block ${target.authorName}`} danger onPress={() => setConfirm('block')} /> : null}
+                {target?.authorId && SERVER_HAS_BLOCKING ? <Row icon="lock" label={`Block ${target.authorName}`} danger onPress={() => setConfirm('block')} /> : null}
               </>
             )}
             <PressScale onPress={close} style={styles.cancel} accessibilityLabel="Cancel" haptic="none">

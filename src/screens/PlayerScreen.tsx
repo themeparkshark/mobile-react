@@ -1,4 +1,5 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
+import { SERVER_HAS_BLOCKING } from '../previewCompat';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ImageBackground, Pressable } from 'react-native';
 import { Dimensions, ScrollView, Text, View } from 'react-native';
@@ -113,7 +114,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
       gameAlert("Couldn't send the report", 'Check your connection and try again.');
       return;
     }
-    if (status !== 'blocked' && await confirmGame({ title: 'Thanks for telling us!', message: `Block ${currentPlayer.screen_name} too?`, confirmLabel: 'Block', cancelLabel: 'Not now', icon: 'check' })) {
+    if (SERVER_HAS_BLOCKING && status !== 'blocked' && await confirmGame({ title: 'Thanks for telling us!', message: `Block ${currentPlayer.screen_name} too?`, confirmLabel: 'Block', cancelLabel: 'Not now', icon: 'check' })) {
       void actions.block(currentPlayer, true);
     }
   };
@@ -154,14 +155,14 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           hint: `Removes ${currentPlayer.screen_name} from your friends`,
           onPress: () => { void actions.remove(currentPlayer); },
         }] : []),
-        {
+        ...(SERVER_HAS_BLOCKING ? [{
           // Block: a red no-entry sign. Unblock: the undo arrow. Neither is the No X (Social v2 r3).
           key: 'block',
           label: status === 'blocked' ? 'Unblock' : 'Block',
           image: status === 'blocked' ? ICON_SOURCES.retry : require('../../assets/images/screens/friends/block.png'),
           hint: `${status === 'blocked' ? 'Unblocks' : 'Blocks'} ${currentPlayer.screen_name}`,
           onPress: () => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); },
-        },
+        }] : []),
       ]
     : [];
 

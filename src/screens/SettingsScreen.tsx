@@ -346,7 +346,8 @@ export default function SettingsScreen() {
             }
           />
           {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
-          <SettingsRow
+          {/* Preview build: hidden when the server has no wishlist alerts yet (production API). */}
+          {player?.wishlist_alerts !== undefined && <SettingsRow
             art="heart"
             title="Wishlist Alerts"
             isLast
@@ -368,7 +369,7 @@ export default function SettingsScreen() {
                 }}
               />
             }
-          />
+          />}
         </Section>
 
         <Section title="Park Play" index={2}>
