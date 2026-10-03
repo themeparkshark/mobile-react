@@ -19,6 +19,10 @@ import { initialStandingsTab, standingsTabSizing, standingsTabs, type StandingsT
 import { AuthContext } from '../context/AuthProvider';
 import { usePresentationBadges } from '../hooks/usePresentationQueue';
 import { BRAND, GameIcon } from '../ui';
+import StandingsBoardV2 from './LeaderboardsScreen/StandingsBoardV2';
+import { prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
+import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standingsDemo';
+import { initialStandingsV2Tab, standingsV2Tabs, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
@@ -28,7 +32,7 @@ const whooshSound = require('../../assets/sounds/whoosh.mp3');
  * pill springs under the chosen one. A dot on Home Hunt means unclaimed results.
  */
 function StandingsTabs({ tabs, active, onChange, dot }: {
-  readonly tabs: readonly StandingsTabSpec[]; readonly active: number; readonly onChange: (index: number) => void; readonly dot: boolean;
+  readonly tabs: readonly (StandingsTabSpec | StandingsV2Tab)[]; readonly active: number; readonly onChange: (index: number) => void; readonly dot: boolean;
 }) {
   const size = standingsTabSizing(tabs.length);
   const reduced = useUiReducedMotion();
@@ -65,7 +69,83 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   );
 }
 
+/**
+ * Standings. v2 (next-wave/standings-v2/PROPOSAL.md): three boards with one
+ * number each (This Week, Friends, All-Time) plus Home Hunt behind its flag.
+ * A signed-out viewer, or a server without GET /me/standings, gets the legacy
+ * boards so an OTA can never land on a broken screen.
+ */
 export default function LeaderboardScreen() {
+  const { player } = useContext(AuthContext);
+  const [v2Missing, setV2Missing] = useState(false);
+  if (!player || v2Missing) return <LegacyStandings />;
+  return <StandingsV2 meId={player.id} onMissing={() => setV2Missing(true)} />;
+}
+
+function StandingsShell({ children }: { readonly children: React.ReactNode }) {
+  return (
+    <Wrapper>
+      <Topbar>
+        <TopbarColumn stretch={false} />
+        <TopbarColumn>
+          <TopbarText>Standings</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal id={InformationModalEnums.LeaderboardScreen} />
+        </TopbarColumn>
+      </Topbar>
+      <View style={{ marginTop: -8, flex: 1 }}>
+        <ImageBackground style={{ flex: 1 }} source={require('../../assets/images/screens/leaderboard/standings-bg.png')}>
+          {children}
+        </ImageBackground>
+      </View>
+    </Wrapper>
+  );
+}
+
+function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMissing: () => void }) {
+  const route = useRoute();
+  const tabParam = (route.params as { tab?: string } | undefined)?.tab;
+  const [huntOn, setHuntOn] = useState(() => homeHuntEnabled(cachedHomeHuntWeek()));
+  const tabs = standingsV2Tabs(huntOn);
+  const [activeTab, setActiveTab] = useState(() => initialStandingsV2Tab(tabParam, tabs));
+  const { playSound } = useContext(SoundEffectContext);
+  const resultsWaiting = usePresentationBadges('standings').length > 0;
+  useEffect(() => {
+    let live = true;
+    void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
+    // The other boards load in the background so the first switch is instant.
+    prefetchBoards(['friends', 'all_time'], meId);
+    return () => { live = false; };
+  }, [meId]);
+  useEffect(() => {
+    if (tabParam) setActiveTab(initialStandingsV2Tab(tabParam, tabs));
+  }, [tabParam, huntOn]);
+  useEffect(() => { if (activeTab >= tabs.length) setActiveTab(0); }, [tabs.length, activeTab]);
+  // Dev-only capture tour (EXPO_PUBLIC_STANDINGS_DEMO=1); a no-op otherwise.
+  useEffect(() => {
+    const off = onStandingsDemo(event => { if (event.type === 'tab') { playSound(whooshSound); setActiveTab(event.index); } });
+    const stop = startStandingsDemo();
+    return () => { off(); stop(); };
+  }, [playSound]);
+  const key = tabs[activeTab]?.key ?? 'week';
+
+  return (
+    <StandingsShell>
+      <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
+        if (activeTab !== index) playSound(whooshSound);
+        setActiveTab(index);
+      }} />
+      {/* Each board remounts for its own podium entrance; cached boards skip the loader. */}
+      <View style={{ flex: 1 }}>
+        {key === 'hunt' ? <HomeHunt /> : <StandingsBoardV2 key={key} board={key} meId={meId} onMissing={onMissing} />}
+      </View>
+    </StandingsShell>
+  );
+}
+
+/** The pre-v2 boards (Coins Won, Rides, Experience), kept for older servers and guests. */
+function LegacyStandings() {
   const { player } = useContext(AuthContext);
   const route = useRoute();
   const tabParam = (route.params as { tab?: string } | undefined)?.tab;

@@ -19,7 +19,7 @@ export function rowEnterDelay(index: number, base = 650): number {
   return base + Math.min(index, 10) * 55;
 }
 
-export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, index, highlight, enterDelayBase, interactive = true }: {
+export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, index, highlight, enterDelayBase, interactive = true, label }: {
   readonly player: PlayerType;
   readonly rank: number;
   readonly score: number;
@@ -33,6 +33,8 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
   readonly enterDelayBase?: number;
   /** False on Near Me boards, which never open a profile. */
   readonly interactive?: boolean;
+  /** Spoken label; defaults to rank, name and score. */
+  readonly label?: string;
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -41,7 +43,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
     <Animated.View entering={reduced ? undefined : FadeInRight.delay(rowEnterDelay(index, enterDelayBase)).springify().damping(15).stiffness(170)}>
       <Pressable
         accessibilityRole={interactive ? 'button' : 'text'}
-        accessibilityLabel={`Rank ${rank}, ${player.screen_name}, ${score}`}
+        accessibilityLabel={label ?? `Rank ${rank}, ${player.screen_name}, ${score}`}
         disabled={!interactive}
         onPress={() => { playSound(tapSound); RootNavigation.navigate('Player', { player: player.id }); }}
         style={({ pressed }) => ({

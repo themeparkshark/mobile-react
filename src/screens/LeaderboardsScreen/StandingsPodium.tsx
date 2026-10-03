@@ -43,9 +43,16 @@ type Props = {
   readonly header?: React.ReactNode;
   /** False on Near Me boards, where names never open a profile. */
   readonly interactive?: boolean;
+  /** Standings v2: a shorter barrel so the list and the You card show on the first screen. */
+  readonly compact?: boolean;
 };
 
-export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, playKey, header, interactive = true }: Props) {
+export const PODIUM_COMPACT_HEIGHT = 470;
+const BARREL_COMPACT_HEIGHT = 190;
+
+export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, playKey, header, interactive = true, compact = false }: Props) {
+  const podiumHeight = compact ? PODIUM_COMPACT_HEIGHT : PODIUM_HEIGHT;
+  const barrelHeight = compact ? BARREL_COMPACT_HEIGHT : BARREL_HEIGHT;
   const reduced = useUiReducedMotion();
   const { width } = useWindowDimensions();
   const { playSound } = useContext(SoundEffectContext);
@@ -114,11 +121,11 @@ export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, play
   );
 
   return (
-    <View style={{ height: PODIUM_HEIGHT }}>
+    <View style={{ height: podiumHeight }}>
       {header}
-      <Image style={{ width, height: BARREL_HEIGHT, position: 'absolute', bottom: 0 }} contentFit="cover" source={BARREL} />
+      <Image style={{ width, height: barrelHeight, position: 'absolute', bottom: 0 }} contentFit="cover" contentPosition="top" source={BARREL} />
       <View pointerEvents="box-none" onLayout={event => { spotsTop.current = event.nativeEvent.layout.y; }} style={{
-        position: 'absolute', left: 0, right: 0, bottom: BARREL_HEIGHT - 50, flexDirection: 'row',
+        position: 'absolute', left: 0, right: 0, bottom: barrelHeight - (compact ? 40 : 50), flexDirection: 'row',
         alignItems: 'flex-end', paddingHorizontal: 8,
       }}>
         {spot(3, 0, 1)}
@@ -126,8 +133,8 @@ export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, play
         {spot(2, 20, 1)}
       </View>
       {!reduced && (
-        <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width, height: PODIUM_HEIGHT }}>
-          <ParticleField ref={particles} width={width} height={PODIUM_HEIGHT} pointerEvents="none" />
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width, height: podiumHeight }}>
+          <ParticleField ref={particles} width={width} height={podiumHeight} pointerEvents="none" />
         </Animated.View>
       )}
     </View>
