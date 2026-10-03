@@ -7,7 +7,7 @@ import YellowButton from '../YellowButton';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { playLimited, SFX_PRIORITY } from '../../audio/sfxLimiter';
 import { CROWNING, crowningCopy, type CoinBossBlock } from './progressionModel';
-import { FlexShareButton } from '../../share';
+import { FlexShareButton, SHARE_IN_MODALS } from '../../share';
 
 /**
  * The Crowning (progression.md 9.5): Level 10, 5.5 s, skippable after 1.5 s.
@@ -117,7 +117,7 @@ export default function Crowning({ rideName, coinUrl, boss, reduced, inPerson = 
             <View style={{ marginTop: 12, alignSelf: 'stretch' }}>
               <YellowButton text={copy.primary} onPress={() => (onFight && copy.secondary ? onFight() : onDone())} />
             </View>
-            {!!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl }} surface="coin_sheet" size="md" style={{ marginTop: 10 }} />}
+            {SHARE_IN_MODALS && !!coinUrl && <FlexShareButton kind="crowned" payload={{ coinUrl }} surface="coin_sheet" size="md" style={{ marginTop: 10 }} />}
             {copy.secondary && (
               <TouchableOpacity accessibilityRole="button" onPress={onDone} style={{ paddingVertical: 10 }}>
                 <Text style={styles.later}>{copy.secondary}</Text>

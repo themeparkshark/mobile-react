@@ -43,7 +43,7 @@ import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import { FlexShareButton } from '../share';
+import { FlexShareButton, SHARE_IN_MODALS } from '../share';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -459,7 +459,7 @@ export default function CoinLevelingModal({
                 </Text>
 
                 {/* Share Studio: a fresh level-up (below the Crowning, which has its own) can be shown off. */}
-                {state === 'success' && nextLevel >= 2 && nextLevel < 10 && (
+                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 2 && nextLevel < 10 && (
                   <FlexShareButton kind="coin_level" surface="coin_sheet" size="md" style={{ marginVertical: 6 }}
                     payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
                 )}
