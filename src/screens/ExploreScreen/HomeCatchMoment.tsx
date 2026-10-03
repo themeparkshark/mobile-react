@@ -6,6 +6,12 @@ import { Image } from 'expo-image';
 import { Canvas, Group, Image as SkImageNode, Picture, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
 
 const WARM_SCALE = [{ scale: 0.01 }];
+/** Stamp art per ride (the ride's own vehicle). Unbuilt rides show a lock instead. */
+const RIDE_STAMP: Partial<Record<RideKind, number>> = {
+  coaster: require('../../../assets/images/ride-photo/car-back.webp'),
+  flume: require('../../../assets/images/ride-photo/log-boat.webp'),
+  teacups: require('../../../assets/images/ride-photo/teacup-back.webp'),
+};
 import Animated, {
   Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
   type SharedValue,
@@ -29,7 +35,7 @@ import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, warmStagePicture, type 
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
-import { READY_RIDES, RIDES, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
+import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
@@ -374,7 +380,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   // "Rides snapped": a ride the player never snapped before gets a "New ride!" beat in the cascade.
   const rideKindRef = useRef<RideKind | null>(null);
-  const [newRide, setNewRide] = useState<{ name: string; line: string } | null>(null);
+  const [newRide, setNewRide] = useState<{ name: string; line: string; stamps: ReturnType<typeof rideStamps> } | null>(null);
   const newRideRef = useRef(false);
   useEffect(() => { void loadRideMemory(); }, []);
 
@@ -400,7 +406,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const served = (result.data.dex as { rides_snapped?: string[] } | null | undefined)?.rides_snapped ?? null;
     const fresh = kind ? recordRide(kind, served) : false;
     newRideRef.current = fresh;
-    setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()) } : null);
+    setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()), stamps: rideStamps(ridesSnapped(), kind) } : null);
     // The sticker keeps the item art until the print lands: the photo is never on screen twice.
     pendingPhoto.current = { image, grade };
     pendingLand.current = { data: result.data, token, item: req.item };
@@ -614,11 +620,16 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
             {bonusXp ? <View style={styles.xpPill}><Text style={styles.xpText} numberOfLines={1}>+{bonusXp} XP</Text></View> : null}
           </Animated.View>}
-          {/* A ride the player never snapped: "New ride!" and the collection count */}
-          {newRide && <Animated.View style={[styles.rideChip, rideStyle]}>
-            <GameIcon name="camera" size={14} />
-            <Text style={styles.rideText} numberOfLines={1}>New ride! {newRide.name}  ·  {newRide.line}</Text>
-          </Animated.View>}
+          {/* A ride the player never snapped: "New ride!" and a stamp row (the new ride pops, unbuilt rides are locks) */}
+          {newRide && <View style={styles.rideRow} pointerEvents="none"><Animated.View style={[styles.rideChip, rideStyle]}>
+            <Text style={styles.rideText} numberOfLines={1}>New ride!</Text>
+            {newRide.stamps.map(stamp => stamp.state === 'locked'
+              ? <View key={stamp.kind} style={[styles.stamp, styles.stampLocked]}><GameIcon name="lock" size={9} /></View>
+              : <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
+                  <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
+                </View>)}
+            <Text style={styles.rideCount} numberOfLines={1}>{newRide.line}</Text>
+          </Animated.View></View>}
         </Animated.View>
       </>
     </View>
@@ -662,7 +673,16 @@ const styles = StyleSheet.create({
   gradeText: { fontFamily: 'Shark', fontSize: 14, marginLeft: 3, flexShrink: 0 },
   xpPill: { marginLeft: 6, paddingHorizontal: 6, borderRadius: 8, backgroundColor: '#0b2f5c', flexShrink: 0 },
   xpText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
-  rideChip: { position: 'absolute', left: STICKER_LEFT + STICKER + 4, bottom: -22, flexDirection: 'row', alignItems: 'center', gap: 5,
+  // Centred under the banner, capped at the banner's width (16 pt screen margins hold for any ride name).
+  rideRow: { position: 'absolute', left: 0, right: 0, bottom: -34, alignItems: 'center' },
+  stamp: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0b2f5c',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  stampNew: { borderColor: '#ff8a00', transform: [{ scale: 1.15 }] },
+  stampOpen: { opacity: 0.45 },
+  stampLocked: { backgroundColor: '#6f7f96', borderColor: '#3f4d63', width: 15, height: 15, borderRadius: 8, borderWidth: 1.5 },
+  stampArt: { width: 16, height: 12 },
+  rideCount: { color: '#0b2f5c', fontFamily: 'Knockout', fontSize: 14 },
+  rideChip: { maxWidth: BADGE_WIDTH, flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
   rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },
 });

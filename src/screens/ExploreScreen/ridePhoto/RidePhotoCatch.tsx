@@ -19,7 +19,7 @@ import { Sunburst, Shimmer } from '../../../gamekit/fx/ShaderFx';
 import { GameIcon } from '../../../ui';
 import RideScene from './RideScene';
 import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type RideStage, type SceneArt, type Sky } from './rides';
-import { lastRideKind } from './rides/rideMemory';
+import { recentRides } from './rides/rideMemory';
 import { buildPrintFrame } from './rides/printFrame';
 import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
@@ -147,7 +147,7 @@ function stageInputs(item: PrepItemType | null, forceRide: { kind?: RideKind; sk
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt) {
   const spec = rideSpec(item?.rarity ?? 3);
   const golden = item?.golden_hour === true;
-  const kind: RideKind = forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity, seed: item?.id ?? 0, lastRide: lastRideKind() });
+  const kind: RideKind = forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity, seed: item?.id ?? 0, recent: recentRides() });
   const base = sceneVariant({ seed: item?.id ?? 0, kind, setName: item?.set_name, golden });
   // Epic's spotlight beat is a night ride.
   const sky: Sky = forceRide?.sky ?? (spec.litMs != null && !golden ? 'night' : base.sky);

@@ -384,20 +384,32 @@ test('round 4: open-second decoupling and sound sync', () => {
 
 const rides = loadTs('src/screens/ExploreScreen/ridePhoto/rides/catalog.ts');
 
-test('round 4 variety: rides are themed by set, wilder for Legendary, never the same twice in a row', () => {
+test('round 6 variety: themed x2, no repeats, the one before at half, every ride within any 4 catches, none over 40%', () => {
   const ready = rides.READY_RIDES;
   assert.deepEqual(plain(ready), ['coaster', 'flume', 'teacups']);
-  // Sweet Treats leans to teacups; Parade Day (carousel not built yet) falls back to teacups.
-  const count = (opts, kind) => Array.from({ length: 400 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
-  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 200);
-  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 200);
-  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 200, 'dark ride falls back to the coaster');
-  assert.ok(count({ setName: 'Snack Stand', rarity: 5 }, 'teacups') < 60, 'Legendary avoids the gentle rides');
+  // A fresh player still leans to the set's ride (fallbacks: Parade Day to teacups, Spooky Snacks to the coaster).
+  const count = (opts, kind) => Array.from({ length: 2000 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
+  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 850);
+  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 850);
+  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 850);
   for (let seed = 0; seed < 200; seed++) {
-    for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, lastRide: last }), last);
+    for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, recent: [last] }), last);
   }
-  for (let seed = 0; seed < 50; seed++) assert.ok(ready.includes(rides.pickRide({ rarity: 2, seed })), 'only ready rides');
-  assert.equal(rides.pickRide({ rarity: 3, seed: 9, ready: ['flume'], lastRide: 'flume' }), 'flume', 'one ride: repeats are allowed');
+  assert.equal(rides.pickRide({ rarity: 3, seed: 9, ready: ['flume'], recent: ['flume'] }), 'flume', 'one ride: repeats are allowed');
+  // 10,000 seeded catches per set and rarity, feeding the picker its own history.
+  for (const set of ['Snack Stand', 'Sweet Treats', 'Ride Day Gear', 'Spooky Snacks', 'Parade Day', 'Night Glow', 'Churro Cart', 'Souvenir Shop', null]) {
+    for (const rarity of [2, 3, 4, 5]) {
+      const recent = []; const counts = {}; const lastSeen = {};
+      for (let i = 0; i < 10000; i++) {
+        const k = rides.pickRide({ setName: set, rarity, seed: i * 7919 + 13, recent });
+        counts[k] = (counts[k] || 0) + 1;
+        recent.unshift(k); recent.length = Math.min(recent.length, 4);
+        lastSeen[k] = i;
+        if (i >= 3) for (const r of ready) assert.ok(i - (lastSeen[r] ?? -1) <= 3, `${set} ${rarity}: ${r} missing from 4 catches in a row`);
+      }
+      for (const r of ready) assert.ok(counts[r] / 10000 <= 0.4, `${set} ${rarity}: ${r} at ${counts[r] / 100}%`);
+    }
+  }
 });
 
 test('round 4 variety: scene sky, season, photobombs and the rides-snapped line', () => {
@@ -414,7 +426,13 @@ test('round 4 variety: scene sky, season, photobombs and the rides-snapped line'
     if (v.photobomb === 'gull') assert.notEqual(v.sky, 'night');
     assert.equal(rides.sceneVariant({ seed, kind: 'teacups' }).sky, v.sky, 'seeded: a reopen looks the same');
   }
-  assert.equal(rides.ridesSnappedLine(['coaster', 'flume', 'flume', 'teacups']), '3 of 8 rides snapped');
+  assert.equal(rides.ridesSnappedLine(['coaster', 'flume', 'flume', 'teacups']), '3 of 3');
+  // Honest: the count is against the rides a find can actually take.
+  const takeable = new Set(Array.from({ length: 3000 }, (_, seed) => rides.pickRide({ rarity: 1 + (seed % 5), seed })));
+  assert.equal(rides.ridesSnappedLine([]).split(' of ')[1], String(takeable.size), 'denominator = rides pickRide can return');
+  const stamps = plain(rides.rideStamps(['coaster'], 'flume'));
+  assert.deepEqual(stamps.slice(0, 3).map(s => s.state), ['snapped', 'new', 'open']);
+  assert.equal(stamps.filter(s => s.state === 'locked').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are locks, no number');
 });
 
 test('round 4 variety: every ride is a config with one paint for the live scene and the photo', () => {

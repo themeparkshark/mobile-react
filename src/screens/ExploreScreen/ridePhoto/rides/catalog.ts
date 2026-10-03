@@ -64,31 +64,45 @@ export function seeded(seed: number, salt = 0): number {
 }
 
 /**
- * Which ride this find takes. Themed by its set (x4 weight), wildest rides for
- * Legendary (x4), a seeded roll for variety, and never the same ride twice in
- * a row when there is a choice. Only ready rides are ever returned.
+ * Which ride this find takes. With only a few rides built, variety wins over theme:
+ * - the set's ride gets x2 (it used to be x4, which made it every other catch)
+ * - the last ride never repeats; the one before it gets x0.5
+ * - a ride missing from the last 3 catches is due and is picked outright, so every ride shows up within
+ *   any 4 catches in a row
+ * - Legendary leans to the wildest rides (x1.5), never so much it breaks the rules above
+ * Only ready rides are ever returned. `recent` is newest first.
  */
 export function pickRide(opts: {
   setName?: string | null;
   rarity: number | null | undefined;
   seed: number;
   lastRide?: RideKind | null;
+  recent?: readonly RideKind[];
   ready?: readonly RideKind[];
 }): RideKind {
   const ready = opts.ready ?? READY_RIDES;
   if (ready.length === 0) return 'coaster';
+  if (ready.length === 1) return ready[0];
+  const recent = (opts.recent ?? (opts.lastRide ? [opts.lastRide] : [])).filter(kind => ready.includes(kind));
+  const last = recent[0] ?? null, beforeLast = recent[1] ?? null;
+  if (recent.length >= ready.length) {
+    const window = recent.slice(0, ready.length);
+    const due = ready.filter(kind => !window.includes(kind) && kind !== last);
+    if (due.length === 1) return due[0];
+  }
   const tier = Math.round(Number(opts.rarity) || 0);
   const themed = SET_RIDE[setSlug(opts.setName)];
   const themedReady = themed ? (ready.includes(themed) ? themed : RIDES[themed].fallback) : null;
   const weights = ready.map(kind => {
     let w = 1;
-    if (kind === themedReady) w *= 4;
-    if (tier >= 5) w *= RIDES[kind].thrill === 3 ? 4 : RIDES[kind].thrill === 1 ? 0.25 : 1;
-    if (opts.lastRide && kind === opts.lastRide && ready.length > 1) w = 0;
+    if (kind === themedReady) w *= 2;
+    if (tier >= 5) w *= RIDES[kind].thrill === 3 ? 1.5 : RIDES[kind].thrill === 1 ? 0.75 : 1;
+    if (kind === last) w = 0;
+    else if (kind === beforeLast) w *= 0.5;
     return w;
   });
   const total = weights.reduce((sum, w) => sum + w, 0);
-  if (total <= 0) return ready[0];
+  if (total <= 0) return ready.find(kind => kind !== last) ?? ready[0];
   let roll = seeded(opts.seed, 7) * total;
   for (let i = 0; i < ready.length; i++) {
     roll -= weights[i];
@@ -148,7 +162,21 @@ export function sceneVariant(opts: { seed: number; kind: RideKind; setName?: str
 }
 
 /** "Rides snapped": the collection hook. */
-export function ridesSnappedLine(snapped: readonly RideKind[]): string {
-  const count = new Set(snapped.filter(kind => kind in RIDES)).size;
-  return `${count} of ${ALL_RIDES.length} rides snapped`;
+/** Counted against the rides a find can actually take (never a promise the game cannot keep). */
+export function ridesSnappedLine(snapped: readonly RideKind[], ready: readonly RideKind[] = READY_RIDES): string {
+  const count = new Set(snapped.filter(kind => ready.includes(kind))).size;
+  return `${count} of ${ready.length}`;
+}
+
+/**
+ * The rides stamp row: every ready ride (snapped or still open) and, after them, the unbuilt rides as locked
+ * silhouettes with no number. Wordless for kids.
+ */
+export function rideStamps(snapped: readonly RideKind[], fresh: RideKind | null, ready: readonly RideKind[] = READY_RIDES)
+  : { kind: RideKind; state: 'new' | 'snapped' | 'open' | 'locked' }[] {
+  const have = new Set(snapped);
+  return [
+    ...ready.map(kind => ({ kind, state: kind === fresh ? 'new' as const : have.has(kind) ? 'snapped' as const : 'open' as const })),
+    ...ALL_RIDES.filter(kind => !ready.includes(kind)).map(kind => ({ kind, state: 'locked' as const })),
+  ];
 }
