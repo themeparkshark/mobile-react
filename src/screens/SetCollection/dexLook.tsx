@@ -4,15 +4,17 @@
  * the glossy sticker-slot tile panel in Alex's style (two-tone body, darker
  * lip, one gloss band).
  *
- * Ramp (round 1 review: Rare is purple, never a second blue; Epic and
- * Legendary must not both read gold): Common slate, Uncommon green,
- * Rare purple, Epic flame orange-red, Legendary gold with a shimmer.
+ * Ramp: the app-wide palette in src/design-system.ts (Common green,
+ * Uncommon blue, Rare purple, Epic orange, Legendary gold), so the book
+ * agrees with stamps, the shop and the wardrobe. The lone Common gem stays
+ * readable by size and a thick white outline, not a different hue.
  * Ink on every chip is navy for 4.5:1 contrast; the frame color never
  * carries text.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { colors } from '../../design-system';
 import { BRAND } from '../../ui';
 
 export type RarityTier = 1 | 2 | 3 | 4 | 5;
@@ -28,12 +30,21 @@ export interface RarityLook {
   readonly ink: string;
 }
 
+/** A light tint of a #RRGGBB color (for chips that carry navy text). */
+export function tint(hex: string, amount: number): string {
+  const v = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `#${[16, 8, 0].map(shift => mix((v >> shift) & 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// The one app-wide rarity palette (stamps, shop, wardrobe, book): src/design-system.ts colors.rarity.
+const R = colors.rarity;
 export const RARITY_LOOK: Readonly<Record<RarityTier, RarityLook>> = {
-  1: { key: 'common', label: 'Common', frame: '#6f849c', chip: '#e8edf3', ink: BRAND.navy },
-  2: { key: 'uncommon', label: 'Uncommon', frame: '#2fb35d', chip: '#dcf6e5', ink: BRAND.navy },
-  3: { key: 'rare', label: 'Rare', frame: '#9b4dff', chip: '#eee2ff', ink: BRAND.navy },
-  4: { key: 'epic', label: 'Epic', frame: '#ff5a2b', chip: '#ffe3d8', ink: BRAND.navy },
-  5: { key: 'legendary', label: 'Legendary', frame: '#f5b400', chip: '#fff1c2', ink: BRAND.navy },
+  1: { key: 'common', label: 'Common', frame: R.common.main, chip: tint(R.common.main, 0.82), ink: BRAND.navy },
+  2: { key: 'uncommon', label: 'Uncommon', frame: R.uncommon.main, chip: tint(R.uncommon.main, 0.82), ink: BRAND.navy },
+  3: { key: 'rare', label: 'Rare', frame: R.rare.main, chip: tint(R.rare.main, 0.85), ink: BRAND.navy },
+  4: { key: 'epic', label: 'Epic', frame: R.epic.main, chip: tint(R.epic.main, 0.82), ink: BRAND.navy },
+  5: { key: 'legendary', label: 'Legendary', frame: R.legendary.main, chip: tint(R.legendary.main, 0.78), ink: BRAND.navy },
 };
 
 export function rarityLook(rarity: number): RarityLook {

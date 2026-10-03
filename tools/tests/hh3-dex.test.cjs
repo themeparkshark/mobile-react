@@ -266,12 +266,16 @@ test('stable items, refresh pacing, swap progress, color separation, prize icons
   assert.equal(dex.spawnIcon('Anytime, anywhere'), 'map');
 });
 
-test('rarity: one ramp (Rare purple, Epic flame, Legendary gold), navy ink on light chips, gems on every tile', () => {
-  const look = loadTs('src/screens/SetCollection/dexLook.tsx', { 'expo-linear-gradient': {}, react: {}, 'react-native': { StyleSheet: { create: x => x } }, '../../ui': { BRAND: { navy: '#05346e', white: '#fff' } } });
+test('rarity: the app-wide design-system palette, navy ink on light chips, gems on every tile', () => {
+  const design = loadTs('src/design-system.ts');
+  const look = loadTs('src/screens/SetCollection/dexLook.tsx', { 'expo-linear-gradient': {}, react: {}, 'react-native': { StyleSheet: { create: x => x } },
+    '../../ui': { BRAND: { navy: '#05346e', white: '#fff' } }, '../../design-system': design });
   const ramp = plain(look.RARITY_LOOK);
   assert.deepEqual(Object.values(ramp).map(entry => entry.key), ['common', 'uncommon', 'rare', 'epic', 'legendary']);
-  assert.equal(ramp[3].frame, '#9b4dff', 'Rare is purple');
-  assert.equal(new Set(Object.values(ramp).map(entry => entry.frame)).size, 5);
+  // One palette app-wide: the book's frames are exactly design-system colors.rarity (fails on any drift).
+  for (const entry of Object.values(ramp)) assert.equal(entry.frame, design.colors.rarity[entry.key].main, entry.key);
+  assert.equal(ramp[3].frame, '#9C27B0');
+  assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const R = colors\.rarity;/);
   const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const entry of Object.values(ramp)) {
     const ratio = (lum(entry.chip) + 0.05) / (lum('#05346e') + 0.05);
