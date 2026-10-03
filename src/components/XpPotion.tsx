@@ -72,7 +72,7 @@ const FILL_BOTTOM = CY + R; // 114
 const FILL_TOP = 30;
 // The liquid never drops below the label line: at 0% a living, glowing base
 // sits under the label (like Alex's art) and progress fills from here to the neck.
-const FILL_BASE = CY + 12; // 88
+const FILL_BASE = CY + 2; // 78: the label line
 const CELEBRATION_MS = 1390; // ends just before the refill spring at 1400 ms
 const FRAME_MS = 33;
 // Lip centre after the tilt: where escaping bubbles and drops leave the bottle.
@@ -123,23 +123,26 @@ function bottlePaths() {
   mouth.addOval(Skia.XYWHRect(CX - 16, 16, 32, 7));
   // The cream label: a band that wraps the lower body, curved with the sphere.
   const label = Skia.Path.Make();
-  // A steep diagonal sticker, like xp.png, that runs a little past the glass edge.
-  label.moveTo(CX - 44, 60);
-  label.quadTo(CX - 2, 70, CX + 44, 92);
-  label.lineTo(CX + 40, 112);
-  label.quadTo(CX - 4, 90, CX - 46, 80);
+  // A diagonal sticker like xp.png: drawn level, then turned 47 degrees so that
+  // after the bottle's tilt it runs about 25 degrees down to the right on screen,
+  // a little past the glass edge.
+  label.moveTo(CX - 50, 2 + CY);
+  label.quadTo(CX, 8 + CY, CX + 50, 2 + CY);
+  label.lineTo(CX + 50, 22 + CY);
+  label.quadTo(CX, 28 + CY, CX - 50, 22 + CY);
   label.close();
+  const letters = Skia.Path.Make();
+  letters.moveTo(CX - 14, 8 + CY); letters.lineTo(CX - 3, 21 + CY);
+  letters.moveTo(CX - 3, 8 + CY); letters.lineTo(CX - 14, 21 + CY);
+  letters.moveTo(CX + 4, 22 + CY); letters.lineTo(CX + 4, 8 + CY);
+  letters.quadTo(CX + 15, 7 + CY, CX + 14, 12 + CY);
+  letters.quadTo(CX + 13, 17 + CY, CX + 5, 16 + CY);
+  const turn = Skia.Matrix().translate(CX, CY + 12).rotate((47 * Math.PI) / 180).translate(-CX, -(CY + 12));
+  label.transform(turn);
+  letters.transform(turn);
   const labelBounds = Skia.Path.Make();
   labelBounds.addCircle(CX, CY, R + 5);
   const labelClip = Skia.Path.MakeFromOp(label, labelBounds, PathOp.Intersect) ?? label;
-  // "XP" in brush strokes, centred on the label.
-  const letters = Skia.Path.Make();
-  // Letters rotated with the sticker (about 25 degrees).
-  letters.moveTo(CX - 15, 73); letters.lineTo(CX - 9, 89);
-  letters.moveTo(CX - 6, 76); letters.lineTo(CX - 18, 86);
-  letters.moveTo(CX + 1, 95); letters.lineTo(CX + 7, 79);
-  letters.quadTo(CX + 18, 83, CX + 14, 89);
-  letters.quadTo(CX + 11, 93, CX + 3, 89);
   // Ooze over the lip, on the left, like Alex's.
   const ooze = Skia.Path.Make();
   ooze.moveTo(CX - 20, 15);
