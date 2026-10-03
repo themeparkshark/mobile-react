@@ -61,7 +61,7 @@ export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
 const PHONE = /(\+?\d{1,2}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b|\b\d{3}[\s.-]\d{4}\b/;
 const EMAIL = /[a-z0-9._%+-]+\s*@\s*[a-z0-9-]+\s*\.\s*[a-z]{2,}/i;
 const ADDRESS = /\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/i;
-const CONTACT = /\b(my|our)\s+(home\s+)?address\b|\bi\s+live\s+(at|on)\b|\b(my|our)\s+(phone|cell|number)\b|\b(call|text|dm|facetime|email)\s+me\b|\b(add|follow|friend)\s+me\s+on\b|(^|\s)@[a-z0-9_.]{3,}/i;
+const CONTACT = /\b(my|our)\s+(home\s+)?address\b|\bi\s+live\s+(at|on)\b|\b(my|our)\s+(phone|cell|number)\b|\b(call|text|dm|facetime|email)\s+me\b|\b(add|follow|friend)\s+me\s+on\b|\bmeet\s*-?\s*(me|ups?)\b|\blet'?s\s+meet\b|(^|\s)@[a-z0-9_.]{3,}/i;
 const LINK = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b)/i;
 
 export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {

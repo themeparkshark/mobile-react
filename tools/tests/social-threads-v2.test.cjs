@@ -18,7 +18,7 @@ test('short kid posts are fine; blank, too long, personal info and links get a k
   }
   assert.equal(model.checkDraft('   '), 'empty');
   assert.equal(model.checkDraft('x'.repeat(model.POST_MAX + 1)), 'too_long');
-  for (const pii of ['text me at 714 555 0199', 'call me 555-0199', 'I live at 12 Elm Street', 'my email is kid@gmail.com', 'add me on snap', 'follow @sharkfan99']) {
+  for (const pii of ['text me at 714 555 0199', 'call me 555-0199', 'I live at 12 Elm Street', 'my email is kid@gmail.com', 'add me on snap', 'follow @sharkfan99', 'Sharks meetup at the fountain', 'meet me at the carousel']) {
     assert.equal(model.checkDraft(pii), 'personal_info', pii);
   }
   assert.equal(model.checkDraft('go to coolsite.com'), 'link');
