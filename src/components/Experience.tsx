@@ -5,7 +5,7 @@ import { nextLevelCaption } from '../constants/levelUnlocks';
 import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import HapticPatterns from '../helpers/hapticPatterns';
 import useCrumbs from '../hooks/useCrumbs';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { useReduceMotionPreference } from '../hooks/useReducedGameMotion';
 import { PlayerType } from '../models/player-type';
 import { useProgressionFlags } from '../services/progression/progressionFlags';
 import XpPotion from './XpPotion';
@@ -51,7 +51,8 @@ export default function Experience({
 }) {
   const { labels } = useCrumbs();
   const { rideBoss } = useProgressionFlags();
-  const reduced = useReducedGameMotion();
+  // Three states, like the potion: null means not known yet (decide nothing).
+  const reduced = useReduceMotionPreference() === true;
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { level, current, needed, percent } = experienceProgress(player);
   const progress = percent / 100;
@@ -157,12 +158,22 @@ export default function Experience({
         {caption && <Text style={styles.caption} numberOfLines={2}>{caption}</Text>}
       </View>
       {ribbonOn && (
-        <Animated.View pointerEvents="none" style={[styles.ribbon, {
-          opacity: ribbon,
-          transform: [{ scale: ribbon.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }, { rotate: '-4deg' }],
-        }]}>
-          <Text style={styles.ribbonText}>Level up!</Text>
-        </Animated.View>
+        // Shadow on a still wrapper; the animated view only scales and fades. Built from
+        // nested pills with even borders so iOS fills it edge to edge on every frame.
+        <View pointerEvents="none" style={styles.ribbonShadow}>
+          <Animated.View style={{
+            opacity: ribbon,
+            transform: [{ scale: ribbon.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }, { rotate: '-4deg' }],
+          }}>
+            <View style={styles.ribbonLip}>
+              <View style={styles.ribbonEdge}>
+                <View style={styles.ribbonFill}>
+                  <Text style={styles.ribbonText}>Level up!</Text>
+                </View>
+              </View>
+            </View>
+          </Animated.View>
+        </View>
       )}
     </View>
   );
@@ -179,8 +190,10 @@ const styles = StyleSheet.create({
   numbers: { fontFamily: 'Shark', fontSize: 18, color: '#1f8a2b', flexShrink: 1 },
   toNext: { fontFamily: 'Knockout', fontSize: 16, color: '#3d5f8c' },
   caption: { fontFamily: 'Knockout', fontSize: 15, color: '#3d5f8c', marginTop: 3 },
-  ribbon: { position: 'absolute', right: 12, top: -14, backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 3,
-    borderColor: '#ffffff', borderBottomWidth: 5, borderBottomColor: '#d99a00', paddingHorizontal: 14, paddingVertical: 4,
+  ribbonShadow: { position: 'absolute', right: 12, top: -16,
     shadowColor: '#05346e', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 3 }, shadowRadius: 4, elevation: 4 },
+  ribbonLip: { backgroundColor: '#d99a00', borderRadius: 17, paddingBottom: 4 },
+  ribbonEdge: { backgroundColor: '#ffffff', borderRadius: 17, padding: 3 },
+  ribbonFill: { backgroundColor: '#ffcf3b', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 3 },
   ribbonText: { fontFamily: 'Shark', fontSize: 22, color: '#05346e', textTransform: 'uppercase' },
 });

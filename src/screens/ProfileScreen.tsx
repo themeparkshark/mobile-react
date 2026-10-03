@@ -50,6 +50,9 @@ import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
+/** Last Stamp Book dot count, shared across Profile mounts. */
+let stampDotCache: { at: number; count: number } | null = null;
+
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
 
@@ -73,9 +76,18 @@ export default function ProfileScreen() {
   // The XP potion only animates while its card is on screen.
   const levelCard = useCardOnScreen();
   const [stampsToClaim, setStampsToClaim] = useState(0);
-  const requestStampDot = useCallback(() => {
+  const requestStampDot = useCallback((force = false) => {
     if (isProfilePreview) return;
-    void getStamps().then((r) => setStampsToClaim(stampClaimableCount(r))).catch(() => setStampsToClaim(0));
+    // The stamp list is a big payload: read it at most every 5 minutes on focus (pull to refresh forces).
+    if (!force && stampDotCache && Date.now() - stampDotCache.at < 5 * 60_000) {
+      setStampsToClaim(stampDotCache.count);
+      return;
+    }
+    void getStamps().then((r) => {
+      const count = stampClaimableCount(r);
+      stampDotCache = { at: Date.now(), count };
+      setStampsToClaim(count);
+    }).catch(() => setStampsToClaim(0));
   }, [isProfilePreview]);
 
   // Scroll refs
@@ -121,7 +133,7 @@ export default function ProfileScreen() {
         setExtrasUnavailable(parkResult.status === 'rejected' ||
           storeResult.status === 'rejected' || friendResult.status === 'rejected');
         await refreshNotificationCount();
-        requestStampDot();
+        requestStampDot(true);
       }
     } finally {
       setRefreshing(false);
@@ -509,19 +521,12 @@ export default function ProfileScreen() {
                 accessibilityLabel="Ride Tracker"
                 accessibilityHint="Opens your rides and park memories"
                 style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: '#ffffff',
-                  borderColor: '#ffffff',
-                  borderWidth: 3,
-                  borderBottomWidth: 5,
-                  borderBottomColor: '#c6e3f5',
+                  // Nested lip (a lip-coloured card under a white card): no corner spur.
+                  backgroundColor: '#c6e3f5',
                   borderRadius: 20,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
+                  paddingBottom: 5,
                   marginTop: 12,
                   marginBottom: 8,
-                  gap: 12,
                   shadowColor: '#05346e',
                   shadowOpacity: 0.14,
                   shadowOffset: { width: 0, height: 3 },
@@ -530,13 +535,16 @@ export default function ProfileScreen() {
                   transform: [{ scale: pressed ? 0.98 : 1 }],
                 })}
               >
-                <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
-                  style={{ width: 55, height: 55 }} contentFit="contain" />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
-                  <Text style={{ color: '#366A8C', fontSize: 15, fontFamily: 'Knockout' }}>Your rides and park memories</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ffffff',
+                  borderRadius: 20, paddingHorizontal: 17, paddingVertical: 13 }}>
+                  <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
+                    style={{ width: 55, height: 55 }} contentFit="contain" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
+                    <Text style={{ color: '#366A8C', fontSize: 15, fontFamily: 'Knockout' }}>Your rides and park memories</Text>
+                  </View>
+                  <GameIcon name="arrow" size={28} />
                 </View>
-                <GameIcon name="arrow" size={28} />
               </Pressable>
               {extrasUnavailable && (
                 <Text style={{ color: '#526477', fontFamily: 'Knockout', fontSize: 14,
