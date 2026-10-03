@@ -63,13 +63,26 @@ test('USF lagoon show (themeparks.wiki, Oct 2): the 12:00 AM performance reads "
   assert.equal(night.teaserText(lagoon, -420), 'Lagoon show at midnight ET', 'a phone still on Pacific time');
   const late = show('2026-10-02T23:15:00-04:00', '2026-10-02T23:27:00-04:00', { kind: 'water', label: 'Lagoon show', where: 'Over the lagoon' });
   assert.equal(night.teaserText(late, -240), 'Lagoon show tonight at 11:15 PM');
-  assert.equal(night.teaserText(late, -420), 'Lagoon show tonight at 11:15 PM ET');
+  assert.equal(night.teaserText(late, -420), 'Lagoon show at 11:15 PM ET', 'with a zone label: no "tonight"');
   assert.equal(night.teaserText(show('2026-10-03T00:45:00-04:00', '2026-10-03T00:57:00-04:00', { label: 'Lagoon show' }), -240),
     'Lagoon show at 12:45 AM');
   // Hollywood's park time, read on an Orlando phone.
   const ush = show('2026-10-02T21:00:00-07:00', '2026-10-02T21:10:00-07:00', { timezone: 'America/Los_Angeles' });
-  assert.equal(night.teaserText(ush, -240), 'Fireworks tonight at 9:00 PM PT');
+  assert.equal(night.teaserText(ush, -240), 'Fireworks at 9:00 PM PT');
   assert.equal(night.teaserText(show('garbage', 'garbage'), -240), 'Fireworks tonight');
+});
+
+test('the longest teasers fit a 375 pt row (SE) at the pill title\'s smallest font scale', () => {
+  const labels = ['Fireworks', 'Water show', 'Lagoon show', 'Castle lights', 'River show', 'Light show', 'Projection show'];
+  for (const label of labels) {
+    const midnight = night.teaserText(show('2026-10-03T00:00:00-04:00', '2026-10-03T00:12:00-04:00', { label }), -420);
+    assert.ok(midnight.length <= night.TEASER_FIT_CHARS, midnight);
+    const zoned = night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label }), -420);
+    assert.ok(zoned.length <= night.TEASER_FIT_CHARS, `${zoned} (${zoned.length})`);
+  }
+  assert.equal(night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label: 'Projection show' }), -420),
+    'Projection show 10:15 PM ET', 'the panel\'s longest case keeps its time and zone');
+  assert.match(read('src/components/map/alive/NightShowPill.tsx'), /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.85\}>\{text\}/);
 });
 
 test('intensity follows the arc and is zero outside the show', () => {
