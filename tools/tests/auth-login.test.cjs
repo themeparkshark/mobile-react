@@ -65,6 +65,7 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
       async clearCache() { events.push(['clearAccountCache']); },
     },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    '../screens/SetCollection/dexCache': { clearBook() {} },
     '../services/push': {
       refreshPushRegistration: async () => undefined,
       listenForPushTaps: () => () => undefined,

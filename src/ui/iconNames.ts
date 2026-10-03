@@ -22,7 +22,7 @@ export const ORIGINAL_ICON_NAMES = [
 export const GENERATED_ICON_NAMES = [
   'crown', 'streak', 'timer',
   'rush', 'wrench', 'pin', 'medal1', 'medal2', 'medal3', 'dice', 'sparkle', 'ride', 'camera',
-  'pause', 'play', 'retry', 'arrow',
+  'pause', 'play', 'retry', 'arrow', 'swap',
 ] as const;
 
 export type GameIconName = typeof ORIGINAL_ICON_NAMES[number] | typeof GENERATED_ICON_NAMES[number];

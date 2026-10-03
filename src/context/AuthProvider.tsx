@@ -1,3 +1,4 @@
+import { clearBook } from '../screens/SetCollection/dexCache';
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -183,6 +184,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);
     setPlayer(null);
+    clearBook(); // the collection book copy belongs to the signed-out player
     setIsReady(true);
     await clearQueueBackgroundHeartbeat().catch(error =>
       console.warn('Could not stop queue background tracking:', error));

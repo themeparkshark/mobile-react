@@ -1,168 +1,325 @@
-import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
-import { useRoute } from '@react-navigation/native';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useHelp } from '../components/help/HelpProvider';
+/**
+ * How to Play: five big cards, each a short looping demo of the mechanic
+ * with a 2 to 3 word title and one line of 7 words or fewer. The next card
+ * peeks in from the right so swiping is obvious without reading. A speaker
+ * button reads each card aloud. "Learn more" (a pill) opens the full help;
+ * a "?" sheet that links a topic opens it directly.
+ */
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faVolumeHigh } from '@fortawesome/free-solid-svg-icons/faVolumeHigh';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, {
+  interpolate, interpolateColor, runOnJS, withDelay, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence,
+  withSpring, withTiming, type SharedValue,
+} from 'react-native-reanimated';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import { AuthContext } from '../context/AuthProvider';
+import { playSfx } from '../gamekit/SFX';
+import * as Haptics from '../helpers/haptics';
 import * as RootNavigation from '../RootNavigation';
-import { GLOSSARY_KEYS, type HelpTopicId } from '../services/help/glossary';
-import { HELP_TOPICS, type HelpArtKey } from '../services/help/helpTopics';
-import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW, textPreset } from '../ui';
+import type { HelpTopicId } from '../services/help/glossary';
+import { HOW_TO_CARDS, type HowToArtKey, type HowToCard } from '../services/help/howToCards';
+import { BRAND, GameButton, GameIcon, RADIUS } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import HowToDemo from './HowToPlay/HowToDemos';
+import HowToPlayMore from './HowToPlay/HowToPlayMore';
+import { StarBurst } from './SetCollection/DexParts';
 
-/** Existing hand-drawn art only (Alex's originals and the kit art players already know). */
-const ART: Readonly<Record<HelpArtKey, number>> = {
-  finn: require('../../assets/images/tutorial/teacher-shark.png'),
-  churro: require('../../assets/images/prep-items/churros/churro_18.png'),
-  park: require('../../assets/images/screens/park/mystery-coin-shark-v1.png'),
-  coin: require('../../assets/images/screens/park/gold.png'),
-  lineplay: require('../../assets/images/screens/lineplay/queue-recap-shark.png'),
-  level: require('../../assets/images/progression/crown.png'),
-  stamps: require('../../assets/images/stamps/stamp-logo.png'),
-  teams: require('../../assets/images/team-shark-badge.png'),
-  standings: require('../../assets/images/screens/leaderboard/crown-gold.png'),
-  shop: require('../../assets/images/screens/profile/shark_shop.png'),
-  extras: require('../../assets/images/screens/pin-collections/shark.png'),
+const VOICE: Readonly<Record<HowToArtKey, number>> = {
+  find: require('../../assets/sounds/howto/vo-find.mp3'),
+  catch: require('../../assets/sounds/howto/vo-catch.mp3'),
+  book: require('../../assets/sounds/howto/vo-book.mp3'),
+  park: require('../../assets/sounds/howto/vo-park.mp3'),
+  line: require('../../assets/sounds/howto/vo-line.mp3'),
 };
 
-/** How to play: every feature in a couple of sentences, every word, and a replay switch. */
+/** Space left and right of a card; the next card shows PEEK points of itself. */
+const READ_ALOUD_SEEN = 'howto_read_aloud_intro_v1';
+const SIDE = 24;
+const GAP = 12;
+
 export default function HowToPlayScreen() {
   const route = useRoute();
+  const navigation = useNavigation();
   const focus = (route.params as { topic?: HelpTopicId } | undefined)?.topic ?? null;
-  const { glossary, explain, replayAllTutorials } = useHelp();
-  const scroll = useRef<ScrollView>(null);
-  const offsets = useRef<Partial<Record<HelpTopicId, number>>>({});
-  const [replaying, setReplaying] = useState(false);
+  const [more, setMore] = useState(focus != null);
+  const [moreFocus, setMoreFocus] = useState<HelpTopicId | null>(focus);
+  const { width } = useWindowDimensions();
+  const reduced = useUiReducedMotion();
+  const { player } = useContext(AuthContext);
+  const soundOn = player?.enabled_sound_effects !== false;
 
-  // Opened from a "?" or a term sheet: land on that card.
-  useEffect(() => {
-    if (!focus) return;
-    const timer = setTimeout(() => {
-      const y = offsets.current[focus];
-      if (y != null) scroll.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [focus]);
+  const cardWidth = width - SIDE * 2 - 20;
+  const interval = cardWidth + GAP;
+  const scrollRef = useRef<Animated.ScrollView>(null);
+  const scrollX = useSharedValue(0);
+  const [page, setPage] = useState(0);
+  const pageRef = useRef(0);
+  const [readAloud, setReadAloud] = useState(false);
+  const voice = useRef<Audio.Sound | null>(null);
+  const [cheer, setCheer] = useState(0);
+  const last = page === HOW_TO_CARDS.length - 1;
 
-  const replay = async () => {
-    if (replaying) return;
-    setReplaying(true);
+  // Every speak() takes a ticket; a clip that loads after a newer request (fast swipes) or after the
+  // screen closed is unloaded at once, so two voices never overlap.
+  const voiceTicket = useRef(0);
+  const stopVoice = useCallback(() => {
+    voiceTicket.current += 1;
+    const current = voice.current;
+    voice.current = null;
+    if (current) void current.unloadAsync().catch(() => undefined);
+  }, []);
+
+  const speak = useCallback(async (card: HowToCard) => {
+    stopVoice();
+    if (!soundOn) return;
+    const ticket = voiceTicket.current;
     try {
-      await replayAllTutorials();
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      gameAlert('Tutorials ready', 'Finn will show every tip again as you play: at home, at the park and in line.',
-        undefined, { icon: 'retry' });
-    } finally {
-      setReplaying(false);
+      const { sound } = await Audio.Sound.createAsync(VOICE[card.art], { shouldPlay: false, volume: 1 });
+      if (ticket !== voiceTicket.current) { void sound.unloadAsync().catch(() => undefined); return; }
+      voice.current = sound;
+      await sound.playAsync();
+    } catch { /* Voice is a bonus; the words are on the card. */ }
+  }, [soundOn, stopVoice]);
+
+  useEffect(() => stopVoice, [stopVoice]);
+
+  // First visit: read the first card aloud on its own, so a kid who can't read finds the speaker.
+  // Never while a screen reader is on: VoiceOver already reads the card, and two voices at once help nobody.
+  const firstVisitChecked = useRef(false);
+  useEffect(() => {
+    if (firstVisitChecked.current || more || !soundOn) return;
+    firstVisitChecked.current = true;
+    let live = true;
+    void (async () => {
+      try {
+        if (await AsyncStorage.getItem(READ_ALOUD_SEEN)) return;
+        void AsyncStorage.setItem(READ_ALOUD_SEEN, '1').catch(() => undefined);
+        if (await AccessibilityInfo.isScreenReaderEnabled()) return;
+        if (!live) return;
+        setReadAloud(true);
+        void speak(HOW_TO_CARDS[0]);
+      } catch { /* The speaker button still works. */ }
+    })();
+    return () => { live = false; };
+  }, [more, soundOn, speak]);
+
+  // Leaving the screen (another screen on top, or back): stop the voice. The demos pause via `screenFocused`.
+  const screenFocused = useIsFocused();
+  useEffect(() => { if (!screenFocused) stopVoice(); }, [screenFocused, stopVoice]);
+
+  const onPage = useCallback((next: number) => {
+    if (next === pageRef.current) return;
+    pageRef.current = next;
+    setPage(next);
+    playSfx('ui.select', 0.45);
+    void Haptics.selectionAsync().catch(() => undefined);
+    if (readAloud) void speak(HOW_TO_CARDS[next]);
+    if (next === HOW_TO_CARDS.length - 1) {
+      // The last card is a small finish, once: a puff of stars, a hop and one LET'S PLAY! pulse.
+      setCheer(value => (value === 0 ? 1 : value));
+      playSfx('fx.reveal', 0.6);
     }
+  }, [readAloud, speak]);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: event => { scrollX.value = event.contentOffset.x; },
+    onMomentumEnd: event => {
+      runOnJS(onPage)(Math.max(0, Math.min(HOW_TO_CARDS.length - 1, Math.round(event.contentOffset.x / Math.max(1, interval)))));
+    },
+  }, [interval, onPage]);
+
+  const goTo = (index: number) => {
+    const target = Math.max(0, Math.min(HOW_TO_CARDS.length - 1, index));
+    scrollRef.current?.scrollTo({ x: target * interval, animated: !reduced });
+    onPage(target);
+  };
+
+  const toggleRead = () => {
+    const next = !readAloud;
+    setReadAloud(next);
+    playSfx('ui.tap', 0.6);
+    if (next) void speak(HOW_TO_CARDS[page]); else stopVoice();
+  };
+
+  const openMore = (topic: HelpTopicId | null) => {
+    playSfx('ui.tap', 0.6);
+    stopVoice();
+    setMoreFocus(topic);
+    setMore(true);
+  };
+
+  const finish = () => {
+    stopVoice();
+    playSfx('fx.whoosh', 0.5);
+    if (navigation.canGoBack()) navigation.goBack();
+    // The home map highlights the nearest find when it supports `highlightNearestFind` (home map agent).
+    RootNavigation.navigate('Explore', { highlightNearestFind: Date.now() });
   };
 
   return (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <BackButton />
+          <BackButton onPress={more && focus == null ? () => setMore(false) : undefined} />
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>How to Play</TopbarText>
+          <TopbarText>{more ? 'More help' : 'How to Play'}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
-      <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <Image source={ART.finn} style={styles.heroArt} contentFit="contain" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Hi, I'm Finn!</Text>
-            <Text style={styles.heroBody}>Everything in the game, in one place. Tap any word to see what it means.</Text>
+      {more ? <HowToPlayMore focus={moreFocus} /> : (
+        <View style={styles.body}>
+          <Animated.ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
+            snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum
+            contentContainerStyle={{ paddingHorizontal: SIDE, gap: GAP }}
+            onScroll={onScroll} scrollEventThrottle={16} style={{ flex: 1 }}>
+            {HOW_TO_CARDS.map((card, index) => (
+              <CardPage key={card.id} card={card} index={index} width={cardWidth} interval={interval} scrollX={scrollX}
+                active={index === page && screenFocused} reduced={reduced} cheer={index === HOW_TO_CARDS.length - 1 ? cheer : 0}
+                readAloud={readAloud} onSpeak={toggleRead} />
+            ))}
+          </Animated.ScrollView>
+
+          <View style={styles.dots} accessible accessibilityRole="adjustable"
+            accessibilityLabel="How to play cards" accessibilityValue={{ text: `Card ${page + 1} of ${HOW_TO_CARDS.length}` }}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={event => goTo(page + (event.nativeEvent.actionName === 'increment' ? 1 : -1))}>
+            {HOW_TO_CARDS.map((card, index) => (
+              <Dot key={card.id} index={index} interval={interval} scrollX={scrollX} color={card.colors[1]} onPress={() => goTo(index)} />
+            ))}
+          </View>
+
+          <View style={[styles.footer, { paddingBottom: BOTTOM_BAR_OVERHANG }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Learn more" onPress={() => openMore(HOW_TO_CARDS[page]?.topic ?? null)}
+              style={({ pressed }) => [styles.morePill, pressed && { transform: [{ scale: 0.96 }] }]} hitSlop={6}>
+              <GameIcon name="info" size={24} />
+              <Text style={styles.moreText}>Learn more</Text>
+            </Pressable>
+            <PulseOnCheer cheer={cheer} reduced={reduced}>
+              <GameButton label={last ? "Let's play!" : 'Next'} icon={last ? 'play' : 'arrow'} fullWidth
+                onPress={() => (last ? finish() : goTo(page + 1))} />
+            </PulseOnCheer>
           </View>
         </View>
-
-        {HELP_TOPICS.map(topic => (
-          <View key={topic.id} onLayout={event => { offsets.current[topic.id] = event.nativeEvent.layout.y; }}
-            style={[styles.card, focus === topic.id && styles.cardFocus]}>
-            <View style={styles.cardHead}>
-              <Image source={ART[topic.art]} style={styles.cardArt} contentFit="contain" />
-              <Text accessibilityRole="header" style={styles.cardTitle}>{topic.title}</Text>
-            </View>
-            {topic.lines.map(line => <Text key={line} style={styles.cardLine}>{line}</Text>)}
-            <View style={styles.chips}>
-              {topic.terms.map(key => (
-                <Pressable key={key} accessibilityRole="button" accessibilityLabel={`What is ${glossary[key].label}?`}
-                  onPress={() => explain(key)} style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}>
-                  <GameIcon name={glossary[key].icon} size={20} />
-                  <Text style={styles.chipText}>{glossary[key].label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ))}
-
-        <Text style={styles.section}>Every word in the game</Text>
-        <View style={styles.list}>
-          {GLOSSARY_KEYS.map((key, index) => {
-            const term = glossary[key];
-            return (
-              <Pressable key={key} accessibilityRole="button" accessibilityLabel={`${term.label}. ${term.what}`}
-                onPress={() => explain(key)}
-                style={({ pressed }) => [styles.row, index < GLOSSARY_KEYS.length - 1 && styles.rowBorder, pressed && styles.chipPressed]}>
-                <GameIcon name={term.icon} size={26} />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.rowTitle}>{term.label}</Text>
-                  <Text style={styles.rowBody} numberOfLines={2}>{term.what}</Text>
-                </View>
-                <GameIcon name="arrow" size={20} />
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.section}>Need a refresher?</Text>
-        <View style={[styles.card, { alignItems: 'stretch' }]}>
-          <Text style={styles.cardLine}>Replay every tutorial and tip. Finn shows each one again the next time it comes up.</Text>
-          <GameButton label="Replay tutorials" icon="retry" loading={replaying} onPress={() => { void replay(); }}
-            style={{ marginTop: 8 }} />
-          <GameButton label="Settings and support" variant="ghost" onPress={() => RootNavigation.navigate('Settings')}
-            style={{ marginTop: 4 }} />
-        </View>
-        <View style={{ height: 120 }} />
-      </ScrollView>
+      )}
     </Wrapper>
   );
 }
 
+function PulseOnCheer({ cheer, reduced, children }: { readonly cheer: number; readonly reduced: boolean; readonly children: ReactNode }) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (!cheer || reduced) return;
+    scale.value = withDelay(250, withSequence(withTiming(1.14, { duration: 170 }), withSpring(1, { damping: 6, stiffness: 220 })));
+  }, [cheer, reduced, scale]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+function CardPage({ card, index, width, interval, scrollX, active, reduced, cheer, readAloud, onSpeak }: {
+  readonly card: HowToCard; readonly index: number; readonly width: number; readonly interval: number;
+  readonly scrollX: SharedValue<number>; readonly active: boolean; readonly reduced: boolean; readonly cheer: number;
+  readonly readAloud: boolean; readonly onSpeak: () => void;
+}) {
+  // Card moves 1x, its art 1.3x: a little depth as you swipe. Reduce Motion keeps cards flat.
+  const cardStyle = useAnimatedStyle(() => {
+    if (reduced) return {};
+    const progress = (scrollX.value - index * interval) / Math.max(1, interval);
+    return { transform: [{ scale: interpolate(progress, [-1, 0, 1], [0.92, 1, 0.92], 'clamp') }] };
+  });
+  const artStyle = useAnimatedStyle(() => {
+    if (reduced) return {};
+    const progress = (scrollX.value - index * interval) / Math.max(1, interval);
+    return { transform: [{ translateX: interpolate(progress, [-1, 0, 1], [width * 0.3, 0, -width * 0.3], 'clamp') }] };
+  });
+  const demo = Math.min(width - 56, 280);
+  // Finish beat on the last card: the art hops and tilts once (a wave stand-in, no redraw).
+  const hop = useSharedValue(0);
+  useEffect(() => {
+    if (!cheer || reduced) return;
+    hop.value = withSequence(withTiming(1, { duration: 220 }), withSpring(0, { damping: 6, stiffness: 180 }));
+  }, [cheer, reduced, hop]);
+  const hopStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -24 * hop.value }, { rotate: `${-6 * hop.value}deg` }] }));
+  return (
+    <Animated.View style={[styles.card, { width }, cardStyle]}>
+      <LinearGradient colors={card.colors as [string, string]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
+      <Animated.View style={[styles.artWrap, artStyle]}>
+        <View style={styles.halo} />
+        <Animated.View style={hopStyle}>
+          <HowToDemo art={card.art} size={demo} active={active} reduced={reduced} />
+        </Animated.View>
+        {cheer > 0 && !reduced && <StarBurst key={cheer} size={demo} />}
+      </Animated.View>
+      <View style={styles.copy} accessible accessibilityRole="header" accessibilityLabel={`${card.title}. ${card.line}`}>
+        <Text style={styles.title}>{card.title}</Text>
+        <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{card.line}</Text>
+      </View>
+      {/* Top-right safe zone (56 pt): the demo art is inset below it, so they never touch. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={readAloud ? 'Stop reading aloud' : 'Read aloud'}
+        onPress={onSpeak} hitSlop={10} style={[styles.speaker, readAloud && styles.speakerOn]}>
+        <FontAwesomeIcon icon={faVolumeHigh} size={22} color={BRAND.navy} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function Dot({ index, interval, scrollX, color, onPress }: {
+  readonly index: number; readonly interval: number; readonly scrollX: SharedValue<number>; readonly color: string;
+  readonly onPress: () => void;
+}) {
+  // Width and color follow the finger directly (no spring started per frame).
+  const style = useAnimatedStyle(() => {
+    const distance = Math.min(1, Math.abs(scrollX.value / Math.max(1, interval) - index));
+    return {
+      transform: [{ scaleX: interpolate(distance, [0, 1], [2.5, 1], 'clamp') }],
+      backgroundColor: interpolateColor(distance, [0, 1], [color, '#9cc7ea']),
+    };
+  });
+  return (
+    <Pressable onPress={onPress} hitSlop={{ top: 16, bottom: 16, left: 6, right: 6 }} accessible={false}>
+      <Animated.View style={[styles.dot, style]} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  scroll: { flex: 1, marginTop: -8, backgroundColor: '#e3f3ff' },
-  content: { padding: 16, paddingTop: 14 },
-  hero: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: RADIUS.lg, borderWidth: 3,
-    borderColor: BRAND.white, padding: 12, marginBottom: 14, ...SHADOW.card,
-  },
-  heroArt: { width: 86, height: 86, marginRight: 10 },
-  heroTitle: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy },
-  heroBody: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 21, color: BRAND.navySoft, marginTop: 2 },
+  body: { flex: 1, marginTop: -8, backgroundColor: '#e3f3ff' },
   card: {
-    backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: '#cfe8fb', padding: 14,
-    marginBottom: 12, ...SHADOW.card, shadowOpacity: 0.12,
+    marginVertical: 14, borderRadius: 30, overflow: 'hidden', borderWidth: 4, borderColor: BRAND.white,
+    shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
   },
-  cardFocus: { borderColor: BRAND.gold, borderWidth: 3 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  cardArt: { width: 46, height: 46, marginRight: 10 },
-  cardTitle: { flex: 1, fontFamily: 'Shark', fontSize: 21, color: BRAND.navy },
-  cardLine: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 22, color: BRAND.navy, marginBottom: 4 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef7ff', borderRadius: RADIUS.pill,
-    borderWidth: 2, borderColor: BRAND.sky, paddingHorizontal: 10, paddingVertical: 4,
+  gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '40%' },
+  halo: {
+    position: 'absolute', width: '84%', aspectRatio: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  chipPressed: { backgroundColor: BRAND.cream },
-  chipText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.blue },
-  section: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, textTransform: 'uppercase', marginTop: 10, marginBottom: 8, marginLeft: 6 },
-  list: { backgroundColor: BRAND.white, borderRadius: RADIUS.lg, borderWidth: 2, borderColor: '#cfe8fb', marginBottom: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12 },
-  rowBorder: { borderBottomWidth: 2, borderBottomColor: '#eef6fd' },
-  rowTitle: { ...textPreset('label'), fontSize: 16 },
-  rowBody: { ...textPreset('bodySmall'), color: BRAND.navySoft },
+  speaker: {
+    position: 'absolute', top: 10, right: 10, width: 46, height: 46, borderRadius: 23, alignItems: 'center',
+    justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 3, borderColor: BRAND.white,
+  },
+  speakerOn: { backgroundColor: BRAND.gold },
+  artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 56 },
+  copy: { paddingHorizontal: 16, paddingBottom: 22, alignItems: 'center' },
+  title: {
+    fontFamily: 'Shark', fontSize: 38, color: BRAND.white, textAlign: 'center',
+    textShadowColor: 'rgba(5,52,110,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
+  },
+  line: { fontFamily: 'Knockout', fontSize: 26, lineHeight: 30, color: BRAND.white, textAlign: 'center', marginTop: 6 },
+  dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 10 },
+  dot: { width: 12, height: 12, borderRadius: 6, marginHorizontal: 9 },
+  footer: { paddingHorizontal: 16, gap: 10 },
+  morePill: {
+    alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 18,
+    borderRadius: RADIUS.pill, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.navy,
+  },
+  moreText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
 });
