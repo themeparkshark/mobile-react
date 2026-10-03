@@ -169,8 +169,8 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.match(src, /tokenShake\.value = withSequence/);
   // Status is not a button, and the action button lives in the Frame (not remounted per chained stamp).
   assert.match(src, /accessibilityRole="text" accessibilityLabel=\{status\}/);
-  assert.match(src, /<Content key=\{stamp\.id\} ref=\{content\}/);
-  assert.ok(src.indexOf("<GameButton label={phase === 'claiming'") > src.indexOf('<Content key={stamp.id}'));
+  assert.match(src, /<Content key=\{s\.id\} ref=\{s\.id === stamp\.id \? content : undefined\}/);
+  assert.ok(src.indexOf("<GameButton label={phase === 'claiming'") > src.indexOf('<Content key={s.id}'));
   // Pending stays yellow: the button is not disabled while the claim is in flight.
   assert.match(src, /loading=\{phase === 'claiming'\} disabled=\{!action \|\| phase === 'cascading' \|\| phase === 'gotIt'\}/);
   const btn = read('src/ui/GameButton.tsx');
@@ -323,7 +323,7 @@ test('preview data is dev only and the API keeps v2 fields optional', () => {
 test('round 6: hand-off prefetches the next art, HUD lives outside the remounting content, level-up from the claim', () => {
   const card = read('src/screens/stampbook/StampCard.tsx');
   // HUD rendered in Frame, before the keyed Content.
-  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('<Content key={stamp.id}'));
+  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('<Content key={s.id}'));
   assert.ok(card.indexOf('<View style={styles.hud}') > card.indexOf('function Frame('));
   assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('const Content = forwardRef'));
   assert.match(card, /if \(phase !== 'cascading' \|\| !nextStamp\) return;/);
@@ -343,4 +343,18 @@ test('round 6: coin stamps show coins in the HUD; Holiday Shark and Wild Legend 
   assert.equal(model.requirement({ metric: 'wild_legendary_variants', target: 2 }).icon, 'sparkle');
   const icons = read('src/ui/iconNames.ts');
   for (const n of ['gift', 'sparkle', 'moon']) assert.ok(icons.includes(`'${n}'`), n);
+});
+
+test('round 6: event haunt stamps get the moon pictogram; the postmark stays off the badge and the name', () => {
+  assert.equal(model.requirement({ metric: 'fright_haunts', target: 5 }).icon, 'moon');
+  assert.match(read('src/screens/stampbook/StampTile.tsx'), /bl: \{ left: -10, bottom: 0 \}, br: \{ right: -10, bottom: 0 \}/);
+});
+
+test('round 6: the outgoing stamp stays drawn until the incoming art is on screen (no one-frame gap)', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /\[stamp, \.\.\.\(held && held\.id !== stamp\.id \? \[held\] : \[\]\)\]\.map/);
+  assert.match(card, /onShown=\{s\.id === stamp\.id \? release : undefined\}/);
+  assert.match(card, /const cap = setTimeout\(\(\) => setHeld\(null\), 700\);/);
+  assert.match(card, /if \(current\.id !== stamp\.id\) \{\n\s+setHeld\(current\);/);
+  assert.match(read('src/screens/stampbook/StampArt.tsx'), /onDisplay=\{onShown\}/);
 });

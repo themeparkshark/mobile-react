@@ -247,6 +247,7 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'CoinShelf');
   if (m === 'night_show') return r('moon', ['night', 'nights'], 'Explore', null);
   if (m === 'holiday_login') return r('gift', ['holiday', 'holidays'], null, null);
+  if (m.startsWith('fright_')) return r('moon', ['haunt', 'haunts'], null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
   return r('star', ['step', 'steps'], null, null);

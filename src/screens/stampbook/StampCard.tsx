@@ -147,6 +147,21 @@ function Frame(props: Props & { stamp: BookStamp }) {
   }), []);
   const kinds = hudKinds(stamp);
 
+  // The stamp shown before this one, held on top until the new art is drawn (see the content block below).
+  // Derived during render (not in an effect), so the outgoing Content is never unmounted for even one commit.
+  const [current, setCurrent] = useState(stamp);
+  const [held, setHeld] = useState<BookStamp | null>(null);
+  if (current.id !== stamp.id) {
+    setHeld(current);
+    setCurrent(stamp);
+  }
+  useEffect(() => {
+    if (!held) return;
+    const cap = setTimeout(() => setHeld(null), 700);
+    return () => clearTimeout(cap);
+  }, [held]);
+  const release = useCallback(() => { requestAnimationFrame(() => setHeld(null)); }, []);
+
   // Prefetch the next stamp's art while this one cascades, so the hand-off never opens on an empty stage.
   useEffect(() => {
     if (phase !== 'cascading' || !nextStamp) return;
@@ -205,8 +220,14 @@ function Frame(props: Props & { stamp: BookStamp }) {
           </View>
 
           <View style={styles.contentWrap} onLayout={e => { hudLayout.current.content = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; }}>
-            <Content key={stamp.id} ref={content} {...props} claimed={claimed} shake={shake} bus={bus}
-              onPhase={setPhase} onClaimed={id => setClaimedIds(ids => [...ids, id])} />
+            {/* Hand-off: the outgoing stamp stays mounted on top until the incoming art is actually drawn
+                (onDisplay, capped), so a chained card never shows an empty stage for even one frame. */}
+            {[stamp, ...(held && held.id !== stamp.id ? [held] : [])].map(s => (
+              <Content key={s.id} ref={s.id === stamp.id ? content : undefined} {...props} stamp={s}
+                claimed={s.rewardClaimed || claimedIds.includes(s.id)} shake={shake} bus={bus} overlay={s.id !== stamp.id}
+                onShown={s.id === stamp.id ? release : undefined}
+                onPhase={s.id === stamp.id ? setPhase : noop} onClaimed={id => setClaimedIds(ids => [...ids, id])} />
+            ))}
           </View>
 
           <View style={styles.actions}>
@@ -229,9 +250,14 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 )}
               </View>
             )}
-            {stamp.earned && claimed && !busy && !!stamp.rewards.title && (
-              <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Remove title' : 'Wear title'} variant="secondary"
-                icon="crown" loading={equipping} onPress={onToggleTitle} />
+            {/* Mounted (invisible) as soon as the stamp has a title, so its art and label are measured before it shows:
+                a freshly mounted GameButton otherwise flashes one frame of blank art. */}
+            {!!stamp.rewards.title && stamp.earned && (
+              <View style={!(claimed && !busy) && styles.hidden} pointerEvents={claimed && !busy ? 'auto' : 'none'}
+                importantForAccessibility={claimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(claimed && !busy)}>
+                <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Remove title' : 'Wear title'} variant="secondary"
+                  icon="crown" loading={equipping} onPress={onToggleTitle} />
+              </View>
             )}
           </View>
           {!!message && <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text>}
@@ -247,8 +273,14 @@ function Frame(props: Props & { stamp: BookStamp }) {
   );
 }
 
+const noop = () => undefined;
+
 type ContentProps = Props & {
   bus: HudBus;
+  /** The outgoing stamp during a hand-off: drawn on top, inert. */
+  overlay?: boolean;
+  /** The incoming stamp's art is on screen. */
+  onShown?: () => void;
   stamp: BookStamp;
   claimed: boolean;
   shake: SharedValue<number>;
@@ -257,7 +289,7 @@ type ContentProps = Props & {
 };
 
 const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp, accent, reducedMotion, fresh, claimed,
-  shake, nextCount, bus, onClaim, onNext, onPhase, onClaimed }, ref) {
+  shake, nextCount, bus, overlay, onShown, onClaim, onNext, onPhase, onClaimed }, ref) {
   const tone = stampRarity(stamp.rarity);
   const rank = rarityRank(stamp.rarity);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
@@ -433,7 +465,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   useEffect(() => {
     if (!autoClaim) return;
     if (stamp.earned && !claimed && hasRewards(stamp.rewards)) later(2400, () => { void claim(); });
-    else if (claimed && nextCount > 0) later(1400, onNext);
+    // Waits out the cascade and any level-up moment before following the chain.
+    else if (claimed && nextCount > 0) later(3400, onNext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimed]);
 
@@ -457,7 +490,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const pillGold = rank >= 5;
 
   return (
-    <View style={styles.content}>
+    <View style={[styles.content, overlay && styles.overlay]} pointerEvents={overlay ? 'none' : 'auto'}
+      importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} accessibilityElementsHidden={overlay}>
       <Pressable
         style={styles.stage}
         onPress={stamp.earned ? () => repress(true) : undefined}
@@ -474,7 +508,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
             <View style={[styles.secret, { borderColor: accent }]}><GameIcon name="info" size={ART * 0.4} /></View>
           ) : (
             <>
-              <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} />
+              <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} onShown={onShown} />
               {bleed > 0 && (
                 <View style={[styles.bleed, { height: `${Math.round(bleed * 100)}%` }]}>
                   <View style={styles.bleedInner}><StampArt stamp={stamp} size="full" locked={false} /></View>
@@ -566,6 +600,7 @@ const styles = StyleSheet.create({
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
   contentWrap: { alignSelf: 'stretch' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: DIALOG_CARD.backgroundColor },
   hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   hudText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF' },
