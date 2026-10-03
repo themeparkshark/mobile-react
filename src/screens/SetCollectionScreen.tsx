@@ -433,6 +433,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const revealedFor = useRef<string | null>(null);
   const claimReady = !!set && (set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable'));
   const pickerBottom = useRef(0);
+  const scrollY = useRef(0);
   // First land on a claim: with a cached book the claim offset from the last visit is applied as the list's
   // initial contentOffset (no paint at the top, no scroll, no hidden page). With no cache the list stays hidden
   // only until its first layout pass decides the offset; the safety timer starts at that first layout.
@@ -570,6 +571,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             ref={listRef}
             contentOffset={seededOffset != null ? { x: 0, y: seededOffset } : undefined}
             onLayout={armSafety}
+            onScroll={event => { scrollY.current = event.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={64}
             data={data}
             numColumns={COLUMNS}
             estimatedItemSize={cell + 46}
@@ -628,8 +631,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         // After the stamp beat, ease the done panel (and its Wear title button) clear of the compass.
         if (revealTimer.current) clearTimeout(revealTimer.current);
         revealTimer.current = setTimeout(() => {
-          const offset = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
-          if (viewportH.current && offset > 0) listRef.current?.scrollToOffset({ offset, animated: !reduced });
+          // Down only, and never to a stop that cuts the set cards in half (same rule as the claim landing).
+          const overflow = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
+          const offset = Math.max(overflow, pickerBottom.current);
+          if (viewportH.current && overflow > scrollY.current + 2) listRef.current?.scrollToOffset({ offset, animated: !reduced });
         }, 700);
       }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
