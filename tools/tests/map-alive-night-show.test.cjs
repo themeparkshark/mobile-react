@@ -32,9 +32,9 @@ test('phases: teaser in the hour before, live during, done after', () => {
 });
 
 test('time zones: the teaser reads park time whatever the phone is set to, and phases are absolute instants', () => {
-  assert.equal(night.teaserText(MK), 'Fireworks tonight at 9:00 PM');
+  assert.equal(night.teaserText(MK, -240), 'Fireworks tonight at 9:00 PM');
   const anaheim = show('2026-10-01T21:30:00-07:00', '2026-10-01T21:40:00-07:00', { timezone: 'America/Los_Angeles' });
-  assert.equal(night.teaserText(anaheim), 'Fireworks tonight at 9:30 PM');
+  assert.equal(night.teaserText(anaheim, -420), 'Fireworks tonight at 9:30 PM');
   // The same instant in UTC: 04:30Z is 9:30 PM in Anaheim, live there.
   assert.equal(night.showPhase(anaheim, Date.parse('2026-10-02T04:35:00Z')), 'live');
   assert.equal(night.showPhase(MK, Date.parse('2026-10-06T01:05:00Z')), 'live', '01:05Z is 9:05 PM in Orlando');
@@ -42,18 +42,47 @@ test('time zones: the teaser reads park time whatever the phone is set to, and p
   assert.equal(night.parkClock('2026-10-05T12:05:00-04:00'), '12:05 PM');
   assert.equal(night.parkClock('garbage'), null);
   assert.equal(night.liveText(MK), 'Fireworks now! Over the castle');
-  for (const text of [night.teaserText(MK), night.liveText(MK)]) assert.ok(!/[—–]/.test(text), 'no em or en dashes');
+  for (const text of [night.teaserText(MK, -240), night.liveText(MK)]) assert.ok(!/[—–]/.test(text), 'no em or en dashes');
 });
 
 test('a show crossing midnight stays live past 12 AM and ends on time', () => {
   const late = show('2026-10-01T23:50:00-04:00', '2026-10-02T00:10:00-04:00');
-  assert.equal(night.teaserText(late), 'Fireworks tonight at 11:50 PM');
+  assert.equal(night.teaserText(late, -240), 'Fireworks tonight at 11:50 PM');
   assert.equal(night.showPhase(late, Date.parse('2026-10-01T23:00:00-04:00')), 'teaser');
   assert.equal(night.showPhase(late, Date.parse('2026-10-02T00:05:00-04:00')), 'live');
   assert.equal(night.showPhase(late, Date.parse('2026-10-02T00:10:00-04:00')), 'done');
   assert.equal(Math.round(night.showSecond(late, Date.parse('2026-10-02T00:05:00-04:00'))), 900, '15 minutes in');
   const encore = show('2026-10-02T00:15:00-04:00', '2026-10-02T00:25:00-04:00');
-  assert.equal(night.teaserText(encore), 'Fireworks tonight at 12:15 AM');
+  assert.equal(night.teaserText(encore, -240), 'Fireworks at 12:15 AM', 'after midnight it is still tonight\'s show: no "tonight"');
+});
+
+test('USF lagoon show (themeparks.wiki, Oct 2): the 12:00 AM performance reads "midnight", in park time, labeled off-zone', () => {
+  // The feed's real performances that night: 9:00, 9:45, 10:30, 11:15 PM, 12:00 and 12:45 AM (park offset -04:00).
+  const lagoon = show('2026-10-03T00:00:00-04:00', '2026-10-03T00:12:00-04:00', { kind: 'water', label: 'Lagoon show', where: 'Over the lagoon' });
+  assert.equal(night.teaserText(lagoon, -240), 'Lagoon show at midnight');
+  assert.equal(night.teaserText(lagoon, -420), 'Lagoon show at midnight ET', 'a phone still on Pacific time');
+  const late = show('2026-10-02T23:15:00-04:00', '2026-10-02T23:27:00-04:00', { kind: 'water', label: 'Lagoon show', where: 'Over the lagoon' });
+  assert.equal(night.teaserText(late, -240), 'Lagoon show tonight at 11:15 PM');
+  assert.equal(night.teaserText(late, -420), 'Lagoon show at 11:15 PM ET', 'with a zone label: no "tonight"');
+  assert.equal(night.teaserText(show('2026-10-03T00:45:00-04:00', '2026-10-03T00:57:00-04:00', { label: 'Lagoon show' }), -240),
+    'Lagoon show at 12:45 AM');
+  // Hollywood's park time, read on an Orlando phone.
+  const ush = show('2026-10-02T21:00:00-07:00', '2026-10-02T21:10:00-07:00', { timezone: 'America/Los_Angeles' });
+  assert.equal(night.teaserText(ush, -240), 'Fireworks at 9:00 PM PT');
+  assert.equal(night.teaserText(show('garbage', 'garbage'), -240), 'Fireworks tonight');
+});
+
+test('the longest teasers fit a 375 pt row (SE) at the pill title\'s smallest font scale', () => {
+  const labels = ['Fireworks', 'Water show', 'Lagoon show', 'Castle lights', 'River show', 'Light show', 'Projection show'];
+  for (const label of labels) {
+    const midnight = night.teaserText(show('2026-10-03T00:00:00-04:00', '2026-10-03T00:12:00-04:00', { label }), -420);
+    assert.ok(midnight.length <= night.TEASER_FIT_CHARS, midnight);
+    const zoned = night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label }), -420);
+    assert.ok(zoned.length <= night.TEASER_FIT_CHARS, `${zoned} (${zoned.length})`);
+  }
+  assert.equal(night.teaserText(show('2026-10-02T22:15:00-04:00', '2026-10-02T22:30:00-04:00', { label: 'Projection show' }), -420),
+    'Projection show 10:15 PM ET', 'the panel\'s longest case keeps its time and zone');
+  assert.match(read('src/components/map/alive/NightShowPill.tsx'), /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.85\}>\{text\}/);
 });
 
 test('intensity follows the arc and is zero outside the show', () => {
