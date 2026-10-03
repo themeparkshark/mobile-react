@@ -74,6 +74,9 @@ const fakeRedeem: typeof redeemPrepItem = async () => ({ success: true, data: {
   item: { id: 39, name: 'Golden Churro', rarity: 5, rarity_label: 'Legendary' },
 } });
 
+/** Map-chrome budget capture of the old layout: every card invisible, the map unchanged. */
+const BARE = __DEV__ && process.env.EXPO_PUBLIC_HH3_EXP === 'still-bare';
+
 /** Dev-only layout review for new-variant guidance on a real map. */
 export default function HomeHuntPreviewScreen() {
   const tutorialPreview = __DEV__ && process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW === '1';
@@ -122,7 +125,7 @@ export default function HomeHuntPreviewScreen() {
         <TopbarColumn stretch={false} />
       </>}
     </Topbar>
-    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
+    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style, BARE && { opacity: 0 }]} pointerEvents={cardFade.pointerEvents}>
       <ParkProjectWidget parkId={null} refreshVersion={0} loadProjects={loadProjects}
         topOffset={125 + Constants.statusBarHeight} />
     </Animated.View>
@@ -149,7 +152,7 @@ export default function HomeHuntPreviewScreen() {
       </View>}
     </View>}
     {/* Floating cards leave while the quick menu is open (opacity 0, no touches), as on the home map */}
-    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
+    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style, BARE && { opacity: 0 }]} pointerEvents={cardFade.pointerEvents}>
     <HomeFocusCard set={{ slug: 'churro_collection', name: 'Churro Collection',
       theme: 'classic', available_now: true, collected_count: 19, total_items: 40 }} onPress={() => {}}
       topOffset={125 + Constants.statusBarHeight} />
@@ -165,7 +168,7 @@ export default function HomeHuntPreviewScreen() {
       removeGoal={loadGoal} loadCollections={loadCollections} />
     </Animated.View>
     {/* The home map's hamburger, so the menu can be checked over the cards */}
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none"><QuickAccessMenu position="left" /></View>
+    <View style={[StyleSheet.absoluteFill, BARE && { opacity: 0 }]} pointerEvents="box-none"><QuickAccessMenu position="left" /></View>
     <PrepItemRedeemModal visible={pickupOpen} prepItem={previewItem} pivotId={previewItem.pivot_id!}
       redeemItem={redeemPreview} onClose={() => setPickupOpen(false)}
       onViewSet={(slug) => RootNavigation.navigate('SetCollectionPreview', { slug })}

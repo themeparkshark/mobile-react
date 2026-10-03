@@ -206,6 +206,7 @@ function ExploreScreen() {
   const [tripGoalVersion, setTripGoalVersion] = useState(0);
   const [activeParkProject, setActiveParkProject] = useState<ParkProject | null>(null);
   const [projectOpenRequestVersion, setProjectOpenRequestVersion] = useState(0);
+  const openParkStory = useCallback(() => setProjectOpenRequestVersion(version => version + 1), []);
   
   // Community Center state
   const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
@@ -968,7 +969,8 @@ function ExploreScreen() {
       {player && <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
         <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
-        pillHidden={!!park && suggestionSlots.right !== 'project'}
+        // At home the story rides in the map's top HUD row as a small chip (HomeExplore), never a card.
+        pillHidden={!park || suggestionSlots.right !== 'project'}
         pillCollapsed={!!park && suggestionSlots.rightStub}
         topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />
       </Animated.View>}
@@ -994,7 +996,9 @@ function ExploreScreen() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind} />
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind}
+          parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
+            goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
