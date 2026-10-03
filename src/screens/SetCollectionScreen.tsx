@@ -287,11 +287,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     claimDim.value = reduced ? 0.6 : withTiming(0.6, { duration: 450 });
     try {
       if (preview) {
-        setBook(current => ({ ...current, sets: current.sets.map(entry => entry.slug !== set.slug ? entry : {
-          ...entry,
-          reward: entry.reward.id === reward.id ? { ...entry.reward, status: 'claimed' } : entry.reward,
-          steps: entry.steps.map(step => step.id === reward.id ? { ...step, status: 'claimed' } : step),
-        }) }));
+        // Nothing to send: the local mark below is the whole claim.
       } else if (reward.claim.kind === 'complete') {
         await claimSetRewards(set.slug);
       } else if (reward.claim.kind === 'starter') {
@@ -302,6 +298,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         setClaimResult(outcome);
         if (outcome.toast) showToast(outcome.toast, 'success');
       }
+      // Mark it claimed now: the book behind the reveal never offers CLAIM again while the refresh is in flight.
+      setBook(current => ({ ...current, sets: current.sets.map(entry => entry.slug !== set.slug ? entry : {
+        ...entry,
+        reward: entry.reward.id === reward.id ? { ...entry.reward, status: 'claimed' } : entry.reward,
+        steps: entry.steps.map(step => step.id === reward.id ? { ...step, status: 'claimed' } : step),
+      }) }));
       setPicking(null);
       celebrate(reward);
       // Background: a slow park network never holds the reveal, the dim or the button.

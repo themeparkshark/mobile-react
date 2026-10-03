@@ -538,3 +538,31 @@ test('round 7b: the first land always applies the claim offset, and the seeded o
   assert.match(land, /listRef\.current\?\.scrollToOffset\(\{ offset, animated: false \}\)/);
   assert.doesNotMatch(land, /Math\.abs\(seededOffset/);
 });
+
+test('round 7b: a finished set the live list sends without rewards_claimed reads its claim state from the detail', async () => {
+  const calls = [];
+  const client = { get: async (url) => {
+    calls.push(url);
+    if (url === '/me/prep-item-sets') return { data: { data: [
+      { slug: 'churro_collection', is_complete: true },
+      { slug: 'open_set', is_complete: false },
+      { slug: 'new_server', is_complete: true, rewards_claimed: false },
+    ] } };
+    if (url === '/me/prep-item-sets/churro_collection') return { data: { data: { progress: { rewards_claimed: true } } } };
+    throw new Error(`unexpected ${url}`);
+  } };
+  const api = loadTs('src/api/endpoints/me/prep-item-sets/index.ts', {
+    '../../../client': { default: client, __esModule: true },
+    '../../../../helpers/deviceTimeZone': { default: () => 'America/Los_Angeles', __esModule: true },
+    '../../../../models/prep-item-set-type': {}, '../../../../models/location-type': {},
+  });
+  const sets = await api.default();
+  assert.equal(sets.find(s => s.slug === 'churro_collection').rewards_claimed, true, 'claimed, not claimable forever');
+  assert.equal(sets.find(s => s.slug === 'new_server').rewards_claimed, false, 'a sent field is trusted');
+  assert.deepEqual(calls, ['/me/prep-item-sets', '/me/prep-item-sets/churro_collection'], 'one detail call, only where needed');
+  const dexModel = loadTs('src/screens/SetCollection/dexModel.ts');
+  assert.ok(dexModel);
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const success = screen.slice(screen.indexOf('const claim = useCallback'), screen.indexOf('celebrate(reward);'));
+  assert.match(success, /setBook\(current => \(\{ \.\.\.current, sets: current\.sets\.map/, 'the claimed reward is marked locally before the reveal');
+});
