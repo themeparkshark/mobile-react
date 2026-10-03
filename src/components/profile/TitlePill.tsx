@@ -1,0 +1,57 @@
+/**
+ * The identity row under the shark stage: the player's equipped title (from
+ * stamps or a finished shop set) as a gold pill with a crown, plus at most ONE
+ * event trophy chip beside it (Fin-ister Nights, fright-nights/CONTRACT.md
+ * section 5). Same on your profile and on other players' pages. The chip
+ * renders nothing until the player has earned one.
+ */
+import type { ReactNode } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import GameIcon from '../../ui/GameIcon';
+
+export default function TitlePill({ title, trophy }: {
+  readonly title?: string | null;
+  /** The single event trophy slot (renders nothing without data). */
+  readonly trophy?: ReactNode;
+}) {
+  if (!title && !trophy) return null;
+  return (
+    <View style={styles.row}>
+      {!!title && (
+        <View style={styles.pill} accessible accessibilityRole="text" accessibilityLabel={`Title: ${title}`}>
+          <GameIcon name="crown" size={22} />
+          <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
+            maxFontSizeMultiplier={1.3}>
+            {title}
+          </Text>
+        </View>
+      )}
+      {trophy}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
+  pill: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    minHeight: 44,
+    backgroundColor: '#ffcf3b',
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderBottomWidth: 5,
+    borderBottomColor: '#d99a00',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    shadowColor: '#05346e',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  text: { color: '#05346e', fontFamily: 'Shark', fontSize: 18, flexShrink: 1 },
+});

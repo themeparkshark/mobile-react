@@ -1,7 +1,6 @@
-import { useFocusEffect, useRoute } from '@react-navigation/native';
-import { FlashList } from '@shopify/flash-list';
+import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -17,23 +16,29 @@ import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
+import { getStamps } from '../api/endpoints/me/stamps';
+import { clearStampDotCache, readStampDotCache, stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
-import PlayerButtons from '../components/PlayerButtons';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
-import Subscribed from '../components/Subscribed';
+import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
+import { profileStores } from '../components/profile/profileStores';
+import StatusBadges from '../components/profile/StatusBadges';
+import TitlePill from '../components/profile/TitlePill';
+import ProfileEventChip from '../components/profile/ProfileEventChip';
+import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import GameIcon from '../ui/GameIcon';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -41,20 +46,19 @@ import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffe
 
 const SHARK_TAP_SOUND = require('../../assets/sounds/button_press.mp3');
 import useCrumbs from '../hooks/useCrumbs';
-import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
-import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
-import ProfileEventChip from '../components/profile/ProfileEventChip';
 import { StoreType } from '../models/store-type';
+
+/** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
+const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
 
 export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
-  const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { player } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const [friendsUnavailable, setFriendsUnavailable] = useState(false);
   const [parksUnavailable, setParksUnavailable] = useState(false);
@@ -64,7 +68,27 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [extrasUnavailable, setExtrasUnavailable] = useState(false);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
-  
+  const reducedMotion = useReducedGameMotion();
+  const focused = useIsFocused();
+  // The XP potion only animates while its card is on screen.
+  const levelCard = useCardOnScreen();
+  const [stampsToClaim, setStampsToClaim] = useState(0);
+  const requestStampDot = useCallback((force = false) => {
+    if (isProfilePreview || !player) return;
+    const playerId = player.id;
+    // The stamp list is a big payload: read it at most every 5 minutes on focus (pull to refresh forces).
+    const cached = force ? null : readStampDotCache(playerId);
+    if (cached !== null) {
+      setStampsToClaim(cached);
+      return;
+    }
+    void getStamps().then((r) => {
+      const count = stampClaimableCount(r);
+      writeStampDotCache(playerId, count);
+      setStampsToClaim(count);
+    }).catch(() => setStampsToClaim(0));
+  }, [isProfilePreview, player?.id]);
+
   // Scroll refs
   const route = useRoute();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -93,10 +117,12 @@ export default function ProfileScreen() {
     setRefreshing(true);
     try {
       if (player) {
+        // Pull to refresh also refreshes the player, so level, XP and title catch up.
         const [parkResult, storeResult, friendResult] = await Promise.allSettled([
           getParks(player.id),
           getStores(),
           getFriends(1, 3),
+          refreshPlayer(),
         ]);
         if (parkResult.status === 'fulfilled') setParks(parkResult.value);
         if (storeResult.status === 'fulfilled') setStores(storeResult.value);
@@ -106,11 +132,12 @@ export default function ProfileScreen() {
         setExtrasUnavailable(parkResult.status === 'rejected' ||
           storeResult.status === 'rejected' || friendResult.status === 'rejected');
         await refreshNotificationCount();
+        requestStampDot(true);
       }
     } finally {
       setRefreshing(false);
     }
-  }, [player, refreshNotificationCount, isProfilePreview]);
+  }, [player, refreshNotificationCount, isProfilePreview, refreshPlayer, requestStampDot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -120,8 +147,9 @@ export default function ProfileScreen() {
       }
 
       void requestFriends();
+      requestStampDot();
       if (!isProfilePreview) void refreshNotificationCount();
-    }, [player?.id, player?.username, requestFriends, refreshNotificationCount, isProfilePreview])
+    }, [player?.id, player?.username, requestFriends, requestStampDot, refreshNotificationCount, isProfilePreview])
   );
 
   useEffect(() => {
@@ -163,57 +191,61 @@ export default function ProfileScreen() {
     }
   }, [loading, route.params]);
 
-  useEffect(() => {
-    if (stores) {
-      setButtons([
-        {
-          image: require('../../assets/images/screens/profile/pin_collections.png'),
-          onPress: () => {
-            RootNavigation.navigate('PinCollections');
-          },
-          text: labels.pin_packs || 'Pin Packs',
+  const shortcuts = useMemo<ProfileShortcut[]>(() => {
+    const { sharkShop, others } = profileStores(stores);
+    const openStore = (store: StoreType) => {
+      if (store.is_secret_store && !player?.is_subscribed) {
+        RootNavigation.navigate('Membership');
+        return;
+      }
+      RootNavigation.navigate('Store', { store: store.id });
+    };
+    // An older server without the Shark Shop keeps its legacy Store badge instead (profileStores).
+    const showSharkShop = !!sharkShop || stores.length === 0;
+    return [
+      ...(showSharkShop ? [{
+        key: 'shark-shop',
+        label: 'Shark Shop',
+        image: require('../../assets/images/screens/profile/shortcut_shark_shop.png'),
+        hint: 'Opens the shop for new gear',
+        onPress: () => {
+          if (sharkShop) RootNavigation.navigate('Store', { store: sharkShop.id });
+          else RootNavigation.navigate('Store', { store: 'shark-shop' });
         },
-        ...stores.map((store) => {
-          return {
-            image: store.icon_url ?? (store.name === 'Shark Shop'
-              ? require('../../assets/images/screens/profile/shark_shop.png') : undefined),
-            onPress: () => {
-              if (!store.is_secret_store) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-                return;
-              }
+      } as ProfileShortcut] : []),
+      {
+        key: 'stamp-book',
+        label: 'Stamp Book',
+        image: require('../../assets/images/screens/profile/shortcut_stamp_book.png'),
+        hint: stampsToClaim > 0 ? `${stampsToClaim} stamp rewards to claim` : 'Opens your stamps',
+        dot: stampsToClaim > 0,
+        onPress: () => RootNavigation.navigate('StampBook'),
+      },
+      {
+        key: 'pin-packs',
+        label: labels.pin_packs || 'Pin Packs',
+        image: require('../../assets/images/screens/profile/pin_collections.png'),
+        hint: 'Opens your pin collections',
+        onPress: () => RootNavigation.navigate('PinCollections'),
+      },
+      ...others.map((store): ProfileShortcut => ({
+        key: `store-${store.id}`,
+        label: store.name,
+        image: store.icon_url || require('../../assets/images/screens/profile/pin_collections.png'),
+        locked: store.is_secret_store && !player?.is_subscribed,
+        hint: store.is_secret_store && !player?.is_subscribed
+          ? 'VIP members only. Opens VIP membership'
+          : `Opens the ${store.name}`,
+        onPress: () => openStore(store),
+      })),
+    ];
+  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim]);
 
-              if (player?.is_subscribed) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-              } else {
-                RootNavigation.navigate('Membership');
-              }
-            },
-            text: store.name,
-            permission:
-              player && !player.is_subscribed && store.is_secret_store
-                ? PermissionEnums.ViewSecretStore
-                : undefined,
-          };
-        }),
-        {
-          image: require('../../assets/images/screens/explore/stampbook.png'),
-          onPress: () => {
-            RootNavigation.navigate('StampBook');
-          },
-          text: 'Stamp Book',
-        },
-      ]);
-    }
-  }, [stores, labels.pin_packs, player?.is_subscribed]);
-
-  // Redirect guests to login: must be in useEffect, not during render
+  // Redirect guests to login: must be in useEffect, not during render.
+  // Signing out also forgets the Stamp Book dot (it is keyed by player too).
   useEffect(() => {
     if (!player) {
+      clearStampDotCache();
       RootNavigation.navigate('Login');
     }
   }, [player]);
@@ -231,6 +263,7 @@ export default function ProfileScreen() {
               RootNavigation.navigate('Notifications');
             }}
             showRedCircle={!!notificationCount}
+            accessibilityLabel={notificationCount ? `Notifications, ${notificationCount} new` : 'Notifications'}
           >
             <Image
               style={{
@@ -251,6 +284,7 @@ export default function ProfileScreen() {
             onPress={() => {
               RootNavigation.navigate('Settings');
             }}
+            accessibilityLabel="Settings"
           >
             <Image
               style={{
@@ -270,14 +304,19 @@ export default function ProfileScreen() {
           style={{
             flex: 1,
             marginTop: -8,
+            backgroundColor: '#dff4ff',
           }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={config.primary} />
           }
+          {...levelCard.scrollProps}
         >
           <View
+            ref={levelCard.contentRef}
+            onLayout={levelCard.remeasure}
             style={{
-              paddingBottom: 32,
+              // Clear the bottom bar and its raised Explore button.
+              paddingBottom: 120,
             }}
           >
             <ImageBackground
@@ -286,14 +325,18 @@ export default function ProfileScreen() {
               } : require('../../assets/images/seaweed_background.png')}
               resizeMode="cover"
               style={{
-                height: 315,
+                height: STAGE_H,
                 overflow: 'hidden',
                 position: 'relative',
               }}
             >
               {/* Shark tap zone */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Your shark"
+                accessibilityHint="Opens the dressing room"
                 onPressIn={() => {
+                  if (reducedMotion) return;
                   Animated.spring(sharkScale, {
                     toValue: 0.92,
                     useNativeDriver: true,
@@ -302,6 +345,7 @@ export default function ProfileScreen() {
                   }).start();
                 }}
                 onPressOut={() => {
+                  if (reducedMotion) return;
                   Animated.parallel([
                     Animated.spring(sharkScale, {
                       toValue: 1,
@@ -335,14 +379,20 @@ export default function ProfileScreen() {
                     position: 'absolute',
                     width: Dimensions.get('window').width,
                     height: 455,
-                    marginTop: -55,
+                    // Keep the shark centred when the stage is shorter than 315.
+                    marginTop: -55 - (315 - STAGE_H) / 2,
                   }}
                 />
               </Pressable>
 
               {/* Edit button tap zone: independent */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={labels.edit || 'Edit'}
+                accessibilityHint="Opens the dressing room"
+                hitSlop={8}
                 onPressIn={() => {
+                  if (reducedMotion) return;
                   Animated.spring(editScale, {
                     toValue: 0.88,
                     useNativeDriver: true,
@@ -351,6 +401,7 @@ export default function ProfileScreen() {
                   }).start();
                 }}
                 onPressOut={() => {
+                  if (reducedMotion) return;
                   Animated.parallel([
                     Animated.spring(editScale, {
                       toValue: 1,
@@ -379,12 +430,13 @@ export default function ProfileScreen() {
               >
                 <View
                   style={{
-                    borderTopRightRadius: 6,
-                    backgroundColor: 'rgba(5, 52, 110, 0.6)',
-                    paddingLeft: 8,
-                    paddingRight: 8,
-                    paddingTop: 4,
-                    paddingBottom: 4,
+                    borderTopRightRadius: 14,
+                    backgroundColor: 'rgba(5, 52, 110, 0.72)',
+                    minHeight: 44,
+                    paddingLeft: 12,
+                    paddingRight: 14,
+                    paddingTop: 6,
+                    paddingBottom: 6,
                     flexDirection: 'row',
                     alignItems: 'center',
                   }}
@@ -434,35 +486,18 @@ export default function ProfileScreen() {
                 backgroundColor: '#dff4ff',
               }}
             >
-              {!!player.title && (
-                <View style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6,
-                  backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 2, borderColor: '#ffffff',
-                  borderBottomWidth: 4, borderBottomColor: '#d99a00',
-                  paddingHorizontal: 14, paddingVertical: 6, marginTop: 12 }}>
-                  <GameIcon name="crown" size={20} />
-                  <Text style={{ color: '#05346e', fontFamily: 'Shark', fontSize: 17,
-                    textAlign: 'center' }} numberOfLines={1}>{player.title}</Text>
-                </View>
-              )}
-              {/* Deep Lantern chip (renders nothing without a card). Same component as claude/release-rc. */}
-              <View style={{ alignSelf: 'center', marginTop: 10 }}><ProfileEventChip /></View>
-              {!!player.featured_ride_coin && (
-                <View style={{ marginHorizontal: 16 }}>
-                  <FeaturedRideCoinCard coin={player.featured_ride_coin}
-                    onPress={() => RootNavigation.navigate('CoinShelf', {
-                      focusCoin: { assetId: player.featured_ride_coin!.id },
-                    })} />
-                </View>
-              )}
-              <View style={{ paddingTop: 20 }}>
+              <View style={{ marginTop: 12 }}>
+                <TitlePill title={player.title} trophy={<ProfileEventChip />} />
+              </View>
+              <View style={{ paddingTop: 10 }}>
               <View
                 style={{
                   paddingLeft: 16,
                   paddingRight: 16,
                 }}
               >
-                <View style={{ paddingTop: 4, paddingBottom: 6 }}>
-                  <Experience player={player} />
+                <View ref={levelCard.cardRef} onLayout={levelCard.remeasure} style={{ paddingTop: 0, paddingBottom: 2 }}>
+                  <Experience player={player} own paused={!focused || levelCard.offscreen} />
                 </View>
               </View>
               <View
@@ -471,47 +506,48 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                <PlayerButtons buttons={buttons} />
-              {(player.is_subscribed || player.verified_at) && (
-                <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 8, gap: 8 }}>
-                  {player.is_subscribed && (
-                    <View style={{ flex: 1 }}>
-                      <Subscribed />
-                    </View>
-                  )}
-                  {player.verified_at && (
-                    <View style={{ flex: 1 }}>
-                      <Verified />
-                    </View>
-                  )}
+                <View style={{ marginTop: 12 }}>
+                  <ProfileShortcuts items={shortcuts} loading={loading} />
                 </View>
-              )}
+                <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
+                {/* The showcase coin sits under the shortcuts so the row is visible on first view. */}
+                {!!player.featured_ride_coin && (
+                  <FeaturedRideCoinCard coin={player.featured_ride_coin}
+                    onPress={() => RootNavigation.navigate('CoinShelf', {
+                      focusCoin: { assetId: player.featured_ride_coin!.id },
+                    })} />
+                )}
               {/* Compact illustrated entry to the ride journal. */}
               <Pressable
                 onPress={() => RootNavigation.navigate('RideTracker')}
                 accessibilityRole="button"
-                accessibilityLabel="Open Ride Tracker"
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: '#DFF4FF',
-                  borderColor: '#58B6E8',
-                  borderWidth: 2,
-                  borderRadius: 15,
-                  paddingHorizontal: 12,
-                  paddingVertical: 9,
-                  marginTop: 16,
+                accessibilityLabel="Ride Tracker"
+                accessibilityHint="Opens your rides and park memories"
+                style={({ pressed }) => ({
+                  // Nested lip (a lip-coloured card under a white card): no corner spur.
+                  backgroundColor: '#c6e3f5',
+                  borderRadius: 20,
+                  paddingBottom: 5,
+                  marginTop: 12,
                   marginBottom: 8,
-                  gap: 10,
-                }}
+                  shadowColor: '#05346e',
+                  shadowOpacity: 0.14,
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowRadius: 6,
+                  elevation: 3,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                })}
               >
-                <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
-                  style={{ width: 55, height: 55 }} contentFit="contain" />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
-                  <Text style={{ color: '#366A8C', fontSize: 15, fontFamily: 'Knockout' }}>Your rides and park memories</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ffffff',
+                  borderRadius: 20, paddingHorizontal: 17, paddingVertical: 13 }}>
+                  <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
+                    style={{ width: 55, height: 55 }} contentFit="contain" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
+                    <Text style={{ color: '#366A8C', fontSize: 15, fontFamily: 'Knockout' }}>Your rides and park memories</Text>
+                  </View>
+                  <GameIcon name="arrow" size={28} />
                 </View>
-                <GameIcon name="arrow" size={28} />
               </Pressable>
               {extrasUnavailable && (
                 <Text style={{ color: '#526477', fontFamily: 'Knockout', fontSize: 14,
@@ -537,29 +573,16 @@ export default function ProfileScreen() {
               >
                 {friends.length > 0 && (
                   <>
-                    <View
-                      style={{
-                        height: friends.length * 80,
-                      }}
-                    >
-                      <FlashList
-                        contentContainerStyle={{ paddingBottom: 8 }}
-                        data={friends}
-                        keyExtractor={(player) => player.id.toString()}
-                        renderItem={({ item }) => {
-                          return (
-                            <FriendPlayer
-                              player={item}
-                              isFriend
-                              onRemove={() => {
-                                requestFriends();
-                              }}
-                            />
-                          );
+                    {friends.map((friend) => (
+                      <FriendPlayer
+                        key={friend.id}
+                        player={friend}
+                        isFriend
+                        onRemove={() => {
+                          requestFriends();
                         }}
-                        estimatedItemSize={80}
                       />
-                    </View>
+                    ))}
                     <View
                       style={{
                         alignItems: 'center',
