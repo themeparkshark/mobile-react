@@ -1,5 +1,4 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
-import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -17,6 +16,8 @@ import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
+import { getStamps } from '../api/endpoints/me/stamps';
+import { stampClaimableCount } from '../components/profile/stampDot';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
@@ -28,6 +29,8 @@ import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/Pr
 import { profileStores } from '../components/profile/profileStores';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import ProfileEventChip from '../components/profile/ProfileEventChip';
+import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -47,6 +50,9 @@ import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
+/** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
+const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
+
 export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -65,8 +71,12 @@ export default function ProfileScreen() {
   const reducedMotion = useReducedGameMotion();
   const focused = useIsFocused();
   // The XP potion only animates while its card is on screen.
-  const [levelCardBottom, setLevelCardBottom] = useState(0);
-  const [potionOffscreen, setPotionOffscreen] = useState(false);
+  const levelCard = useCardOnScreen();
+  const [stampsToClaim, setStampsToClaim] = useState(0);
+  const requestStampDot = useCallback(() => {
+    if (isProfilePreview) return;
+    void getStamps().then((r) => setStampsToClaim(stampClaimableCount(r))).catch(() => setStampsToClaim(0));
+  }, [isProfilePreview]);
 
   // Scroll refs
   const route = useRoute();
@@ -111,11 +121,12 @@ export default function ProfileScreen() {
         setExtrasUnavailable(parkResult.status === 'rejected' ||
           storeResult.status === 'rejected' || friendResult.status === 'rejected');
         await refreshNotificationCount();
+        requestStampDot();
       }
     } finally {
       setRefreshing(false);
     }
-  }, [player, refreshNotificationCount, isProfilePreview, refreshPlayer]);
+  }, [player, refreshNotificationCount, isProfilePreview, refreshPlayer, requestStampDot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -125,8 +136,9 @@ export default function ProfileScreen() {
       }
 
       void requestFriends();
+      requestStampDot();
       if (!isProfilePreview) void refreshNotificationCount();
-    }, [player?.id, player?.username, requestFriends, refreshNotificationCount, isProfilePreview])
+    }, [player?.id, player?.username, requestFriends, requestStampDot, refreshNotificationCount, isProfilePreview])
   );
 
   useEffect(() => {
@@ -192,7 +204,8 @@ export default function ProfileScreen() {
         key: 'stamp-book',
         label: 'Stamp Book',
         image: require('../../assets/images/screens/profile/shortcut_stamp_book.png'),
-        hint: 'Opens your stamps',
+        hint: stampsToClaim > 0 ? `${stampsToClaim} stamp rewards to claim` : 'Opens your stamps',
+        dot: stampsToClaim > 0,
         onPress: () => RootNavigation.navigate('StampBook'),
       },
       {
@@ -206,13 +219,14 @@ export default function ProfileScreen() {
         key: `store-${store.id}`,
         label: store.name,
         image: store.icon_url || require('../../assets/images/screens/profile/pin_collections.png'),
+        locked: store.is_secret_store && !player?.is_subscribed,
         hint: store.is_secret_store && !player?.is_subscribed
           ? 'VIP members only. Opens VIP membership'
           : `Opens the ${store.name}`,
         onPress: () => openStore(store),
       })),
     ];
-  }, [stores, labels.pin_packs, player?.is_subscribed]);
+  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim]);
 
   // Redirect guests to login: must be in useEffect, not during render
   useEffect(() => {
@@ -280,13 +294,11 @@ export default function ProfileScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={config.primary} />
           }
-          scrollEventThrottle={100}
-          onScroll={(e) => {
-            const off = levelCardBottom > 0 && e.nativeEvent.contentOffset.y > levelCardBottom;
-            if (off !== potionOffscreen) setPotionOffscreen(off);
-          }}
+          {...levelCard.scrollProps}
         >
           <View
+            ref={levelCard.contentRef}
+            onLayout={levelCard.remeasure}
             style={{
               // Clear the bottom bar and its raised Explore button.
               paddingBottom: 120,
@@ -298,7 +310,7 @@ export default function ProfileScreen() {
               } : require('../../assets/images/seaweed_background.png')}
               resizeMode="cover"
               style={{
-                height: 315,
+                height: STAGE_H,
                 overflow: 'hidden',
                 position: 'relative',
               }}
@@ -352,7 +364,8 @@ export default function ProfileScreen() {
                     position: 'absolute',
                     width: Dimensions.get('window').width,
                     height: 455,
-                    marginTop: -55,
+                    // Keep the shark centred when the stage is shorter than 315.
+                    marginTop: -55 - (315 - STAGE_H) / 2,
                   }}
                 />
               </Pressable>
@@ -458,29 +471,18 @@ export default function ProfileScreen() {
                 backgroundColor: '#dff4ff',
               }}
             >
-              {!!player.title && (
-                <View style={{ marginTop: 14 }}>
-                  <TitlePill title={player.title} />
-                </View>
-              )}
-              {!!player.featured_ride_coin && (
-                <View style={{ marginHorizontal: 16 }}>
-                  <FeaturedRideCoinCard coin={player.featured_ride_coin}
-                    onPress={() => RootNavigation.navigate('CoinShelf', {
-                      focusCoin: { assetId: player.featured_ride_coin!.id },
-                    })} />
-                </View>
-              )}
-              <View style={{ paddingTop: player.featured_ride_coin ? 2 : 16 }}>
+              <View style={{ marginTop: 12 }}>
+                <TitlePill title={player.title} trophy={<ProfileEventChip />} />
+              </View>
+              <View style={{ paddingTop: 10 }}>
               <View
                 style={{
                   paddingLeft: 16,
                   paddingRight: 16,
                 }}
               >
-                <View style={{ paddingTop: 4, paddingBottom: 6 }}
-                  onLayout={(e) => setLevelCardBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height + 315)}>
-                  <Experience player={player} own paused={!focused || potionOffscreen} />
+                <View ref={levelCard.cardRef} onLayout={levelCard.remeasure} style={{ paddingTop: 0, paddingBottom: 2 }}>
+                  <Experience player={player} own paused={!focused || levelCard.offscreen} />
                 </View>
               </View>
               <View
@@ -489,28 +491,44 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                <View style={{ marginTop: 18 }}>
+                <View style={{ marginTop: 12 }}>
                   <ProfileShortcuts items={shortcuts} loading={loading} />
                 </View>
                 <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
+                {/* The showcase coin sits under the shortcuts so the row is visible on first view. */}
+                {!!player.featured_ride_coin && (
+                  <FeaturedRideCoinCard coin={player.featured_ride_coin}
+                    onPress={() => RootNavigation.navigate('CoinShelf', {
+                      focusCoin: { assetId: player.featured_ride_coin!.id },
+                    })} />
+                )}
               {/* Compact illustrated entry to the ride journal. */}
               <Pressable
                 onPress={() => RootNavigation.navigate('RideTracker')}
                 accessibilityRole="button"
-                accessibilityLabel="Open Ride Tracker"
-                style={{
+                accessibilityLabel="Ride Tracker"
+                accessibilityHint="Opens your rides and park memories"
+                style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: '#DFF4FF',
-                  borderColor: '#58B6E8',
-                  borderWidth: 2,
-                  borderRadius: 15,
-                  paddingHorizontal: 12,
-                  paddingVertical: 9,
-                  marginTop: 16,
+                  backgroundColor: '#ffffff',
+                  borderColor: '#ffffff',
+                  borderWidth: 3,
+                  borderBottomWidth: 5,
+                  borderBottomColor: '#c6e3f5',
+                  borderRadius: 20,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  marginTop: 12,
                   marginBottom: 8,
-                  gap: 10,
-                }}
+                  gap: 12,
+                  shadowColor: '#05346e',
+                  shadowOpacity: 0.14,
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowRadius: 6,
+                  elevation: 3,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                })}
               >
                 <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
                   style={{ width: 55, height: 55 }} contentFit="contain" />
@@ -544,29 +562,16 @@ export default function ProfileScreen() {
               >
                 {friends.length > 0 && (
                   <>
-                    <View
-                      style={{
-                        height: friends.length * 80,
-                      }}
-                    >
-                      <FlashList
-                        contentContainerStyle={{ paddingBottom: 8 }}
-                        data={friends}
-                        keyExtractor={(player) => player.id.toString()}
-                        renderItem={({ item }) => {
-                          return (
-                            <FriendPlayer
-                              player={item}
-                              isFriend
-                              onRemove={() => {
-                                requestFriends();
-                              }}
-                            />
-                          );
+                    {friends.map((friend) => (
+                      <FriendPlayer
+                        key={friend.id}
+                        player={friend}
+                        isFriend
+                        onRemove={() => {
+                          requestFriends();
                         }}
-                        estimatedItemSize={80}
                       />
-                    </View>
+                    ))}
                     <View
                       style={{
                         alignItems: 'center',
