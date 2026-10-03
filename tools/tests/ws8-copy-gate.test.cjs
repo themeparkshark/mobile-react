@@ -45,12 +45,12 @@ const WS8_CLEAN = [
   'src/components/FriendPlayer.tsx',
   'src/screens/SocialScreen.tsx',
   'src/components/SocialPost.tsx',
-  'src/screens/Social/Composer.tsx',
-  'src/screens/Social/ThreadCard.tsx',
-  'src/screens/Social/PostMenu.tsx',
-  'src/screens/Social/SocialHelp.tsx',
-  'src/screens/Social/socialLook.tsx',
-  'src/screens/Social/socialModel.ts',
+  'src/screens/threads/Composer.tsx',
+  'src/screens/threads/ThreadCard.tsx',
+  'src/screens/threads/PostMenu.tsx',
+  'src/screens/threads/SocialHelp.tsx',
+  'src/screens/threads/socialLook.tsx',
+  'src/screens/threads/socialModel.ts',
   'src/screens/ThreadScreen.tsx',
   'src/hooks/useFriends.tsx',
   'src/components/PushSoftAsk.tsx',
@@ -70,12 +70,12 @@ const WS8_CLEAN = [
 const NO_ICON_FONT = [
   'src/screens/SettingsScreen.tsx',
   'src/screens/SocialScreen.tsx',
-  'src/screens/Social/Composer.tsx',
-  'src/screens/Social/ThreadCard.tsx',
-  'src/screens/Social/PostMenu.tsx',
-  'src/screens/Social/SocialHelp.tsx',
-  'src/screens/Social/socialLook.tsx',
-  'src/screens/Social/socialModel.ts',
+  'src/screens/threads/Composer.tsx',
+  'src/screens/threads/ThreadCard.tsx',
+  'src/screens/threads/PostMenu.tsx',
+  'src/screens/threads/SocialHelp.tsx',
+  'src/screens/threads/socialLook.tsx',
+  'src/screens/threads/socialModel.ts',
   'src/screens/ThreadScreen.tsx',
 ];
 
@@ -102,7 +102,7 @@ test('WS8 social and settings surfaces use hand-drawn art, not an icon font, and
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     assert.doesNotMatch(source, /@fortawesome|@expo\/vector-icons/, file);
   }
-  for (const file of ['src/screens/SocialScreen.tsx', 'src/screens/Social/Composer.tsx']) {
+  for (const file of ['src/screens/SocialScreen.tsx', 'src/screens/threads/Composer.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     assert.match(source, /from '(\.\.\/)+constants\/teams'/, `${file} reads teams from constants/teams.ts`);
     assert.doesNotMatch(source, /const TEAMS = \{/, `${file} has no local team copy`);

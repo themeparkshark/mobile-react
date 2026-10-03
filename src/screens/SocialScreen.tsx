@@ -32,13 +32,13 @@ import type { ThreadType } from '../models/thread-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import Composer from './Social/Composer';
-import PostMenu, { type MenuTarget } from './Social/PostMenu';
-import SocialHelp from './Social/SocialHelp';
-import ThreadCard from './Social/ThreadCard';
-import { applySocialEvent, emitSocial, onSocial } from './Social/socialEvents';
-import { COMPOSE_ART, PressScale, WATER } from './Social/socialLook';
-import { DEFAULT_PROMPT, mergePage, topicFor, type FeedTab, type TopicKey } from './Social/socialModel';
+import Composer from './threads/Composer';
+import PostMenu, { type MenuTarget } from './threads/PostMenu';
+import SocialHelp from './threads/SocialHelp';
+import ThreadCard from './threads/ThreadCard';
+import { applySocialEvent, emitSocial, onSocial } from './threads/socialEvents';
+import { COMPOSE_ART, PressScale, WATER } from './threads/socialLook';
+import { DEFAULT_PROMPT, mergePage, topicFor, type FeedTab, type TopicKey } from './threads/socialModel';
 
 const TAB_SOUND = require('../../assets/sounds/tap.mp3');
 

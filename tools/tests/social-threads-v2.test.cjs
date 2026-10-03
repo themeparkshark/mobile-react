@@ -8,8 +8,8 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 const { plain } = require('./helpers/plain.cjs');
 
 const root = path.resolve(__dirname, '../..');
-const model = loadTs('src/screens/Social/socialModel.ts');
-const events = loadTs('src/screens/Social/socialEvents.ts');
+const model = loadTs('src/screens/threads/socialModel.ts');
+const events = loadTs('src/screens/threads/socialEvents.ts');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('short kid posts are fine; blank, too long, personal info and links get a kid line', () => {
@@ -96,7 +96,7 @@ test('one detail view: the feed opens ThreadScreen with its copy of the post; no
 });
 
 test('the composer header cannot leave the screen and posting never loses words', () => {
-  const composer = read('src/screens/Social/Composer.tsx');
+  const composer = read('src/screens/threads/Composer.tsx');
   // The old sheet: fixed 78% height inside react-native-modal with avoidKeyboard.
   assert.doesNotMatch(composer, /avoidKeyboard|SCREEN_HEIGHT \* 0\.78/);
   assert.match(composer, /presentationStyle="fullScreen"/);
@@ -106,13 +106,13 @@ test('the composer header cannot leave the screen and posting never loses words'
 });
 
 test('every Social surface respects Reduce Motion', () => {
-  for (const file of ['src/screens/SocialScreen.tsx', 'src/screens/ThreadScreen.tsx', 'src/screens/Social/Composer.tsx', 'src/screens/Social/ThreadCard.tsx', 'src/screens/Social/socialLook.tsx', 'src/screens/Social/PostMenu.tsx']) {
+  for (const file of ['src/screens/SocialScreen.tsx', 'src/screens/ThreadScreen.tsx', 'src/screens/threads/Composer.tsx', 'src/screens/threads/ThreadCard.tsx', 'src/screens/threads/socialLook.tsx', 'src/screens/threads/PostMenu.tsx']) {
     assert.match(read(file), /useUiReducedMotion/, file);
   }
 });
 
 test('reply rows: answers sit under their reply, hidden answers with no replies are dropped, "show more" counts the rest', () => {
-  const screen = loadTs('src/screens/Social/socialRows.ts');
+  const screen = loadTs('src/screens/threads/socialRows.ts');
   const top = { id: 1, children_count: 4, children: [{ id: 2 }, { id: 3, hidden: 'removed', children_count: 0 }] };
   const rows = screen.buildRows([top, { id: 9, children_count: 0, children: [] }], { 1: [{ id: 4 }] });
   assert.deepEqual(plain(rows.map((r) => r.key)), ['c1', 'c2', 'c4', 'm1', 'c9']);

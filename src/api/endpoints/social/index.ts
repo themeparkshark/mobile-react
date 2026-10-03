@@ -9,7 +9,7 @@ import type { ThreadType } from '../../../models/thread-type';
 import type { CommentType } from '../../../models/comment-type';
 import type { ReactionType } from '../../../models/reaction-type';
 import type { PlayerType } from '../../../models/player-type';
-import type { FeedTab, Page, TopicKey } from '../../../screens/Social/socialModel';
+import type { FeedTab, Page, TopicKey } from '../../../screens/threads/socialModel';
 
 export async function fetchFeed(page: number, tab: FeedTab, options: { team?: string | null; topic?: TopicKey | null } = {}): Promise<Page<ThreadType>> {
   const params: Record<string, string | number | boolean> = { page, pinned: false };
