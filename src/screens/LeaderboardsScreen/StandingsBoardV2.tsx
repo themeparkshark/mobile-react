@@ -639,9 +639,13 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // row is on screen, so the You card never duplicates a visible row.
   const viewport = useRef(0);
   const [snapId, setSnapId] = useState(0);
+  const prevActive = useRef(active);
   useLayoutEffect(() => {
+    const becameActive = active && !prevActive.current;
+    prevActive.current = active;
     if (!active) return;
-    setSnapId(id => id + 1);
+    // Snap only on the hidden-to-active edge; a data refresh while active springs.
+    if (becameActive) setSnapId(id => id + 1);
     list.current?.recordInteraction();
     const index = items.findIndex(item => item.type === 'row' && item.row.isMe);
     const onScreen = index >= 0 && rowOnScreen(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);

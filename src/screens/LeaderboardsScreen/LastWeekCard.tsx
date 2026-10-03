@@ -35,13 +35,14 @@ export default function LastWeekCard({ result, me, onClose }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.weekStart]);
   // Crowns and winner words only for a paid top-three result.
+  // A deeper scrim and a lower card (below): the board's own crown never reads as this card's.
   const crown = result && result.tickets > 0 && result.rank <= 3 ? CROWN_ART[result.rank as 1 | 2 | 3] : null;
   return (
     <Modal visible={!!result} transparent animationType="none" onRequestClose={onClose} accessibilityViewIsModal>
       {result && copy && (
-        <Animated.View entering={reduced ? undefined : FadeIn.duration(180)} style={{ flex: 1, backgroundColor: BRAND.scrim, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View entering={reduced ? undefined : FadeIn.duration(180)} style={{ flex: 1, backgroundColor: 'rgba(8,56,128,0.68)', alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(12).stiffness(200)} style={{
-            width: 300, alignItems: 'center', padding: 22, borderRadius: RADIUS.xl, backgroundColor: BRAND.cream,
+            width: 300, marginTop: 80, alignItems: 'center', padding: 22, borderRadius: RADIUS.xl, backgroundColor: BRAND.cream,
             borderWidth: 4, borderBottomWidth: 8, borderColor: BRAND.gold, ...SHADOW.lifted,
           }}>
             <Text style={[textPreset('label'), { color: BRAND.goldLip }]}>LAST WEEK</Text>

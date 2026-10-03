@@ -160,7 +160,10 @@ function AnimatedStat({
 }
 
 export default function Stats({ player }: { readonly player: PlayerType }) {
-  const stats = [
+  // A stranger's limited profile hides where a kid has been. Every number is
+  // also coerced, so a missing field can never crash toLocaleString.
+  const limited = (player as PlayerType & { profile_limited?: boolean }).profile_limited === true;
+  const all = [
     {
       label: 'Keys',
       value: player.keys,
@@ -192,9 +195,12 @@ export default function Stats({ player }: { readonly player: PlayerType }) {
       iconIndex: 5,
     },
   ];
+  const stats = all
+    .filter(stat => !(limited && stat.label === 'Parks'))
+    .map(stat => ({ ...stat, value: Number(stat.value) || 0 }));
 
-  const row1 = stats.slice(0, 3);
-  const row2 = stats.slice(3, 6);
+  const row1 = stats.slice(0, stats.length - 3);
+  const row2 = stats.slice(stats.length - 3);
 
   return (
     <View style={{ gap: 10, paddingHorizontal: 8 }}>

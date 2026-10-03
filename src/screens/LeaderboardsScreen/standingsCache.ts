@@ -67,3 +67,8 @@ export function takeWinNote(): PendingWinNote | null {
   if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
   return note;
 }
+
+/** Whether a note is waiting (the win screen reserves its slot, so nothing jumps when it lands). */
+export function hasWinNote(): boolean {
+  return pendingNote !== null;
+}
