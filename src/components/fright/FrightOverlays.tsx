@@ -45,30 +45,6 @@ export function FrightCoachMark({ coach, onClose, top = 120 }: { readonly coach:
   );
 }
 
-export function CaseFileReveal({ file, onClose }: { readonly file: FrightCaseFileDrop | null; readonly onClose: () => void }) {
-  const scale = useRef(new Animated.Value(0.6)).current;
-  useEffect(() => {
-    if (!file) return;
-    scale.setValue(0.6);
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
-  }, [file, scale]);
-  if (!file) return null;
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.center} onPress={onClose} accessibilityLabel="Close the Case File">
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <NightCard style={styles.file}>
-            <Text style={styles.kicker}>{file.new ? 'NEW CASE FILE' : 'CASE FILE'} · {file.year_label}</Text>
-            <Text style={styles.fileTitle} accessibilityRole="header">{file.title}</Text>
-            <Text style={styles.fileBody}>{file.body}</Text>
-            <NightButton label="Into the Lantern" onPress={onClose} style={{ marginTop: 12 }} />
-          </NightCard>
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
-}
-
 /** The exit moment (mode turns off): a gentle card leading to the Marquee. */
 export function FrightExitCard({ visible, onOpen, onClose }: { readonly visible: boolean; readonly onOpen: () => void; readonly onClose: () => void }) {
   if (!visible) return null;

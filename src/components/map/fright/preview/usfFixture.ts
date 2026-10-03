@@ -60,8 +60,21 @@ export const USF_FRIGHT_SPOTS: readonly FrightSpot[] = [
     'whoopee-blowfish,balloon-jelly,shark-prank', ['skid-fins', 'eyes']),
 ];
 
+/**
+ * The lagoon show (approximate lagoon middle; the server sends the real spot),
+ * live from a minute ago for the 'show' capture (the Lagoon Glow-Down plays and
+ * the fright sprites hold still), otherwise two hours out.
+ */
+export function usfLagoonShow(now: number, live = false): FrightSpot {
+  return {
+    key: 'usf26-lagoon-glow-down', kind: 'show', name: 'The Lagoon Glow-Down', blurb: '', latitude: 28.4787, longitude: -81.4683,
+    radius: 120, walk_minutes: 0, status: 'OPERATING', posted_minutes: null, accepting: false, fan_rank: null, sort: 20,
+    fx: { props: ['lagoon-glow'] }, art: null, times: [new Date(live ? now - 60_000 : now + 2 * 3600_000).toISOString()],
+  };
+}
+
 /** A live night around `now`, with the encounter live at the carnival gate. */
-export function usfFrightFixture(now: number, phase: FrightTonight['phase'] = 'live'): FrightTonight {
+export function usfFrightFixture(now: number, phase: FrightTonight['phase'] = 'live', showLive = false): FrightTonight {
   const iso = (ms: number) => new Date(ms).toISOString();
   return {
     enabled: true,
@@ -71,9 +84,9 @@ export function usfFrightFixture(now: number, phase: FrightTonight['phase'] = 'l
       park_id: 3, timezone: 'America/New_York', year: 2026, night_index: 3, nights_total: 34 },
     night: { night_on: iso(now).slice(0, 10), opens_at: iso(now - 3600_000), closes_at: iso(now + 4 * 3600_000),
       early_opens_at: null, last_call_at: iso(now + 3.5 * 3600_000), after_until: iso(now + 5 * 3600_000), teaser_from: iso(now - 4 * 3600_000) },
-    spots: USF_FRIGHT_SPOTS,
+    spots: [...USF_FRIGHT_SPOTS, usfLagoonShow(now, showLive)],
     encounter: { key: 'enc-chuckles', critter: 'chuckles', name: 'Chuckles the Chum Jester', line: 'Something is giggling near the carnival. Go look.',
-      latitude: 28.4757, longitude: -81.4674, radius: 40, starts_at: iso(now - 60_000), ends_at: iso(now + 6 * 60_000), caught: false },
+      latitude: 28.4757, longitude: -81.4674, radius: 40, starts_at: iso(now - 60_000), ends_at: iso(now + 6 * 60_000), caught: false, chaos_hour: false },
     me: null,
     config: null,
     assets: USF_FIXTURE_ASSETS,

@@ -15,16 +15,16 @@ import type { FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
 import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
 import { critterSlugs } from './frightArt';
-import { critterAsset, hauntLayers, iconAsset, isChaosHour } from './frightAssets';
+import { activeShowStart, critterAsset, encounterChaos, hauntLayers, iconAsset } from './frightAssets';
 import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, chipKeys, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, canvasProps, chipKeys, hauntChipLabel, SHOW_WINDOW_MS, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
-import { EncounterSprite, HAUNT_ANCHOR, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
+import { EncounterCritter, EncounterRing, HAUNT_ANCHOR, LagoonGlow, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
 import type { FrightMapInput } from './types';
 import { useFrightState } from './useFrightState';
 
@@ -97,7 +97,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   };
   const windowAlloc = allocate(haunts.map(h => [h.key, windowsOf(h)] as const), animate ? caps.frightWindows : 0);
   const critterAlloc = allocate(reefs.map(r => [r.key, critterWant(r.fx)] as const), animate ? caps.frightCritters : 0);
-  const propSpots = ranked.map(k => byKey.get(k)!).filter(s => spotProps(s.fx).length > 0);
+  const propSpots = ranked.map(k => byKey.get(k)!).filter(s => canvasProps(spotProps(s.fx)).length > 0);
   const batAlloc = allocate(propSpots.filter(s => spotProps(s.fx).includes('bats')).map(s => [s.key, 2] as const), animate ? caps.frightBats : 0);
   const propAlloc = allocate(propSpots.map(s => [s.key, movingProps(spotProps(s.fx)).length] as const), animate ? caps.frightProps : 0);
 
@@ -129,8 +129,20 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     for (const key of result.pops) if (!pendingPops.current.includes(key)) pendingPops.current.push(key);
   }, [player?.latitude, player?.longitude, reefCircles, st.effectsOn, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const encounter = input.tonight.encounter;
+  const encounterLive = !!encounter && validPoint(encounter) && (() => {
+    const start = Date.parse(encounter.starts_at);
+    const end = Date.parse(encounter.ends_at);
+    return Number.isFinite(start) && Number.isFinite(end) && st.serverNow >= start && st.serverNow < end;
+  })();
   const lod = critterLod(zoom);
   const onHauntPress = input.onHauntPress;
+  const onEncounterPress = input.onEncounterPress;
+  // Lagoon Glow-Down: show spots that ask for it (fx.props), only while a performance runs.
+  const glowAsset = assets?.ambient?.['lagoon-glow'] ?? null;
+  const glowSpots = glowAsset?.file ? order('show')
+    .filter(spot => spotProps(spot.fx).includes('lagoon-glow') && activeShowStart(spot.times, st.serverNow, SHOW_WINDOW_MS) !== null)
+    .map(spot => ({ spot, widthPts: Math.max(80, Math.min(360, spot.radius * 2 * pointsPerMeter(zoom, spot.latitude))) })) : [];
   const chips = chipKeys(haunts, zoom);
   const reefCount = (key: string) => (lod === 'sprites' ? critterAlloc[key] ?? 0 : 0);
   const sources: AmbientSource[] = [];
@@ -142,6 +154,10 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
       if (!layersOf(haunt) || hauntDim(haunt)) continue;
       sources.push({ id: `door:${haunt.key}`, minGapMs: 40_000, maxGapMs: 90_000, durationMs: 3000 });
       if (!lite) sources.push({ id: `ghost:${haunt.key}`, minGapMs: 25_000, maxGapMs: 60_000, durationMs: 1000 });
+    }
+    // Skid-fin spark passes while the encounter is live (full tier only), every 20 to 45 s.
+    if (encounterLive && encounter && st.tier === 'full') {
+      sources.push({ id: `sparks:${encounter.key}`, minGapMs: 20_000, maxGapMs: 45_000, durationMs: 1500 });
     }
   }
   const sourcesKey = sources.map(x => x.id).join('|');
@@ -192,12 +208,6 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     return () => clearInterval(timer);
   }, [animate, sourcesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const encounter = input.tonight.encounter;
-  const encounterLive = !!encounter && validPoint(encounter) && (() => {
-    const start = Date.parse(encounter.starts_at);
-    const end = Date.parse(encounter.ends_at);
-    return Number.isFinite(start) && Number.isFinite(end) && st.serverNow >= start && st.serverNow < end;
-  })();
   const intro = input.cinematic === 'intro';
 
   if (visible <= 0) return null;
@@ -229,7 +239,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         );
       })}
       {propSpots.map(spot => {
-        const props = spotProps(spot.fx);
+        const props = canvasProps(spotProps(spot.fx));
         const bats = batAlloc[spot.key] ?? 0;
         const moving = propAlloc[spot.key] ?? 0;
         if (st.tier === 'calm' && !props.includes('fog-thick')) return null;
@@ -257,13 +267,25 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
           </Marker>
         );
       })}
+      {glowSpots.map(({ spot, widthPts }) => (
+        <Marker key={`fg-${spot.key}`} coordinate={spot}>
+          <LagoonGlow asset={glowAsset!} widthPts={widthPts} clock={alive.clock} intensity={visible}
+            fps={alive.running && st.tier !== 'calm' ? (lite ? 6 : 10) : 0} />
+        </Marker>
+      ))}
       {encounterLive && encounter && nearView(encounter, bounds, 1) && (
         <Marker key={`fe-${encounter.key}`} coordinate={encounter}>
-          <EncounterSprite critter={encounter.critter} asset={iconAsset(assets, encounter.critter)}
-            chaos={isChaosHour(encounter.starts_at, encounter.ends_at)} lite={lite}
-            ringPts={Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude)))}
-            trail={caps.frightCritters > 0 ? Math.min(6, Math.round(caps.frightCritters * 0.75)) : 0}
-            clock={alive.clock} animated={animate} />
+          <EncounterRing ringPts={Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude)))}
+            clock={alive.clock} animated={animate} sparkToken={tokens[`sparks:${encounter.key}`] ?? 0}
+            sparks={assets?.ambient?.['skid-fin-sparks'] ?? null} />
+        </Marker>
+      )}
+      {encounterLive && encounter && nearView(encounter, bounds, 1) && (
+        <Marker key={`fc-${encounter.key}`} coordinate={encounter}
+          onPress={onEncounterPress ? () => onEncounterPress(encounter.key) : undefined}
+          accessibilityLabel={`${encounter.name}, encounter`}>
+          <EncounterCritter critter={encounter.critter} asset={iconAsset(assets, encounter.critter)}
+            chaos={encounterChaos(encounter)} clock={alive.clock} animated={animate} full={st.tier === 'full'} />
         </Marker>
       )}
     </>

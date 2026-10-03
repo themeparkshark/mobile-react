@@ -16,7 +16,7 @@ import { hash01 } from '../alive/ambientBudget';
 import { CritterBody } from './CritterBody';
 import { critterPose, sheetPose } from './critters';
 import { BAT_FRAME, BAT_FRAMES, critterLook, EYES_FRAMES, EYES_H, EYES_W, FRIGHT_ART, MIST_H, MIST_W, NIGHT } from './frightArt';
-import { rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
+import { encounterPose, rowIndex, sheetTiming, SPARK_RUN_S, sparkPass, timelineLit, windowTimelines } from './frightAssets';
 import { flickerPlan, flickerProfile, silhouetteAt, silhouettePlan, windowLevel } from './flicker';
 import { hashString } from './random';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
@@ -536,75 +536,134 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
 
 /* ── Encounter ────────────────────────────────────────────────────────── */
 
+/** The tappable critter's box: 88 pt, above the 44 pt minimum. */
+export const ENCOUNTER_CRITTER_PT = 88;
+
 /**
- * The Lantern Star encounter: its icon sheet (appear once, then idle; the
- * chaos loop during Chaos Hour and the first 20 s) inside a pulsing ring,
- * with a spark trail. Calm: the still frame and a "here" ring.
+ * The Lantern Star encounter's ring: a pulsing radius ring and the skid-fin
+ * spark passes (sheet `skid-fin-sparks`, 8 frames at 16 fps, sliding 80 pt/s
+ * for 1.5 s on a new heading each pass). Takes no touches; the critter on top
+ * is its own (tappable) marker. Calm: a still "here" ring.
  */
-export const EncounterSprite = memo(function EncounterSprite({ critter, asset, chaos, ringPts, trail, clock, animated, lite }: {
+export const EncounterRing = memo(function EncounterRing({ ringPts, clock, animated, sparkToken, sparks }: {
+  readonly ringPts: number;
+  readonly clock: SharedValue<number>;
+  readonly animated: boolean;
+  /** Bumps when a spark pass starts (through the 2-event gate). */
+  readonly sparkToken: number;
+  readonly sparks: FrightAmbientAsset | null;
+}) {
+  const S = Math.round(Math.max(ringPts * 2 + 40, 140));
+  const c = S / 2;
+  const sheet = useRemoteImage(animated ? sparks?.file : null);
+  const sparkAt = useSharedValue(-1000);
+  const heading = useSharedValue(0);
+  useEffect(() => {
+    if (sparkToken <= 0) return;
+    heading.value = hash01(sparkToken * 13.7) * Math.PI * 2;
+    sparkAt.value = clock.value;
+  }, [sparkToken, clock, sparkAt, heading]);
+  const ringR = useDerivedValue(() => ringPts * (animated ? 0.94 + 0.06 * Math.sin(clock.value * 2.4) : 1));
+  const ringO = useDerivedValue(() => (animated ? 0.55 + 0.25 * Math.sin(clock.value * 2.4) : 0.75));
+  const [fw, fh] = sparks?.frame ?? [192, 64];
+  const frames = sparks?.rows?.[0] ?? 8;
+  const fps = Math.min(16, Number(sparks?.fps) || 16);
+  const pass = useDerivedValue(() => sparkPass(clock.value - sparkAt.value, frames, fps));
+  // The pass crosses the ring through its middle: start 60 pt before center along the heading.
+  const sparkTransform = useDerivedValue(() => {
+    const d = pass.value.d - SPARK_RUN_S * 40;
+    return [{ translateX: c + Math.cos(heading.value) * d }, { translateY: c + Math.sin(heading.value) * d },
+      { rotate: heading.value }];
+  });
+  const sparkFrame = useDerivedValue(() => pass.value.frame);
+  const sparkOpacity = useDerivedValue(() => pass.value.opacity);
+  const row = useSharedValue(0);
+  return (
+    <Canvas style={{ width: S, height: S }} pointerEvents="none">
+      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} opacity={0.08} />
+      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
+      {animated && sheet && (
+        <Group transform={sparkTransform}>
+          <SheetFrame image={sheet} fw={fw} fh={fh} frame={sparkFrame} row={row} x={-fw / 2} y={-fh / 4} opacity={sparkOpacity} />
+        </Group>
+      )}
+    </Canvas>
+  );
+});
+
+/**
+ * The encounter critter from its icon sheet (rows idle, appear, chaos-hour;
+ * 160 px frames @2x): appear once on spawn, then the chaos loop during Chaos
+ * Hour and the first 20 s (full tier), else idle. Lite: appear and idle.
+ * Calm or not animated: the still frame. Placeholder while the art loads.
+ */
+export const EncounterCritter = memo(function EncounterCritter({ critter, asset, chaos, clock, animated, full }: {
   readonly critter: 'chuckles' | 'riptide';
   readonly asset: FrightSheetAsset | null;
   readonly chaos: boolean;
-  readonly ringPts: number;
-  readonly trail: number;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
-  readonly lite: boolean;
+  readonly full: boolean;
 }) {
-  const S = Math.round(Math.max(ringPts * 2 + 60, 120));
-  const c = S / 2;
+  const B = ENCOUNTER_CRITTER_PT;
   const look = useMemo(() => critterLook(critter), [critter]);
   const sheet = useRemoteImage(animated ? asset?.sheet : null);
   const still = useRemoteImage(asset?.static);
   const spawn = useSharedValue(clock.value);
   const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'appear'), rowIndex(asset, 'chaos-hour')] : [0, -1, -1]), [asset]);
-  const { frames, fps } = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
-  const ringR = useDerivedValue(() => ringPts * (animated ? 0.94 + 0.06 * Math.sin(clock.value * 2.4) : 1));
-  const ringO = useDerivedValue(() => (animated ? 0.55 + 0.25 * Math.sin(clock.value * 2.4) : 0.7));
-  const at = (lag: number) => {
-    'worklet';
-    const a = (animated ? clock.value : 0) * 0.5 - lag;
-    return { x: c + Math.cos(a) * ringPts * 0.35, y: c + Math.sin(a) * ringPts * 0.25 };
-  };
-  const pose = useDerivedValue(() => {
-    const age = clock.value - spawn.value;
-    const idle = rows[0] >= 0 ? rows[0] : 0;
-    const frame = Math.floor(clock.value * fps) % frames;
-    if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.floor(age * fps) };
-    if (!lite && rows[2] >= 0 && (chaos || age < 20)) return { row: rows[2], frame };
-    return { row: idle, frame };
-  });
-  const frame = useDerivedValue(() => pose.value.frame);
-  const row = useDerivedValue(() => pose.value.row);
-  const body = useDerivedValue(() => {
-    const p = at(0);
-    return [{ translateX: p.x }, { translateY: p.y }];
-  });
   const fw = asset?.frame[0] ?? 160;
   const fh = asset?.frame[1] ?? 160;
+  const timing = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
+  const frames = sheet ? Math.max(1, Math.round(sheet.width() / fw)) : timing.frames;
+  const fps = timing.fps;
+  const pose = useDerivedValue(() => encounterPose(clock.value, clock.value - spawn.value, rows, frames, fps, chaos, full));
+  const frame = useDerivedValue(() => pose.value.frame);
+  const row = useDerivedValue(() => pose.value.row);
+  const scale = B / (fw / 2);
   return (
-    <Canvas style={{ width: S, height: S }} pointerEvents="none">
-      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
-      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} opacity={0.08} />
-      {animated && Array.from({ length: trail }, (_, j) => <TrailDot key={j} j={j} at={at} />)}
-      <Group transform={body}>
+    <Canvas style={{ width: B, height: B }} pointerEvents="none">
+      <Group transform={[{ scale }]}>
         {sheet && animated
-          ? <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 4 - 8} />
+          ? <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} />
           : still
-            ? <SkImage image={still} x={-fw / 4} y={-fh / 4 - 8} width={fw / 2} height={fh / 2} fit="contain" />
-            : <Group transform={[{ translateY: 10 }, { scale: 1.1 }]}><CritterBody look={look} /></Group>}
+            ? <SkImage image={still} x={0} y={0} width={fw / 2} height={fh / 2} fit="contain" />
+            : <Group transform={[{ translateX: fw / 4 }, { translateY: fh / 2 - 12 }, { scale: 1.6 }]}><CritterBody look={look} /></Group>}
       </Group>
     </Canvas>
   );
 });
 
-function TrailDot({ j, at }: { j: number; at: (lag: number) => { x: number; y: number } }) {
-  const c = useDerivedValue(() => {
-    const p = at(0.12 * (j + 1));
-    return vec(p.x, p.y + 20);
-  });
-  return <Circle c={c} r={3 - j * 0.35} color={NIGHT.candy} opacity={0.7 - j * 0.1} />;
-}
+/* ── Lagoon Glow-Down ─────────────────────────────────────────────────── */
+
+/**
+ * The show spot's glow (sheet `lagoon-glow`, 10 frames) while a performance
+ * runs: 10 fps in full, 6 fps in lite, the still first frame in calm.
+ */
+export const LagoonGlow = memo(function LagoonGlow({ asset, widthPts, clock, fps, intensity }: {
+  readonly asset: FrightAmbientAsset;
+  readonly widthPts: number;
+  readonly clock: SharedValue<number>;
+  /** 0 holds frame 0. */
+  readonly fps: number;
+  readonly intensity: number;
+}) {
+  const image = useRemoteImage(asset.file);
+  const [fw, fh] = asset.frame ?? [256, 128];
+  const frames = asset.rows?.[0] ?? 10;
+  const W = Math.round(widthPts);
+  const scale = W / (fw / 2);
+  const H = Math.round((fh / 2) * scale);
+  const frame = useDerivedValue(() => (fps > 0 ? Math.floor(clock.value * fps) % frames : 0));
+  const row = useSharedValue(0);
+  if (!image) return null;
+  return (
+    <Canvas style={{ width: W, height: H }} pointerEvents="none">
+      <Group transform={[{ scale }]} opacity={Math.max(0.4, intensity)}>
+        <SheetFrame image={image} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} />
+      </Group>
+    </Canvas>
+  );
+});
 
 const styles = StyleSheet.create({
   // At least 44 pt wide and tall: the whole facade is the tap target.

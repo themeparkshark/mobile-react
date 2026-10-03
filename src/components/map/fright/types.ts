@@ -33,6 +33,8 @@ export interface FrightMapInput {
   readonly showLive?: boolean;
   /** A haunt facade was tapped (open the haunt sheet at that haunt). */
   readonly onHauntPress?: (spotKey: string) => void;
+  /** The live encounter's critter was tapped (encounter.key). */
+  readonly onEncounterPress?: (encounterKey: string) => void;
   /**
    * Highest FX tier (server config.fx_tier_cap). Absent: 'lite' while the mode
    * is ON, until battery use is measured.

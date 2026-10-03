@@ -14,6 +14,8 @@ import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFrightCard, type FrightCard, type FrightSlot } from '../../api/endpoints/fright';
 import { artFromCard, frameFor, pinImage, rememberFrightArt } from '../../services/fright/art';
+import { FlexShareButton } from '../../share';
+import { badgeFlex, lanternFlex, nightFlex } from '../../services/fright/share';
 import { COPY } from '../../services/fright/copy';
 import { withTimeout } from '../../services/fright/timeout';
 import { NightButton } from './ui';
@@ -131,6 +133,8 @@ export default function FrightCardScreen() {
             ) : <Text style={styles.title} accessibilityRole="header">{card.card_title}</Text>}
             <Text style={styles.sub}>{`${card.park_name} · ${card.nights} night${card.nights === 1 ? '' : 's'}${friend ? ' · Friend\'s card' : ''}`}</Text>
           </View>
+          {/* Share Studio (a route, not a modal): the whole Deep Lantern. Own card only. */}
+          {!friend && card.haunts_done > 0 && <FlexShareButton kind="fright_lifetime" payload={lanternFlex(card)} surface="fright_card" />}
         </View>
 
         <View style={styles.ringWrap}>
@@ -175,6 +179,10 @@ export default function FrightCardScreen() {
                 !slot.earned && ended ? COPY.backNextFall : null,
               ].filter(Boolean).join(' · ')}</Text>
             </View>
+            {!friend && (() => {
+              const flex = badgeFlex(card, slot);
+              return flex ? <FlexShareButton kind="fright_badge" payload={flex} surface="fright_card" /> : null;
+            })()}
           </View>
         ))}
 
@@ -229,18 +237,22 @@ export default function FrightCardScreen() {
         </ScrollView>
 
         {card.recaps.length > 0 && <Text style={styles.section}>Your nights</Text>}
-        {card.recaps.slice().sort((a, b) => b.night_on.localeCompare(a.night_on)).map(item => (
+        {card.recaps.slice().sort((a, b) => b.night_on.localeCompare(a.night_on)).map((item, index, list) => (
           <Pressable key={item.night_on} accessibilityRole="button" onPress={() => setRecapNight(item.night_on)} style={styles.recapRow}
             accessibilityLabel={`${nightDateLabel(item.night_on)}. ${item.haunts} haunts. Open the Marquee.`}>
             <Text style={[styles.slotName, { flex: 1 }]}>{nightDateLabel(item.night_on) ?? item.night_on}</Text>
             <Text style={styles.meta}>{`${item.haunts} haunts · ${formatMinutes(item.minutes_in_line)}`}</Text>
+            {/* Recap share lives here (the Marquee is a modal; SHARE_IN_MODALS keeps its button hidden). */}
+            {!friend && item.haunts > 0 && (
+              <FlexShareButton kind="fright_night" payload={nightFlex(card, item, list.length - index)} surface="fright_recap" />
+            )}
             <GameIcon name="arrow" size={16} />
           </Pressable>
         ))}
       </ScrollView>
       <Modal visible={!!recapNight} transparent animationType="slide" onRequestClose={() => setRecapNight(null)}>
         <View style={{ flex: 1, backgroundColor: NIGHT.scrim, justifyContent: 'flex-end' }}>
-          {recapNight && <MarqueeBody eventSlug={card.event_slug} nightOn={recapNight} playerId={params.playerId}
+          {recapNight && <MarqueeBody eventSlug={card.event_slug} nightOn={recapNight} playerId={params.playerId} inModal
             onClose={() => setRecapNight(null)} />}
         </View>
       </Modal>

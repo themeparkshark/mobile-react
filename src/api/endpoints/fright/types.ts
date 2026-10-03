@@ -67,6 +67,8 @@ export interface FrightEncounter {
   readonly starts_at: string;
   readonly ends_at: string;
   readonly caught: boolean;
+  /** This window is Chaos Hour (11:11 PM). Optional: older servers omit it and the app reads the times. */
+  readonly chaos_hour?: boolean | null;
 }
 
 export interface FrightRun {
@@ -141,6 +143,8 @@ export interface FrightConfig {
   readonly fx_tier_cap?: 'full' | 'lite' | 'calm' | null;
   /** Looping ambience default (false: opt-in from the haunt sheet). */
   readonly ambience_default?: boolean | null;
+  /** Chaos Hour (the Lantern Star encounter) is switched on server-side. */
+  readonly encounters_enabled?: boolean | null;
 }
 
 /** GET /parks/{id}/fright */
@@ -217,6 +221,8 @@ export interface FrightAssets {
 
 export interface FrightReward {
   readonly kind: 'pin' | 'cosmetic' | 'xp' | 'coins' | 'case_file' | 'stamp';
+  /** Event milestone key when the reward came from one (ten_in_one, first_haunt, all_haunts, haunts_5...). */
+  readonly key?: string | null;
   readonly name: string;
   readonly image: string | null;
   readonly item_id?: number | null;
@@ -231,6 +237,8 @@ export interface FrightCaseFileDrop {
   readonly body: string;
   readonly rarity: 'common' | 'rare' | 'icon';
   readonly new: boolean;
+  /** Card front art (title plate blank: overlay the title). */
+  readonly image?: string | null;
 }
 
 /** Result of enter / done / found / score. `error` codes are stable strings. */
@@ -243,6 +251,8 @@ export interface FrightActionResult {
   readonly case_file?: FrightCaseFileDrop | null;
   readonly lantern?: FrightLantern | null;
   readonly needs_side?: boolean;
+  /** Encounter catches: which critter was caught. */
+  readonly critter?: 'chuckles' | 'riptide' | null;
   readonly fan?: { readonly rank: number | null; readonly score: number | null } | null;
   readonly server_now?: string;
 }
