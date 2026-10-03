@@ -193,7 +193,7 @@ test('every WS3 modal dims the app with the brand navy scrim, never near-black',
     for (const [, value] of src.matchAll(/backdropOpacity=\{[^}]*?(0\.\d+)\s*\}/g))
       assert.ok(Number(value) <= 0.9, `${file} backdrop is too heavy`);
   }
-  for (const [file, style] of [['src/screens/stampbook/StampCard.tsx', 'backdrop'], ['src/screens/SetCollectionScreen.tsx', 'modalOverlay']]) {
+  for (const [file, style] of [['src/screens/stampbook/StampCard.tsx', 'backdrop'], ['src/screens/SetCollection/DexItemCard.tsx', 'overlay'], ['src/screens/SetCollectionScreen.tsx', 'sheetOverlay']]) {
     const src = fs.readFileSync(file, 'utf8');
     const block = src.slice(src.indexOf(`  ${style}: {`), src.indexOf('}', src.indexOf(`  ${style}: {`)));
     assert.match(block, /rgba\(5,\s*52,\s*110,/, `${file} ${style} is not the navy scrim`);
@@ -206,7 +206,7 @@ test('collection rarity and challenge cards use the blue, white and gold ramp: n
   assert.equal(tiers.rarityToneByName('epic').color, '#e0a100');
   assert.equal(tiers.rarityToneByName('nope').name, 'common');
   const purple = /#(a855f7|ec4899|8b5cf6|a78bfa|c4b5fd|c084fc|f472b6|9c27b0|7c3aed|d946ef)\b|rgba\(\s*(168,\s*85,\s*247|236,\s*72,\s*153|139,\s*92,\s*246|196,\s*181,\s*253)/i;
-  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx',
+  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/RidePhoto.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/stampbook/StampTile.tsx',
     'src/screens/stampbook/StampCard.tsx', 'src/screens/stampbook/model.ts', 'src/components/RedeemRedeemableModal.tsx',
     'src/components/TicketPunch.tsx', 'src/constants/coinTiers.ts', 'src/components/UnfoundCoinModal.tsx',
     'src/components/CoinUpgradeDemo.tsx'])
@@ -215,8 +215,11 @@ test('collection rarity and challenge cards use the blue, white and gold ramp: n
 });
 
 test('Set Collection text never falls back to the system font', () => {
-  const src = fs.readFileSync('src/screens/SetCollectionScreen.tsx', 'utf8');
-  const bare = [...src.matchAll(/(\w+): \{([^{}]*)\}/g)]
-    .filter(([, , block]) => /fontSize/.test(block) && !/fontFamily/.test(block)).map(([, name]) => name);
-  assert.deepEqual(bare, []);
+  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/RidePhoto.tsx',
+    'src/screens/SetCollection/DexTile.tsx', 'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx']) {
+    const src = fs.readFileSync(file, 'utf8');
+    const bare = [...src.matchAll(/(\w+): \{([^{}]*)\}/g)]
+      .filter(([, , block]) => /fontSize/.test(block) && !/fontFamily/.test(block)).map(([, name]) => name);
+    assert.deepEqual(bare, [], file);
+  }
 });

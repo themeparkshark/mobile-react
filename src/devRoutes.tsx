@@ -34,6 +34,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
+      { name: 'MenuPreview', getComponent: () => require('./screens/MenuPreviewScreen').default },
       { name: 'SetCollectionPreview', getComponent: () => require('./screens/SetCollectionPreviewScreen').default },
       { name: 'HomeHuntPreview', getComponent: () => require('./screens/ExploreScreen/HomeHuntPreviewScreen').default },
       { name: 'InventoryPreview', getComponent: () => require('./screens/InventoryPreviewScreen').default },
@@ -82,6 +83,8 @@ export function devInitialRoute(): string | null {
       on(process.env.EXPO_PUBLIC_HOME_SAVED_PREVIEW) ||
       on(process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW), 'HomeHuntPreview'],
     [on(process.env.EXPO_PUBLIC_SET_COLLECTION_PREVIEW), 'SetCollectionPreview'],
+    [on(process.env.EXPO_PUBLIC_MENU_PREVIEW), 'MenuPreview'],
+    [on(process.env.EXPO_PUBLIC_HOW_TO_PLAY_PREVIEW), 'HowToPlay'],
     [on(process.env.EXPO_PUBLIC_CREW_GRID_PREVIEW), 'CrewGridPreview'],
     [on(process.env.EXPO_PUBLIC_PARK_DAY_RECAP_PREVIEW), 'ParkDayRecapPreview'],
     [on(process.env.EXPO_PUBLIC_TRIP_GOAL_PREVIEW), 'TripGoalPreview'],

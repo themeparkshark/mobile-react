@@ -46,6 +46,8 @@ export default function App() {
     process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE === 'big-thunder';
   const isRideBatchPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_BATCH_PREVIEW === '1';
   const isStandalonePreview = isStandalonePreviewMode();
+  // Dev only: EXPO_PUBLIC_CLEAN_RECORDING=1 hides the dev joystick and LogBox for review recordings.
+  const cleanRecording = __DEV__ && process.env.EXPO_PUBLIC_CLEAN_RECORDING === '1';
   const initialRouteName = devInitialRoute() ?? 'Splash';
   useAppUpdates();
   const { player } = useContext(AuthContext);
@@ -245,7 +247,6 @@ export default function App() {
         <Stack.Screen name="SetCollection" getComponent={() => require('./screens/SetCollectionScreen').default} />
         <Stack.Screen name="StampBook" getComponent={() => require('./screens/StampBookScreen').default} />
         <Stack.Screen name="CoinShelf" getComponent={() => require('./screens/CoinShelfScreen').default} />
-        <Stack.Screen name="SharkPark" getComponent={() => require('./screens/SharkParkScreen').default} />
         <Stack.Screen 
           name="CommunityCenter" 
           getComponent={() => require('./screens/CommunityCenterScreen').default}
@@ -310,7 +311,7 @@ export default function App() {
     <GameDialogHost />
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
-    {(__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
+    {cleanRecording ? null : (__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
     </View>
   );
 }

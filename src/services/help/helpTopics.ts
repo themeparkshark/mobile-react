@@ -26,8 +26,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['coins', 'tickets', 'energy', 'xp', 'daily_chest', 'day_streak'] },
   { id: 'home', title: 'Hunting at home', art: 'churro',
     lines: [
-      'Finds pop up near you and leave after a while. Walk until one is inside your grab zone, then tap it.',
-      'Pick a Park goal so your next park day starts with a plan.',
+      'Snacks and souvenirs pop up on the map near you. Walk close, then tap one to catch it.',
+      'Each find leaves after a while, so catch it while you can.',
     ],
     terms: ['home_finds', 'travel_mode', 'sets', 'park_goal'] },
   { id: 'park', title: 'At the park', art: 'park',
@@ -56,7 +56,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['coin_levels', 'ride_parts', 'energy'] },
   { id: 'collections', title: 'Sets and stamps', art: 'stamps',
     lines: [
-      'Every home find fills a set. Finished sets pay Energy, Tickets, XP and a title.',
+      'Every catch fills a set in your collection book. Finished sets pay Energy, Tickets, XP and a title.',
       'Stamps mark your milestones. Open Collections or the Stamp Book from the menu.',
     ],
     terms: ['sets', 'stamps'] },
@@ -80,10 +80,10 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['supplies', 'bonus_ads', 'vip', 'coins'] },
   { id: 'extras', title: 'More to explore', art: 'extras',
     lines: [
-      'Shark Park is a side game with its own money. Pins come from Pin Packs and Pin Trading.',
+      'Pins come from Pin Packs and Pin Trading.',
       'Ask for help any time from Settings.',
     ],
-    terms: ['shark_park', 'pins'] },
+    terms: ['pins'] },
 ];
 
 export function helpTopic(id: HelpTopicId | string | null | undefined): HelpTopic | null {
