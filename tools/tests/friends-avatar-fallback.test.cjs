@@ -27,9 +27,11 @@ test('no photo shows the TPS shark', () => {
   assert.equal(photo(app).props.source, photo(app).props.placeholder);
 });
 
-test('offscreen swipe actions are hidden from VoiceOver and the visible buttons are labelled', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../src/components/FriendPlayer.tsx'), 'utf8');
-  assert.equal((src.match(/importantForAccessibility="no-hide-descendants"/g) ?? []).length, 2);
-  assert.match(src, /accessibilityLabel=\{`Compliment \$\{player\.screen_name\}`\}/);
-  assert.match(src, /as a friend/);
+test('friend rows have no hidden swipe actions and every visible button is labelled', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../src/screens/social/PlayerRow.tsx'), 'utf8');
+  assert.doesNotMatch(src, /Swipeable/, 'no gesture-only actions a kid or VoiceOver cannot find');
+  assert.match(src, /accessibilityLabel=\{`Say yes to \$\{player\.screen_name\}`\}/);
+  assert.match(src, /accessibilityLabel=\{`Say no to \$\{player\.screen_name\}`\}/);
+  assert.match(src, /Send \$\{player\.screen_name\} a heart and 5 coins/);
+  assert.match(src, /accessibilityHint="Opens their profile"/);
 });

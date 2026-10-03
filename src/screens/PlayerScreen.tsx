@@ -1,7 +1,7 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { ImageBackground, Pressable } from 'react-native';
-import { Alert, Dimensions, ScrollView, Text, View } from 'react-native';
+import { Dimensions, ScrollView, Text, View } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import getPlayer from '../api/endpoints/players/get';
 import reportPlayer from '../api/endpoints/players/report';
@@ -22,9 +22,12 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import VisitedParks from '../components/VisitedParks';
 import { AuthContext } from '../context/AuthProvider';
-import useCompliment from '../hooks/useCompliment';
 import useCrumbs from '../hooks/useCrumbs';
-import useFriends from '../hooks/useFriends';
+import { useFriendActions } from '../hooks/useFriends';
+import { confirmGame, gameAlert } from '../ui';
+import { effectiveStatus } from './social/socialModel';
+import { useFriendOverrides } from './social/socialStore';
+import { Pill } from './social/SocialKit';
 import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -42,9 +45,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const [currentPlayer, setCurrentPlayer] = useState<PlayerType>();
   const [parks, setParks] = useState<ParkType[]>([]);
   const { purchaseItem, purchaseModal } = usePurchaseItem();
-  const [isFriend, setIsFriend] = useState<boolean>(false);
-  const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { complimentPlayer } = useCompliment();
+  const actions = useFriendActions();
+  const overrides = useFriendOverrides();
   const { checkPermission, hasPermission } = usePermissions();
   const [failed, setFailed] = useState(false);
   const focused = useIsFocused();
@@ -84,47 +86,37 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
 
   useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => {
-    if (!currentPlayer) {
-      return;
-    }
+  // Social v2: optimistic friend state (Add, Asked, Yes/No, Block) layered over the server's answer.
+  const status = currentPlayer ? effectiveStatus(currentPlayer, overrides) : 'none';
+  const isFriend = status === 'friends';
 
-    setIsFriend(currentPlayer.is_friend);
-  }, [currentPlayer]);
-
-  const report = () => {
+  const report = async () => {
     if (!currentPlayer || !checkPermission(PermissionEnums.CreateReports)) return;
-    Alert.alert(
-      vsprintf(prompts.report_username, [currentPlayer.screen_name]),
-      '',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Ok',
-          onPress: async () => {
-            await reportPlayer(currentPlayer.id);
-            Alert.alert(messages.report_created, '', [{ text: 'Ok' }]);
-          },
-        },
-      ]
-    );
+    if (!(await confirmGame({ title: vsprintf(prompts.report_username, [currentPlayer.screen_name]), confirmLabel: 'Report', icon: 'info' }))) return;
+    try {
+      await reportPlayer(currentPlayer.id);
+      gameAlert(messages.report_created || 'Report sent.', 'Thanks! A grown-up on our team will check it.', undefined, { icon: 'check', haptic: 'success' });
+    } catch {
+      gameAlert("Couldn't send the report", 'Check your connection and try again.');
+    }
   };
 
-  // Friendly actions first; Unfriend always last.
-  const actions: ProfileShortcut[] = currentPlayer
+  // Friendly actions first; Unfriend always last. Adding or answering a friend
+  // request lives in the FriendPanel above the row.
+  const shortcuts: ProfileShortcut[] = currentPlayer
     ? [
-        {
+        ...(status !== 'blocked' ? [{
           key: 'compliment',
-          label: 'Compliment',
+          label: 'Heart',
           image: require('../../assets/images/screens/player/compliment.png'),
-          hint: `Sends ${currentPlayer.screen_name} a compliment`,
+          hint: `Sends ${currentPlayer.screen_name} a heart`,
           locked: !hasPermission(PermissionEnums.CreateCompliments),
           onPress: async () => {
             if (checkPermission(PermissionEnums.CreateCompliments)) {
-              await complimentPlayer(currentPlayer);
+              await actions.cheer(currentPlayer);
             }
           },
-        },
+        }] : []),
         ...(currentPlayer.mascot ? [{
           key: 'gift',
           label: 'Gift',
@@ -137,30 +129,13 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             }
           },
         }] : []),
-        isFriend ? {
+        ...(isFriend ? [{
           key: 'remove-friend',
           label: 'Unfriend',
           image: require('../../assets/images/screens/friends/remove_friend.png'),
           hint: `Removes ${currentPlayer.screen_name} from your friends`,
-          onPress: () => {
-            removeFriend(currentPlayer, () => setIsFriend(false));
-          },
-        } : {
-          key: 'add-friend',
-          label: currentPlayer.has_friend_request_from ? 'Accept' : 'Add Friend',
-          image: require('../../assets/images/screens/friends/add_friend.png'),
-          hint: currentPlayer.has_friend_request_from
-            ? `Accepts ${currentPlayer.screen_name}'s friend request`
-            : `Sends ${currentPlayer.screen_name} a friend request`,
-          locked: !hasPermission(PermissionEnums.AddFriends),
-          onPress: async () => {
-            if (checkPermission(PermissionEnums.AddFriends)) {
-              currentPlayer?.has_friend_request_from
-                ? acceptFriend(currentPlayer)
-                : addFriend(currentPlayer);
-            }
-          },
-        },
+          onPress: () => { void actions.remove(currentPlayer); },
+        }] : []),
       ]
     : [];
 
@@ -239,8 +214,16 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               <View ref={levelCard.cardRef} onLayout={levelCard.remeasure} style={{ paddingTop: 4 }}>
                 <Experience player={currentPlayer} own={false} paused={!focused || levelCard.offscreen} />
               </View>
+              <FriendPanel
+                name={currentPlayer.screen_name}
+                status={status}
+                onAdd={() => { if (checkPermission(PermissionEnums.AddFriends)) void actions.add(currentPlayer); }}
+                onYes={() => { void actions.accept(currentPlayer); }}
+                onNo={() => { void actions.decline(currentPlayer); }}
+                onUndo={() => { void actions.cancel(currentPlayer); }}
+              />
               <View style={{ marginTop: 18 }}>
-                <ProfileShortcuts items={actions} />
+                <ProfileShortcuts items={shortcuts} />
               </View>
               <StatusBadges isVip={!!currentPlayer.is_subscribed} isVerified={!!currentPlayer.verified_at} own={false} />
               <Heading text="Statistics" />
@@ -267,7 +250,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               )}
               {Boolean(currentPlayer.username) && (
                 <Pressable
-                  onPress={report}
+                  onPress={() => { void report(); }}
                   accessibilityRole="button"
                   accessibilityLabel={`Report ${currentPlayer.screen_name}`}
                   style={{ alignSelf: 'center', marginTop: 28, minHeight: 44, paddingHorizontal: 16,
@@ -279,10 +262,55 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                   </Text>
                 </Pressable>
               )}
+              <Pressable
+                onPress={() => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); }}
+                accessibilityRole="button"
+                accessibilityLabel={`${status === 'blocked' ? 'Unblock' : 'Block'} ${currentPlayer.screen_name}`}
+                style={{ alignSelf: 'center', marginTop: 4, minHeight: 44, paddingHorizontal: 16,
+                  justifyContent: 'center' }}
+              >
+                <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#526477',
+                  textDecorationLine: 'underline' }}>
+                  {status === 'blocked' ? 'Unblock this player' : 'Block this player'}
+                </Text>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
       )}
     </>
+  );
+}
+
+/**
+ * The one big friend button a kid needs on a profile: Add friend, Asked
+ * (tap to take it back), Yes! / No when they asked you, or a happy
+ * "Friends" badge. Blocked shows nothing here (Unblock is in the buttons).
+ */
+function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
+  readonly name: string;
+  readonly status: string;
+  readonly onAdd: () => void;
+  readonly onYes: () => void;
+  readonly onNo: () => void;
+  readonly onUndo: () => void;
+}) {
+  if (status === 'blocked') return null;
+  return (
+    <View style={{ alignItems: 'center', marginTop: 14, marginBottom: 4 }}>
+      {status === 'incoming' && (
+        <>
+          <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
+            maxFontSizeMultiplier={1.2}>{name} wants to be friends!</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Pill tone="grey" icon="close" label="No" onPress={onNo} accessibilityLabel={`Say no to ${name}`} />
+            <Pill tone="green" icon="check" label="Yes!" onPress={onYes} accessibilityLabel={`Say yes to ${name}`} />
+          </View>
+        </>
+      )}
+      {status === 'none' && <Pill tone="gold" icon="shark" label="Add friend" onPress={onAdd} accessibilityLabel={`Add ${name} as a friend`} />}
+      {status === 'outgoing' && <Pill tone="grey" icon="timer" label="Asked" onPress={onUndo} accessibilityLabel={`You asked ${name}. Tap to take it back`} />}
+      {status === 'friends' && <Pill tone="green" icon="check" label="Friends" accessibilityLabel={`${name} is your friend`} />}
+    </View>
   );
 }

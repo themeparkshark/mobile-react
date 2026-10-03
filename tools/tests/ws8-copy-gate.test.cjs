@@ -37,7 +37,12 @@ const WS8_CLEAN = [
   'src/components/Tutorial/TutorialProvider.tsx',
   'src/components/Tutorial/SpotlightOverlay.tsx',
   'src/screens/FriendsScreen.tsx',
-  'src/screens/FriendsScreen/YourList.tsx',
+  'src/screens/social/PlayerRow.tsx',
+  'src/screens/social/SocialKit.tsx',
+  'src/screens/social/SearchField.tsx',
+  'src/screens/social/socialModel.ts',
+  'src/screens/PlayerScreen.tsx',
+  'src/components/FriendPlayer.tsx',
   'src/screens/SocialScreen.tsx',
   'src/components/CreateThreadModal.tsx',
   'src/components/SocialPost.tsx',
@@ -104,22 +109,24 @@ test('toasts show art for their type, map legacy emoji to art, and never use a d
   assert.match(source, /GameRichText/);
 });
 
-test('friend actions confirm with the game dialog and report failures', () => {
+test('friend actions use the game dialog, confirm only the risky ones, and report failures', () => {
   const source = fs.readFileSync(path.join(root, 'src/hooks/useFriends.tsx'), 'utf8');
   assert.doesNotMatch(source, /Alert\.alert/);
-  assert.equal((source.match(/catch \{/g) || []).length, 3);
+  assert.equal((source.match(/confirmGame\(/g) || []).length, 3, 'take back, remove and block confirm; add, yes, no and heart are one tap');
+  assert.match(source, /gameAlert\(onError, FAILED\)/, 'one failure path puts the button back and says so');
 });
 
 test('Notifications: mark-all-read hides when nothing is unread, a failed load can retry, the empty state is art', () => {
   const source = fs.readFileSync(path.join(root, 'src/screens/NotificationsScreen.tsx'), 'utf8');
-  const fn = source.slice(source.indexOf('export function showMarkAllRead'), source.indexOf('/** "All caught up"'));
+  const fn = source.slice(source.indexOf('export function showMarkAllRead'), source.indexOf('const REFOCUS_MS'));
   const js = require(path.join(root, 'node_modules/typescript')).transpileModule(fn, { compilerOptions: { module: 1 } }).outputText;
   const mod = { exports: {} };
   new Function('module', 'exports', js)(mod, mod.exports);
   assert.equal(mod.exports.showMarkAllRead([]), false);
   assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }]), false);
   assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }, { read_at: null }]), true);
-  assert.match(source, /\{showMarkAllRead\(notifications\) && <Button/);
+  assert.equal(mod.exports.showMarkAllRead([{ id: 'a', read_at: null }], new Set(['a'])), false, 'a row read on this screen counts');
+  assert.match(source, /item\.key === 'h-new' && showMarkAllRead\(items, readIds\)/, 'Read all sits on the New header, only while something is unread');
   assert.match(source, /state="error"/);
   assert.match(source, /GameIcon name="bell"/);
 });
@@ -165,7 +172,8 @@ test('guest invite: bright card over the live map, sign-in inside, no gym promis
 
 test('a notification row renders server copy through the icon-safe text and draws its arrow as art', () => {
   const source = fs.readFileSync(path.join(root, 'src/components/Notification.tsx'), 'utf8');
-  assert.match(source, /<GameRichText[\s\S]*notification\.content\?\.message/);
+  assert.match(source, /const stored = notificationMessage\(notification\.content\?\.message\)/);
+  assert.match(source, /<GameRichText[^>]*>\s*\{message\}/);
   assert.doesNotMatch(source, /<Text[^>]*>\s*\{notification\.content\?\.message/);
   assert.match(source, /<GameIcon name="arrow"/);
   assert.doesNotMatch(source, /›/);
@@ -183,5 +191,5 @@ test('an emoji that split two sentences leaves a full stop, and every row uses o
   assert.equal(notificationMessage(undefined), '');
   const source = fs.readFileSync(path.join(root, 'src/components/Notification.tsx'), 'utf8');
   assert.doesNotMatch(source, /preset=\{isUnread/, 'read and unread rows share a preset');
-  assert.match(source, /iconSize=\{16\}/, 'inline art fits the line');
+  assert.match(source, /iconSize=\{17\}/, 'inline art fits the 17 pt line');
 });

@@ -19,6 +19,10 @@ export interface PlayerType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
+  /** Social v2 (optional on older servers): friends | incoming | outgoing | blocked | none, from my side. */
+  readonly friend_status?: 'friends' | 'incoming' | 'outgoing' | 'blocked' | 'none';
+  /** Social v2: requests waiting on me (on /me only). */
+  readonly pending_friend_requests_count?: number;
   readonly is_subscribed: boolean;
   readonly keys: number;
   readonly last_read_notifications_at: string;
