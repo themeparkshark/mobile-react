@@ -21,6 +21,7 @@ import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
+import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -395,6 +396,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       </View>
   );
 
+  const chromeOff = chromeHidden ? 1 : 0;
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
+
   return (
     <MapAliveProvider value={alive}>
     <View
@@ -405,21 +409,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       }}
       onLayout={event => setViewSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
     >
-      {/* Map controls */}
-      <View
+      {/* Map controls: hidden on the tap frame of a catch (UI thread), never over the viewfinder */}
+      <Reanimated.View
         pointerEvents={chromeHidden ? 'none' : 'box-none'}
-        style={{
+        style={[{
           position: 'absolute',
           top: controlsTop,
           right: 16,
           zIndex: 10,
           gap: 8,
-          opacity: chromeHidden ? 0 : 1,
-        }}
+        }, chromeStyle]}
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
         <Pressable
-          onPress={() => { haptic('tapLight'); recenterOnPlayer(); }}
+          onPress={() => { if (isCatchShown()) return; haptic('tapLight'); recenterOnPlayer(); }}
           accessibilityRole="button"
           accessibilityLabel={focusedOnPlayer ? 'Following your shark' : 'Center the map on your shark'}
           hitSlop={6}
@@ -428,7 +431,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <RecenterIcon away={!focusedOnPlayer} reducedMotion={reducedMotion} />
         </Pressable>
         {extraControls}
-      </View>
+      </Reanimated.View>
 
       <MapView
         ref={mapViewRef}
@@ -561,11 +564,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {fright && viewSize && <FrightMapLayer input={fright} width={viewSize.width} height={viewSize.height} zoom={cameraZoom} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
-      {!chromeHidden && <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
-        onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
-        hitSlop={8} style={styles.attribution}>
-        <Text style={styles.attributionText}>© OpenStreetMap</Text>
-      </Pressable>}
+      {/* Kept mounted; it fades with the controls on the catch's shared value and ignores taps under a catch. */}
+      <Reanimated.View pointerEvents={chromeHidden ? 'none' : 'box-none'} style={[styles.attribution, chromeStyle]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
+          onPress={() => { if (isCatchShown()) return; void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
+          hitSlop={8}>
+          <Text style={styles.attributionText}>© OpenStreetMap</Text>
+        </Pressable>
+      </Reanimated.View>
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>

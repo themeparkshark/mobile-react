@@ -1,3 +1,4 @@
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import dayjs from 'dayjs';
@@ -22,7 +23,7 @@ import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './Home
 import { pickupFix } from './homeCatch';
 import { rideSpec } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
-import { useCatchOpen } from './catchPresence';
+import { useCatchOpen, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { clusterFinds } from './findEdges';
 import type { FingerSide } from './PrepItem';
@@ -149,6 +150,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const catchRef = useRef<HomeCatchHandle>(null);
   const snapshotter = useRef<(() => Promise<string | null>) | null>(null);
   const catchOpen = useCatchOpen();
+  // Menus, edge arrows and chips leave on the tap frame (UI thread), never showing through the viewfinder's fade.
+  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -555,23 +558,23 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         ))}
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
-      <View style={[StyleSheet.absoluteFill, catchOpen && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} />
-      </View>
+      </Animated.View>
 
-      {bottom && <View style={styles.bottomSlot} pointerEvents="box-none">{bottom}</View>}
+      {bottom && <Animated.View style={[styles.bottomSlot, chromeFade]} pointerEvents="box-none">{bottom}</Animated.View>}
 
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
       <HomeLive top={TOP} onBarChange={setLiveBar} />
 
       {/* Menus step back (dimmed, not tappable) while a catch is open. */}
-      <View style={[StyleSheet.absoluteFill, catchOpen && styles.dimmed]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* Quick Access Menu - hamburger on left */}
         <QuickAccessMenu position="left" />
 
         {/* Radial Stats Menu - shark avatar on right */}
         <RadialStatsMenu />
-      </View>
+      </Animated.View>
 
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}

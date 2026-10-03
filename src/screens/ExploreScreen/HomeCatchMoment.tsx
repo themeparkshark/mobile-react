@@ -205,7 +205,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     progress.value = next.progressFrom;
     // Via the print: the pad springs in 200 ms into the hand-off (after the iris), never over the ride.
     const pad = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
-    badgeIn.value = viaPrint && motion ? withDelay(200, pad) : pad;
+    // After the iris and most of the fade (never ghosted over the black).
+    badgeIn.value = viaPrint && motion ? withDelay(300, pad) : pad;
     if (!viaPrint) {
       if (!data.replayed) catchSound('whoosh', { volume: 0.6 });
       fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
@@ -263,7 +264,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const photoRef = useRef<SkImage | null>(null);
   photoRef.current = photo?.image ?? null;
   const releasePhoto = () => {
-    const image = photoRef.current;
+    const image = photoRef.current ?? pendingPhoto.current?.image ?? null;
+    pendingPhoto.current = null;
     if (image) setTimeout(() => image.dispose(), 500);
   };
 
@@ -360,6 +362,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const newRideRef = useRef(false);
   useEffect(() => { void loadRideMemory(); }, []);
 
+  const pendingPhoto = useRef<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
   const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null) => {
     const req = request;
@@ -381,7 +384,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const fresh = kind ? recordRide(kind, served) : false;
     newRideRef.current = fresh;
     setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()) } : null);
-    setPhoto({ image, grade });
+    // The sticker keeps the item art until the print lands: the photo is never on screen twice.
+    pendingPhoto.current = { image, grade };
     pendingLand.current = { data: result.data, token, item: req.item };
     closeRide(true);
     setRide(current => (current ? { ...current, flyTo: { x: target.x + offset.x, y: target.y + offset.y } } : current));
@@ -392,6 +396,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const pending = pendingLand.current;
     if (!pending || aliveRef.current !== pending.token) return;
     pendingLand.current = null;
+    if (pendingPhoto.current) { setPhoto(pendingPhoto.current); pendingPhoto.current = null; }
     void arrive(catchSummary(pending.item, pending.data), pending.data, pending.token);
   }, [arrive]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -405,6 +410,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   // The viewfinder covers the map: the React-level catch state (map chrome, ambient pause) commits unseen.
   const onCovered = useCallback(() => setCatchOpen(true), []);
+  const onChromeBack = useCallback(() => showCatchChrome(false), []);
   const onIrisClosed = useCallback(() => { showCatchChrome(false); setCatchOpen(false); }, []);
 
   const onClose = useCallback(() => {
@@ -493,7 +499,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         from={stageFrom}
         layer={fullLayer} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
         closing={ride?.closing ?? false} flyTarget={ride?.flyTo ?? null}
-        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosed}
+        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosed} onChromeBack={onChromeBack}
         autoShots={autoShots} forceRide={forceRide} /></View>}
 
       {item && <>

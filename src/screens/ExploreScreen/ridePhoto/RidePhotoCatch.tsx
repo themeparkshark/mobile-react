@@ -127,6 +127,8 @@ export interface RidePhotoProps {
   readonly onCovered?: () => void;
   /** The close iris has met in the middle: the map's chrome can come back behind the bars. */
   readonly onIrisClosed?: () => void;
+  /** The iris has met: the app's header and tab bar start back while the bars fade. */
+  readonly onChromeBack?: () => void;
   /** Development recordings: latency-compensated shot offsets per pass (ms; negative is early). */
   readonly autoShots?: number[] | null;
   /** Development recordings: pin the ride and sky. */
@@ -140,7 +142,7 @@ export interface RidePhotoProps {
  * attached and decides what a tap means. Grading is in milliseconds at the touch.
  */
 const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function RidePhotoCatch({ item, active, from, layer, insets,
-  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots, onCovered, onIrisClosed, forceRide }, ref) {
+  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots, onCovered, onIrisClosed, onChromeBack, forceRide }, ref) {
   const spec = useMemo(() => rideSpec(item?.rarity ?? 3), [item?.rarity]);
   const tier = rarityTier(item?.rarity);
   const bandH = insets.bottom + 128;
@@ -403,10 +405,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   useEffect(() => {
     if (active) startOpen(from);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  const coverCalls = useRef({ onCovered, onIrisClosed });
-  coverCalls.current = { onCovered, onIrisClosed };
+  const coverCalls = useRef({ onCovered, onIrisClosed, onChromeBack });
+  coverCalls.current = { onCovered, onIrisClosed, onChromeBack };
   const covered = useCallback(() => coverCalls.current.onCovered?.(), []);
   const irisClosed = useCallback(() => coverCalls.current.onIrisClosed?.(), []);
+  const chromeBack = useCallback(() => coverCalls.current.onChromeBack?.(), []);
   useAnimatedReaction(() => open.value >= 0.98, (on, was) => { if (on && !was) runOnJS(covered)(); });
   // Close: the viewfinder irises out behind the flying print (never shrinks into a card).
   useEffect(() => {
@@ -417,7 +420,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     catchMark('close');
     // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
     // then fade to the map (160 to 380 ms); only then does the app's chrome come back (onIrisClosed).
-    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 160, easing: Easing.in(Easing.cubic) });
+    // The chrome starts back as the bars start to fade (160 ms), so header, tab bar and map arrive
+    // together at about 380 ms; the React-level catch state clears once the fade is done.
+    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 160, easing: Easing.in(Easing.cubic) }, done => {
+      if (done) runOnJS(chromeBack)();
+    });
     veil.value = withDelay(reducedMotion ? 0 : 160, withTiming(0, { duration: reducedMotion ? 120 : 220 }, done => {
       if (done) runOnJS(irisClosed)();
     }));
