@@ -86,7 +86,7 @@ function build(set: MockDexSet, setIndex: number) {
       is_focused: list.is_focused, theme_config: list.theme_config, time_gate: timeGate },
     progress: { total, collected: found, percentage: list.progress_percentage, is_complete: complete,
       collected_ids: items.filter(item => item.is_collected).map(item => item.id), spare_count: 6, exchange_cost: 4,
-      exchange_costs: { 1: 4, 2: 4, 3: 4, 4: 8, 5: 12 }, rewards_claimed: list.rewards_claimed, starter_milestone: starter },
+      exchange_costs: { 1: 4, 2: 4, 3: 4, 4: 8, 5: 12 }, rewards_claimed: list.rewards_claimed === true, starter_milestone: starter },
     items,
     items_by_rarity: { legendary: [], epic: [], rare: [], uncommon: [], common: [] },
     completion_rewards: rewards,

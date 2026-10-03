@@ -128,6 +128,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // While the claim is in flight the whole window dims (top bar and tab bar too) and the wait builds up.
   const [claimWaiting, setClaimWaiting] = useState(false);
   const claimDimStyle = useAnimatedStyle(() => ({ opacity: claimDim.value }));
+  const buildUp = (
+    <>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
+      <ClaimBuildUp reduced={reduced} />
+    </>
+  );
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
 
@@ -281,11 +287,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     claimDim.value = reduced ? 0.6 : withTiming(0.6, { duration: 450 });
     try {
       if (preview) {
-        setBook(current => ({ ...current, sets: current.sets.map(entry => entry.slug !== set.slug ? entry : {
-          ...entry,
-          reward: entry.reward.id === reward.id ? { ...entry.reward, status: 'claimed' } : entry.reward,
-          steps: entry.steps.map(step => step.id === reward.id ? { ...step, status: 'claimed' } : step),
-        }) }));
+        // Nothing to send: the local mark below is the whole claim.
       } else if (reward.claim.kind === 'complete') {
         await claimSetRewards(set.slug);
       } else if (reward.claim.kind === 'starter') {
@@ -296,6 +298,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         setClaimResult(outcome);
         if (outcome.toast) showToast(outcome.toast, 'success');
       }
+      // Mark it claimed now: the book behind the reveal never offers CLAIM again while the refresh is in flight.
+      setBook(current => ({ ...current, sets: current.sets.map(entry => entry.slug !== set.slug ? entry : {
+        ...entry,
+        reward: entry.reward.id === reward.id ? { ...entry.reward, status: 'claimed' } : entry.reward,
+        steps: entry.steps.map(step => step.id === reward.id ? { ...step, status: 'claimed' } : step),
+      }) }));
       setPicking(null);
       celebrate(reward);
       // Background: a slow park network never holds the reveal, the dim or the button.
@@ -437,7 +445,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // First land on a claim: with a cached book the claim offset from the last visit is applied as the list's
   // initial contentOffset (no paint at the top, no scroll, no hidden page). With no cache the list stays hidden
   // only until its first layout pass decides the offset; the safety timer starts at that first layout.
-  const seededOffset = seed ? landOffset(player?.id, seedSlug) : null;
+  // Read once at mount: the stored offsets load from disk asynchronously, and a value that appears after the list
+  // mounted was never applied as its contentOffset.
+  const [seededOffset] = useState(() => (seed ? landOffset(player?.id, seedSlug) : null));
   const firstLand = useRef(true);
   const seedSet = seed?.book.sets.find(entry => entry.slug === seedSlug);
   const seedClaim = !!seedSet && hasClaimable(seedSet);
@@ -476,7 +486,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     // Later set switches keep the animated scroll.
     if (firstLand.current) {
       firstLand.current = false;
-      if (seededOffset == null || Math.abs(seededOffset - offset) > 2) listRef.current?.scrollToOffset({ offset, animated: false });
+      // Always set it: a no-op when the seeded contentOffset already holds, the fix when it did not.
+      listRef.current?.scrollToOffset({ offset, animated: false });
       showList();
       return;
     }
@@ -616,9 +627,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </Modal>
 
       <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
-      <Modal visible={claimWaiting} transparent animationType="none" statusBarTranslucent>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
-        <ClaimBuildUp reduced={reduced} />
+      {/* The build-up rides in its own window, or inside the wearable sheet when the claim came from there
+          (iOS shows one modal at a time, so a second window would never cover the sheet). */}
+      <Modal visible={claimWaiting && !picking} transparent animationType="none" statusBarTranslucent>
+        {buildUp}
       </Modal>
       <RewardReveal reveal={reveal} onClose={() => {
         const won = reveal;
@@ -638,6 +650,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         }, 700);
       }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
+        overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
       <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
         loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />

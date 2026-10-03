@@ -507,7 +507,7 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.match(celebrate, /setBusy\(null\)/);
   assert.match(screen, /void refreshPlayer\(\)\.catch\(\(\) => undefined\)\.then\(\(\) => reloadAll\(\)\)/);
   assert.doesNotMatch(screen, /await refreshPlayer\(\)\.catch\(\(\) => undefined\);\s*await reloadAll\(\);/);
-  assert.match(screen, /<Modal visible=\{claimWaiting\}/, 'the whole window dims during the wait');
+  assert.match(screen, /<Modal visible=\{claimWaiting && !picking\}/, 'the whole window dims during the wait');
   assert.match(screen, /function ClaimBuildUp/);
   assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,260}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
   assert.match(screen, /if \(firstLand\.current\) \{/, 'the jump is first land only');
@@ -522,4 +522,47 @@ test('round 7b: the after-stamp scroll only moves down and never stops with the 
   assert.match(onClose, /const offset = Math\.max\(overflow, pickerBottom\.current\)/);
   assert.match(onClose, /overflow > scrollY\.current \+ 2/);
   assert.match(screen, /onScroll=\{event => \{ scrollY\.current = event\.nativeEvent\.contentOffset\.y; \}\}/);
+});
+
+test('round 7b: a wearable pick claim shows the build-up inside the sheet (one iOS modal at a time)', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /overlay=\{claimWaiting \? buildUp : null\}/);
+  const sheet = read('src/screens/SetCollection/SetHuntSections.tsx');
+  assert.match(sheet, /\{overlay\}\s*<\/Modal>/);
+});
+
+test('round 7b: the first land always applies the claim offset, and the seeded offset is read once at mount', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /const \[seededOffset\] = useState\(\(\) => \(seed \? landOffset\(player\?\.id, seedSlug\) : null\)\)/);
+  const land = screen.slice(screen.indexOf('if (firstLand.current) {'), screen.indexOf('showList();', screen.indexOf('if (firstLand.current) {')));
+  assert.match(land, /listRef\.current\?\.scrollToOffset\(\{ offset, animated: false \}\)/);
+  assert.doesNotMatch(land, /Math\.abs\(seededOffset/);
+});
+
+test('round 7b: a finished set the live list sends without rewards_claimed reads its claim state from the detail', async () => {
+  const calls = [];
+  const client = { get: async (url) => {
+    calls.push(url);
+    if (url === '/me/prep-item-sets') return { data: { data: [
+      { slug: 'churro_collection', is_complete: true },
+      { slug: 'open_set', is_complete: false },
+      { slug: 'new_server', is_complete: true, rewards_claimed: false },
+    ] } };
+    if (url === '/me/prep-item-sets/churro_collection') return { data: { data: { progress: { rewards_claimed: true } } } };
+    throw new Error(`unexpected ${url}`);
+  } };
+  const api = loadTs('src/api/endpoints/me/prep-item-sets/index.ts', {
+    '../../../client': { default: client, __esModule: true },
+    '../../../../helpers/deviceTimeZone': { default: () => 'America/Los_Angeles', __esModule: true },
+    '../../../../models/prep-item-set-type': {}, '../../../../models/location-type': {},
+  });
+  const sets = await api.default();
+  assert.equal(sets.find(s => s.slug === 'churro_collection').rewards_claimed, true, 'claimed, not claimable forever');
+  assert.equal(sets.find(s => s.slug === 'new_server').rewards_claimed, false, 'a sent field is trusted');
+  assert.deepEqual(calls, ['/me/prep-item-sets', '/me/prep-item-sets/churro_collection'], 'one detail call, only where needed');
+  const dexModel = loadTs('src/screens/SetCollection/dexModel.ts');
+  assert.ok(dexModel);
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const success = screen.slice(screen.indexOf('const claim = useCallback'), screen.indexOf('celebrate(reward);'));
+  assert.match(success, /setBook\(current => \(\{ \.\.\.current, sets: current\.sets\.map/, 'the claimed reward is marked locally before the reveal');
 });
