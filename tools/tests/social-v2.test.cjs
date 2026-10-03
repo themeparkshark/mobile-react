@@ -161,8 +161,11 @@ test('audit regressions stay fixed in the screens', () => {
   assert.match(rows, /actions\.decline\(me\)/, 'B10: requests can be answered No');
   assert.doesNotMatch(rows, /actions\.remove/, 'remove lives on the profile, not one mis-tap away');
   const profile = read('src/screens/PlayerScreen.tsx');
-  assert.match(profile, /<SocialError title="This profile didn't load" onRetry/, 'B18: a failed profile can retry');
-  assert.match(profile, /\[player, reloadKey\]/, '#22: a reused screen loads the new player');
+  // RC: the profile page keeps profile-v2's layout (Loading state="error"), with Social v2's behaviour.
+  assert.match(profile, /state="error"[^>]*onRetry/, 'B18: a failed profile can retry');
+  assert.match(profile, /loadSeq/, '#22: a reused screen loads the new player and ignores an older answer');
+  assert.match(profile, /\}, \[player\]\);/, '#22: the load reruns when the player changes');
+  assert.match(profile, /Block \$\{currentPlayer\.screen_name\} too\?/, 'report offers Block too');
   assert.doesNotMatch(profile, /Alert\.alert|explore\/base\.png/, 'B18: game dialogs and real art');
   assert.match(profile, /actions\.block/);
 });
