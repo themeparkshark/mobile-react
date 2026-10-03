@@ -7,7 +7,7 @@ import {
 } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
+  Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue,
   withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { PrepItemType } from '../../../models/prep-item-type';
@@ -16,13 +16,14 @@ import type { HapticIntent } from '../../../gamekit/Haptics';
 import { FxStage, type FxStageHandle } from '../../../gamekit/fx/FxStage';
 import { Sunburst, Shimmer } from '../../../gamekit/fx/ShaderFx';
 import { GameIcon } from '../../../ui';
-import RideScene, { buildRailsPicture, cameraBox, carSize, drawPhoto, frameBox, type SceneImages } from './RideScene';
+import RideScene from './RideScene';
+import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type SceneArt, type Sky } from './rides';
+import { lastRideKind } from './rides/rideMemory';
 import StampPlate from './StampPlate';
-import { buildTrack, rideVariant, sampleTrack, tAtU, uAtX } from './rideTrack';
 import { useRideArt, useRider } from './rideAssets';
 import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
 import {
-  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload, rideProgress,
+  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -62,6 +63,14 @@ const BLANK: SkImage = (() => {
 let photoStreak = 0;
 
 function buzz(intent: HapticIntent, priority = 2) { catchHaptic(intent, priority); }
+
+/** The print's flight: a quadratic Bezier through a control point 60 pt above the middle of the line. */
+function flightPoint(from: { x: number; y: number }, to: { x: number; y: number }, f: number): { x: number; y: number } {
+  'worklet';
+  const cx = (from.x + to.x) / 2, cy = Math.min(from.y, to.y) - 60;
+  const k = 1 - f;
+  return { x: k * k * from.x + 2 * k * f * cx + f * f * to.x, y: k * k * from.y + 2 * k * f * cy + f * f * to.y };
+}
 
 /** Instant film: a milky blue-teal base (#2f5560-ish) lifting to full colour (d = 0..1). Worklet. */
 function filmMatrix(d: number): number[] {
@@ -117,6 +126,8 @@ export interface RidePhotoProps {
   readonly onIrisClosed?: () => void;
   /** Development recordings: latency-compensated shot offsets per pass (ms; negative is early). */
   readonly autoShots?: number[] | null;
+  /** Development recordings: pin the ride and sky. */
+  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
 }
 
 /**
@@ -126,38 +137,38 @@ export interface RidePhotoProps {
  * attached and decides what a tap means. Grading is in milliseconds at the touch.
  */
 const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function RidePhotoCatch({ item, active, from, layer, insets,
-  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots, onCovered, onIrisClosed }, ref) {
+  reducedMotion, firstRide, onCaught, onPrintReady, flyTarget, onPrintLanded, onRodeOff, onClose, closing, autoShots, onCovered, onIrisClosed, forceRide }, ref) {
   const spec = useMemo(() => rideSpec(item?.rarity ?? 3), [item?.rarity]);
   const tier = rarityTier(item?.rarity);
   const bandH = insets.bottom + 128;
   const sceneW = layer.width;
   const sceneH = Math.max(360, layer.height - bandH);
-  const variant = useMemo(() => rideVariant(item?.id ?? 0), [item?.id]);
-  const sky = spec.track === 'dark' ? 'night' : variant.sky;
-  const lut = useMemo(() => buildTrack(spec.track, sceneW, sceneH, undefined,
-    { top: Math.max(insets.top + 70, sceneH * 0.3), height: sceneH * 0.6 }, variant.frameShift),
-  [spec.track, sceneW, sceneH, insets.top, variant.frameShift]);
-  const rails = useMemo(() => buildRailsPicture(lut, sceneW, sceneH, sky), [lut, sceneW, sceneH, sky]);
-  const samples = useMemo(() => ({ xs: lut.xs, ys: lut.ys, angles: lut.angles }), [lut]);
-  const box = useMemo(() => frameBox(lut, sceneW), [lut, sceneW]);
-  const car = carSize(sceneW);
-  const track = spec.track;
   const passMs = spec.passMs;
   const owned = item?.is_new_variant === false;
-  const anchors = useMemo(() => {
-    const uFrame = uAtX(samples, lut.frameX);
-    const tFrame = tAtU(track, uFrame);
-    const uStation = uAtX(samples, sceneW * 0.16);
-    const tStation = tAtU(track, uStation);
-    const tRetry = Math.max(tStation, tFrame - RETRY_LEAD_MS / passMs);
-    return { uFrame, tFrame, uStation, tStation, tRetry };
-  }, [samples, lut.frameX, track, sceneW, passMs]);
+  const golden = item?.golden_hour === true;
+
+  // Which ride, and how it looks: themed by the set, wilder for Legendary, never the last ride twice.
+  const kind: RideKind = useMemo(() => forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity,
+    seed: item?.id ?? 0, lastRide: lastRideKind() }), [item?.id, forceRide?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const variant = useMemo(() => {
+    const base = sceneVariant({ seed: item?.id ?? 0, kind, setName: item?.set_name, golden });
+    // Epic's spotlight beat is a night ride.
+    const sky: Sky = forceRide?.sky ?? (spec.litMs != null && !golden ? 'night' : base.sky);
+    return { ...base, sky };
+  }, [item?.id, kind, golden, spec.litMs, forceRide?.sky]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const art = useRideArt();
   const riderSource = item ? (item.icon_url && /^(https?|file):/i.test(item.icon_url) ? item.icon_url : null) : null;
   const rider = useRider(riderSource);
-  const images: SceneImages = useMemo(() => ({ far: art.far, near: art.near, carBack: art.carBack, carFront: art.carFront,
-    camera: art.camera, cameraPole: art.cameraPole, sparkle: art.sparkle, rider }), [art, rider]);
+  const images: SceneArt = useMemo(() => ({ ...art, rider }), [art, rider]);
+  const stage = useMemo(() => buildStage(kind, { width: sceneW, height: sceneH, top: insets.top, spec, tier, variant, art: images }),
+    [kind, sceneW, sceneH, insets.top, spec, tier, variant, images]);
+  const box = stage.box;
+  const anchors = useMemo(() => ({
+    tFrame: stage.frameT,
+    tStation: stage.stationT,
+    tRetry: Math.max(stage.stationT, stage.frameT - RETRY_LEAD_MS / passMs),
+  }), [stage, passMs]);
 
   const [screenReader, setScreenReader] = useState(false);
   useEffect(() => {
@@ -166,7 +177,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     return () => sub.remove();
   }, []);
   const parkedMode = reducedMotion || screenReader;
-  const golden = item?.golden_hour === true;
 
   const [ride, setRide] = useState<RideState>(RIDE_START);
   const rideRef = useRef(ride);
@@ -201,7 +211,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const flash = useSharedValue(0);
   const dim = useSharedValue(0);
   const lit = useSharedValue(0);
-  const ghostU = useSharedValue(0);
+  const ghostT = useSharedValue(0);
+  const clock = useSharedValue(0);
   const ghost = useSharedValue(0);
   const riderIn = useSharedValue(0);
   const rock = useSharedValue(0);
@@ -224,13 +235,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const nudgeBlink = useSharedValue(0);
   useEffect(() => { parked.value = parkedMode; }, [parkedMode, parked]);
 
-  const uFrame = anchors.uFrame;
-  const u = useDerivedValue(() => (parked.value && armed.value ? uFrame : rideProgress(track, t.value)));
+  // Scene seconds for loops (bulbs, bob, spray): ticks only while the viewfinder is open.
+  const clockTick = useFrameCallback(info => {
+    'worklet';
+    const dt = info.timeSincePreviousFrame;
+    if (dt != null) clock.value += Math.min(dt, 100) / 1000;
+  }, false);
+  const setClock = useCallback((on: boolean) => clockTick.setActive(on), [clockTick]);
+  useAnimatedReaction(() => open.value > 0.01, (on, was) => { if (on !== was) runOnJS(setClock)(on); });
 
   // ── Telegraph on the target: brackets close in, red/yellow/green lamps, rising pips ──
   const tFrame = anchors.tFrame;
   const litHalf = (spec.litMs ?? 0) / 2;
-  const isDark = track === 'dark';
+  const isDark = stage.spotlight;
   const pip = useCallback((i: number) => {
     catchSound(i === 0 ? 'pip0' : i === 1 ? 'pip3' : 'pip7');
     if (i === 0) setMissNote(null);
@@ -267,7 +284,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     clearPassTimers();
     frozen.value = false;
     armed.value = true;
-    if (parkedMode) { ready.value = 3; approach.value = 1; return; }
+    if (parkedMode) { t.value = anchors.tFrame; ready.value = 3; approach.value = 1; return; }
     t.value = fromT;
     carVis.value = withTiming(1, { duration: 140 });
     const end = () => passEndRef.current();
@@ -287,10 +304,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         pip(i);
       }, delay));
     });
-    if (fromT <= anchors.tStation + 0.01 && (track === 'hill' || track === 'dark')) catchSound('clack', { volume: 0.8 });
-    else catchSound('whoosh', { volume: 0.5 });
-    catchMark('pass');
-  }, [parkedMode, passMs, anchors.tStation, track]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (fromT <= anchors.tStation + 0.01 && (stage.kind === 'coaster' || stage.kind === 'flume') && spec.track !== 'family') {
+      catchSound('clack', { volume: 0.8 });
+    } else catchSound('whoosh', { volume: 0.5 });
+    catchMark(`pass ${stage.kind}`);
+  }, [parkedMode, passMs, anchors.tStation, anchors.tFrame, stage.kind, spec.track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const retry = useCallback((missed: boolean) => {
     if (rideRef.current.outcome !== 'riding') return;
@@ -387,10 +405,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     armed.value = false; holding.value = false;
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
-    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 200, easing: Easing.in(Easing.cubic) }, done => {
+    // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
+    // then fade to the map (160 to 380 ms); only then does the app's chrome come back (onIrisClosed).
+    iris.value = withTiming(1, { duration: reducedMotion ? 1 : 160, easing: Easing.in(Easing.cubic) });
+    veil.value = withDelay(reducedMotion ? 0 : 160, withTiming(0, { duration: reducedMotion ? 120 : 220 }, done => {
       if (done) runOnJS(irisClosed)();
-    });
-    veil.value = withDelay(reducedMotion ? 0 : 180, withTiming(0, { duration: reducedMotion ? 120 : 200 }));
+    }));
     later(1000, () => {
       opened.current = false;
       setPrint(null); setPrintImage(null); setMissed([]);
@@ -406,18 +426,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   }, [closing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── The photo: only the crop, at device resolution, drawn by hand (no reconciler, no re-parse) ──
-  const crop = useMemo(() => {
-    const w = box.w * 1.9;
-    const h = w * (PHOTO_H / PHOTO_W);
-    const x = Math.max(0, Math.min(sceneW - w, lut.frameX - w / 2));
-    return { x, y: Math.max(0, Math.min(sceneH - h, box.y + box.h * 0.5 - h / 2)), w, h };
-  }, [box, lut.frameX, sceneW, sceneH]);
-  const takePhoto = useCallback((atU: number) => {
+  const crop = stage.crop;
+  const takePhoto = useCallback((atT: number) => {
     try {
-      return drawPhoto({ width: sceneW, height: sceneH, lut, art: images, rails, u: atU, golden, sky, crop,
-        scale: (PHOTO_W / crop.w) * PixelRatio.get() });
+      return drawStagePhoto(stage, images, atT, (PHOTO_W / crop.w) * PixelRatio.get());
     } catch { return null; }
-  }, [sceneW, sceneH, lut, images, rails, golden, sky, crop]);
+  }, [stage, images, crop]);
 
   const finishHold = useRef<(() => void) | null>(null);
   const pendingReveal = useRef<(() => void) | null>(null);
@@ -572,9 +586,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       photoStreak = 0;
       developPrint('blurry', soClose, false);
       // Replay: a ghost car slides to where the shot should have been.
-      ghostU.value = u.value;
+      ghostT.value = t.value;
       ghost.value = withSequence(withTiming(1, { duration: 80 }), withDelay(420, withTiming(0, { duration: 200 })));
-      ghostU.value = withTiming(uFrame, { duration: 420, easing: Easing.inOut(Easing.quad) });
+      ghostT.value = withTiming(anchors.tFrame, { duration: 420, easing: Easing.inOut(Easing.quad) });
       carVis.value = withTiming(0, { duration: 140 });
       cancelAnimation(t);
       if (next.outcome === 'rode_off') { later(900, onRodeOff); return; }
@@ -583,13 +597,13 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     }
     if (rideRef.current.passes === 0) photoStreak += 1;
     setStreak(photoStreak);
-    if (next.outcome === 'caught') { caughtRef.current = true; onCaught(photoPayload(spec, next), grade); }
+    if (next.outcome === 'caught') { caughtRef.current = true; onCaught({ ...photoPayload(spec, next), ride_type: stage.kind }, grade); }
     developPrint(grade, false, next.outcome === 'caught');
     later(130, () => {
       if (parkedMode) return;
       t.value = withTiming(1, { duration: Math.max(240, (1 - t.value) * passMs), easing: Easing.linear });
     });
-  }, [takePhoto, spec, developPrint, onCaught, onRodeOff, retry, later, parkedMode, passMs, uFrame]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [takePhoto, spec, developPrint, onCaught, onRodeOff, retry, later, parkedMode, passMs, anchors.tFrame, stage.kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const arrivalMs = anchors.tFrame * passMs;
   const rarity = item?.rarity ?? 3;
@@ -615,7 +629,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     iris.value = withSequence(withTiming(0.55, { duration: 55 }), withTiming(0, { duration: 140 }));
     ready.value = 0;
     runOnJS(shutterNow)();
-    runOnJS(onShot)(grade, offset, direction, soClose, u.value);
+    runOnJS(onShot)(grade, offset, direction, soClose, parked.value ? tFrame : t.value);
   }, [passMs, arrivalMs, onShot, shutterNow, rarity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One gesture, always attached: every touch gets a visible press, and the worklet decides what it means.
@@ -668,19 +682,20 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   useEffect(() => {
     if (!flyTarget) return;
     catchMark('print-fly');
-    fly.value = withDelay(reducedMotion ? 0 : 120, withTiming(1, { duration: reducedMotion ? 1 : 520, easing: Easing.inOut(Easing.cubic) }, done => {
+    // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
+    // the whoosh starts with it, and the landing calls back on the UI frame it lands.
+    fly.value = withTiming(1, { duration: reducedMotion ? 1 : 460, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
       if (done) runOnJS(onPrintLanded)();
-    }));
+    });
     dim.value = withTiming(0, { duration: 300 });
     catchSound('whoosh', { volume: 0.6 });
-    for (let i = 1; i <= 7; i++) later(120 + i * 65, () => trailBurst(i / 8));
+    for (let i = 1; i <= 6; i++) later(i * 62, () => trailBurst(i / 7.5));
   }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
   const flyFrom = { x: layer.width / 2, y: heroTop + HERO_H / 2 };
   const trailBurst = (f: number) => {
     if (!flyTarget) return;
-    const e = f < 0.5 ? 4 * f * f * f : 1 - (-2 * f + 2) ** 3 / 2;
-    fx.current?.burst('glints', flyFrom.x + (flyTarget.x - flyFrom.x) * e,
-      flyFrom.y + (flyTarget.y - flyFrom.y) * e - 140 * 4 * e * (1 - e));
+    const p = flightPoint(flyFrom, flyTarget, f);
+    fx.current?.burst('glints', p.x, p.y);
   };
 
   // Close (x): before a catch it closes; once the server has the catch it fast-forwards to the badge.
@@ -725,8 +740,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const haloStyle = useAnimatedStyle(() => ({ opacity: 1 - 0.35 * handLoop.value, transform: [{ scale: 1 + 0.08 * handLoop.value }] }));
 
   // Hop: the find's own art squashes on its map spot, then arcs into the seat.
-  const seatStart = sampleTrack(samples, anchors.uStation);
-  const seat = { x: seatStart.x + car.w * (0.39 - 0.5), y: seatStart.y - car.h * 0.86 + car.h * 0.5 - car.rider * 0.45 };
+  const seat = { x: stage.seat.x, y: stage.seat.y - stage.riderSize * 0.45 };
+  const riderSize = stage.riderSize;
   const hopStyle = useAnimatedStyle(() => {
     const raw = hop.value;
     const h = Math.max(0, (raw - 0.18) / 0.82);
@@ -734,24 +749,23 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const x = fromPt.x + (seat.x - fromPt.x) * h;
     const y = fromPt.y + (seat.y - fromPt.y) * h - 120 * 4 * h * (1 - h);
     return { opacity: raw > 0 && raw < 1 ? 1 : 0,
-      transform: [{ translateX: x - car.rider / 2 }, { translateY: y - car.rider / 2 }, { scaleX: 2 - squash }, { scaleY: squash }] };
+      transform: [{ translateX: x - riderSize / 2 }, { translateY: y - riderSize / 2 }, { scaleX: 2 - squash }, { scaleY: squash }] };
   });
 
   const printStyle = useAnimatedStyle(() => {
     const f = fly.value;
-    const e = f < 0.5 ? 4 * f * f * f : 1 - (-2 * f + 2) ** 3 / 2;
-    const target = flyTarget ?? flyFrom;
     const lift = printLift.value;
     const baseY = printTop + (heroTop - printTop) * lift;
-    const x = flyFrom.x + (target.x - flyFrom.x) * e - HERO_W / 2;
-    const y = baseY + (target.y - (baseY + HERO_H / 2)) * e - 140 * 4 * e * (1 - e);
-    // Laid out at hero size: rest is 0.76, the reveal lifts to 1.0, the flight shrinks to the sticker.
-    const scale = (0.6 + 0.4 * printIn.value) * (REST_SCALE + (1 - REST_SCALE) * lift) * printTick.value * (1 - e * 0.8);
+    const start = { x: flyFrom.x, y: baseY + HERO_H / 2 };
+    const p = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    // Laid out at hero size: rest is 0.76, the reveal lifts to 1.0, the flight shrinks to the sticker (0.18).
+    const held = (0.6 + 0.4 * printIn.value) * (REST_SCALE + (1 - REST_SCALE) * lift) * printTick.value;
+    const scale = held + (0.18 - held) * f;
     const shown = (open.value > 0.02 || f > 0) && f < 0.999 ? 1 : 0;
     return {
       opacity: Math.min(1, printIn.value * 2) * shown,
-      transform: [{ translateX: x }, { translateY: y + (1 - printIn.value) * 90 }, { scale },
-        { rotate: `${-4 + printShake.value * 3 + e * 12}deg` }],
+      transform: [{ translateX: p.x - HERO_W / 2 }, { translateY: p.y - HERO_H / 2 + (1 - printIn.value) * 90 }, { scale },
+        { rotate: `${(-4 + printShake.value * 3) * (1 - f)}deg` }],
     };
   });
   // The plate slams from its laid-out peak size down to rest, kept 16 pt inside the screen.
@@ -773,7 +787,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const shutterCenterY = layer.height - insets.bottom - 62;
   const missDirLeft = missNote?.dir === 'late';
-  const cam = cameraBox(lut, sceneW, sceneH);
+  const cam = stage.cam;
 
   if (!item || layer.width === 0) return null;
   return (
@@ -781,16 +795,16 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.view, { width: layer.width, height: layer.height }, viewStyle]}>
           <Canvas style={{ width: sceneW, height: sceneH }}>
-            <RideScene width={sceneW} height={sceneH} lut={lut} art={images} rails={rails} u={u} approach={approach} ready={ready}
-              flash={flash} dim={dim} lit={lit} ghostU={ghostU} ghost={ghost} riderIn={riderIn} rock={rock} carVis={carVis}
-              golden={golden} sky={sky} dark={isDark} />
+            <RideScene stage={stage} art={images} t={t} clock={clock} approach={approach} ready={ready}
+              flash={flash} dim={dim} lit={lit} ghostT={ghostT} ghost={ghost} riderIn={riderIn} rock={rock} carVis={carVis}
+              nudgeBlink={nudgeBlink} golden={golden} />
             {/* Always mounted (Skia 1.5 crashes when a shader bound to shared values remounts); the grade sets the strength. */}
             <Sunburst cx={sceneW / 2} cy={heroTop + HERO_H / 2} radius={sceneW * 0.8} intensity={burst} colorA="#ffd84a"
               width={sceneW} height={sceneH} speed={0.35} />
           </Canvas>
           {/* Viewfinder corner marks, 16 pt inside the screen */}
-          <View pointerEvents="none" style={[styles.corner, { left: 16, top: insets.top + 56, borderLeftWidth: 3, borderTopWidth: 3 }]} />
-          <View pointerEvents="none" style={[styles.corner, { right: 16, top: insets.top + 56, borderRightWidth: 3, borderTopWidth: 3 }]} />
+          <View pointerEvents="none" style={[styles.corner, { left: 16, top: insets.top + 8 + 44 + 8, borderLeftWidth: 3, borderTopWidth: 3 }]} />
+          <View pointerEvents="none" style={[styles.corner, { right: 16, top: insets.top + 8 + 44 + 8, borderRightWidth: 3, borderTopWidth: 3 }]} />
           <View pointerEvents="none" style={[styles.corner, { left: 16, bottom: bandH + 16, borderLeftWidth: 3, borderBottomWidth: 3 }]} />
           <View pointerEvents="none" style={[styles.corner, { right: 16, bottom: bandH + 16, borderRightWidth: 3, borderBottomWidth: 3 }]} />
 
@@ -873,8 +887,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       </Animated.View>}
 
       {/* The find hops from the map into the seat */}
-      {riderSource && <Animated.View pointerEvents="none" style={[styles.hop, { width: car.rider, height: car.rider }, hopStyle]}>
-        <Image source={{ uri: riderSource }} style={{ width: car.rider, height: car.rider }} contentFit="contain" transition={0} />
+      {riderSource && <Animated.View pointerEvents="none" style={[styles.hop, { width: riderSize, height: riderSize }, hopStyle]}>
+        <Image source={{ uri: riderSource }} style={{ width: riderSize, height: riderSize }} contentFit="contain" transition={0} />
       </Animated.View>}
 
       {/* The print, laid out at hero size: develops, holds with its grade, then flies to the badge on the map */}

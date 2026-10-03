@@ -8,6 +8,8 @@ export interface RedeemCatchDetails {
   readonly photo_quality?: 'good' | 'great' | 'frame_it';
   readonly rides?: number;
   readonly photos?: number;
+  /** Which ride the photo was taken on (coaster, flume, teacups, ...), for dex.rides_snapped. */
+  readonly ride_type?: string;
 }
 
 /**

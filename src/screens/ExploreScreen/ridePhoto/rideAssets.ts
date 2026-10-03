@@ -11,6 +11,15 @@ import { preloadCatchAudio } from './catchAudio';
 
 export const RIDE_ART = {
   far: require('../../../../assets/images/ride-photo/scene-far.webp'),
+  farNight: require('../../../../assets/images/ride-photo/scene-far-night.webp'),
+  farSunset: require('../../../../assets/images/ride-photo/scene-far-sunset.webp'),
+  glow: require('../../../../assets/images/ride-photo/glow.webp'),
+  logBoat: require('../../../../assets/images/ride-photo/log-boat.webp'),
+  logBoatFront: require('../../../../assets/images/ride-photo/log-boat-front.webp'),
+  splash: require('../../../../assets/images/ride-photo/splash.webp'),
+  cupBack: require('../../../../assets/images/ride-photo/teacup-back.webp'),
+  cupFront: require('../../../../assets/images/ride-photo/teacup-front.webp'),
+  teapot: require('../../../../assets/images/ride-photo/teapot-hub.webp'),
   near: require('../../../../assets/images/ride-photo/scene-near.webp'),
   carBack: require('../../../../assets/images/ride-photo/car-back.webp'),
   carFront: require('../../../../assets/images/ride-photo/car-front.webp'),

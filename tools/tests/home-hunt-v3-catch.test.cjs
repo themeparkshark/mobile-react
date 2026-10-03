@@ -97,7 +97,7 @@ test('track lookup table crosses the scene and passes through the flash frame', 
   assert.ok(lut.xs[0] < 0 && lut.xs[lut.xs.length - 1] > 380, 'enters and leaves off screen');
   const at = track.sampleTrack(lut, 0.5);
   assert.ok(Number.isFinite(at.x) && Number.isFinite(at.y) && Number.isFinite(at.angle));
-  assert.ok(Math.abs(lut.frameX - 380 * track.FRAME_AT.hill) < 1e-9);
+  assert.ok(Math.abs(lut.frameX - 380 * track.FRAME_AT.hill) < 3, "frame snaps to the nearest sample");
 });
 
 test('find look: in range hops bigger and brighter; rare and up glow and sparkle', () => {
@@ -226,7 +226,7 @@ test('round 2: the map steps back during a catch and the catch never reads GPS o
   assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
   assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen\) return null;/);
   const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
-  assert.doesNotMatch(scene, /BlurMask|<Shadow|ColorMatrix/);
+  assert.doesNotMatch(scene, /BlurMask|<Shadow/, "no blur or shadow filters (a sprite colour grade is fine)");
   assert.match(scene, /createPicture/);
   const markers = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.doesNotMatch(markers, /shadowRadius/);
@@ -277,7 +277,7 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   const gestureEnd = src.indexOf('</GestureDetector>');
   assert.ok(src.indexOf('accessibilityLabel="Close the camera"') > gestureEnd, 'close sits outside the shutter gesture');
-  assert.match(src, /scale: \(PHOTO_W \/ crop\.w\) \* PixelRatio\.get\(\) \}/, 'photo at device resolution x1.0 (R4)');
+  assert.match(src, /drawStagePhoto\(stage, images, atT, \(PHOTO_W \/ crop\.w\) \* PixelRatio\.get\(\)\)/, "photo at device resolution x1.0 (R4)");
   assert.match(read('src/components/Wrapper.tsx'), /catchShown\.value/);
   assert.match(read('src/components/Topbar.tsx'), /catchShown\.value/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
@@ -351,4 +351,54 @@ test('round 4: open-second decoupling and sound sync', () => {
   assert.match(src, /image\.dispose\(\)/);
   const sun = read('src/gamekit/fx/ShaderFx.tsx');
   assert.match(sun, /intensity\.value > 0 \? width : 0/, 'idle sunburst covers no pixels');
+});
+
+const rides = loadTs('src/screens/ExploreScreen/ridePhoto/rides/catalog.ts');
+
+test('round 4 variety: rides are themed by set, wilder for Legendary, never the same twice in a row', () => {
+  const ready = rides.READY_RIDES;
+  assert.deepEqual(plain(ready), ['coaster', 'flume', 'teacups']);
+  // Sweet Treats leans to teacups; Parade Day (carousel not built yet) falls back to teacups.
+  const count = (opts, kind) => Array.from({ length: 400 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
+  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 200);
+  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 200);
+  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 200, 'dark ride falls back to the coaster');
+  assert.ok(count({ setName: 'Snack Stand', rarity: 5 }, 'teacups') < 60, 'Legendary avoids the gentle rides');
+  for (let seed = 0; seed < 200; seed++) {
+    for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, lastRide: last }), last);
+  }
+  for (let seed = 0; seed < 50; seed++) assert.ok(ready.includes(rides.pickRide({ rarity: 2, seed })), 'only ready rides');
+  assert.equal(rides.pickRide({ rarity: 3, seed: 9, ready: ['flume'], lastRide: 'flume' }), 'flume', 'one ride: repeats are allowed');
+});
+
+test('round 4 variety: scene sky, season, photobombs and the rides-snapped line', () => {
+  assert.equal(rides.seasonFor(new Date(2026, 9, 2)), 'halloween');
+  assert.equal(rides.seasonFor(new Date(2026, 11, 20)), 'holiday');
+  assert.equal(rides.seasonFor(new Date(2026, 5, 1)), 'none');
+  assert.equal(rides.sceneVariant({ seed: 4, kind: 'coaster', setName: 'Spooky Snacks' }).sky, 'night');
+  assert.equal(rides.sceneVariant({ seed: 4, kind: 'coaster', golden: true }).sky, 'sunset');
+  const skies = new Set(Array.from({ length: 60 }, (_, seed) => rides.sceneVariant({ seed, kind: 'flume' }).sky));
+  assert.deepEqual([...skies].sort(), ['day', 'night', 'sunset']);
+  for (let seed = 0; seed < 100; seed++) {
+    const v = rides.sceneVariant({ seed, kind: 'teacups' });
+    if (v.photobomb === 'fireworks') assert.equal(v.sky, 'night');
+    if (v.photobomb === 'gull') assert.notEqual(v.sky, 'night');
+    assert.equal(rides.sceneVariant({ seed, kind: 'teacups' }).sky, v.sky, 'seeded: a reopen looks the same');
+  }
+  assert.equal(rides.ridesSnappedLine(['coaster', 'flume', 'flume', 'teacups']), '3 of 8 rides snapped');
+});
+
+test('round 4 variety: every ride is a config with one paint for the live scene and the photo', () => {
+  for (const file of ['coaster', 'flume', 'teacups']) {
+    const src = read(`src/screens/ExploreScreen/ridePhoto/rides/${file}.ts`);
+    assert.match(src, /export function build\w+\(ctx: BuildCtx\): RideStage/);
+    assert.match(src, /export function paint\w+\(canvas: SkCanvas, s: PaintState[\s\S]*?\{\s*'worklet';/);
+  }
+  const index = read('src/screens/ExploreScreen/ridePhoto/rides/index.ts');
+  assert.match(index, /stage\.paint\(canvas, state, stage\.data, art\)/, 'the photo uses the ride paint');
+  const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
+  assert.match(scene, /Skia\.PictureRecorder\(\)/);
+  assert.doesNotMatch(scene, /\{[a-zA-Z.?]+ && <(Group|Rect|Image|SkImage|Path)/, 'no conditionally mounted Skia nodes');
+  const stage = read('src/screens/ExploreScreen/ridePhoto/rides/stage.ts');
+  assert.match(stage, /const gap = box\.w \* 0\.15 \+ 8;/, 'the camera never overlaps the brackets at 1.3x');
 });

@@ -54,7 +54,16 @@ function catmull(p0: number, p1: number, p2: number, p3: number, t: number): num
  */
 export function buildTrack(track: RideTrack, width: number, height: number, samples = LUT_SAMPLES,
   band: { top: number; height: number } = { top: 0, height }, frameShift = 0): TrackLut {
-  const pts = SHAPES[track].map(([x, y]) => [x * width, band.top + y * band.height] as const);
+  return buildLut(SHAPES[track], width, band, (FRAME_AT[track] + frameShift) * width, samples);
+}
+
+/**
+ * Any ride path: a Catmull-Rom spline through control points (0..1 of the width
+ * and of the band), resampled by arc length. `frameX` is the camera moment's x.
+ */
+export function buildLut(shape: readonly (readonly [number, number])[], width: number,
+  band: { top: number; height: number }, frameX: number, samples = LUT_SAMPLES, maxPitch = MAX_PITCH): TrackLut {
+  const pts = shape.map(([x, y]) => [x * width, band.top + y * band.height] as const);
   const dense: [number, number][] = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
@@ -84,10 +93,9 @@ export function buildTrack(track: RideTrack, width: number, height: number, samp
   const angles = raw.map((_, k) => {
     let sum = 0, n = 0;
     for (let d = -2; d <= 2; d++) { const i = k + d; if (i >= 0 && i < raw.length) { sum += raw[i]; n++; } }
-    return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, sum / n));
+    return Math.max(-maxPitch, Math.min(maxPitch, sum / n));
   });
   const path = `M ${dense.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(' L ')}`;
-  const frameX = (FRAME_AT[track] + frameShift) * width;
   let nearest = 0;
   for (let k = 1; k < samples; k++) if (Math.abs(xs[k] - frameX) < Math.abs(xs[nearest] - frameX)) nearest = k;
   const frameY = ys[nearest];
@@ -97,7 +105,17 @@ export function buildTrack(track: RideTrack, width: number, height: number, samp
     for (let k = 1; k < samples; k++) if (Math.abs(xs[k] - x) < Math.abs(xs[best] - x)) best = k;
     posts.push({ x: xs[best], y: ys[best] });
   }
-  return { xs, ys, angles, path, frameX, frameY, posts };
+  return { xs, ys, angles, path, frameX: xs[nearest], frameY, posts };
+}
+
+/** Time fraction (0..1) at which a monotonic progress curve reaches u. */
+export function tAtProgress(progress: (t: number) => number, u: number): number {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (progress(mid) < u) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /** u (0..1 of the track) where the car's centre is at scene x. */

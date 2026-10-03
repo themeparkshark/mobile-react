@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { LogBox, StyleSheet, Text, View } from 'react-native';
 import { runOnJS, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
 import { LocationContext } from '../../context/LocationProvider';
@@ -18,6 +18,8 @@ import { walkCloserLine } from './findPresentation';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen } from './catchPresence';
+import type { RideKind, Sky } from './ridePhoto/rides';
+import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 
 /**
  * Development-only (EXPO_PUBLIC_HOME_CATCH_PREVIEW=1): the v3 home map with
@@ -36,6 +38,22 @@ const FIXTURES: Fixture[] = [
   { slug: 'turkey-leg', name: 'Smoky Turkey Leg', rarity: 4, set: 'Snack Stand', color: '#FF8A3D', north: -30, east: 34, inRange: true },
   { slug: 'golden-feast-platter', name: 'Golden Feast Platter', rarity: 5, set: 'Snack Stand', color: '#FF8A3D', north: 260, east: 90, inRange: false },
   { slug: 'popcorn-bucket', name: 'Striped Popcorn Bucket', rarity: 1, set: 'Snack Stand', color: '#FF8A3D', north: -70, east: -95, inRange: false },
+];
+
+/**
+ * The recording script (EXPO_PUBLIC_HOME_CATCH_AUTOPLAY=1): one catch per ride and look the graders
+ * asked for. Each step pins the ride and sky, can re-rarity or mark the find as owned, and shoots at
+ * scripted latency-compensated offsets (ms; negative is early).
+ */
+// Recordings show the app, not the dev warning toast.
+if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
+
+const SCRIPT: { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean }[] = [
+  { index: 0, kind: 'coaster', sky: 'day', shots: [-650] },
+  { index: 0, kind: 'flume', sky: 'sunset', shots: [12], rarity: 2 },
+  { index: 0, kind: 'teacups', sky: 'day', shots: [-300, 20] },
+  { index: 0, kind: 'coaster', sky: 'night', shots: [55], owned: true },
+  { index: 3, kind: 'flume', sky: 'night', shots: [-420, 6, 45] },
 ];
 
 export default function HomeCatchPreviewScreen() {
@@ -90,7 +108,7 @@ export default function HomeCatchPreviewScreen() {
 
   const fakeRedeem: typeof redeemPrepItem = async (id, _pivot, _lat, _lng, details) => {
     await new Promise(resolve => setTimeout(resolve, 450));
-    const item = items.find(entry => entry.id === id)!;
+    const item = stepItem.current?.id === id ? stepItem.current : items.find(entry => entry.id === id)!;
     found.current += 1;
     const quality = details?.photo_quality ?? null;
     if (quality) lastGrade.current = quality;
@@ -127,6 +145,19 @@ export default function HomeCatchPreviewScreen() {
     void state.startCatch(item);
   }, []);
   const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
+  const [step, setStep] = useState(0);
+  const stepItem = useRef<PrepItemType | null>(null);
+  const runStep = (index: number) => {
+    const entry = SCRIPT[index];
+    if (!entry) return;
+    setStep(index);
+    const base = items[entry.index];
+    const next = { ...base, rarity: entry.rarity ?? base.rarity, is_new_variant: entry.owned ? false : base.is_new_variant,
+      // A fresh id per step, so each step builds its own ride.
+      id: base.id * 10 + index };
+    stepItem.current = next;
+    void startCatch(next);
+  };
   const autoplay = __DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1';
   // UI-thread frame times while a catch plays, logged once a second (performance review).
   const frameCount = useSharedValue(0), frameSlow = useSharedValue(0), frameWorst = useSharedValue(0), frameSum = useSharedValue(0);
@@ -147,7 +178,8 @@ export default function HomeCatchPreviewScreen() {
   useEffect(() => {
     if (!autoplay) return;
     resetRideHintForPreview();
-    const timer = setTimeout(() => void startCatch(items[0]), 4000);
+    resetRideMemoryForPreview();
+    const timer = setTimeout(() => runStep(0), 4000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplay]);
@@ -184,16 +216,17 @@ export default function HomeCatchPreviewScreen() {
       <HomeCatchMoment ref={catchRef} request={request} stageItem={rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null}
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
         mapStill={mapStill}
-        autoShots={autoplay ? (request?.item.rarity === 4 ? [-420, 6, 45] : [-650]) : null} refreshAfterCatch={false}
+        autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
+        forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
           const pivot = request?.pivotId;
           setRequest(null);
-          if (done && pivot != null) setCaught(current => new Set([...current, pivot]));
+          if (done && pivot != null && !autoplay) setCaught(current => new Set([...current, pivot]));
           // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos).
           catches.current += 1;
-          if (autoplay && catches.current === 1) setTimeout(() => void startCatch(items[3]), 2600);
+          if (autoplay && catches.current < SCRIPT.length) setTimeout(() => runStep(catches.current), 2600);
         }} />
     </View>
     </View></Wrapper>

@@ -156,9 +156,10 @@ export const Sunburst = React.memo(function Sunburst({ cx, cy, radius, intensity
     if (info.timeSincePreviousFrame == null || intensity.value <= 0) return;
     time.value = time.value + (info.timeSincePreviousFrame / 1000) * speed;
   }, false);
+  const setActive = React.useCallback((on: boolean) => frame.setActive(on), [frame]);
   useAnimatedReaction(() => intensity.value > 0, (on, was) => {
-    if (on !== was) runOnJS(frame.setActive)(on);
-  }, [frame]);
+    if (on !== was) runOnJS(setActive)(on);
+  }, [setActive]);
   const w = useDerivedValue(() => (intensity.value > 0 ? width : 0), [width]);
   const h = useDerivedValue(() => (intensity.value > 0 ? height : 0), [height]);
   const uniforms = useDerivedValue(() => ({

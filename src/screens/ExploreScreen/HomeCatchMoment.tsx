@@ -25,6 +25,8 @@ import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto
 import RidePhotoCatch, { BLANK_IMAGE, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
+import { RIDES, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
+import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
 let rideHintSeen: boolean | null = null;
@@ -103,10 +105,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly onFailed: (line: string, retryable: boolean) => void;
   /** Development recordings only (see RidePhotoCatch). */
   readonly autoShots?: number[] | null;
+  /** Development recordings: pin the ride and sky. */
+  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, refreshAfterCatch = true }, ref) {
   const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
   const { currencies } = useContext(CurrencyContext);
@@ -144,6 +148,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const ringPop = useSharedValue(0);
   const flyFromX = useSharedValue(0);
   const flyFromY = useSharedValue(0);
+  const rideIn = useSharedValue(0);
 
   const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion });
   latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion };
@@ -198,7 +203,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     latest.current.onCollected(data);
     if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
     progress.value = next.progressFrom;
-    badgeIn.value = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
+    // Via the print: the pad springs in 200 ms into the hand-off (after the iris), never over the ride.
+    const pad = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
+    badgeIn.value = viaPrint && motion ? withDelay(200, pad) : pad;
     if (!viaPrint) {
       if (!data.replayed) catchSound('whoosh', { volume: 0.6 });
       fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
@@ -222,6 +229,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (next.isNew) beats.push(() => { reveal.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1; });
     beats.push(() => { progress.value = withTiming(next.progressTo, { duration: motion ? 420 : 1, easing: Easing.out(Easing.cubic) }); });
     beats.push(() => { gradeIn.value = motion ? withSpring(1, { damping: 10, stiffness: 260 }) : 1; });
+    if (newRideRef.current) beats.push(() => { rideIn.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1; });
     if (!data.replayed) beats.push(() => {
       layerRef.current?.measureInWindow((x, y) => {
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -261,6 +269,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   const finish = (caught: boolean) => {
     releasePhoto();
+    newRideRef.current = false; setNewRide(null); rideIn.value = 0;
     // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules.
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
@@ -333,6 +342,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!req) return;
     // The first-time hint is done only once the kid has a Good or better photo.
     if (rideHintSeen !== true) { rideHintSeen = true; void AsyncStorage.setItem(RIDE_HINT_KEY, '1').catch(() => undefined); }
+    rideKindRef.current = (details.ride_type as RideKind | undefined) ?? null;
     // The server call runs while the photo develops, so the wait hides inside the suspense beats.
     redeemRun.current = catchFind(latest.current.redeem, req.item.id, req.pivotId, latest.current.getFix(), details);
   }, [request]);
@@ -343,6 +353,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // The header, tab bar and map chrome come back only once the iris has closed (onIrisClosed).
     if (!caught) setTimeout(() => setRide(null), 420);
   };
+
+  // "Rides snapped": a ride the player never snapped before gets a "New ride!" beat in the cascade.
+  const rideKindRef = useRef<RideKind | null>(null);
+  const [newRide, setNewRide] = useState<{ name: string; line: string } | null>(null);
+  const newRideRef = useRef(false);
+  useEffect(() => { void loadRideMemory(); }, []);
 
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
   const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null) => {
@@ -360,6 +376,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       return;
     }
     // One hand-off: the viewfinder irises out behind the print, which flies into the badge on the map.
+    const kind = rideKindRef.current;
+    const served = (result.data.dex as { rides_snapped?: string[] } | null | undefined)?.rides_snapped ?? null;
+    const fresh = kind ? recordRide(kind, served) : false;
+    newRideRef.current = fresh;
+    setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()) } : null);
     setPhoto({ image, grade });
     pendingLand.current = { data: result.data, token, item: req.item };
     closeRide(true);
@@ -425,6 +446,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     opacity: Math.min(1, reveal.value * 1.4),
     transform: [{ rotate: '-10deg' }, { scale: reveal.value > 0 ? 0.4 + 0.6 * reveal.value : 0.4 }],
   }));
+  const rideStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, rideIn.value * 1.5), transform: [{ translateY: (1 - rideIn.value) * 12 }, { scale: 0.7 + 0.3 * rideIn.value }] }));
   const gradeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, gradeIn.value * 1.5), transform: [{ translateY: (1 - gradeIn.value) * 10 }, { scale: 0.7 + 0.3 * gradeIn.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
 
@@ -472,7 +494,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         layer={fullLayer} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
         closing={ride?.closing ?? false} flyTarget={ride?.flyTo ?? null}
         onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosed}
-        autoShots={autoShots} /></View>}
+        autoShots={autoShots} forceRide={forceRide} /></View>}
 
       {item && <>
         <Animated.View style={[styles.ring, { borderColor: color }, ringStyle]} pointerEvents="none" />
@@ -515,6 +537,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             {Array.from({ length: GRADE_STARS[photo.grade] }, (_, i) => <GameIcon key={i} name="star" size={14} />)}
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]}>{GRADE_LABEL[photo.grade]}{bonusXp ? `  +${bonusXp} XP` : ''}</Text>
           </Animated.View>}
+          {/* A ride the player never snapped: "New ride!" and the collection count */}
+          {newRide && <Animated.View style={[styles.rideChip, rideStyle]}>
+            <GameIcon name="camera" size={14} />
+            <Text style={styles.rideText} numberOfLines={1}>New ride! {newRide.name}  ·  {newRide.line}</Text>
+          </Animated.View>}
         </Animated.View>
       </>}
     </View>
@@ -554,4 +581,7 @@ const styles = StyleSheet.create({
   gradeChip: { position: 'absolute', right: 8, top: -24, flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 9, paddingVertical: 3,
     borderRadius: 12, borderWidth: 2, borderColor: '#0b2f5c' },
   gradeText: { fontFamily: 'Shark', fontSize: 14, marginLeft: 3 },
+  rideChip: { position: 'absolute', left: STICKER_LEFT + STICKER + 4, bottom: -22, flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
+  rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },
 });
