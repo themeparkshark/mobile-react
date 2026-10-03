@@ -9,6 +9,8 @@ export default async function updatePlayer(payload: {
   readonly username?: string;
   /** "Let sharks find me" (servers with the kid-safety update). */
   readonly discoverable?: boolean;
+  /** Required by the server (Social v2 R4) whenever discoverable turns on: the grown-up gate was passed. */
+  readonly grown_up_confirmed?: boolean;
 }): Promise<PlayerType> {
   const { data } = await client.put<ApiResponseType<PlayerType>>(
     '/me',

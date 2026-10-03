@@ -412,7 +412,8 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
     playSfx(next ? 'star' : 'tap');
     haptic('tickSelection');
     try {
-      const me = await updatePlayer({ discoverable: next });
+      // Turning it on carries the grown-up gate's yes (the server refuses discoverable=true without it).
+      const me = await updatePlayer(next ? { discoverable: true, grown_up_confirmed: true } : { discoverable: false });
       if (typeof me?.discoverable === 'boolean') setFindMe(me.discoverable);
       void refreshPlayer?.().catch(() => undefined);
     } catch {
