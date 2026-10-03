@@ -46,6 +46,10 @@ export interface LinePlayChapter {
   };
   readonly trivia: readonly TriviaQuestion[];
   readonly fieldNotes: readonly LoreCard[];
+  /** Fin-ister Nights haunt lines only: the night palette. Every other chapter stays bright. */
+  readonly palette?: 'night';
+  /** One line shown as the chapter opens (the Shusher in haunt lines). */
+  readonly introLine?: string;
 }
 
 const adaptiveChapters = new Map<string, LinePlayChapter>();
@@ -1042,8 +1046,79 @@ const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
   ],
 };
 
+/* ---- Fin-ister Nights haunt lines (DESIGN L2): games-only, night palette, spooky-silly parody deck ---- */
+
+export interface FrightChapterDeck {
+  readonly trivia: readonly TriviaQuestion[];
+  readonly fieldNotes?: readonly LoreCard[];
+}
+
+let frightDeck: FrightChapterDeck | null = null;
+const frightChapters = new Map<string, LinePlayChapter>();
+
+/** services/fright/lineplay.ts registers the full content-pack deck; the inline deck below is the fallback. */
+export function registerFrightChapterDeck(deck: FrightChapterDeck | null): void {
+  frightDeck = deck && deck.trivia.length >= 3 ? deck : null;
+  frightChapters.clear();
+}
+
+const FRIGHT_FALLBACK_TRIVIA: readonly TriviaQuestion[] = [
+  { id: 'fright-lore-1', question: 'What kind of sea critter is Chuckles the Chum Jester?', choices: ['Clownfish', 'Pufferfish', 'Lobster', 'Octopus'], correctIndex: 0, difficulty: 'easy', fact: 'Chuckles is a clownfish in a jester collar.', source: 'Fin-ister Nights lore', deck: 'fright' },
+  { id: 'fright-lore-2', question: 'Who keeps the Tidepool Carnival in perfect order?', choices: ['Ringmaster Riptide', 'The Kelp Keeper', 'Clapperclaw', 'Dice'], correctIndex: 0, difficulty: 'easy', fact: 'Ringmaster Riptide is a tidy cuttlefish. Mostly tidy.', source: 'Fin-ister Nights lore', deck: 'fright' },
+  { id: 'fright-lore-3', question: 'Who shushes phones in the dark?', choices: ['The Shusher', 'Misty Mirror', 'Host Hammerhead', 'The Tide-Teller'], correctIndex: 0, difficulty: 'easy', fact: 'The Shusher is a seahorse usher with a flashlight.', source: 'Fin-ister Nights lore', deck: 'fright' },
+  { id: 'fright-lore-4', question: 'Which town shows up in every Case File?', choices: ['Carp Cove', 'Kelp City', 'Bubble Bay', 'Fin Falls'], correctIndex: 0, difficulty: 'medium', fact: 'Carp Cove welcomes careful visitors.', source: 'Fin-ister Nights lore', deck: 'fright' },
+  { id: 'fright-lore-5', question: 'What holds every Case File of the season?', choices: ['The Deep Lantern', 'A treasure chest', 'A coral crown', 'A message bottle'], correctIndex: 0, difficulty: 'easy', fact: 'The Deep Lantern is an anglerfish whose lure holds every file.', source: 'Fin-ister Nights lore', deck: 'fright' },
+];
+
+const FRIGHT_FIELD_NOTES: readonly LoreCard[] = [
+  { id: 'fright-note-1', title: 'Fog Watch', body: 'Look for one spooky-silly detail from your place in line: a glow, a shape or a sound. Give it a sea-critter name.' },
+  { id: 'fright-note-2', title: 'Brave Face Check', body: 'Practice your bravest shark face with your crew. Who can hold it longest without a giggle?' },
+  { id: 'fright-note-3', title: 'Scream-o-meter Guess', body: 'Predict it now: will you giggle, jump or scream in this haunt? Check your guess on the way out.' },
+];
+
+function frightChapter(parkId: number | undefined, rideSlug: string, rideName: string): LinePlayChapter {
+  const name = rideName.trim().slice(0, 60) || 'this haunt';
+  const id = `fright-${parkId ?? 0}-${rideSlug.slice('fright-'.length).replace(/[^a-z0-9-]/gi, '').slice(0, 60)}`;
+  const cached = frightChapters.get(id);
+  if (cached) return cached;
+  const chapter: LinePlayChapter = {
+    id, palette: 'night', introLine: 'shh. phones away soon. play while the line moves.',
+    parkLabel: 'FIN-ISTER NIGHTS', title: `The Line to ${name}`,
+    story: 'The fog is rolling in and the line is long. Solve a spooky-silly clue, spot something odd, then race the Lantern before the doors open.',
+    completedTitle: 'Brave in line!',
+    completedStory: 'Your crew is ready. When the doors open, phones go away. See you on the other side.',
+    progressNoun: 'clues found',
+    missionNames: ['Crack a Case File clue', 'Spot something odd', 'Match the critters'],
+    finale: { idSuffix: 'finale', title: 'Match the critters',
+      preview: 'Match glowing sea-critter symbols in a quick memory round. Play solo or let your crew call out the pairs.',
+      memoryDeckId: 'mansion', gameId: 'memory' },
+    relay: {
+      title: 'Fog Crew Relay',
+      setupStory: 'Four short turns pick how your crew braves the fog. Pass one phone around as the line shuffles forward.',
+      firstTurnTitle: 'Crack the first clue', firstClueFound: 'The Navigator cracked the first clue.',
+      missedClue: 'The fog hid that clue. Your crew can still finish.', scoreNoun: 'Clues cracked',
+      routeTitle: 'Choose how you brave the fog', routeOptions: ['Team Chaos · giggle through', 'Team Control · stay calm'],
+      perfectResult: 'Fog conquered!', otherResult: 'Your crew chose a path!',
+      alphaResult: 'Your shark giggles through the fog and finds the lantern glowing.',
+      omegaResult: 'Your shark stays calm and counts the lantern lights.',
+      completionNote: 'Haunt lines are games-only: no Parts, just bragging rights.',
+      branchKicker: 'YOUR CREW CHOSE A SIDE', branchDone: 'Your crew braved the fog.',
+      routeNames: ['Giggle through', 'Stay calm'],
+      epilogues: {
+        alpha: { title: 'Giggle Through', prompt: 'Tap the sharks that pop out of the fog. Skip the decoys.' },
+        omega: { title: 'Stay Calm', prompt: 'Swim a steady path through the fog to the lantern.' },
+      },
+    },
+    trivia: frightDeck?.trivia ?? FRIGHT_FALLBACK_TRIVIA,
+    fieldNotes: frightDeck?.fieldNotes?.length ? frightDeck.fieldNotes : FRIGHT_FIELD_NOTES,
+  };
+  frightChapters.set(id, chapter);
+  return chapter;
+}
+
 export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?: string,
   episodeSeed?: number): LinePlayChapter | null {
+  if (rideSlug?.startsWith('fright-')) return frightChapter(parkId, rideSlug, rideName ?? '');
   if (parkId === 8 &&
       (rideSlug === 'space-mountain-8' || rideName?.trim().toLowerCase() === 'space mountain')) {
     return DISNEYLAND_SPACE_MOUNTAIN;
@@ -1083,6 +1158,7 @@ export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?
 }
 
 export function getLinePlayChapterById(id?: string): LinePlayChapter | null {
+  if (id?.startsWith('fright-')) return frightChapters.get(id) ?? null;
   if (id === DISNEYLAND_SPACE_MOUNTAIN.id) return DISNEYLAND_SPACE_MOUNTAIN;
   if (id === DISNEYLAND_JUNGLE_CRUISE.id) return DISNEYLAND_JUNGLE_CRUISE;
   if (id === DISNEYLAND_BIG_THUNDER.id) return DISNEYLAND_BIG_THUNDER;

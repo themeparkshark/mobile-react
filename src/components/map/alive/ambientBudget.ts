@@ -42,15 +42,33 @@ export interface AliveCaps {
   readonly sparksPerBurst: number;
   /** Friends drawn as ghost sharks. */
   readonly ghosts: number;
+  /**
+   * Fin-ister Nights (src/components/map/fright): scare-critters wandering
+   * the reefs, on screen at once across every reef.
+   */
+  readonly frightCritters: number;
+  /** Screen-space fog layers and the moon's cloud strip. */
+  readonly frightFog: number;
+  /** Bats circling spots. */
+  readonly frightBats: number;
+  /** Haunt lantern windows that flicker (the rest hold a still glow). */
+  readonly frightWindows: number;
+  /** Lightning flashes on screen at once. */
+  readonly frightBolts: number;
+  /** Small props: blinking eyes, a turning pumpkin, skid-fin sparks, buzzing lanterns. */
+  readonly frightProps: number;
 }
 
 export const ALIVE_CAPS: Readonly<Record<AliveTier, AliveCaps>> = {
   full: { hz: 30, clouds: 3, birds: 3, fireflies: 6, waterGlints: 6, pulsingRides: 10, idleCoins: 4,
-    limitedShimmer: 4, sleepyRides: 3, trail: 8, skyShowBursts: 4, sparksPerBurst: 14, ghosts: 5 },
+    limitedShimmer: 4, sleepyRides: 3, trail: 8, skyShowBursts: 4, sparksPerBurst: 14, ghosts: 5,
+    frightCritters: 8, frightFog: 3, frightBats: 4, frightWindows: 10, frightBolts: 1, frightProps: 8 },
   lite: { hz: 30, clouds: 2, birds: 2, fireflies: 3, waterGlints: 3, pulsingRides: 4, idleCoins: 3,
-    limitedShimmer: 2, sleepyRides: 2, trail: 5, skyShowBursts: 3, sparksPerBurst: 10, ghosts: 3 },
+    limitedShimmer: 2, sleepyRides: 2, trail: 5, skyShowBursts: 3, sparksPerBurst: 10, ghosts: 3,
+    frightCritters: 4, frightFog: 2, frightBats: 2, frightWindows: 5, frightBolts: 1, frightProps: 4 },
   calm: { hz: 0, clouds: 0, birds: 0, fireflies: 0, waterGlints: 0, pulsingRides: 0, idleCoins: 0,
-    limitedShimmer: 0, sleepyRides: 0, trail: 0, skyShowBursts: 0, sparksPerBurst: 0, ghosts: 5 },
+    limitedShimmer: 0, sleepyRides: 0, trail: 0, skyShowBursts: 0, sparksPerBurst: 0, ghosts: 5,
+    frightCritters: 0, frightFog: 0, frightBats: 0, frightWindows: 0, frightBolts: 0, frightProps: 0 },
 };
 
 /** Hard ceiling on independently animated ambient sprites, whatever the tier. */
@@ -64,10 +82,26 @@ export const MAX_AMBIENT_SPRITES = 120;
  * MAX_AMBIENT_SPRITES so a crowded park never turns into a particle storm.
  */
 export function ambientSpriteBudget(caps: AliveCaps): number {
-  const day = caps.clouds * 3 + caps.birds * 2 + caps.waterGlints;
-  const night = caps.fireflies + caps.skyShowBursts * caps.sparksPerBurst;
+  // Fin-ister Nights can start while the sun is still up, so its sprites add to
+  // the daytime life. At night it yields to the night show: while a show is
+  // live the fright layer holds every sprite still (FrightMapLayer), so the
+  // night term counts the bigger of the two, never both.
+  const fright = frightSpriteBudget(caps);
+  const day = caps.clouds * 3 + caps.birds * 2 + caps.waterGlints + fright;
+  const night = caps.fireflies + Math.max(caps.skyShowBursts * caps.sparksPerBurst, fright);
   return Math.max(day, night) + caps.pulsingRides + caps.idleCoins * 3 + caps.limitedShimmer * 3 +
     caps.sleepyRides * 3 + caps.trail + (caps.hz ? caps.ghosts : 0);
+}
+
+/**
+ * Worst case moving sprites of the Fin-ister Nights layer: every capped
+ * family at once, plus the rare encounter (its critter and a spark trail that
+ * scales with the critter cap). Calm moves nothing.
+ */
+export function frightSpriteBudget(caps: AliveCaps): number {
+  const encounter = caps.frightCritters > 0 ? 1 + Math.min(6, Math.round(caps.frightCritters * 0.75)) : 0;
+  return caps.frightCritters + caps.frightFog + caps.frightBats + caps.frightWindows + caps.frightBolts +
+    caps.frightProps + encounter;
 }
 
 /** Frame governor state: strain 0 = healthy, 1 = lite, 2 = calm (probing back after a rest). */

@@ -16,6 +16,7 @@ import { WaterGlints } from './map/alive/WaterGlints';
 import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
+import { FrightMapLayer, FrightMapSources, type FrightMapInput } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
@@ -54,7 +55,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -85,6 +86,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   } | null;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
+  /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
+  readonly fright?: FrightMapInput | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -523,6 +526,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
             fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
         </ShapeSource>
+        {/* Fin-ister Nights: night tint over the tiles, lanterns, reef critters (map anchored). */}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
         {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
           <ShapeSource id="tps-lamps" shape={lampPoints}>
@@ -573,6 +578,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
+      {fright && viewSize && <FrightMapLayer input={fright} width={viewSize.width} height={viewSize.height} zoom={cameraZoom} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
       <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"

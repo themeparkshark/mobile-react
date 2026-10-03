@@ -161,6 +161,8 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
+// Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
+import '../../services/fright/lineplay';
 
 export default function LinePlayScreen() {
   const navigation = useNavigation();
@@ -853,8 +855,15 @@ export default function LinePlayScreen() {
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
 
   return (
-    <View style={styles.root}>
-      <LinearGradient colors={['#0a7dd1', '#07569e', '#073e87']} style={StyleSheet.absoluteFill} />
+    <View style={[styles.root, snapshot.chapter?.palette === 'night' && { backgroundColor: '#2B2350' }]}>
+      {/* Only a Fin-ister Nights haunt-line chapter gets the night palette; every other chapter stays bright. */}
+      <LinearGradient colors={snapshot.chapter?.palette === 'night' ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
+        style={StyleSheet.absoluteFill} />
+      {snapshot.chapter?.introLine && snapshot.state !== 'complete' && (
+        <View pointerEvents="none" style={{ position: 'absolute', bottom: 96, left: 16, right: 16, zIndex: 5 }}>
+          <Text style={{ textAlign: 'center', fontFamily: 'Knockout', fontSize: 15, color: '#E4DAFF' }}>{snapshot.chapter.introLine}</Text>
+        </View>
+      )}
       <Wrapper onNavigate={handleNavigateTab}>
         <Topbar>
           <TopbarColumn stretch={false}>

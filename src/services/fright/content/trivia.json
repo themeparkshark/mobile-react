@@ -1,0 +1,962 @@
+[
+  {
+    "slug": "lore-chuckles-critter",
+    "question": "What kind of sea critter is Chuckles the Chum Jester?",
+    "choices": [
+      "Clownfish",
+      "Pufferfish",
+      "Lobster",
+      "Octopus"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Chuckles is a clownfish in a jester collar who hides whoopee cushions in the kelp.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-riptide-critter",
+    "question": "What kind of critter is Ringmaster Riptide?",
+    "choices": [
+      "Seahorse",
+      "Cuttlefish",
+      "Hermit crab",
+      "Sea turtle"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Ringmaster Riptide is a cuttlefish who likes the carnival in perfect order.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-hometown",
+    "question": "What town shows up in every Case File?",
+    "choices": [
+      "Kelp Harbor",
+      "Carp Cove",
+      "Gill Gulch",
+      "Coral Bay"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Carp Cove is the foggy seaside hometown of every Case File.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-shusher-rule",
+    "question": "What does The Shusher want you to put away in a haunt?",
+    "choices": [
+      "Your snacks",
+      "Your hat",
+      "Your phone",
+      "Your map"
+    ],
+    "correct_index": 2,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "The Shusher is a seahorse usher who keeps phones down in the dark.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-clapperclaw-yell",
+    "question": "What does Clapperclaw the lobster director yell?",
+    "choices": [
+      "Action!",
+      "Cut!",
+      "Boo!",
+      "Encore!"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Clapperclaw yells 'Cut!' and films everyone's best scared face.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-misty-count",
+    "question": "How many times do you say 'Misty' at the mirror?",
+    "choices": [
+      "One",
+      "Two",
+      "Three",
+      "Ten"
+    ],
+    "correct_index": 2,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Say 'Misty' three times and Misty Mirror blinks back.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-dice-home",
+    "question": "Where does Dice the hermit crab live?",
+    "choices": [
+      "A teacup",
+      "A giant die",
+      "A treasure chest",
+      "A tuba"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Dice lives in a giant die and rolls for everything, even lunch.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-lucky-scales",
+    "question": "What kind of critter is Lady Lucky Scales?",
+    "choices": [
+      "Octopus",
+      "Eel",
+      "Ray",
+      "Shrimp"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Lady Lucky Scales is a fortune-telling octopus with eight cards.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-fright-reefs",
+    "question": "What are the spooky outdoor zones called in Fin-ister Nights?",
+    "choices": [
+      "Fright Reefs",
+      "Boo Beaches",
+      "Ghost Gulfs",
+      "Scare Shores"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Spooky outdoor zones are Fright Reefs, home of the scare-critters.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-reswim",
+    "question": "What do you call doing the same haunt again?",
+    "choices": [
+      "A re-run",
+      "A re-swim",
+      "A redo-dive",
+      "A splash-back"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Doing a haunt again is a re-swim, and every one counts.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-pumpkin-puffer",
+    "question": "What happens when The Pumpkin Puffer gets surprised?",
+    "choices": [
+      "He hides in sand",
+      "He lights up the reef",
+      "He sings opera",
+      "He swims backward"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Pumpkin Puffer puffs into a jack-o'-lantern and lights up the reef.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-deck-size",
+    "question": "How many Case Files are in the full Deep Lantern deck?",
+    "choices": [
+      "10",
+      "25",
+      "35",
+      "50"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Deep Lantern deck holds exactly 35 Case Files.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-kelp-keeper",
+    "question": "What kind of critter is The Kelp Keeper?",
+    "choices": [
+      "Moray eel",
+      "Starfish",
+      "Sea otter",
+      "Manta ray"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Kelp Keeper is a quiet moray eel who tends glowing sea pickles.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-little-minnow",
+    "question": "Who is The Kelp Keeper's kid?",
+    "choices": [
+      "Cousin Bubbles",
+      "Little Minnow",
+      "Dice",
+      "Ebb"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Little Minnow keeps a toy chest full of retired Case Files.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-ebb-flow",
+    "question": "How do Ebb & Flow finish each other's sentences?",
+    "choices": [
+      "Loudly",
+      "In rhyme",
+      "Backwards",
+      "In bubbles"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Ebb & Flow are mirror-twin rays who finish sentences backwards.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-host-channel",
+    "question": "Host Hammerhead's Matinee airs on which channel?",
+    "choices": [
+      "Channel 3",
+      "Channel 7",
+      "Channel 13",
+      "Channel 99"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Host Hammerhead hosts the Midnight Monster Matinee on channel 13.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-missing-file",
+    "question": "Which year is the 'Missing File' in the Case Files deck?",
+    "choices": [
+      "2004",
+      "2012",
+      "2020",
+      "2025"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Missing File: 2020. Some nights stay dark.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-collector-crab",
+    "question": "Who runs the Sunken Sideshow shop?",
+    "choices": [
+      "The Collector Crab",
+      "The Shusher",
+      "Clapperclaw",
+      "The Tide-Teller"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Collector Crab is a cheerful hoarder covered in souvenirs.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-skid-fins",
+    "question": "What are the sparkly trails that zoom across the map called?",
+    "choices": [
+      "Glow-worms",
+      "Skid-fins",
+      "Fin-flares",
+      "Spark-tails"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Skid-fins are scare-critters zooming by with a trail of sparks.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-deep-lantern",
+    "question": "What kind of fish is the Deep Lantern?",
+    "choices": [
+      "Anglerfish",
+      "Swordfish",
+      "Goldfish",
+      "Catfish"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Deep Lantern is an anglerfish whose glowing lure holds every Case File.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-tide-teller",
+    "question": "What kind of critter is The Tide-Teller?",
+    "choices": [
+      "Ancient sea turtle",
+      "Young dolphin",
+      "Giant squid",
+      "Hermit crab"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The Tide-Teller is an ancient sea turtle with spooky bedtime stories.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-first-haunts",
+    "question": "In Case File 1, how many haunts did the very first season have?",
+    "choices": [
+      "1",
+      "3",
+      "5",
+      "10"
+    ],
+    "correct_index": 0,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "The very first season had just 1 haunt.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-first-nights",
+    "question": "In Case File 1, how many nights did the very first season run?",
+    "choices": [
+      "1",
+      "3",
+      "7",
+      "13"
+    ],
+    "correct_index": 1,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "The very first season ran just 3 nights.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-lantern-glow",
+    "question": "On which night of the season does the Deep Lantern glow extra bright?",
+    "choices": [
+      "Every 7th",
+      "Every 13th",
+      "Every 19th",
+      "Every 31st"
+    ],
+    "correct_index": 2,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Every 19th night of the season, the Deep Lantern glows extra bright.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "lore-cousin-bubbles",
+    "question": "What did Cousin Bubbles host that never aired?",
+    "choices": [
+      "A cooking show",
+      "A game show",
+      "A talent show",
+      "A weather report"
+    ],
+    "correct_index": 1,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Cousin Bubbles is never seen, only heard: a game-show buzzer.",
+    "source_label": "Fin-ister Nights lore",
+    "source_url": null
+  },
+  {
+    "slug": "ocean-starfish-regrow",
+    "question": "What can a sea star do if it loses an arm?",
+    "choices": [
+      "Grow it back",
+      "Glue it on",
+      "Swap with a crab",
+      "Nothing at all"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Sea stars can regenerate a lost arm.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/starfish.html"
+  },
+  {
+    "slug": "ocean-seahorse-dads",
+    "question": "Which seahorse parent carries the babies until they are born?",
+    "choices": [
+      "The mom",
+      "The dad",
+      "The grandma",
+      "Neither"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Male seahorses get pregnant and give birth.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/seahorse.html"
+  },
+  {
+    "slug": "ocean-whale-shark",
+    "question": "What is the largest fish in the sea?",
+    "choices": [
+      "Great white shark",
+      "Whale shark",
+      "Blue whale",
+      "Manta ray"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "The whale shark is the largest fish, reaching 40 feet or more.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/whale-shark"
+  },
+  {
+    "slug": "ocean-cover",
+    "question": "About how much of Earth's surface does the ocean cover?",
+    "choices": [
+      "About 10 percent",
+      "About 30 percent",
+      "More than 70 percent",
+      "All of it"
+    ],
+    "correct_index": 2,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "The ocean covers more than 70 percent of Earth's surface.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/oceanwater.html"
+  },
+  {
+    "slug": "ocean-clownfish-home",
+    "question": "Clownfish make their homes in which sea creature?",
+    "choices": [
+      "Sea anemones",
+      "Sea cucumbers",
+      "Clam shells",
+      "Kelp bulbs"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "A mucus coat protects clownfish from the anemone's sting.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/clownfish"
+  },
+  {
+    "slug": "ocean-hermit-shells",
+    "question": "Where do hermit crabs get their shells?",
+    "choices": [
+      "They grow them",
+      "They borrow empty ones",
+      "They knit them",
+      "They buy them"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Hermit crabs can't grow shells, so they move into empty ones.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/invertebrates/facts/hermit-crabs"
+  },
+  {
+    "slug": "ocean-puffer-puff",
+    "question": "How does a pufferfish puff up?",
+    "choices": [
+      "It swallows lots of water",
+      "It holds its breath",
+      "It eats seaweed",
+      "It spins around"
+    ],
+    "correct_index": 0,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Pufferfish gulp water (or air) to become a big spiky ball.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/pufferfish"
+  },
+  {
+    "slug": "ocean-octopus-arms",
+    "question": "How many arms does an octopus have?",
+    "choices": [
+      "Six",
+      "Eight",
+      "Ten",
+      "Twelve"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Octopuses have eight arms lined with hundreds of suckers.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/invertebrates/facts/octopus-facts"
+  },
+  {
+    "slug": "halloween-bats-fly",
+    "question": "What is the only kind of mammal that can truly fly?",
+    "choices": [
+      "Flying squirrel",
+      "Bat",
+      "Sugar glider",
+      "Owl"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "Bats are the only mammals in the world that can fly.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/mammals/facts/bats"
+  },
+  {
+    "slug": "halloween-date",
+    "question": "Halloween is the evening before which day?",
+    "choices": [
+      "New Year's Day",
+      "All Saints Day",
+      "Thanksgiving",
+      "Valentine's Day"
+    ],
+    "correct_index": 1,
+    "difficulty": "easy",
+    "deck": "fright",
+    "fact": "The evening before All Saints Day was All Hallows Eve, later Halloween.",
+    "source_label": "Library of Congress",
+    "source_url": "https://blogs.loc.gov/headlinesandheroes/2021/10/the-origins-of-halloween-traditions/"
+  },
+  {
+    "slug": "ocean-jelly-water",
+    "question": "About how much of a jellyfish is water?",
+    "choices": [
+      "About 25 percent",
+      "About 50 percent",
+      "About 95 percent",
+      "None of it"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Jellyfish are about 95 percent water.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/jellyfish.html"
+  },
+  {
+    "slug": "ocean-jelly-brain",
+    "question": "Which of these does a jellyfish NOT have?",
+    "choices": [
+      "Tentacles",
+      "A brain",
+      "An outer layer",
+      "A mouth"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Jellyfish have no brain and no heart.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/jellyfish.html"
+  },
+  {
+    "slug": "ocean-horseshoe",
+    "question": "Horseshoe crabs are more closely related to which animals?",
+    "choices": [
+      "Lobsters",
+      "Spiders and scorpions",
+      "Clams",
+      "Sea turtles"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Horseshoe crabs are closer kin to spiders and scorpions than crabs.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/horseshoe-crab.html"
+  },
+  {
+    "slug": "ocean-leatherback",
+    "question": "What is the largest turtle in the world?",
+    "choices": [
+      "Leatherback",
+      "Green sea turtle",
+      "Box turtle",
+      "Snapping turtle"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Leatherbacks are the largest turtles, named for their rubbery skin.",
+    "source_label": "NOAA Fisheries",
+    "source_url": "https://www.fisheries.noaa.gov/species/leatherback-turtle"
+  },
+  {
+    "slug": "ocean-coral-animal",
+    "question": "Is coral a plant, an animal, or a rock?",
+    "choices": [
+      "A plant",
+      "An animal",
+      "A rock",
+      "A fungus"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Coral is an animal that partners with plant-like algae.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/coral.html"
+  },
+  {
+    "slug": "ocean-kelp-speed",
+    "question": "In ideal conditions, how fast can kelp grow?",
+    "choices": [
+      "1 inch a year",
+      "Up to 18 inches a day",
+      "1 foot a month",
+      "It never grows"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Giant kelp can grow up to 18 inches per day.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/kelp.html"
+  },
+  {
+    "slug": "ocean-one-ocean",
+    "question": "According to NOAA, how many global oceans are there really?",
+    "choices": [
+      "One",
+      "Five",
+      "Seven",
+      "Twelve"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "There is one global ocean, divided into named regions.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/howmanyoceans.html"
+  },
+  {
+    "slug": "ocean-tides",
+    "question": "What causes ocean tides?",
+    "choices": [
+      "Wind",
+      "Whales",
+      "The pull of the moon and sun",
+      "Rivers"
+    ],
+    "correct_index": 2,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Tides come from the gravitational pull of the moon and sun.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/tides.html"
+  },
+  {
+    "slug": "ocean-bioluminescence",
+    "question": "What is bioluminescence?",
+    "choices": [
+      "Light made by a living thing",
+      "A type of seaweed",
+      "Sunlight on waves",
+      "A deep-sea volcano"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Bioluminescence is light produced by an organism through a chemical reaction.",
+    "source_label": "NOAA Ocean Exploration",
+    "source_url": "https://oceanexplorer.noaa.gov/facts/bioluminescence.html"
+  },
+  {
+    "slug": "ocean-anglerfish-lure",
+    "question": "An anglerfish's glowing lure works most like what?",
+    "choices": [
+      "A fishing pole",
+      "A flashlight",
+      "A mirror",
+      "A bell"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The lure is a piece of spine sticking out like a fishing pole.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/anglerfish"
+  },
+  {
+    "slug": "ocean-cuttlefish-color",
+    "question": "Cuttlefish are colorblind, but they are amazing at what?",
+    "choices": [
+      "Singing",
+      "Changing color",
+      "Climbing",
+      "Digging"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Cuttlefish change color brilliantly even though they're colorblind.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/invertebrates/facts/cuttlefish"
+  },
+  {
+    "slug": "ocean-shark-skeleton",
+    "question": "What are shark skeletons made of?",
+    "choices": [
+      "Bone",
+      "Cartilage",
+      "Shell",
+      "Coral"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Sharks have skeletons made of cartilage, not bone.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/sharks"
+  },
+  {
+    "slug": "ocean-hammerhead-eyes",
+    "question": "How does a hammerhead's wide head help it?",
+    "choices": [
+      "Better visual range",
+      "Faster swimming",
+      "Louder calls",
+      "Warmer water"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Wide-set eyes give hammerheads a better visual range than most sharks.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/hammerhead-sharks"
+  },
+  {
+    "slug": "ocean-sea-otter-float",
+    "question": "How do sea otters often float at the surface?",
+    "choices": [
+      "On their backs",
+      "Upside down",
+      "Standing up",
+      "On a log"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Sea otters often float on their backs, sometimes wrapped in kelp.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/mammals/facts/sea-otter"
+  },
+  {
+    "slug": "halloween-turnip",
+    "question": "Before pumpkins, what did people in Ireland carve into lanterns?",
+    "choices": [
+      "Watermelons",
+      "Turnips and other root vegetables",
+      "Coconuts",
+      "Apples"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "People carved beets, potatoes and turnips before pumpkins caught on.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/history/article/the-twisted-transatlantic-tale-of-american-jack-o-lanterns"
+  },
+  {
+    "slug": "halloween-samhain",
+    "question": "Halloween has roots in which ancient Celtic festival?",
+    "choices": [
+      "Samhain",
+      "Diwali",
+      "Lunar New Year",
+      "Mardi Gras"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Halloween traces back to the Celtic harvest festival of Samhain.",
+    "source_label": "Library of Congress",
+    "source_url": "https://blogs.loc.gov/headlinesandheroes/2021/10/the-origins-of-halloween-traditions/"
+  },
+  {
+    "slug": "halloween-apples",
+    "question": "Which party game has been a Halloween staple for many years?",
+    "choices": [
+      "Bobbing for apples",
+      "Hot potato",
+      "Musical chairs",
+      "Leapfrog"
+    ],
+    "correct_index": 0,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "Bobbing for apples has been a Halloween party staple for many years.",
+    "source_label": "Library of Congress",
+    "source_url": "https://blogs.loc.gov/headlinesandheroes/2021/10/the-origins-of-halloween-traditions/"
+  },
+  {
+    "slug": "halloween-hunters-moon",
+    "question": "What is the full moon after the harvest moon called?",
+    "choices": [
+      "Snow moon",
+      "Hunter's moon",
+      "Pink moon",
+      "Wolf moon"
+    ],
+    "correct_index": 1,
+    "difficulty": "medium",
+    "deck": "fright",
+    "fact": "The first full moon after the harvest moon is the hunter's moon.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/science/article/full-moon"
+  },
+  {
+    "slug": "ocean-challenger-deep",
+    "question": "What is the deepest part of the ocean called?",
+    "choices": [
+      "Challenger Deep",
+      "Blue Hole",
+      "Deep Lantern",
+      "Abyss Point"
+    ],
+    "correct_index": 0,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "The Challenger Deep sits in the Mariana Trench in the western Pacific.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/oceandepth.html"
+  },
+  {
+    "slug": "ocean-avg-depth",
+    "question": "About how deep is the ocean on average?",
+    "choices": [
+      "About 100 meters",
+      "About 3,700 meters",
+      "About 20,000 meters",
+      "About 10 meters"
+    ],
+    "correct_index": 1,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "The ocean's average depth is about 3,682 meters (12,080 feet).",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/oceandepth.html"
+  },
+  {
+    "slug": "ocean-pacific-name",
+    "question": "Which explorer named the Pacific Ocean?",
+    "choices": [
+      "Ferdinand Magellan",
+      "Christopher Columbus",
+      "Marco Polo",
+      "Leif Erikson"
+    ],
+    "correct_index": 0,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Ferdinand Magellan named the Pacific Ocean in the 16th century.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/pacific.html"
+  },
+  {
+    "slug": "ocean-earth-water",
+    "question": "About how much of Earth's water is in the ocean?",
+    "choices": [
+      "About 50 percent",
+      "About 75 percent",
+      "About 97 percent",
+      "About 20 percent"
+    ],
+    "correct_index": 2,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "About 97 percent of Earth's water is in the ocean.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/oceanwater.html"
+  },
+  {
+    "slug": "ocean-starfish-arms",
+    "question": "Some sea star species can have how many arms?",
+    "choices": [
+      "Up to 40",
+      "Exactly 5 always",
+      "Up to 3",
+      "None"
+    ],
+    "correct_index": 0,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Most sea stars have five arms, but some species have up to 40.",
+    "source_label": "NOAA Ocean Service",
+    "source_url": "https://oceanservice.noaa.gov/facts/starfish.html"
+  },
+  {
+    "slug": "ocean-great-white-teeth",
+    "question": "About how many teeth does a great white shark have in total?",
+    "choices": [
+      "About 30",
+      "About 300",
+      "About 3,000",
+      "About 3"
+    ],
+    "correct_index": 1,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Great whites have around 300 teeth in seven rows.",
+    "source_label": "National Geographic",
+    "source_url": "https://www.nationalgeographic.com/animals/fish/facts/great-white-shark"
+  },
+  {
+    "slug": "halloween-samhain-say",
+    "question": "How is the festival name 'Samhain' pronounced?",
+    "choices": [
+      "SAM-hane",
+      "SAH-win",
+      "SHAM-ain",
+      "SAM-hun"
+    ],
+    "correct_index": 1,
+    "difficulty": "hard",
+    "deck": "fright",
+    "fact": "Samhain is a Gaelic word pronounced 'SAH-win.'",
+    "source_label": "Library of Congress",
+    "source_url": "https://blogs.loc.gov/headlinesandheroes/2021/10/the-origins-of-halloween-traditions/"
+  }
+]

@@ -156,6 +156,12 @@ export default function App() {
           } } : undefined}
           options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
+        {/* Fin-ister Nights: the Deep Lantern card, a night's Marquee, and the tutorial replay. */}
+        <Stack.Screen name="FrightCard" getComponent={() => require('./components/fright/FrightCardScreen').default} />
+        <Stack.Screen name="FrightRecap" getComponent={() => require('./components/fright/FrightRecapScreen').default}
+          options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="FrightTutorial" getComponent={() => require('./components/fright/tutorial/FrightTutorialScreen').default}
+          options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="Friends" getComponent={() => require('./screens/FriendsScreen').default} />
         <Stack.Screen name="Notifications" getComponent={() => require('./screens/NotificationsScreen').default} />
         <Stack.Screen

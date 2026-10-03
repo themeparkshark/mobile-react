@@ -69,6 +69,10 @@ import { GhostSharks } from '../components/map/alive/GhostSharks';
 import { NightShowLayer } from '../components/map/alive/NightShowLayer';
 import NightShowPill from '../components/map/alive/NightShowPill';
 import useNightShow from '../components/map/alive/useNightShow';
+// Fin-ister Nights (Halloween night mode layered on the park game).
+import useFrightNight from '../hooks/useFrightNight';
+import { FrightLayer, FrightPill, useFrightEngine } from '../components/fright';
+import type { FrightMapInput } from '../components/map/fright';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
@@ -216,7 +220,7 @@ function ExploreScreen() {
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
   const { refreshPlayer, player } = useContext(AuthContext);
-  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked } =
+  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef } =
     useContext(LocationContext);
   // The anchor is the newest outside-park confirmation (kept through a failed
   // re-check), so walking past the 25 m re-check never blanks the home map.
@@ -474,6 +478,17 @@ function ExploreScreen() {
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
   // Tonight's night show: real showtimes; the pill takes the live slot only when nothing else needs it.
   const nightShow = useNightShow(park?.id ?? null, mapFocused && !!player);
+  // Fin-ister Nights: tonight's state (server clock, phases, polling) and the in-park engine.
+  const frightNight = useFrightNight(player ? park?.id ?? null : null, mapFocused && !!player);
+  const frightEngine = useFrightEngine(frightNight, { parkId: park?.id ?? null, focused: mapFocused, location,
+    sampleRef: latestLocationSampleRef, blocked: !isReady || isActive || homeIntroOpen });
+  const frightMap = useMemo<FrightMapInput | null>(() => frightNight.tonight && (frightNight.modeOn || frightNight.phase === 'after')
+    && frightNight.eventPark ? {
+      tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,
+      player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
+      cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
+    } : null, [frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+    frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
   const hasLiveEvents = busyLiveSlot || nightPill;
@@ -1110,6 +1125,7 @@ function ExploreScreen() {
                 const anchor = nightShow.show?.anchor;
                 if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
               }} />}
+            {frightNight.modeOn && <FrightPill night={frightNight} engine={frightEngine} onHelp={frightEngine.replayTutorial} />}
           </View>
         )}
         {leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder={() => true}
@@ -1208,6 +1224,7 @@ function ExploreScreen() {
           projector={mapProjector}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
+          fright={frightMap}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={chestButton} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
@@ -1392,6 +1409,8 @@ function ExploreScreen() {
       {/* Too Far Away: ribbon + blue card with a distance meter */}
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
         homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
+      {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
+      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 8} />}
     </Wrapper>
   );
 }

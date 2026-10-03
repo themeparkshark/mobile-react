@@ -1,0 +1,119 @@
+{
+  "shusher": [
+    "shh. phones away. see you soon.",
+    "phones down, fins in.",
+    "no glowing screens in there, please.",
+    "eyes up. the critters notice.",
+    "shh. your progress is saved.",
+    "pocket it, Fin-vestigator.",
+    "lights low. phones lower.",
+    "welcome back. phones are fine now."
+  ],
+  "mode_on": [
+    "The fog is rolling in.",
+    "Fin-ister Nights is on.",
+    "After dark, new rules apply.",
+    "Gates open. The Lantern is listening."
+  ],
+  "mode_off": [
+    "Lights up. Fin-ister Nights is over.",
+    "The fog lifts. Nice swimming tonight.",
+    "Lantern dimmed. Your night is saved."
+  ],
+  "rank_prompt": [
+    "Survived it! How many fins?",
+    "Rate it fast. Lines won't wait.",
+    "One tap. How was it?",
+    "Re-swim! Still a five?",
+    "Give it your fins.",
+    "Rank it before the fog moves."
+  ],
+  "reaction_prompt": "Giggled, jumped, or screamed?",
+  "reaction_labels": [
+    {
+      "key": "giggled",
+      "label": "Giggled"
+    },
+    {
+      "key": "jumped",
+      "label": "Jumped"
+    },
+    {
+      "key": "screamed",
+      "label": "Screamed"
+    }
+  ],
+  "haunt_done": [
+    "You survived {name}!",
+    "{name}: survived. Fins out.",
+    "Another bead lit: {name}.",
+    "{name} is in the books.",
+    "Brave fin! {name} done.",
+    "{name} survived. Lantern glows brighter.",
+    "Out of {name}, still smiling.",
+    "{name}: check. Who's next?"
+  ],
+  "encounter": {
+    "chuckles": [
+      "Chuckles is loose! 7 minutes.",
+      "Something's giggling near the reef.",
+      "Honk honk! Chuckles spotted.",
+      "Catch Chuckles before he hides!",
+      "Whoopee cushion alert near the reef.",
+      "Chuckles wants chaos. Go find him!"
+    ],
+    "riptide": [
+      "Ringmaster Riptide demands order.",
+      "Riptide has arrived. Line up neatly.",
+      "Attention! The Ringmaster is here.",
+      "Riptide is counting. Hurry, please.",
+      "Order on the midway. Riptide spotted.",
+      "The Ringmaster awaits. Seven minutes."
+    ],
+    "both": [
+      "Chuckles and Riptide are both loose!",
+      "Team Chaos or Team Control?",
+      "Pick a side. The tides are tugging.",
+      "Chaos leads tonight, {chaos} to {control}."
+    ]
+  },
+  "reef_enter": [
+    "Fog's thick at {name}. Listen.",
+    "You're in {name}. Stand still.",
+    "Welcome to {name}. Watch your fins.",
+    "{name}: critters nearby.",
+    "Something's lurking in {name}.",
+    "Stay one minute in {name}.",
+    "{name} is whispering. Stick around.",
+    "A Case File hides in {name}."
+  ],
+  "marquee": [
+    "{n} haunts survived!",
+    "{n} haunts. One brave shark.",
+    "Haunts tonight: {n}.",
+    "{n} down. Legend in progress.",
+    "{n} haunts and zero regrets.",
+    "Brave night: {n} haunts!",
+    "{n} haunts survived. Fins out.",
+    "The Lantern counts {n} tonight.",
+    "{n} haunts. Carp Cove is proud.",
+    "Night recap: {n} haunts."
+  ],
+  "marquee_zero": "Scouted the reefs tonight.",
+  "empty_error": [
+    "No haunts yet. The fog can wait.",
+    "Signal's spooky here. Progress saved.",
+    "This haunt is closed right now.",
+    "Waits are hiding. Check back soon.",
+    "No Case Files yet. Visit a reef.",
+    "Fin-ister Nights isn't on yet.",
+    "The Lantern is loading. Hang tight.",
+    "Couldn't save that. Try again."
+  ],
+  "pace": [
+    "{done} down, {left} to go. {time} left.",
+    "{done} survived. {left} left. {time} remaining.",
+    "{done} in, {left} out, {time} left.",
+    "On pace: {done} done, {left} in {time}."
+  ]
+}
