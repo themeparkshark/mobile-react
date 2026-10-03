@@ -6,6 +6,8 @@
 const assert = require('node:assert/strict'), test = require('node:test');
 const fs = require('node:fs');
 const read = file => fs.readFileSync(file, 'utf8');
+const { loadTs } = require('./helpers/ts-module.cjs');
+const { plain } = require('./helpers/plain.cjs');
 
 test('the sky overlay keeps one fixed Skia tree: tier, light and pause only change strengths', () => {
   const sky = read('src/components/map/alive/MapSkyOverlay.tsx');
@@ -57,4 +59,45 @@ test('the panned-away shark hides while its spot is off screen (iOS draws off-sc
   const map = read('src/components/Map.tsx');
   assert.match(map, /opacity: focusedOnPlayer \|\| !playerOnScreen \? 0 : 1/);
   assert.match(map, /checkPlayer\(feature\.properties\?\.visibleBounds\)/);
+});
+
+test('slot pools: a find keeps its slot while it lives, new finds take free slots, the pool never resizes', () => {
+  const { assignSlots, SLOTS } = loadTs('src/components/map/markerSlots.ts', { react: { useRef: () => ({ current: [] }) } });
+  let slots = assignSlots([], ['a', 'b', 'c'], 4);
+  assert.deepEqual(plain(slots), ['a', 'b', 'c', null]);
+  slots = assignSlots(slots, ['c', 'd', 'a'], 4);
+  assert.deepEqual(plain(slots), ['a', 'd', 'c', null], 'b left; d took its slot; a and c never moved');
+  slots = assignSlots(slots, ['a', 'c', 'd', 'e', 'f'], 4);
+  assert.equal(slots.length, 4, 'a full pool waits instead of growing');
+  assert.ok(SLOTS.coins >= 24 && SLOTS.rides >= 80);
+});
+
+test('the map\'s children are append-only: no conditional, filtered or keyed-by-data Marker list anywhere under <Map>', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  const block = explore.slice(explore.indexOf('<Map onPress='), explore.indexOf('</Map>'));
+  assert.ok(block.length > 500);
+  assert.doesNotMatch(block, /\.filter\(/, 'no filtered marker list (finds come and go in fixed slots)');
+  assert.doesNotMatch(block, /\{[a-zA-Z?.()\s!&|=]+&&\s*(\(\s*)?<(TaskMarker|FindMarker|BossMarker|GymMarker|CommunityCenterMarker|SwordMarker|VaultMarker|ItemMarker|PinMarker|NightShowLayer|ParkProjectMapBeacon|BossMapDeparture|Circle|GhostSharks)/,
+    'no marker mounts on a condition');
+  for (const pool of ['rideSlots', 'coinSlots', 'keySlots', 'redeemableSlots', 'itemSlots', 'pinSlots', 'vaultSlots', 'swordSlots']) {
+    assert.match(block, new RegExp(`\\{${pool}\\.map\\(`), pool);
+  }
+  assert.match(block, /key=\{`ride-\$\{slot\}`\}/, 'keyed by slot, never by the find or ride');
+  const map = read('src/components/Map.tsx');
+  const mapTree = map.slice(map.indexOf('<MapView'), map.indexOf('</MapView>'));
+  assert.doesNotMatch(mapTree.replace(/\{fright && <FrightMapSources/, ''), /\{[^}]*&&\s*(\(\s*)?<(Marker|ShapeSource|BackgroundLayer)/,
+    'the map\'s own children are always mounted');
+  assert.ok(mapTree.indexOf('<FrightMapSources') > mapTree.indexOf('{children}'), 'the one late mount (Fin-ister) is the true last child');
+  const marker = read('src/components/map/Marker.tsx');
+  assert.doesNotMatch(marker, /return null/, 'a bad coordinate parks the marker instead of unmounting it');
+});
+
+test('no find ever shows 0:00: at its time it fades out and asks for fresh map data', () => {
+  const life = read('src/screens/ExploreScreen/FindLife.tsx');
+  assert.match(life, /setGone\(true\); onExpire\(\);/);
+  for (const file of ['Coin', 'Key', 'Redeemable']) {
+    const src = read(`src/screens/ExploreScreen/${file}.tsx`);
+    assert.match(src, /const gone = useFindExpiry\(/, file);
+    assert.match(src, /<FindFade gone=\{gone\}>/, file);
+  }
 });

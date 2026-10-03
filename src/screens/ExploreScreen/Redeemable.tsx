@@ -1,11 +1,10 @@
-import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import Countdown, { zeroPad } from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
-import { REDEEMABLE_BODY, FIND_BOX, FIND_ROOT, FIND_TAG } from './parkMapLayout';
-import { useTimeoutWhen } from 'rooks';
+import { REDEEMABLE_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
+import { FindFade, useFindExpiry } from './FindLife';
 import { RedeemableType } from '../../models/redeemable-type';
 
 /**
@@ -22,19 +21,14 @@ export default function Redeemable({
   /** Where the declutter put the timer chip (undefined: default, null: hidden). */
   readonly tag?: TagPlacement | null;
 }) {
-  useTimeoutWhen(
-    () => {
-      onExpire();
-    },
-    dayjs(redeemable.active_to).diff(dayjs()),
-    !!redeemable.id
-  );
+  // At zero the find fades out and leaves (no 0:00 chip).
+  const gone = useFindExpiry(redeemable.active_to, onExpire);
 
   const themeColor = redeemable.theme?.currency?.color || '#9C27B0';
   const lightColor = themeColor + '30';
 
   return (
-    <View style={FIND_ROOT}>
+    <FindFade gone={gone}>
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: REDEEMABLE_BODY.y - FIND_TAG.h - 3 }}>
@@ -88,6 +82,6 @@ export default function Redeemable({
           contentFit="contain"
         />
       </View>
-    </View>
+    </FindFade>
   );
 }

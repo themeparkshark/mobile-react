@@ -23,7 +23,8 @@ import { BRAND, GameIcon } from '../../ui';
 import { formatDistance } from './adventureTicketPresentation';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 import { limitedLabel } from '../../services/collection/limitedCoins';
-import { Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
+import { foldLabel, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
+import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
 
 const LANDMARKS: Record<LandmarkId, number> = {
@@ -319,6 +320,8 @@ export interface TaskMarkerProps {
   /** Distance order among the islands on the map (0 = nearest): only the nearest few spend animation. */
   readonly aliveRank?: number;
   readonly onPress: (task: TaskType) => void;
+  /** An empty pool slot: both markers stay mounted, parked and empty (MapView children never mount mid-list). */
+  readonly parked?: boolean;
 }
 
 /**
@@ -331,12 +334,13 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
-  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank,
+  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const alive = useMapAlive();
   // Declutter: shown, receded or folded away, and where this island's chip goes (parkMapLayout).
-  const placement = usePlacement(rideLayoutId(task.id));
+  const placed = usePlacement(rideLayoutId(task.id));
+  const placement = parked ? PARKED_PLACEMENT : placed;
   const shown = placement.visible;
   // A hidden island holds every loop still (battery) and ignores taps.
   const calm = alive.tier === 'calm' || !shown;
@@ -429,16 +433,16 @@ function TaskMarker({
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
   return (<>
-    {waterKind && waterSpot && (
-      <Marker coordinate={waterSpot} anchor={{ x: 0.5, y: 0.63 }}>
-        <WaterAmbience kind={waterKind} />
-      </Marker>
-    )}
+    {/* Always mounted (hidden without a water scene): the island's two map markers never come and go. */}
+    <Marker coordinate={waterSpot ?? { latitude, longitude }} hidden={parked || !(waterKind && waterSpot)} anchor={{ x: 0.5, y: 0.63 }}>
+      {waterKind && waterSpot && !parked ? <WaterAmbience kind={waterKind} /> : <View style={styles.parkedBox} />}
+    </Marker>
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
       accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
+      hidden={parked}
       anchor={{ x: 0.5, y: 0.9 }}
     >
       {/* One chip at a time keeps the map calm, on the free side the declutter picked (unscaled: the
@@ -524,7 +528,7 @@ function TaskMarker({
           </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
           {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
-          {folded > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{folded}</Text></View>}
+          {folded > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>{foldLabel(folded)}</Text></View>}
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
@@ -537,7 +541,11 @@ function TaskMarker({
 
 export default memo(TaskMarker);
 
+/** An empty slot's placement: not drawn, no chip, no loops. */
+const PARKED_PLACEMENT: Placement = { visible: false, scale: 1, folded: 0, foldedInto: null, tag: null, reason: 'offscreen' };
+
 const styles = StyleSheet.create({
+  parkedBox: { width: 1, height: 1 },
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   goalBadge: { backgroundColor: BRAND.gold,

@@ -195,6 +195,19 @@ function leaderFor(body: Rect, x: number, y: number, w: number, h: number): TagP
   return { x1: tx, y1: ty, x2: body.x + body.w / 2, y2: body.y + Math.min(10, body.h / 4) };
 }
 
+/**
+ * A short pointer from a chip that sits beside its art (not straight above or
+ * below) into that art, so in a crowd every chip has a clear owner.
+ */
+function pointerFor(body: Rect, x: number, y: number, w: number, h: number): TagPlacement['leader'] {
+  const cx = x + w / 2, cy = y + h / 2;
+  const bx = body.x + body.w / 2, by = body.y + body.h / 2;
+  const x1 = Math.max(x, Math.min(x + w, bx)), y1 = Math.max(y, Math.min(y + h, by));
+  const inner = { x: body.x + 10, y: body.y + 10, w: Math.max(0, body.w - 20), h: Math.max(0, body.h - 20) };
+  const x2 = Math.max(inner.x, Math.min(inner.x + inner.w, cx)), y2 = Math.max(inner.y, Math.min(inner.y + inner.h, cy));
+  return Math.hypot(x2 - x1, y2 - y1) < 6 ? null : { x1, y1, x2, y2 };
+}
+
 interface Placed { readonly item: LayoutItem; readonly rect: Rect; readonly order: number; readonly p: { x: number; y: number }; folded: number }
 interface Cell<T> { readonly owner: T; readonly rect: Rect }
 
@@ -347,7 +360,18 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     if (!item.pinned && item.tag.minZoom !== undefined && frame.zoom < item.tag.minZoom) { tags.set(item.id, null); continue; }
     const body = scaled(bodies.get(item.id)!, scales.get(item.id) ?? 1);
     const all = tagCandidates(body, item.tag.w, item.tag.h);
-    const lastSide = previous?.get(item.id)?.tag?.side;
+    const last = previous?.get(item.id)?.tag ?? null;
+    const lastSide = last?.side;
+    // During a gesture a chip never moves or appears: it keeps last pass's slot while that slot
+    // stays in view and clear of the HUD (sides change only on a settled pass).
+    if (hold && !item.pinned) {
+      const kept = last && previous?.get(item.id)?.visible ? last : null;
+      const rect = kept ? { x: p.x + kept.x, y: p.y + kept.y, w: item.tag.w, h: item.tag.h } : null;
+      const ok = !!rect && insideView(rect, frame, edge) && !insets.some(inset => overlapArea(rect, inset) > 0);
+      tags.set(item.id, ok ? kept : null);
+      if (ok && rect) tagGrid.add(null, rect);
+      continue;
+    }
     // The selected marker's card always sits on top (it draws there itself); others keep last pass's side while it is free.
     const candidates = item.pinned ? all.slice(0, 1)
       : lastSide ? [...all.filter(c => c.side === lastSide), ...all.filter(c => c.side !== lastSide)] : all;
@@ -361,7 +385,9 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
         if (tagGrid.near(rect).some(cell => overlapArea(rect, cell.rect) > 0)) continue;
         if (tagObstacles.some(other => overlapArea(rect, other) > 0)) continue;
       }
-      chosen = { x: c.x, y: c.y, side: c.side, leader: c.far ? leaderFor(body, c.x, c.y, item.tag.w, item.tag.h) : null };
+      const beside = c.side !== 'top' && c.side !== 'bottom';
+      chosen = { x: c.x, y: c.y, side: c.side, leader: c.far ? leaderFor(body, c.x, c.y, item.tag.w, item.tag.h)
+        : beside ? pointerFor(body, c.x, c.y, item.tag.w, item.tag.h) : null };
       tagGrid.add(null, rect);
       break;
     }

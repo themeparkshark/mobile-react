@@ -79,7 +79,7 @@ test('projection: the camera centre is the view centre; bearing turns the map un
 });
 
 test('footprints are the drawn art with its glow: islands 72 x 88, coins and keys 48, the haunt facade 96 x 100 plus its name chip', () => {
-  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -84, w: 72, h: 88 });
+  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -74, w: 72, h: 88 }, 'down to the island base');
   assert.equal(L.COIN_BODY.w, 48);
   assert.equal(L.COIN_BODY.h, 48);
   assert.deepEqual(plain(L.HAUNT_BODY), { x: -48, y: -82, w: 96, h: 100 });
@@ -111,6 +111,13 @@ test('USF and the 154-marker stress set at z15.8, 16.4, 17.6, 18.8 and 19.4: zer
           }
           for (const other of chips) if (other !== chip) assert.equal(s.overlapArea(chip.rect, other.rect), 0, `${name}: chips ${chip.id} and ${other.id}`);
           for (const inset of INSETS) assert.equal(s.overlapArea(chip.rect, inset), 0, `${name}: chip ${chip.id} under the HUD`);
+        }
+        // Buttons are hard insets: no art at all under the bottom columns (6 pt gap included).
+        for (const a of art) {
+          if (a.item.fixed) continue;
+          for (const inset of INSETS.filter(inset => inset.share === 0)) {
+            assert.equal(s.overlapArea(a.rect, inset), 0, `${name} z${zoom}: ${a.id} under a button`);
+          }
         }
         // Nothing vanishes without a reason, and a fold always lands on a shown host.
         for (const item of items) {
@@ -199,6 +206,21 @@ test('no popping: during a gesture shown markers never change; a small settle ke
   assert.equal(settled.get('ride:1').visible, true, 'a settle at the same zoom keeps what is on screen');
   const zoomed = s.solveLayout([a, moved], frame({ zoom: 18.2 }), { previous: held, previousZoom: 17.6 });
   assert.equal(zoomed.get('ride:2').visible, true, 'a new zoom lets priority win again');
+});
+
+test('during a gesture chips neither move nor appear; they keep last pass\'s slot until the settle', () => {
+  const coin = coinAt(1, 0, 0);
+  const blocker = { id: 'x', ...at(0, -50), priority: 900, fixed: true, body: { x: -40, y: -20, w: 80, h: 40 } };
+  const first = s.solveLayout([coin], frame());
+  assert.equal(first.get('coin:1').tag.side, 'top');
+  // Mid-pan something now sits where the chip is: held, it stays put instead of jumping.
+  const held = s.solveLayout([coin, blocker], frame(), { previous: first, previousZoom: 17.6, hold: true });
+  assert.equal(held.get('coin:1').tag.side, 'top');
+  const fresh = s.solveLayout([coinAt(2, 60, 0)], frame(), { previous: new Map([['coin:2', s.VISIBLE]]), previousZoom: 17.6, hold: true });
+  assert.equal(fresh.get('coin:2').tag, null, 'no chip appears mid-gesture');
+  const settled = s.solveLayout([coin, blocker], frame(), { previous: held, previousZoom: 17.6 });
+  assert.notEqual(settled.get('coin:1').tag.side, 'top', 'the settle moves it');
+  assert.ok(settled.get('coin:1').tag.leader, 'a chip beside its art points at it');
 });
 
 test('chip sides are sticky: last pass\'s side is kept while it is free', () => {

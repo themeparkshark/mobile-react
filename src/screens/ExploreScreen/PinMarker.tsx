@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
-import { Marker } from '../../components/map/Marker';
+import { Marker, PARKED } from '../../components/map/Marker';
 import { Placed, usePlacement } from '../../components/map/declutter/Placed';
 
 /**
@@ -11,16 +11,15 @@ import { Placed, usePlacement } from '../../components/map/declutter/Placed';
 export default function PinMarker({
   item,
 }: {
-  readonly item: { id: number; latitude: number; longitude: number };
+  /** Null: an empty pool slot (mounted, parked, draws nothing). */
+  readonly item: { id: number; latitude: number; longitude: number } | null;
 }) {
   // Declutter: steps back under a HUD inset or stronger art (parkMapLayout).
-  const placement = usePlacement(`pin:${item.id}`);
+  const placement = usePlacement(item ? `pin:${item.id}` : '');
   return (
     <Marker
-      coordinate={{
-        latitude: item.latitude,
-        longitude: item.longitude,
-      }}
+      coordinate={item ?? PARKED}
+      hidden={!item}
       tappable={false}
       flat={true}
       tracksViewChanges={false}

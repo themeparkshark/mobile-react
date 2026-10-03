@@ -18,9 +18,11 @@ interface Props {
   longitude: number;
   expiresAt: string;
   onPress: () => void;
+  /** Mounted but parked and not drawn (an empty pool slot). */
+  hidden?: boolean;
 }
 
-export default function SwordMarker({ id, latitude, longitude, expiresAt, onPress }: Props) {
+export default function SwordMarker({ id, latitude, longitude, expiresAt, onPress, hidden = false }: Props) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const bounceY = useSharedValue(0);
   const glowOpacity = useSharedValue(0.4);
@@ -108,6 +110,7 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={onPress}
+      hidden={hidden}
       anchor={{ x: 0.5, y: 1 }}
     >
       <View style={styles.container}>

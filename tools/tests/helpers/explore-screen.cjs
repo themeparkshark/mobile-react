@@ -85,6 +85,10 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/mapPresentationQueue': queue,
     './ExploreScreen/dailyChestPresence': chestPresence,
     '../components/map/statusStack': statusStack,
+    // Fixed slot pools: items in order, then empty slots (the real assignment is unit tested in map-declutter-stability).
+    '../components/map/markerSlots': { SLOTS: { rides: 80, coins: 24, keys: 8, redeemables: 8, items: 8, pins: 8, vaults: 4, swords: 8 },
+      useMarkerSlots: (items, _keyOf, size) => Array.from({ length: size }, (_, i) => items[i] ?? null) },
+    '../components/map/Marker': { PARKED: { latitude: 0, longitude: 0 }, Marker: Object.defineProperty(function Marker() { return null; }, 'name', { value: 'Marker' }) },
     './ExploreScreen/parkMapLayout': parkMapLayout,
     '../components/map/declutter/store': declutterStore,
     '../components/map/fright/geo': frightGeo,

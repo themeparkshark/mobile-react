@@ -118,6 +118,8 @@ import type { MapDeclutterInput } from '../components/map/declutter/useMapDeclut
 import { offsetMeters, validPoint } from '../components/map/fright/geo';
 import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
+import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
+import { PARKED } from '../components/map/Marker';
 import { BOTTOM_RIGHT_COLUMN, bottomLeftColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 
@@ -139,6 +141,11 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
+// An empty ride slot's stand-in (parked, never drawn) and an empty slot's 1 pt content.
+const PARKED_TASK = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
+  times_completed: 0, asset_id: -1, ticket_cost: 1 } as unknown as TaskType;
+const PARKED_BOX = { width: 1, height: 1 } as const;
+const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
 
@@ -952,6 +959,23 @@ function ExploreScreen() {
     return buildParkLayout({ rides, finds, haunts: frightMap ? haunts : [], reefs: frightMap ? reefs : [], fixed, nightMode });
   }, [park, rideFactsKey, findsKey, frightSpots, frightMap, gymData, communityCenter, swords, raid, raidActive, nightMode, // eslint-disable-line react-hooks/exhaustive-deps
     encounterLiveNow, frightEncounter]);
+  // Fixed marker slot pools (see markerSlots): allocated once, a slot keeps its find while it lives.
+  const liveCoins = useMemo(() => (redeemables?.coins ?? []).filter(coin => opportunityIsActive(coin, mapNow)), [redeemables, mapNow]);
+  const liveKeys = useMemo(() => (redeemables?.keys ?? []).filter(key => opportunityIsActive(key, mapNow)), [redeemables, mapNow]);
+  const liveRedeemables = useMemo(() => (redeemables?.redeemables ?? []).filter(item => opportunityIsActive(item, mapNow)), [redeemables, mapNow]);
+  const shownItems = useMemo(() => (redeemables?.items ?? []).filter(item => !item.is_hidden), [redeemables]);
+  const shownPins = useMemo(() => (redeemables?.pins ?? []).filter(item => !item.is_hidden), [redeemables]);
+  const rideSlots = useMarkerSlots(orderedRides, task => String(task.id), SLOTS.rides);
+  const coinSlots = useMarkerSlots(liveCoins, coin => String(coin.id), SLOTS.coins);
+  const keySlots = useMarkerSlots(liveKeys, key => String(key.id), SLOTS.keys);
+  const redeemableSlots = useMarkerSlots(liveRedeemables, item => String(item.id), SLOTS.redeemables);
+  const itemSlots = useMarkerSlots(shownItems, item => String(item.id), SLOTS.items);
+  const pinSlots = useMarkerSlots(shownPins, item => String(item.id), SLOTS.pins);
+  const vaultSlots = useMarkerSlots(redeemables?.vaults ?? [], vault => String(vault.id), SLOTS.vaults);
+  const swordSlots = useMarkerSlots(swords, sword => String(sword.id), SLOTS.swords);
+  const refreshFinds = useCallback(() => { void refreshMapOpportunities().catch(() => undefined); }, [refreshMapOpportunities]);
+  const checklistRide = focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
+    !visibleTasks.some(task => task.id === focusedFromChecklist.id) ? focusedFromChecklist : null;
   const projectPillShown = !!activeParkProject && suggestionSlots.right === 'project';
   const declutterInsets = useMemo(() => parkMapInsets({
     hudBottom: slotTop,
@@ -1392,21 +1416,17 @@ function ExploreScreen() {
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>
-          {redeemables?.items
-            .filter((item) => !item.is_hidden)
-            .map((item) => (
-              <ItemMarker key={item.id} item={item} />
-            ))}
-          {redeemables?.pins
-            .filter((item) => !item.is_hidden)
-            .map((item) => (
-              <PinMarker key={item.id} item={item} />
-            ))}
-          {orderedRides.map(task => {
+          {/* Every marker below is a fixed slot or an always-mounted singleton: finds spawning and
+              expiring, rides coming and going, a boss landing or a show starting only change what a
+              slot draws. MapView children never mount, unmount or reorder (MapLibre insert crash). */}
+          {itemSlots.map((item, slot) => <ItemMarker key={`item-${slot}`} item={item} />)}
+          {pinSlots.map((item, slot) => <PinMarker key={`pin-${slot}`} item={item} />)}
+          {rideSlots.map((task, slot) => {
+            if (!task) return <TaskMarker key={`ride-${slot}`} task={PARKED_TASK} parked isSelected={false} onPress={handleTaskPress} />;
             const resting = restingTasks.includes(task);
             const distance = taskDistance.get(task.id) ?? null;
             return <TaskMarker
-              key={task.id}
+              key={`ride-${slot}`}
               task={task}
               isSelected={selectedTask?.id === task.id}
               isTripGoal={goalTaskId === task.id}
@@ -1427,69 +1447,47 @@ function ExploreScreen() {
             />;
           })}
           <GhostSharks ghosts={ghosts} />
-          {nightShow.show && <NightShowLayer show={nightShow.show} live={nightShow.phase === 'live'} />}
+          <NightShowLayer show={nightShow.show ?? null} live={nightShow.phase === 'live'} />
           {/* After the ride islands so their ambience never prints over the label; it settles clear of them. */}
-          {activeParkProject?.park_id === park.id && (
-            <ParkProjectMapBeacon project={activeParkProject} avoid={beaconAvoid}
-              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
-          )}
-          {bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag') &&
-            <Circle center={bossMap.moment.impact.coordinate} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />}
-          {bossMap.moment?.phase === 'exit' && <BossMapDeparture impact={bossMap.moment.impact} onComplete={bossMap.finishExit} />}
-          {raid && raidActive && <BossMarker raid={raid} animate={mapFocused && !bossOccluded && !isActive} onPress={() => setBossOpen(true)} />}
-          {redeemables?.coins?.filter(coin => opportunityIsActive(coin, mapNow)).map(coin => (
-            <FindMarker key={`coin-${coin.id}`} id={`coin:${coin.id}`} latitude={Number(coin.latitude)} longitude={Number(coin.longitude)}>
-              {tag => <Coin coin={coin} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+          <ParkProjectMapBeacon project={activeParkProject?.park_id === park.id ? activeParkProject : null} avoid={beaconAvoid}
+            onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
+          <Circle hidden={!(bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag'))}
+            center={bossMap.moment?.impact.coordinate ?? PARKED} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />
+          <BossMapDeparture impact={bossMap.moment?.phase === 'exit' ? bossMap.moment.impact : null} onComplete={bossMap.finishExit} />
+          <BossMarker raid={raid && raidActive ? raid : null} animate={mapFocused && !bossOccluded && !isActive} onPress={() => setBossOpen(true)} />
+          {coinSlots.map((coin, slot) => (
+            <FindMarker key={`coin-${slot}`} id={coin ? `coin:${coin.id}` : ''} hidden={!coin}
+              latitude={coin ? Number(coin.latitude) : PARKED.latitude} longitude={coin ? Number(coin.longitude) : PARKED.longitude}>
+              {tag => coin ? <Coin key={coin.id} coin={coin} tag={tag} onExpire={refreshFinds} /> : <View style={PARKED_BOX} />}
             </FindMarker>
           ))}
-          {redeemables?.vaults.map((vault) => (
-            <VaultMarker key={vault.id} vault={vault} />
-          ))}
+          {vaultSlots.map((vault, slot) => <VaultMarker key={`vault-${slot}`} vault={vault} />)}
           {/* Keys - rare spawns! */}
-          {redeemables?.keys?.filter(key => opportunityIsActive(key, mapNow)).map(key => (
-            <FindMarker key={`key-${key.id}`} id={`key:${key.id}`} latitude={Number(key.latitude)} longitude={Number(key.longitude)}>
-              {tag => <Key model={key} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+          {keySlots.map((key, slot) => (
+            <FindMarker key={`key-${slot}`} id={key ? `key:${key.id}` : ''} hidden={!key}
+              latitude={key ? Number(key.latitude) : PARKED.latitude} longitude={key ? Number(key.longitude) : PARKED.longitude}>
+              {tag => key ? <Key key={key.id} model={key} tag={tag} onExpire={refreshFinds} /> : <View style={PARKED_BOX} />}
             </FindMarker>
           ))}
-          {redeemables?.redeemables.filter(redeemable => opportunityIsActive(redeemable, mapNow)).map(redeemable => (
-            <FindMarker key={`redeemable-${redeemable.id}`} id={`redeemable:${redeemable.id}`}
-              latitude={Number(redeemable.latitude)} longitude={Number(redeemable.longitude)}>
-              {tag => <Redeemable redeemable={redeemable} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+          {redeemableSlots.map((redeemable, slot) => (
+            <FindMarker key={`redeemable-${slot}`} id={redeemable ? `redeemable:${redeemable.id}` : ''} hidden={!redeemable}
+              latitude={redeemable ? Number(redeemable.latitude) : PARKED.latitude}
+              longitude={redeemable ? Number(redeemable.longitude) : PARKED.longitude}>
+              {tag => redeemable ? <Redeemable key={redeemable.id} redeemable={redeemable} tag={tag} onExpire={refreshFinds} /> : <View style={PARKED_BOX} />}
             </FindMarker>
           ))}
-          {/* Community Center Marker */}
-          {communityCenter && (
-            <CommunityCenterMarker
-              center={communityCenter}
-              onPress={handleCommunityCenterPress}
-            />
-          )}
+          <CommunityCenterMarker center={communityCenter} onPress={handleCommunityCenterPress} />
           {/* Gym Marker - show even without team so players can discover it */}
-          {gymData && (
-            <GymMarker
-              leader={gymData.leader}
-              latitude={gymData.gym.latitude}
-              longitude={gymData.gym.longitude}
-              onPress={handleGymPress}
-            />
-          )}
-          {/* Sword Markers */}
-          {swords.map((sword) => (
-            <SwordMarker
-              key={sword.id}
-              id={sword.id}
-              latitude={sword.latitude}
-              longitude={sword.longitude}
-              expiresAt={sword.expires_at}
-              onPress={() => handleSwordClaim(sword.id)}
-            />
+          <GymMarker hidden={!gymData} leader={gymData?.leader} latitude={gymData?.gym.latitude ?? PARKED.latitude}
+            longitude={gymData?.gym.longitude ?? PARKED.longitude} onPress={handleGymPress} />
+          {swordSlots.map((sword, slot) => (
+            <SwordMarker key={`sword-${slot}`} hidden={!sword} id={sword?.id ?? -1}
+              latitude={sword?.latitude ?? PARKED.latitude} longitude={sword?.longitude ?? PARKED.longitude}
+              expiresAt={sword?.expires_at ?? PARKED_TIME} onPress={() => { if (sword) void handleSwordClaim(sword.id); }} />
           ))}
-          {/* A ride focused from the checklist that is not on today's map: last, so mounting it appends. */}
-          {focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
-            !visibleTasks.some(task => task.id === focusedFromChecklist.id) && (
-              <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}
-                onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />
-            )}
+          {/* A ride focused from the checklist that is not on today's map (parked otherwise). */}
+          <TaskMarker task={checklistRide ?? PARKED_TASK} parked={!checklistRide} isSelected={!!checklistRide} isTripGoal={false}
+            onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />
         </Map>
       </View>
       )}

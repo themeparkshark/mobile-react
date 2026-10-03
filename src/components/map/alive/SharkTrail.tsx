@@ -9,7 +9,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
-import { Marker } from '../Marker';
+import { Marker, PARKED } from '../Marker';
 import { hash01 } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
 import { pushTrail, TRAIL_LIFE_MS, type TrailPoint } from './presence';
@@ -64,15 +64,15 @@ export const SharkTrail = memo(function SharkTrail({ latitude, longitude }: {
   // the slot of the one it replaces, so walking never mounts, unmounts or reorders MapView
   // children (MapLibre's -[MLRNMapView insertReactSubview:atIndex:] crash). Only the
   // content changes. Before the first fix the pool waits until the map knows where we are.
-  const park = latitude !== null && longitude !== null ? { latitude, longitude } : null;
-  const parked = useRef(park); if (park && !parked.current) parked.current = park;
-  if (!parked.current) return null;
+  // Mounted from the map's first render (parked until the first fix), so nothing inserts later.
+  const parked = useRef<{ latitude: number; longitude: number }>(PARKED);
+  if (parked.current === PARKED && latitude !== null && longitude !== null) parked.current = { latitude, longitude };
   const bySlot = new Map(points.map(point => [point.id % TRAIL_SLOTS, point]));
   return <>
     {Array.from({ length: TRAIL_SLOTS }, (_, slot) => {
       const point = bySlot.get(slot);
       return (
-        <Marker key={`trail-${slot}`} coordinate={point ?? parked.current!}>
+        <Marker key={`trail-${slot}`} hidden={!point} coordinate={point ?? parked.current}>
           {point ? <TrailSparkle key={point.id} seed={point.id} /> : <View style={styles.box} />}
         </Marker>
       );

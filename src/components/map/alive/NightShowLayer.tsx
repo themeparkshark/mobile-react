@@ -8,10 +8,12 @@
  * Reduce Motion and a calm phone skip it (the pill still says it is on).
  */
 import { BlurMask, Canvas, Circle, Group, Points, vec, type SkPoint } from '@shopify/react-native-skia';
-import { memo, useContext, useEffect, useMemo, useRef } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
-import { Marker } from '../Marker';
+import { View } from 'react-native';
+import { Marker, PARKED } from '../Marker';
+import { ALIVE_CAPS } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
 import { burstSchedule, showSecond, showTimes, type Burst, type NightShow } from './nightShow';
 
@@ -40,12 +42,15 @@ function lastAtOrBefore(times: readonly number[], t: number): number {
 
 interface SlotState { readonly visible: number; readonly age: number; readonly i: number }
 
-function Slot({ k, clock, sync, times, bursts, water, sparks }: {
+function Slot({ k, clock, sync, times, bursts, water, sparks, on }: {
   k: number; clock: SharedValue<number>; sync: { showT: number; clock: number }; times: readonly number[]; bursts: readonly Burst[];
   water: boolean; sparks: number;
+  /** Drawing now (the show is live and this slot is within the tier's budget); off holds still and draws nothing. */
+  on: boolean;
 }) {
   // Which burst this slot shows now: the k-th most recent one still alive.
   const state = useDerivedValue<SlotState>(() => {
+    if (!on) return { visible: 0, age: 0, i: 0 };
     // Show time runs on the map's ambient clock, synced to the real show clock when the layer mounts.
     const t = sync.showT + (clock.value - sync.clock);
     const i = lastAtOrBefore(times, t + RISE) - k;
@@ -153,14 +158,26 @@ function Slot({ k, clock, sync, times, bursts, water, sparks }: {
 
 const NIGHT_SHOW_POP_ENABLED = false;
 
-export const NightShowLayer = memo(function NightShowLayer({ show, live }: { readonly show: NightShow; readonly live: boolean }) {
+/** The most bursts any tier draws at once (the full tier). */
+const MAX_SLOTS = ALIVE_CAPS.full.skyShowBursts;
+
+/**
+ * Always mounted on the park map (null show: parked and empty), and once a
+ * show has gone live its canvas stays mounted with a fixed set of burst slots:
+ * the tier, the pause and the show ending only stop and hide them. MapView
+ * children mounting mid-list crash MapLibre; Skia nodes unmounting while the
+ * ambient clock animates them crash RN Skia.
+ */
+export const NightShowLayer = memo(function NightShowLayer({ show, live }: { readonly show: NightShow | null; readonly live: boolean }) {
   const { clock, caps, running } = useMapAlive();
   const { playSound } = useContext(SoundEffectContext);
-  const bursts = useMemo(() => burstSchedule(show), [show]);
+  const bursts = useMemo(() => (show ? burstSchedule(show) : []), [show]);
   const times = useMemo(() => bursts.map(b => b.t), [bursts]);
-  const startMs = showTimes(show)?.start ?? 0;
+  const startMs = show ? showTimes(show)?.start ?? 0 : 0;
   const slots = caps.skyShowBursts;
-  const on = live && running && slots > 0 && bursts.length > 0;
+  const on = !!show && live && running && slots > 0 && bursts.length > 0;
+  const [armed, setArmed] = useState(false);
+  useEffect(() => { if (on) setArmed(true); }, [on]);
   // Re-synced every time the layer (re)appears, so a paused map never drifts from the real show.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sync = useMemo(() => ({ showT: (Date.now() - startMs) / 1000, clock: clock.value }), [on, startMs]);
@@ -169,7 +186,7 @@ export const NightShowLayer = memo(function NightShowLayer({ show, live }: { rea
   // default (Dustin): guests can already hear the real show around them.
   const lastPop = useRef(0);
   useEffect(() => {
-    if (!NIGHT_SHOW_POP_ENABLED || !on || show.kind === 'projection') return;
+    if (!NIGHT_SHOW_POP_ENABLED || !on || !show || show.kind === 'projection') return;
     const timer = setInterval(() => {
       const t = showSecond(show, Date.now());
       const now = Date.now();
@@ -184,14 +201,16 @@ export const NightShowLayer = memo(function NightShowLayer({ show, live }: { rea
     return () => clearInterval(timer);
   }, [on, show, bursts, times, playSound]);
 
-  if (!on) return null;
   return (
-    <Marker coordinate={show.anchor} anchor={{ x: GX / W, y: GY / H }}>
-      <Canvas style={{ width: W, height: H }} pointerEvents="none">
-        {Array.from({ length: slots }, (_, k) => (
-          <Slot key={k} k={k} clock={clock} sync={sync} times={times} bursts={bursts} water={show.kind === 'water'} sparks={caps.sparksPerBurst} />
-        ))}
-      </Canvas>
+    <Marker hidden={!on} coordinate={show?.anchor ?? PARKED} anchor={{ x: GX / W, y: GY / H }}>
+      {armed ? (
+        <Canvas style={{ width: W, height: H }} pointerEvents="none">
+          {Array.from({ length: MAX_SLOTS }, (_, k) => (
+            <Slot key={k} k={k} clock={clock} sync={sync} times={times} bursts={bursts} water={show?.kind === 'water'}
+              sparks={caps.sparksPerBurst} on={on && k < slots} />
+          ))}
+        </Canvas>
+      ) : <View style={{ width: 1, height: 1 }} />}
     </Marker>
   );
 });

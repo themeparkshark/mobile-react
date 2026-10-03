@@ -6,7 +6,8 @@
  */
 import { createContext, memo, useContext, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { BRAND } from '../../../ui';
 import { VISIBLE, type Placement, type TagPlacement } from './solver';
 import type { DeclutterStore } from './store';
@@ -25,6 +26,10 @@ export function usePlacement(id: string): Placement {
 }
 
 const FADE_MS = 120;
+/** Two frames' grace for art re-entering the screen (see Placed). */
+const REENTRY_MS = 50;
+/** Chip slides between sides over this long. */
+const TAG_MOVE_MS = 140;
 
 /**
  * Wraps a marker's art. `anchor` is the geo point inside this box (points), so
@@ -43,20 +48,25 @@ export const Placed = memo(function Placed({ placement, anchor, style, overlay, 
   readonly overlay?: ReactNode;
   readonly children: ReactNode;
 }) {
+  const reduced = useReducedGameMotion();
   const opacity = useSharedValue(placement.visible ? 1 : 0);
   const scale = useSharedValue(placement.scale);
   const pop = useSharedValue(1);
-  const wasVisible = useRef(placement.visible);
+  const was = useRef<{ visible: boolean; reason: Placement['reason'] }>({ visible: placement.visible, reason: placement.reason });
   useEffect(() => {
-    opacity.value = withTiming(placement.visible ? 1 : 0, { duration: FADE_MS });
-    scale.value = withTiming(placement.scale, { duration: FADE_MS });
-    // Newly freed art arrives with a small settle (0.92 to 1), never a jump.
-    if (placement.visible && !wasVisible.current) {
+    const fromOffscreen = placement.visible && !was.current.visible && was.current.reason === 'offscreen';
+    // Art coming back from off screen waits two frames before it shows: iOS parks an
+    // off-screen marker view at the top-left corner until the map places it again.
+    const show = withTiming(placement.visible ? 1 : 0, { duration: FADE_MS });
+    opacity.value = fromOffscreen ? withDelay(REENTRY_MS, show) : show;
+    scale.value = reduced ? placement.scale : withTiming(placement.scale, { duration: FADE_MS });
+    // Newly freed art arrives with a small settle (0.92 to 1), never a jump; Reduce Motion skips it.
+    if (placement.visible && !was.current.visible && !reduced) {
       pop.value = 0.92;
-      pop.value = withSpring(1, { damping: 14, stiffness: 320 });
+      pop.value = withDelay(fromOffscreen ? REENTRY_MS : 0, withSpring(1, { damping: 14, stiffness: 320 }));
     }
-    wasVisible.current = placement.visible;
-  }, [placement.visible, placement.scale, opacity, scale, pop]);
+    was.current = { visible: placement.visible, reason: placement.reason };
+  }, [placement.visible, placement.reason, placement.scale, opacity, scale, pop, reduced]);
   const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const art = useAnimatedStyle(() => ({ transform: [{ scale: scale.value * pop.value }] }));
   const origin = { transformOrigin: anchor ? `${anchor.x}px ${anchor.y}px 0px` : 'center' } as ViewStyle;
@@ -82,14 +92,26 @@ export function TagSlot({ tag, anchor, width, height, fallback, children }: {
   readonly fallback: { readonly x: number; readonly y: number };
   readonly children: ReactNode;
 }) {
-  if (tag === null) return null;
-  const at = tag ?? fallback;
+  // Always mounted: a hidden chip fades out where it was, a moved chip slides to its new side.
+  const reduced = useReducedGameMotion();
+  const last = useRef(tag ?? fallback);
+  if (tag) last.current = tag;
+  const at = tag ?? (tag === null ? last.current : fallback);
+  const x = useSharedValue(at.x), y = useSharedValue(at.y), o = useSharedValue(tag === null ? 0 : 1);
+  useEffect(() => {
+    const move = (v: number) => (reduced ? v : withTiming(v, { duration: TAG_MOVE_MS }));
+    x.value = move(at.x);
+    y.value = move(at.y);
+    o.value = withTiming(tag === null ? 0 : 1, { duration: FADE_MS });
+  }, [at.x, at.y, tag === null, reduced, x, y, o]); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateX: x.value }, { translateY: y.value }] }));
+  const leader = tag?.leader ?? null;
   return (
     <>
-      {tag?.leader && <Leader anchor={anchor} {...tag.leader} />}
-      <View pointerEvents="none" style={[styles.slot, { left: anchor.x + at.x, top: anchor.y + at.y, width, height }]}>
+      {leader && <Leader anchor={anchor} {...leader} />}
+      <Animated.View pointerEvents="none" style={[styles.slot, { left: anchor.x, top: anchor.y, width, height }, style]}>
         {children}
-      </View>
+      </Animated.View>
     </>
   );
 }
@@ -105,12 +127,17 @@ function Leader({ anchor, x1, y1, x2, y2 }: { anchor: { x: number; y: number }; 
   }]} />;
 }
 
+/** "+3", or "9+" past nine (a far zoom folds whole lands into one island). */
+export function foldLabel(count: number): string {
+  return count > 9 ? '9+' : `+${count}`;
+}
+
 /** "+N" for markers folded into this one (haunts; rides draw their own). */
 export function FoldBadge({ count, style }: { readonly count: number; readonly style?: ViewStyle }) {
   if (count <= 0) return null;
   return (
     <View pointerEvents="none" style={[styles.fold, style]}>
-      <Text style={styles.foldText}>+{count}</Text>
+      <Text style={styles.foldText}>{foldLabel(count)}</Text>
     </View>
   );
 }

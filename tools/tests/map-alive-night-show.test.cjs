@@ -115,10 +115,10 @@ test('the night show is wired to the map: pill only in a free slot, layer over t
   // The show joins the one HUD row; the status stack ranks it (live outranks Fin-ister, a teaser waits behind it).
   assert.match(explore, /const nightPill = !!nightShow\.show && \(nightShow\.phase === 'teaser' \|\| nightShow\.phase === 'live'\)/);
   assert.match(explore, /show: nightPill \? \(nightShow\.phase === 'live' \? 'live' : 'teaser'\) : null/);
-  assert.match(explore, /<NightShowLayer show=\{nightShow\.show\} live=\{nightShow\.phase === 'live'\} \/>/);
+  assert.match(explore, /<NightShowLayer show=\{nightShow\.show \?\? null\} live=\{nightShow\.phase === 'live'\} \/>/, 'always mounted');
   const layer = read('src/components/map/alive/NightShowLayer.tsx');
-  assert.match(layer, /const on = live && running && slots > 0 && bursts\.length > 0/, 'Reduce Motion (calm) and a paused map draw nothing');
-  assert.match(layer, /<Marker coordinate=\{show\.anchor\}/);
+  assert.match(layer, /const on = !!show && live && running && slots > 0 && bursts\.length > 0/, 'Reduce Motion (calm) and a paused map draw nothing');
+  assert.match(layer, /<Marker hidden=\{!on\} coordinate=\{show\?\.anchor \?\? PARKED\}/, 'always mounted, parked when off');
   assert.match(layer, /firework_pop\.mp3/);
   assert.ok(fs.existsSync(path.join(__dirname, '../../assets/sounds/firework_pop.mp3')));
   const api = read('src/api/endpoints/parks/nightShow.ts');

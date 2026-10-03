@@ -30,6 +30,8 @@ import { BOTTOM_RIGHT_COLUMN, bottomLeftColumnHeight, buildParkLayout, parkMapIn
 import MapStatusStack, { TONES, type StatusEntry } from '../../MapStatusStack';
 import { HUD_BOTTOM } from '../../statusStack';
 import { createDeclutterStore } from '../store';
+import { SLOTS, useMarkerSlots } from '../../markerSlots';
+import { PARKED } from '../../Marker';
 import type { TaskType } from '../../../../models/task-type';
 import type { LiveRide } from '../../../../api/endpoints/parks/live';
 import { USF_RIDES } from './usfRides';
@@ -55,14 +57,43 @@ const STRESS_RIDES = STRESS ? Array.from({ length: 90 }, (_, i) => ({ id: 2000 +
 const CAM = process.env.EXPO_PUBLIC_DECLUTTER_CAM;
 const SOAK_ZOOMS = [16.4, 15.8, 17.6, 18.8, 19.4, 17.0, 16.4, 18.2];
 
+interface PreviewFind { readonly id: string; readonly n: number; readonly kind: 'coin' | 'key'; readonly latitude: number; readonly longitude: number; readonly until: number }
+let findSerial = 0;
+function spawnFind(now: number, kind: 'coin' | 'key'): PreviewFind {
+  const n = ++findSerial;
+  const east = ((n * 71) % 400) - 200, north = ((n * 113) % 500) - 150;
+  return { id: `${kind}:${n}`, n, kind, ...offsetMeters(PLAYER, east, north), until: now + 60_000 + ((n * 7919) % 30_000) };
+}
+/** The starting finds (4, or 34 under stress). */
+function seedFinds(now: number): PreviewFind[] {
+  return Array.from({ length: STRESS ? 34 : 4 }, (_, i) => spawnFind(now, i % 5 === 2 ? 'key' : 'coin'));
+}
+/** Drop the expired, then top back up to the target count with fresh finds. */
+function cycleFinds(current: readonly PreviewFind[], now: number): PreviewFind[] {
+  const alive = current.filter(find => find.until > now);
+  const target = STRESS ? 34 : 4;
+  const out = [...alive];
+  if (out.length < target) out.push(spawnFind(now, findSerial % 5 === 2 ? 'key' : 'coin'));
+  return out;
+}
+const PARKED_RIDE = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
+  times_completed: 0, asset_id: -1, ticket_cost: 1 } as unknown as TaskType;
+
 export default function MapDeclutterPreview() {
   const before = SCENE === 'before';
   const day = SCENE === 'day';
   const [now] = useState(() => Date.now());
   const store = useRef(createDeclutterStore()).current;
   const tonight = useMemo(() => usfFrightFixture(now, 'live'), [now]);
-  const fright = useMemo<FrightMapInput | null>(() => day ? null : ({ tonight, active: true, nowOffsetMs: 0,
-    player: PLAYER, spooky: true, quiet: true, doneKeys: [] }), [tonight, day]);
+  // The soak also turns the night mode off for 15 s every 45 s (its markers fade, never unmount).
+  const [modeOff, setModeOff] = useState(false);
+  useEffect(() => {
+    if (CAM !== 'soak') return;
+    const timer = setInterval(() => setModeOff(off => !off), 22_500);
+    return () => clearInterval(timer);
+  }, []);
+  const fright = useMemo<FrightMapInput | null>(() => day ? null : ({ tonight, active: !modeOff, nowOffsetMs: 0,
+    player: PLAYER, spooky: true, quiet: true, doneKeys: [] }), [tonight, day, modeOff]);
   const [camFocus, setCamFocus] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   useEffect(() => {
     if (!CAM) return;
@@ -96,14 +127,18 @@ export default function MapDeclutterPreview() {
     (Number(task.longitude) - player.longitude) * 111320 * 0.879) <= 60;
 
   // Timed finds right among the islands and haunts, like tonight's screenshot.
-  const finds = useMemo(() => [
-    { id: 'coin:1', kind: 'coin' as const, ...offsetMeters(player, 18, 40) },
-    { id: 'coin:2', kind: 'coin' as const, ...offsetMeters(player, -30, 75) },
-    { id: 'key:1', kind: 'key' as const, ...offsetMeters(player, -12, 52) },
-    { id: 'coin:3', kind: 'coin' as const, ...offsetMeters(player, 45, -20) },
-    ...(STRESS ? Array.from({ length: 30 }, (_, i) => ({ id: `coin:${10 + i}`, kind: 'coin' as const,
-      ...offsetMeters(player, ((i * 71) % 400) - 200, ((i * 113) % 500) - 150) })) : []),
-  ], []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Finds live 60 to 90 s and new ones spawn every few seconds, like a park day (the soak's
+  // spawn and expire churn through the fixed slot pools). Stress keeps ~34 alive at once.
+  const [finds, setFinds] = useState<PreviewFind[]>(() => seedFinds(now));
+  useEffect(() => {
+    const timer = setInterval(() => setFinds(current => cycleFinds(current, Date.now())), 3000);
+    return () => clearInterval(timer);
+  }, []);
+  const liveFinds = finds.filter(find => find.until > Date.now());
+  const coinSlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'coin'), find => find.id, SLOTS.coins);
+  const keySlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'key'), find => find.id, SLOTS.keys);
+  const rideSlots = useMarkerSlots(tasks, task => String(task.id), SLOTS.rides);
+  const findsKey = liveFinds.map(find => find.id).join('|');
 
   const items = useMemo(() => buildParkLayout({
     nightMode: !day,
@@ -115,13 +150,13 @@ export default function MapDeclutterPreview() {
           limitedText: task.limited?.active ? 'Limited · leaves Oct 31' : null, expiresAt: task.active_to ? Date.parse(task.active_to) : null,
           near: near(task), now, closed }) };
     }),
-    finds: finds.map(find => ({ id: find.id, latitude: find.latitude, longitude: find.longitude, kind: find.kind })),
+    finds: liveFinds.map(find => ({ id: find.id, latitude: find.latitude, longitude: find.longitude, kind: find.kind })),
     haunts: day ? [] : tonight.spots.filter(spot => spot.kind === 'haunt').map(spot => ({ key: spot.key, latitude: spot.latitude, longitude: spot.longitude,
       closed: spot.status === 'DOWN' || spot.status === 'CLOSED' })),
     reefs: day ? [] : tonight.spots.filter(spot => spot.kind === 'reef').map(spot => ({ key: spot.key, latitude: spot.latitude, longitude: spot.longitude, radius: spot.radius })),
     fixed: !day && tonight.encounter ? [{ id: 'encounter', latitude: tonight.encounter.latitude, longitude: tonight.encounter.longitude,
       kind: 'encounter' as const, radius: tonight.encounter.radius }] : [],
-  }), [tasks, live, adventureId, finds, tonight, now, day]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [tasks, live, adventureId, findsKey, tonight, now, day]); // eslint-disable-line react-hooks/exhaustive-deps
   const insets = useMemo(() => parkMapInsets({ hudBottom: HUD_BOTTOM, left: null, right: null,
     bottomLeft: bottomLeftColumnHeight(0), bottomRight: BOTTOM_RIGHT_COLUMN }), []);
   const declutter = useMemo(() => before ? null : { store, items, insets }, [before, store, items, insets]);
@@ -155,15 +190,17 @@ export default function MapDeclutterPreview() {
         ) : <MapStatusStack entries={entries} defaultOpen={SCENE === 'expanded'} />}
         <Map fright={fright} declutter={declutter} controlsTop={HUD_BOTTOM + 76} onPress={noop} focusCoordinate={camFocus}
           sunOverride={day ? 50 : -16}>
-          {tasks.map(task => (
-            <TaskMarker key={task.id} task={task} isSelected={false} adventure={task.id === adventureId} near={near(task)}
-              live={day ? undefined : live.get(task.id)} onPress={noop} aliveRank={0} />
-          ))}
-          {finds.map(find => (
-            <FindMarker key={find.id} id={find.id} latitude={find.latitude} longitude={find.longitude}>
-              {tag => find.kind === 'key'
-                ? <Key tag={tag} onExpire={noop} model={{ id: 1, active_to: new Date(now + 6 * 60_000 + 28_000).toISOString() } as never} />
-                : <Coin tag={tag} onExpire={noop} coin={{ id: Number(find.id.slice(5)), active_to: new Date(now + 2 * 60_000 + 22_000).toISOString() } as never} />}
+          {/* The same fixed pools as ExploreScreen: slots mount once, finds come and go inside them. */}
+          {rideSlots.map((task, slot) => task
+            ? <TaskMarker key={`ride-${slot}`} task={task} isSelected={false} adventure={task.id === adventureId} near={near(task)}
+                live={day ? undefined : live.get(task.id)} onPress={noop} aliveRank={0} />
+            : <TaskMarker key={`ride-${slot}`} task={PARKED_RIDE} parked isSelected={false} onPress={noop} />)}
+          {[...coinSlots, ...keySlots].map((find, slot) => (
+            <FindMarker key={`find-${slot}`} id={find?.id ?? ''} hidden={!find}
+              latitude={find?.latitude ?? PARKED.latitude} longitude={find?.longitude ?? PARKED.longitude}>
+              {tag => !find ? <View style={{ width: 1, height: 1 }} /> : find.kind === 'key'
+                ? <Key key={find.id} tag={tag} onExpire={noop} model={{ id: find.n, active_to: new Date(find.until).toISOString() } as never} />
+                : <Coin key={find.id} tag={tag} onExpire={noop} coin={{ id: find.n, active_to: new Date(find.until).toISOString() } as never} />}
             </FindMarker>
           ))}
         </Map>

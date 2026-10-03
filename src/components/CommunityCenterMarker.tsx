@@ -1,22 +1,23 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { Marker } from './map/Marker';
+import { Marker, PARKED } from './map/Marker';
 import { GameIcon } from '../ui';
 
 const CommunityCenterIcon = require('../assets/community-center.png');
 
 interface Props {
+  /** Null: no center in this park (mounted, parked, draws nothing). */
   center: {
     id: number;
     name: string;
     latitude: number;
     longitude: number;
     available_gifts: number;
-  };
+  } | null;
   onPress: () => void;
 }
 
 export default function CommunityCenterMarker({ center, onPress }: Props) {
-  const hasGifts = center.available_gifts > 0;
+  const hasGifts = (center?.available_gifts ?? 0) > 0;
 
   // NOTE: All animations REMOVED. react-native-maps Marker children must have
   // a completely static layout — any Animated transform (translateY, scale, rotate)
@@ -26,10 +27,8 @@ export default function CommunityCenterMarker({ center, onPress }: Props) {
 
   return (
     <Marker
-      coordinate={{
-        latitude: center.latitude,
-        longitude: center.longitude,
-      }}
+      coordinate={center ?? PARKED}
+      hidden={!center}
       onPress={onPress}
       tracksViewChanges={false}
       anchor={{ x: 0.5, y: 0.5 }}
@@ -39,7 +38,7 @@ export default function CommunityCenterMarker({ center, onPress }: Props) {
         {hasGifts && (
           <View style={styles.badge}>
             <GameIcon name="gift" size={14} />
-            <Text style={styles.badgeText}>{center.available_gifts}</Text>
+            <Text style={styles.badgeText}>{center?.available_gifts}</Text>
           </View>
         )}
         

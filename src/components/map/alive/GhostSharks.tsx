@@ -8,7 +8,8 @@ import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { BRAND } from '../../../ui';
-import { Marker } from '../Marker';
+import { Marker, PARKED } from '../Marker';
+import { useMarkerSlots } from '../markerSlots';
 import { hash01 } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
 import type { GhostShark } from './friendsNearby';
@@ -33,13 +34,21 @@ function Ghost({ ghost }: { readonly ghost: GhostShark }) {
   );
 }
 
+/** Ghost sharks on the map at most (ExploreScreen GHOST_CAP). */
+export const GHOST_SLOTS = 5;
+
+/** A fixed pool of slots: friends come and go without mounting MapView children mid-list. */
 export const GhostSharks = memo(function GhostSharks({ ghosts }: { readonly ghosts: readonly GhostShark[] }) {
-  return <>{ghosts.map(ghost => (
-    <Marker key={ghost.id} coordinate={ghost} anchor={{ x: 0.5, y: 0.7 }}><Ghost ghost={ghost} /></Marker>
+  const slots = useMarkerSlots(ghosts, ghost => String(ghost.id), GHOST_SLOTS);
+  return <>{slots.map((ghost, slot) => (
+    <Marker key={`ghost-${slot}`} hidden={!ghost} coordinate={ghost ?? PARKED} anchor={{ x: 0.5, y: 0.7 }}>
+      {ghost ? <Ghost key={ghost.id} ghost={ghost} /> : <View style={styles.parked} />}
+    </Marker>
   ))}</>;
 });
 
 const styles = StyleSheet.create({
+  parked: { width: 1, height: 1 },
   box: { width: 90, alignItems: 'center' },
   glow: { position: 'absolute', left: 4, right: 4, bottom: -2, height: 10, borderRadius: 10, backgroundColor: 'rgba(191,229,255,0.55)' },
   fin: { width: 34, height: 30, opacity: 0.75 },

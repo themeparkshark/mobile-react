@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { BackgroundLayer, Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -17,6 +17,7 @@ import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
+import { NIGHT_TINT, NIGHT_TINT_MAX } from './map/fright/FrightMapSources';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
@@ -46,6 +47,21 @@ const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
+/** The style's land colour (tpsMapStyle 'bg'). */
+const STYLE_BACKGROUND = '#c4e39a';
+/** b mixed into a at alpha t (hex or rgb() colours). */
+function mixHex(a: string, b: string, t: number): string {
+  const parse = (c: string): [number, number, number] => {
+    const rgb = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c);
+    if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+    const h = c.replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const [x, y] = [parse(a), parse(b)];
+  const k = Math.max(0, Math.min(1, t));
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** One empty collection (a stable prop: always-mounted sources show nothing without re-sending a shape). */
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
@@ -125,6 +141,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const pinnedSun = sunOverride ?? (Number.isFinite(devSun) ? devSun : undefined);
   const sun = pinnedSun ?? (skyLat === null || skyLng === null ? 45 : Math.round(sunElevation(skyNow, skyLat, skyLng) * 2) / 2);
   const light = useMemo(() => lightForElevation(sun), [sun]);
+  const nightBackground = useMemo(() => mixHex(mixHex(STYLE_BACKGROUND, light.tint.color, light.tint.opacity), NIGHT_TINT, NIGHT_TINT_MAX),
+    [light.tint.color, light.tint.opacity]);
   const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
@@ -386,7 +404,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const frightOn = !!fright?.active;
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
-    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12 }];
+    // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
+    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
     if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
@@ -615,6 +634,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
             fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
         </ShapeSource>
+        {/* Where tiles have not drawn yet (a camera jump), the style background showed as a flash of day
+            map at night. While the night tint is on, the background wears the tinted colour. Always mounted. */}
+        <BackgroundLayer id="tps-night-bg" aboveLayerID="bg" style={{ backgroundColor: nightBackground,
+          backgroundOpacity: fright?.active ? 1 : 0 }} />
         {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
         <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
@@ -656,15 +679,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Sparkles where the shark walked: on the ground, under the islands. */}
         <SharkTrail latitude={location?.latitude ?? null} longitude={location?.longitude ?? null} />
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
-        {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
-            order, so it comes after the ride islands and is never hidden under one. */}
-        {/* Both shark copies stay mounted and swap by opacity: remounting on every
-            drag reloaded the outfit images and made the shark flash. */}
-        {location && (
-          <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
-            <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
-          </Marker>
-        )}
+        {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in order, so it
+            comes after the ride islands and is never hidden under one. It is mounted from the map's
+            first render (hidden until the first fix), like every other map child: with the screen's
+            markers in fixed pools too, no MapView child ever mounts or unmounts mid-list (MapLibre
+            insertReactSubview crash). Both shark copies stay mounted and swap by opacity. */}
+        <Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location} anchor={{ x: 0.5, y: 0.65 }}>
+          <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
+        </Marker>
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
