@@ -20,3 +20,15 @@ export function useDevAutoPress(step: string | readonly string[], press: () => v
     return () => clearTimeout(t);
   }, [hit, delayMs]);
 }
+
+/** Marks a dev-only stub (a fake spend). Auto-press hooks bound to spends fire only for marked stubs. */
+export const DEV_STUB = '__shareDevStub';
+
+export function markDevStub<T extends object>(fn: T): T {
+  if (__DEV__) Object.defineProperty(fn, DEV_STUB, { value: true });
+  return fn;
+}
+
+export function isDevStub(fn: unknown): boolean {
+  return __DEV__ && !!fn && typeof fn === 'function' && (fn as unknown as Record<string, unknown>)[DEV_STUB] === true;
+}

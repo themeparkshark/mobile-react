@@ -39,6 +39,19 @@ PLACES = [
     'Super Nintendo World', 'Nintendo', 'Pixar', 'Mickey', 'Minnie', 'Minion', 'Minions', 'Toy Story',
     'Jurassic Park', 'Jurassic World', 'Fantasyland', 'Tomorrowland', 'Frontierland', 'Adventureland',
     'Halloween Horror Nights', 'Horror Nights', 'HHN',
+    # other US parks and resorts
+    'Dollywood', 'Kings Island', 'Kings Dominion', 'Carowinds', 'Silver Dollar City', 'Hersheypark', 'Hershey Park', 'Knoebels',
+    'Kennywood', 'Holiday World', "Canada's Wonderland", 'Great Wolf Lodge', 'Discovery Cove', 'Aquatica', 'Typhoon Lagoon',
+    'Blizzard Beach', 'Worlds of Fun', 'Valleyfair', "Michigan's Adventure", 'Schlitterbahn', 'Kalahari', 'Gilroy Gardens',
+    'Disneyland Paris', 'Tokyo Disney', 'Tokyo DisneySea', 'Hong Kong Disneyland', 'Shanghai Disney', 'Europa-Park', 'Efteling',
+    'Universal Studios Japan', 'Universal Beijing', 'Islands of Adventure', 'Fun Spot', 'ICON Park', 'Gardaland',
+    # US states (abbreviations live in usCities.ts STATE_CODES, matched case-sensitively)
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii',
+    'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
+    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York',
+    'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming', 'SoCal', 'NorCal',
+    'So Cal', 'Central Florida', 'Southern California', 'Bay Area',
     'Galaxys Edge', 'Galaxy Edge', 'Tron Lightcycle', 'Mine-Train', 'Mine Train', 'Pandora',
     'Kissimmee', 'Knotts Berry Farm', "Knott's", 'Knotts', 'Lake Buena Vista',
     # characters and rides the seeds don't spell out (panel r2-fasttrack)
@@ -78,14 +91,43 @@ if len(sys.argv) > 2:
         if single and name.lower() in words and int(r[14] or 0) < 500000:
             continue
         cities.add(name)
-    cities |= {'Lakeland', 'Davenport', 'Kissimmee', 'Clermont', 'Ocoee', 'Sanford', 'Buena Park', 'Garden Grove', 'Fullerton'}
+    cities |= {'Lakeland', 'Davenport', 'Kissimmee', 'Clermont', 'Ocoee', 'Sanford', 'Buena Park', 'Garden Grove', 'Fullerton',
+               # resort towns and districts under 15k people next to the parks
+               'Celebration', 'Windermere', 'Dr. Phillips', 'Dr Phillips', 'Doctor Phillips', 'Four Corners', 'ChampionsGate',
+               'Champions Gate', 'Reunion', 'Bay Lake', 'Universal City', 'Burbank', 'Glendale', 'Pigeon Forge', 'Gatlinburg',
+               'Sevierville', 'Branson', 'Sandusky', 'Mason', 'Valencia', 'Carlsbad', 'Williamsburg', 'Hershey'}
+    # Abbreviated and spelled-out Saint/Fort/Mount forms ("St. Petersburg", "Ft Lauderdale", "Saint Pete").
+    for name in list(cities):
+        for a, alts in (('St. ', ('Saint ', 'St ')), ('Saint ', ('St. ', 'St ')), ('Fort ', ('Ft. ', 'Ft ')), ('Mount ', ('Mt. ', 'Mt '))):
+            if name.startswith(a):
+                for b in alts:
+                    cities.add(b + name[len(a):])
+    cities |= {'St. Pete', 'St Pete', 'Saint Pete'}
 city_list = sorted(cities, key=lambda s: (-len(s), s.lower()))
-(pathlib.Path(__file__).resolve().parents[2] / 'src/share/usCities.ts').write_text(
-    '/** US cities (GeoNames cities15000, filtered: see tools/share-studio/build-place-names.py). Never on a card. Do not edit by hand. */\n'
-    'export const US_CITIES: readonly string[] = ' + json.dumps(city_list, ensure_ascii=False) + ';\n')
+import re as _re
+# Catalog names a city/town word would eat ("Giant Celebration Cupcake", "Hollywood Pin"): kept whole.
+root = pathlib.Path(__file__).resolve().parents[2]
+fixture = json.loads((root / 'tools/tests/fixtures/share-catalog-names.json').read_text())
+catalog = sorted({n for k, v in fixture.items() if k != 'note' for n in v})
+city_rx = _re.compile(r'(^|[^A-Za-z0-9])(' + '|'.join(_re.escape(c) for c in city_list) + r')(?=$|[^A-Za-z0-9])', _re.I) if city_list else None
+safe = [n for n in catalog if city_rx and city_rx.search(n)]
+STATE_CODES = ['AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'IA', 'ID', 'IL', 'KS', 'KY', 'LA', 'MA', 'MD', 'MI', 'MN', 'MO',
+               'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ', 'NM', 'NV', 'NY', 'NYC', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT',
+               'WA', 'WI', 'WV', 'WY', 'DC', 'L.A.', 'N.Y.', 'D.C.']
+(root / 'src/share/usCities.ts').write_text(
+    '/** US cities and towns (GeoNames cities15000, filtered, plus resort towns: see tools/share-studio/build-place-names.py). Never on a card. Do not edit by hand. */\n'
+    'export const US_CITIES: readonly string[] = ' + json.dumps(city_list, ensure_ascii=False) + ';\n\n'
+    '/** State and city abbreviations, matched case-sensitively (IN, OR, ME, OK, HI, OH are left out: they are words). */\n'
+    'export const STATE_CODES: readonly string[] = ' + json.dumps(STATE_CODES) + ';\n\n'
+    '/** Catalog names that contain a town word and are kept whole (tools/tests/fixtures/share-catalog-names.json). */\n'
+    'export const CITY_SAFE_NAMES: readonly string[] = ' + json.dumps(safe, ensure_ascii=False) + ';\n')
+print('city-safe catalog names:', safe)
 print(f'{len(city_list)} US cities')
 
 out = pathlib.Path(__file__).resolve().parents[2] / 'src/share/placeNames.ts'
+city_lower = {c.lower() for c in city_list}
+# A bare city lives in usCities.ts (matched with its North/Saint/Bay forms), not here.
+all_names = [n for n in all_names if n.lower() not in city_lower]
 body = ',\n'.join(f'  {json.dumps(n)}' for n in all_names)
 out.write_text(f'''/**
  * Park, resort, land, franchise and ride names that must never print on a flex

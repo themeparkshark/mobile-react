@@ -44,7 +44,7 @@ import OneTimeTip from './help/OneTimeTip';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
-import { useDevAutoPress } from '../share/devDrive';
+import { isDevStub, useDevAutoPress } from '../share/devDrive';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -185,7 +185,8 @@ export default function CoinLevelingModal({
   // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
   // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
   const levelUpPress = useRef<() => void>(() => undefined);
-  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
+  // It only ever presses Level Up when the spend is a marked dev stub (ShareModalEvidenceScreen).
+  useDevAutoPress(visible && isDevStub(onLevelUp) ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
 
   if (!rideCoin) return null;
 

@@ -1,10 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
+import { warmFlex } from '../share/store';
 import { parkDayFlexPayload } from '../share/parkDay';
 import * as RootNavigation from '../RootNavigation';
 
@@ -24,6 +25,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // The flex card (Share Studio): only coin counts and coin art cross over (parkDayFlexPayload).
+  // Decode the Park Day card art while the recap is on screen, so the share sheet opens with it drawn.
+  useEffect(() => { warmFlex('park_day'); }, []);
   const shareDay = () => {
     if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
   };

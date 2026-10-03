@@ -389,12 +389,8 @@ test('cities, lowercase areas and leftover region numbers never print; catalog n
     assert.equal(copy.cleanName(t), '', t);
   assert.equal(copy.cleanName('Region 5 Champ'), 'Champ');
   assert.equal(copy.cleanName('Orlando Hero'), 'Hero');
-  // The audit catalog lives outside the repo; resolve it from home so any worktree depth works, and skip when absent (CI).
-  const catalogPath = pathMod.join(require('node:os').homedir(), 'apps/tps-prime-time-audit/next-wave/home-hunt-v3/catalog.json');
-  if (fs.existsSync(catalogPath)) {
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    for (const name of [...catalog.items.map(i => i.name), ...catalog.sets.map(s => s.name)]) assert.equal(copy.cleanName(name), name, name);
-  }
+  const fixture = JSON.parse(fs.readFileSync(pathMod.join(__dirname, 'fixtures/share-catalog-names.json'), 'utf8'));
+  for (const name of [...fixture.home_hunt_items, ...fixture.home_hunt_sets, ...fixture.home_hunt_titles]) assert.equal(copy.cleanName(name), name, name);
   for (const city of ['Tampa', 'Phoenix', 'Winter Park']) {
     for (const sample of FLEX_SAMPLES) {
       const c = copy.flexCopy(sample.kind, poison(sample.payload, `${city} Legend`));
@@ -417,4 +413,39 @@ test('art is warmed per kind when a share-eligible screen or a share asks, never
 test('the coin sheet Share icon carries a word and the stamp payload must say whether its art has a shark', () => {
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
+});
+
+/* ---------------- r3-ship panel ---------------- */
+test('resort towns, states, other parks and Saint/Fort/Bay forms are removed whole, never as fragments', () => {
+  for (const t of ['Celebration', 'Windermere', 'Dr. Phillips', 'Ft Lauderdale', 'Fort Lauderdale', 'Florida', 'FL', 'NYC', 'SoCal',
+    'Dollywood', 'Kings Island', 'Saint Petersburg', 'St. Petersburg', 'St Pete', 'Tampa Bay', 'Lincoln Elementary', 'Pigeon Forge',
+    'North Orlando', 'Central Florida', 'Bay Area', 'Silver Dollar City'])
+    assert.equal(copy.cleanName(t), '', t);
+  assert.equal(copy.cleanName('Champ from Tampa Bay!'), 'Champ!');
+  assert.equal(copy.cleanName('Hollywood Studios Star'), 'Star');
+  for (const keep of ['me or you ok', 'Meet in the parade', "Saint Patrick's Hat", 'Beach Ball Pin', 'Star Hat'])
+    assert.equal(copy.cleanName(keep), keep, keep);
+});
+
+test('every catalog name survives, except wardrobe names that carry a park name (those are meant to go)', () => {
+  const fixture = JSON.parse(fs.readFileSync(pathMod.join(__dirname, 'fixtures/share-catalog-names.json'), 'utf8'));
+  for (const name of ['Giant Celebration Cupcake', '100 Castle Celebration Pin', 'Hollywood Pin', 'Golden Gate Pin']) assert.equal(copy.cleanName(name, 60), name);
+  const changed = fixture.wardrobe_items.filter(name => copy.cleanName(name, 60) !== name.replace(/\s+/g, ' ').trim());
+  for (const name of changed) assert.match(name, /\bLA\b|Magic Kingdom|Animal Kingdom|Epcot|EPCOT|Hollywood Studios|Disney|Universal|Minion|Jurassic|Hogwarts|Harry Potter|Star Wars|Marvel|Kong|Hulk|Pixar|Mickey|Minnie|Toy Story|Galaxy|Spider|Mario|Simpsons|Shrek|Avatar|Dumbo|Matterhorn|Tron|Transformers|Mummy|Florida|California|Texas|Hawaii|Washington|Haunted Mansion|Space Mountain|Pirates/i, `over-scrubbed catalog name: ${name}`);
+});
+
+test('the reveal flash follows Dim Flashing Lights; dev auto-press only drives a marked stub spend; Park Day art is warmed on the recap', () => {
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /if \(!isDimFlashingLightsEnabled\(\)\) flash\.value =/);
+  assert.match(host, /PREVIEW_HOLD_MS = 400/);
+  const sheet = fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8');
+  assert.match(sheet, /visible && isDevStub\(onLevelUp\) \? 'level_up' : 'level_up_off'/);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/screens/ShareModalEvidenceScreen.tsx'), 'utf8'), /onLevelUp=\{markDevStub\(/);
+  const drive = loadTs('src/share/devDrive.ts', { react: { useEffect() {}, useRef: v => ({ current: v }) } }, { __DEV__: true });
+  const stub = drive.markDevStub(async () => true);
+  assert.equal(drive.isDevStub(stub), true);
+  assert.equal(drive.isDevStub(async () => true), false, 'a real spend is never auto-pressed');
+  const release = loadTs('src/share/devDrive.ts', { react: { useEffect() {}, useRef: v => ({ current: v }) } }, { __DEV__: false });
+  assert.equal(release.isDevStub(release.markDevStub(async () => true)), false);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/screens/ParkDayRecapCard.tsx'), 'utf8'), /useEffect\(\(\) => \{ warmFlex\('park_day'\); \}, \[\]\)/);
 });
