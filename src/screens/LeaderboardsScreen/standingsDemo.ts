@@ -4,7 +4,7 @@
  * recordings need no taps. Never active outside __DEV__.
  */
 type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly type: 'scrollMe' } | { readonly type: 'park'; readonly parkId: number | null }
-  | { readonly type: 'dismiss' } | { readonly type: 'card' };
+  | { readonly type: 'dismiss' } | { readonly type: 'card' } | { readonly type: 'refresh' };
 
 const listeners = new Set<(event: DemoEvent) => void>();
 
@@ -25,10 +25,13 @@ const TOUR: readonly (readonly [number, DemoEvent])[] = [
   [29000, { type: 'card' }],
   [33000, { type: 'dismiss' }],
   [35000, { type: 'tab', index: 0 }],
+  // A second climb in the same session (the capture script adds rides meanwhile).
+  [42000, { type: 'refresh' }],
 ];
 
 export function startStandingsDemo(): () => void {
   if (!STANDINGS_DEMO_ON) return () => undefined;
+  console.log('standings-demo-start');
   const timers = TOUR.map(([at, event]) => setTimeout(() => listeners.forEach(listener => listener(event)), at));
   return () => timers.forEach(clearTimeout);
 }

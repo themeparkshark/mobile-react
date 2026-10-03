@@ -95,7 +95,7 @@ function rewardView(reducedMotion) {
   return runtime('src/components/PostWinRewardsModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: null } } },
     '../hooks/useReducedGameMotion': { default: () => reducedMotion },
-    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null },
+    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined },
   }, { visible: true, rideName: 'Forbidden Journey', coinTimesCollected: 1, coinsEarned: 10, xpEarned: 25, ridePartsEarned: 4, energyEarned: 40, onClose() {} });
 }
 test('reduced-motion reward summary settles immediately and leaves its primary action visible', () => {
@@ -110,7 +110,7 @@ test('the win footer sits on a solid plate so the tab bar compass never reads ov
   const rewards = runtime('src/components/PostWinRewardsModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: null } } },
     '../hooks/useReducedGameMotion': { default: () => true },
-    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null },
+    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined },
   }, { visible: true, rideName: 'Main Street, U.S.A.', taskCoinUrl: 'coin.png', coinTimesCollected: 1, coinsEarned: 10,
     xpEarned: 25, onViewCoin() {}, onClose() {} });
   rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
@@ -260,7 +260,7 @@ test('receipt navigation waits for native dismissal and fires only once', () => 
     '../context/AuthProvider': {AuthContext:{value:{player:null}}},
     '../hooks/useReducedGameMotion':{default:()=>true},
     '../RootNavigation':{navigate:(...args)=>navigated.push(args)},
-    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null },
+    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined },
   }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
     ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();

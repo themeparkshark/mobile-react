@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import { Image as ExpoImage } from 'expo-image';
 import { outfitLayerUrls } from '../../helpers/wardrobe';
 import type { InventoryType } from '../../models/inventory-type';
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
   type ListRenderItem, type ViewToken,
@@ -41,7 +41,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  chaseChip, chaseProgress, DIVIDER_HEIGHT, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  chaseChip, chaseProgress, DIVIDER_HEIGHT, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, weekDots, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -244,10 +244,12 @@ function GoalPips({ model }: { readonly model: StandingsBoardModel }) {
  * one line, and a bar that ends at the face of the player you are chasing
  * with a "+2" chip, so the goal reads without words.
  */
-function YouCard({ model, climb, climbId, passed, hidden, now, onPress, onGoRide, onClimbDone }: {
+function YouCard({ model, climb, climbId, passed, hidden, snapId, now, onPress, onGoRide, onClimbDone }: {
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
   /** Changes for every climb, so two climbs of the same size both play. */
   readonly climbId: number;
+  /** Changes when the board becomes the active tab: the card jumps to its state, no slide. */
+  readonly snapId: number;
   readonly hidden: boolean; readonly now: number; readonly onPress: () => void;
   /** NEW players: the card's button opens the map. */
   readonly onGoRide: () => void;
@@ -266,9 +268,12 @@ function YouCard({ model, climb, climbId, passed, hidden, now, onPress, onGoRide
   const urgent = model.board !== 'all_time' && weekDots(model.endsAt, now).urgency !== 'calm' && !!model.chase && model.chase.toPass <= 2;
 
   useEffect(() => { fill.value = reduced ? progress : withDelay250(progress); }, [progress, reduced, fill]);
-  useEffect(() => {
-    shown.value = reduced ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
-  }, [hidden, reduced, shown]);
+  const lastSnap = useRef(snapId);
+  useLayoutEffect(() => {
+    const snap = lastSnap.current !== snapId;
+    lastSnap.current = snapId;
+    shown.value = reduced || snap ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
+  }, [hidden, reduced, shown, snapId]);
 
   // The overtake: each player you passed slides by with a tick, then "Up N!" lands.
   useEffect(() => {
@@ -442,9 +447,11 @@ function Skeleton() {
   );
 }
 
-export default function StandingsBoardV2({ board, meId, onMissing }: {
+export default function StandingsBoardV2({ board, meId, onMissing, active = true }: {
   readonly board: StandingsBoardKey;
   readonly meId: number | null;
+  /** The chosen tab. Hidden boards stay mounted but stay quiet (no climb, no cards). */
+  readonly active?: boolean;
   /** The server has no v2 endpoint: show the legacy screen. */
   readonly onMissing: () => void;
 }) {
@@ -502,7 +509,11 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const react = useCallback(async (next: StandingsBoardModel) => {
+    // A hidden board saves its moments for when the kid opens it.
+    if (!activeRef.current) return;
     const seen = await readSeenRank(meId, next);
     const up = rankClimb(seen, next.me?.rank);
     writeSeenRank(meId, next);
@@ -560,6 +571,12 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => { load(false); }, [load]);
+  // Returning to this tab: refresh if stale and play any moment saved while hidden.
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (active && !wasActive.current) loadRef.current(false);
+    wasActive.current = active;
+  }, [active]);
   useEffect(() => { const t = setTimeout(() => { entered.current = true; }, 900); return () => clearTimeout(t); }, []);
 
   const items = useMemo(() => (model ? listItems(model) : []), [model]);
@@ -599,10 +616,12 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const scrollRef = useRef(scrollToMe);
   scrollRef.current = scrollToMe;
   useEffect(() => onStandingsDemo(event => {
+    if (!activeRef.current) return;
     if (event.type === 'scrollMe') scrollRef.current();
     if (event.type === 'park' && board === 'all_time') { chooseAllTimePark(event.parkId); setParkId(event.parkId); }
     if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
     if (event.type === 'card') setCard(cardRef.current);
+    if (event.type === 'refresh' && board === 'week') loadRef.current(true);
   }), [board]);
 
   const onScroll = useAnimatedScrollHandler(event => { scrollY.value = event.contentOffset.y; });
@@ -610,9 +629,26 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
   });
   const viewability = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  // Your row's visibility is tracked even while this tab is hidden, and applied when it shows.
+  const myRowSeen = useRef(false);
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    setMyRowVisible(viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe)));
+    myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
+    if (activeRef.current) setMyRowVisible(myRowSeen.current);
   }).current;
+  // Becoming the active tab: wake the list and work out from geometry whether your
+  // row is on screen, so the You card never duplicates a visible row.
+  const viewport = useRef(0);
+  const [snapId, setSnapId] = useState(0);
+  useLayoutEffect(() => {
+    if (!active) return;
+    setSnapId(id => id + 1);
+    list.current?.recordInteraction();
+    const index = items.findIndex(item => item.type === 'row' && item.row.isMe);
+    const onScreen = index >= 0 && rowOnScreen(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
+    myRowSeen.current = onScreen;
+    setMyRowVisible(onScreen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, items]);
 
   const renderItem: ListRenderItem<ListItem> = useCallback(({ item, index }) => {
     if (item.type === 'divider') return <Divider label={item.label} />;
@@ -698,12 +734,13 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     );
   }
 
-  const hideYou = !climbing && (myRowVisible || (meOnPodium && podiumOnScreen));
+  // A hidden tab keeps its card down, so activating it can never flash a duplicate of your row.
+  const hideYou = !active || (!climbing && (myRowVisible || (meOnPodium && podiumOnScreen)));
 
   return (
     <View style={{ flex: 1 }}>
       {strip}
-      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }}>
+      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => { viewport.current = event.nativeEvent.layout.height; }}>
         <Animated.FlatList
           ref={list as never}
           data={items as ListItem[]}
@@ -714,7 +751,9 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
             length: layouts[index]?.length ?? ROW_HEIGHT, offset: HEADER_HEIGHT + (layouts[index]?.offset ?? index * ROW_HEIGHT), index,
           })}
           initialNumToRender={10}
-          windowSize={9}
+          // A hidden tab keeps only what is near its viewport. (No clipped-subview
+          // removal: re-attaching on activation would paint a blank first frame.)
+          windowSize={active ? 9 : 3}
           maxToRenderPerBatch={10}
           onScroll={onScroll}
           scrollEventThrottle={16}
@@ -725,7 +764,7 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
         />
         <TopRibbon podium={podium} metric={model.metric} scrollY={scrollY} />
       </View>
-      <YouCard model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} now={now} onPress={scrollToMe}
+      <YouCard model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} onPress={scrollToMe}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); }} />
       <SharkCard row={card} metric={model.metric} board={board} onClose={() => setCard(null)} />
