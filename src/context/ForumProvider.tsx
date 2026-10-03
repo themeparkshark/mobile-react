@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { Image } from 'expo-image';
 import { useAsyncEffect } from 'rooks';
 import all from '../api/endpoints/reaction-types/all';
 import { CommentType } from '../models/comment-type';
@@ -54,6 +55,12 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
       // Reactions simply stay hidden until the next launch.
     }
   }, []);
+
+  // Warm the shark faces so a post never opens on blank reaction buttons.
+  useEffect(() => {
+    const urls = reactionTypes.map((type) => type.image_url).filter(Boolean);
+    if (urls.length) Image.prefetch(urls).catch(() => undefined);
+  }, [reactionTypes]);
 
   return (
     <ForumContext.Provider

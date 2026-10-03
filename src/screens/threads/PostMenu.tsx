@@ -27,6 +27,7 @@ export interface MenuTarget {
 }
 
 const REASONS: readonly { reason: ReportReason; label: string; icon: GameIconName }[] = [
+  { reason: 'asked_about_me', label: 'Asked about me / made me feel weird', icon: 'lock' },
   { reason: 'disrespectful', label: 'Mean or bullying', icon: 'swords' },
   { reason: 'swearing', label: 'Bad words', icon: 'close' },
   { reason: 'personal_info', label: 'Personal info', icon: 'lock' },
@@ -110,7 +111,14 @@ export default function PostMenu({
     if (!target) return;
     const item = target;
     close();
-    void run(item, () => report(item.kind, item.id, reason), 'reported', 'Thanks for telling us! A grown-up will check it.');
+    // "Asked about me": the server also blocks the poster for this kid, so they leave the screen too.
+    const weird = reason === 'asked_about_me';
+    void run(
+      item,
+      () => report(item.kind, item.id, reason),
+      weird && item.authorId ? 'blocked' : 'reported',
+      weird ? "Thanks for telling us. You won't see them again, and a grown-up will check." : 'Thanks for telling us! A grown-up will check it.',
+    );
   };
 
   return (

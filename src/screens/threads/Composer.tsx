@@ -14,6 +14,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
@@ -103,6 +104,14 @@ export default function Composer({
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: wiggle.value }] }));
   const scrollRef = useRef<ScrollView>(null);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When the keyboard lands (or changes height) while typing, bring the post card fully into view.
+  useEffect(() => {
+    if (keyboard > 0 && inputRef.current?.isFocused()) {
+      const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: !reduced }), 60);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [keyboard, reduced]);
   useEffect(() => () => { if (doneTimer.current) clearTimeout(doneTimer.current); }, []);
 
   // Load the saved draft (or the post being edited) each time the screen opens.
@@ -146,11 +155,13 @@ export default function Composer({
   const def = topicFor(topic);
   const left = POST_MAX - text.trim().length;
 
+  const compactTopics = keyboard > 0;
+
   const pickTopic = (key: TopicKey) => {
     playSound(TAP, { volume: 0.5, rate: 1.1 });
     setTopic((current) => (current === key ? null : key));
     setServerLine(null);
-    if (!text.trim()) setTimeout(() => inputRef.current?.focus(), 120);
+    if (!text.trim() && keyboard === 0) setTimeout(() => inputRef.current?.focus(), 120);
   };
 
   const close = async () => {
@@ -221,13 +232,38 @@ export default function Composer({
             />
           </View>
 
+          <LinearGradient
+            colors={['rgba(5,104,185,0.95)', 'rgba(5,104,185,0)']}
+            style={styles.headerFade}
+            pointerEvents="none"
+          />
           <ScrollView
             ref={scrollRef}
             contentContainerStyle={[styles.scroll, { paddingBottom: keyboard > 0 ? 16 : insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-            {!editing && (
+            {!editing && compactTopics ? (
+              // Keyboard up: the six tiles fold into one row of small chips so the card stays in view.
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.compactRow} accessibilityLabel="Topics">
+                {TOPICS.map((item) => {
+                  const on = topic === item.key;
+                  return (
+                    <PressScale
+                      key={item.key}
+                      onPress={() => pickTopic(item.key)}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.label}
+                      accessibilityState={{ selected: on }}
+                      style={[styles.badge, styles.compactChip, { backgroundColor: on ? item.chip : BRAND.white, borderColor: on ? item.color : '#bcd8f5' }]}
+                    >
+                      <Image source={topicArt(item.key)} style={{ width: 22, height: 22 }} contentFit="contain" />
+                      <Text style={styles.badgeText}>{item.label}</Text>
+                    </PressScale>
+                  );
+                })}
+              </ScrollView>
+            ) : !editing && (
               <>
                 <Text style={styles.step}>What's it about?</Text>
                 <View style={styles.topics} accessibilityRole="radiogroup">
@@ -327,7 +363,8 @@ export default function Composer({
             <Animated.View entering={FadeIn.duration(180)} style={[StyleSheet.absoluteFill, styles.doneScrim]} />
             <RewardBurst progress={burst} x={width / 2} y={height * 0.5} />
             <Animated.View entering={reduced ? FadeIn : ZoomIn.springify().damping(10)} style={[styles.doneWrap, { top: height * 0.5 - 110 }]}>
-              <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
+              <View style={styles.doneGlow} />
+            <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
               <View style={styles.doneRibbon}>
                 <Text style={styles.doneText}>{editing ? 'Saved!' : 'Posted!'}</Text>
               </View>
@@ -386,7 +423,11 @@ const styles = StyleSheet.create({
   kind: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
   left: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft },
   doneWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  doneScrim: { backgroundColor: 'rgba(5,52,110,0.62)' },
+  doneScrim: { backgroundColor: 'rgba(5,52,110,0.82)' },
+  doneGlow: { position: 'absolute', top: -30, width: 230, height: 230, borderRadius: 115, backgroundColor: 'rgba(255,207,59,0.35)', borderWidth: 8, borderColor: 'rgba(255,224,122,0.45)' },
+  headerFade: { position: 'absolute', left: 0, right: 0, top: 0, height: 22, zIndex: 2 },
+  compactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  compactChip: { marginTop: 0, minHeight: 40, paddingVertical: 4, paddingLeft: 6, paddingRight: 14, alignItems: 'center' },
   doneShark: { width: 170, height: 150 },
   doneRibbon: {
     marginTop: -14,

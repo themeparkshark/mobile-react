@@ -9,6 +9,7 @@ import { useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { acceptSocialRules, fetchSocialRules } from '../../api/endpoints/social';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 
@@ -16,9 +17,17 @@ const SHARK = require('../../../assets/images/screens/pin-collections/shark.png'
 
 export const rulesKey = (playerId?: number) => `social.rules.v1.${playerId ?? 'guest'}`;
 
+/** Promised on this phone, or on the server (a new phone does not ask again). */
 export async function hasPromised(playerId?: number): Promise<boolean> {
   try {
-    return (await AsyncStorage.getItem(rulesKey(playerId))) === 'yes';
+    if ((await AsyncStorage.getItem(rulesKey(playerId))) === 'yes') return true;
+  } catch {
+    // fall through to the server
+  }
+  try {
+    const at = await fetchSocialRules();
+    if (at) AsyncStorage.setItem(rulesKey(playerId), 'yes').catch(() => undefined);
+    return Boolean(at);
   } catch {
     return false;
   }
@@ -82,6 +91,7 @@ export default function RulesCard({
           onPress={() => {
             promised.current = true;
             AsyncStorage.setItem(rulesKey(playerId), 'yes').catch(() => undefined);
+            acceptSocialRules().catch(() => undefined);
             onCancel();
           }}
         />

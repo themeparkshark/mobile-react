@@ -13,14 +13,19 @@ const events = loadTs('src/screens/threads/socialEvents.ts');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('short kid posts are fine; blank, too long, personal info and links get a kid line', () => {
-  for (const ok of ['I love it', 'So cool!', 'Got 3 stamps today!', 'Space Mountain at 7 pm', 'meet @ the fountain', 'Rode 2 rides on Main Street']) {
+  for (const ok of ['I love it', 'So cool!', 'Got 3 stamps today!', 'Space Mountain at 7 pm', 'lol ig same', 'Rode 2 rides on Main Street']) {
     assert.equal(model.checkDraft(ok), null, ok);
   }
   assert.equal(model.checkDraft('   '), 'empty');
   assert.equal(model.checkDraft('x'.repeat(model.POST_MAX + 1)), 'too_long');
-  for (const pii of ['text me at 714 555 0199', 'call me 555-0199', 'I live at 12 Elm Street', 'my email is kid@gmail.com', 'add me on snap', 'follow @sharkfan99', 'Sharks meetup at the fountain', 'meet me at the carousel']) {
+  for (const pii of ['text me at 714 555 0199', 'call me 555-0199', 'I live at 12 Elm Street', 'my email is kid@gmail.com', 'add me on snap', 'follow @sharkfan99']) {
     assert.equal(model.checkDraft(pii), 'personal_info', pii);
   }
+  // Grooming has its own kid line (age, school, where you are, meeting up).
+  for (const groom of ['meet @ the fountain', 'Sharks meetup at the fountain', 'meet me at the carousel', 'how old r u']) {
+    assert.equal(model.checkDraft(groom), 'grooming', groom);
+  }
+  assert.match(model.DRAFT_LINES.grooming, /age, school, or where they are/);
   assert.equal(model.checkDraft('go to coolsite.com'), 'link');
   for (const line of Object.values(model.DRAFT_LINES)) assert.doesNotMatch(line, /—|field|characters/);
 });
@@ -178,4 +183,30 @@ test('a reply to a reply notifies the kid who was answered', () => {
   const screen = read('src/screens/ThreadScreen.tsx');
   assert.match(screen, /const answered = replyTo && replyTo\.parent_id \? replyTo\.id : null/);
   assert.match(read('src/api/endpoints/social/index.ts'), /reply_to_id: replyToId/);
+});
+
+test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
+  const crypto = require('node:crypto');
+  const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'd49ca859a55ff50e5ca0f1b6b317cd7614c8dc6e92503aec9e078d3205823cb8');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'bff8cdbce594558579375993091556409bc1a210735d9c600d4f22a2ed2b4ce1');
+});
+
+test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
+  const menu = read('src/screens/threads/PostMenu.tsx');
+  assert.match(menu, /reason: 'asked_about_me', label: 'Asked about me \/ made me feel weird'/);
+  assert.match(read('src/screens/threads/RulesCard.tsx'), /acceptSocialRules\(\)/);
+  assert.match(read('src/screens/threads/RulesCard.tsx'), /fetchSocialRules\(\)/);
+  assert.match(read('src/screens/threads/BlockedPlayersScreen.tsx'), /confirmGame\(\{\s*title: 'Unblock\?'/);
+  assert.match(read('src/context/ForumProvider.tsx'), /Image\.prefetch\(urls\)/);
+  const social = read('src/screens/SocialScreen.tsx');
+  assert.match(social, /Image\.prefetch\(urls\)/);
+  assert.match(social, /fresh=\{item\.id === glowId\}/);
+  assert.doesNotMatch(social, /setTimeout\(\(\) => setFreshId\(null\)/, 'the new post no longer drops under the pin after 4 s');
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /onLongPress=\{\(\) => onMenu\(comment\)\}/);
+  assert.match(screen, /hitSlop=\{14\}/);
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /const compactTopics = keyboard > 0/);
+  assert.match(composer, /styles\.headerFade/);
 });
