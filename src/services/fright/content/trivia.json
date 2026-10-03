@@ -181,13 +181,13 @@
     "choices": [
       "10",
       "25",
-      "35",
+      "36",
       "50"
     ],
     "correct_index": 2,
     "difficulty": "medium",
     "deck": "fright",
-    "fact": "The Deep Lantern deck holds exactly 35 Case Files.",
+    "fact": "The Deep Lantern deck holds 36 Case Files, one for every year from 1991 to 2026.",
     "source_label": "Fin-ister Nights lore",
     "source_url": null
   },

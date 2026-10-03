@@ -19,6 +19,7 @@ import { FRIGHT_SOUNDS, playFrightSfx } from '../../map/fright/frightAudio';
 import { NIGHT } from '../../../services/fright/theme';
 import { TUTORIAL_CARDS } from '../../../services/fright/tutorial';
 import { GameIcon } from '../../../ui';
+import ArtImage from '../ArtImage';
 import { NightButton } from '../ui';
 
 const FOG = require('../../map/fright/art/fog-near.webp');
@@ -30,8 +31,10 @@ const CARD_COLORS: readonly (readonly [string, string])[] = [
 
 export type FrightTutorialMode = 'intro' | 'welcome_back' | 'replay';
 
-export default function FrightTutorial({ mode, title, whatsNew, spooky = true, onDone }: {
+export default function FrightTutorial({ mode, title, whatsNew, spooky = true, hero = null, onDone }: {
   readonly mode: FrightTutorialMode;
+  /** Server tutorial hero (720x1080, top half empty for copy); null draws the gradient cards. */
+  readonly hero?: string | null;
   readonly title: string;
   readonly whatsNew?: readonly string[] | null;
   readonly spooky?: boolean;
@@ -97,7 +100,7 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, o
           </View>
         </Pressable>
       )}
-      {step === 'cards' && <Cards title={title} onDone={onDone} />}
+      {step === 'cards' && <Cards title={title} hero={hero} onDone={onDone} />}
       {step === 'welcome' && (
         <View style={styles.center}>
           <View style={[styles.card, { width: '86%' }]} accessible accessibilityLabel={`Welcome back to ${title}. ${(whatsNew ?? []).join('. ')}`}>
@@ -116,8 +119,9 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, o
   );
 }
 
-function Cards({ title, onDone }: { readonly title: string; readonly onDone: () => void }) {
-  const { width } = useWindowDimensions();
+function Cards({ title, hero, onDone }: { readonly title: string; readonly hero: string | null; readonly onDone: () => void }) {
+  const { width, height } = useWindowDimensions();
+  const heroHeight = Math.min((width - 48) * 1.5, height * 0.62);
   const [page, setPage] = useState(0);
   const scroll = useRef<ScrollView>(null);
   const cardWidth = width - 48;
@@ -135,11 +139,22 @@ function Cards({ title, onDone }: { readonly title: string; readonly onDone: () 
           <View key={card.key} style={{ width, alignItems: 'center' }}>
             <View style={[styles.card, { width: cardWidth }]} accessible
               accessibilityLabel={`Card ${index + 1} of ${TUTORIAL_CARDS.length}. ${card.title}. ${card.line}`}>
-              <LinearGradient colors={CARD_COLORS[index] as [string, string]} style={styles.cardFill}>
-                <View style={styles.halo}><GameIcon name={CARD_ICONS[index]} size={88} /></View>
-                <Text style={styles.cardTitle}>{card.title}</Text>
-                <Text style={styles.cardLine}>{card.line}</Text>
-              </LinearGradient>
+              {hero ? (
+                <View style={{ height: heroHeight }}>
+                  <ArtImage uri={hero} fit="cover" style={StyleSheet.absoluteFill}
+                    fallback={<LinearGradient colors={CARD_COLORS[index] as [string, string]} style={StyleSheet.absoluteFill} />} />
+                  <View style={styles.heroCopy}>
+                    <Text style={styles.cardTitle}>{card.title}</Text>
+                    <Text style={styles.cardLine}>{card.line}</Text>
+                  </View>
+                </View>
+              ) : (
+                <LinearGradient colors={CARD_COLORS[index] as [string, string]} style={styles.cardFill}>
+                  <View style={styles.halo}><GameIcon name={CARD_ICONS[index]} size={88} /></View>
+                  <Text style={styles.cardTitle}>{card.title}</Text>
+                  <Text style={styles.cardLine}>{card.line}</Text>
+                </LinearGradient>
+              )}
             </View>
           </View>
         ))}
@@ -170,6 +185,7 @@ const styles = StyleSheet.create({
   card: { marginVertical: 14, borderRadius: 30, overflow: 'hidden', borderWidth: 4, borderColor: NIGHT.white,
     shadowColor: NIGHT.ink, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
   cardFill: { minHeight: 380, alignItems: 'center', justifyContent: 'center', padding: 22 },
+  heroCopy: { height: '50%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   halo: { width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontFamily: 'Shark', fontSize: 34, color: NIGHT.white, textAlign: 'center', marginTop: 16,
     textShadowColor: 'rgba(30,24,56,0.5)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },

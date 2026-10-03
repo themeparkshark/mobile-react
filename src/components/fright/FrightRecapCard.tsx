@@ -10,6 +10,7 @@ import type { FrightRecap } from '../../api/endpoints/fright';
 import { marqueeModel } from '../../services/fright/marquee';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
+import ArtImage from './ArtImage';
 
 const BULBS = 11;
 
@@ -21,7 +22,11 @@ function BulbRow() {
   );
 }
 
-const FrightRecapCard = forwardRef<View, { readonly recap: FrightRecap }>(function FrightRecapCard({ recap }, ref) {
+const FrightRecapCard = forwardRef<View, {
+  readonly recap: FrightRecap;
+  /** Server marquee background (art.recap_bg); null keeps the drawn card. */
+  readonly background?: string | null;
+}>(function FrightRecapCard({ recap, background = null }, ref) {
   const m = marqueeModel(recap);
   const stats = [
     m.topHaunt ? `Your #1 tonight: ${m.topHaunt}` : null,
@@ -32,6 +37,7 @@ const FrightRecapCard = forwardRef<View, { readonly recap: FrightRecap }>(functi
   return (
     <View ref={ref} collapsable={false} style={styles.card} accessible
       accessibilityLabel={`${recap.card_title}. ${m.date}. ${m.headline} ${stats.join('. ')}`}>
+      <ArtImage uri={background} fit="cover" style={StyleSheet.absoluteFill} />
       <BulbRow />
       <View style={styles.body}>
         <Text style={styles.kicker}>{recap.card_title.toUpperCase()}</Text>

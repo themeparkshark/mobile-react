@@ -7,16 +7,18 @@
  * ambient clock, so it pauses with the map, the app and Reduce Motion.
  */
 import {
-  BlurMask, Canvas, Circle, Group, Image as SkImage, ImageShader, Mask, Path, RadialGradient, Rect, Skia, useImage, vec,
+  BlurMask, Canvas, Circle, Group, Image as SkImage, ImageShader, Mask, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType,
 } from '@shopify/react-native-skia';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  Easing, ReduceMotion, runOnJS, useDerivedValue, useFrameCallback, useSharedValue, withTiming,
+  Easing, ReduceMotion, runOnJS, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { CLOUDS_H, CLOUDS_W, FOG_TILE, FRIGHT_ART, NIGHT } from './frightArt';
+import { frightEvents } from './events';
+import { useFrightImage, useRemoteImage } from './useFrightImage';
 import { FRIGHT_SOUNDS, playFrightSfx, useFrightSoundBed } from './frightAudio';
 import { frameStats } from './frightBudget';
 import { distanceMeters, pointsPerMeter, validPoint } from './geo';
@@ -43,14 +45,21 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   const { alive, caps, visible, moving, effectsOn } = st;
   const { clock } = alive;
   const { heading } = useContext(HeadingContext);
-  const fogFar = useImage(FRIGHT_ART.fogFar);
-  const fogNear = useImage(FRIGHT_ART.fogNear);
-  const clouds = useImage(FRIGHT_ART.moonClouds);
+  const assets = input.tonight.assets ?? null;
+  const fogFar = useFrightImage(assets?.fog_night?.fog_far, FRIGHT_ART.fogFar);
+  const fogNear = useFrightImage(assets?.fog_night?.fog_near, FRIGHT_ART.fogNear);
+  const clouds = useFrightImage(assets?.ambient?.clouds?.file, FRIGHT_ART.moonClouds);
+  const moon = useRemoteImage(assets?.ambient?.moon?.file);
+  const boltAsset = assets?.ambient?.lightning ?? null;
+  const boltSheet = useRemoteImage(boltAsset?.file);
+  // MAP_FX_SPEC tiers: full far + near drifting, lite far only, calm one still far tile; clouds move in full only.
+  const full = st.tier === 'full';
+  const lite = st.tier === 'lite';
   const player = validPoint(input.player) ? input.player : null;
 
   // Blend: fog fades in over 4 s, steps toward each new intensity (the after-fade).
   const fog = useSharedValue(0);
-  const fogTarget = caps.frightFog > 0 ? visible : 0;
+  const fogTarget = caps.frightFog > 0 ? visible : visible * 0.7;
   useEffect(() => {
     fog.value = withTiming(fogTarget, { duration: 4000, reduceMotion: ReduceMotion.Never });
   }, [fogTarget, fog]);
@@ -84,14 +93,23 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   const farOpacity = useDerivedValue(() => 0.75 * fog.value);
   const nearOpacity = useDerivedValue(() => fog.value);
   const cloudX = useDerivedValue(() => ((clock.value * 3 + 120) % (width + CLOUDS_W)) - CLOUDS_W);
-  const moonX = Math.round(width * 0.2);
+  const moonX = Math.round(width * 0.66); // top right, clear of the map buttons
   const moonY = Math.round(height * 0.15);
 
   // Lightning: the flash rides the ambient clock; thunder follows 0.6 to 1.8 s later.
   const flashAt = useSharedValue(-1000);
   const flashStrength = useSharedValue(1);
-  const flash = useDerivedValue(() => flashLevel(clock.value - flashAt.value, flashStrength.value));
-  const bolt = useDerivedValue(() => Math.min(0.75, flash.value * 4.5));
+  const flash = useDerivedValue(() => flashLevel(clock.value - flashAt.value, flashStrength.value, lite));
+  const bolt = useDerivedValue(() => Math.min(0.85, flash.value * 4));
+  // The bolt sprite: 6 frames at 20 fps from the flash.
+  const boltFrames = boltAsset?.rows?.[0] ?? 6;
+  const boltFrame = useDerivedValue(() => Math.max(0, Math.min(boltFrames - 1, Math.floor((clock.value - flashAt.value) * 20))));
+  const boltShown = useDerivedValue<number>(() => {
+    const age = clock.value - flashAt.value;
+    return age >= 0 && age < boltFrames / 20 ? 1 : 0;
+  });
+  const boltRow = useSharedValue(0);
+  const boltX = useSharedValue(width * 0.6);
   const thunderOn = effectsOn && caps.frightBolts > 0 && moving && !st.showLive;
   const thunder = useRef<ThunderState | null>(null);
   useEffect(() => {
@@ -105,9 +123,15 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
       const { state, strike } = stepThunder(thunder.current, Date.now(), false);
       thunder.current = state;
       if (!strike) return;
-      flashStrength.value = strike.strength;
-      flashAt.value = clock.value;
-      timers.push(setTimeout(() => playThunder(0.32), strike.thunderDelayMs));
+      // A strike is an event: with 2 already on screen it waits 2 to 5 s (once).
+      const fire = () => {
+        flashStrength.value = strike.strength;
+        boltX.value = width * (0.15 + Math.random() * 0.7);
+        flashAt.value = clock.value;
+        timers.push(setTimeout(() => playThunder(0.32), strike.thunderDelayMs));
+      };
+      if (frightEvents.tryStart('bolt', Date.now(), 1500)) fire();
+      else timers.push(setTimeout(() => { if (frightEvents.tryStart('bolt', Date.now(), 1500)) fire(); }, 2000 + Math.random() * 3000));
     }, 2000);
     return () => { clearInterval(tick); timers.forEach(clearTimeout); };
   }, [thunderOn, clock, flashAt, flashStrength]);
@@ -151,15 +175,14 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   const diag = Math.hypot(width, height) / 2;
 
   if (visible <= 0 || width <= 0 || height <= 0) return null;
-  const showFog = caps.frightFog > 0;
   const fogLayers = (
     <Group>
-      {fogFar && caps.frightFog >= 3 && (
+      {fogFar && (
         <Rect x={0} y={0} width={width} height={height} opacity={farOpacity}>
           <ImageShader image={fogFar} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={farTransform} />
         </Rect>
       )}
-      {fogNear && (
+      {fogNear && full && (
         <Rect x={0} y={0} width={width} height={height} opacity={nearOpacity}>
           <ImageShader image={fogNear} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={nearTransform} />
         </Rect>
@@ -174,30 +197,38 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
           <Circle cx={moonX} cy={moonY} r={40} opacity={0.35}>
             <RadialGradient c={vec(moonX, moonY)} r={40} colors={[NIGHT.moon, `${NIGHT.moon}00`]} />
           </Circle>
-          <Circle cx={moonX} cy={moonY} r={18} color={NIGHT.moon} />
-          <Circle cx={moonX - 5} cy={moonY - 4} r={3.5} color="#F1DC92" />
-          <Circle cx={moonX + 6} cy={moonY + 5} r={2.5} color="#F1DC92" />
-          {clouds && showFog && (
+          {moon ? <SkImage image={moon} x={moonX - 24} y={moonY - 24} width={48} height={48} fit="contain" /> : (
+            <Group>
+              <Circle cx={moonX} cy={moonY} r={18} color={NIGHT.moon} />
+              <Circle cx={moonX - 5} cy={moonY - 4} r={3.5} color="#F1DC92" />
+              <Circle cx={moonX + 6} cy={moonY + 5} r={2.5} color="#F1DC92" />
+            </Group>
+          )}
+          {clouds && full && (
             <Group transform={[{ translateY: moonY - CLOUDS_H * 0.45 }]}>
               <SkImage image={clouds} x={cloudX} y={0} width={CLOUDS_W} height={CLOUDS_H} fit="fill" opacity={0.85} />
             </Group>
           )}
         </Group>
-        {showFog && (introOn ? (
+        {introOn ? (
           // Fog rolls in from the edges: the clear middle closes as the intro runs.
           <Mask mode="alpha" mask={
             <Rect x={0} y={0} width={width} height={height}>
               <RadialGradient c={vec(width / 2, height / 2)} r={diag} colors={['rgba(0,0,0,0)', 'rgba(0,0,0,1)']} positions={maskPositions} />
             </Rect>
           }>{fogLayers}</Mask>
-        ) : fogLayers)}
+        ) : fogLayers}
         {/* Lightning: a soft violet-white flash and a small bolt by the moon. */}
         {caps.frightBolts > 0 && (
           <Group>
             <Rect x={0} y={0} width={width} height={height} color={NIGHT.fogLight} opacity={flash} />
-            <Group transform={[{ translateX: moonX + 46 }, { translateY: moonY + 8 }]} opacity={bolt}>
-              <Path path={BOLT} color={NIGHT.moon}><BlurMask blur={2} style="solid" /></Path>
-            </Group>
+            {boltSheet && boltAsset?.frame
+              ? <BoltSprite image={boltSheet} fw={boltAsset.frame[0]} fh={boltAsset.frame[1]} frame={boltFrame} row={boltRow} x={boltX} shown={boltShown} />
+              : (
+                <Group transform={[{ translateX: moonX + 46 }, { translateY: moonY + 8 }]} opacity={bolt}>
+                  <Path path={BOLT} color={NIGHT.moon}><BlurMask blur={2} style="solid" /></Path>
+                </Group>
+              )}
           </Group>
         )}
       </Canvas>
@@ -205,6 +236,21 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
     </>
   );
 });
+
+/** The lightning sprite at its strike x in the top third (drawn at half pixel size). */
+function BoltSprite({ image, fw, fh, frame, row, x, shown }: {
+  image: SkImageType; fw: number; fh: number; frame: SharedValue<number>; row: SharedValue<number>; x: SharedValue<number>; shown: SharedValue<number>;
+}) {
+  const w = fw / 2;
+  const h = fh / 2;
+  const clip = useDerivedValue(() => Skia.XYWHRect(x.value - w / 2, 8, w, h));
+  const slide = useDerivedValue(() => [{ translateX: x.value - w / 2 - frame.value * w }, { translateY: 8 - row.value * h }]);
+  return (
+    <Group clip={clip} opacity={shown}>
+      <Group transform={slide}><SkImage image={image} x={0} y={0} width={image.width() / 2} height={image.height() / 2} fit="fill" /></Group>
+    </Group>
+  );
+}
 
 /**
  * Development only (EXPO_PUBLIC_FRIGHT_PROFILE=1): UI-thread frame intervals

@@ -3,13 +3,13 @@
  * for the profile's player. Latest card art (or a lantern glyph) plus
  * "{haunts_done} haunts". Tap opens the read-only Deep Lantern.
  */
-import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getFrightCards, type FrightCardSummary } from '../../api/endpoints/fright';
 import * as RootNavigation from '../../RootNavigation';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
+import ArtImage from './ArtImage';
 
 export default function FrightCardChip({ playerId, cards: given }: {
   /** The profile's player (omit for the signed-in player). */
@@ -31,8 +31,7 @@ export default function FrightCardChip({ playerId, cards: given }: {
       onPress={() => RootNavigation.navigate('FrightCard', { eventSlug: latest.event_slug, playerId: playerId ?? undefined })}
       style={({ pressed }) => [styles.chip, latest.ten_in_one && styles.gold, pressed && { opacity: 0.85 }]}>
       <View style={styles.icon}>
-        {latest.art.chip ? <Image source={{ uri: latest.art.chip }} style={{ width: 24, height: 24 }} contentFit="contain" />
-          : <GameIcon name="sparkle" size={20} />}
+        <ArtImage uri={latest.art.chip} style={{ width: 26, height: 26 }} fallback={<GameIcon name="sparkle" size={20} />} />
       </View>
       <Text style={styles.text}>{`${latest.haunts_done} haunt${latest.haunts_done === 1 ? '' : 's'}`}</Text>
     </Pressable>

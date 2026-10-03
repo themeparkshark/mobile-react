@@ -10,10 +10,11 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
-  enterFrightSpot, findFrightSpot, finishFrightSpot, markFrightRecapSeen, markFrightSeen, scoreFrightSpot,
+  enterFrightSpot, findFrightSpot, getFrightCards, finishFrightSpot, markFrightRecapSeen, markFrightSeen, scoreFrightSpot,
   type FrightActionResult, type FrightCaseFileDrop, type FrightReaction, type FrightRun, type FrightSpot,
 } from '../../api/endpoints/fright';
 import type { FrightNight } from '../../hooks/useFrightNight';
+import { artFromAssets, artFromCard, frightArt, rememberFrightArt, type FrightArtSet } from '../../services/fright/art';
 import { COPY } from '../../services/fright/copy';
 import { encounterLive, reefStep, toWireFix, type ReefHold } from '../../services/fright/finds';
 import type { FrightFixSample } from '../../services/fright/geo';
@@ -72,6 +73,8 @@ export interface FrightEngine {
   readonly openMarquee: (slug: string, nightOn: string) => void;
   readonly closeMarquee: () => void;
   readonly doneKeys: readonly string[];
+  /** Server card art learned so far (URLs may be null: draw fallbacks). */
+  readonly art: FrightArtSet;
   readonly myRankOf: (key: string) => number | null;
 }
 
@@ -120,6 +123,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const [recapOffer, setRecapOffer] = useState<{ slug: string; nightOn: string } | null>(null);
   const [marquee, setMarquee] = useState<{ slug: string; nightOn: string } | null>(null);
   const [tick, setTick] = useState(0);
+  const [art, setArt] = useState<FrightArtSet>(frightArt);
   const reefHold = useRef<ReefHold | null>(null);
   const finishing = useRef(false);
   const lastOpenCount = useRef(0);
@@ -223,6 +227,20 @@ export default function useFrightEngine(night: FrightNight, opts: {
   }, [event, now]);
 
   const enqueueCoach = useCallback((key: FrightCoachKey) => setCoach(state => coachEnqueue(state, key, seen)), [seen]);
+
+  // Card art: tonight's assets, plus the event pin (chip) from the player's cards, fetched once per event.
+  const artFetched = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tonight) return;
+    setArt(rememberFrightArt(artFromAssets(tonight.assets?.card)));
+    const slug = tonight.event?.slug;
+    if (!modeOn || !slug || artFetched.current === slug) return;
+    artFetched.current = slug;
+    void getFrightCards().then(result => {
+      const card = result?.cards.find(item => item.event_slug === slug);
+      if (card) setArt(rememberFrightArt(artFromCard(card.art)));
+    });
+  }, [tonight, modeOn]);
 
   /* ---------- Writes ---------- */
 
@@ -534,6 +552,6 @@ export default function useFrightEngine(night: FrightNight, opts: {
     recapOffer, dismissRecapOffer: () => setRecapOffer(null),
     marquee, openMarquee: (slug, on) => { setRecapOffer(null); setMarquee({ slug, nightOn: on }); if (event) markSeen('recap'); },
     closeMarquee: () => setMarquee(null),
-    doneKeys, myRankOf,
+    doneKeys, art, myRankOf,
   };
 }

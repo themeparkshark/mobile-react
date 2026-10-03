@@ -17,6 +17,7 @@ import { AppState } from 'react-native';
 import { getFrightTonight, type FrightActionResult, type FrightPhase, type FrightRun, type FrightSide,
   type FrightTonight }
   from '../api/endpoints/fright';
+import { artFromAssets, rememberFrightArt } from '../services/fright/art';
 import { clockJumped, clockOffset, monoNow, serverNow, type ClockBaseline } from '../services/fright/clock';
 import { FRIGHT_DEFAULTS, frightModeName } from '../services/fright/config';
 import { effectivePhase, frightPollMs, isModeOn, nextPhaseEdge } from '../services/fright/phase';
@@ -87,6 +88,7 @@ export default function useFrightNight(parkId: number | null, focused: boolean):
         setOffset(nextOffset);
       }
       baseline.current = { wall: Date.now(), mono: monoNow() };
+      rememberFrightArt(artFromAssets(result.tonight.assets?.card));
       setTonight(result.tonight.enabled && result.tonight.event ? result.tonight : null);
       setLeftEventPark(false);
     }).finally(() => { inflight.current = null; });

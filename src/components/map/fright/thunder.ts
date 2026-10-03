@@ -63,16 +63,20 @@ export function stepThunder(state: ThunderState, now: number, quiet: boolean): {
 }
 
 /**
- * The flash itself (UI thread): two quick soft pulses and a tail, peak 0.16
- * opacity. Never a strobe: one flash per strike, well under 3 per second.
+ * The screen flash (UI thread), MAP_FX_SPEC: up to 0.35 in 60 ms, back to
+ * 0.05 by 180 ms, a second blip to 0.22 for 60 ms, then out over 200 ms.
+ * Lite peaks at 0.2 with no second blip. One flash per strike, so well under
+ * 3 flashes a second.
  */
-export function flashLevel(ageS: number, strength: number): number {
+export function flashLevel(ageS: number, strength: number, lite = false): number {
   'worklet';
-  if (ageS < 0 || ageS > 0.9) return 0;
-  const pulse = (t: number, at: number, width: number) => {
-    const x = (t - at) / width;
-    return x < 0 || x > 1 ? 0 : Math.sin(x * Math.PI);
-  };
-  const v = Math.max(pulse(ageS, 0, 0.12), 0.6 * pulse(ageS, 0.2, 0.1), 0.25 * pulse(ageS, 0.3, 0.6));
-  return 0.16 * strength * v;
+  const ms = ageS * 1000;
+  if (ms < 0 || ms > 440) return 0;
+  const peak = lite ? 0.2 : 0.35;
+  let v = 0;
+  if (ms < 60) v = peak * (ms / 60);
+  else if (ms < 180) v = peak + (0.05 - peak) * ((ms - 60) / 120);
+  else if (ms < 240) v = lite ? 0.05 : 0.22;
+  else v = (lite ? 0.05 : 0.22) * (1 - (ms - 240) / 200);
+  return Math.max(0, v * strength);
 }

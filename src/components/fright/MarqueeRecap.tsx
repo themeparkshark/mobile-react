@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { getFrightRecap, type FrightRecap } from '../../api/endpoints/fright';
+import { frightArt } from '../../services/fright/art';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon, gameAlert } from '../../ui';
 import FrightRecapCard from './FrightRecapCard';
@@ -29,8 +30,10 @@ export async function shareRecapCard(view: View | null): Promise<void> {
   }
 }
 
-export function MarqueeBody({ eventSlug, nightOn, playerId, onClose }: {
+export function MarqueeBody({ eventSlug, nightOn, playerId, background, onClose }: {
   readonly eventSlug: string;
+  /** art.recap_bg; defaults to the art learned this session. */
+  readonly background?: string | null;
   readonly nightOn: string;
   readonly playerId?: number | null;
   readonly onClose: () => void;
@@ -55,7 +58,7 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, onClose }: {
         <GameIcon name="close" size={30} />
       </Pressable>
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 52 }}>
-        {recap ? <FrightRecapCard ref={card} recap={recap} />
+        {recap ? <FrightRecapCard ref={card} recap={recap} background={background ?? frightArt().recapBg} />
           : <Text style={styles.wait}>{failed ? 'The Lantern is loading. Hang tight.' : 'Lighting the marquee...'}</Text>}
         {recap && !playerId && (
           <NightButton label="Share my night" icon="camera" loading={sharing} style={{ marginTop: 14 }}

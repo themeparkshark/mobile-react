@@ -1,22 +1,23 @@
 /**
  * The Deep Lantern: one yearly card per event (CONTRACT 2). Ring of haunt
  * beads with re-swim counts (gold rim for Ten-in-One), pins, the Case Files
- * scroll ("17 of 35", cold cases), the Team tally, the Lantern level and the
+ * scroll ("17 of 36", cold cases), the Team tally, the Lantern level and the
  * recap history (reopens the Marquee). Read-only for friends via playerId.
  * Locked slots are silhouettes; "Back next fall" once the season has ended.
  * Easter eggs: tap the Lantern glass 3 times and Misty Mirror blinks back;
  * the 19th night glows extra bright.
  */
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFrightCard, type FrightCard, type FrightSlot } from '../../api/endpoints/fright';
+import { artFromCard, frameFor, pinImage, rememberFrightArt } from '../../services/fright/art';
 import { COPY } from '../../services/fright/copy';
 import { formatMinutes, nightDateLabel } from '../../services/fright/dates';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
+import ArtImage from './ArtImage';
 import { MarqueeBody } from './MarqueeRecap';
 
 export interface FrightCardParams {
@@ -35,8 +36,8 @@ function Bead({ slot, index, total, gold, ended }: { slot: FrightSlot; index: nu
       : `Locked haunt${ended ? `. ${COPY.backNextFall}` : ''}`}
       style={[styles.bead, { width: size, height: size, left: RING / 2 + r * Math.cos(angle) - size / 2, top: RING / 2 + r * Math.sin(angle) - size / 2 },
         slot.earned ? styles.beadLit : styles.beadLocked, slot.earned && gold && styles.beadGold]}>
-      {slot.earned && slot.badge ? <Image source={{ uri: slot.badge }} style={{ width: 30, height: 30 }} contentFit="contain" />
-        : <GameIcon name={slot.earned ? 'fin' : 'lock'} size={slot.earned ? 22 : 16} />}
+      {slot.earned ? <ArtImage uri={slot.badge} style={{ width: 30, height: 30 }} fallback={<GameIcon name="fin" size={22} />} />
+        : <GameIcon name="lock" size={16} />}
       {slot.runs > 1 && <Text style={styles.reswim}>{`x${slot.runs}`}</Text>}
     </View>
   );
@@ -59,7 +60,7 @@ export default function FrightCardScreen() {
     let current = true;
     void getFrightCard(params.eventSlug, params.playerId).then(next => {
       if (!current) return;
-      if (next) setCard(next); else setFailed(true);
+      if (next) { setCard(next); rememberFrightArt(artFromCard(next.art)); } else setFailed(true);
     });
     return () => { current = false; };
   }, [params.eventSlug, params.playerId]);
@@ -98,7 +99,8 @@ export default function FrightCardScreen() {
   const ended = card.status === 'ended';
   const haunts = card.slots.filter(slot => slot.kind === 'haunt');
   const others = card.slots.filter(slot => slot.kind !== 'haunt');
-  const pins = card.slots.filter(slot => slot.pin);
+  const pins = card.slots.filter(slot => slot.pin || slot.pin_art?.image || slot.pin_art?.locked);
+  const frame = card.art.frames?.[frameFor(card)] ?? null;
   const tallyTotal = card.tally.chaos + card.tally.control;
   const chaosShare = tallyTotal ? card.tally.chaos / tallyTotal : 0.5;
   const lanternProgress = card.lantern.next_at ? Math.min(1, card.lantern.parts / card.lantern.next_at) : 1;
@@ -110,18 +112,26 @@ export default function FrightCardScreen() {
         <View style={styles.headRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}><GameIcon name="back" size={34} /></Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title} accessibilityRole="header">{card.card_title}</Text>
+            {card.art.card ? (
+              <ArtImage uri={card.art.card} style={styles.headerArt} label={card.card_title}
+                fallback={<Text style={styles.title} accessibilityRole="header">{card.card_title}</Text>} />
+            ) : card.art.header ? (
+              <View style={styles.headerArt}>
+                <ArtImage uri={card.art.header} style={StyleSheet.absoluteFill} />
+                <Text style={[styles.title, styles.headerTitle]} accessibilityRole="header">{card.card_title}</Text>
+              </View>
+            ) : <Text style={styles.title} accessibilityRole="header">{card.card_title}</Text>}
             <Text style={styles.sub}>{`${card.park_name} · ${card.nights} night${card.nights === 1 ? '' : 's'}${friend ? ' · Friend\'s card' : ''}`}</Text>
           </View>
         </View>
 
         <View style={styles.ringWrap}>
-          <View style={[styles.ring, card.ten_in_one && styles.ringGold]}>
+          {frame && <ArtImage uri={frame} style={styles.frame} />}
+          <View style={[styles.ring, card.ten_in_one && styles.ringGold, frame ? styles.ringFramed : null]}>
             {haunts.map((slot, index) => <Bead key={slot.key} slot={slot} index={index} total={haunts.length} gold={card.ten_in_one} ended={ended} />)}
             <Pressable onPress={tapGlass} accessibilityRole="button" accessibilityLabel={`Deep Lantern, level ${card.lantern.level}`} style={styles.glass}>
               <Animated.View style={[styles.glassGlow, { opacity: brightNight ? glow : 0.55 }]} />
-              {card.art.card ? <Image source={{ uri: card.art.card }} style={{ width: 72, height: 72 }} contentFit="contain" />
-                : <GameIcon name="sparkle" size={52} />}
+              <ArtImage uri={card.art.chip} style={{ width: 70, height: 70 }} fallback={<GameIcon name="sparkle" size={52} />} />
               <Text style={styles.level}>{`Lv${card.lantern.level}`}</Text>
             </Pressable>
           </View>
@@ -171,23 +181,41 @@ export default function FrightCardScreen() {
         {pins.length > 0 && <Text style={styles.section}>{`Pins ${card.pins_earned} of ${card.pins_total}`}</Text>}
         <View style={styles.pins}>
           {pins.map(slot => (
-            <View key={slot.key} style={[styles.pin, !slot.pin?.earned_on && styles.pinLocked]}
-              accessibilityLabel={slot.pin?.earned_on ? slot.pin.name : 'Locked pin'}>
-              {slot.pin?.image ? <Image source={{ uri: slot.pin.image }} style={{ width: 48, height: 48, opacity: slot.pin.earned_on ? 1 : 0.2 }} contentFit="contain" />
-                : <GameIcon name={slot.pin?.earned_on ? 'pin' : 'lock'} size={28} />}
-            </View>
+            (() => {
+              const art = pinImage(slot);
+              return (
+                <View key={slot.key} style={[styles.pin, !art.earned && styles.pinLocked]}
+                  accessibilityLabel={art.earned ? slot.pin?.name ?? slot.name : 'Locked pin'}>
+                  <ArtImage uri={art.uri} style={{ width: 52, height: 52 }}
+                    fallback={<GameIcon name={art.earned ? 'pin' : 'lock'} size={28} />} />
+                </View>
+              );
+            })()
           ))}
         </View>
 
         <Text style={styles.section}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
           {card.case_files.map(file => (
-            <View key={file.key} style={[styles.file, !file.found && styles.fileLocked]}
+            <View key={file.key} style={[styles.file, !file.found && styles.fileLocked, file.found && file.image ? styles.fileArt : null]}
               accessibilityLabel={file.found ? `Case File ${file.number}. ${file.title}. ${file.body}` : `Case File ${file.number}, not found yet`}>
-              <Text style={styles.fileYear}>{`${file.number} · ${file.year_label}`}</Text>
-              <Text style={styles.fileTitle} numberOfLines={2}>{file.found ? file.title : '???'}</Text>
-              {file.found ? <Text style={styles.fileBody} numberOfLines={4}>{file.body}</Text>
-                : file.cold_case ? <Text style={styles.cold}>Cold Case</Text> : null}
+              {file.found && file.image ? (
+                <>
+                  {/* Card front art; its title plate is blank, so the title is overlaid. */}
+                  <ArtImage uri={file.image} fit="cover" style={StyleSheet.absoluteFill} />
+                  <View style={styles.filePlate}>
+                    <Text style={styles.fileTitle} numberOfLines={2}>{file.title}</Text>
+                    <Text style={styles.fileYear}>{file.year_label}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.fileYear}>{`${file.number} · ${file.year_label}`}</Text>
+                  <Text style={styles.fileTitle} numberOfLines={2}>{file.found ? file.title : '???'}</Text>
+                  {file.found ? <Text style={styles.fileBody} numberOfLines={4}>{file.body}</Text>
+                    : file.cold_case ? <Text style={styles.cold}>Cold Case</Text> : null}
+                </>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -242,6 +270,12 @@ const styles = StyleSheet.create({
   tally: { flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', borderWidth: 2, borderColor: NIGHT.dusk },
   tallyChaos: { backgroundColor: NIGHT.pumpkin },
   tallyControl: { backgroundColor: '#3f9fb0' },
+  headerArt: { height: 64, width: '100%', justifyContent: 'center' },
+  headerTitle: { textAlign: 'center' },
+  frame: { position: 'absolute', top: -18, width: RING + 36, height: RING + 36 },
+  ringFramed: { borderColor: 'transparent' },
+  filePlate: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4 },
+  fileArt: { minHeight: 220, justifyContent: 'flex-end', overflow: 'hidden' },
   slotRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.2)' },
   slotName: { fontFamily: 'Shark', fontSize: 15, color: NIGHT.white },
   pins: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

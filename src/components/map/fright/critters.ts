@@ -140,3 +140,35 @@ export function stepPops(state: PopState, reefs: readonly ReefCircle[], player: 
   }
   return { state: { inside, lastPop }, pops };
 }
+
+/* ── Sheet frames (server art) ────────────────────────────────────────── */
+
+export interface SheetPose {
+  /** Row: 0 idle, 1 lurk, 2 jump (the manifest's row order). */
+  readonly row: number;
+  readonly frame: number;
+}
+
+/**
+ * Which frame of a critter sheet plays at time t (MAP_FX_SPEC, Fright Reefs):
+ * idle by default; every 6 to 14 s a lurk for 1 or 2 loops (not in lite);
+ * a jump plays its row once from `jumpAge` 0, then cuts back to idle.
+ * `rows` are the row indexes [idle, lurk, jump] (-1 when a sheet lacks one).
+ */
+export function sheetPose(seed: number, t: number, frames: number, fps: number, rows: readonly number[],
+  lurks: boolean, jumpAge: number): SheetPose {
+  'worklet';
+  const idle = rows[0] >= 0 ? rows[0] : 0;
+  const loop = frames / fps;
+  if (rows[2] >= 0 && jumpAge >= 0 && jumpAge < loop) {
+    return { row: rows[2], frame: Math.min(frames - 1, Math.floor(jumpAge * fps)) };
+  }
+  const frame = Math.floor(t * fps + hash01(seed * 7 + 2) * frames) % frames;
+  if (lurks && rows[1] >= 0) {
+    const loops = hash01(seed * 7 + 3) < 0.5 ? 1 : 2;
+    const period = 6 + 8 * hash01(seed * 7 + 4) + loops * loop;
+    const c = (t + hash01(seed * 7 + 5) * period) % period;
+    if (c >= period - loops * loop) return { row: rows[1], frame };
+  }
+  return { row: idle, frame };
+}

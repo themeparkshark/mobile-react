@@ -5,13 +5,33 @@
  * as data: the live map always renders the server's spots.
  */
 import type { FrightSpot, FrightTonight } from '../../../../api/endpoints/fright/types';
+import { USF_FIXTURE_ASSETS } from './usfAssets';
 
 const haunt = (key: string, name: string, latitude: number, longitude: number, sort: number,
   extra: Partial<FrightSpot> = {}): FrightSpot => ({
   key, kind: 'haunt', name, blurb: '', latitude, longitude, radius: 60, walk_minutes: 5, status: 'OPERATING',
-  posted_minutes: 45, accepting: true, fan_rank: null, sort, art: null,
-  fx: { flicker: ['candle', 'neon', 'strobe-soft'][sort % 3], windows: 3 + (sort % 3) }, ...extra,
+  posted_minutes: 45, accepting: true, fan_rank: null, sort,
+  fx: { flicker: ['candle', 'neon', 'strobe-soft'][sort % 3], windows: 3 + (sort % 3), art: HAUNT_ART[key] ?? null },
+  art: { icon: iconFor(HAUNT_ART[key]), badge: null, pin: null }, ...extra,
 });
+
+/** Spot key to the manifest's haunt art slug (the server sends this as fx.art). */
+const HAUNT_ART: Record<string, string> = {
+  'usf26-tug-of-the-tides': 'h01-tug-of-the-tides',
+  'usf26-creaky-book': 'h05-cabin-creaky-book',
+  'usf26-flicker-light-town': 'h02-flicker-light-town',
+  'usf26-rock-legend': 'h06-rock-legend-encore',
+  'usf26-wild-zoo': 'h08-wild-zoo-after-dark',
+  'usf26-robot-city': 'h09-robot-city',
+  'usf26-farmhouse-ufo': 'h10-farmhouse-ufo',
+  'usf26-host-hammerhead': 'h07-host-hammerhead-matinee',
+  'usf26-juke-joint': 'h03-midnight-juke-joint',
+  'usf26-puzzle-box': 'h04-clockwork-puzzle-box',
+};
+
+function iconFor(slug: string | undefined): string | null {
+  return slug ? USF_FIXTURE_ASSETS.haunts?.[slug]?.icon?.['128'] ?? null : null;
+}
 
 const reef = (key: string, name: string, latitude: number, longitude: number, radius: number, sort: number,
   critter: string, props: string[]): FrightSpot => ({
@@ -56,5 +76,6 @@ export function usfFrightFixture(now: number, phase: FrightTonight['phase'] = 'l
       latitude: 28.4757, longitude: -81.4674, radius: 40, starts_at: iso(now - 60_000), ends_at: iso(now + 6 * 60_000), caught: false },
     me: null,
     config: null,
+    assets: USF_FIXTURE_ASSETS,
   };
 }

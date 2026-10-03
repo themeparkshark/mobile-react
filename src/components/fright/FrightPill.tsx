@@ -11,6 +11,7 @@ import { hauntCountText, paceText, paceVisible } from '../../services/fright/pac
 import { countdownTarget } from '../../services/fright/phase';
 import { NIGHT } from '../../services/fright/theme';
 import type { FrightNight } from '../../hooks/useFrightNight';
+import ArtImage from './ArtImage';
 import type { FrightEngine } from './useFrightEngine';
 
 export default function FrightPill({ night, engine, onHelp }: {
@@ -40,7 +41,9 @@ export default function FrightPill({ night, engine, onHelp }: {
     <View style={styles.row}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => engine.setSheetOpen(true)}
         style={({ pressed }) => [styles.pill, pressed && { opacity: 0.9 }]}>
-        <View style={styles.lantern}><GameIcon name="sparkle" size={18} /></View>
+        <View style={styles.lantern}>
+          <ArtImage uri={engine.art.chip} style={{ width: 30, height: 30 }} fallback={<GameIcon name="sparkle" size={18} />} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{title}  <Text style={styles.count}>{hauntCountText(done, haunts.length)}</Text></Text>
           <Text style={styles.sub} numberOfLines={1}>{sub}</Text>

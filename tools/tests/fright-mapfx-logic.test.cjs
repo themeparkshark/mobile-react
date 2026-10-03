@@ -49,12 +49,17 @@ test('thunder: quiet holds every strike, then resumes', () => {
   assert.ok(strikes.length > 0, 'resumes after');
 });
 
-test('thunder: the flash is soft and short', () => {
+test('thunder: the flash follows MAP_FX_SPEC (0.35 peak, a second blip, out by 440 ms); lite is softer', () => {
   let peak = 0;
   for (let t = -0.1; t < 1.2; t += 0.005) peak = Math.max(peak, thunder.flashLevel(t, 1));
-  assert.ok(peak > 0.1 && peak <= 0.16, `peak ${peak}`);
-  assert.equal(thunder.flashLevel(1, 1), 0);
+  assert.ok(peak > 0.3 && peak <= 0.35, `peak ${peak}`);
+  assert.ok(Math.abs(thunder.flashLevel(0.21, 1) - 0.22) < 1e-9, 'second blip');
+  assert.equal(thunder.flashLevel(0.45, 1), 0);
   assert.equal(thunder.flashLevel(-0.1, 1), 0);
+  let litePeak = 0;
+  for (let t = 0; t < 0.5; t += 0.005) litePeak = Math.max(litePeak, thunder.flashLevel(t, 1, true));
+  assert.ok(litePeak <= 0.2, `lite ${litePeak}`);
+  assert.ok(thunder.flashLevel(0.21, 1, true) < 0.1, 'lite has no second blip');
 });
 
 test('critters wander inside the reef, cycle idle/lurk/jump and are deterministic', () => {

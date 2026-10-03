@@ -31,7 +31,7 @@ export default function FrightLayer({ night, engine, top = 132 }: {
       <MarqueeRecap target={engine.marquee} onClose={engine.closeMarquee} />
       {engine.tutorial && night.modeOn && (
         <FrightTutorial mode={engine.tutorial} title={night.title} whatsNew={night.tonight?.event?.whats_new}
-          spooky={engine.spooky} onDone={engine.finishTutorial} />
+          spooky={engine.spooky} hero={engine.art.tutorial} onDone={engine.finishTutorial} />
       )}
     </>
   );

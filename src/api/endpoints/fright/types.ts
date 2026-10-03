@@ -23,6 +23,8 @@ export interface FrightFx {
   readonly props?: readonly string[] | null;
   /** Offset of the facade from the entrance point in metres (east, north). */
   readonly offset?: readonly [number, number] | null;
+  /** Haunts: the art slug, a key of `assets.haunts` (facade layers). */
+  readonly art?: string | null;
 }
 
 export interface FrightArt {
@@ -148,6 +150,65 @@ export interface FrightTonight {
   readonly encounter: FrightEncounter | null;
   readonly me: FrightMe | null;
   readonly config: FrightConfig | null;
+  /** Art manifest (art/MANIFEST.json with every path resolved to a URL). */
+  readonly assets?: FrightAssets | null;
+}
+
+/* ---- Art manifest (server-hosted; every path is a URL) ---- */
+
+/** A sprite sheet: horizontal frame strips, one row per animation, @2x pixels. */
+export interface FrightSheetAsset {
+  readonly sheet: string | null;
+  /** One still frame (calm, far zoom, loading). */
+  readonly static?: string | null;
+  /** Frame size in pixels [w, h]. */
+  readonly frame: readonly [number, number];
+  /** Row names, top to bottom ("idle", "lurk", "jump"; icons: "idle loop", "appear one-shot"...). */
+  readonly rows: readonly string[];
+  readonly frames_per_row?: number | null;
+  readonly fps?: number | null;
+}
+
+export interface FrightAmbientAsset {
+  readonly file: string | null;
+  readonly frame?: readonly [number, number] | null;
+  /** Frames in each row. */
+  readonly rows?: readonly number[] | null;
+  readonly fps?: number | string | null;
+}
+
+export interface FrightHauntLayers {
+  /** Every layer shares this frame size in pixels. */
+  readonly frame: readonly [number, number];
+  readonly base: string | null;
+  /** One frame per window, each lighting only its own window. */
+  readonly windows?: string | null;
+  readonly window_count?: number | null;
+  /** The passing ghost, a one-shot strip. */
+  readonly ghost?: string | null;
+  /** The door creak, 6 frames. */
+  readonly door?: string | null;
+}
+
+export interface FrightAssets {
+  readonly version?: number;
+  readonly critters?: Readonly<Record<string, FrightSheetAsset>> | null;
+  readonly icons?: Readonly<Record<string, FrightSheetAsset>> | null;
+  /** bat, eyes, clouds, moon, lightning, ground-mist, jack-o-lantern, lantern, bush, crow... */
+  readonly ambient?: Readonly<Record<string, FrightAmbientAsset>> | null;
+  readonly fog_night?: {
+    readonly tint_spec?: string | null;
+    readonly palette_sheet?: string | null;
+    readonly fog_far?: string | null;
+    readonly fog_near?: string | null;
+    readonly ground_mist?: string | null;
+  } | null;
+  /** File names ("recap-bg.webp") to URLs. */
+  readonly card?: Readonly<Record<string, string | null>> | null;
+  readonly haunts?: Readonly<Record<string, {
+    readonly icon?: Readonly<Record<string, string | null>> | null;
+    readonly layers?: FrightHauntLayers | null;
+  }>> | null;
 }
 
 export interface FrightReward {
@@ -184,6 +245,22 @@ export interface FrightActionResult {
 
 /* ---- Card (CONTRACT.md sections 1-3) ---- */
 
+export type FrightFrameKey = 'frame-gold' | 'frame-silver' | 'frame-glow' | 'frame-locked';
+
+/** Server-hosted card art. Any URL may be null: draw the fallback. */
+export interface FrightCardArt {
+  /** Header with the title painted in. */
+  readonly card: string | null;
+  /** The event pin (profile chip, map pill). */
+  readonly chip: string | null;
+  /** Blank header (overlay the title). */
+  readonly header?: string | null;
+  readonly recap_bg?: string | null;
+  /** 720x1080 tutorial hero, top half empty for copy. */
+  readonly tutorial?: string | null;
+  readonly frames?: Partial<Record<FrightFrameKey, string | null>> | null;
+}
+
 export interface FrightCardSummary {
   readonly event_slug: string;
   readonly year: number;
@@ -192,7 +269,7 @@ export interface FrightCardSummary {
   readonly title: string;
   readonly card_title: string;
   readonly lantern_star: string;
-  readonly art: { readonly card: string | null; readonly chip: string | null };
+  readonly art: FrightCardArt;
   readonly haunts_done: number;
   readonly haunts_total: number;
   readonly pins_earned: number;
@@ -219,6 +296,8 @@ export interface FrightSlot {
   readonly name: string;
   readonly blurb: string;
   readonly badge: string | null;
+  /** Pin art for the Deep Lantern: `image` when earned, `locked` silhouette otherwise. */
+  readonly pin_art?: { readonly image: string | null; readonly locked: string | null } | null;
   readonly pin: { readonly item_id: number; readonly name: string; readonly image: string | null;
     readonly earned_on: string | null; readonly night_on: string | null } | null;
   readonly earned: boolean;
@@ -241,6 +320,8 @@ export interface FrightCaseFile {
   readonly found: boolean;
   readonly found_on: string | null;
   readonly cold_case: boolean;
+  /** Card front art (null while locked). The title plate is blank: overlay the title. */
+  readonly image?: string | null;
 }
 
 export interface FrightCard extends FrightCardSummary {

@@ -17,6 +17,7 @@ import { quietMinutesLeft } from '../../services/fright/run';
 import { NIGHT } from '../../services/fright/theme';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { frightLinePlayRide } from './frightLinePlay';
+import ArtImage from './ArtImage';
 import { NightButton } from './ui';
 import type { FrightEngine } from './useFrightEngine';
 
@@ -77,7 +78,8 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
             return (
               <View key={spot.key} style={styles.row}>
                 <View style={[styles.bead, done && styles.beadLit]}>
-                  {done ? <GameIcon name="check" size={16} /> : <Text style={styles.beadText}>{spot.sort}</Text>}
+                  {done ? <GameIcon name="check" size={16} />
+                    : <ArtImage uri={spot.art?.icon} style={{ width: 28, height: 28 }} fallback={<Text style={styles.beadText}>{spot.sort}</Text>} />}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name} numberOfLines={2}>{spot.name}</Text>

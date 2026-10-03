@@ -18,6 +18,7 @@ import { seededRandom } from './random';
 export const FRIGHT_SOUNDS = {
   thunder: require('../../../../assets/sounds/fright/thunder-distant.mp3'),
   pop: require('../../../../assets/sounds/fright/critter-pop.mp3'),
+  door: require('../../../../assets/sounds/fright/door-creak.mp3'),
   raven: require('../../../../assets/sounds/fright/raven-call.mp3'),
   wind: require('../../../../assets/sounds/fright/wind-howl.mp3'),
   bed: require('../../../../assets/sounds/fright/eerie-atmosphere-loop.mp3'),
