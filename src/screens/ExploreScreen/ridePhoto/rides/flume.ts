@@ -1,7 +1,7 @@
 import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, vec, type SkCanvas } from '@shopify/react-native-skia';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
 import { drawGround, drawSeason, drawSky, paintExtras, drawFarProps } from './backdrop';
-import { FLUME_MAX_PITCH, FLUME_SHAPE } from './shapes';
+import { FLUME_MAX_PITCH, flumeShape } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
@@ -15,7 +15,6 @@ import { seeded } from './catalog';
  */
 
 // The flume's own silhouette lives in shapes.ts (tested): a shallow conveyor lift, a float trough, one chute, a pool.
-const SHAPE = FLUME_SHAPE;
 // The log waits on the float trough at least 24 pt inside the screen.
 const LIFT_TOP_X = 0.04, CREST_X = 0.31, BOTTOM_X = 0.7, FRAME_X = 0.73, STATION_X = 0.2;
 export const BOAT_SCALE = 0.3;
@@ -51,7 +50,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
   const { width, height, top, spec, variant, art } = ctx;
   const band = { top: Math.max(top + 60, height * 0.24), height: height * 0.66 };
   const frameX = (FRAME_X + (variant.frameShift - 0.6) * 0.03) * width;
-  const lut = buildLut(SHAPE, width, band, frameX, 200, FLUME_MAX_PITCH);
+  const lut = buildLut(flumeShape(Math.floor(seeded(variant.seed, 71) * 3)), width, band, frameX, 200, FLUME_MAX_PITCH);
   const uCrest = uAtX(lut, CREST_X * width), uBottom = uAtX(lut, BOTTOM_X * width);
   const progress = (t: number) => flumeProgress(t, uCrest, uBottom);
   const uFrame = uAtX(lut, lut.frameX);
@@ -74,7 +73,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
-    drawFarProps(canvas, crop, variant);
+    drawFarProps(canvas, crop, variant, lut);
     drawTrestle(canvas, lut, height, grade);
     const hedgeTop = drawGround(canvas, 'flume', width, height, variant, art);
     drawPool(canvas, pool, height, grade);

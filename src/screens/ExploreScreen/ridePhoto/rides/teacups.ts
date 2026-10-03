@@ -12,7 +12,12 @@ import { seeded } from './catalog';
  * camera. A slow, steady rotation instead of a drop; the same ms windows.
  */
 
-const CUPS = 3;
+/** Seeded per find: three or four cups, and one of three turntable palettes. */
+const PALETTES = [
+  { ink: '#6a3f8f', rim: '#b27ad6', a: '#ffe9f4', b: '#f7b6d8' },
+  { ink: '#2f7a6a', rim: '#6cc9b0', a: '#effff8', b: '#a9ead6' },
+  { ink: '#8a5a1f', rim: '#e8b04f', a: '#fff6e0', b: '#ffd98a' },
+];
 /** Orbit sweep per pass (radians) and spins per pass of the find's cup. */
 const SWEEP = Math.PI * 1.5;
 const SPINS = 2.2;
@@ -48,11 +53,13 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
   const sScale = 0.78 + 0.22 * Math.sin(st.orbit);
   const seat = { x: cx + rx * Math.cos(st.orbit), y: cy + ry * Math.sin(st.orbit) - cupH * sScale * (1 - SEAT_Y) };
 
+  const palette = Math.floor(seeded(variant.seed, 73) * 3);
+  const cups = seeded(variant.seed, 74) < 0.5 ? 3 : 4;
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
     drawFarProps(canvas, crop, variant);
     const hedgeTop = drawGround(canvas, 'teacups', width, height, variant, art);
-    drawTurntable(canvas, cx, cy, rx, ry, cupW, grade);
+    drawTurntable(canvas, cx, cy, rx, ry, cupW, grade, PALETTES[palette]);
     drawSeason(canvas, width, height, variant, hedgeTop, art);
   }, { width, height });
 
@@ -63,7 +70,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
   }
   const data: RideData = {
     cx, cy, rx, ry, cupW, cupH, rider: riderSize, frameT, grade, width, height, sky: variant.sky,
-    weather: variant.weather, photobomb: variant.photobomb, box, bulbs,
+    weather: variant.weather, photobomb: variant.photobomb, box, bulbs, cups,
   };
   return {
     kind: 'teacups', width, height, sky: variant.sky, variant, frameT, stationT, box, cam, crop, seat, riderSize,
@@ -129,8 +136,9 @@ export function paintTeacups(canvas: SkCanvas, s: PaintState, d: RideData, art: 
   const pose = cupPose(s.t, d.frameT as number);
   // Back to front: cups behind the hub, the teapot hub, cups in front.
   const order: number[] = [];
-  for (let i = 0; i < CUPS; i++) order.push(i);
-  const orbitOf = (i: number) => pose.orbit + (i * Math.PI * 2) / CUPS;
+  const cups = d.cups as number;
+  for (let i = 0; i < cups; i++) order.push(i);
+  const orbitOf = (i: number) => pose.orbit + (i * Math.PI * 2) / cups;
   order.sort((a, b) => Math.sin(orbitOf(a)) - Math.sin(orbitOf(b)));
   let hubDrawn = false;
   for (let k = 0; k < order.length; k++) {
@@ -182,15 +190,16 @@ export function paintTeacupBulbs(canvas: SkCanvas, s: PaintState, d: RideData, a
 }
 
 /** The turntable: a striped saucer top with a thick rim, in Alex's flat outlined style. */
-function drawTurntable(canvas: SkCanvas, cx: number, cy: number, rx: number, ry: number, cupW: number, grade: number[]) {
+function drawTurntable(canvas: SkCanvas, cx: number, cy: number, rx: number, ry: number, cupW: number, grade: number[],
+  colors: { ink: string; rim: string; a: string; b: string }) {
   const ox = rx + cupW * 0.55, oy = ry + cupW * 0.2;
   const filter = Skia.ColorFilter.MakeMatrix(grade);
   const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColorFilter(filter);
   const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(4);
-  ink.setColor(Skia.Color('#6a3f8f')); ink.setColorFilter(filter);
+  ink.setColor(Skia.Color(colors.ink)); ink.setColorFilter(filter);
   const rimH = cupW * 0.22;
   // Rim (side band).
-  fill.setColor(Skia.Color('#b27ad6'));
+  fill.setColor(Skia.Color(colors.rim));
   const rim = Skia.Path.Make();
   rim.addOval(Skia.XYWHRect(cx - ox, cy - oy + rimH, ox * 2, oy * 2));
   rim.addRect(Skia.XYWHRect(cx - ox, cy, ox * 2, rimH));
@@ -206,7 +215,7 @@ function drawTurntable(canvas: SkCanvas, cx: number, cy: number, rx: number, ry:
       wedge.lineTo(cx + ox * Math.cos(a), cy + oy * Math.sin(a));
     }
     wedge.close();
-    fill.setColor(Skia.Color(i % 2 ? '#ffe9f4' : '#f7b6d8'));
+    fill.setColor(Skia.Color(i % 2 ? colors.a : colors.b));
     canvas.drawPath(wedge, fill);
   }
   canvas.drawOval(Skia.XYWHRect(cx - ox, cy - oy, ox * 2, oy * 2), ink);

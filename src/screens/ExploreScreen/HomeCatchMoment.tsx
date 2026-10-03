@@ -249,7 +249,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // site); a common's fly plays it here. The pad springs in with the kick.
     if (!soundScheduled.current) catchSound('badge');
     soundScheduled.current = false;
-    if (badgeIn.value < 0.5) badgeIn.value = motion ? withSpring(1, { damping: 14, stiffness: 320 }) : withTiming(1, { duration: 1 });
+    // The banner springs in 120 ms after the kick, so the two never land in one frame.
+    if (badgeIn.value < 0.5) badgeIn.value = motion ? withDelay(120, withSpring(1, { damping: 14, stiffness: 320 })) : withTiming(1, { duration: 1 });
     catchHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
     badgeKick.value = motion ? withSequence(withTiming(1.22, { duration: 100 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
     ringPop.value = 0;

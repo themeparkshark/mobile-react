@@ -58,7 +58,15 @@ export function drawHedge(canvas: SkCanvas, width: number, height: number, varia
  * Returns the top of the ground line (for the season props).
  */
 export function drawGround(canvas: SkCanvas, kind: RideKind, width: number, height: number, variant: SceneVariant, art: SceneArt): number {
-  if (kind === 'coaster') return drawHedge(canvas, width, height, variant, art);
+  // One seeded foreground swap per ride: tulip beds by the coaster, a log pile by the flume, a hedge
+  // instead of the fence around the teacups.
+  const swap = seeded(variant.seed, 81) < 0.5;
+  if (kind === 'coaster') {
+    const top = drawHedge(canvas, width, height, variant, art);
+    if (swap) drawTulips(canvas, width, height, variant);
+    return top;
+  }
+  if (kind === 'teacups' && swap) return drawHedge(canvas, width, height, variant, art);
   const filter = Skia.ColorFilter.MakeMatrix(gradeMatrix(variant.sky, variant.golden));
   const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColorFilter(filter);
   const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(3);
@@ -86,6 +94,20 @@ export function drawGround(canvas: SkCanvas, kind: RideKind, width: number, heig
       canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x + (r(60 + i) - 0.5) * 8 - 3, groundTop + 6 - h - 4, 6, 14), 3, 3), fill);
       ink.setColor(Skia.Color('#5a3a1a')); ink.setStrokeWidth(1.6);
       canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x + (r(60 + i) - 0.5) * 8 - 3, groundTop + 6 - h - 4, 6, 14), 3, 3), ink);
+    }
+    if (swap) {
+      // A pile of cut logs (ring ends showing) instead of rocks.
+      for (let i = 0; i < 3; i++) {
+        const lx = width * (0.08 + 0.36 * i + r(90 + i) * 0.1), ly = height - 18 - (i % 2) * 8, lw = 44 + r(95 + i) * 18;
+        fill.setColor(Skia.Color('#b57a43'));
+        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(lx, ly - 14, lw, 16), 8, 8), fill);
+        ink.setColor(Skia.Color('#6e4321')); ink.setStrokeWidth(3);
+        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(lx, ly - 14, lw, 16), 8, 8), ink);
+        fill.setColor(Skia.Color('#e8c58f')); canvas.drawCircle(lx + lw - 8, ly - 6, 7, fill);
+        canvas.drawCircle(lx + lw - 8, ly - 6, 7, ink);
+        ink.setStrokeWidth(1.5); canvas.drawCircle(lx + lw - 8, ly - 6, 3.5, ink);
+      }
+      return groundTop;
     }
     // Rounded rocks.
     const rocks = 3 + Math.floor(r(33) * 3);
@@ -127,6 +149,27 @@ export function drawGround(canvas: SkCanvas, kind: RideKind, width: number, heig
     ink.setColor(Skia.Color('#6a4a3a')); ink.setStrokeWidth(1.8); canvas.drawPath(flag, ink);
   }
   return fenceTop;
+}
+
+/** A row of tulips in front of the hedges (the coaster's seeded dressing swap). */
+function drawTulips(canvas: SkCanvas, width: number, height: number, variant: SceneVariant) {
+  const filter = Skia.ColorFilter.MakeMatrix(gradeMatrix(variant.sky, variant.golden));
+  const stem = Skia.Paint(); stem.setAntiAlias(true); stem.setStyle(PaintStyle.Stroke); stem.setStrokeWidth(3);
+  stem.setColor(Skia.Color('#3d7a2a')); stem.setColorFilter(filter);
+  const petal = Skia.Paint(); petal.setAntiAlias(true); petal.setColorFilter(filter);
+  const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(2); ink.setColorFilter(filter);
+  const colors = ['#ff6f91', '#ffd84a', '#ff8a3d', '#b98cff'];
+  for (let i = 0; i < 9; i++) {
+    const x = (i + 0.5) * (width / 9) + (seeded(variant.seed, 100 + i) - 0.5) * 10, y = height - 10 - (i % 2) * 6;
+    canvas.drawLine(x, y, x, y - 18, stem);
+    const c = colors[(i + Math.floor(seeded(variant.seed, 99) * 4)) % 4];
+    petal.setColor(Skia.Color(c));
+    const cup = Skia.Path.Make();
+    cup.moveTo(x - 6, y - 26); cup.lineTo(x - 3, y - 20); cup.lineTo(x, y - 27); cup.lineTo(x + 3, y - 20); cup.lineTo(x + 6, y - 26);
+    cup.quadTo(x + 6, y - 15, x, y - 15); cup.quadTo(x - 6, y - 15, x - 6, y - 26); cup.close();
+    canvas.drawPath(cup, petal);
+    ink.setColor(Skia.Color('#7a2a3a')); canvas.drawPath(cup, ink);
+  }
 }
 
 /** Halloween pumpkins on the hedge line, holiday bulbs on a garland. Simple outlined shapes in Alex's style. */
@@ -234,18 +277,32 @@ export function paintExtras(canvas: SkCanvas, t: number, clock: number, frameT: 
  * A far-plane landmark in the upper third of the photo crop, low contrast so the park reads before the
  * ride: a castle spire, a ferris wheel or a balloon cluster (seeded). Night adds the moon inside the crop.
  */
-export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: number; h: number }, variant: SceneVariant): void {
+export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: number; h: number }, variant: SceneVariant,
+  track?: { xs: number[]; ys: number[] }): void {
   const r = (salt: number) => seeded(variant.seed, salt);
   const night = variant.sky === 'night', sunset = variant.sky === 'sunset';
-  const left = r(51) < 0.5;
-  const cx = crop.x + crop.w * (left ? 0.18 : 0.82), base = crop.y + crop.h * 0.36;
-  const tone = night ? '#24346a' : sunset ? '#b9a0c9' : '#a9cdec';
-  const ink = night ? '#1a2550' : sunset ? '#9580ad' : '#8bb6dd';
+  // How close the track runs to a point (the landmark and the moon never sit behind it).
+  const clearance = (x: number, y: number) => {
+    if (!track) return Infinity;
+    let best = Infinity;
+    for (let k = 0; k < track.xs.length; k += 2) best = Math.min(best, Math.hypot(track.xs[k] - x, track.ys[k] - y));
+    return best;
+  };
+  // The object sits at 15 to 25% of the photo's height, on the side the track leaves clearer.
+  const midY = crop.y + crop.h * 0.2;
+  const leftX = crop.x + crop.w * 0.2, rightX = crop.x + crop.w * 0.8;
+  let left = r(51) < 0.5;
+  const need = crop.w * 0.16;
+  if (clearance(left ? leftX : rightX, midY) < need && clearance(left ? rightX : leftX, midY) > clearance(left ? leftX : rightX, midY)) left = !left;
+  const cx = left ? leftX : rightX;
+  const s = crop.h * 0.06;
+  const base = midY + s * 1.15;
+  const tone = night ? '#2c3f7c' : sunset ? '#a88bc0' : '#8fbfe6';
+  const ink = night ? '#18224a' : sunset ? '#7e66a0' : '#5f93c4';
   const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColor(Skia.Color(tone));
   const line = Skia.Paint(); line.setAntiAlias(true); line.setStyle(PaintStyle.Stroke); line.setStrokeWidth(2.5);
   line.setColor(Skia.Color(ink)); line.setStrokeJoin(StrokeJoin.Round); line.setStrokeCap(StrokeCap.Round);
   const kind = Math.floor(r(52) * 3);
-  const s = crop.w * 0.11;
   if (kind === 0) {
     // Castle spire: a tower with a cone roof and a pennant, plus a shorter side tower.
     const t = Skia.Path.Make();
@@ -285,7 +342,10 @@ export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: 
   }
   if (night) {
     // The moon, inside the crop, on the other side from the landmark.
-    const mx = crop.x + crop.w * (left ? 0.8 : 0.2), my = crop.y + crop.h * 0.14, mr = crop.w * 0.06;
+    // At 18 to 25% of the photo's height, opposite the landmark, and never behind the track.
+    let mx = crop.x + crop.w * (left ? 0.8 : 0.2), my = crop.y + crop.h * 0.21;
+    const mr = crop.h * 0.05;
+    if (clearance(mx, my) < mr * 2.2) { mx = crop.x + crop.w * (left ? 0.62 : 0.38); my = crop.y + crop.h * 0.19; }
     const halo = Skia.Paint(); halo.setAntiAlias(true);
     halo.setShader(Skia.Shader.MakeRadialGradient(vec(mx, my), mr * 3, [Skia.Color('rgba(255,244,210,0.35)'), Skia.Color('rgba(255,244,210,0)')], null, 0));
     canvas.drawCircle(mx, my, mr * 3, halo);

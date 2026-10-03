@@ -30,7 +30,8 @@ import {
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
 
-const HAND_ART = require('../../../../assets/images/ride-photo/tap-hand.webp');
+/** The hint pointer: Alex's own shark fins (ui_home slice59), upside down so the tips point at the shutter. */
+const HAND_ART = require('../../../../assets/images/ride-photo/fin-pointer.webp');
 /** The miss chip shows the current ride's own vehicle. */
 const VEHICLE_ICON: Partial<Record<RideKind, number>> = {
   coaster: require('../../../../assets/images/ride-photo/car-back.webp'),
@@ -1150,9 +1151,9 @@ const styles = StyleSheet.create({
   slotGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b' },
   shutterWrap: { width: SHUTTER + 20, height: SHUTTER + 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
   halo: { position: 'absolute', width: SHUTTER + 18, height: SHUTTER + 18, borderRadius: (SHUTTER + 18) / 2, borderWidth: 3, borderColor: '#ffc93c' },
-  // Fingertip straight down at the disc centre, 6 pt above the disc's top edge (the disc top sits 21 pt into the wrap).
-  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 36 * 0.63, top: 21 - 6 - 46, width: 36, height: 46 },
-  handArt: { width: 36, height: 46 },
+  // Fin tips straight down at the disc centre, 6 pt above the disc's top edge (the disc top sits 21 pt into the wrap).
+  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 44 * 0.694, top: 21 - 6 - 40, width: 44, height: 40 },
+  handArt: { width: 44, height: 40 },
   rarity: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
   bevel: { position: 'absolute', left: 0, right: 0, top: 0, height: 1.5, backgroundColor: 'rgba(255,255,255,0.6)' },
