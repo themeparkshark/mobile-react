@@ -283,6 +283,26 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     </View>
   );
 
+  // Nobody to race yet (no friends, or an empty week): one big friendly card, no empty podium.
+  if (empty) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}
+        refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}>
+        {strip}
+        <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14).stiffness(160)} style={{
+          marginHorizontal: 20, marginTop: 28, padding: 24, alignItems: 'center', borderRadius: RADIUS.xl,
+          backgroundColor: BRAND.cream, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white, ...SHADOW.lifted,
+        }}>
+          <GameIcon name={board === 'friends' ? 'heart' : 'trophy'} size={84} />
+          <Text accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 8 }]}>{copy.title}</Text>
+          <Text style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 6, marginBottom: 18 }]}>{copy.message}</Text>
+          <GameButton label={copy.action} icon={copy.target === 'Friends' ? 'heart' : 'ride'}
+            onPress={() => { playSound(tapSound); RootNavigation.navigate(copy.target); }} />
+        </Animated.View>
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <FlatList
@@ -312,24 +332,14 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
         )}
         ListEmptyComponent={(
           <View style={{ backgroundColor: BRAND.cream, alignItems: 'center', paddingHorizontal: 24, paddingBottom: 12 }}>
-            {empty ? (
-              <>
-                <GameIcon name={board === 'friends' ? 'heart' : 'trophy'} size={56} />
-                <Text accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 6 }]}>{copy.title}</Text>
-                <Text style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 4, marginBottom: 14 }]}>{copy.message}</Text>
-                <GameButton label={copy.action} icon={copy.target === 'Friends' ? 'heart' : 'ride'} size="compact"
-                  onPress={() => RootNavigation.navigate(copy.target)} />
-              </>
-            ) : (
-              <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, textAlign: 'center', paddingVertical: 12 }]}>
-                Open spots on the podium. Win a ride to claim one.
-              </Text>
-            )}
+            <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, textAlign: 'center', paddingVertical: 12 }]}>
+              Open spots on the podium. Win a ride to claim one.
+            </Text>
           </View>
         )}
         ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 40 }} />}
       />
-      {!empty && <YouCard model={model} climb={climb} onPress={scrollToMe} />}
+      <YouCard model={model} climb={climb} onPress={scrollToMe} />
     </View>
   );
 }
