@@ -5,11 +5,12 @@ import client from '../../client';
 export default async function updatePlayer(payload: {
   readonly enabled_music?: boolean;
   readonly enabled_sound_effects?: boolean;
+  /** Shark Shop v2 wishlist pushes. */
   readonly wishlist_alerts?: boolean;
   readonly username?: string;
   /** "Let sharks find me" (servers with the kid-safety update). */
   readonly discoverable?: boolean;
-  /** Required by the server (Social v2 R4) whenever discoverable turns on: the grown-up gate was passed. */
+  /** Sent only after the grown-up gate passes (the server needs it to turn discovery on). */
   readonly grown_up_confirmed?: boolean;
 }): Promise<PlayerType> {
   const { data } = await client.put<ApiResponseType<PlayerType>>(

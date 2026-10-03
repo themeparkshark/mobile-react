@@ -10,7 +10,7 @@
  * read state or friend answer changed re-renders.
  */
 import { Image } from 'expo-image';
-import { memo, useCallback, useContext, useEffect, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useFriendActions } from '../hooks/useFriends';
@@ -51,14 +51,10 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const endBurst = useCallback(() => setBurst(false), []);
   const surface = useContext(SurfaceContext);
   const hop = useHop(burst);
-  // A No fades and shrinks for 180 ms; the screen then collapses the row.
+  // A No: the buttons stay as they were while the screen's LeavingRow fades the row out.
   const leaving = kind === 'friend_request' && answer === 'none';
-  const fade = useAnimatedStyle(() => ({
-    opacity: withTiming(leaving ? 0 : 1, { duration: reduced ? 0 : 180 }),
-    transform: [{ scale: withTiming(leaving ? 0.94 : 1, { duration: reduced ? 0 : 180 }) }],
-  }), [leaving, reduced]);
   const overrides = new Map(answer && actor ? [[actor, answer]] : []);
-  const answerable = canAnswerInline(notification, overrides);
+  const answerable = leaving || canAnswerInline(notification, overrides);
   const answeredYes = kind === 'friend_request' && answer === 'friends';
   // A request answered Yes turns into a "new friend" row right where it is.
   const look = KIND_LOOK[answeredYes ? 'friend_accepted' : kind];
@@ -70,7 +66,8 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const art = artFailed ? null : answeredYes && storedArt ? storedArt.replace('friend_request_received', 'friend_request_accepted') : storedArt;
   // The row only offers Yes/No while the request waits, so the answer starts from 'incoming'.
   // The Yes moment: a burst on this row, once.
-  useEffect(() => {
+  // Layout effect: the hop, the burst and the green card land on the same frame.
+  useLayoutEffect(() => {
     if (answeredYes && actor !== null && takeJustFriended(actor, surface)) setBurst(true);
   }, [answeredYes, actor, surface]);
   const actorFace = !faceFailed ? (notification.actor_avatar_url ?? null) : null;
@@ -78,9 +75,11 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const target = actor ? { id: actor, screen_name: nameFrom(stored), friend_status: 'incoming' as const } : null;
 
   return (
-    <Animated.View style={[styles.wrap, fade]}>
+    <Animated.View style={styles.wrap}>
       <View style={[kit.card, styles.card, unread ? styles.cardUnread : styles.cardRead, answeredYes && styles.cardYes]}>
         {unread && <View style={[styles.stripe, { backgroundColor: look.color }]} />}
+        {/* Behind the face disc, inside the card: the burst never covers the new friend or the words. */}
+        {burst && <Burst big={1.6} style={{ left: 47, top: 44 }} onDone={endBurst} />}
         <Pressable
           onPress={() => onOpen(notification)}
           onLongPress={() => onClear(notification)}
@@ -144,7 +143,6 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
             <Text style={[styles.answeredText, { color: BRAND.greenLip }]} maxFontSizeMultiplier={1.2}>New friend!</Text>
           </Animated.View>
         )}
-        {burst && <Burst big={1.6} style={{ left: 47, top: 44 }} onDone={endBurst} />}
         {canHeartBack && target && (
           <View style={styles.answer}>
             <Pill compact tone={heartBack === 'sent' || actions.hearted(actor!) ? 'grey' : 'white'} icon="heart"

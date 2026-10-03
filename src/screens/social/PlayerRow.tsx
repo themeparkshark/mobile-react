@@ -13,8 +13,8 @@
  * the buttons ignore taps for 600 ms, so a double tap can't land on the next
  * state (Add then "Take back?").
  */
-import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import { haptic } from '../../gamekit/Haptics';
@@ -44,7 +44,8 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
   const [burst, setBurst] = useState(false);
   const [fresh, setFresh] = useState(false);
   // Fixed from the window (no onLayout pass on every mount and recycle).
-  const cardW = Dimensions.get('window').width - (inset ? 60 : 28);
+  const { width: windowW } = useWindowDimensions();
+  const cardW = windowW - (inset ? 60 : 28);
   const [flying, setFlying] = useState(false);
   const look = friendButton(status);
   const level = player.experience_level?.level;
@@ -68,7 +69,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
 
   const surface = useContext(SurfaceContext);
   const pop = useSharedValue(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (status === 'friends' && takeJustFriended(player.id, surface)) {
       setBurst(true);
       setFresh(true);
@@ -97,6 +98,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
   return (
     <Animated.View style={[styles.wrap, inset && styles.wrapInset, popStyle]}>
       <View style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk, status === 'incoming' && styles.cardStack, justMade && styles.cardNew]}>
+        {burst && status === 'friends' && <Burst style={styles.burstAt} onDone={endBurst} />}
         <Pressable
           onPress={open}
           onPressIn={squash.onPressIn}
@@ -155,7 +157,6 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
           )}
         </View>
         {flying && <View style={styles.flyFrom}><FlyHeart dx={-(cardW - 62 - 46)} dy={0} onDone={endFly} /></View>}
-        {burst && status === 'friends' && <Burst style={styles.burstAt} onDone={endBurst} />}
       </View>
     </Animated.View>
   );

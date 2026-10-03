@@ -7,7 +7,7 @@
 import { memo, useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import GameIcon from '../../ui/GameIcon';
 import type { GameIconName } from '../../ui/iconNames';
 import { BRAND, FONT } from '../../ui/tokens';
@@ -168,8 +168,7 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
     <View style={kitError.wrap} accessibilityLiveRegion="polite">
       <View>
         <Image source={require('../../../assets/images/screens/pin-collections/shark.png')} style={kitError.art} contentFit="contain" />
-        {/* The same wifi-off art as the offline banner, as a sticker on the shark. */}
-        <Image source={require('../../../assets/images/offline/offline.png')} style={kitError.sticker} contentFit="contain" />
+        {/* One offline mark: the app's offline banner already shows wifi-off. */}
       </View>
       <Text style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</Text>
       <Text style={kitError.text} maxFontSizeMultiplier={1.3}>Check your connection and try again.</Text>
@@ -181,7 +180,6 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
 const kitError = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 60 },
   art: { width: 150, height: 150 },
-  sticker: { position: 'absolute', right: 0, top: 4, width: 48, height: 48 },
   title: {
     fontFamily: FONT.display, fontSize: 26, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', marginTop: 10,
     textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
@@ -203,4 +201,33 @@ function BouncyCount({ count }: { readonly count: number }) {
   }, [count, reduced, b]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.35 * b.value }] }));
   return <Animated.View style={[kit.sectionCount, style]}><Text style={kit.sectionCountText}>{count}</Text></Animated.View>;
+}
+
+/**
+ * A row that leaves smoothly: it keeps its measured height, fades and shrinks
+ * to 0 over 180 ms on the UI thread, then calls onGone so the list drops the
+ * data. Works inside FlashList cells (LayoutAnimation does not, on the new
+ * architecture). Reduce Motion: gone at once.
+ */
+export function LeavingRow({ leaving, onGone, children }: { readonly leaving: boolean; readonly onGone: () => void; readonly children: ReactNode }) {
+  const reduced = useUiReducedMotion();
+  const height = useSharedValue(-1);
+  const t = useSharedValue(1);
+  const done = useRef(false);
+  useEffect(() => {
+    if (!leaving) { t.value = 1; done.current = false; return; }
+    if (done.current) return;
+    done.current = true;
+    if (reduced) { onGone(); return; }
+    t.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) }, finished => { if (finished) runOnJS(onGone)(); });
+  }, [leaving, reduced, onGone, t]);
+  const style = useAnimatedStyle(() => (height.value < 0 || t.value === 1
+    ? { opacity: 1 }
+    : { opacity: t.value, height: height.value * t.value, overflow: 'hidden', transform: [{ scale: 0.96 + 0.04 * t.value }] }));
+  return (
+    <Animated.View style={style} onLayout={e => { if (!leaving) height.value = e.nativeEvent.layout.height; }}
+      pointerEvents={leaving ? 'none' : 'auto'} importantForAccessibility={leaving ? 'no-hide-descendants' : 'auto'}>
+      {children}
+    </Animated.View>
+  );
 }

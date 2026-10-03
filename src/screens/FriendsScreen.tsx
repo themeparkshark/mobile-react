@@ -10,7 +10,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutAnimation, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
@@ -33,8 +33,8 @@ import { BRAND, FONT } from '../ui/tokens';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import PlayerRow, { ROW_HEIGHT } from './social/PlayerRow';
 import SearchField from './social/SearchField';
-import { CountBadge, INK, Pill, SectionHeader, SocialBackdrop, SocialError, kit, useSquash } from './social/SocialKit';
-import { confirmGame } from '../ui';
+import { CountBadge, INK, LeavingRow, Pill, SectionHeader, SocialBackdrop, SocialError, kit, useSquash } from './social/SocialKit';
+import { GrownUpGate } from './social/GrownUpGate';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
@@ -42,11 +42,14 @@ import { SurfaceContext, setPendingIncoming, useFriendOverrides, usePendingIncom
 const CREST = require('../../assets/images/screens/friends/noti.png');
 const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
 const ADD_ART = require('../../assets/images/screens/friends/add_friend.png');
+const NOOP = () => undefined;
 const APP_LINK = 'https://apps.apple.com/app/theme-park-shark/id6758812566';
 
 type Row =
   | { readonly type: 'header'; readonly key: string; readonly label: string; readonly icon?: GameIconName; readonly count?: number }
-  | { readonly type: 'player'; readonly key: string; readonly player: PlayerType; readonly fallback: FriendStatus }
+  | { readonly type: 'player'; readonly key: string; readonly player: PlayerType; readonly fallback: FriendStatus;
+      /** Leaving the list: drawn frozen in this state (a refused row never shows Add), then onGone drops it. */
+      readonly leaving?: FriendStatus; readonly onGone?: () => void }
   | { readonly type: 'hint'; readonly key: string; readonly text: string };
 
 type Load = 'loading' | 'ready' | 'error';
@@ -187,7 +190,9 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
       renderItem={({ item, index }) => {
         if (item.type === 'header') return <SectionHeader label={item.label} icon={item.icon} count={item.count} />;
         if (item.type === 'hint') return <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{item.text}</Text>;
-        const row = <PlayerRow player={item.player} status={effectiveStatus(item.player, overrides, item.fallback)} />;
+        const row = item.leaving
+          ? <LeavingRow leaving onGone={item.onGone ?? NOOP}><PlayerRow player={item.player} status={item.leaving} /></LeavingRow>
+          : <PlayerRow player={item.player} status={effectiveStatus(item.player, overrides, item.fallback)} />;
         return <Animated.View entering={first.current && !reduced && index < 8 ? FadeInDown.delay(index * 40).springify().damping(16) : undefined}>{row}</Animated.View>;
       }}
     />
@@ -319,48 +324,36 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
     return () => clearTimeout(timer);
   }, [incoming, overrides, settled]);
 
-  // An answered "No", a block or a taken-back ask closes its space smoothly.
-  const reduced = useUiReducedMotion();
-  const requestsList = useRef<FlashList<Row>>(null);
-  const answeredAway = useMemo(() => [...incoming, ...sent].filter(p => {
-    const st = overrides.get(p.id);
-    return st === 'none' || st === 'blocked' || (st === 'friends' && settled.has(p.id));
-  }).map(p => p.id).join(','), [incoming, sent, overrides, settled]);
-  const [away, setAway] = useState('');
-  useEffect(() => {
-    if (answeredAway === away) return;
-    const t = setTimeout(() => {
-      if (!reduced) {
-        requestsList.current?.prepareForLayoutAnimationRender();
-        LayoutAnimation.configureNext({ duration: 180, update: { type: 'easeInEaseOut' }, delete: { type: 'easeInEaseOut', property: 'opacity' } });
-      }
-      setAway(answeredAway);
-    }, reduced ? 0 : 120);
-    return () => clearTimeout(t);
-  }, [answeredAway, away, reduced]);
+  // An answered "No", a block, a taken-back ask, or a settled Yes leaves
+  // through LeavingRow (fade plus height to 0 in the cell), then the data goes.
+  const [away, setAway] = useState<ReadonlySet<number>>(() => new Set());
+  const drop = useCallback((id: number) => setAway(prev => new Set(prev).add(id)), []);
   const rows = useMemo<Row[]>(() => {
-    const awaySet = new Set(away.split(',').filter(Boolean).map(Number));
-    const gone = (_status: FriendStatus, id: number) => awaySet.has(id);
-    const ask = incoming.filter(p => !gone(effectiveStatus(p, overrides, 'incoming'), p.id));
-    const mine = sent.filter(p => !gone(effectiveStatus(p, overrides, 'outgoing'), p.id));
+    const leavingAs = (p: PlayerType, was: FriendStatus): FriendStatus | undefined => {
+      const st = overrides.get(p.id);
+      if (st === 'none' || st === 'blocked') return was; // frozen as it was: never flashes Add
+      if (st === 'friends' && settled.has(p.id)) return 'friends';
+      return undefined;
+    };
+    const ask = incoming.filter(p => !away.has(p.id));
+    const mine = sent.filter(p => !away.has(p.id));
     const out: Row[] = [];
     if (ask.length) {
       out.push({ type: 'header', key: 'h-ask', label: 'Want to be friends', icon: 'heart', count: ask.filter(p => effectiveStatus(p, overrides, 'incoming') === 'incoming').length });
-      for (const p of ask) out.push({ type: 'player', key: `i${p.id}`, player: p, fallback: 'incoming' });
+      for (const p of ask) out.push({ type: 'player', key: `i${p.id}`, player: p, fallback: 'incoming', leaving: leavingAs(p, 'incoming'), onGone: () => drop(p.id) });
     }
     if (mine.length) {
       out.push({ type: 'header', key: 'h-sent', label: 'You asked', icon: 'timer' });
-      for (const p of mine) out.push({ type: 'player', key: `o${p.id}`, player: p, fallback: 'outgoing' });
+      for (const p of mine) out.push({ type: 'player', key: `o${p.id}`, player: p, fallback: 'outgoing', leaving: leavingAs(p, 'outgoing'), onGone: () => drop(p.id) });
     }
     return out;
-  }, [incoming, sent, overrides, away]);
+  }, [incoming, sent, overrides, away, settled, drop]);
 
   if (load === 'loading') return <SharkLoader state="loading" tone="onBlue" title="Checking requests" />;
   if (load === 'error') return <SocialError title="Requests didn't load" onRetry={() => { setLoad('loading'); fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
 
   return (
     <SocialList
-      listRef={requestsList}
       rows={rows}
       refreshing={refreshing}
       onRefresh={() => { setRefreshing(true); fetchAll().catch(() => undefined).finally(() => setRefreshing(false)); }}
@@ -394,25 +387,17 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
   useEffect(() => { if (active && load === 'idle') fetchSuggested(); }, [active, load, fetchSuggested]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  // Turning discovery ON is a grown-up decision: a confirm first. Taps while
-  // a save is in flight are ignored; the server's answer wins.
+  // Turning discovery ON needs the grown-up gate (hold plus a sum in words);
+  // the server also refuses it without grown_up_confirmed. Taps while a save
+  // is in flight are ignored; the server's answer wins.
   const saving = useRef(false);
-  const toggleFindMe = useCallback(async () => {
-    if (saving.current) return;
-    const next = !findMe;
-    if (next && !(await confirmGame({
-      title: 'Ask a grown-up first',
-      message: 'With this on, any shark can find you by typing part of your name. Is a grown-up OK with that?',
-      confirmLabel: 'Grown-up says yes',
-      cancelLabel: 'Keep it off',
-      icon: 'info',
-    }))) return;
+  const [gate, setGate] = useState(false);
+  const save = useCallback(async (next: boolean) => {
     saving.current = true;
     setFindMe(next);
     playSfx(next ? 'star' : 'tap');
     haptic('tickSelection');
     try {
-      // Turning it on carries the grown-up gate's yes (the server refuses discoverable=true without it).
       const me = await updatePlayer(next ? { discoverable: true, grown_up_confirmed: true } : { discoverable: false });
       if (typeof me?.discoverable === 'boolean') setFindMe(me.discoverable);
       void refreshPlayer?.().catch(() => undefined);
@@ -422,7 +407,12 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
     } finally {
       saving.current = false;
     }
-  }, [findMe, refreshPlayer]);
+  }, [refreshPlayer]);
+  const toggleFindMe = useCallback(() => {
+    if (saving.current) return;
+    if (findMe) void save(false);
+    else setGate(true);
+  }, [findMe, save]);
 
   const search = useCallback((text: string) => {
     setQuery(text);
@@ -458,6 +448,7 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
     <View>
       <MyNameCard name={player?.screen_name ?? ''} onInvite={onInvite} />
       <FindMeCard on={findMe} onToggle={toggleFindMe} />
+      <GrownUpGate visible={gate} onDone={passed => { setGate(false); if (passed) void save(true); }} />
     </View>
   );
 
@@ -504,11 +495,11 @@ function MyNameCard({ name, onInvite }: { readonly name: string; readonly onInvi
 function FindMeCard({ on, onToggle }: { readonly on: boolean; readonly onToggle: () => void }) {
   return (
     <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }}
-      accessibilityLabel="Let sharks find me" accessibilityHint={on ? 'On: sharks can find you by part of your name. Tap to turn off.' : 'Off: sharks can add you only if they type your exact shark name. Turning it on needs a grown-up.'}>
+      accessibilityLabel="Let sharks find me" accessibilityHint={on ? 'On: sharks can find you by part of your name. Tap to turn off.' : "Off: sharks can't search for you, but a shark who knows your exact name or taps you on a leaderboard or post can still ask. Turning it on needs a grown-up."}>
       <View style={[kit.card, styles.findCard, styles.findMe]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>Let sharks find me</Text>
-          <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Sharks can find you by part of your name.' : 'Sharks can add you only if they type your exact shark name.'}</Text>
+          <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Sharks can find you by part of your name.' : "Sharks can't search for you. A shark who knows your exact name, or taps you on a leaderboard or post, can still ask. You pick Yes or No."}</Text>
         </View>
         <View style={[styles.switch, on && styles.switchOn]}>
           <View style={[styles.knob, on && styles.knobOn]} />

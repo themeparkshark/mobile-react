@@ -252,7 +252,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 <ProfileShortcuts items={shortcuts} />
               </View>
               <StatusBadges isVip={!!currentPlayer.is_subscribed} isVerified={!!currentPlayer.verified_at} own={false} />
-              {!isFriend && (currentPlayer.profile_access ?? 'public') !== 'self' ? (
+              {!isFriend && currentPlayer.id !== authPlayer?.id && (currentPlayer.profile_access ?? 'public') === 'public' ? (
                 // Social v2 r3: strangers see who they are, not a wall of zeros.
                 <View style={[kit.card, { marginTop: 18, padding: 16, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
                   accessible accessibilityLabel={`Friends only. Become friends with ${currentPlayer.screen_name} to see their stats and parks.`}>

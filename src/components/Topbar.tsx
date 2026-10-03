@@ -130,6 +130,8 @@ export default function Topbar({
               ? { uri: theme.top_bar_url }
               : require('../../assets/images/original-top-bar.png')
         }
+        // Offline or before the theme art downloads: the bundled bar, never a grey plate.
+        defaultSource={require('../../assets/images/original-top-bar.png')}
         resizeMode="cover"
         style={{
           height: 70 + Constants.statusBarHeight,

@@ -71,7 +71,7 @@ test('How to Play "Let\'s go" reaches the home map: highlightNearestFind is read
 
 test('"Let sharks find me" sends the grown-up yes the server requires (notif-friends-be R4)', () => {
   const screen = read('src/screens/FriendsScreen.tsx');
-  assert.match(screen, /Grown-up says yes/);
-  assert.match(screen, /updatePlayer\(next \? \{ discoverable: true, grown_up_confirmed: true \} : \{ discoverable: false \}\)/);
-  assert.match(read('src/api/endpoints/me/update-player.ts'), /grown_up_confirmed\?: boolean/);
+  assert.match(screen, /GrownUpGate/);
+  assert.match(screen, /grown_up_confirmed: true/);
+  assert.match(read('src/api/endpoints/me/update-player.ts'), /grown_up_confirmed/);
 });
