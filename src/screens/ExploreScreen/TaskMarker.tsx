@@ -23,6 +23,8 @@ import { BRAND, GameIcon } from '../../ui';
 import { formatDistance } from './adventureTicketPresentation';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 import { limitedLabel } from '../../services/collection/limitedCoins';
+import { Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
+import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -333,7 +335,14 @@ function TaskMarker({
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const alive = useMapAlive();
-  const calm = alive.tier === 'calm';
+  // Declutter: shown, receded or folded away, and where this island's chip goes (parkMapLayout).
+  const placement = usePlacement(rideLayoutId(task.id));
+  const shown = placement.visible;
+  // A hidden island holds every loop still (battery) and ignores taps.
+  const calm = alive.tier === 'calm' || !shown;
+  const shownRef = useRef(shown); shownRef.current = shown;
+  // The chip's clock ticks only while the map runs and this island is on show.
+  const timerTicking = shown ? alive.active : false;
   const expiresAt = gameTimestamp(task.active_to);
   const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
 
@@ -352,6 +361,10 @@ function TaskMarker({
   const limited = task.limited?.active ? limitedLabel(task.limited) : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
   const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
+  // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
+  const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
+  const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '');
+  const folded = clusterCount + placement.folded;
   // Scenes stay mounted while the living map pauses; their loops stop inside
   // (RideAmbience reads the map's running state). Mounting or unmounting views
   // inside 37 markers at once on every return to the map crashed MapLibre's
@@ -410,7 +423,7 @@ function TaskMarker({
     wasPlayable.current = playable;
   }, [playable, task.id, calm]);
 
-  const press = () => onPress(task);
+  const press = () => { if (shownRef.current) onPress(task); };
   const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
@@ -423,28 +436,37 @@ function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${clusterCount ? `${clusterCount} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       anchor={{ x: 0.5, y: 0.9 }}
     >
+      <Placed placement={placement} anchor={RIDE_BOX.anchor}>
       <Animated.View style={[styles.container, dropStyle]}>
-        {/* One badge at a time keeps the map calm; the chip replaces it when selected. */}
-        {!isSelected && badge === 'rush' && rush && (
-          <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
-            <GameIcon name="rush" size={14} />
-            <Text style={styles.rushText}>RUSH {live?.wait ?? rush.wait} MIN</Text>
-          </View>
+        {/* One chip at a time keeps the map calm, on the free side the declutter picked; the info card replaces it when selected. */}
+        {tagKind && tagSize && (
+          <TagSlot tag={placement.tag} anchor={RIDE_BOX.anchor} width={tagSize.w} height={tagSize.h}
+            fallback={{ x: -tagSize.w / 2, y: RIDE_BODY.y - tagSize.h - 3 }}>
+            {tagKind === 'rush' && rush && (
+              <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
+                <GameIcon name="rush" size={14} />
+                <Text style={styles.rushText}>RUSH {live?.wait ?? rush.wait} MIN</Text>
+              </View>
+            )}
+            {tagKind === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
+            {tagKind === 'goal' && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
+            {tagKind === 'limited' && limited && <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
+              <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>}
+            {tagKind === 'timer' && (
+              <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]}>
+                <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
+              </View>
+            )}
+          </TagSlot>
         )}
-        {!isSelected && badge === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
-        {!isSelected && badge === 'goal' && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
-        {!isSelected && badge === 'limited' && limited && <View style={styles.limitedSlot}>
-          <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
-            <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>
-        </View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
-        {!isSelected && showTimer && (
-          <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent, badge !== 'new' && badge !== 'level' && styles.timerLow]}>
-            <MarkerTimer expiresAt={expiresAt!} ticking={alive.active} urgent={timerUrgent} />
+        {!isSelected && showTimer && tagKind !== 'timer' && (
+          <View style={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]}>
+            <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
           </View>
         )}
 
@@ -501,12 +523,13 @@ function TaskMarker({
           </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
           {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
-          {clusterCount > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{clusterCount}</Text></View>}
+          {folded > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{folded}</Text></View>}
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
         {burst > 0 && <ArrivalBurst key={burst} onDone={() => setBurst(0)} />}
       </Animated.View>
+      </Placed>
     </Marker>
   </>);
 }
@@ -516,14 +539,12 @@ export default memo(TaskMarker);
 const styles = StyleSheet.create({
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
-  goalBadge: { position: 'absolute', top: -24, zIndex: 22, backgroundColor: BRAND.gold,
+  goalBadge: { backgroundColor: BRAND.gold,
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: BRAND.navy },
   goalText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
-  adventureBadge: { position: 'absolute', top: -24, zIndex: 22, flexDirection: 'row', alignItems: 'center', gap: 3,
+  adventureBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: BRAND.white, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   adventureText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
-  // Wider than the island so "LIMITED · LEAVES OCT 31" never clips.
-  limitedSlot: { position: 'absolute', top: -24, left: -44, right: -44, zIndex: 22, alignItems: 'center' },
   limitedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 9,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   limitedText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
@@ -531,9 +552,10 @@ const styles = StyleSheet.create({
   levelPip: { position: 'absolute', bottom: 2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
     backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   levelText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.white },
-  timerBadge: { position: 'absolute', top: -24, backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
-    borderWidth: 2, borderColor: BRAND.navy, zIndex: 20 },
-  timerLow: { top: -2 },
+  timerBadge: { backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
+    borderWidth: 2, borderColor: BRAND.navy },
+  // Under a badge, the timer sits on the art's shoulder.
+  timerLow: { position: 'absolute', top: -2, zIndex: 20 },
   timerBadgeUrgent: { borderColor: BRAND.red },
   timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
   timerTextUrgent: { color: BRAND.red },
@@ -564,7 +586,7 @@ const styles = StyleSheet.create({
   clusterBadge: { position: 'absolute', top: 16, left: -4, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   clusterText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
-  rushBadge: { position: 'absolute', top: -24, zIndex: 23, flexDirection: 'row', alignItems: 'center', gap: 3,
+  rushBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   landmarkImage: { width: 64, height: 64 },

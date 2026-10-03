@@ -7,12 +7,14 @@
  * nearest spots spend the tier's sprite budget.
  */
 import { FillLayer, ShapeSource, type MapViewRef } from '@maplibre/maplibre-react-native';
-import { memo, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
 import type { FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
+import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
+import type { Placement } from '../declutter/solver';
 import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
 import { critterSlugs } from './frightArt';
 import { critterAsset, hauntLayers, iconAsset, isChaosHour } from './frightAssets';
@@ -57,6 +59,29 @@ function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: 
     return () => { live = false; clearInterval(timer); };
   }, [on, zoom, mapRef]);
   return bounds;
+}
+
+/** Haunt lantern box (FrightSprites: 96 x 114) and its anchor (0.5, 0.82); parkMapLayout uses the same footprint. */
+const HAUNT_ANCHOR = { x: 48, y: 93.5 };
+
+/**
+ * A spot's art under the map declutter: fades or recedes with its placement
+ * and shows "+N" for haunts folded into it. Only this spot re-renders when its
+ * placement changes; a hidden spot holds its loops still.
+ */
+function PlacedSpot({ id, anchor, fold = false, children }: {
+  readonly id: string;
+  readonly anchor?: { readonly x: number; readonly y: number };
+  readonly fold?: boolean;
+  readonly children: (placement: Placement) => ReactNode;
+}) {
+  const placement = usePlacement(id);
+  return (
+    <Placed placement={placement} anchor={anchor}>
+      {children(placement)}
+      {fold && <FoldBadge count={placement.folded} style={{ left: 6, top: 14 }} />}
+    </Placed>
+  );
 }
 
 const hauntDim = (s: FrightSpot) => s.status === 'CLOSED' || s.status === 'DOWN' || s.status === 'REFURBISHMENT';
@@ -218,11 +243,12 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const sheets = slugs.map(slug => critterAsset(assets, slug));
         return (
           <Marker key={`fr-${reef.key}`} coordinate={reef}>
-            {glyph
+            <PlacedSpot id={`reef:${reef.key}`}>{placement => glyph
               ? <ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />
               : <ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n} wanderPts={wander} clock={alive.clock}
-                  animated={animate} lite={lite} watch={watch} jumpToken={tokens[`jump:${reef.key}`] ?? 0}
+                  animated={animate && placement.visible} lite={lite} watch={watch} jumpToken={tokens[`jump:${reef.key}`] ?? 0}
                   jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible} mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+            </PlacedSpot>
           </Marker>
         );
       })}
@@ -244,13 +270,15 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const at = offset && offset.length === 2 ? offsetMeters(haunt, Number(offset[0]) || 0, Number(offset[1]) || 0) : haunt;
         return (
           <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={{ x: 0.5, y: 0.82 }}>
-            <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
-              animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
-              rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
-              ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-              layers={layersOf(haunt)}
-              done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)} index={i}
-              iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+            <PlacedSpot id={`haunt:${haunt.key}`} anchor={HAUNT_ANCHOR} fold>{placement => (
+              <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
+                animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate && placement.visible}
+                rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
+                ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
+                layers={layersOf(haunt)}
+                done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)} index={i}
+                iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+            )}</PlacedSpot>
           </Marker>
         );
       })}

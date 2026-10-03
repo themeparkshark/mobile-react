@@ -86,20 +86,19 @@ test('Find this coin selects the ride and lays a guide toward it', async () => {
   assert.equal(app.find(named('Map')).props.guideTarget, null, 'tapping the map clears the guide');
 });
 
-test('the Park Project pill sits on the same row as the other suggestion slots, below Ride Control and Live Events', async () => {
+test('the Park Project pill sits on the same row as the other suggestion slots, under the one HUD row', async () => {
   const { loadTs } = require('./helpers/ts-module.cjs');
   const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
-  assert.equal(q.suggestionSlotTop(false), 64);
-  assert.equal(q.suggestionSlotTop(true), 124);
+  // One HUD row (12 + 54 + 10), whatever it shows: no slot jumps when a Rush or the night mode arrives.
+  assert.equal(q.suggestionSlotTop(), 76);
   // Header (70 + status bar) minus the map's 8pt tuck, then the in-map slot row.
-  assert.equal(q.suggestionSlotScreenTop(54, false), 54 + 62 + 64);
-  assert.equal(q.suggestionSlotScreenTop(54, true), 54 + 62 + 124);
+  assert.equal(q.suggestionSlotScreenTop(54), 54 + 62 + 76);
   const app = exploreScreen(); await app.settle();
   const widget = app.find(named('ParkProjectWidget'));
   assert.ok(widget, 'project widget renders at the park');
-  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, false));
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0));
   // The recenter compass clears the tallest chip in the right slot (the Park Story pill).
-  assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop(false) + 76);
+  assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop() + 76);
 });
 
 test('one suggestion leads: a live raid plus an adventure plus a Park Story shows exactly one full chip', async () => {
@@ -120,9 +119,9 @@ test('one suggestion leads: a live raid plus an adventure plus a Park Story show
   assert.equal(fullChips.length, 1, 'exactly one full suggestion chip');
   assert.equal(card.props.collapsed, false, 'the adventure leads');
   assert.equal(widget.props.pillCollapsed, true, 'the Park Story folds into its stub');
-  // Both slots sit under the Live Events row.
-  assert.equal(card.props.top, q.suggestionSlotTop(true));
-  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, true));
+  // Both slots sit under the one HUD row (the raid leads it).
+  assert.equal(card.props.top, q.suggestionSlotTop());
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0));
 });
 
 test('a selected queue ride leads and the adventure folds into its stub', async () => {

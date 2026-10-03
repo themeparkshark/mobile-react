@@ -50,10 +50,12 @@ export function TeamChip({ team, count, yours, leading }: {
  * Today's fight for the park: how many rides each team holds, who leads, and
  * (on tap) the rides that are up for grabs right now.
  */
-export default function RideControlBar({ control, tasks, onFocusTask, compact = false }: {
+export default function RideControlBar({ control, tasks, onFocusTask, compact = false, inline = false }: {
   readonly control: RideControlPark | null;
   /** While a boss is live: just the team chips, tucked to the right, so the map stays clear. */
   readonly compact?: boolean;
+  /** Inside the map's status row: no outer margin (the row owns spacing). */
+  readonly inline?: boolean;
   readonly tasks: readonly TaskType[];
   readonly onFocusTask: (task: TaskType) => void;
 }) {
@@ -79,7 +81,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
     <>
       <Pressable accessibilityRole="button"
         accessibilityLabel={`${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`}
-        onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact]}>
+        onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Text style={styles.kicker} numberOfLines={1}>{headline}</Text>}
@@ -153,6 +155,7 @@ const styles = StyleSheet.create({
   barWrap: { marginHorizontal: 12, borderRadius: 18, shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 } },
   barWrapCompact: { alignSelf: 'flex-end' },
+  inline: { marginHorizontal: 0, marginTop: 0 },
   barCompact: { paddingVertical: 3, paddingLeft: 6, paddingRight: 4 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white,
     paddingVertical: 6, paddingLeft: 12, paddingRight: 6, overflow: 'visible' },

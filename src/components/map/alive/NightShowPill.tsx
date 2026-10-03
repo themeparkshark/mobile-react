@@ -9,16 +9,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BRAND, GameIcon } from '../../../ui';
 import { liveText, teaserText, type NightShow, type ShowPhase } from './nightShow';
 
-export default function NightShowPill({ show, phase, onSee }: {
+export default function NightShowPill({ show, phase, onSee, inline = false }: {
   readonly show: NightShow;
   readonly phase: ShowPhase;
   readonly onSee: () => void;
+  /** Inside the map's status row: no outer margin. */
+  readonly inline?: boolean;
 }) {
   if (phase !== 'teaser' && phase !== 'live') return null;
   const live = phase === 'live';
   const text = live ? liveText(show) : teaserText(show);
   return (
-    <Pressable accessibilityRole="button" onPress={onSee} style={styles.shadow}
+    <Pressable accessibilityRole="button" onPress={onSee} style={[styles.shadow, inline && styles.inline]}
       accessibilityLabel={`${text}. Show it on the map.`}>
       <LinearGradient colors={live ? ['#3a2b8f', '#1b2f7a'] : ['#24407f', '#16306b']} style={styles.pill}>
         <View style={[styles.star, live && styles.starLive]}><GameIcon name="sparkle" size={18} /></View>
@@ -31,6 +33,7 @@ export default function NightShowPill({ show, phase, onSee }: {
 }
 
 const styles = StyleSheet.create({
+  inline: { marginHorizontal: 0, marginTop: 0 },
   shadow: { marginHorizontal: 12, marginTop: 8, borderRadius: 16, shadowColor: BRAND.shadow, shadowOpacity: 0.25,
     shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: BRAND.white,

@@ -5,7 +5,6 @@ import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
 import { Text, View, Pressable } from 'react-native';
-import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
@@ -110,6 +109,16 @@ import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
 import HelpButton from '../components/help/HelpButton';
 import { mapTipReady, parkTipFor } from '../services/help/tipGate';
+// Map declutter: one HUD row, and every marker placed by priority (no overlaps).
+import MapStatusStack, { type StatusEntry } from '../components/map/MapStatusStack';
+import { statusOrder } from '../components/map/statusStack';
+import { createDeclutterStore } from '../components/map/declutter/store';
+import type { MapDeclutterInput } from '../components/map/declutter/useMapDeclutter';
+import { offsetMeters, validPoint } from '../components/map/fright/geo';
+import { limitedLabel } from '../services/collection/limitedCoins';
+import FindMarker from './ExploreScreen/FindMarker';
+import { BOTTOM_RIGHT_COLUMN, bottomLeftColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
+  type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -490,9 +499,9 @@ function ExploreScreen() {
     } : null, [frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
-  const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
-  const hasLiveEvents = busyLiveSlot || nightPill;
-  const slotTop = suggestionSlotTop(hasLiveEvents);
+  const nightPill = !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
+  // One HUD row over the map, always: the suggestion row never moves.
+  const slotTop = suggestionSlotTop();
   // Friends who share their spot in this park, as ghost sharks (only if the live feed carries them).
   const ghosts = useMemo(() => ghostSharks(livePark?.friends_nearby, location ?? null, Date.now(), GHOST_CAP),
     [livePark, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -573,11 +582,13 @@ function ExploreScreen() {
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   const clusterRef = useRef({ rideClusters, mapZoom }); clusterRef.current = { rideClusters, mapZoom };
+  const declutterStore = useRef(createDeclutterStore()).current;
   // Tapping a folded island zooms into it; a lone island toggles selection.
   const handleTaskPress = useCallback((task: TaskType) => {
     const { rideClusters: clusters, mapZoom: zoom } = clusterRef.current;
     const cluster = clusters.find(item => item.lead.id === task.id);
-    if (cluster && cluster.members.length > 0 && zoom < 19.5) {
+    const folded = (cluster?.members.length ?? 0) + (declutterStore.get(rideLayoutId(task.id))?.folded ?? 0);
+    if (folded > 0 && zoom < 19.5) {
       setSelectedTask(null);
       setMapFocusRequest({ latitude: Number(task.latitude), longitude: Number(task.longitude), zoom: Math.min(20, zoom + 1.5), requestId: Date.now() });
       return;
@@ -814,6 +825,93 @@ function ExploreScreen() {
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
   const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
+  // Declutter inputs, rebuilt on data change only (the camera side runs in Map).
+  const nightMode = !!frightMap?.active;
+  const frightSpots = frightMap?.tonight.spots;
+  const declutterItems = useMemo(() => {
+    if (!park) return [];
+    const rides = rideClusters.map(({ lead, members }) => {
+      const task = lead.task;
+      const live = liveByTask.get(task.id);
+      const rush = !!live?.rush && live.status === 'OPERATING' && Date.parse(live.rush.ends_at) > mapNow;
+      const closed = live?.status === 'DOWN' || live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT' || restingTasks.includes(task);
+      const selected = selectedTask?.id === task.id;
+      const near = (taskDistance.get(task.id) ?? Infinity) <= 60;
+      return { id: task.id, latitude: lead.latitude, longitude: lead.longitude, members: members.length, selected,
+        adventure: adventureTaskId === task.id, playable: playableTaskId === task.id, goal: goalTaskId === task.id, rush, near, closed,
+        tag: rideTagFor({ selected, rush, adventure: adventureTaskId === task.id, goal: goalTaskId === task.id,
+          owned: (task.times_completed ?? 0) > 0, limitedText: task.limited?.active ? limitedLabel(task.limited) : null,
+          expiresAt: gameTimestamp(task.active_to), near, now: mapNow }) };
+    });
+    const finds: FindLayoutInput[] = [
+      ...(redeemables?.coins ?? []).filter(coin => opportunityIsActive(coin, mapNow))
+        .map(coin => ({ id: `coin:${coin.id}`, latitude: Number(coin.latitude), longitude: Number(coin.longitude), kind: 'coin' as const })),
+      ...(redeemables?.keys ?? []).filter(key => opportunityIsActive(key, mapNow))
+        .map(key => ({ id: `key:${key.id}`, latitude: Number(key.latitude), longitude: Number(key.longitude), kind: 'key' as const })),
+      ...(redeemables?.redeemables ?? []).filter(item => opportunityIsActive(item, mapNow))
+        .map(item => ({ id: `redeemable:${item.id}`, latitude: Number(item.latitude), longitude: Number(item.longitude), kind: 'redeemable' as const })),
+      ...(redeemables?.items ?? []).filter(item => !item.is_hidden)
+        .map(item => ({ id: `item:${item.id}`, latitude: Number(item.latitude), longitude: Number(item.longitude), kind: 'item' as const })),
+      ...(redeemables?.pins ?? []).filter(item => !item.is_hidden)
+        .map(item => ({ id: `pin:${item.id}`, latitude: Number(item.latitude), longitude: Number(item.longitude), kind: 'pin' as const })),
+      ...(redeemables?.vaults ?? [])
+        .map(vault => ({ id: `vault:${vault.id}`, latitude: Number(vault.latitude), longitude: Number(vault.longitude), kind: 'vault' as const })),
+    ];
+    // Haunts at their drawn spot (the entrance offset), reefs at their centre.
+    const haunts: HauntLayoutInput[] = (frightSpots ?? []).filter(spot => spot.kind === 'haunt' && validPoint(spot)).map(spot => {
+      const offset = spot.fx?.offset;
+      const at = offset && offset.length === 2 ? offsetMeters(spot, Number(offset[0]) || 0, Number(offset[1]) || 0) : spot;
+      return { key: spot.key, latitude: at.latitude, longitude: at.longitude,
+        closed: spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT' };
+    });
+    const reefs = (frightSpots ?? []).filter(spot => spot.kind === 'reef' && validPoint(spot))
+      .map(spot => ({ key: spot.key, latitude: spot.latitude, longitude: spot.longitude }));
+    const fixed: FixedLayoutInput[] = [
+      ...(gymData ? [{ id: 'gym', latitude: gymData.gym.latitude, longitude: gymData.gym.longitude, kind: 'gym' as const }] : []),
+      ...(communityCenter ? [{ id: 'community', latitude: communityCenter.latitude, longitude: communityCenter.longitude, kind: 'community' as const }] : []),
+      ...swords.map(sword => ({ id: `sword:${sword.id}`, latitude: sword.latitude, longitude: sword.longitude, kind: 'sword' as const })),
+      ...(raid && raidActive && raid.latitude != null && raid.longitude != null
+        ? [{ id: 'boss', latitude: raid.latitude, longitude: raid.longitude, kind: 'boss' as const }] : []),
+    ];
+    return buildParkLayout({ rides, finds, haunts: frightMap ? haunts : [], reefs: frightMap ? reefs : [], fixed, nightMode });
+  }, [park, rideClusters, liveByTask, mapNow, restingTasks, selectedTask?.id, taskDistance, adventureTaskId, playableTaskId, goalTaskId,
+    redeemables, frightSpots, frightMap, gymData, communityCenter, swords, raid, raidActive, nightMode]);
+  const projectPillShown = !!activeParkProject && suggestionSlots.right === 'project';
+  const declutterInsets = useMemo(() => parkMapInsets({
+    hudBottom: slotTop,
+    left: suggestionSlots.left ? { top: slotTop, stub: suggestionSlots.leftStub } : null,
+    right: suggestionSlots.right === 'ride' || projectPillShown ? { top: slotTop, stub: suggestionSlots.rightStub } : null,
+    bottomLeft: bottomLeftColumnHeight(park?.stores.length ?? 0),
+    bottomRight: BOTTOM_RIGHT_COLUMN,
+  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length]);
+  const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
+    [park, declutterStore, declutterItems, declutterInsets]);
+
+  // The one HUD row: the most urgent status leads, the rest wait behind "+N".
+  const statusEntries: StatusEntry[] = player && park ? statusOrder({
+    live: busyLiveSlot, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
+    nightMode: frightNight.modeOn, control: true,
+  }).map(key => {
+    if (key === 'live') return { key, label: 'Live in the park', node: <LiveEventsPill inline raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
+      mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
+      onMapMoment={() => {
+        const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
+        if (task) setSelectedTask(task);
+      }}
+      pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
+      onRush={(task) => setSelectedTask(task)} /> };
+    if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
+      onSee={() => {
+        const anchor = nightShow.show?.anchor;
+        if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
+      }} /> : null };
+    // Fin-ister's "?" shows when its pill stands alone or the stack is open; collapsed, the "+N" button takes that spot.
+    if (key === 'fright') return { key, label: frightNight.title, node: ({ lead, open, alone }) => <FrightPill inline night={frightNight}
+      engine={frightEngine} onHelp={frightEngine.replayTutorial} showHelp={!lead || open || alone} /> };
+    return { key, label: 'Ride Control', node: <RideControlBar inline control={rideControl} tasks={visibleTasks}
+      onFocusTask={(task) => setSelectedTask(task)} /> };
+  }) : [];
+
   return (
     <Wrapper>
       <Topbar>
@@ -894,7 +992,7 @@ function ExploreScreen() {
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
         pillHidden={!!park && suggestionSlots.right !== 'project'}
         pillCollapsed={!!park && suggestionSlots.rightStub}
-        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />}
+        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0) : undefined} />}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
@@ -1107,27 +1205,8 @@ function ExploreScreen() {
               ? { position: 'absolute', left: 12, right: 12, bottom: 196, zIndex: 40 }
               : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
         )}
-        {/* Ride Control floats over the map so the map runs right up to the header. */}
-        {player && (
-          <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
-            <RideControlBar control={rideControl} tasks={visibleTasks}
-              onFocusTask={(task) => setSelectedTask(task)} />
-            <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
-              mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
-              onMapMoment={() => {
-                const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
-                if (task) setSelectedTask(task);
-              }}
-              pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
-              onRush={(task) => setSelectedTask(task)} />
-            {nightPill && nightShow.show && <NightShowPill show={nightShow.show} phase={nightShow.phase}
-              onSee={() => {
-                const anchor = nightShow.show?.anchor;
-                if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
-              }} />}
-            {frightNight.modeOn && <FrightPill night={frightNight} engine={frightEngine} onHelp={frightEngine.replayTutorial} />}
-          </View>
-        )}
+        {/* One HUD row floats over the map (the map runs right up to the header). */}
+        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder={() => true}
           accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={{ position: 'absolute', top: slotTop, left: 0, width: '52%', height: 120, zIndex: 40 }} />}
@@ -1225,6 +1304,7 @@ function ExploreScreen() {
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
           fright={frightMap}
+          declutter={declutter}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={chestButton} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
@@ -1283,82 +1363,26 @@ function ExploreScreen() {
               <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}
                 onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />
             )}
-          {redeemables?.coins
-            ?.filter((coin) =>
-              opportunityIsActive(coin, mapNow)
-            )
-            .map((coin) => {
-              return (
-                <Marker
-                  key={coin.id}
-                  coordinate={{
-                    latitude: Number(coin.latitude),
-                    longitude: Number(coin.longitude),
-                  }}
-                  tappable={false}
-                  flat={true}
-                  tracksViewChanges={false}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                >
-                  <View pointerEvents="none">
-                    <Coin coin={coin} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />
-                  </View>
-                </Marker>
-              );
-            })}
+          {redeemables?.coins?.filter(coin => opportunityIsActive(coin, mapNow)).map(coin => (
+            <FindMarker key={`coin-${coin.id}`} id={`coin:${coin.id}`} latitude={Number(coin.latitude)} longitude={Number(coin.longitude)}>
+              {tag => <Coin coin={coin} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+            </FindMarker>
+          ))}
           {redeemables?.vaults.map((vault) => (
             <VaultMarker key={vault.id} vault={vault} />
           ))}
           {/* Keys - rare spawns! */}
-          {redeemables?.keys
-            ?.filter((key) =>
-              opportunityIsActive(key, mapNow)
-            )
-            .map((key) => {
-              return (
-                <Marker
-                  key={key.id}
-                  coordinate={{
-                    latitude: Number(key.latitude),
-                    longitude: Number(key.longitude),
-                  }}
-                  tappable={false}
-                  flat={true}
-                  tracksViewChanges={false}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                >
-                  <View pointerEvents="none">
-                    <Key model={key} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />
-                  </View>
-                </Marker>
-              );
-            })}
-          {redeemables?.redeemables
-            .filter((redeemable) =>
-              opportunityIsActive(redeemable, mapNow)
-            )
-            .map((redeemable) => {
-              return (
-                <Marker
-                  key={redeemable.id}
-                  coordinate={{
-                    latitude: Number(redeemable.latitude),
-                    longitude: Number(redeemable.longitude),
-                  }}
-                  tappable={false}
-                  flat={true}
-                  tracksViewChanges={false}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                >
-                  <View pointerEvents="none">
-                    <Redeemable
-                      redeemable={redeemable}
-                      onExpire={() => void refreshMapOpportunities().catch(() => undefined)}
-                    />
-                  </View>
-                </Marker>
-              );
-            })}
+          {redeemables?.keys?.filter(key => opportunityIsActive(key, mapNow)).map(key => (
+            <FindMarker key={`key-${key.id}`} id={`key:${key.id}`} latitude={Number(key.latitude)} longitude={Number(key.longitude)}>
+              {tag => <Key model={key} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+            </FindMarker>
+          ))}
+          {redeemables?.redeemables.filter(redeemable => opportunityIsActive(redeemable, mapNow)).map(redeemable => (
+            <FindMarker key={`redeemable-${redeemable.id}`} id={`redeemable:${redeemable.id}`}
+              latitude={Number(redeemable.latitude)} longitude={Number(redeemable.longitude)}>
+              {tag => <Redeemable redeemable={redeemable} tag={tag} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />}
+            </FindMarker>
+          ))}
           {/* Community Center Marker */}
           {communityCenter && (
             <CommunityCenterMarker

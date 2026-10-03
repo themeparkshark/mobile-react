@@ -14,11 +14,15 @@ import type { FrightNight } from '../../hooks/useFrightNight';
 import ArtImage from './ArtImage';
 import type { FrightEngine } from './useFrightEngine';
 
-export default function FrightPill({ night, engine, onHelp }: {
+export default function FrightPill({ night, engine, onHelp, inline = false, showHelp = true }: {
   readonly night: FrightNight;
   readonly engine: FrightEngine;
   /** Replay the tutorial ("?"). */
   readonly onHelp: () => void;
+  /** Inside the map's status row: no outer margin. */
+  readonly inline?: boolean;
+  /** The "?" button (the status row hides it when its stack button takes that spot). */
+  readonly showHelp?: boolean;
 }) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -38,7 +42,7 @@ export default function FrightPill({ night, engine, onHelp }: {
         : hauntCountText(done, haunts.length);
   const label = `${title}. ${hauntCountText(done, haunts.length)}. ${sub}. Open the haunt list.`;
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, inline && styles.inline]}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => engine.setSheetOpen(true)}
         style={({ pressed }) => [styles.pill, pressed && { opacity: 0.9 }]}>
         <View style={styles.lantern}>
@@ -51,15 +55,16 @@ export default function FrightPill({ night, engine, onHelp }: {
         {engine.pendingSync > 0 && <GameIcon name="retry" size={14} />}
         <GameIcon name="arrow" size={16} />
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`How ${title} works`} onPress={onHelp} hitSlop={8}
+      {showHelp && <Pressable accessibilityRole="button" accessibilityLabel={`How ${title} works`} onPress={onHelp} hitSlop={8}
         style={styles.help}>
         <Text style={styles.helpText}>?</Text>
-      </Pressable>
+      </Pressable>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  inline: { marginHorizontal: 0, marginTop: 0 },
   row: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 8, gap: 6 },
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: NIGHT.fog,
     backgroundColor: NIGHT.haunt, paddingVertical: 5, paddingLeft: 6, paddingRight: 10, minHeight: 48,

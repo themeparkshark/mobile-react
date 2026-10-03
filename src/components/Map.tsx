@@ -22,6 +22,9 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
 import { useFocusEffect } from '@react-navigation/native';
 import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
+import { DeclutterContext } from './map/declutter/Placed';
+import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
+import type { LayoutItem, Rect } from './map/declutter/solver';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -42,6 +45,8 @@ const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
+// Radial falloff texture: soft round shadows and light pools with no hard edge.
+const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
 /** The GRAB ZONE tag's slot inside the grab-zone box (a 2r square), centred on its spot on the circle. */
 function grabTagSlotPosition(radius: number, angleDeg: number) {
@@ -55,7 +60,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -88,6 +93,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly extraControls?: ReactNode;
   /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
   readonly fright?: FrightMapInput | null;
+  /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
+  readonly declutter?: MapDeclutterInput | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -357,6 +364,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }],
   };
 
+  // Declutter: the shark is an obstacle for chips (never for art you walk up to),
+  // and the map's own button column is an inset no marker draws under.
+  const declutterPlayer = useMemo<LayoutItem[]>(() => declutter && location ? [{ id: 'player', latitude: location.latitude,
+    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }] : [],
+  [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasExtraControls = !!extraControls;
+  const declutterControls = useMemo<Rect[]>(() => declutter && viewSize ? [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6,
+    w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12 }] : [], [!!declutter, viewSize?.width, controlsTop, hasExtraControls]); // eslint-disable-line react-hooks/exhaustive-deps
+  const feedDeclutter = useMapDeclutter(declutter, viewSize, declutterPlayer, declutterControls);
+  const declutterSeeded = useRef(false);
+  useEffect(() => {
+    if (!declutter || declutterSeeded.current || !location) return;
+    declutterSeeded.current = true;
+    feedDeclutter({ latitude: location.latitude, longitude: location.longitude, zoom: FOLLOW_ZOOM, bearing: 0 });
+  }, [declutter, location, feedDeclutter]);
+
   const rangeRadius = pickupRange && location
     ? Math.max(24, Math.min(600, pickupRange.meters * pointsPerMeter(cameraZoom, location.latitude))) : 0;
   const playerShark = (
@@ -374,16 +397,19 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </View>
         ) : (
           <>
-            {/* Animated glow ring */}
-            <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
-            {/* Inner blue ring (ground indicator) */}
-            <View style={styles.groundRing} />
+            {/* A soft pool of light breathes under the shark, over a soft round ground shadow (one radial texture each). */}
+            <Reanimated.View style={[styles.outerGlowRing, glowStyle]}>
+              <Image source={GROUND_GLOW} tintColor="#7cc6f5" style={StyleSheet.absoluteFill} contentFit="fill" />
+            </Reanimated.View>
+            <Image source={GROUND_GLOW} tintColor="#05143c" style={styles.groundRing} contentFit="fill" />
           </>
         )}
         {/* Wake: sparkles spill from under the shark while it walks. */}
         <SharkWake moving={wake} />
-        {/* Animated shadow — shrinks when shark bobs up */}
-        <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
+        {/* Contact shadow: tightens as the shark bobs up */}
+        <Reanimated.View style={[styles.shadowDisc, shadowStyle]}>
+          <Image source={GROUND_GLOW} tintColor="#05143c" style={StyleSheet.absoluteFill} contentFit="fill" />
+        </Reanimated.View>
         {/* Directional indicator — only visible in heading mode */}
         {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
@@ -450,6 +476,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {extraControls}
       </View>
 
+      {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
+      <DeclutterContext.Provider value={declutter?.store ?? null}>
       <MapView
         ref={mapViewRef}
         style={StyleSheet.absoluteFill}
@@ -480,6 +508,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
+          const [centerLng, centerLat] = feature.geometry?.coordinates ?? [];
+          feedDeclutter({ latitude: Number(centerLat), longitude: Number(centerLng), zoom, bearing: Number(feature.properties?.heading ?? 0) });
           if (Number.isFinite(zoom)) {
             onZoomChange?.(zoom);
             setCameraZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
@@ -575,6 +605,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </Marker>
         )}
       </MapView>
+      </DeclutterContext.Provider>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
@@ -668,33 +699,31 @@ const styles = StyleSheet.create({
   grabZoneTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
   grabZoneText: { fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.5, color: BRAND.blue },
   grabZoneTextReady: { color: BRAND.navy },
+  // Player shark on the park map: a soft round shadow on the ground, not a
+  // hard bar. A faint light pool breathes under it (the glow loop), the core
+  // shadow is a feathered ellipse (the blur is the view's own shadow).
+  // Player shark on the park map: a soft round shadow on the ground, not a
+  // hard bar (each is the radial glow texture, tinted).
   outerGlowRing: {
     position: 'absolute',
-    bottom: 0,
-    width: 72,
-    height: 22,
-    borderRadius: 30,
-    backgroundColor: 'rgba(33, 150, 243, 0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(33, 150, 243, 0.25)',
+    bottom: -6,
+    width: 92,
+    height: 34,
+    opacity: 0.35,
   },
   groundRing: {
     position: 'absolute',
-    bottom: 3,
-    width: 55,
-    height: 17,
-    borderRadius: 23,
-    backgroundColor: 'rgba(33, 150, 243, 0.35)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(33, 150, 243, 0.7)',
+    bottom: -2,
+    width: 70,
+    height: 24,
+    opacity: 0.55,
   },
   shadowDisc: {
     position: 'absolute',
-    bottom: 6,
-    width: 36,
-    height: 12,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    bottom: 3,
+    width: 40,
+    height: 14,
+    opacity: 0.5,
   },
   sharkDirectionCone: {
     position: 'absolute',
