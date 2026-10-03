@@ -1,7 +1,7 @@
-import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -22,18 +22,20 @@ import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
-import PlayerButtons from '../components/PlayerButtons';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
-import Subscribed from '../components/Subscribed';
+import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
+import { profileStores } from '../components/profile/profileStores';
+import StatusBadges from '../components/profile/StatusBadges';
+import TitlePill from '../components/profile/TitlePill';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import GameIcon from '../ui/GameIcon';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -41,9 +43,7 @@ import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffe
 
 const SHARK_TAP_SOUND = require('../../assets/sounds/button_press.mp3');
 import useCrumbs from '../hooks/useCrumbs';
-import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
-import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
@@ -51,7 +51,6 @@ export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
-  const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { player } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
@@ -63,7 +62,12 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [extrasUnavailable, setExtrasUnavailable] = useState(false);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
-  
+  const reducedMotion = useReducedGameMotion();
+  const focused = useIsFocused();
+  // The XP potion only animates while its card is on screen.
+  const [levelCardBottom, setLevelCardBottom] = useState(0);
+  const [potionOffscreen, setPotionOffscreen] = useState(false);
+
   // Scroll refs
   const route = useRoute();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -162,52 +166,50 @@ export default function ProfileScreen() {
     }
   }, [loading, route.params]);
 
-  useEffect(() => {
-    if (stores) {
-      setButtons([
-        {
-          image: require('../../assets/images/screens/profile/pin_collections.png'),
-          onPress: () => {
-            RootNavigation.navigate('PinCollections');
-          },
-          text: labels.pin_packs || 'Pin Packs',
+  const shortcuts = useMemo<ProfileShortcut[]>(() => {
+    const { sharkShop, others } = profileStores(stores);
+    const openStore = (store: StoreType) => {
+      if (store.is_secret_store && !player?.is_subscribed) {
+        RootNavigation.navigate('Membership');
+        return;
+      }
+      RootNavigation.navigate('Store', { store: store.id });
+    };
+    return [
+      {
+        key: 'shark-shop',
+        label: 'Shark Shop',
+        image: require('../../assets/images/screens/profile/shortcut_shark_shop.png'),
+        hint: 'Opens the shop for new gear',
+        onPress: () => {
+          if (sharkShop) RootNavigation.navigate('Store', { store: sharkShop.id });
+          else RootNavigation.navigate('Store', { store: 'shark-shop' });
         },
-        ...stores.map((store) => {
-          return {
-            image: store.icon_url ?? (store.name === 'Shark Shop'
-              ? require('../../assets/images/screens/profile/shark_shop.png') : undefined),
-            onPress: () => {
-              if (!store.is_secret_store) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-                return;
-              }
-
-              if (player?.is_subscribed) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-              } else {
-                RootNavigation.navigate('Membership');
-              }
-            },
-            text: store.name,
-            permission:
-              player && !player.is_subscribed && store.is_secret_store
-                ? PermissionEnums.ViewSecretStore
-                : undefined,
-          };
-        }),
-        {
-          image: require('../../assets/images/screens/explore/stampbook.png'),
-          onPress: () => {
-            RootNavigation.navigate('StampBook');
-          },
-          text: 'Stamp Book',
-        },
-      ]);
-    }
+      },
+      {
+        key: 'stamp-book',
+        label: 'Stamp Book',
+        image: require('../../assets/images/screens/profile/shortcut_stamp_book.png'),
+        hint: 'Opens your stamps',
+        onPress: () => RootNavigation.navigate('StampBook'),
+      },
+      {
+        key: 'pin-packs',
+        label: labels.pin_packs || 'Pin Packs',
+        image: require('../../assets/images/screens/profile/pin_collections.png'),
+        hint: 'Opens your pin collections',
+        onPress: () => RootNavigation.navigate('PinCollections'),
+      },
+      ...others.map((store): ProfileShortcut => ({
+        key: `store-${store.id}`,
+        label: store.name,
+        image: store.icon_url || require('../../assets/images/screens/profile/pin_collections.png'),
+        hint: store.is_secret_store && !player?.is_subscribed
+          ? 'VIP members only. Opens VIP membership'
+          : `Opens the ${store.name}`,
+        onPress: () => openStore(store),
+      })),
+    ];
   }, [stores, labels.pin_packs, player?.is_subscribed]);
 
   // Redirect guests to login: must be in useEffect, not during render
@@ -230,6 +232,7 @@ export default function ProfileScreen() {
               RootNavigation.navigate('Notifications');
             }}
             showRedCircle={!!notificationCount}
+            accessibilityLabel={notificationCount ? `Notifications, ${notificationCount} new` : 'Notifications'}
           >
             <Image
               style={{
@@ -250,6 +253,7 @@ export default function ProfileScreen() {
             onPress={() => {
               RootNavigation.navigate('Settings');
             }}
+            accessibilityLabel="Settings"
           >
             <Image
               style={{
@@ -273,10 +277,16 @@ export default function ProfileScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={config.primary} />
           }
+          scrollEventThrottle={100}
+          onScroll={(e) => {
+            const off = levelCardBottom > 0 && e.nativeEvent.contentOffset.y > levelCardBottom;
+            if (off !== potionOffscreen) setPotionOffscreen(off);
+          }}
         >
           <View
             style={{
-              paddingBottom: 32,
+              // Clear the bottom bar and its raised Explore button.
+              paddingBottom: 120,
             }}
           >
             <ImageBackground
@@ -292,7 +302,11 @@ export default function ProfileScreen() {
             >
               {/* Shark tap zone */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Your shark"
+                accessibilityHint="Opens the dressing room"
                 onPressIn={() => {
+                  if (reducedMotion) return;
                   Animated.spring(sharkScale, {
                     toValue: 0.92,
                     useNativeDriver: true,
@@ -301,6 +315,7 @@ export default function ProfileScreen() {
                   }).start();
                 }}
                 onPressOut={() => {
+                  if (reducedMotion) return;
                   Animated.parallel([
                     Animated.spring(sharkScale, {
                       toValue: 1,
@@ -341,7 +356,12 @@ export default function ProfileScreen() {
 
               {/* Edit button tap zone: independent */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={labels.edit || 'Edit'}
+                accessibilityHint="Opens the dressing room"
+                hitSlop={8}
                 onPressIn={() => {
+                  if (reducedMotion) return;
                   Animated.spring(editScale, {
                     toValue: 0.88,
                     useNativeDriver: true,
@@ -350,6 +370,7 @@ export default function ProfileScreen() {
                   }).start();
                 }}
                 onPressOut={() => {
+                  if (reducedMotion) return;
                   Animated.parallel([
                     Animated.spring(editScale, {
                       toValue: 1,
@@ -378,12 +399,13 @@ export default function ProfileScreen() {
               >
                 <View
                   style={{
-                    borderTopRightRadius: 6,
-                    backgroundColor: 'rgba(5, 52, 110, 0.6)',
-                    paddingLeft: 8,
-                    paddingRight: 8,
-                    paddingTop: 4,
-                    paddingBottom: 4,
+                    borderTopRightRadius: 14,
+                    backgroundColor: 'rgba(5, 52, 110, 0.72)',
+                    minHeight: 44,
+                    paddingLeft: 12,
+                    paddingRight: 14,
+                    paddingTop: 6,
+                    paddingBottom: 6,
                     flexDirection: 'row',
                     alignItems: 'center',
                   }}
@@ -434,13 +456,8 @@ export default function ProfileScreen() {
               }}
             >
               {!!player.title && (
-                <View style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6,
-                  backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 2, borderColor: '#ffffff',
-                  borderBottomWidth: 4, borderBottomColor: '#d99a00',
-                  paddingHorizontal: 14, paddingVertical: 6, marginTop: 12 }}>
-                  <GameIcon name="crown" size={20} />
-                  <Text style={{ color: '#05346e', fontFamily: 'Shark', fontSize: 17,
-                    textAlign: 'center' }} numberOfLines={1}>{player.title}</Text>
+                <View style={{ marginTop: 14 }}>
+                  <TitlePill title={player.title} />
                 </View>
               )}
               {!!player.featured_ride_coin && (
@@ -458,8 +475,9 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                <View style={{ paddingTop: 4, paddingBottom: 6 }}>
-                  <Experience player={player} />
+                <View style={{ paddingTop: 4, paddingBottom: 6 }}
+                  onLayout={(e) => setLevelCardBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height + 315)}>
+                  <Experience player={player} own paused={!focused || potionOffscreen} />
                 </View>
               </View>
               <View
@@ -468,21 +486,10 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                <PlayerButtons buttons={buttons} />
-              {(player.is_subscribed || player.verified_at) && (
-                <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 8, gap: 8 }}>
-                  {player.is_subscribed && (
-                    <View style={{ flex: 1 }}>
-                      <Subscribed />
-                    </View>
-                  )}
-                  {player.verified_at && (
-                    <View style={{ flex: 1 }}>
-                      <Verified />
-                    </View>
-                  )}
+                <View style={{ marginTop: 18 }}>
+                  <ProfileShortcuts items={shortcuts} loading={loading} />
                 </View>
-              )}
+                <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
               {/* Compact illustrated entry to the ride journal. */}
               <Pressable
                 onPress={() => RootNavigation.navigate('RideTracker')}
