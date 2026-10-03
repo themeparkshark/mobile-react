@@ -4,9 +4,10 @@
  * the glossy sticker-slot tile panel in Alex's style (two-tone body, darker
  * lip, one gloss band).
  *
- * Ramp: the app-wide palette in src/design-system.ts (Common green,
- * Uncommon blue, Rare purple, Epic orange, Legendary gold), so the book
- * agrees with stamps, the shop and the wardrobe. The lone Common gem stays
+ * Ramp: the app-wide palette in src/design-system.ts colors.rarity (Common
+ * green, Uncommon blue, Rare purple, Epic orange, Legendary gold), shared with
+ * stamps, the shop and prep items. (The wardrobe keeps a white Common on
+ * purpose, via wearableRarityUi.) The lone Common gem stays
  * readable by size and a thick white outline, not a different hue.
  * Ink on every chip is navy for 4.5:1 contrast; the frame color never
  * carries text.
@@ -62,13 +63,15 @@ export function RarityGems({ rarity, size = 9, style }: { readonly rarity: numbe
   const count = Math.max(1, Math.min(5, Math.round(rarity)));
   // A lone Common gem reads as big as the rest (it has the room).
   const gem = count === 1 ? Math.round(size * 1.35) : size;
-  const box = Math.ceil(gem * 1.45);
+  const box = Math.ceil((gem + 4) * 1.45);
   return (
     <View style={[styles.gems, style]} accessible={false}>
       {Array.from({ length: count }, (_, index) => (
         <View key={index} style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
-          <View style={[styles.gem, { width: gem, height: gem, backgroundColor: look.frame }, count === 1 && styles.gemCommon]}>
-            <View style={styles.facet} />
+          <View style={[styles.gemOutline, { width: gem + 4, height: gem + 4 }]}>
+            <View style={[styles.gem, { width: gem, height: gem, backgroundColor: look.frame, transform: [] }, count === 1 && styles.gemCommon]}>
+              <View style={styles.facet} />
+            </View>
           </View>
         </View>
       ))}
@@ -93,7 +96,9 @@ export function TilePanel({ rarity, found, children, style }: {
 
 const styles = StyleSheet.create({
   gems: { flexDirection: 'row', gap: 1 },
+  // A white keyline inside a 2 px navy outline: every gem reads on white tiles and on blue panels.
   gem: { transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: BRAND.white, borderRadius: 2, overflow: 'hidden' },
+  gemOutline: { transform: [{ rotate: '45deg' }], borderWidth: 2, borderColor: BRAND.navy, borderRadius: 3, alignItems: 'center', justifyContent: 'center' },
   gemCommon: { borderWidth: 2.5 },
   facet: { position: 'absolute', left: 0, top: 0, width: '50%', height: '50%', backgroundColor: 'rgba(255,255,255,0.55)' },
   panel: {

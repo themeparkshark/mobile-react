@@ -18,7 +18,7 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
@@ -49,7 +49,7 @@ import {
 } from './SetCollection/DexParts';
 import { ItemCard } from './SetCollection/DexItemCard';
 import { RewardReveal } from './SetCollection/DexReveal';
-import { cachedBook, storeBook, storeDetail } from './SetCollection/dexCache';
+import { cachedBook, landOffset, saveLandOffset, storeBook, storeDetail } from './SetCollection/dexCache';
 import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/eventCards';
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
@@ -125,6 +125,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const [reveal, setReveal] = useState<{ set: DexSet; reward: DexReward; key: number } | null>(null);
   const [stamp, setStamp] = useState<{ slug: string; title: string } | null>(null);
   const claimDim = useSharedValue(0);
+  // While the claim is in flight the whole window dims (top bar and tab bar too) and the wait builds up.
+  const [claimWaiting, setClaimWaiting] = useState(false);
   const claimDimStyle = useAnimatedStyle(() => ({ opacity: claimDim.value }));
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
@@ -256,8 +258,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     setPopKey(key => key + 1);
     invalidateMenuRewardBadge();
+    // The reveal is opaque and up: the pre-dim and the busy CLAIM go at once (never wait on the refresh calls).
+    claimDim.value = withTiming(0, { duration: 200 });
+    setBusy(null);
+    setClaimWaiting(false);
     if (set) setReveal({ set, reward, key: Date.now() });
-  }, [set]);
+  }, [set, claimDim]);
 
   const claim = useCallback(async (reward: DexReward, itemId?: number) => {
     if (!set || busy) return;
@@ -271,6 +277,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     // Answer the tap at once (whoosh, haptic, the dim toward the reveal) so the server wait hides in the build-up.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     playSfx('fx.whooshRev', 0.7);
+    setClaimWaiting(true);
     claimDim.value = reduced ? 0.6 : withTiming(0.6, { duration: 450 });
     try {
       if (preview) {
@@ -291,10 +298,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       }
       setPicking(null);
       celebrate(reward);
-      if (!preview) {
-        await refreshPlayer().catch(() => undefined);
-        await reloadAll();
-      }
+      // Background: a slow park network never holds the reveal, the dim or the button.
+      if (!preview) void refreshPlayer().catch(() => undefined).then(() => reloadAll()).catch(() => undefined);
     } catch {
       // A lost response can follow a saved claim. Read it back before blaming the player.
       const list = await reloadAll();
@@ -303,15 +308,16 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       if (after && (after.status === 'claimed' || after.status === 'pending')) {
         setPicking(null);
         celebrate(reward);
-        await refreshPlayer().catch(() => undefined);
+        void refreshPlayer().catch(() => undefined);
       } else {
         setError('That reward did not go through. Try again.');
         playSfx('fx.nopeShort', 0.6);
       }
     } finally {
+      // Error path (success already cleared these in celebrate).
       setBusy(null);
-      // The reveal (opaque) is up now, or the claim failed: either way the pre-dim goes.
-      claimDim.value = withTiming(0, { duration: 200 });
+      setClaimWaiting(false);
+      claimDim.value = reduced ? 0 : withTiming(0, { duration: 200 });
     }
   }, [set, busy, preview, refreshPlayer, reloadAll, celebrate, claimDim, reduced]);
 
@@ -430,7 +436,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // First land on a claim: with a cached book the claim offset from the last visit is applied as the list's
   // initial contentOffset (no paint at the top, no scroll, no hidden page). With no cache the list stays hidden
   // only until its first layout pass decides the offset; the safety timer starts at that first layout.
-  const seededOffset = seed ? lastLandOffset.get(seedSlug ?? '') ?? null : null;
+  const seededOffset = seed ? landOffset(player?.id, seedSlug) : null;
+  const firstLand = useRef(true);
   const seedSet = seed?.book.sets.find(entry => entry.slug === seedSlug);
   const seedClaim = !!seedSet && hasClaimable(seedSet);
   // Visible from the first frame when the cached page needs no scroll, or we already know where to start.
@@ -454,15 +461,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     safetyTimer.current = setTimeout(() => { setLanded(true); listFade.value = 1; }, 700);
   };
   const revealClaim = () => {
-    if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) { if (set && !claimReady) showList(); return; }
+    if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) {
+      if (set && !claimReady) { firstLand.current = false; showList(); }
+      return;
+    }
     revealedFor.current = set.slug;
     const overflow = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
-    if (overflow <= 0) { showList(); return; }
+    if (overflow <= 0) { firstLand.current = false; showList(); return; }
     // Never stop with the set cards cut in half: scroll them fully off (the ribbon header leads) when we must move.
     const offset = Math.max(overflow, pickerBottom.current);
-    lastLandOffset.set(set.slug, offset);
-    // First land: jump there before the list is shown (no visible scroll from the picker to the claim panel).
-    if (!landed || seededOffset != null) {
+    saveLandOffset(player?.id, set.slug, offset);
+    // First land only: jump there before the list is shown (no visible scroll from the picker to the claim panel).
+    // Later set switches keep the animated scroll.
+    if (firstLand.current) {
+      firstLand.current = false;
       if (seededOffset == null || Math.abs(seededOffset - offset) > 2) listRef.current?.scrollToOffset({ offset, animated: false });
       showList();
       return;
@@ -551,6 +563,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             <GameButton label="Open the map" icon="map" onPress={goToMap} />
           </View>
         ) : (
+          <View style={{ flex: 1 }}>
+          {!landed && <View style={StyleSheet.absoluteFill} pointerEvents="none"><BookSkeleton cell={cell} /></View>}
           <Animated.View style={[{ flex: 1 }, listFadeStyle]}>
           <FlashList
             ref={listRef}
@@ -573,6 +587,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             )}
           />
           </Animated.View>
+          </View>
         )}
       </View>
 
@@ -598,7 +613,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </Modal>
 
       <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
+      <Modal visible={claimWaiting} transparent animationType="none" statusBarTranslucent>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
+        <ClaimBuildUp reduced={reduced} />
+      </Modal>
       <RewardReveal reveal={reveal} onClose={() => {
         const won = reveal;
         setReveal(null);
@@ -607,6 +625,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
           setStamp({ slug: won.set.slug, title: won.reward.title });
           playSfx('ui.confirm', 0.7);
         }
+        // After the stamp beat, ease the done panel (and its Wear title button) clear of the compass.
+        if (revealTimer.current) clearTimeout(revealTimer.current);
+        revealTimer.current = setTimeout(() => {
+          const offset = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
+          if (viewportH.current && offset > 0) listRef.current?.scrollToOffset({ offset, animated: !reduced });
+        }, 700);
       }} />
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
@@ -616,8 +640,31 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   );
 }
 
-/** Where the first land scrolled to, per set, for this session: the next open starts there before first paint. */
-const lastLandOffset = new Map<string, number>();
+/** The claim wait as a build-up: a pulsing gold glow and, after 600 ms, a rising tone every half second. */
+function ClaimBuildUp({ reduced }: { readonly reduced: boolean }) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return undefined;
+    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0.35, { duration: 380 })), -1, false);
+    let step = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const tick = () => {
+      playSfx('ui.select', Math.min(0.9, 0.35 + step * 0.12));
+      step += 1;
+      timers.push(setTimeout(tick, 500));
+    };
+    timers.push(setTimeout(tick, 600));
+    return () => { timers.forEach(clearTimeout); cancelAnimation(pulse); };
+  }, [reduced, pulse]);
+  const glow = useAnimatedStyle(() => ({ opacity: 0.25 + 0.5 * pulse.value, transform: [{ scale: 0.85 + 0.25 * pulse.value }] }));
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
+      accessible accessibilityLabel="Claiming your reward">
+      <Animated.View style={[{ width: 220, height: 220, borderRadius: 110, backgroundColor: BRAND.gold }, glow]} />
+      <View style={{ position: 'absolute' }}><GameIcon name="gift" size={96} /></View>
+    </View>
+  );
+}
 
 /** The event card screen ships with the fright app; until it is in this build, no Events card shows. */
 function eventRouteExists(): boolean {
