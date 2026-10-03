@@ -75,7 +75,7 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
   const { playSound } = useContext(SoundEffectContext);
   const first = rank === 1;
   const avatarPx = first ? 80 : 70;
-  const shown = useCountUp(score, landed, reduced);
+  const shown = useCountUp(Number(score) || 0, landed, reduced);
   const crown = useSharedValue(reduced ? 1 : 0);
   const spin = useSharedValue(0);
   const pulse = useSharedValue(0);

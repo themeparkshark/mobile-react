@@ -34,7 +34,7 @@ export function useFrightState(input: FrightMapInput) {
   else if (phase === 'off') wasActive.current = false;
   const visible = enabled ? frightVisibility({ active: input.active, phase, serverNowMs: serverNow, night, wasActive: wasActive.current }) : 0;
   const tier = frightTier({ alive: alive.tier, spooky: input.spooky, reducedMotion: alive.reducedMotion,
-    cap: frightTierCap(input.tierCap, livePhase) });
+    cap: frightTierCap(devTier() ?? input.tierCap, livePhase) });
   const caps = frightCaps(tier);
   const showLive = !!input.showLive || showLiveFromSpots(spots, serverNow);
   const quiet = !!input.quiet;
@@ -43,6 +43,13 @@ export function useFrightState(input: FrightMapInput) {
   // Thunder, pops, haptics and sound: the mode is ON, Spooky effects on, phones up, map on screen.
   const effectsOn = livePhase && input.spooky && !quiet && tier !== 'calm' && alive.active;
   return { alive, serverNow, phase, visible, tier, caps, showLive, livePhase, quiet, moving, effectsOn };
+}
+
+/** Development measurement only (EXPO_PUBLIC_FRIGHT_TIER=full|lite|calm): overrides the server cap. */
+function devTier(): 'full' | 'lite' | 'calm' | null {
+  if (!__DEV__) return null;
+  const v = process.env.EXPO_PUBLIC_FRIGHT_TIER;
+  return v === 'full' || v === 'lite' || v === 'calm' ? v : null;
 }
 
 export type FrightState = ReturnType<typeof useFrightState>;

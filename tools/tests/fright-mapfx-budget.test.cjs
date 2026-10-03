@@ -117,7 +117,7 @@ test('perf probe stats', () => {
 test('Map wires the fright layer through one prop, and the layer pauses with the map', () => {
   const map = read('src/components/Map.tsx');
   assert.match(map, /readonly fright\?: FrightMapInput \| null;/);
-  assert.match(map, /\{fright && <FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} \/>\}/);
+  assert.match(map, /\{fright && <FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} hud=\{rail\} \/>\}/);
   assert.match(map, /\{fright && viewSize && <FrightMapLayer input=\{fright\}/);
   const index = read('src/components/map/fright/index.ts');
   assert.match(index, /export type \{ FrightMapInput \}/);
@@ -152,7 +152,8 @@ test('tier cap: the server cap clamps; without one the mode runs lite while ON',
   assert.equal(fb.frightTierCap('calm', true), 'calm');
   assert.equal(fb.frightTierCap('bogus', true), 'lite');
   const state = read('src/components/map/fright/useFrightState.ts');
-  assert.match(state, /cap: frightTierCap\(input\.tierCap, livePhase\)/);
+  assert.match(state, /cap: frightTierCap\(devTier\(\) \?\? input\.tierCap, livePhase\)/);
+  assert.match(state, /if \(!__DEV__\) return null;/, 'the measurement override is development only');
 });
 
 test('ambient sound bed is opt-in; thunder and pops follow Spooky and phones-down only', () => {
@@ -184,7 +185,7 @@ test('haunts are tappable with a name and wait chip; reefs and props stay non-in
   assert.equal(fb.HAUNT_CHIP_ZOOM, 16);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /onPress=\{drawn && onHauntPress \? \(\) => onHauntPress\(haunt\.key\) : undefined\}/, 'hidden haunts take no taps');
-  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipLabel\(haunt, beads\[haunt\.key\] !== undefined\) : null\}/);
+  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipParts\(haunt, beads\[haunt\.key\] !== undefined\)\.name : null\}/);
   const reefMarkers = sources.match(/<Marker key=(\{`f[rpe]-|"fe")[^>]*>/g) ?? [];
   assert.ok(reefMarkers.length >= 3);
   for (const m of reefMarkers) assert.doesNotMatch(m, /onPress/, 'reefs, props and the encounter take no taps');

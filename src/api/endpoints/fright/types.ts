@@ -235,6 +235,8 @@ export interface FrightCaseFileDrop {
   readonly body: string;
   readonly rarity: 'common' | 'rare' | 'icon';
   readonly new: boolean;
+  /** Card front art (title plate blank: overlay the title). */
+  readonly image?: string | null;
 }
 
 /** Result of enter / done / found / score. `error` codes are stable strings. */

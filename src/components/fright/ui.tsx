@@ -47,14 +47,15 @@ export function Fins({ value, size = 22 }: { readonly value: number; readonly si
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 44, borderRadius: 14, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center',
+  button: { minHeight: 48, borderRadius: 14, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6, borderWidth: 3 },
   pumpkin: { backgroundColor: NIGHT.pumpkin, borderColor: NIGHT.moon },
   candy: { backgroundColor: NIGHT.candy, borderColor: NIGHT.white },
   ghost: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: NIGHT.fog },
   disabled: { opacity: 0.45 },
   pressed: { transform: [{ scale: 0.97 }] },
-  label: { fontFamily: 'Shark', fontSize: 15, color: NIGHT.ink },
-  labelGhost: { color: NIGHT.fogLight },
+  /** Primary labels (Next, Into the fog, Done, See it, Let's go, Retry) at 18 pt; ghost chips stay smaller. */
+  label: { fontFamily: 'Shark', fontSize: 18, color: NIGHT.ink },
+  labelGhost: { color: NIGHT.fogLight, fontSize: 15 },
   card: { backgroundColor: NIGHT.midnight, borderRadius: 22, borderWidth: 3, borderColor: NIGHT.fog, padding: 16 },
 });

@@ -18,7 +18,7 @@ import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { CLOUDS_H, CLOUDS_W, FOG_TILE, FRIGHT_ART, NIGHT } from './frightArt';
 import { frightEvents } from './events';
-import { useFrightImage, useRemoteImage } from './useFrightImage';
+import { frightImagesHeld, useFrightImage, useRemoteImage } from './useFrightImage';
 import { FRIGHT_SOUNDS, playFrightSfx, useFrightSoundBed } from './frightAudio';
 import { ambienceOn, frameStats } from './frightBudget';
 import { distanceMeters, pointsPerMeter, validPoint } from './geo';
@@ -251,7 +251,7 @@ function FrightPerfProbe({ tier }: { readonly tier: string }) {
   const samples = useSharedValue<number[]>([]);
   const log = (values: number[]) => {
     const s = frameStats(values);
-    console.log(`[fright-perf] tier=${tier} frames=${s.n} avg=${s.avg.toFixed(2)}ms p95=${s.p95.toFixed(2)}ms`);
+    console.log(`[fright-perf] tier=${tier} frames=${s.n} avg=${s.avg.toFixed(2)}ms p95=${s.p95.toFixed(2)}ms images=${frightImagesHeld()}`);
   };
   useFrameCallback(info => {
     'worklet';

@@ -16,7 +16,7 @@ import { WaterGlints } from './map/alive/WaterGlints';
 import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
-import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput } from './map/fright';
+import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
@@ -304,6 +304,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
+  // The right-rail controls, so fright haunt chips keep clear of them.
+  const [rail, setRail] = useState<HudRect | null>(null);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
   useEffect(() => {
@@ -487,7 +489,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         flex: 1,
       }}
       onLayout={event => {
-        setViewSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height });
+        const size = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
+        setViewSize(size);
         rootRef.current?.measureInWindow((_x, y) => { if (Number.isFinite(y)) setViewTop(y); });
       }}
     >
@@ -499,6 +502,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
+        }}
+        onLayout={event => {
+          const { x, y, width, height } = event.nativeEvent.layout;
+          setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
+            ? prev : { x, y, width, height }));
         }}
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
@@ -660,7 +668,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
       </DeclutterContext.Provider>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}

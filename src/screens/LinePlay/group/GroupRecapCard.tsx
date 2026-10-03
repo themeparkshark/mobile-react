@@ -12,10 +12,12 @@ import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, SHADOW, gameAlert } from '../../../ui';
 import { groupRecap, waitLine, type LineGroup } from '../../../services/lineplay/lineGroup';
 import { parkDayCaptureSize } from '../../../components/parkDayShareMetrics';
-import { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../../../components/ParkDayShareCard';
+import { FLEX_SIZE } from '../../../share/formats';
 import type { RideCoinLevelType } from '../../../models/ride-coin-level-type';
 import PlayerBadge from './PlayerBadge';
 import GroupShareCard from './GroupShareCard';
+
+const { width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT } = FLEX_SIZE.story;
 
 export function seatMap(group: LineGroup): Record<string, number> {
   return Object.fromEntries(group.players.map((player, index) => [player.id, index]));

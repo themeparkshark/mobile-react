@@ -38,7 +38,7 @@ test('screen projection follows the map heading; the camera center is the player
   assert.equal(fb.cameraCenter(null, null), null);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /chipX=\{chipCenter && chips\.has\(haunt\.key\) \? screenX\(at, chipCenter, zoom, heading, screenW\) : null\}/);
-  assert.match(sprites(), /chipShift\(chipX, chipW, screenW\)/, 'clamped with the measured chip width');
+  assert.match(sprites(), /chipShiftClear\(chipX, chipY \?\? Number\.NaN, chipSize\.w, chipSize\.h, screenW, huds\)/, 'clamped with the measured chip size');
   assert.match(sprites(), /transform: \[\{ translateX: shift \}\]/);
 });
 
@@ -65,7 +65,7 @@ test('survived haunts: pin and check badge, no "1" bead, no posted wait', () => 
   assert.match(src, /styles\.check/);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /survivedPin=\{assets\?\.event_pins\?\.\['ev-survived'\]\?\.\['256'\] \?\? null\}/);
-  assert.match(sources, /hauntChipLabel\(haunt, beads\[haunt\.key\] !== undefined\)/);
+  assert.match(sources, /hauntChipParts\(haunt, beads\[haunt\.key\] !== undefined\)/);
 });
 
 test('arrival beat: the haunts light over 1.5 s after the intro, and the map adds no second thunder', () => {

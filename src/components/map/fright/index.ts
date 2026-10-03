@@ -5,4 +5,5 @@
 export type { FrightMapInput } from './types';
 export { FrightMapSources, FrightNightTint } from './FrightMapSources';
 export { FrightMapLayer } from './FrightMapLayer';
-export { frightTier, frightWorstCase, phaseIntensity, frightVisibility, stableMarkerSpots } from './frightBudget';
+export { frightTier, frightWorstCase, phaseIntensity, frightVisibility, stableMarkerSpots, onScreen } from './frightBudget';
+export type { HudRect } from './frightBudget';
