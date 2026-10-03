@@ -3,7 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Canvas, Image as SkImageNode, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
+import { Canvas, Group, Image as SkImageNode, Picture, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
+
+const WARM_SCALE = [{ scale: 0.01 }];
+/** Stamp art per ride (the ride's own vehicle). Unbuilt rides show a lock instead. */
+const RIDE_STAMP: Partial<Record<RideKind, number>> = {
+  coaster: require('../../../assets/images/ride-photo/car-back.webp'),
+  flume: require('../../../assets/images/ride-photo/log-boat.webp'),
+  teacups: require('../../../assets/images/ride-photo/teacup-back.webp'),
+};
 import Animated, {
   Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
   type SharedValue,
@@ -23,11 +31,11 @@ import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, t
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
-import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
-import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
+import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
-import { RIDES, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
+import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
@@ -110,12 +118,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Development recordings: pin the ride and sky. */
   readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
   /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
+  /** The reward banner is on the map (map markers under it hide their tags). */
+  readonly onCascade?: (active: boolean) => void;
+  /** Development recordings: play this catch as if Reduce Motion were on. */
+  readonly forceReducedMotion?: boolean;
   readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, refreshAfterCatch = true }, ref) {
-  const reducedMotion = useReducedGameMotion();
+  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, refreshAfterCatch = true }, ref) {
+  const systemReduced = useReducedGameMotion();
+  // Development recordings can show one catch with Reduce Motion on.
+  const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
   const { refreshPlayer } = useContext(AuthContext);
   const { currencies } = useContext(CurrencyContext);
   const { triggerFly } = useCurrencyFly();
@@ -126,6 +140,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean; flyTo: { x: number; y: number } | null } | null>(null);
   const [rideItem, setRideItem] = useState<PrepItemType | null>(null);
+  // The map's mounted stage only ever swaps to a find whose stage is already built (idle prebuild), so
+  // nothing is built in render on the map; after a catch the finished ride stays until the next is ready.
+  const [readyItem, setReadyItem] = useState<PrepItemType | null>(null);
+  const [stageNonce, setStageNonce] = useState(0);
+  const rideItemRef = useRef<PrepItemType | null>(null);
+  rideItemRef.current = rideItem;
   const [primed, setPrimed] = useState<{ item: PrepItemType; from: { x: number; y: number } | null } | null>(null);
   const [photo, setPhoto] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [cascade, setCascade] = useState(0);
@@ -154,8 +174,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromY = useSharedValue(0);
   const rideIn = useSharedValue(0);
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion };
+  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade });
+  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
@@ -202,15 +222,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     const next = catchSummary(item, data);
     setSummary(next);
+    latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
     if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
     latest.current.onCollected(data);
     if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
     progress.value = next.progressFrom;
-    // Via the print: the pad springs in 200 ms into the hand-off (after the iris), never over the ride.
+    // Via the print, the pad stays fully hidden until the print lands (arrive() springs it in with the kick).
     const pad = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
-    // After the iris and most of the fade (never ghosted over the black).
-    badgeIn.value = viaPrint && motion ? withDelay(300, pad) : pad;
+    if (!viaPrint) badgeIn.value = pad;
     if (!viaPrint) {
       if (!data.replayed) catchSound('whoosh', { volume: 0.6 });
       fly.value = withTiming(1, { duration: motion ? CATCH_TIMING.fly : 1, easing: Easing.inOut(Easing.cubic) });
@@ -225,7 +245,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const arrive = useCallback(async (next: CatchSummary, data: RedeemPrepItemResponseType['data'], token: number) => {
     const motion = !latest.current.reducedMotion;
     const tier = rarityTier(data.item?.rarity);
-    catchSound('badge');
+    // Via the print the landing sound was scheduled on the JS clock at flight start + 460 ms (closeRide
+    // site); a common's fly plays it here. The pad springs in with the kick.
+    if (!soundScheduled.current) catchSound('badge');
+    soundScheduled.current = false;
+    // The banner springs in 120 ms after the kick, so the two never land in one frame.
+    if (badgeIn.value < 0.5) badgeIn.value = motion ? withDelay(120, withSpring(1, { damping: 14, stiffness: 320 })) : withTiming(1, { duration: 1 });
     catchHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
     badgeKick.value = motion ? withSequence(withTiming(1.22, { duration: 100 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
     ringPop.value = 0;
@@ -274,9 +299,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
 
   const finish = (caught: boolean) => {
+    catchMark('done');
+    latest.current.onCascade?.(false);
     releasePhoto();
     newRideRef.current = false; setNewRide(null); rideIn.value = 0;
-    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules.
+    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps
+    // showing the finished ride (hidden) for 1.2 s, so the next find's stage is never built in the hand-back;
+    // it is prebuilt at +600 ms and swapped in after.
+    if (rideItemRef.current) setReadyItem(rideItemRef.current);
+    setStageNonce(n => n + 1);
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
     showCatchChrome(false);
@@ -362,10 +393,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   // "Rides snapped": a ride the player never snapped before gets a "New ride!" beat in the cascade.
   const rideKindRef = useRef<RideKind | null>(null);
-  const [newRide, setNewRide] = useState<{ name: string; line: string } | null>(null);
+  const [newRide, setNewRide] = useState<{ name: string; line: string; stamps: ReturnType<typeof rideStamps> } | null>(null);
   const newRideRef = useRef(false);
   useEffect(() => { void loadRideMemory(); }, []);
 
+  const soundScheduled = useRef(false);
   const pendingPhoto = useRef<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
   const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null) => {
@@ -387,11 +419,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const served = (result.data.dex as { rides_snapped?: string[] } | null | undefined)?.rides_snapped ?? null;
     const fresh = kind ? recordRide(kind, served) : false;
     newRideRef.current = fresh;
-    setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()) } : null);
+    setNewRide(fresh && kind ? { name: RIDES[kind].name, line: ridesSnappedLine(ridesSnapped()), stamps: rideStamps(ridesSnapped(), kind) } : null);
     // The sticker keeps the item art until the print lands: the photo is never on screen twice.
     pendingPhoto.current = { image, grade };
     pendingLand.current = { data: result.data, token, item: req.item };
     closeRide(true);
+    // The landing thunk is scheduled by the stage on the JS clock, in the same turn the 460 ms flight
+    // starts (the UI completion still drives the kick and the cascade).
+    soundScheduled.current = true;
     setRide(current => (current ? { ...current, flyTo: { x: target.x + offset.x, y: target.y + offset.y } } : current));
     await land(req.item, result.data, token, true);
   }, [request, land, target.x, target.y, offset.x, offset.y]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -473,25 +508,71 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
-  const stageFor = rideItem ?? primed?.item ?? stageItem;
+  const stageFor = rideItem ?? primed?.item ?? readyItem;
   const sceneArt = useRideArt();
-  // The reveal's sunburst shader compiles on its first draw (about 300 ms on the simulator). Draw it once,
-  // 2 pt and invisible, while the map is idle, so the first Frame It! reveal never pays for it.
-  const [warmShader, setWarmShader] = useState(false);
+  // Launch warm-up, on the first idle after the map settles (never a fixed timer): the reveal's sunburst
+  // shader and every ride kind in every sky are drawn once, tiny and invisible, one per idle slice. No catch
+  // then draws a ride, gradient or shader for the first time during its reward.
+  const [warmStep, setWarmStep] = useState(-1);
   const warmIntensity = useSharedValue(0.01);
+  const warmPlan = useMemo(() => READY_RIDES.flatMap(kind => (['day', 'sunset', 'night'] as Sky[]).map(sky => ({ kind, sky }))), []);
+  const busyRef = useRef(false);
+  busyRef.current = !!request || !!primed || !!ride;
   useEffect(() => {
-    const on = setTimeout(() => setWarmShader(true), 2500);
-    const off = setTimeout(() => setWarmShader(false), 4000);
-    return () => { clearTimeout(on); clearTimeout(off); };
-  }, []);
+    if (window.width === 0 || warmStep >= warmPlan.length) return;
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+      ?? ((cb: () => void) => setTimeout(cb, 200));
+    let live = true;
+    const next = () => {
+      if (!live) return;
+      if (busyRef.current) { setTimeout(() => idle(next, { timeout: 4000 }), 600); return; }
+      setWarmStep(step => step + 1);
+    };
+    const timer = setTimeout(() => idle(next, { timeout: 4000 }), warmStep < 0 ? 0 : 280);
+    return () => { live = false; clearTimeout(timer); };
+  }, [warmStep, window.width]); // eslint-disable-line react-hooks/exhaustive-deps
+  const warming = warmStep >= 0 && warmStep < warmPlan.length ? warmPlan[warmStep] : null;
+  const warmPics = useMemo(() => (warming ? warmStagePicture(warming.kind, warming.sky,
+    { width: window.width, height: window.height }, insets, sceneArt) : null), [warming, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (warming) catchMark(`warm ${warming.kind} ${warming.sky}`); }, [warming]);
   const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
+  // The staged find (nearest in range) is prebuilt first and swapped in only once its stage exists.
   useEffect(() => {
-    if (!warm || window.width === 0) return;
-    for (const entry of warm) {
-      if (rideSpec(entry.item.rarity).style !== 'ride_photo') continue;
-      prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
-    }
-  }, [warmKey, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (window.width === 0) return;
+    const target = stageItem && rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null;
+    if (!target) return;
+    const layerSize = { width: window.width, height: window.height };
+    const ready = () => rideStageReady(target, forceRide ?? null, layerSize, insets, sceneArt);
+    if (ready()) { setReadyItem(target); return; }
+    let live = true;
+    const kick = setTimeout(() => {
+      if (live && settled()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+    }, 0);
+    const poll = setInterval(() => {
+      if (!live) return;
+      if (settled() && !ready()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+      if (ready()) { setReadyItem(target); clearInterval(poll); }
+    }, 150);
+    return () => { live = false; clearTimeout(kick); clearInterval(poll); };
+  }, [stageItem?.id, stageItem?.rarity, forceRide?.kind, forceRide?.sky, stageNonce, window.width, window.height, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
+  const rewardBusy = !!request || !!primed || !!ride || !!showing;
+  const rewardBusyRef = useRef(rewardBusy);
+  rewardBusyRef.current = rewardBusy;
+  const rewardEndRef = useRef(0);
+  useEffect(() => { if (!rewardBusy) rewardEndRef.current = Date.now(); }, [rewardBusy]);
+  const settled = () => !rewardBusyRef.current && Date.now() - rewardEndRef.current > 600;
+  useEffect(() => {
+    if (!warm || window.width === 0 || rewardBusy) return;
+    const timer = setTimeout(() => {
+      for (const entry of warm) {
+        if (rideSpec(entry.item.rarity).style !== 'ride_photo') continue;
+        prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [warmKey, rewardBusy, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
   const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);
   const showingFrom = showing?.from;
@@ -515,7 +596,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         </Canvas>}
       </Animated.View>
 
-      {warmShader && <Canvas pointerEvents="none" style={styles.warmCanvas}>
+      {warming && warmPics && <Canvas pointerEvents="none" style={styles.warmCanvas}>
+        <Group transform={WARM_SCALE}>
+          <Picture picture={warmPics.backdrop} />
+          {warmPics.foreground ? <Picture picture={warmPics.foreground} /> : null}
+          <Picture picture={warmPics.moving} />
+        </Group>
         <Sunburst cx={1} cy={1} radius={2} intensity={warmIntensity} width={2} height={2} />
       </Canvas>}
       {stageFor && layer.width > 0 && <View pointerEvents="box-none"
@@ -536,7 +622,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           {art ? <Image source={art} style={styles.itemArt} contentFit="contain" transition={0} />
             : <View style={[styles.itemFallback, { backgroundColor: color }]}><GameIcon name="gift" size={30} /></View>}
         </Animated.View>
+      </>}
 
+      {/* The badge stays mounted (hidden at badgeIn 0), so the first reward never mounts its views mid-cascade */}
+      <>
         <Animated.View pointerEvents="none" style={[styles.badge, { left: badgeLeft, bottom: badgeBottom,
           borderColor: summary?.setColor ?? BRAND.gold }, badgeStyle]}>
           {/* Sticker: the photo (or the item) breaks out of the badge with a die-cut edge */}
@@ -569,13 +658,21 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
             {bonusXp ? <View style={styles.xpPill}><Text style={styles.xpText} numberOfLines={1}>+{bonusXp} XP</Text></View> : null}
           </Animated.View>}
-          {/* A ride the player never snapped: "New ride!" and the collection count */}
-          {newRide && <Animated.View style={[styles.rideChip, rideStyle]}>
-            <GameIcon name="camera" size={14} />
-            <Text style={styles.rideText} numberOfLines={1}>New ride! {newRide.name}  ·  {newRide.line}</Text>
-          </Animated.View>}
+          {/* A ride the player never snapped: "New ride!", the 3 ride stamps, "n of 3", then (after a divider) the
+              unbuilt rides as dim "coming soon" silhouettes, no locks and no number. No progress-bar fill. */}
+          {newRide && <View style={styles.rideRow} pointerEvents="none"><Animated.View style={[styles.rideChip, rideStyle]}>
+            <Text style={styles.rideText} numberOfLines={1}>New ride!</Text>
+            {newRide.stamps.filter(stamp => stamp.state !== 'soon').map(stamp => (
+              <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
+                <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
+              </View>))}
+            <Text style={styles.rideCount} numberOfLines={1}>{newRide.line}</Text>
+            <View style={styles.rideDivider} />
+            {newRide.stamps.filter(stamp => stamp.state === 'soon').map(stamp => (
+              <View key={stamp.kind} style={styles.stampSoon}><GameIcon name="ride" size={10} /></View>))}
+          </Animated.View></View>}
         </Animated.View>
-      </>}
+      </>
     </View>
   );
 });
@@ -617,7 +714,18 @@ const styles = StyleSheet.create({
   gradeText: { fontFamily: 'Shark', fontSize: 14, marginLeft: 3, flexShrink: 0 },
   xpPill: { marginLeft: 6, paddingHorizontal: 6, borderRadius: 8, backgroundColor: '#0b2f5c', flexShrink: 0 },
   xpText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
-  rideChip: { position: 'absolute', left: STICKER_LEFT + STICKER + 4, bottom: -22, flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
-  rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },
+  // Centred under the banner, capped at the banner's width (16 pt screen margins hold for any ride name).
+  rideRow: { position: 'absolute', left: 0, right: 0, bottom: -34, alignItems: 'center' },
+  stamp: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0b2f5c',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  stampNew: { borderColor: '#ff8a00', transform: [{ scale: 1.15 }] },
+  stampOpen: { opacity: 0.45 },
+  // Coming soon: a dim ride silhouette at 60% of a stamp, no lock (there is no key in play).
+  stampSoon: { width: 12, height: 12, alignItems: 'center', justifyContent: 'center', opacity: 0.35 },
+  rideDivider: { width: 1.5, height: 14, marginHorizontal: 2, backgroundColor: 'rgba(255,255,255,0.45)' },
+  stampArt: { width: 16, height: 12 },
+  rideCount: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
+  rideChip: { maxWidth: BADGE_WIDTH, flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#0b2f5c', borderWidth: 2, borderColor: '#ffcf3b' },
+  rideText: { color: '#ffcf3b', fontFamily: 'Shark', fontSize: 13 },
 });

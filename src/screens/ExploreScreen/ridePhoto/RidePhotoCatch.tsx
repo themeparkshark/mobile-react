@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import {
-  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, type SkImage,
+  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, createPicture, type SkImage,
 } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -19,7 +19,7 @@ import { Sunburst, Shimmer } from '../../../gamekit/fx/ShaderFx';
 import { GameIcon } from '../../../ui';
 import RideScene from './RideScene';
 import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type RideStage, type SceneArt, type Sky } from './rides';
-import { lastRideKind } from './rides/rideMemory';
+import { recentRides } from './rides/rideMemory';
 import { buildPrintFrame } from './rides/printFrame';
 import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
@@ -30,7 +30,8 @@ import {
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
 
-const HAND_ART = require('../../../../assets/images/ride-photo/tap-hand.webp');
+/** The hint pointer: Alex's own shark fins (ui_home slice59), upside down so the tips point at the shutter. */
+const HAND_ART = require('../../../../assets/images/ride-photo/fin-pointer.webp');
 /** The miss chip shows the current ride's own vehicle. */
 const VEHICLE_ICON: Partial<Record<RideKind, number>> = {
   coaster: require('../../../../assets/images/ride-photo/car-back.webp'),
@@ -51,6 +52,8 @@ const PLATE_PEAK = 1.6;
 const INK = '#0b2f5c';
 /** The find arcs from its pin into the seat in 280 ms, then squashes 1.15, 0.92, 1.0 on landing. */
 const HOP_MS = 280;
+/** The print's flight into the badge, ms (the badge sound is timed from its start). */
+const PRINT_FLIGHT_MS = 460;
 const RETRY_LEAD_MS = 900;
 
 type FrameStage = 'white' | 'silver' | 'gold';
@@ -145,7 +148,7 @@ function stageInputs(item: PrepItemType | null, forceRide: { kind?: RideKind; sk
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt) {
   const spec = rideSpec(item?.rarity ?? 3);
   const golden = item?.golden_hour === true;
-  const kind: RideKind = forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity, seed: item?.id ?? 0, lastRide: lastRideKind() });
+  const kind: RideKind = forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity, seed: item?.id ?? 0, recent: recentRides() });
   const base = sceneVariant({ seed: item?.id ?? 0, kind, setName: item?.set_name, golden });
   // Epic's spotlight beat is a night ride.
   const sky: Sky = forceRide?.sky ?? (spec.litMs != null && !golden ? 'night' : base.sky);
@@ -161,13 +164,14 @@ const STAGES = new Map<string, RideStage>();
 function remember(key: string, stage: RideStage) {
   STAGES.delete(key);
   STAGES.set(key, stage);
-  while (STAGES.size > 4) STAGES.delete(STAGES.keys().next().value as string);
+  while (STAGES.size > 6) STAGES.delete(STAGES.keys().next().value as string);
 }
 function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?: Sky } | null,
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): RideStage {
   const { key, build } = stageInputs(item, forceRide, layer, insets, art);
   const hit = STAGES.get(key);
   if (hit) return hit;
+  catchMark(`stage-build ${key.split('|').slice(0, 4).join('|')}`);
   const stage = build();
   remember(key, stage);
   return stage;
@@ -176,12 +180,37 @@ function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?:
  * Build a find's ride stage in idle time (the map calls this when a Ride Photo find comes in range), so
  * the open never pays for the build or the picture recording.
  */
+/**
+ * Launch warm-up: one stage per ride kind and sky, drawn once into a hidden canvas while the app is idle,
+ * so no catch ever draws a ride's art, gradients or shaders for the first time during a reward.
+ */
+export function warmStagePicture(kind: RideKind, sky: Sky, layer: { width: number; height: number },
+  insets: { top: number; bottom: number }, art: SceneArt) {
+  const sceneH = Math.max(360, layer.height - (insets.bottom + 128));
+  const spec = rideSpec(3);
+  const stage = buildStage(kind, { width: layer.width, height: sceneH, top: insets.top, spec, tier: 3,
+    variant: { ...sceneVariant({ seed: 7, kind }), sky }, art });
+  const state = { t: stage.frameT, clock: 0, rock: 0, riderIn: 1, alpha: 1, ghost: false, photo: false };
+  const moving = createPicture(canvas => {
+    stage.paint(canvas, state, stage.data, art);
+    stage.front?.(canvas, state, stage.data, art);
+    stage.emissive?.(canvas, state, stage.data, art);
+  }, { width: layer.width, height: sceneH });
+  return { backdrop: stage.backdrop, foreground: stage.foreground, moving };
+}
+
+/** Whether a find's stage is already built (so the map can swap to it without building in render). */
+export function rideStageReady(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,
+  layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): boolean {
+  return STAGES.has(stageInputs(item, forceRide, layer, insets, art).key);
+}
+
 export function prebuildRideStage(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): void {
   const { key, build } = stageInputs(item, forceRide, layer, insets, art);
   if (STAGES.has(key)) return;
   const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  const run = () => { if (!STAGES.has(key)) remember(key, build()); };
+  const run = () => { if (!STAGES.has(key)) { catchMark(`stage-prebuild ${key.split('|').slice(0, 4).join('|')}`); remember(key, build()); } };
   if (idle) idle(run, { timeout: 1500 }); else setTimeout(run, 0);
 }
 
@@ -332,6 +361,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // ── A pass of the car ──────────────────────────────────────────────────
   const passTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearPassTimers = useCallback(() => { passTimers.current.forEach(clearTimeout); passTimers.current = []; }, []);
+  // Ride sounds that belong to the ride, not the shot (the splash): kept through a shot, cleared per pass.
+  const rideTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearRideTimers = useCallback(() => { rideTimers.current.forEach(clearTimeout); rideTimers.current = []; }, []);
+  useEffect(() => clearRideTimers, [clearRideTimers]);
   useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
   const missedThisPass = useRef(false);
@@ -339,7 +372,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const runPass = useCallback((fromT: number) => {
     shotThisPass.current = false;
     missedThisPass.current = false;
-    clearPassTimers();
+    clearPassTimers(); clearRideTimers();
     frozen.value = false;
     armed.value = true;
     if (parkedMode) { t.value = anchors.tFrame; ready.value = 3; approach.value = 1; return; }
@@ -369,7 +402,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       if (delay < 0) return;
       passTimers.current.push(setTimeout(() => { if (evenIfShot ? !missedThisPass.current : !shotThisPass.current) play(); }, delay));
     };
-    if (stage.kind === 'flume') at(80, () => catchSound('flumeSplash', { volume: 0.9 }), true);
+    // The splash is the ride's own sound: it plays with the crown on every pass, missed or not.
+    if (stage.kind === 'flume') { const d = arriveIn - 80; if (d >= 0) rideTimers.current.push(setTimeout(() => catchSound('flumeSplash', { volume: 0.9 }), d)); }
     if (stage.variant.photobomb === 'gull') at(260, () => catchSound('gull', { volume: 0.7 }), true);
     if (stage.variant.photobomb === 'fireworks') at(140, () => catchSound('fireworks', { volume: 0.7 }), true);
     if ((stage.kind === 'coaster' && spec.track !== 'family') || stage.kind === 'flume') {
@@ -483,6 +517,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
     stopRideAmbience();
+    clearRideTimers();
     // Confetti and sparkles end with the ride: they never keep a full-screen particle canvas busy over the map.
     fx.current?.clear();
     // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
@@ -593,17 +628,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       }
       catchMark(`reveal-${grade}`);
       setFrameStage(STAGE_FOR[grade]);
-      develop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+      // One reveal per photo: the colour completes first (160 ms); the plate, stars, burst, shake and chime
+      // all land together on the developed print (about 270 ms), never on a grey one.
+      develop.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
       sheen.value = 0;
       sheen.value = withTiming(1, { duration: 420, easing: Easing.inOut(Easing.quad) });
       printLift.value = reducedMotion ? withTiming(1, { duration: 1 }) : withSpring(1, { damping: 12, stiffness: 220, mass: 0.8 });
       dim.value = withTiming(1, { duration: 220 });
-      if (BURST[grade]) burst.value = withTiming(double ? 1.35 : grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 160 });
-      stampIn.value = withDelay(80, withTiming(1, { duration: reducedMotion ? 1 : 140, easing: Easing.in(Easing.quad) }));
+      if (BURST[grade] && !reducedMotion) burst.value = withDelay(150, withTiming(double ? 1.35 : grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 120 }));
+      stampIn.value = withDelay(150, withTiming(1, { duration: reducedMotion ? 1 : 120, easing: Easing.in(Easing.quad) }));
       const amp = grade === 'frame_it' ? 4 : grade === 'great' ? 2 : 0;
-      if (amp && !reducedMotion) shake.value = withDelay(200, withSequence(withTiming(amp, { duration: 30 }), withTiming(-amp, { duration: 40 }),
+      if (amp && !reducedMotion) shake.value = withDelay(270, withSequence(withTiming(amp, { duration: 30 }), withTiming(-amp, { duration: 40 }),
         withTiming(amp * 0.5, { duration: 40 }), withTiming(0, { duration: 40 })));
-      later(200, () => {
+      later(270, () => {
         if (grade === 'frame_it') {
           duckForCheer(); catchSound('cheer'); catchSound('chime');
           fx.current?.burst('confetti', layer.width / 2, sceneH * 0.45);
@@ -794,13 +831,17 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // ── The print flies into the badge on the map ──────────────────────────
   const printTop = Math.max(insets.top + 40, sceneH * 0.1);
   const heroTop = Math.max(insets.top + 30, sceneH * 0.45 - HERO_H / 2);
+  const markLanded = useCallback((uiMs: number) => catchMark(`print-land ui=${uiMs} js-lag=${Date.now() - uiMs}`), []);
   useEffect(() => {
     if (!flyTarget) return;
     catchMark('print-fly');
+    // The badge thunk on the JS clock, started with the fixed 460 ms flight (not a UI-to-JS hop at landing).
+    later(reducedMotion ? 0 : PRINT_FLIGHT_MS, () => catchSound('badge'));
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
-    fly.value = withTiming(1, { duration: reducedMotion ? 1 : 460, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
-      if (done) runOnJS(onPrintLanded)();
+    fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
+      // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
+      if (done) { runOnJS(markLanded)(Date.now()); runOnJS(onPrintLanded)(); }
     });
     dim.value = withTiming(0, { duration: 300 });
     catchSound('whoosh', { volume: 0.6 });
@@ -826,7 +867,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // find hops from its pin into the seat. Only opacity and a shake transform animate.
   const viewStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, open.value * 2.2) * veil.value,
-    transform: [{ translateX: shake.value }],
+  }));
+  // The shake moves only the scene, overscanned by the amplitude plus 4 pt on every side, so it never
+  // uncovers whatever sits under the viewfinder.
+  const overscan = 1 + (2 * (4 + 4)) / Math.max(1, sceneW);
+  const sceneShake = useAnimatedStyle(() => ({
+    transform: [{ translateX: shake.value }, { scale: shake.value === 0 ? 1 : overscan }],
   }));
   // Iris bars are fixed half-screen views scaled on Y (a transform, not a layout prop).
   const irisTop = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
@@ -927,6 +973,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       {visible && !closing && <StatusBar style="light" />}
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.view, { width: layer.width, height: layer.height }, viewStyle]}>
+          <Animated.View style={sceneShake}>
           <Canvas style={{ width: sceneW, height: sceneH }}>
             <RideScene stage={stage} art={images} t={t} clock={clock} approach={approach} ready={ready}
               flash={flash} dim={dim} lit={lit} ghostT={ghostT} ghost={ghost} riderIn={riderIn} rock={rock} carVis={carVis}
@@ -935,6 +982,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             <Sunburst cx={sceneW / 2} cy={heroTop + HERO_H / 2} radius={sceneW * 0.8} intensity={burst} colorA="#ffd34d"
               width={sceneW} height={sceneH} speed={0.14} />
           </Canvas>
+          </Animated.View>
           {/* Viewfinder corner marks, 16 pt inside the screen */}
           <View pointerEvents="none" style={[styles.corner, { left: 16, top: insets.top + 8 + 44 + 8, borderLeftWidth: 3, borderTopWidth: 3 }]} />
           <View pointerEvents="none" style={[styles.corner, { right: 16, top: insets.top + 8 + 44 + 8, borderRightWidth: 3, borderTopWidth: 3 }]} />
@@ -1103,9 +1151,9 @@ const styles = StyleSheet.create({
   slotGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b' },
   shutterWrap: { width: SHUTTER + 20, height: SHUTTER + 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
   halo: { position: 'absolute', width: SHUTTER + 18, height: SHUTTER + 18, borderRadius: (SHUTTER + 18) / 2, borderWidth: 3, borderColor: '#ffc93c' },
-  // Fingertip straight down at the disc centre, 6 pt above the disc's top edge (the disc top sits 21 pt into the wrap).
-  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 36 * 0.63, top: 21 - 6 - 46, width: 36, height: 46 },
-  handArt: { width: 36, height: 46 },
+  // Fin tips straight down at the disc centre, 6 pt above the disc's top edge (the disc top sits 21 pt into the wrap).
+  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 44 * 0.694, top: 21 - 6 - 40, width: 44, height: 40 },
+  handArt: { width: 44, height: 40 },
   rarity: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
   bevel: { position: 'absolute', left: 0, right: 0, top: 0, height: 1.5, backgroundColor: 'rgba(255,255,255,0.6)' },
