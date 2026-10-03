@@ -27,6 +27,8 @@ import type { FrightMapInput } from './types';
 import { frightIntro, introStep, useFrightState } from './useFrightState';
 
 export const INTRO_MS = 4000;
+/** The arrival beat: haunt facades light one by one over this long once the intro ends. */
+export const ARRIVAL_LIGHT_MS = 1500;
 const BOLT = Skia.Path.MakeFromSVGString('M0 0 L-7 16 L-1 16 L-9 34 L6 12 L0 12 L6 0 Z')!;
 
 function playThunder(volume: number) {
@@ -109,7 +111,9 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   });
   const boltRow = useSharedValue(0);
   const boltX = useSharedValue(width * 0.6);
-  const thunderOn = effectsOn && caps.frightBolts > 0 && moving && !st.showLive;
+  // One thunder for the arrival: the tutorial plays it, so the map's own storm waits out the
+  // intro and then its usual first 20+ s (startThunder restarts when this turns back on).
+  const thunderOn = effectsOn && caps.frightBolts > 0 && moving && !st.showLive && input.cinematic !== 'intro';
   const thunder = useRef<ThunderState | null>(null);
   useEffect(() => {
     if (!thunderOn) return;
@@ -157,7 +161,8 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
     }
     if (step === 'light') {
       frightIntro.value = 0.5;
-      frightIntro.value = withTiming(1, { duration: 2000, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
+      // Haunts light one by one over 1.5 s (the arrival beat), quietly.
+      frightIntro.value = withTiming(1, { duration: ARRIVAL_LIGHT_MS, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
     }
     return undefined;
   }, [input.cinematic]);

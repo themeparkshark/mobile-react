@@ -28,7 +28,7 @@ export default function FrightCardChip({ playerId, cards: given }: {
   const latest = cards?.slice().sort((a, b) => b.year - a.year || (b.last_night_on ?? '').localeCompare(a.last_night_on ?? ''))[0];
   if (!latest) return null;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${latest.card_title}. ${latest.haunts_done} haunts. Open the card.`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${latest.card_title}. ${latest.haunts_done} ${latest.haunts_done === 1 ? 'haunt' : 'haunts'}. Open the card.`}
       onPress={() => RootNavigation.navigate('FrightCard', { eventSlug: latest.event_slug, playerId: playerId ?? undefined })}
       style={({ pressed }) => [styles.chip, latest.ten_in_one && styles.gold, pressed && { opacity: 0.85 }]}>
       <View style={styles.icon}>

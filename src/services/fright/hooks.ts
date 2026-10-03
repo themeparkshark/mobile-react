@@ -35,5 +35,28 @@ export function frightPhotoTheme(state?: Pick<FrightSnapshot, 'modeOn'> & Partia
   return { backdrop: 'farNight', frame: 'lantern', tint: current.calm ? 'rgba(30,24,70,0.24)' : NIGHT.overlay };
 }
 
+/** While the mode is on, or its exit / Marquee card is up, the generic park tip stays away. */
+export function frightOwnsParkTips(input: { readonly modeOn: boolean; readonly recapUp: boolean }): boolean {
+  return input.modeOn || input.recapUp;
+}
+
+/** The map's one "?" while the mode is on: the Fin-ister tutorial first, then the park help. */
+export function frightHelpChoices(input: { readonly title: string; readonly onFright: () => void; readonly onPark: () => void }):
+  { text: string; onPress?: () => void; style?: 'cancel' }[] {
+  return [
+    { text: input.title, onPress: input.onFright },
+    { text: 'Park help', onPress: input.onPark },
+    { text: 'Close', style: 'cancel' },
+  ];
+}
+
+/**
+ * "EVERY RIDE IS OPEN" never shows on an event night at an event park (before the mode turns on,
+ * while it runs, and through the after grace hour): most rides close for the event.
+ */
+export function hideEveryRideOpen(input: { readonly modeOn: boolean; readonly eventPark: boolean; readonly hasNight: boolean }): boolean {
+  return input.modeOn || (input.eventPark && input.hasNight);
+}
+
 export { FRIGHT_OFF, getFrightSnapshot, publishFrightSnapshot, subscribeFrightSnapshot } from './store';
 export type { FrightSnapshot } from './store';

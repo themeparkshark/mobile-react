@@ -113,5 +113,5 @@ test('Q9 battery: looping ambience is opt-in (default off, server ambience_defau
 test('Q10 "EVERY RIDE IS OPEN" hides while the mode is ON and stays otherwise', () => {
   const bar = read('src/components/RideControlBar.tsx');
   assert.match(bar, /hideAllOpen \? 'RIDE CONTROL' : 'EVERY RIDE IS OPEN'/);
-  assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{frightNight\.modeOn\}/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{hideEveryRideOpen\(/);
 });

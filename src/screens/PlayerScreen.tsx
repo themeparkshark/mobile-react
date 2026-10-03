@@ -29,6 +29,7 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
+import ProfileEventChip from '../components/profile/ProfileEventChip';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
@@ -206,6 +207,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                     textAlign: 'center' }} numberOfLines={1}>{currentPlayer.title}</Text>
                 </View>
               )}
+              {/* Deep Lantern chip (renders nothing without a card). Same component as claude/release-rc. */}
+              <View style={{ alignSelf: 'center', marginBottom: 12 }}><ProfileEventChip playerId={currentPlayer.id} /></View>
               {!!currentPlayer.featured_ride_coin && (
                 <FeaturedRideCoinCard coin={currentPlayer.featured_ride_coin} />
               )}

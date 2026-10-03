@@ -184,7 +184,7 @@ test('haunts are tappable with a name and wait chip; reefs and props stay non-in
   assert.equal(fb.HAUNT_CHIP_ZOOM, 16);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /onPress=\{drawn && onHauntPress \? \(\) => onHauntPress\(haunt\.key\) : undefined\}/, 'hidden haunts take no taps');
-  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipLabel\(haunt\) : null\}/);
+  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipLabel\(haunt, beads\[haunt\.key\] !== undefined\) : null\}/);
   const reefMarkers = sources.match(/<Marker key=(\{`f[rpe]-|"fe")[^>]*>/g) ?? [];
   assert.ok(reefMarkers.length >= 3);
   for (const m of reefMarkers) assert.doesNotMatch(m, /onPress/, 'reefs, props and the encounter take no taps');

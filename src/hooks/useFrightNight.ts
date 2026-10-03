@@ -190,6 +190,7 @@ export default function useFrightNight(parkId: number | null, focused: boolean):
     publishFrightSnapshot(modeOn && tonight?.event ? {
       modeOn, phase, parkId, eventSlug: tonight.event.slug, nightOn: tonight.night?.night_on ?? null,
       nightIndex: tonight.event.night_index, calm, title,
+      encountersEnabled: tonight.config?.encounters_enabled === true,
     } : { ...FRIGHT_OFF, calm });
   }, [modeOn, phase, parkId, tonight, calm, title]);
   useEffect(() => () => publishFrightSnapshot(FRIGHT_OFF), []);
