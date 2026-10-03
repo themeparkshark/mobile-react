@@ -57,8 +57,11 @@ export default function FrightPill({ night, engine, onHelp }: {
             fallback={<Image source={LANTERN} style={{ width: 34, height: 34 }} contentFit="contain" />} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>{title}  <Text style={styles.count}>{hauntCountText(done, haunts.length)}</Text></Text>
-          <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
+          {/* Short form keeps the count readable on every width (COPY.md: "Fin-ister" in tight spaces). */}
+          <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            {shortTitle(title)} · <Text style={styles.count}>{hauntCountText(done, haunts.length)}</Text>
+          </Text>
+          <Text style={styles.sub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{sub}</Text>
         </View>
         {engine.pendingSync > 0 && <GameIcon name="retry" size={14} />}
         <GameIcon name="arrow" size={16} />
@@ -84,3 +87,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   helpText: { fontFamily: 'Shark', fontSize: 20, color: NIGHT.candy },
 });
+
+/** "Fin-ister Nights" -> "Fin-ister" (the copy deck's short form); other titles keep their first word group. */
+export function shortTitle(title: string): string {
+  return title.replace(/\s+Nights?$/i, '').trim() || title;
+}

@@ -164,6 +164,8 @@ const LW = 96;
 const LH = 100;
 /** Room under the facade for the bead and the name chip (always reserved, so the anchor never shifts). */
 const LANTERN_FOOT = 36;
+/** The marker is wider than the facade so the name chip is never squeezed to the facade's width. */
+const LANTERN_W = 168;
 /** The facade's ground point (glow pool center) as a marker anchor. */
 export const HAUNT_ANCHOR = { x: 0.5, y: (LH - 18) / (LH + LANTERN_FOOT) };
 const HOUSE = Skia.Path.MakeFromSVGString('M14 36 L38 12 L62 36 L62 74 L14 74 Z')!;
@@ -606,8 +608,8 @@ function TrailDot({ j, at }: { j: number; at: (lag: number) => { x: number; y: n
 
 const styles = StyleSheet.create({
   // At least 44 pt wide and tall: the whole facade is the tap target.
-  lantern: { width: LW, height: LH + LANTERN_FOOT, alignItems: 'center' },
-  chip: { maxWidth: 132, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
+  lantern: { width: LANTERN_W, height: LH + LANTERN_FOOT, alignItems: 'center' },
+  chip: { maxWidth: LANTERN_W, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
     backgroundColor: 'rgba(30,24,56,0.92)', borderWidth: 1.5, borderColor: NIGHT.lantern },
   chipDim: { borderColor: NIGHT.dusk, opacity: 0.85 },
   chipText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.moon },

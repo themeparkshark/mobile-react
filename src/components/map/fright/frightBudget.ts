@@ -11,7 +11,7 @@
  */
 import { ALIVE_CAPS, frightSpriteBudget, type AliveCaps, type AliveTier } from '../alive/ambientBudget';
 import type { FrightNightWindow, FrightPhase, FrightSpot } from '../../../api/endpoints/fright/types';
-import { distanceMeters, type LatLng } from './geo';
+import { distanceMeters, pointsPerMeter, type LatLng } from './geo';
 
 /* ── Phase to intensity ───────────────────────────────────────────────── */
 
@@ -107,7 +107,7 @@ export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'poste
   const closed = spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT';
   if (closed) return `${spot.name} · Closed`;
   const wait = spot.posted_minutes;
-  return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)}m` : spot.name;
+  return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)} min` : spot.name;
 }
 
 /**
@@ -118,6 +118,28 @@ export function introStep(prev: 'intro' | null, next: 'intro' | null): 'hold' | 
   if (next === 'intro' && prev !== 'intro') return 'hold';
   if (prev === 'intro' && next !== 'intro') return 'light';
   return 'none';
+}
+
+/** Chips closer than this (points on screen) to a chip already shown are hidden. */
+export const CHIP_MIN_GAP_PT = 72;
+
+/**
+ * Which haunts show their chip: in rank order (nearest first), skipping any
+ * haunt whose chip would land within CHIP_MIN_GAP_PT of one already shown,
+ * so two neighbouring haunts never stack unreadable chips.
+ */
+export function chipKeys(ranked: readonly { readonly key: string; readonly latitude: number; readonly longitude: number }[],
+  zoom: number): Set<string> {
+  const shown: { latitude: number; longitude: number }[] = [];
+  const keys = new Set<string>();
+  if (!Number.isFinite(zoom) || zoom < HAUNT_CHIP_ZOOM) return keys;
+  for (const h of ranked) {
+    const ppm = pointsPerMeter(zoom, h.latitude);
+    if (shown.some(o => distanceMeters(o, h) * ppm < CHIP_MIN_GAP_PT)) continue;
+    shown.push(h);
+    keys.add(h.key);
+  }
+  return keys;
 }
 
 /** Haunt chips show from this zoom in (they would crowd ride markers further out). */

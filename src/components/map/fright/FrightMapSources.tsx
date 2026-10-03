@@ -20,7 +20,7 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, HAUNT_CHIP_ZOOM, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, chipKeys, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
@@ -131,6 +131,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 
   const lod = critterLod(zoom);
   const onHauntPress = input.onHauntPress;
+  const chips = chipKeys(haunts, zoom);
   const reefCount = (key: string) => (lod === 'sprites' ? critterAlloc[key] ?? 0 : 0);
   const sources: AmbientSource[] = [];
   if (animate) {
@@ -250,7 +251,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
               animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
               rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
               ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-              layers={layersOf(haunt)} label={zoom >= HAUNT_CHIP_ZOOM ? hauntChipLabel(haunt) : null}
+              layers={layersOf(haunt)} label={chips.has(haunt.key) ? hauntChipLabel(haunt) : null}
               done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)} index={i}
               iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
           </Marker>

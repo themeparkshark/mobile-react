@@ -1,28 +1,38 @@
 /**
  * Dev-only capture harness for the Fin-ister intro (EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW):
- * cinematic | lantern | card1..card5 | welcome | exit | coach-haunt | coach-reef | coach-rank | coach-recap.
+ * cinematic | lantern | card1..card5 | welcome | exit | coach-haunt | coach-reef | coach-rank | coach-recap,
+ * then the app-layer states (FrightAppPreview: real map, pill, sheet, rank card, coach mark, Marquee).
  * A busy, bright stand-in for the map sits underneath so captures prove nothing bleeds through.
  */
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FrightCoachMark, FrightExitCard } from '../FrightOverlays';
+import FrightAppPreview, { APP_PREVIEW_SECONDS, APP_PREVIEW_STATES, type AppPreviewState } from '../preview/FrightAppPreview';
 import FrightTutorial from './FrightTutorial';
 
 const ENV = process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW ?? 'cinematic';
-/** 'cycle' walks every state, 8 s each (for timed simulator captures). */
-export const CYCLE = ['cinematic', 'lantern', 'card1', 'card2', 'card3', 'card4', 'card5', 'welcome', 'exit',
+const INTRO_STATES = ['cinematic', 'lantern', 'card1', 'card2', 'card3', 'card4', 'card5', 'welcome', 'exit',
   'coach-haunt', 'coach-reef', 'coach-rank', 'coach-recap'] as const;
+/** 'cycle' walks every state (for timed simulator captures): intro states first, then the app layer. */
+export const CYCLE = [...INTRO_STATES, ...APP_PREVIEW_STATES] as const;
+const isAppState = (state: string): state is AppPreviewState => (APP_PREVIEW_STATES as readonly string[]).includes(state);
+/** Seconds a state holds in the cycle: 8, except app states with their own (the Marquee timeout needs 16). */
+export function cycleSeconds(state: string): number {
+  return isAppState(state) ? APP_PREVIEW_SECONDS[state] : 8;
+}
 
 export default function FrightIntroPreviewScreen() {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   useEffect(() => {
-    if (ENV !== 'cycle') return;
-    const timer = setInterval(() => setIndex(i => Math.min(i + 1, CYCLE.length - 1)), 8000);
-    return () => clearInterval(timer);
-  }, []);
+    if (ENV !== 'cycle' || index >= CYCLE.length - 1) return;
+    const timer = setTimeout(() => setIndex(i => Math.min(i + 1, CYCLE.length - 1)), cycleSeconds(CYCLE[index]) * 1000);
+    return () => clearTimeout(timer);
+  }, [index]);
   const STATE: string = ENV === 'cycle' ? CYCLE[index] : ENV;
+  useEffect(() => { console.log(`FRIGHT_PREVIEW ${STATE}`); }, [STATE]);
+  if (isAppState(STATE)) return <FrightAppPreview state={STATE} />;
   const noop = () => {};
   const card = /^card(\d)$/.exec(STATE);
   const coach = STATE.startsWith('coach-') ? ({ haunt: 'haunt_near', reef: 'reef_first', rank: 'rank_first', recap: 'recap' } as const)[
@@ -36,7 +46,7 @@ export default function FrightIntroPreviewScreen() {
       {coach && <FrightCoachMark coach={coach} onClose={noop} top={insets.top + 120} />}
       {(STATE === 'cinematic' || STATE === 'lantern' || card || STATE === 'welcome') && (
         <FrightTutorial key={STATE} mode={STATE === 'welcome' ? 'welcome_back' : 'intro'} title="Fin-ister Nights" spooky={false} onDone={noop}
-          whatsNew={['The Deep Lantern: one card for your whole season', 'Rank every haunt and see the fan favorites']}
+          whatsNew={['The Deep Lantern: one card for your whole season', 'Rank every haunt you survive']}
           initialStep={STATE === 'welcome' ? 'welcome' : card ? 'cards' : (STATE as 'cinematic' | 'lantern')}
           initialPage={card ? Number(card[1]) - 1 : 0} />
       )}

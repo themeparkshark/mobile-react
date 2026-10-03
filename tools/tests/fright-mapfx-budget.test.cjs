@@ -178,21 +178,36 @@ test('intro: one thunder only (the tutorial plays it); the map stays quiet, then
 });
 
 test('haunts are tappable with a name and wait chip; reefs and props stay non-interactive', () => {
-  assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: 'OPERATING', posted_minutes: 25 }), 'The Robot City · 25m');
+  assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: 'OPERATING', posted_minutes: 25 }), 'The Robot City · 25 min', 'minutes, never confused with metres');
   assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: null, posted_minutes: null }), 'The Robot City');
   assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: 'DOWN', posted_minutes: 25 }), 'The Robot City · Closed');
   assert.equal(fb.HAUNT_CHIP_ZOOM, 16);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /onPress=\{onHauntPress \? \(\) => onHauntPress\(haunt\.key\) : undefined\}/);
-  assert.match(sources, /label=\{zoom >= HAUNT_CHIP_ZOOM \? hauntChipLabel\(haunt\) : null\}/);
+  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipLabel\(haunt\) : null\}/);
   const reefMarkers = sources.match(/<Marker key=\{`f[rpe]-[^>]*>/g) ?? [];
   assert.ok(reefMarkers.length >= 3);
   for (const m of reefMarkers) assert.doesNotMatch(m, /onPress/, 'reefs, props and the encounter take no taps');
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.match(sprites, /<View style=\{styles\.lantern\}>/, 'the facade view takes touches');
-  assert.match(sprites, /lantern: \{ width: LW, height: LH \+ LANTERN_FOOT/);
+  assert.match(sprites, /lantern: \{ width: LANTERN_W, height: LH \+ LANTERN_FOOT/);
   const types = read('src/components/map/fright/types.ts');
   assert.match(types, /readonly onHauntPress\?: \(spotKey: string\) => void;/);
   assert.match(types, /readonly tierCap\?: 'full' \| 'lite' \| 'calm' \| null;/);
   assert.match(types, /readonly ambience\?: boolean;/);
+});
+
+test('chips: only from zoom 16, and neighbouring haunts never stack their chips', () => {
+  const juke = { key: 'juke', latitude: 28.480557, longitude: -81.46841 };
+  const puzzle = { key: 'puzzle', latitude: 28.48037, longitude: -81.46844 }; // ~21 m away
+  const robot = { key: 'robot', latitude: 28.47779, longitude: -81.469558 };
+  assert.deepEqual([...fb.chipKeys([juke, puzzle, robot], 16.3)], ['juke', 'robot'], 'the nearer of two neighbours keeps its chip');
+  assert.deepEqual([...fb.chipKeys([puzzle, juke], 19.5)], ['puzzle', 'juke'], 'zoomed in, both fit');
+  assert.equal(fb.chipKeys([juke, robot], 15.9).size, 0, 'zoomed out: no chips');
+});
+
+test('Map re-applies a focus request made before the map first drew', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /focusCoordinate\?\.requestId, reducedMotion, covered\]\)/,
+    'a mount-time focus (previews, deep links) is dropped by the native camera until the map has drawn');
 });

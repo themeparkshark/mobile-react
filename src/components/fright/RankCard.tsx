@@ -12,13 +12,16 @@ import { GameIcon } from '../../ui';
 import { NightButton, NightCard } from './ui';
 import type { RankPrompt } from './useFrightEngine';
 
-export default function RankCard({ prompt, onSubmit, onClose }: {
+export default function RankCard({ prompt, onSubmit, onClose, initialScore = null, initialResult = null }: {
   readonly prompt: RankPrompt | null;
+  /** Dev capture harness only: start with a score picked / a result line shown. */
+  readonly initialScore?: number | null;
+  readonly initialResult?: string | null;
   readonly onSubmit: (score: number, reaction: FrightReaction | null) => Promise<{ fanRank: number | null; myRank: number | null } | null>;
   readonly onClose: () => void;
 }) {
-  const [score, setScore] = useState<number | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [score, setScore] = useState<number | null>(initialScore);
+  const [result, setResult] = useState<string | null>(initialResult);
   const [sending, setSending] = useState(false);
   if (!prompt) return null;
   const finish = () => { setScore(null); setResult(null); onClose(); };

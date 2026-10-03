@@ -50,3 +50,16 @@ test('the app park tip waits while the Fin-ister intro is up', () => {
   const src = read('src/screens/ExploreScreen.tsx');
   assert.match(src, /dialogOpen: [^\n]*!!frightEngine\.tutorial/);
 });
+
+test('pill uses the short mode name so the haunt count never truncates', () => {
+  const src = read('src/components/fright/FrightPill.tsx');
+  assert.match(src, /shortTitle\(title\)/);
+  assert.match(src, /replace\(\/\\s\+Nights\?\$\/i, ''\)/);
+});
+
+test('each tutorial card has its own subject art on the shared night scene', () => {
+  const src = read('src/components/fright/tutorial/FrightTutorial.tsx');
+  for (const key of ['haunts', 'rank', 'reefs', 'marquee', 'lantern']) assert.match(src, new RegExp(`${key}: \\{ kind:`));
+  assert.match(src, /SUBJECT_BAND = \{ top: 0\.5, bottom: 0\.84 \}/);
+  assert.match(src, /RadialGradient/, 'the lantern glow is soft, never a flat disc');
+});

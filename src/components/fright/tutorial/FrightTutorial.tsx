@@ -18,6 +18,7 @@
  * Reduce Motion: no drift, flash or thunder; static fades. Audio only when
  * Spooky effects are on. Every step has a VoiceOver label.
  */
+import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
@@ -32,9 +33,25 @@ import { NightButton } from '../ui';
 
 const FOG_FAR = require('../../map/fright/art/fog-far.webp');
 const FOG_NEAR = require('../../map/fright/art/fog-near.webp');
-const MOON = require('../../map/fright/art/moon-clouds.webp');
 const LANTERN = require('../art/lantern.webp');
 const HERO = require('../art/tutorial-hero.webp');
+const SKY = require('../art/card-sky.webp');
+
+/**
+ * Each card has its own subject on the shared night scene (same sky band for
+ * the copy): the shark and the Shusher, haunt pins, a Case File, the
+ * "I survived" pin, and the Deep Lantern itself.
+ */
+type CardSubject = { readonly kind: 'hero' } | { readonly kind: 'images'; readonly images: readonly number[]; readonly scale: number };
+const CARD_SUBJECTS: Readonly<Record<string, CardSubject>> = {
+  haunts: { kind: 'hero' },
+  rank: { kind: 'images', images: [require('../art/pin-a.webp'), require('../art/pin-b.webp'), require('../art/pin-c.webp')], scale: 0.3 },
+  reefs: { kind: 'images', images: [require('../art/card-case-file.webp')], scale: 0.42 },
+  marquee: { kind: 'images', images: [require('../art/pin-survived.webp')], scale: 0.5 },
+  lantern: { kind: 'images', images: [LANTERN], scale: 0.56 },
+};
+/** The subject area on the card (fractions of the card height): below the copy band, above the cloud base. */
+export const SUBJECT_BAND = { top: 0.5, bottom: 0.84 } as const;
 
 export type FrightTutorialMode = 'intro' | 'welcome_back' | 'replay';
 export type FrightTutorialStep = 'cinematic' | 'lantern' | 'cards' | 'welcome';
@@ -126,8 +143,11 @@ function NightSky({ reduced, fog }: { readonly reduced: boolean; readonly fog: A
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <LinearGradient colors={[NIGHT.ink, NIGHT.midnight, NIGHT.haunt]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
-      <Image source={MOON} contentFit="contain"
-        style={{ position: 'absolute', width: moon, height: moon * 0.6, left: 18, top: insets.top + 64, opacity: 0.85 }} />
+      <View style={{ position: 'absolute', left: 22, top: insets.top + 62, width: moon * 0.62, height: moon * 0.62 }}>
+        <Glow size={moon * 0.62} color={NIGHT.moon} strength={0.35} />
+        <View style={{ position: 'absolute', left: moon * 0.16, top: moon * 0.16, width: moon * 0.3, height: moon * 0.3,
+          borderRadius: moon * 0.15, backgroundColor: NIGHT.moon }} />
+      </View>
       {SKY_STARS.map(([x, y, r], i) => (
         <View key={i} style={{ position: 'absolute', left: x * width, top: insets.top + y * height * 0.12, width: r, height: r,
           borderRadius: r / 2, backgroundColor: NIGHT.moon, opacity: 0.7 }} />
@@ -172,9 +192,11 @@ function Cinematic({ step, title, glow, onAdvance }: {
     <Pressable style={styles.center} onPress={onAdvance} accessibilityRole="button"
       accessibilityLabel={`${title} is on. The fog is rolling in. Tap to continue.`}>
       <View style={{ width: size * 1.5, height: size * 1.5, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View style={[styles.halo, { width: size * 1.4, height: size * 1.4, borderRadius: size * 0.7,
-          opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] }),
-          transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }]} />
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', width: size * 1.5, height: size * 1.5,
+          left: size * 0.33, top: -size * 0.06,
+          opacity: glow, transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }}>
+          <Glow size={size * 1.5} color={NIGHT.lantern} strength={0.6} />
+        </Animated.View>
         <Animated.View style={{ opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
           transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }}>
           <Image source={LANTERN} contentFit="contain" style={{ width: size, height: size }}
@@ -215,8 +237,7 @@ function Cards({ title, hero, onDone, initialPage }: {
           <View key={card.key} style={{ width, alignItems: 'center' }}>
             <View style={[styles.card, { width: layout.cardWidth, height: layout.cardHeight }]} accessible
               accessibilityLabel={`Card ${index + 1} of ${TUTORIAL_CARDS.length}. ${card.title}. ${card.line}`}>
-              <ArtImage uri={hero} fit="cover" style={StyleSheet.absoluteFill}
-                fallback={<Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} />} />
+              <CardArt cardKey={card.key} hero={hero} width={layout.cardWidth} height={layout.cardHeight} />
               <View style={[styles.copy, {
                 top: layout.cardHeight * HERO_COPY_BAND.top, height: layout.cardHeight * (HERO_COPY_BAND.bottom - HERO_COPY_BAND.top),
                 paddingHorizontal: layout.cardWidth * 0.08 }]}>
@@ -238,6 +259,42 @@ function Cards({ title, hero, onDone, initialPage }: {
           onPress={() => (last ? onDone() : go(page + 1))} style={{ alignSelf: 'center', minWidth: 220 }} />
       </View>
     </View>
+  );
+}
+
+function CardArt({ cardKey, hero, width, height }: { readonly cardKey: string; readonly hero: string | null; readonly width: number; readonly height: number }) {
+  const subject = CARD_SUBJECTS[cardKey] ?? { kind: 'hero' };
+  if (subject.kind === 'hero') {
+    return <ArtImage uri={hero} fit="cover" style={StyleSheet.absoluteFill}
+      fallback={<Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} />} />;
+  }
+  const band = (SUBJECT_BAND.bottom - SUBJECT_BAND.top) * height;
+  const many = subject.images.length > 1;
+  const item = Math.min(width * subject.scale * (many ? 1 : 1.6), band);
+  return (
+    <>
+      <Image source={SKY} contentFit="cover" style={StyleSheet.absoluteFill} />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: SUBJECT_BAND.top * height, height: band,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+        {subject.images.map((source, i) => (
+          <Image key={i} source={source} contentFit="contain" style={{ width: item, height: item,
+            marginHorizontal: many ? -item * 0.08 : 0,
+            transform: many ? [{ rotate: `${(i - 1) * 9}deg` }, { translateY: i === 1 ? -item * 0.12 : 0 }] : [] }} />
+        ))}
+      </View>
+    </>
+  );
+}
+
+/** A soft round glow (radial gradient to transparent), never a flat disc. */
+function Glow({ size, color, strength }: { readonly size: number; readonly color: string; readonly strength: number }) {
+  const alpha = Math.round(strength * 255).toString(16).padStart(2, '0');
+  return (
+    <Canvas style={{ width: size, height: size }} pointerEvents="none">
+      <Circle cx={size / 2} cy={size / 2} r={size / 2}>
+        <RadialGradient c={vec(size / 2, size / 2)} r={size / 2} colors={[`${color}${alpha}`, `${color}00`]} />
+      </Circle>
+    </Canvas>
   );
 }
 
@@ -263,7 +320,6 @@ function Welcome({ title, whatsNew, onDone }: { readonly title: string; readonly
 const styles = StyleSheet.create({
   flash: { backgroundColor: NIGHT.fogLight },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
-  halo: { position: 'absolute', backgroundColor: NIGHT.lantern },
   nameBlock: { minHeight: 96, alignItems: 'center', justifyContent: 'flex-start', marginTop: 6, alignSelf: 'stretch' },
   modeName: { fontFamily: 'Shark', fontSize: 40, color: NIGHT.candy, textAlign: 'center',
     textShadowColor: NIGHT.ink, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
