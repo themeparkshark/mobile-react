@@ -30,7 +30,7 @@ import GameIcon from '../ui/GameIcon';
 import type { GameIconName } from '../ui/iconNames';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import StampTile, { INK } from './stampbook/StampTile';
-import StampCard, { type Wallet } from './stampbook/StampCard';
+import StampCard, { type ClaimResult, type Wallet } from './stampbook/StampCard';
 import StampArt from './stampbook/StampArt';
 import { BookFxProvider, useBookClocks, useBookFx } from './stampbook/BookFx';
 import { Confetti } from './stampbook/SlamFx';
@@ -203,36 +203,48 @@ export default function StampBookScreen() {
     flushSeen();
   }, [flushPatches, flushSeen]);
 
+  const nextClaim = useMemo(() => {
+    const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
+    return waiting.find(s => s.id !== selected?.id) ?? null;
+    // pendingPatch is a ref; selected changes on every hand-off, which recomputes this.
+  }, [queue, selected]);
+
+  /** Opens the next claimable stamp once its thumb is in memory (or after 350 ms), so the hand-off is never an empty stage. */
   const openNextClaim = useCallback(() => {
     const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
     const target = waiting.find(s => s.id !== selected?.id) ?? waiting[0];
     if (!target) return;
-    open(target);
+    const thumb = target.thumbUrl ?? target.iconUrl;
+    if (!thumb) { open(target); return; }
+    let opened = false;
+    const go = () => { if (!opened) { opened = true; open(target); } };
+    Image.prefetch([thumb], 'memory-disk').then(go, go);
+    setTimeout(go, 350);
   }, [queue, selected, open]);
 
-  const claim = useCallback(async (): Promise<boolean> => {
-    if (!selected || claimingRef.current) return false;
-    if (previewMode) { pendingPatch.current.push(selected.id); return true; }
+  const claim = useCallback(async (): Promise<ClaimResult> => {
+    if (!selected || claimingRef.current) return { ok: false };
+    if (previewMode) { pendingPatch.current.push(selected.id); return { ok: true }; }
     const id = selected.id;
     claimingRef.current = true;
     setMessage(null);
     try {
-      await claimStampReward(id);
+      const res = await claimStampReward(id);
       pendingPatch.current.push(id);
       refreshPlayer().catch(() => undefined);
-      return true;
+      return { ok: true, levelsGained: Number(res?.levels_gained ?? 0) || 0, level: typeof res?.level === 'number' ? res.level : null };
     } catch {
       // A lost response can follow a successful claim. Read back before showing failure.
       try {
         const freshData = await getStamps();
         const confirmed = Object.values(freshData.stamps).flat().find(s => s.id === id);
-        if (confirmed?.reward_claimed) { pendingPatch.current.push(id); refreshPlayer().catch(() => undefined); return true; }
+        if (confirmed?.reward_claimed) { pendingPatch.current.push(id); refreshPlayer().catch(() => undefined); return { ok: true }; }
         haptic('warning');
         setMessage('That did not go through. Try again.');
       } catch {
         setMessage('Not sure that went through. Reopen the Stamp Book to check.');
       }
-      return false;
+      return { ok: false };
     } finally {
       claimingRef.current = false;
     }
@@ -280,7 +292,7 @@ export default function StampBookScreen() {
   }, [filter, width, reducedMotion]);
 
   const onScroll = useAnimatedScrollHandler(e => { fx.scrollY.value = e.contentOffset.y; });
-  const wallet: Wallet = { energy: player?.energy ?? 0, tickets: player?.tickets ?? 0, xp: player?.total_experience ?? 0 };
+  const wallet: Wallet = { energy: player?.energy ?? 0, tickets: player?.tickets ?? 0, xp: player?.total_experience ?? 0, coins: player?.coins ?? 0 };
 
   return (
     <Wrapper>
@@ -348,6 +360,7 @@ export default function StampBookScreen() {
           equipping={equipping}
           message={message}
           wearingTitle={!!selected?.rewards.title && player?.title === selected.rewards.title}
+          nextStamp={nextClaim}
           nextCount={queue.filter(s => s.id !== selected?.id && !pendingPatch.current.includes(s.id)).length}
           onClaim={claim}
           onNext={openNextClaim}

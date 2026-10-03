@@ -23,7 +23,8 @@
  * colour; colour bleeds up from an ink line past 75% (capped at 65%).
  * Reduce Motion: fades only; sound, haptics and announcements stay.
  */
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Image } from 'expo-image';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -60,10 +61,31 @@ const BADGE_CY = 0.55;
 const INK = '#14213D';
 const LEGENDARY_GOLD = '#FFC21A';
 type Kind = 'energy' | 'tickets' | 'xp' | 'coins' | 'title';
+type HudKind = 'energy' | 'tickets' | 'xp' | 'coins';
 const KIND_ICON: Record<Kind, GameIconName> = { energy: 'energy', tickets: 'ticket', xp: 'xp', coins: 'coin', title: 'crown' };
-const HUD_KINDS: ('energy' | 'tickets' | 'xp')[] = ['energy', 'tickets', 'xp'];
+const BASE_HUD: HudKind[] = ['energy', 'tickets', 'xp'];
 
-export interface Wallet { energy: number; tickets: number; xp: number }
+/** Coin stamps (and coin rewards) also show the coin balance in the card HUD. */
+export function hudKinds(stamp: Pick<BookStamp, 'metric' | 'rewards'>): HudKind[] {
+  const coins = stamp.metric === 'coins_held' || stamp.metric === 'coins_earned' || (stamp.rewards?.coins ?? 0) > 0;
+  return coins ? [...BASE_HUD, 'coins'] : BASE_HUD;
+}
+
+export interface Wallet { energy: number; tickets: number; xp: number; coins: number }
+
+/** What a claim returned: success, and what the XP did to the player's level (stamp-economy backend). */
+export interface ClaimResult { ok: boolean; levelsGained?: number; level?: number | null }
+
+interface Burst { id: string; icon: GameIconName; sx: number; sy: number; ex: number; ey: number; delay: number; lift: number }
+
+/** The card-wide HUD the chained stamp content talks to (lives in Frame, so it never remounts). */
+interface HudBus {
+  readonly layout: { current: { hud: Record<string, { x: number; y: number }>; hudRow: { x: number; y: number }; content: { x: number; y: number } } };
+  readonly add: (kind: HudKind, n: number) => void;
+  readonly burst: (list: Burst[]) => void;
+  readonly setCascading: (on: boolean) => void;
+  readonly levelUp: (level: number) => void;
+}
 
 type Phase = 'idle' | 'claiming' | 'cascading' | 'gotIt';
 
@@ -79,7 +101,9 @@ interface Props {
   readonly wearingTitle: boolean;
   /** Claimable stamps left after this one (the chain). */
   readonly nextCount: number;
-  readonly onClaim: () => Promise<boolean>;
+  /** The stamp the Next button will open: its art is prefetched during the cascade. */
+  readonly nextStamp?: BookStamp | null;
+  readonly onClaim: () => Promise<ClaimResult>;
   readonly onNext: () => void;
   readonly onGo: (stamp: BookStamp) => void;
   readonly onToggleTitle: () => void;
@@ -98,13 +122,37 @@ interface ContentHandle { claim: () => void }
 
 /** Mounted once per open: backdrop, card chrome and the action button survive chained stamps. */
 function Frame(props: Props & { stamp: BookStamp }) {
-  const { stamp, reducedMotion, equipping, message, wearingTitle, nextCount, onNext, onGo, onToggleTitle, onClose } = props;
+  const { stamp, reducedMotion, equipping, message, wearingTitle, nextCount, nextStamp, wallet, onNext, onGo, onToggleTitle, onClose } = props;
   const backdrop = useSharedValue(reducedMotion ? 1 : 0);
   const card = useSharedValue(reducedMotion ? 1 : 0.9);
   const shake = useSharedValue(0);
   const content = useRef<ContentHandle>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [claimedIds, setClaimedIds] = useState<number[]>([]);
+
+  // HUD lives here (not in the per-stamp Content) so its icons and numbers never remount on a chained card.
+  const cascadingRef = useRef(false);
+  const [shown, setShown] = useState<Wallet>(wallet);
+  // A chained card opens before the profile refresh lands: follow the wallet whenever nothing is counting.
+  useEffect(() => { if (!cascadingRef.current) setShown(wallet); }, [wallet]);
+  const [bursts, setBursts] = useState<Burst[]>([]);
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+  const hudLayout = useRef({ hud: {} as Record<string, { x: number; y: number }>, hudRow: { x: 0, y: 0 }, content: { x: 0, y: 0 } });
+  const bus = useMemo<HudBus>(() => ({
+    layout: hudLayout,
+    add: (kind, n) => setShown(w => ({ ...w, [kind]: w[kind] + n })),
+    burst: list => setBursts(list),
+    setCascading: on => { cascadingRef.current = on; },
+    levelUp: level => setLevelUp(level),
+  }), []);
+  const kinds = hudKinds(stamp);
+
+  // Prefetch the next stamp's art while this one cascades, so the hand-off never opens on an empty stage.
+  useEffect(() => {
+    if (phase !== 'cascading' || !nextStamp) return;
+    const urls = [nextStamp.thumbUrl, nextStamp.iconUrl, nextStamp.lockedThumbUrl].filter((u): u is string => !!u);
+    if (urls.length) Image.prefetch(urls, 'memory-disk').catch(() => undefined);
+  }, [phase, nextStamp]);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -142,8 +190,24 @@ function Frame(props: Props & { stamp: BookStamp }) {
             <GameIcon name="close" size={44} />
           </Pressable>
 
-          <Content key={stamp.id} ref={content} {...props} claimed={claimed} shake={shake}
-            onPhase={setPhase} onClaimed={id => setClaimedIds(ids => [...ids, id])} />
+          {/* Mini HUD: where reward particles land. Outside the keyed Content, so it survives the chain. */}
+          <View style={styles.hud} onLayout={e => { hudLayout.current.hudRow = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; }}
+            accessible accessibilityLabel={`You have ${kinds.map(k => `${shown[k]} ${k === 'xp' ? 'XP' : k}`).join(', ')}`}>
+            {kinds.map(kind => (
+              <View key={kind} style={styles.hudItem} onLayout={e => {
+                const { x, y, width, height } = e.nativeEvent.layout;
+                hudLayout.current.hud[kind] = { x: x + width / 2, y: y + height / 2 };
+              }}>
+                <GameIcon name={KIND_ICON[kind]} size={22} />
+                <Text style={styles.hudText} maxFontSizeMultiplier={1.2}>{shown[kind].toLocaleString('en-US')}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.contentWrap} onLayout={e => { hudLayout.current.content = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; }}>
+            <Content key={stamp.id} ref={content} {...props} claimed={claimed} shake={shake} bus={bus}
+              onPhase={setPhase} onClaimed={id => setClaimedIds(ids => [...ids, id])} />
+          </View>
 
           <View style={styles.actions}>
             {(action || status) && (
@@ -171,6 +235,8 @@ function Frame(props: Props & { stamp: BookStamp }) {
             )}
           </View>
           {!!message && <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text>}
+              {bursts.map(b => <Particle key={b.id} icon={b.icon} sx={b.sx} sy={b.sy} ex={b.ex} ey={b.ey} delay={b.delay} lift={b.lift} />)}
+          {levelUp !== null && <LevelUp level={levelUp} reducedMotion={reducedMotion} onDone={() => setLevelUp(null)} />}
           {/* Keeps the reward icons decoded for the whole chain, so token discs are never blank on a new card. */}
           <View style={styles.preload} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             {(['energy', 'ticket', 'xp', 'coin', 'crown', 'check', 'gift'] as GameIconName[]).map(n => <GameIcon key={n} name={n} size={8} />)}
@@ -181,9 +247,8 @@ function Frame(props: Props & { stamp: BookStamp }) {
   );
 }
 
-interface Burst { id: string; icon: GameIconName; sx: number; sy: number; ex: number; ey: number; delay: number; lift: number }
-
 type ContentProps = Props & {
+  bus: HudBus;
   stamp: BookStamp;
   claimed: boolean;
   shake: SharedValue<number>;
@@ -191,8 +256,8 @@ type ContentProps = Props & {
   onClaimed: (id: number) => void;
 };
 
-const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp, accent, reducedMotion, fresh, wallet, claimed,
-  shake, nextCount, onClaim, onNext, onPhase, onClaimed }, ref) {
+const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp, accent, reducedMotion, fresh, claimed,
+  shake, nextCount, bus, onClaim, onNext, onPhase, onClaimed }, ref) {
   const tone = stampRarity(stamp.rarity);
   const rank = rarityRank(stamp.rarity);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
@@ -219,14 +284,8 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const later = useCallback((ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); }, []);
   useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
 
-  const cascading = useRef(false);
-  const [shown, setShown] = useState<Wallet>(wallet);
-  // A chained card opens before the profile refresh lands: follow the wallet whenever nothing is counting.
-  useEffect(() => { if (!cascading.current) setShown(wallet); }, [wallet]);
-  const [bursts, setBursts] = useState<Burst[]>([]);
   const [party, setParty] = useState(false);
-  const layout = useRef<{ hud: Record<string, { x: number; y: number }>; chips: Record<string, { x: number; y: number }>; chipsRow: { x: number; y: number }; hudRow: { x: number; y: number } }>(
-    { hud: {}, chips: {}, chipsRow: { x: 0, y: 0 }, hudRow: { x: 0, y: 0 } });
+  const layout = useRef<{ chips: Record<string, { x: number; y: number }>; chipsRow: { x: number; y: number } }>({ chips: {}, chipsRow: { x: 0, y: 0 } });
 
   const impact = useCallback((celebrate: boolean) => {
     haptic('hitRigid');
@@ -312,27 +371,30 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
     repress(false);
     chipPop.value = 0;
     chipPop.value = withTiming(1, { duration: 520 });
-    const ok = await onClaim();
-    if (!ok) {
+    const result = await onClaim();
+    if (!result.ok) {
       onPhase('idle');
       haptic('warning');
       tokenShake.value = withSequence(withTiming(8, { duration: 50 }), withTiming(-8, { duration: 50 }), withTiming(5, { duration: 50 }), withTiming(0, { duration: 50 }));
       return;
     }
     onClaimed(stamp.id);
-    cascading.current = true;
+    bus.setCascading(true);
     onPhase('cascading');
     // Particles arc from each token to its HUD counter; each landing ticks the counter up.
     const L = layout.current;
+    const H = bus.layout.current;
+    const cx0 = H.content.x + L.chipsRow.x; const cy0 = H.content.y + L.chipsRow.y;
     const next: Burst[] = [];
     let n = 0;
     let lastLanding = 0;
-    const kinds = rewardChips(stamp.rewards).map(c => c.kind).filter((k): k is 'energy' | 'tickets' | 'xp' => (HUD_KINDS as string[]).includes(k));
+    const hud = hudKinds(stamp);
+    const kinds = rewardChips(stamp.rewards).map(c => c.kind).filter((k): k is HudKind => (hud as string[]).includes(k));
     kinds.forEach((kind, ki) => {
-      const total = stamp.rewards[kind === 'tickets' ? 'tickets' : kind];
-      const from = L.chips[kind]; const to = L.hud[kind];
+      const total = stamp.rewards[kind];
+      const from = L.chips[kind]; const to = H.hud[kind];
       if (!from || !to || reducedMotion) {
-        setShown(w => ({ ...w, [kind]: w[kind] + total }));
+        bus.add(kind, total);
         return;
       }
       const count = Math.min(8, Math.max(5, Math.round(16 / kinds.length)));
@@ -342,24 +404,27 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         const share = i === count - 1 ? total - given : Math.floor(total / count);
         given += share;
         const delay = 200 + ki * 90 + i * 45;
-        next.push({ id: `${stamp.id}-${step}`, icon: KIND_ICON[kind], sx: L.chipsRow.x + from.x + (i % 3) * 6, sy: L.chipsRow.y + from.y,
-          ex: L.hudRow.x + to.x, ey: L.hudRow.y + to.y, delay, lift: 70 + (i % 4) * 18 });
+        next.push({ id: `${stamp.id}-${step}`, icon: KIND_ICON[kind], sx: cx0 + from.x + (i % 3) * 6, sy: cy0 + from.y,
+          ex: H.hudRow.x + to.x, ey: H.hudRow.y + to.y, delay, lift: 70 + (i % 4) * 18 });
         lastLanding = Math.max(lastLanding, delay + 450);
         later(delay + 450, () => {
           haptic('tickSelection');
           GameAudio.play('fx.coinTick', { pitch: Math.min(12, step), volume: 0.7 });
-          setShown(w => ({ ...w, [kind]: w[kind] + share }));
+          bus.add(kind, share);
         });
       }
     });
-    setBursts(next);
+    bus.burst(next);
     const spoken = rewardChips(stamp.rewards).map(c => c.label.replace('+', '')).join(', ');
+    const levelled = (result.levelsGained ?? 0) > 0 && typeof result.level === 'number';
     later(lastLanding + 200, () => {
       haptic('success'); playSfx('fx.reward'); onPhase('gotIt');
-      AccessibilityInfo.announceForAccessibility(`Got ${spoken}`);
+      AccessibilityInfo.announceForAccessibility(`Got ${spoken}${levelled ? `. Level up! You are level ${result.level}` : ''}`);
     });
-    later(lastLanding + 800, () => { cascading.current = false; onPhase('idle'); setBursts([]); });
-  }, [onPhase, onClaim, onClaimed, repress, chipPop, tokenShake, stamp, reducedMotion, later]);
+    // The XP moved the level bar: play the level-up moment after the rewards land.
+    if (levelled) later(lastLanding + 650, () => bus.levelUp(result.level as number));
+    later(lastLanding + (levelled ? 2400 : 800), () => { bus.setCascading(false); onPhase('idle'); bus.burst([]); });
+  }, [onPhase, onClaim, onClaimed, repress, chipPop, tokenShake, stamp, reducedMotion, later, bus]);
 
   useImperativeHandle(ref, () => ({ claim: () => { void claim(); } }), [claim]);
 
@@ -384,26 +449,15 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const tokensStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tokenShake.value }] }));
 
   const chips = rewardChips(stamp.rewards);
-  const onHudRow = (e: LayoutChangeEvent) => { layout.current.hudRow = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; };
   const onChipsRow = (e: LayoutChangeEvent) => { layout.current.chipsRow = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }; };
-  const at = (bucket: 'hud' | 'chips', kind: string) => (e: LayoutChangeEvent) => {
+  const at = (_bucket: 'chips', kind: string) => (e: LayoutChangeEvent) => {
     const { x, y, width, height } = e.nativeEvent.layout;
-    layout.current[bucket][kind] = { x: x + width / 2, y: y + height / 2 };
+    layout.current.chips[kind] = { x: x + width / 2, y: y + height / 2 };
   };
   const pillGold = rank >= 5;
 
   return (
     <View style={styles.content}>
-      {/* Mini HUD: where reward particles land. */}
-      <View style={styles.hud} onLayout={onHudRow} accessible accessibilityLabel={`You have ${shown.energy} energy, ${shown.tickets} tickets, ${shown.xp} XP`}>
-        {HUD_KINDS.map(kind => (
-          <View key={kind} style={styles.hudItem} onLayout={at('hud', kind)}>
-            <GameIcon name={KIND_ICON[kind]} size={22} />
-            <Text style={styles.hudText} maxFontSizeMultiplier={1.2}>{shown[kind].toLocaleString('en-US')}</Text>
-          </View>
-        ))}
-      </View>
-
       <Pressable
         style={styles.stage}
         onPress={stamp.earned ? () => repress(true) : undefined}
@@ -479,7 +533,6 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       )}
 
       {party && <Confetti width={340} height={620} seed={stamp.id} count={30} />}
-      {bursts.map(b => <Particle key={b.id} icon={b.icon} sx={b.sx} sy={b.sy} ex={b.ex} ey={b.ey} delay={b.delay} lift={b.lift} />)}
     </View>
   );
 });
@@ -512,6 +565,7 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
+  contentWrap: { alignSelf: 'stretch' },
   hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   hudText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF' },
@@ -564,5 +618,38 @@ const styles = StyleSheet.create({
   },
   statusText: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
   preload: { position: 'absolute', opacity: 0, width: 1, height: 1, overflow: 'hidden' },
+  levelUp: {
+    position: 'absolute', left: 24, right: 24, top: '30%', alignItems: 'center', paddingVertical: 18, borderRadius: 22,
+    backgroundColor: LEGENDARY_GOLD, borderWidth: 4, borderColor: '#FFFFFF', zIndex: 10, elevation: 10,
+  },
+  levelUpTitle: { fontFamily: 'Shark', fontSize: 34, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: INK },
   message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
 });
+
+/** Level-up moment: the stamp's XP moved the level bar. A gold ribbon pops over the card with a fanfare. */
+function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotion: boolean; onDone: () => void }) {
+  const pop = useSharedValue(reducedMotion ? 1 : 0.4);
+  const fade = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    haptic('success');
+    playSfx('fx.purchase');
+    if (!reducedMotion) {
+      fade.value = withTiming(1, { duration: 140 });
+      pop.value = withSpring(1, { damping: 9, stiffness: 260 });
+    }
+    const out = setTimeout(() => { fade.value = withTiming(0, { duration: 260 }); }, 1500);
+    const done = setTimeout(onDone, 1800);
+    return () => { clearTimeout(out); clearTimeout(done); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const style = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ scale: pop.value }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.levelUp, style]} accessibilityLiveRegion="assertive">
+      <GameIcon name="xp" size={48} />
+      <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>LEVEL UP!</Text>
+      <Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.2}>Level {level}</Text>
+      {!reducedMotion && <Confetti width={300} height={240} seed={level} count={24} />}
+    </Animated.View>
+  );
+}

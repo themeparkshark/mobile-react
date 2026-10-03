@@ -67,7 +67,7 @@ export async function getStamps(): Promise<StampsResponse> {
   return data;
 }
 
-export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards }> {
+export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null }> {
   const { data } = await client.post(`/me/stamps/${stampId}/claim`);
   return data;
 }

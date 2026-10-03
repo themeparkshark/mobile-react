@@ -162,8 +162,9 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.ok(claimFn.indexOf('repress(false)') < claimFn.indexOf('await onClaim()'), 'press feedback must come before the request');
   assert.match(src, /const step = n;/);
   assert.match(src, /pitch: Math\.min\(12, step\)/);
-  assert.match(src, /setShown\(w => \(\{ \.\.\.w, \[kind\]: w\[kind\] \+ share \}\)\)/);
-  assert.match(src, /useEffect\(\(\) => \{ if \(!cascading\.current\) setShown\(wallet\); \}, \[wallet\]\);/);
+  assert.match(src, /bus\.add\(kind, share\);/);
+  assert.match(src, /add: \(kind, n\) => setShown\(w => \(\{ \.\.\.w, \[kind\]: w\[kind\] \+ n \}\)\)/);
+  assert.match(src, /useEffect\(\(\) => \{ if \(!cascadingRef\.current\) setShown\(wallet\); \}, \[wallet\]\);/);
   assert.match(src, /AccessibilityInfo\.announceForAccessibility/);
   assert.match(src, /tokenShake\.value = withSequence/);
   // Status is not a button, and the action button lives in the Frame (not remounted per chained stamp).
@@ -251,10 +252,13 @@ test('locked bleed never reads as earned; postmark sits in the free corner; rari
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'nope' })).freeCorner, 'tr');
   const tile = read('src/screens/stampbook/StampTile.tsx');
   assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, stamp\.claimable \|\| isNew \|\| almost\)\]\]\}/);
-  // App-wide ramp (mirrors dexLook RARITY_LOOK on claude/hh3-menu-dex): gold is Legendary only, gems give a shape cue.
+  // One app-wide palette: stamps read design-system colors.rarity (shop and wardrobe ladder); gold is Legendary only.
   const rarity = loadTs('src/screens/stampbook/rarity.ts');
+  const ds = loadTs('src/design-system.ts');
   assert.deepEqual(plain(['common', 'uncommon', 'rare', 'epic', 'legendary'].map(k => rarity.STAMP_RARITY[k].frame)),
-    ['#8a9bb0', '#2fb35d', '#9b4dff', '#ff5a2b', '#f5b400']);
+    plain(['common', 'uncommon', 'rare', 'epic', 'legendary'].map(k => ds.colors.rarity[k].main)));
+  assert.deepEqual(plain(['uncommon', 'rare', 'epic', 'legendary'].map(k => ds.wearableRarityUi[['common', 'uncommon', 'rare', 'epic', 'legendary'].indexOf(k) + 1].border)),
+    plain(['uncommon', 'rare', 'epic', 'legendary'].map(k => rarity.STAMP_RARITY[k].frame.toUpperCase())).map(c => c.replace('#00A5F5', '#00a5f5')));
   assert.deepEqual(plain(Object.values(rarity.STAMP_RARITY).map(r => r.gems)), [1, 2, 3, 4, 5]);
   assert.match(tile, /Array\.from\(\{ length: look\.gems \}/);
   assert.match(read('src/screens/stampbook/StampCard.tsx'), /backgroundColor: tone\.chip, borderColor: tone\.frame/);
@@ -314,4 +318,29 @@ test('preview data is dev only and the API keeps v2 fields optional', () => {
   const api = read('src/api/endpoints/me/stamps.ts');
   for (const field of ['section?: string;', 'icon_url?: string | null;', 'how_to?: string;', 'sections?: StampSectionInfo[];'])
     assert.ok(api.includes(field), field);
+});
+
+test('round 6: hand-off prefetches the next art, HUD lives outside the remounting content, level-up from the claim', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  // HUD rendered in Frame, before the keyed Content.
+  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('<Content key={stamp.id}'));
+  assert.ok(card.indexOf('<View style={styles.hud}') > card.indexOf('function Frame('));
+  assert.ok(card.indexOf('<View style={styles.hud}') < card.indexOf('const Content = forwardRef'));
+  assert.match(card, /if \(phase !== 'cascading' \|\| !nextStamp\) return;/);
+  assert.match(card, /Image\.prefetch\(urls, 'memory-disk'\)/);
+  assert.match(card, /if \(levelled\) later\(lastLanding \+ 650, \(\) => bus\.levelUp\(result\.level as number\)\);/);
+  assert.match(card, /function LevelUp\(/);
+  const screen = read('src/screens/StampBookScreen.tsx');
+  assert.match(screen, /Image\.prefetch\(\[thumb\], 'memory-disk'\)\.then\(go, go\);\n\s+setTimeout\(go, 350\);/);
+  assert.match(screen, /levelsGained: Number\(res\?\.levels_gained \?\? 0\)/);
+  assert.match(screen, /coins: player\?\.coins \?\? 0/);
+});
+
+test('round 6: coin stamps show coins in the HUD; Holiday Shark and Wild Legend have their own pictograms', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  assert.match(card, /stamp\.metric === 'coins_held' \|\| stamp\.metric === 'coins_earned'/);
+  assert.equal(model.requirement({ metric: 'holiday_login', target: 1 }).icon, 'gift');
+  assert.equal(model.requirement({ metric: 'wild_legendary_variants', target: 2 }).icon, 'sparkle');
+  const icons = read('src/ui/iconNames.ts');
+  for (const n of ['gift', 'sparkle', 'moon']) assert.ok(icons.includes(`'${n}'`), n);
 });
