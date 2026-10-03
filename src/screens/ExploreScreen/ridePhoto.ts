@@ -169,7 +169,13 @@ export function gradeShot(offsetFraction: number): PhotoGrade {
 }
 
 /** How long the grade holds before the print flies, by grade (tap skips). */
-export const GRADE_HOLD_MS: Readonly<Record<PhotoGrade, number>> = { blurry: 900, good: 450, great: 650, frame_it: 1100 };
+/**
+ * Blurry holds 520 ms then slides out in 180 ms: the miss print is gone before the next pass's first pip
+ * (retry starts 450 ms after the miss and arrives 900 ms later, so the -600 ms pip is at 750 ms).
+ */
+export const MISS_RETRY_MS = 450;
+export const BLURRY_OUT_MS = 180;
+export const GRADE_HOLD_MS: Readonly<Record<PhotoGrade, number>> = { blurry: 520, good: 450, great: 650, frame_it: 1100 };
 /** Stars on the stamp, so the grade reads without colour. */
 export const GRADE_STARS: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 1, great: 2, frame_it: 3 };
 /** Ready pips before the car reaches the frame (ms to arrival) and their pitch (semitones). */

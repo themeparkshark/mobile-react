@@ -191,7 +191,7 @@ test('round 2: grading is in ms at the touch minus 50 ms, with a coyote frame, t
 });
 
 test('round 2: holds, stars and the ready pips', () => {
-  assert.deepEqual(plain(ride.GRADE_HOLD_MS), { blurry: 900, good: 450, great: 650, frame_it: 1100 });
+  assert.deepEqual(plain(ride.GRADE_HOLD_MS), { blurry: 520, good: 450, great: 650, frame_it: 1100 });
   assert.deepEqual(plain(ride.GRADE_STARS), { blurry: 0, good: 1, great: 2, frame_it: 3 });
   assert.deepEqual(plain(ride.READY_PIPS.map(p => [p.atMs, p.semitones])), [[600, 0], [400, 3], [200, 7]]);
 });
@@ -205,7 +205,9 @@ test('round 2: the Rare frame sits on the slow run-out, never the fastest part o
   for (let t = 0; t < 1; t += 0.01) peak = Math.max(peak, speed(t));
   assert.ok(speed(tFrame) < peak * 0.75, `frame speed ${speed(tFrame).toFixed(2)} vs peak ${peak.toFixed(2)}`);
   // A retry starts 0.9 s before the frame, so a miss gets its next chance within 1.4 s.
-  assert.ok(300 + 900 <= ride.RETRY_MAX_MS);
+  assert.ok(ride.MISS_RETRY_MS + 900 <= ride.RETRY_MAX_MS);
+  // The miss print is gone before the next pass's first pip (-600 ms).
+  assert.ok(ride.GRADE_HOLD_MS.blurry + ride.BLURRY_OUT_MS <= ride.MISS_RETRY_MS + 900 - 600);
 });
 
 test('round 2: per-find variety and edge arrows', () => {
@@ -475,4 +477,26 @@ test('round 5: the flume splash peaks at the camera moment, holds, and is drawn 
   assert.ok(splashLevel(-40) > 0 && splashLevel(-40) < 1);
   assert.ok(splashLevel(300) > 0 && splashLevel(300) < 1);
   assert.equal(splashLevel(500), 0);
+});
+
+test('round 5: How to Play hand-off glides to the nearest find and pulses it once with a soft sound', () => {
+  const nf = loadTs('src/screens/ExploreScreen/nearestFind.ts');
+  assert.equal(nf.nearestFind([]), null, 'no finds: a no-op');
+  assert.deepEqual(plain(nf.nearestFind([
+    { item: { latitude: 1, longitude: 1 }, distance: 50 },
+    { item: { latitude: 2, longitude: 2 }, distance: 10 },
+    { item: { latitude: null, longitude: 3 }, distance: 1 },
+  ])), { latitude: 2, longitude: 2 });
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /setPulse\(\{ pivot, key \}\); catchSound\('tick'/);
+  const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(marker, /scale: reduced \? 1 : 1 \+ 0\.35 \* pulseV\.value/, 'no swell under Reduce Motion');
+});
+
+test('round 5: kid clarity: hand points down at the disc, miss chip shows the ride vehicle', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.doesNotMatch(src, /rotate: '-60deg'/);
+  assert.match(src, /handArt: \{ width: 36, height: 46 \}/);
+  assert.match(src, /VEHICLE_ICON\[stage\.kind\]/);
+  assert.match(src, /setPlateLeft\(/, 'the plate sits opposite the vehicle');
 });

@@ -25,13 +25,18 @@ import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
 import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
 import {
-  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload,
+  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload, MISS_RETRY_MS, BLURRY_OUT_MS,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
 
 const HAND_ART = require('../../../../assets/images/ride-photo/tap-hand.webp');
-const CAR_ICON = require('../../../../assets/images/ride-photo/car-back.webp');
+/** The miss chip shows the current ride's own vehicle. */
+const VEHICLE_ICON: Partial<Record<RideKind, number>> = {
+  coaster: require('../../../../assets/images/ride-photo/car-back.webp'),
+  flume: require('../../../../assets/images/ride-photo/log-boat.webp'),
+  teacups: require('../../../../assets/images/ride-photo/teacup-back.webp'),
+};
 
 const SHUTTER = 86;
 /** The print is laid out at its hero size and only ever scaled down, so it stays sharp. */
@@ -325,7 +330,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
 
   const retry = useCallback((missed: boolean) => {
     if (rideRef.current.outcome !== 'riding') return;
-    later(missed ? 300 : 380, () => runPass(anchors.tRetry));
+    later(missed ? MISS_RETRY_MS : 380, () => runPass(anchors.tRetry));
   }, [later, runPass, anchors.tRetry]);
 
   passEndRef.current = () => {
@@ -474,7 +479,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         later(90, () => { if (printKey.isCurrent(key)) buzz('softBump', 1); });
       });
       later(GRADE_HOLD_MS.blurry, () => {
-        if (printKey.isCurrent(key)) printIn.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) });
+        if (printKey.isCurrent(key)) printIn.value = withTiming(0, { duration: BLURRY_OUT_MS, easing: Easing.in(Easing.quad) });
       });
       later(GRADE_HOLD_MS.blurry + 220, () => setPrint(current => (current?.key === key ? null : current)));
       return;
@@ -868,7 +873,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           {missNote && <View pointerEvents="none" accessibilityLabel={missNote.dir === 'early' ? 'Too soon' : 'Too late'}
             style={[styles.missChip, { left: Math.max(16, Math.min(sceneW - 130, box.x + box.w / 2 - 57)), top: box.y - 64 }]}>
             {missDirLeft && <Text style={styles.arrow}>◀</Text>}
-            <Image source={CAR_ICON} style={styles.missCar} contentFit="contain" transition={0} />
+            <Image source={VEHICLE_ICON[stage.kind] ?? VEHICLE_ICON.coaster} style={styles.missCar} contentFit="contain" transition={0} />
             {!missDirLeft && <Text style={styles.arrow}>▶</Text>}
           </View>}
           {/* No tap this pass: a camera and a pulsing finger (no words) */}
@@ -1026,8 +1031,9 @@ const styles = StyleSheet.create({
   slotGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b' },
   shutterWrap: { width: SHUTTER + 20, height: SHUTTER + 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
   halo: { position: 'absolute', width: SHUTTER + 18, height: SHUTTER + 18, borderRadius: (SHUTTER + 18) / 2, borderWidth: 3, borderColor: '#ffc93c' },
-  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 54 * 0.6, top: -69 - 2, width: 54, height: 69 },
-  handArt: { width: 54, height: 69, transform: [{ rotate: '-60deg' }] },
+  // Fingertip straight down at the disc centre, 6 pt above the disc's top edge (the disc top sits 21 pt into the wrap).
+  hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 36 * 0.63, top: 21 - 6 - 46, width: 36, height: 46 },
+  handArt: { width: 36, height: 46 },
   rarity: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
   bevel: { position: 'absolute', left: 0, right: 0, top: 0, height: 1.5, backgroundColor: 'rgba(255,255,255,0.6)' },

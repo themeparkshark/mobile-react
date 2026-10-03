@@ -1,7 +1,8 @@
 import { Image, ImageSource } from 'expo-image';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PrepItemType } from '../../models/prep-item-type';
 import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameIcon } from '../../ui';
@@ -104,6 +105,7 @@ interface Props {
   count?: number;
   /** Only one find on the map shows the pointing finger at a time (the nearest in range). */
   showFinger?: boolean;
+  pulseKey?: number | null;
   chromeless?: boolean;
 }
 
@@ -178,7 +180,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   const imageSource = useMemo(() => findImageSource(prepItem),
@@ -216,6 +218,16 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     const tap = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
     return { transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
   }, [phase, moving, tilt, below]);
+  // One pulse per new key: the art swells 1.35x and a ring blooms (Reduce Motion: the ring only, no swell).
+  const reduced = useReducedGameMotion();
+  const pulseV = useSharedValue(0);
+  useEffect(() => {
+    if (pulseKey == null) return;
+    pulseV.value = 0;
+    pulseV.value = withSequence(withTiming(1, { duration: 220 }), withTiming(0, { duration: 420 }));
+  }, [pulseKey, pulseV]);
+  const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value }] }), [reduced]);
+  const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
 
   return (
@@ -229,6 +241,8 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
         </Animated.View>}
         {look.aura && <Animated.Image source={GLOW} style={[styles.aura, { tintColor: color }, pulse]} />}
+        <Animated.View style={[styles.pulseRing, { borderColor: color }, pulseRing]} pointerEvents="none" />
+        <Animated.View style={pulseArt}>
         <Animated.View style={[styles.art, bob]}>
           {imageSource ? (
             <Image source={imageSource} style={styles.image} contentFit="contain" transition={0} cachePolicy="memory-disk" />
@@ -237,6 +251,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
               <GameIcon name="gift" size={30} />
             </View>
           )}
+        </Animated.View>
         </Animated.View>
         {SPARKLES.slice(0, look.sparkles).map(spark => <Sparkle key={spark.phase} {...spark}
           color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
@@ -272,6 +287,7 @@ const styles = StyleSheet.create({
   rays: { position: 'absolute', width: 96, height: 96, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
   ray: { position: 'absolute', width: 96, height: 8, borderRadius: 4 },
   aura: { position: 'absolute', width: 96, height: 96 },
+  pulseRing: { position: 'absolute', width: 84, height: 84, borderRadius: 42, borderWidth: 4 },
   art: { width: A, height: A, alignItems: 'center', justifyContent: 'center' },
   image: { width: A, height: A },
   fallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
