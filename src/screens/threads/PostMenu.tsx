@@ -27,7 +27,7 @@ export interface MenuTarget {
 }
 
 const REASONS: readonly { reason: ReportReason; label: string; icon: GameIconName }[] = [
-  { reason: 'asked_about_me', label: 'Asked about me / made me feel weird', icon: 'lock' },
+  { reason: 'asked_about_me', label: 'Asked about me / made me feel weird', icon: 'shark' },
   { reason: 'disrespectful', label: 'Mean or bullying', icon: 'swords' },
   { reason: 'swearing', label: 'Bad words', icon: 'close' },
   { reason: 'personal_info', label: 'Personal info', icon: 'lock' },

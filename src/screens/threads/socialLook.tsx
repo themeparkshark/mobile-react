@@ -415,10 +415,10 @@ const styles = StyleSheet.create({
   },
   plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 2 },
   faceName: {
-    position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 10,
+    position: 'absolute', top: -38, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 12, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 8, paddingVertical: 3,
   },
-  faceNameText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white, marginTop: 2 },
+  faceNameText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 2 },
   extraFace: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 4, opacity: 0.85 },
   extraCount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft, marginTop: 2 },
   gold: {
