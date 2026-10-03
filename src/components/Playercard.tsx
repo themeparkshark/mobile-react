@@ -5,10 +5,6 @@ import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
 
-// Tap zone map — Y percentage ranges on the shark for each slot
-// Checked top-to-bottom; first match wins
-// Hands use X position (far left/right sides) at mid-body height
-
 /**
  * Where each worn layer lands, normalized on the 1353x1530 paper art
  * (dressing-room.md 7.2 slot anchors). A newly worn layer pops in from here.
