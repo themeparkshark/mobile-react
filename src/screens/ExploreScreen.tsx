@@ -490,6 +490,19 @@ function ExploreScreen() {
   useEffect(() => { setFrightIntroOwns(frightEngine.introPending); }, [frightEngine.introPending]);
   const frightStressSpots = useRef<readonly { latitude: number; longitude: number }[]>([]);
   frightStressSpots.current = frightNight.tonight?.spots ?? [];
+  // Dev-only capture driver (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=card|profile|collection): opens that screen
+  // 25 s after the map loads so simulator captures can show real flows without touch input.
+  useEffect(() => {
+    const target = __DEV__ ? process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_NAV : undefined;
+    if (!target) return;
+    const timer = setTimeout(() => {
+      const slug = frightNight.tonight?.event?.slug;
+      if (target === 'card' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug });
+      if (target === 'profile') (navigation as any).navigate('Profile');
+      if (target === 'collection') (navigation as any).navigate('SetCollection');
+    }, 25_000);
+    return () => clearTimeout(timer);
+  }, [frightNight.tonight?.event?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
   // Dev-only stress (EXPO_PUBLIC_FRIGHT_STRESS=1): every 45 s the mode turns off for 15 s (the map input
   // goes away and comes back), exercising the one-time mount and unmount of the fright markers.
   const [stressOff, setStressOff] = useState(false);
