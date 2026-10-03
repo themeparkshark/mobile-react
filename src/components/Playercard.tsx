@@ -25,8 +25,10 @@ const SLOT_ANCHORS: Record<string, string> = {
  * One worn layer. When it arrives after the shark is already on screen it
  * fades in over 60ms and settles from 1.18 to 1.0 at its slot.
  */
-function WornLayer({ uri, slot, pop }: { readonly uri: string; readonly slot: string; readonly pop: boolean }) {
-  const scale = useRef(new Animated.Value(pop ? 1.18 : 1)).current;
+function WornLayer({ uri, slot, pop, popFrom = 1.18, drop = false }: { readonly uri: string; readonly slot: string; readonly pop: boolean; readonly popFrom?: number; readonly drop?: boolean }) {
+  const scale = useRef(new Animated.Value(pop ? popFrom : 1)).current;
+  // Shop buy: the new piece falls about 40pt onto the shark before it settles.
+  const fall = useRef(new Animated.Value(pop && drop ? -40 : 0)).current;
   const opacity = useRef(new Animated.Value(pop ? 0 : 1)).current;
 
   useEffect(() => {
@@ -34,6 +36,7 @@ function WornLayer({ uri, slot, pop }: { readonly uri: string; readonly slot: st
     const arrival = Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 60, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1, damping: 9, stiffness: 260, mass: 1, useNativeDriver: true }),
+      Animated.spring(fall, { toValue: 0, damping: 11, stiffness: 320, mass: 1, useNativeDriver: true }),
     ]);
     arrival.start();
     return () => arrival.stop();
@@ -42,7 +45,7 @@ function WornLayer({ uri, slot, pop }: { readonly uri: string; readonly slot: st
   return (
     <Animated.View pointerEvents="none" style={[styles.image, {
       opacity,
-      transform: [{ scale }],
+      transform: [{ translateY: fall }, { scale }],
       transformOrigin: SLOT_ANCHORS[slot] ?? 'center',
     }]}>
       <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
@@ -57,6 +60,11 @@ export default function Playercard({
   sharkTransform,
   onItemTap,
   popLayers = false,
+  still = false,
+  pinAnchor = 'card',
+  popFrom,
+  dropIn = false,
+  shadow = false,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -65,6 +73,16 @@ export default function Playercard({
   readonly onItemTap?: (item: ItemType, slot: string) => void;
   /** Inventory stage: layers put on after the first frame pop in at their slot. */
   readonly popLayers?: boolean;
+  /** Reduce Motion: skip the idle bob. */
+  readonly still?: boolean;
+  /** Stages (shop try-on, reveal): 'body' pins the pin on the chest instead of the card corner. */
+  readonly pinAnchor?: 'card' | 'body';
+  /** How big a newly worn layer starts before settling (1.18 by default; the shop's buy drop uses 1.4). */
+  readonly popFrom?: number;
+  /** Newly worn layers fall onto the shark (the shop buy landing). */
+  readonly dropIn?: boolean;
+  /** Stages: a contact shadow under the tail that grows and darkens as the shark bobs down. */
+  readonly shadow?: boolean;
 }) {
   const translate = useRef(new Animated.Value(0)).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -75,7 +93,9 @@ export default function Playercard({
   const containerSize = useRef({ width: 0, height: 0 });
 
   useEffect(() => {
-    Animated.loop(
+    // Reduce Motion (or a still preview): no idle bob at all.
+    if (still) { translate.setValue(0); return; }
+    const bob = Animated.loop(
       Animated.sequence([
         Animated.timing(translate, {
           toValue: 10,
@@ -88,8 +108,10 @@ export default function Playercard({
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, []);
+    );
+    bob.start();
+    return () => bob.stop();
+  }, [still]);
 
   // Check if shark is "naked" (no wearable items)
   const isNaked = !inventory?.head_item && !inventory?.face_item &&
@@ -157,7 +179,7 @@ export default function Playercard({
             contentFit="cover"
           />
         )}
-        {inventory?.pin_item && (
+        {inventory?.pin_item && pinAnchor === 'card' && (
           onItemTap ? (
             <Pressable
               onPress={() => onItemTap(inventory.pin_item, 'pin_item')}
@@ -191,6 +213,12 @@ export default function Playercard({
               contentFit="contain"
             />
           )
+        )}
+        {shadow && (
+          <Animated.View pointerEvents="none" style={[styles.shadow, {
+            opacity: translate.interpolate({ inputRange: [0, 10], outputRange: [0.16, 0.3] }),
+            transform: [{ scaleX: translate.interpolate({ inputRange: [0, 10], outputRange: [0.82, 1] }) }],
+          }]} />
         )}
         <Animated.View
           style={{
@@ -228,9 +256,14 @@ export default function Playercard({
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
               const worn = inventory?.[slot];
               return worn?.paper_url ? (
-                <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} />
+                <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} popFrom={popFrom} drop={dropIn} />
               ) : null;
             })}
+            {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
+            {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
+              <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
+                pointerEvents="none" style={styles.chestPin} />
+            ) : null}
             {/* Single tap overlay — uses coordinates to determine which equipped item */}
             {onItemTap && (
               <Pressable
@@ -246,6 +279,9 @@ export default function Playercard({
 }
 
 const styles = StyleSheet.create({
+  // Under the tail, where the shark meets the stage (art box coordinates).
+  shadow: { position: 'absolute', left: '40%', width: '36%', top: '83%', height: '4.5%', borderRadius: 999, backgroundColor: '#05346e' },
+  chestPin: { position: 'absolute', left: '47%', top: '52%', width: '11%', aspectRatio: 1 },
   image: {
     width: '100%',
     height: '100%',

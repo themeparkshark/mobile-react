@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -8,6 +8,7 @@ import {
   ImageBackground,
   Pressable,
   SafeAreaView,
+  useWindowDimensions,
   StyleSheet,
   Text,
   View,
@@ -17,6 +18,15 @@ import getItems from '../api/endpoints/catalogs/items';
 import getStore from '../api/endpoints/stores/get';
 import getStores from '../api/endpoints/stores/stores';
 import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
+import getShopToday from '../api/endpoints/stores/today';
+import { ShopToday } from '../models/shop-today';
+import ShopShelves from './StoreScreen/ShopShelves';
+import { WishHeart } from './StoreScreen/shopUi';
+import WishlistSheet from './StoreScreen/WishlistSheet';
+import { useWishCount } from './StoreScreen/wishStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -28,7 +38,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import usePurchaseItem, { currencyLabel } from '../hooks/usePurchaseItem';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { ws7Preview } from '../dev/ws7Preview';
-import { BRAND, SharkLoader } from '../ui';
+import { BRAND, GameIcon, SharkLoader } from '../ui';
 import currencyBalance from '../helpers/currency-balance';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -242,15 +252,39 @@ function SingleBubble({
 }
 
 /** Gear (cosmetics for Shark Coins) and Supplies (in-app purchases), on the Shark Shop only. */
-function ShopTabs({ tab, onChange }: { tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void }) {
+function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
+  tab: 'gear' | 'supplies'; onChange: (tab: 'gear' | 'supplies') => void;
+  /** Shop v2: the balance lives in the tab row (no separate pill row). */
+  coins?: number | null;
+  onWishlist?: () => void;
+  /** Shop v2: the back button lives in the tab row, so the title bar can fold away by transform only. */
+  withBack?: boolean;
+}) {
+  const wishes = useWishCount();
   return (
-    <View style={tabStyles.row} accessibilityRole="tablist">
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
+    {withBack && <View style={{ marginLeft: 12, marginTop: 10 }}><BackButton /></View>}
+    <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }, withBack && { marginLeft: 8 }]} accessibilityRole="tablist">
       {(['gear', 'supplies'] as const).map(key => (
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
           accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
           <Text style={[tabStyles.label, tab === key && tabStyles.labelOn]}>{key === 'gear' ? 'GEAR' : 'SUPPLIES'}</Text>
         </Pressable>
       ))}
+    </View>
+    {coins != null && (
+      <>
+        <Pressable onPress={onWishlist} style={tabStyles.wish} accessibilityRole="button"
+          accessibilityLabel={`My wishlist, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
+          <WishHeart on={wishes > 0} size={20} />
+          {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
+        </Pressable>
+        <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins`}>
+          <GameIcon name="coins" size={20} />
+          <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
+        </View>
+      </>
+    )}
     </View>
   );
 }
@@ -262,11 +296,19 @@ const tabStyles = StyleSheet.create({
   tabOn: { backgroundColor: '#ffcf3b' },
   label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
   labelOn: { color: '#6a3b00' },
+  coins: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,
+    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 2, borderColor: BRAND.white },
+  coinsText: { fontFamily: 'Shark', fontSize: 16, color: '#fff' },
+  wish: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, marginRight: 8, backgroundColor: '#fff0f5',
+    borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, borderWidth: 2, borderColor: '#ff4f8b' },
+  wishText: { fontFamily: 'Shark', fontSize: 14, color: '#c2185b' },
 });
 
 export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus } = route.params as {
+  const { store, tab: initialTab, focus, focus_item: focusItem } = route.params as {
     store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
+    /** Wishlist push deep link: open this item's try-on. */
+    focus_item?: number;
   };
   const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
   const [currentStore, setCurrentStore] = useState<StoreType>();
@@ -280,6 +322,35 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted } = useTutorial();
+  const [today, setToday] = useState<ShopToday | null>(null);
+  const storeIdRef = useRef<number | null>(null);
+  // Server clock minus device clock: timers never trust a changed device clock.
+  const [clockSkew, setClockSkew] = useState(0);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  // Wishlist push or My Wishlist: a new nonce opens the try-on, even for the same item twice.
+  const [focusRequest, setFocusRequest] = useState<{ id: number; nonce: number } | null>(
+    () => (focusItem ? { id: focusItem, nonce: 1 } : null));
+  const shopStill = useReducedGameMotion();
+  // The title bar folds into the tab row after 40pt of shop scroll.
+  const scrollY = useSharedValue(0);
+  const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
+  const [barH, setBarH] = useState(0);
+  const { height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // The title bar folds away by transform and opacity only (no layout per scroll frame): the whole
+  // stack slides up by the bar's height, and is that much taller so the shelf fills the screen.
+  const fold = Math.max(0, barH - insets.top);
+  const stackStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -fold * collapse.value }] }));
+  const titleStyle = useAnimatedStyle(() => ({ opacity: 1 - collapse.value }));
+  const reloadToday = useCallback(async (): Promise<boolean> => {
+    if (!storeIdRef.current) return false;
+    const next = await getShopToday(storeIdRef.current).catch(() => null);
+    if (!next) return false;
+    setClockSkew(clockOffset(next.server_time, Date.now()));
+    setToday(next);
+    return true;
+  }, []);
+  // The classic grid (older backends, park stores) keeps the dialog purchase flow.
   const { purchaseItem, purchaseModal } = usePurchaseItem();
   const [page, setPage] = useState<number>(1);
   // One page request at a time: two quick onEndReached calls must not skip a page.
@@ -324,12 +395,17 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
         : Number((await getStores()).find(s => s.name === 'Shark Shop')?.id) || undefined;
       if (!id) throw new Error('Shark Shop not found');
       const nextStore = await getStore(id);
-      const [nextRotation, nextCatalog] = await Promise.all([
+      storeIdRef.current = id;
+      const [nextRotation, nextCatalog, nextToday] = await Promise.all([
         getStoreRotation(id).catch(() => null),
         getCatalog(nextStore.current_catalog_id),
+        // Shop v2 shelves; null on an older backend, which keeps the classic grid.
+        getShopToday(id).catch(() => null),
       ]);
-      const firstPage = await getItems(nextCatalog.id, 1);
+      const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
       if (!live) return;
+      if (nextToday) setClockSkew(clockOffset(nextToday.server_time, Date.now()));
+      setToday(nextToday);
       setCurrentStore(nextStore);
       setRotation(nextRotation);
       setCatalog(nextCatalog);
@@ -354,6 +430,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
 
   // Supplies sit on the Shark Shop only; secret and park stores stay gear-only.
   const sharkShop = store === 'shark-shop' || currentStore?.name === 'Shark Shop';
+  // Shop v2 shelves (the title bar folds away as the shelf scrolls).
+  const v2 = !!today && sharkShop && tab === 'gear';
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
@@ -375,9 +453,15 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   return (
     <>
       {purchaseModal}
+      <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
+        onOpenItem={id => setFocusRequest(r => ({ id, nonce: (r?.nonce ?? 0) + 1 }))} />
+      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: BRAND.blue }}>
+      <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: winH + fold }, stackStyle] : { flex: 1 }}>
+      <Reanimated.View style={v2 ? titleStyle : undefined}
+        onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       <Topbar purple={currentStore?.is_secret_store ?? false}>
         <TopbarColumn stretch={false}>
-          <BackButton />
+          {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>{currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
@@ -386,9 +470,11 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           <InformationModal id={InformationModalEnums.StoreScreen} />
         </TopbarColumn>
       </Topbar>
+      </Reanimated.View>
       {sharkShop && (
         <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
-          <ShopTabs tab={tab} onChange={setTab} />
+          <ShopTabs tab={tab} onChange={setTab} coins={v2 ? Number(player?.coins ?? 0) : null}
+            onWishlist={() => setWishlistOpen(true)} withBack={v2} />
         </View>
       )}
       {sharkShop && tab === 'supplies' && (
@@ -423,10 +509,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
                 flexDirection: 'row',
                 columnGap: 16,
                 justifyContent: 'center',
-                paddingTop: 16,
+                paddingTop: today ? 0 : 16,
               }}
             >
-              {catalog &&
+              {catalog && !today &&
                 catalog.currencies.map((currency) => {
                   return (
                     <View
@@ -475,11 +561,15 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
                   );
                 })}
             </View>
+            {today && (
+              <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
+                focusRequest={focusRequest} scrollY={scrollY} />
+            )}
             {/* Countdown Timer */}
-            {rotation?.next_rotation_at && (
+            {!today && rotation?.next_rotation_at && (
               <StoreCountdown nextRotationAt={rotation.next_rotation_at} onElapsed={() => setRestockPending(true)} />
             )}
-            <View
+            {!today && <View
               style={{
                 height: 180,
                 paddingTop: 16,
@@ -491,12 +581,12 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
               {!reducedMotion && <StoreBubbles />}
               {/* Animated shark */}
               <AnimatedShark imageUrl={catalog?.promotion_image_url} still={reducedMotion} />
-            </View>
-            {items.length === 0 && (
+            </View>}
+            {!today && items.length === 0 && (
               <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way"
                 message="The Shark Shop restocks soon. Check back after the countdown." />
             )}
-            {items && items?.length > 0 && (
+            {!today && items && items?.length > 0 && (
               <View
                 style={{
                   borderTopWidth: 5,
@@ -525,6 +615,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
           </SafeAreaView>
         </ImageBackground>
       )}
+      </Reanimated.View>
+      </View>
     </>
   );
 }

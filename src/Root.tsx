@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
-import { useContext, useCallback, useEffect } from 'react';
+import { useContext, useCallback, useEffect, useState } from 'react';
 import { LogBox, View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext, LocationStatusContext } from './context/LocationProvider';
@@ -324,13 +324,33 @@ function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; r
   return null;
 }
 
+/** Screenshot and recording builds: EXPO_PUBLIC_NO_DEV_OVERLAYS=1 hides every dev overlay (inlined at bundle time). */
+const NO_DEV_OVERLAYS = __DEV__ && process.env.EXPO_PUBLIC_NO_DEV_OVERLAYS === '1';
+// Capture builds: no LogBox toasts over the screen either.
+if (NO_DEV_OVERLAYS) LogBox.ignoreAllLogs(true);
+const SCREENS_WITHOUT_JOYSTICK = new Set(['Store', 'Membership', 'Inventory', 'Settings']);
+
+/** The focused route name, updated on every navigation. */
+function useCurrentRouteName(): string | undefined {
+  const [name, setName] = useState<string | undefined>(() => navigationRef.getCurrentRoute()?.name);
+  useEffect(() => {
+    const update = () => setName(navigationRef.getCurrentRoute()?.name);
+    const unsubscribe = navigationRef.addListener('state', update);
+    update();
+    return unsubscribe;
+  }, []);
+  return name;
+}
+
 /** Dev builds and the App Store review account: the location joystick, which needs the live position. */
 function DevJoystickHost() {
   const { location, moveDevLocation } = useContext(LocationContext);
   const onMove = useCallback((dx: number, dy: number, speed: number) => moveDevLocation(dx, dy, speed), [moveDevLocation]);
   const onStop = useCallback(() => {}, []);
+  const route = useCurrentRouteName();
   // Dev only: Standings screen captures run without the joystick over the board.
   if (process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') return null;
-  if (!location || CLEAN_CAPTURE) return null;
+  // Never over the shops (nothing there moves with GPS), and never in capture builds.
+  if (!location || NO_DEV_OVERLAYS || CLEAN_CAPTURE || (route && SCREENS_WITHOUT_JOYSTICK.has(route))) return null;
   return <DevJoystick onMove={onMove} onStop={onStop} currentLat={location.latitude} currentLng={location.longitude} />;
 }

@@ -21,6 +21,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import deletePlayer from '../api/endpoints/me/delete';
 import deleteAccountNow from '../api/endpoints/me/delete-account';
+import { showToast } from '../utils/toast';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
 import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
@@ -150,6 +151,7 @@ export default function SettingsScreen() {
   const [backgroundLocationBusy, setBackgroundLocationBusy] = useState(false);
   const [findingOriginal, setFindingOriginal] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
+  const [wishlistAlerts, setWishlistAlerts] = useState<boolean>(!!player?.wishlist_alerts);
   const accountAction = useRef(false);
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
@@ -158,6 +160,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
     setEnabledSoundEffects(player?.enabled_sound_effects);
+    setWishlistAlerts(!!player?.wishlist_alerts);
   }, [player]);
 
   useEffect(() => {
@@ -330,7 +333,6 @@ export default function SettingsScreen() {
           <SettingsRow
             art="sound"
             title="Sound Effects"
-            isLast
             accessory={
               <BrandSwitch
                 label="Sound effects"
@@ -339,6 +341,30 @@ export default function SettingsScreen() {
                   setEnabledSoundEffects(!enabledSoundEffects);
                   await updatePlayer({ enabled_sound_effects: !player?.enabled_sound_effects }).catch(() => undefined);
                   await refreshPlayer().catch(() => undefined);
+                }}
+              />
+            }
+          />
+          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
+          <SettingsRow
+            art="heart"
+            title="Wishlist Alerts"
+            isLast
+            accessory={
+              <BrandSwitch
+                label="Wishlist alerts"
+                value={!!wishlistAlerts}
+                onValueChange={async () => {
+                  const next = !wishlistAlerts;
+                  setWishlistAlerts(next);
+                  try {
+                    await updatePlayer({ wishlist_alerts: next });
+                    await refreshPlayer().catch(() => undefined);
+                  } catch {
+                    // Say so and put the switch back: never a silent save failure.
+                    setWishlistAlerts(!next);
+                    showToast('Couldn’t save Wishlist Alerts. Try again.', 'warning');
+                  }
                 }}
               />
             }
