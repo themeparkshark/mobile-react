@@ -170,6 +170,7 @@ function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?:
   const { key, build } = stageInputs(item, forceRide, layer, insets, art);
   const hit = STAGES.get(key);
   if (hit) return hit;
+  catchMark(`stage-build ${key.split('|').slice(0, 4).join('|')}`);
   const stage = build();
   remember(key, stage);
   return stage;
@@ -202,7 +203,7 @@ export function prebuildRideStage(item: PrepItemType, forceRide: { kind?: RideKi
   const { key, build } = stageInputs(item, forceRide, layer, insets, art);
   if (STAGES.has(key)) return;
   const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  const run = () => { if (!STAGES.has(key)) remember(key, build()); };
+  const run = () => { if (!STAGES.has(key)) { catchMark(`stage-prebuild ${key.split('|').slice(0, 4).join('|')}`); remember(key, build()); } };
   if (idle) idle(run, { timeout: 1500 }); else setTimeout(run, 0);
 }
 

@@ -334,7 +334,7 @@ test('round 4: catch N+1 opens with its own rarity, speed and hint rules (behavi
   assert.equal(cancelled.opens.length, 0);
   // The component uses this gate and clears the ride item on finish.
   assert.match(read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx'), /primeGate\.rendered\(item\?\.id\)/);
-  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /const finish = [\s\S]{0,300}setRideItem\(null\)/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /const finish = [\s\S]{0,700}setRideItem\(null\)/);
 });
 
 test('round 4: a Blurry timer never touches a newer print (keyed prints)', () => {

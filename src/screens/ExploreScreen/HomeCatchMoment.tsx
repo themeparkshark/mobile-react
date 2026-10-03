@@ -27,7 +27,7 @@ import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
-import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
+import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
 import { READY_RIDES, RIDES, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
@@ -128,6 +128,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean; flyTo: { x: number; y: number } | null } | null>(null);
   const [rideItem, setRideItem] = useState<PrepItemType | null>(null);
+  const [linger, setLinger] = useState<PrepItemType | null>(null);
+  const rideItemRef = useRef<PrepItemType | null>(null);
+  rideItemRef.current = rideItem;
   const [primed, setPrimed] = useState<{ item: PrepItemType; from: { x: number; y: number } | null } | null>(null);
   const [photo, setPhoto] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [cascade, setCascade] = useState(0);
@@ -279,9 +282,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
 
   const finish = (caught: boolean) => {
+    catchMark('done');
     releasePhoto();
     newRideRef.current = false; setNewRide(null); rideIn.value = 0;
-    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules.
+    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps
+    // showing the finished ride (hidden) for 1.2 s, so the next find's stage is never built in the hand-back;
+    // it is prebuilt at +600 ms and swapped in after.
+    setLinger(rideItemRef.current); setTimeout(() => setLinger(null), 1200);
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
     showCatchChrome(false);
@@ -482,7 +489,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
-  const stageFor = rideItem ?? primed?.item ?? stageItem;
+  const stageFor = rideItem ?? primed?.item ?? linger ?? stageItem;
   const sceneArt = useRideArt();
   // Launch warm-up, on the first idle after the map settles (never a fixed timer): the reveal's sunburst
   // shader and every ride kind in every sky are drawn once, tiny and invisible, one per idle slice. No catch
@@ -508,6 +515,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const warming = warmStep >= 0 && warmStep < warmPlan.length ? warmPlan[warmStep] : null;
   const warmPics = useMemo(() => (warming ? warmStagePicture(warming.kind, warming.sky,
     { width: window.width, height: window.height }, insets, sceneArt) : null), [warming, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (warming) catchMark(`warm ${warming.kind} ${warming.sky}`); }, [warming]);
   const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
   // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
   const rewardBusy = !!request || !!primed || !!ride || !!showing;
