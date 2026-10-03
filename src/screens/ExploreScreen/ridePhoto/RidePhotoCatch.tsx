@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import {
-  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Rect, Skia, type SkImage,
+  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, type SkImage,
 } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -20,6 +20,7 @@ import { GameIcon } from '../../../ui';
 import RideScene from './RideScene';
 import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type SceneArt, type Sky } from './rides';
 import { lastRideKind } from './rides/rideMemory';
+import { buildPrintFrame } from './rides/printFrame';
 import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
 import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
@@ -43,7 +44,8 @@ const REST_SCALE = 0.76;
 /** The stamp plate is laid out at its slam size and scaled down from 1 to this. */
 const PLATE_PEAK = 1.6;
 const INK = '#0b2f5c';
-const HOP_MS = 380;
+/** The find arcs from its pin into the seat in 280 ms, then squashes 1.15, 0.92, 1.0 on landing. */
+const HOP_MS = 280;
 const RETRY_LEAD_MS = 900;
 
 type FrameStage = 'white' | 'silver' | 'gold';
@@ -165,6 +167,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const stage = useMemo(() => buildStage(kind, { width: sceneW, height: sceneH, top: insets.top, spec, tier, variant, art: images }),
     [kind, sceneW, sceneH, insets.top, spec, tier, variant, images]);
   const box = stage.box;
+  const printFrame = useMemo(() => buildPrintFrame(RIDES[stage.kind].frame, HERO_W, HERO_H, { x: 12, y: 12, w: PHOTO_W, h: PHOTO_H }), [stage.kind]);
   const anchors = useMemo(() => ({
     tFrame: stage.frameT,
     tStation: stage.stationT,
@@ -360,8 +363,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     open.value = reducedMotion ? withTiming(1, { duration: 120 })
       : withSpring(1, { damping: 22, stiffness: 320, mass: 0.7 });
     hop.value = withTiming(1, { duration: reducedMotion ? 1 : HOP_MS + 90, easing: Easing.inOut(Easing.cubic) });
-    riderIn.value = withDelay(reducedMotion ? 0 : 90 + HOP_MS, withSequence(withTiming(1.0001, { duration: 1 }),
-      withSpring(1, { damping: 8, stiffness: 300 })));
+    riderIn.value = withDelay(reducedMotion ? 0 : 90 + HOP_MS, withSequence(withTiming(1.15, { duration: 1 }),
+      withTiming(0.92, { duration: 90, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 9, stiffness: 300 })));
     rock.value = withDelay(90 + HOP_MS + 40, withSequence(withTiming(1, { duration: 120 }), withTiming(-1, { duration: 120 }),
       withTiming(0.5, { duration: 100 }), withTiming(0, { duration: 100 })));
     buzz('tapLight', 1);
@@ -959,6 +962,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         <Image source={require('../../../../assets/images/ride-photo/glow.webp')} style={styles.printShadow} contentFit="fill" transition={0} />
         <LinearGradient colors={FRAME_FILL[frameStage]} style={[StyleSheet.absoluteFill, styles.printFill]} />
         <View style={[styles.goldBevel, { opacity: frameStage === 'white' ? 0 : 1 }]} />
+        {/* The ride's own print frame (a splash band for the flume, sprinkles for the teacups) */}
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none"><Picture picture={printFrame} /></Canvas>
         <Animated.View style={[StyleSheet.absoluteFill, styles.glint, glintStyle]} />
         <View style={styles.photo}>
           <Canvas style={{ width: PHOTO_W, height: PHOTO_H }}>

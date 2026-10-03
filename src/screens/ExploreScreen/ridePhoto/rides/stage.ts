@@ -128,18 +128,19 @@ export function drawCover(canvas: SkCanvas, image: SkImage | null, x: number, y:
 }
 
 /**
- * The find in its seat: bottom-centre at (x, y), `size` tall, a squash on landing
- * (riderIn just past 1) and a lean against the vehicle's pitch.
+ * The find in its seat: bottom-centre at (x, y), `size` tall, a squash and rebound on landing,
+ * and a lean against the vehicle's pitch.
  */
 export function drawRider(canvas: SkCanvas, rider: SkImage | null, x: number, y: number, size: number, lean: number,
   riderIn: number, paint: SkPaint, scaleX = 1): void {
   'worklet';
   if (!rider || riderIn <= 0) return;
-  const land = Math.min(1, riderIn);
+  // riderIn runs 1.15 (squash on landing), 0.92 (rebound), then 1: wide and short, tall and thin, rest.
+  const k = Math.max(0.85, Math.min(1.2, riderIn));
   canvas.save();
   canvas.translate(x, y);
   canvas.rotate((lean * 180) / Math.PI, 0, 0);
-  canvas.scale(scaleX * (1 + (1 - land) * 0.08), 0.9 + 0.1 * land);
+  canvas.scale(scaleX * k, 2 - k);
   canvas.drawImageRect(rider, Skia.XYWHRect(0, 0, rider.width(), rider.height()),
     Skia.XYWHRect(-size / 2, -size * 0.92, size, size), paint);
   canvas.restore();

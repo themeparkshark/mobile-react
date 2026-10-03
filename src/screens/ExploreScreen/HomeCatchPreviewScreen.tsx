@@ -21,6 +21,8 @@ import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen } from './catchPresence';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
+import { catchTraceBuffer } from './ridePhoto/catchAudio';
+import * as FileSystem from 'expo-file-system';
 
 /**
  * Development-only (EXPO_PUBLIC_HOME_CATCH_PREVIEW=1): the v3 home map with
@@ -171,7 +173,9 @@ export default function HomeCatchPreviewScreen() {
   // UI-thread frame times while a catch plays, logged once a second (performance review).
   const frameCount = useSharedValue(0), frameSlow = useSharedValue(0), frameWorst = useSharedValue(0), frameSum = useSharedValue(0);
   const logFrames = (count: number, slow: number, worst: number, sum: number) => {
-    console.log(`[catch-perf] frames=${count} avg=${(sum / Math.max(1, count)).toFixed(1)}ms worst=${worst.toFixed(1)}ms over25ms=${slow}`);
+    const line = `[catch-perf] ${Date.now()} frames=${count} avg=${(sum / Math.max(1, count)).toFixed(1)}ms worst=${worst.toFixed(1)}ms over25ms=${slow}`;
+    console.log(line);
+    catchTraceBuffer.push(line);
   };
   useFrameCallback(info => {
     const dt = info.timeSincePreviousFrame;
@@ -184,6 +188,14 @@ export default function HomeCatchPreviewScreen() {
       frameCount.value = 0; frameSlow.value = 0; frameWorst.value = 0; frameSum.value = 0;
     }
   }, true);
+  // A Release preview build has no console: the trace is flushed to Documents/catch-trace.log.
+  useEffect(() => {
+    if (!autoplay) return;
+    const timer = setInterval(() => {
+      void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}catch-trace.log`, catchTraceBuffer.join('\n')).catch(() => undefined);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [autoplay]);
   useEffect(() => {
     if (!autoplay) return;
     resetRideHintForPreview();

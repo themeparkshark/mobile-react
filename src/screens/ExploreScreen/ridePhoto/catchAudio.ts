@@ -65,8 +65,13 @@ export function preloadCatchAudio(): Promise<void> {
 
 /** Play on the catch channel. A stinger waits for the previous stinger's tail instead of stacking. */
 /** Development: every sound and haptic is logged with a timestamp, for AUDIO_TIMELINE.md and sync review. */
+/** Preview recordings in a Release build (no console there) read the trace from this buffer. */
+export const catchTraceBuffer: string[] = [];
 function trace(kind: string, name: string, extra = '') {
-  if (__DEV__) console.log(`[catch-av] ${Date.now()} ${kind} ${name}${extra}`);
+  if (!__DEV__) return;
+  const line = `[catch-av] ${Date.now()} ${kind} ${name}${extra}`;
+  console.log(line);
+  if (catchTraceBuffer.length < 5000) catchTraceBuffer.push(line);
 }
 export function catchMark(name: string): void { trace('mark', name); }
 

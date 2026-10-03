@@ -418,3 +418,15 @@ test('round 4 map: overlapping finds collapse into one marker with a count; find
   assert.match(marker, /is_new_variant && !chromeless && count === 1/, 'never two NEW tags stacked');
   assert.match(marker, /groundShadow: \{[^}]*borderRadius: 18[\s\S]*?scaleY: 0\.28/, 'round ground shadow, not a bar');
 });
+
+test('round 4: per-ride print frames and the landing squash', () => {
+  const rides = loadTs('src/screens/ExploreScreen/ridePhoto/rides/catalog.ts');
+  assert.equal(rides.RIDES.flume.frame, 'splash');
+  assert.equal(rides.RIDES.teacups.frame, 'sugar');
+  const frame = read('src/screens/ExploreScreen/ridePhoto/rides/printFrame.ts');
+  assert.match(frame, /frame === 'splash'/);
+  assert.match(frame, /frame === 'sugar'/);
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /const HOP_MS = 280;/);
+  assert.match(src, /withTiming\(1\.15, \{ duration: 1 \}\),\s*withTiming\(0\.92/);
+});
