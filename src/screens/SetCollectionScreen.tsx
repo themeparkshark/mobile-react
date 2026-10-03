@@ -443,7 +443,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   // First land on a claim: with a cached book the claim offset from the last visit is applied as the list's
   // initial contentOffset (no paint at the top, no scroll, no hidden page). With no cache the list stays hidden
   // only until its first layout pass decides the offset; the safety timer starts at that first layout.
-  const seededOffset = seed ? landOffset(player?.id, seedSlug) : null;
+  // Read once at mount: the stored offsets load from disk asynchronously, and a value that appears after the list
+  // mounted was never applied as its contentOffset.
+  const [seededOffset] = useState(() => (seed ? landOffset(player?.id, seedSlug) : null));
   const firstLand = useRef(true);
   const seedSet = seed?.book.sets.find(entry => entry.slug === seedSlug);
   const seedClaim = !!seedSet && hasClaimable(seedSet);
@@ -482,7 +484,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     // Later set switches keep the animated scroll.
     if (firstLand.current) {
       firstLand.current = false;
-      if (seededOffset == null || Math.abs(seededOffset - offset) > 2) listRef.current?.scrollToOffset({ offset, animated: false });
+      // Always set it: a no-op when the seeded contentOffset already holds, the fix when it did not.
+      listRef.current?.scrollToOffset({ offset, animated: false });
       showList();
       return;
     }
