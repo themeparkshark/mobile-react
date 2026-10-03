@@ -122,8 +122,10 @@ export default function HomeHuntPreviewScreen() {
         <TopbarColumn stretch={false} />
       </>}
     </Topbar>
-    <ParkProjectWidget parkId={null} refreshVersion={0} loadProjects={loadProjects}
-      topOffset={125 + Constants.statusBarHeight} />
+    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
+      <ParkProjectWidget parkId={null} refreshVersion={0} loadProjects={loadProjects}
+        topOffset={125 + Constants.statusBarHeight} />
+    </Animated.View>
     {!tutorialPreview && !cleanPreview && <View style={styles.top}>
       <Pressable accessibilityRole="button" accessibilityLabel="Toggle preview controls"
         onPress={() => setShowControls(value => !value)} style={styles.previewToggle}>
