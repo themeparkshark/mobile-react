@@ -29,3 +29,75 @@ export function potionTransition(
   if (next.level === prev.level && next.progress > prev.progress + 0.001) return 'gain';
   return 'settle';
 }
+
+/** Timings of the level-up celebration (ms from its start). */
+export const BURST_AT_MS = 520;
+export const REFILL_AT_MS = 1400;
+
+export interface PotionDriverHooks {
+  /** A transition starts playing (not called for 'wait' or 'defer'). */
+  readonly play: (kind: PotionTransition, next: PotionState) => void;
+  /** The burst moment of a level up (sound, haptic, ribbon). */
+  readonly burst: () => void;
+  /** The celebration is over: ease to the latest value. */
+  readonly refill: (latest: PotionState) => void;
+  readonly setTimer: (fn: () => void, ms: number) => unknown;
+  readonly clearTimer: (handle: unknown) => void;
+}
+
+/**
+ * Drives the potion over time, so the level-up rules are tested without a
+ * renderer (tools/tests/profile-v2 runs it with a fake clock):
+ * - A refetch during a celebration never cancels it ('defer'), and the refill
+ *   eases to the latest value.
+ * - A second level up that lands during a celebration is queued, not dropped:
+ *   it plays its own burst right after the first refill.
+ * - Timers are cleared only by dispose (unmount).
+ */
+export function createPotionDriver(initial: PotionState | null, hooks: PotionDriverHooks) {
+  let last = initial;
+  let celebrating = false;
+  let queuedLevelUp = false;
+  let latest: PotionState | null = initial;
+  const timers: unknown[] = [];
+
+  const celebrate = (next: PotionState) => {
+    celebrating = true;
+    hooks.play('levelUp', next);
+    timers.push(hooks.setTimer(hooks.burst, BURST_AT_MS));
+    timers.push(hooks.setTimer(() => {
+      celebrating = false;
+      if (queuedLevelUp && latest) {
+        queuedLevelUp = false;
+        celebrate(latest);
+        return;
+      }
+      if (latest) hooks.refill(latest);
+    }, REFILL_AT_MS));
+  };
+
+  return {
+    update(next: PotionState, reduced: boolean | null): PotionTransition {
+      const prev = last;
+      const kind = potionTransition(prev, next, reduced, celebrating);
+      if (kind === 'wait') return kind;
+      last = next;
+      latest = next;
+      if (kind === 'defer') {
+        if (prev && next.level > prev.level) queuedLevelUp = true;
+        return kind;
+      }
+      if (kind === 'levelUp' && !reduced) {
+        celebrate(next);
+        return kind;
+      }
+      hooks.play(kind, next);
+      if (kind === 'levelUp') hooks.burst(); // Reduce Motion: no build-up, burst at once
+      return kind;
+    },
+    dispose() {
+      timers.forEach(hooks.clearTimer);
+      timers.length = 0;
+    },
+  };
+}

@@ -20,3 +20,24 @@ export function stampClaimableCount(resp: { stamps: StampsResponse['stamps']; su
   }
   return n;
 }
+
+/**
+ * The last Stamp Book dot count, kept per player for 5 minutes. Keyed by
+ * player id and cleared on logout, so a family device never shows the last
+ * kid's dot.
+ */
+const STAMP_DOT_TTL_MS = 5 * 60_000;
+let stampDotCache: { playerId: number; at: number; count: number } | null = null;
+
+export function readStampDotCache(playerId: number, now = Date.now()): number | null {
+  if (!stampDotCache || stampDotCache.playerId !== playerId || now - stampDotCache.at >= STAMP_DOT_TTL_MS) return null;
+  return stampDotCache.count;
+}
+
+export function writeStampDotCache(playerId: number, count: number, now = Date.now()) {
+  stampDotCache = { playerId, at: now, count };
+}
+
+export function clearStampDotCache() {
+  stampDotCache = null;
+}
