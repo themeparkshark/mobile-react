@@ -824,6 +824,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // ── The print flies into the badge on the map ──────────────────────────
   const printTop = Math.max(insets.top + 40, sceneH * 0.1);
   const heroTop = Math.max(insets.top + 30, sceneH * 0.45 - HERO_H / 2);
+  const markLanded = useCallback((uiMs: number) => catchMark(`print-land ui=${uiMs} js-lag=${Date.now() - uiMs}`), []);
   useEffect(() => {
     if (!flyTarget) return;
     catchMark('print-fly');
@@ -832,7 +833,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
     fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
-      if (done) runOnJS(onPrintLanded)();
+      // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
+      if (done) { runOnJS(markLanded)(Date.now()); runOnJS(onPrintLanded)(); }
     });
     dim.value = withTiming(0, { duration: 300 });
     catchSound('whoosh', { volume: 0.6 });
