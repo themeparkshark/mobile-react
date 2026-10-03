@@ -118,3 +118,11 @@ test('reply rows: answers sit under their reply, hidden answers with no replies 
   assert.deepEqual(plain(rows.map((r) => r.key)), ['c1', 'c2', 'c4', 'm1', 'c9']);
   assert.equal(rows.find((r) => r.kind === 'more').remaining, 1);
 });
+
+test('report, block and delete never stack a game dialog on the closing menu sheet', () => {
+  const menu = read('src/screens/Social/PostMenu.tsx');
+  // A native dialog presented while the sheet was dismissing left an invisible layer that ate every tap.
+  assert.doesNotMatch(menu, /confirmGame|Alert\.alert/);
+  assert.match(menu, /setConfirm\('block'\)/);
+  assert.match(menu, /onModalHide/);
+});
