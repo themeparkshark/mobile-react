@@ -482,14 +482,25 @@ function ExploreScreen() {
   const frightNight = useFrightNight(player ? park?.id ?? null : null, mapFocused && !!player);
   const frightEngine = useFrightEngine(frightNight, { parkId: park?.id ?? null, focused: mapFocused, location,
     sampleRef: latestLocationSampleRef, blocked: !isReady || isActive || homeIntroOpen });
-  const frightMap = useMemo<FrightMapInput | null>(() => frightNight.tonight && (frightNight.modeOn || frightNight.phase === 'after')
+  const frightStressSpots = useRef<readonly { latitude: number; longitude: number }[]>([]);
+  frightStressSpots.current = frightNight.tonight?.spots ?? [];
+  // Dev-only stress (EXPO_PUBLIC_FRIGHT_STRESS=1): every 45 s the mode turns off for 15 s (the map input
+  // goes away and comes back), exercising the one-time mount and unmount of the fright markers.
+  const [stressOff, setStressOff] = useState(false);
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_FRIGHT_STRESS !== '1') return;
+    let off = false;
+    const timer = setInterval(() => { off = !off; setStressOff(off); }, off ? 15_000 : 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const frightMap = useMemo<FrightMapInput | null>(() => !stressOff && frightNight.tonight /* mounted for the whole event-park session: markers never churn (MapLibre insert crash); active/phase fade them */
     && frightNight.eventPark ? {
       tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,
       player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
       cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
       onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
       tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
-    } : null, [frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
@@ -574,6 +585,21 @@ function ExploreScreen() {
       .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
+  // Dev-only stress for the MapLibre marker guard (EXPO_PUBLIC_FRIGHT_STRESS=1): pans and zooms
+  // across every Fin-ister spot every 2.5 s so culling and LOD churn as hard as a walking guest.
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_FRIGHT_STRESS !== '1') return;
+    let i = 0;
+    const timer = setInterval(() => {
+      const spots = frightStressSpots.current;
+      if (!spots.length) return;
+      const s = spots[i % spots.length];
+      const zoom = [15.2, 16.4, 17.6, 18.6][i % 4];
+      i += 1;
+      setMapFocusRequest({ latitude: s.latitude, longitude: s.longitude, zoom, requestId: Date.now() });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
   const clusterRef = useRef({ rideClusters, mapZoom }); clusterRef.current = { rideClusters, mapZoom };
   // Tapping a folded island zooms into it; a lone island toggles selection.
   const handleTaskPress = useCallback((task: TaskType) => {
