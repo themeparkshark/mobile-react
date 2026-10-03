@@ -120,7 +120,7 @@ test('reply rows: answers sit under their reply, hidden answers with no replies 
 });
 
 test('report, block and delete never stack a game dialog on the closing menu sheet', () => {
-  const menu = read('src/screens/Social/PostMenu.tsx');
+  const menu = read('src/screens/threads/PostMenu.tsx');
   // A native dialog presented while the sheet was dismissing left an invisible layer that ate every tap.
   assert.doesNotMatch(menu, /confirmGame|Alert\.alert/);
   assert.match(menu, /setConfirm\('block'\)/);
