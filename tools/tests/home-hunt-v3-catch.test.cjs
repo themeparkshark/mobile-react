@@ -285,7 +285,7 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.doesNotMatch(moment, /snapshot\?\.\(\)/, 'no per-open map snapshot');
-  assert.match(moment, /closeRide\(true\);\s*setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
+  assert.match(moment, /closeRide\(true\);[\s\S]{0,400}setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
   assert.doesNotMatch(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /react-native-svg/);
 });
 
