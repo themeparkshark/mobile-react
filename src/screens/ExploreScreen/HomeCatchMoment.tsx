@@ -22,6 +22,7 @@ import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
+import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
@@ -474,6 +475,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? stageItem;
   const sceneArt = useRideArt();
+  // The reveal's sunburst shader compiles on its first draw (about 300 ms on the simulator). Draw it once,
+  // 2 pt and invisible, while the map is idle, so the first Frame It! reveal never pays for it.
+  const [warmShader, setWarmShader] = useState(false);
+  const warmIntensity = useSharedValue(0.01);
+  useEffect(() => {
+    const on = setTimeout(() => setWarmShader(true), 2500);
+    const off = setTimeout(() => setWarmShader(false), 4000);
+    return () => { clearTimeout(on); clearTimeout(off); };
+  }, []);
   const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
   useEffect(() => {
     if (!warm || window.width === 0) return;
@@ -505,6 +515,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         </Canvas>}
       </Animated.View>
 
+      {warmShader && <Canvas pointerEvents="none" style={styles.warmCanvas}>
+        <Sunburst cx={1} cy={1} radius={2} intensity={warmIntensity} width={2} height={2} />
+      </Canvas>}
       {stageFor && layer.width > 0 && <View pointerEvents="box-none"
         style={{ position: 'absolute', left: -offset.x, top: -offset.y, width: window.width, height: window.height }}>
         <RidePhotoCatch ref={stage} item={stageFor} active={!!ride} insets={insets}
@@ -571,6 +584,7 @@ export default memo(HomeCatchMoment);
 
 const styles = StyleSheet.create({
   tint: { backgroundColor: 'rgba(11,47,92,0.35)' },
+  warmCanvas: { position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
   ring: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, borderRadius: 40, borderWidth: 5 },
   sparkOrigin: { position: 'absolute', left: 0, top: 0, width: 0, height: 0 },
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },

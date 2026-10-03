@@ -1,4 +1,5 @@
 import { formatFindDistance } from './homeFindCopy';
+import { colors } from '../../design-system';
 
 /**
  * Home Hunt v3: how a find looks on the home map and how a catch plays out.
@@ -6,14 +7,14 @@ import { formatFindDistance } from './homeFindCopy';
  * can pin the rules without a renderer.
  */
 
-/** Rarity ring colours, matching the v3 catalog (Common to Legendary). */
 /**
- * Colour-blind safer than v1 (green and gold collapsed under deuteranopia):
- * Uncommon is teal and Legendary deep orange, and every rarity also has a
- * shape mark (pips, gem, crown), so colour is never the only cue.
+ * Rarity colours: the app-wide palette (design-system `colors.rarity`), the same as the dex, stamps and
+ * wearables: Common green, Uncommon blue, Rare purple, Epic orange, Legendary gold. Every rarity also has
+ * a shape mark (pips, gem, crown), so colour is never the only cue.
  */
 export const RARITY_COLORS: Readonly<Record<number, string>> = {
-  1: '#9AA4B2', 2: '#14B3A3', 3: '#2F7BFF', 4: '#A54BFF', 5: '#FF8A00',
+  1: colors.rarity.common.main, 2: colors.rarity.uncommon.main, 3: colors.rarity.rare.main,
+  4: colors.rarity.epic.main, 5: colors.rarity.legendary.main,
 };
 export const RARITY_LABELS: Readonly<Record<number, string>> = {
   1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Legendary',

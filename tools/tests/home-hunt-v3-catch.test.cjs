@@ -550,3 +550,20 @@ test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride
   assert.match(src, /startRideAmbience\(stage\.kind\)/);
   assert.match(src, /catchMark\('close'\);\s*stopRideAmbience\(\);/);
 });
+
+test('round 5: Home Hunt and Ride Photo use the app-wide rarity palette (drift guard)', () => {
+  const ds = loadTs('src/design-system.ts');
+  const expected = { 1: ds.colors.rarity.common.main, 2: ds.colors.rarity.uncommon.main, 3: ds.colors.rarity.rare.main,
+    4: ds.colors.rarity.epic.main, 5: ds.colors.rarity.legendary.main };
+  assert.deepEqual(plain(look.RARITY_COLORS), plain(expected), 'findPresentation follows design-system colors.rarity');
+  for (const r of [1, 2, 3, 4, 5]) assert.equal(look.rarityColor(r), expected[r]);
+  // Common green, Uncommon blue, Rare purple, Epic orange, Legendary gold.
+  assert.deepEqual(plain(expected), { 1: '#4CAF50', 2: '#00a5f5', 3: '#9C27B0', 4: '#FF6B00', 5: '#FFD700' });
+  const modal = read('src/components/PrepItemRedeemModal.tsx');
+  assert.match(modal, /colors\.rarity\.rare\.main/);
+  for (const stale of ['#0a9a78', '#E91E63', '#ffccdd', '#c8f3e3']) assert.ok(!modal.includes(stale), `no stale ${stale} in the catch reveal`);
+  // No other hard-coded rarity palettes in the home map or Ride Photo code.
+  const files = ['src/screens/ExploreScreen/HomeCatchMoment.tsx', 'src/screens/ExploreScreen/PrepItem.tsx',
+    'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx', 'src/screens/ExploreScreen/HomeExplore.tsx'];
+  for (const f of files) assert.ok(!/#14B3A3|#2F7BFF|#A54BFF|#9AA4B2/i.test(read(f)), `${f} uses rarityColor()`);
+});
