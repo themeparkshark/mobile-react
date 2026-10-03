@@ -229,3 +229,69 @@ export function paintExtras(canvas: SkCanvas, t: number, clock: number, frameT: 
     }
   }
 }
+
+/**
+ * A far-plane landmark in the upper third of the photo crop, low contrast so the park reads before the
+ * ride: a castle spire, a ferris wheel or a balloon cluster (seeded). Night adds the moon inside the crop.
+ */
+export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: number; h: number }, variant: SceneVariant): void {
+  const r = (salt: number) => seeded(variant.seed, salt);
+  const night = variant.sky === 'night', sunset = variant.sky === 'sunset';
+  const left = r(51) < 0.5;
+  const cx = crop.x + crop.w * (left ? 0.18 : 0.82), base = crop.y + crop.h * 0.36;
+  const tone = night ? '#24346a' : sunset ? '#b9a0c9' : '#a9cdec';
+  const ink = night ? '#1a2550' : sunset ? '#9580ad' : '#8bb6dd';
+  const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColor(Skia.Color(tone));
+  const line = Skia.Paint(); line.setAntiAlias(true); line.setStyle(PaintStyle.Stroke); line.setStrokeWidth(2.5);
+  line.setColor(Skia.Color(ink)); line.setStrokeJoin(StrokeJoin.Round); line.setStrokeCap(StrokeCap.Round);
+  const kind = Math.floor(r(52) * 3);
+  const s = crop.w * 0.11;
+  if (kind === 0) {
+    // Castle spire: a tower with a cone roof and a pennant, plus a shorter side tower.
+    const t = Skia.Path.Make();
+    t.addRect(Skia.XYWHRect(cx - s * 0.3, base - s * 1.4, s * 0.6, s * 1.4));
+    t.addRect(Skia.XYWHRect(cx + s * 0.3, base - s * 0.9, s * 0.45, s * 0.9));
+    canvas.drawPath(t, fill); canvas.drawPath(t, line);
+    const roof = Skia.Path.Make();
+    roof.moveTo(cx - s * 0.42, base - s * 1.4); roof.lineTo(cx, base - s * 2.3); roof.lineTo(cx + s * 0.42, base - s * 1.4); roof.close();
+    roof.moveTo(cx + s * 0.24, base - s * 0.9); roof.lineTo(cx + s * 0.52, base - s * 1.45); roof.lineTo(cx + s * 0.8, base - s * 0.9); roof.close();
+    canvas.drawPath(roof, fill); canvas.drawPath(roof, line);
+    canvas.drawLine(cx, base - s * 2.3, cx, base - s * 2.7, line);
+    if (night) {
+      const lit = Skia.Paint(); lit.setColor(Skia.Color('#ffd86a'));
+      canvas.drawRect(Skia.XYWHRect(cx - s * 0.08, base - s * 1.1, s * 0.16, s * 0.22), lit);
+    }
+  } else if (kind === 1) {
+    // Ferris wheel: a rim, spokes and little gondolas.
+    const rad = s * 0.95, wy = base - rad - s * 0.3;
+    canvas.drawCircle(cx, wy, rad, line);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      canvas.drawLine(cx, wy, cx + Math.cos(a) * rad, wy + Math.sin(a) * rad, line);
+      const g = Skia.Paint(); g.setAntiAlias(true); g.setColor(Skia.Color(night ? '#ffd86a' : tone));
+      canvas.drawCircle(cx + Math.cos(a) * rad, wy + Math.sin(a) * rad, s * 0.12, g);
+    }
+    canvas.drawLine(cx, wy, cx - s * 0.5, base, line); canvas.drawLine(cx, wy, cx + s * 0.5, base, line);
+  } else {
+    // A balloon cluster drifting over the park.
+    const colors = night ? ['#3b4a85', '#4a3b85', '#2f5f85'] : sunset ? ['#e8a3b8', '#f0c08a', '#b9a0d9'] : ['#ffb3c7', '#ffe08a', '#a8dcff'];
+    for (let i = 0; i < 3; i++) {
+      const bx = cx + (i - 1) * s * 0.45, by = base - s * (1.6 + (i % 2) * 0.3);
+      const b = Skia.Paint(); b.setAntiAlias(true); b.setColor(Skia.Color(colors[i])); b.setAlphaf(0.75);
+      canvas.drawOval(Skia.XYWHRect(bx - s * 0.28, by - s * 0.36, s * 0.56, s * 0.72), b);
+      canvas.drawOval(Skia.XYWHRect(bx - s * 0.28, by - s * 0.36, s * 0.56, s * 0.72), line);
+      canvas.drawLine(bx, by + s * 0.36, cx, base - s * 0.4, line);
+    }
+  }
+  if (night) {
+    // The moon, inside the crop, on the other side from the landmark.
+    const mx = crop.x + crop.w * (left ? 0.8 : 0.2), my = crop.y + crop.h * 0.14, mr = crop.w * 0.06;
+    const halo = Skia.Paint(); halo.setAntiAlias(true);
+    halo.setShader(Skia.Shader.MakeRadialGradient(vec(mx, my), mr * 3, [Skia.Color('rgba(255,244,210,0.35)'), Skia.Color('rgba(255,244,210,0)')], null, 0));
+    canvas.drawCircle(mx, my, mr * 3, halo);
+    const moon = Skia.Paint(); moon.setAntiAlias(true); moon.setColor(Skia.Color('#fff2c8'));
+    canvas.drawCircle(mx, my, mr, moon);
+    const rim = Skia.Paint(); rim.setAntiAlias(true); rim.setStyle(PaintStyle.Stroke); rim.setStrokeWidth(2.5); rim.setColor(Skia.Color('#e3c98a'));
+    canvas.drawCircle(mx, my, mr, rim);
+  }
+}

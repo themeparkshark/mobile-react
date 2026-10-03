@@ -20,6 +20,8 @@ export interface CamRig {
   readonly lamps: readonly { readonly x: number; readonly y: number }[];
   readonly lampR: number;
   readonly pole: Box;
+  /** A hung camera's gantry beam (enters from the screen side below the status bar), or null. */
+  readonly beam: Box | null;
   /** The camera faces left (sits right of the frame) or right. */
   readonly facing: 'left' | 'right';
 }
@@ -205,8 +207,13 @@ export function cameraRig(box: Box, width: number, height: number, top: number, 
     : Math.max(x + w * 0.2, Math.min(x + w * 0.5, box.x - gap));
   return { x, y, w, h, lens, lamps, lampR: Math.max(9, w * 0.07), facing,
     // Two mounts: on a pole to the ground, or hung from a beam above the scene.
-    pole: mount === 'hang' ? { x: x + w * 0.5 - poleW / 2, y: -4, w: poleW, h: y + h * 0.12 + 4 }
-      : { x: poleX - poleW / 2, y: poleTop, w: poleW, h: height - poleTop + 4 } };
+    // Hung: a gantry beam enters from the near screen side at the safe-area line (never through the status
+    // bar) and a short drop holds the camera.
+    pole: mount === 'hang' ? { x: x + w * 0.5 - poleW / 2, y: top + 12, w: poleW, h: Math.max(8, y + h * 0.12 - (top + 12)) }
+      : { x: poleX - poleW / 2, y: poleTop, w: poleW, h: height - poleTop + 4 },
+    beam: mount === 'hang' ? (x + w / 2 > width / 2
+      ? { x: x + w * 0.5 - poleW, y: top + 8, w: width - (x + w * 0.5 - poleW) + 6, h: 10 }
+      : { x: -6, y: top + 8, w: x + w * 0.5 + poleW + 6, h: 10 }) : null };
 }
 
 /** Photo crop: the window and a margin, kept inside the scene. */

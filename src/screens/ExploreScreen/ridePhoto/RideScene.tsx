@@ -159,6 +159,9 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
         </Path>
         <RoundedRect x={box.x} y={box.y} width={box.w} height={box.h} r={14} color="rgba(255,244,190,0.6)" opacity={windowOpacity} />
         {/* The camera on its pole, under the sky's grade like every sprite */}
+        {/* A hung camera's gantry beam (static per stage, never bound to a shared value) */}
+        <RoundedRect x={cam.beam?.x ?? 0} y={cam.beam?.y ?? 0} width={cam.beam?.w ?? 0} height={cam.beam?.h ?? 0} r={4} color="#fff5e1" />
+        <RoundedRect x={cam.beam?.x ?? 0} y={cam.beam?.y ?? 0} width={cam.beam?.w ?? 0} height={cam.beam?.h ?? 0} r={4} color="#b98a58" style="stroke" strokeWidth={3} />
         <SkImage image={art.cameraPole ?? null} x={cam.pole.x} y={cam.pole.y} width={cam.pole.w} height={cam.pole.h} fit="fill">
           <ColorMatrix matrix={grade} />
         </SkImage>

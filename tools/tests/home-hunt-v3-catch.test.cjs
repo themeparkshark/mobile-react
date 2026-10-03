@@ -564,7 +564,7 @@ test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride
   }
   assert.match(audio, /'ride\.organ'/);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /if \(stage\.kind === 'flume'\) at\(80, \(\) => catchSound\('flumeSplash'/, 'the splash sound lands with the crown');
+  assert.match(src, /if \(stage\.kind === 'flume'\) \{ const d = arriveIn - 80; if \(d >= 0\) rideTimers\.current\.push\(setTimeout\(\(\) => catchSound\('flumeSplash'/, 'the splash sound lands with the crown, on every pass (kept through a shot)');
   assert.match(src, /startRideAmbience\(stage\.kind\)/);
   assert.match(src, /catchMark\('close'\);\s*stopRideAmbience\(\);/);
 });

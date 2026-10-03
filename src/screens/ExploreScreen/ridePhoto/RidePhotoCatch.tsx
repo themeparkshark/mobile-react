@@ -354,6 +354,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // ── A pass of the car ──────────────────────────────────────────────────
   const passTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearPassTimers = useCallback(() => { passTimers.current.forEach(clearTimeout); passTimers.current = []; }, []);
+  // Ride sounds that belong to the ride, not the shot (the splash): kept through a shot, cleared per pass.
+  const rideTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearRideTimers = useCallback(() => { rideTimers.current.forEach(clearTimeout); rideTimers.current = []; }, []);
+  useEffect(() => clearRideTimers, [clearRideTimers]);
   useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
   const missedThisPass = useRef(false);
@@ -361,7 +365,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const runPass = useCallback((fromT: number) => {
     shotThisPass.current = false;
     missedThisPass.current = false;
-    clearPassTimers();
+    clearPassTimers(); clearRideTimers();
     frozen.value = false;
     armed.value = true;
     if (parkedMode) { t.value = anchors.tFrame; ready.value = 3; approach.value = 1; return; }
@@ -391,7 +395,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       if (delay < 0) return;
       passTimers.current.push(setTimeout(() => { if (evenIfShot ? !missedThisPass.current : !shotThisPass.current) play(); }, delay));
     };
-    if (stage.kind === 'flume') at(80, () => catchSound('flumeSplash', { volume: 0.9 }), true);
+    // The splash is the ride's own sound: it plays with the crown on every pass, missed or not.
+    if (stage.kind === 'flume') { const d = arriveIn - 80; if (d >= 0) rideTimers.current.push(setTimeout(() => catchSound('flumeSplash', { volume: 0.9 }), d)); }
     if (stage.variant.photobomb === 'gull') at(260, () => catchSound('gull', { volume: 0.7 }), true);
     if (stage.variant.photobomb === 'fireworks') at(140, () => catchSound('fireworks', { volume: 0.7 }), true);
     if ((stage.kind === 'coaster' && spec.track !== 'family') || stage.kind === 'flume') {
@@ -505,6 +510,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
     stopRideAmbience();
+    clearRideTimers();
     // Confetti and sparkles end with the ride: they never keep a full-screen particle canvas busy over the map.
     fx.current?.clear();
     // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
@@ -850,7 +856,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   // find hops from its pin into the seat. Only opacity and a shake transform animate.
   const viewStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, open.value * 2.2) * veil.value,
-    transform: [{ translateX: shake.value }],
+  }));
+  // The shake moves only the scene, overscanned by the amplitude plus 4 pt on every side, so it never
+  // uncovers whatever sits under the viewfinder.
+  const overscan = 1 + (2 * (4 + 4)) / Math.max(1, sceneW);
+  const sceneShake = useAnimatedStyle(() => ({
+    transform: [{ translateX: shake.value }, { scale: shake.value === 0 ? 1 : overscan }],
   }));
   // Iris bars are fixed half-screen views scaled on Y (a transform, not a layout prop).
   const irisTop = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
@@ -951,6 +962,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       {visible && !closing && <StatusBar style="light" />}
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.view, { width: layer.width, height: layer.height }, viewStyle]}>
+          <Animated.View style={sceneShake}>
           <Canvas style={{ width: sceneW, height: sceneH }}>
             <RideScene stage={stage} art={images} t={t} clock={clock} approach={approach} ready={ready}
               flash={flash} dim={dim} lit={lit} ghostT={ghostT} ghost={ghost} riderIn={riderIn} rock={rock} carVis={carVis}
@@ -959,6 +971,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             <Sunburst cx={sceneW / 2} cy={heroTop + HERO_H / 2} radius={sceneW * 0.8} intensity={burst} colorA="#ffd34d"
               width={sceneW} height={sceneH} speed={0.14} />
           </Canvas>
+          </Animated.View>
           {/* Viewfinder corner marks, 16 pt inside the screen */}
           <View pointerEvents="none" style={[styles.corner, { left: 16, top: insets.top + 8 + 44 + 8, borderLeftWidth: 3, borderTopWidth: 3 }]} />
           <View pointerEvents="none" style={[styles.corner, { right: 16, top: insets.top + 8 + 44 + 8, borderRightWidth: 3, borderTopWidth: 3 }]} />

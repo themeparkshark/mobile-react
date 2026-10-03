@@ -1,5 +1,5 @@
 import { PaintStyle, Skia, StrokeCap, createPicture, vec, type SkCanvas } from '@shopify/react-native-skia';
-import { drawGround, drawSeason, drawSky, paintExtras } from './backdrop';
+import { drawGround, drawSeason, drawSky, paintExtras, drawFarProps } from './backdrop';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
@@ -20,7 +20,8 @@ const CUP_SCALE = 0.3;
 /** teacup-back/front.webp (512 x 418): the front rim starts at 36% of the height; the find sits at 55%. */
 const SEAT_Y = 0.55;
 const CUP_ASPECT = 418 / 512;
-const STATION_DT = 0.3;
+/** The cup waits at the turntable's left, fully on screen (at least 24 pt in). */
+const STATION_DT = 0.15;
 
 /** The find's cup at pass time t: orbit angle (pi/2 is front centre) and spin (0 faces the camera). */
 export function cupPose(t: number, frameT: number): { orbit: number; spin: number } {
@@ -49,6 +50,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
+    drawFarProps(canvas, crop, variant);
     const hedgeTop = drawGround(canvas, 'teacups', width, height, variant, art);
     drawTurntable(canvas, cx, cy, rx, ry, cupW, grade);
     drawSeason(canvas, width, height, variant, hedgeTop, art);

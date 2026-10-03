@@ -1,7 +1,7 @@
 import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, type SkCanvas } from '@shopify/react-native-skia';
 import { rideProgress, type RideTrack } from '../../ridePhoto';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
-import { drawHedge, drawSeason, drawSky, paintExtras } from './backdrop';
+import { drawHedge, drawSeason, drawSky, paintExtras, drawFarProps } from './backdrop';
 import { COASTER_FRAME_AT, COASTER_MAX_PITCH, COASTER_SHAPES, COASTER_STATION_X } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
@@ -61,6 +61,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
+    drawFarProps(canvas, crop, variant);
     drawLattice(canvas, lut, height, grade);
     const hedgeTop = drawHedge(canvas, width, height, variant, art);
     drawStation(canvas, station.x, station.y, car.w, height, grade);

@@ -1,6 +1,6 @@
 import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, vec, type SkCanvas } from '@shopify/react-native-skia';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
-import { drawGround, drawSeason, drawSky, paintExtras } from './backdrop';
+import { drawGround, drawSeason, drawSky, paintExtras, drawFarProps } from './backdrop';
 import { FLUME_MAX_PITCH, FLUME_SHAPE } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
@@ -16,7 +16,8 @@ import { seeded } from './catalog';
 
 // The flume's own silhouette lives in shapes.ts (tested): a shallow conveyor lift, a float trough, one chute, a pool.
 const SHAPE = FLUME_SHAPE;
-const LIFT_TOP_X = 0.04, CREST_X = 0.31, BOTTOM_X = 0.7, FRAME_X = 0.73, STATION_X = 0.13;
+// The log waits on the float trough at least 24 pt inside the screen.
+const LIFT_TOP_X = 0.04, CREST_X = 0.31, BOTTOM_X = 0.7, FRAME_X = 0.73, STATION_X = 0.2;
 export const BOAT_SCALE = 0.3;
 /** log-boat.webp is about 3:1 after cleanup; the waterline sits at 78% of its height. */
 export const BOAT_ASPECT = 211 / 640;
@@ -73,6 +74,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
+    drawFarProps(canvas, crop, variant);
     drawTrestle(canvas, lut, height, grade);
     const hedgeTop = drawGround(canvas, 'flume', width, height, variant, art);
     drawPool(canvas, pool, height, grade);
