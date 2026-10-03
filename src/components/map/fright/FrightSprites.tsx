@@ -16,12 +16,12 @@ import { hash01 } from '../alive/ambientBudget';
 import { CritterBody } from './CritterBody';
 import { critterPose, sheetPose } from './critters';
 import { BAT_FRAME, BAT_FRAMES, critterLook, EYES_FRAMES, EYES_H, EYES_W, FRIGHT_ART, MIST_H, MIST_W, NIGHT } from './frightArt';
-import { rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
+import { critterRows, rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
 import { flickerPlan, flickerProfile, silhouetteAt, silhouettePlan, windowLevel } from './flicker';
 import { hashString } from './random';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
 import { frightIntro } from './useFrightState';
-import { chipShift, type FrightProp } from './frightBudget';
+import { chipShiftClear, type FrightProp, type HudRect } from './frightBudget';
 
 /* ── Sheet frames ─────────────────────────────────────────────────────── */
 
@@ -89,7 +89,7 @@ function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, i
   const sheet = useRemoteImage(asset?.sheet);
   const still = useMemo(() => critterPose(seed, 0, wander, watch, -1), [seed, wander, watch]);
   const timing = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
-  const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'lurk'), rowIndex(asset, 'jump')] : NO_ROWS), [asset]);
+  const rows = useMemo(() => (asset ? critterRows(asset) : NO_ROWS), [asset]);
   const useSheet = !!sheet && !!asset;
   const pose = useDerivedValue(() => {
     if (!animated) return still;
@@ -326,7 +326,7 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
  * (the survived pin) once survived, dim when closed. During the intro cinematic the haunts light
  * one by one (120 ms apart).
  */
-export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label, chipX = null, screenW = 0, survivedPin = null }: {
+export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label, chipDetail = null, chipX = null, chipY = null, screenW = 0, huds = NO_HUDS, survivedPin = null }: {
   readonly spotKey: string;
   readonly flicker: string | null | undefined;
   readonly windows: number;
@@ -351,7 +351,13 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   readonly label: string | null;
   /** The facade's projected screen x (points), to keep the chip 12 pt inside the screen edges. */
   readonly chipX?: number | null;
+  /** The chip's projected top (points), to keep it clear of HUD rects beside it. */
+  readonly chipY?: number | null;
   readonly screenW?: number;
+  /** Small second chip line: "25 min", "Closed" (null: name only). */
+  readonly chipDetail?: string | null;
+  /** HUD rects the chip keeps clear of (the right rail). */
+  readonly huds?: readonly HudRect[];
   /** The survived pin art (assets.event_pins['ev-survived']); a gold check when missing. */
   readonly survivedPin?: string | null;
 }) {
@@ -373,8 +379,9 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   });
   const showIcon = !base && !!iconUrl;
   // The chip's real width (measured), so the edge clamp never guesses from the label length.
-  const [chipW, setChipW] = useState(0);
-  const shift = chipX !== null && chipW > 0 ? chipShift(chipX, chipW, screenW) : 0;
+  const [chipSize, setChipSize] = useState({ w: 0, h: 0 });
+  const shift = chipX !== null && chipSize.w > 0
+    ? chipShiftClear(chipX, chipY ?? Number.NaN, chipSize.w, chipSize.h, screenW, huds) : 0;
   return (
     <View style={styles.lantern}>
       <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
@@ -403,13 +410,21 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
       )}
       {label && (
         <View style={[styles.chip, dim && styles.chipDim, done && styles.chipDone, shift ? { transform: [{ translateX: shift }] } : null]}
-          onLayout={event => { const w = Math.round(event.nativeEvent.layout.width); if (Math.abs(w - chipW) > 1) setChipW(w); }}>
-          <Text style={styles.chipText} numberOfLines={1}>{label}</Text>
+          onLayout={event => {
+            const w = Math.round(event.nativeEvent.layout.width);
+            const h = Math.round(event.nativeEvent.layout.height);
+            if (Math.abs(w - chipSize.w) > 1 || Math.abs(h - chipSize.h) > 1) setChipSize({ w, h });
+          }}>
+          {/* The full name (up to 2 lines, never cut at normal widths), then a small detail line. */}
+          <Text style={styles.chipText} numberOfLines={2}>{label}</Text>
+          {chipDetail ? <Text style={styles.chipDetail} numberOfLines={1}>{chipDetail}</Text> : null}
         </View>
       )}
     </View>
   );
 });
+
+const NO_HUDS: readonly HudRect[] = [];
 
 /* ── Spot props ───────────────────────────────────────────────────────── */
 
@@ -657,7 +672,8 @@ const styles = StyleSheet.create({
   chip: { maxWidth: LANTERN_W, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
     backgroundColor: 'rgba(30,24,56,0.92)', borderWidth: 1.5, borderColor: NIGHT.lantern },
   chipDim: { borderColor: NIGHT.dusk, opacity: 0.85 },
-  chipText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.moon },
+  chipText: { fontFamily: 'Knockout', fontSize: 10.5, lineHeight: 12, color: NIGHT.moon, textAlign: 'center' },
+  chipDetail: { fontFamily: 'Knockout', fontSize: 9, lineHeight: 10.5, color: NIGHT.lantern, textAlign: 'center' },
   icon: { position: 'absolute', top: 10, width: 64, height: 64 },
   iconDim: { opacity: 0.5 },
   // Survived: the pin at the facade's top right with a check badge (replaces the old "1" bead).

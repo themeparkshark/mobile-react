@@ -21,7 +21,7 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, cameraCenter, onScreen, screenX, stableMarkerSpots, chipKeys, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, cameraCenter, hauntChipParts, onScreen, screenX, screenY, stableMarkerSpots, type HudRect, chipKeys, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
@@ -64,11 +64,13 @@ function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: 
 
 const hauntDim = (s: FrightSpot) => s.status === 'CLOSED' || s.status === 'DOWN' || s.status === 'REFURBISHMENT';
 
-export const FrightMapSources = memo(function FrightMapSources({ input, zoom, mapRef }: {
+export const FrightMapSources = memo(function FrightMapSources({ input, zoom, mapRef, hud = null }: {
   readonly input: FrightMapInput;
   /** Camera zoom (Map's cameraZoom). */
   readonly zoom: number;
   readonly mapRef: RefObject<MapViewRef | null>;
+  /** The map's own right-rail controls (screen rect), measured by Map.tsx. */
+  readonly hud?: HudRect | null;
 }) {
   const st = useFrightState(input);
   const { heading } = useContext(HeadingContext);
@@ -212,6 +214,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 
   // Chips stay 12 pt inside the screen edges: project each facade and slide its chip in.
   const chipCenter = cameraCenter(player, bounds);
+  // Chips also keep clear of the HUD: the map's right rail plus any rects ExploreScreen passes.
+  const huds = useMemo(() => [...(hud ? [hud] : []), ...(input.hudRects ?? [])], [hud, input.hudRects]);
   // MapLibre iOS draws a MarkerView whose point is off screen at the top-left corner (the
   // "facade in the corner" and edge-clipped chips). Every Marker stays mounted (the crash
   // guard); a spot whose point is off screen draws the hidden stand-in instead.
@@ -235,7 +239,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const reaction = reefReaction(d, reef.radius);
         const watch = reaction === 'ignore' || !player ? 0 : faceToward(bearingDeg(reef, player), heading);
         const ppm = pointsPerMeter(zoom, reef.latitude);
-        const wander = Math.max(18, Math.min(110, reef.radius * ppm * 0.8));
+        // Capped at 90 pt: a reef canvas is (2 x wander + 90) points square at 3x, and four of them add up.
+        const wander = Math.max(18, Math.min(90, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
         const glyph = lod === 'glyph' || st.tier === 'calm' || n === 0;
         const sheets = slugs.map(slug => critterAsset(assets, slug));
@@ -277,8 +282,12 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
                   animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
                   rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
                   ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-                  layers={layersOf(haunt)} label={chips.has(haunt.key) ? hauntChipLabel(haunt, beads[haunt.key] !== undefined) : null}
-                  chipX={chipCenter && chips.has(haunt.key) ? screenX(at, chipCenter, zoom, heading, screenW) : null} screenW={screenW}
+                  layers={layersOf(haunt)}
+                  label={chips.has(haunt.key) ? hauntChipParts(haunt, beads[haunt.key] !== undefined).name : null}
+                  chipDetail={hauntChipParts(haunt, beads[haunt.key] !== undefined).detail}
+                  chipX={chipCenter && chips.has(haunt.key) ? screenX(at, chipCenter, zoom, heading, screenW) : null}
+                  chipY={chipCenter && chips.has(haunt.key) ? screenY(at, chipCenter, zoom, heading, screenH) + CHIP_BELOW_ANCHOR : null}
+                  screenW={screenW} huds={huds}
                   survivedPin={assets?.event_pins?.['ev-survived']?.['256'] ?? null}
                   done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)}
                   index={rankIndex.get(haunt.key) ?? 0}
@@ -305,7 +314,9 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 /** How far past the view (in screens) a spot still counts for budget ranking. */
 export const DRAW_MARGIN_SCREENS = 1;
 /** A spot draws while its point is on screen, give or take this many points. */
-export const ON_SCREEN_SLACK = 0;
+export const ON_SCREEN_SLACK = 40;
+/** The chip's top sits this far below the facade's anchor point (glow pool to chip). */
+export const CHIP_BELOW_ANCHOR = 20;
 
 /** A mounted, invisible stand-in: the Marker stays, nothing draws and nothing takes touches. */
 function HiddenSpot() {

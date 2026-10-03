@@ -112,6 +112,50 @@ export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'poste
   return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)} min` : spot.name;
 }
 
+/**
+ * The chip as two lines: the full name (never cut at normal widths) and a
+ * small detail line ("25 min", "Closed"; none when survived or no wait).
+ */
+export function hauntChipParts(spot: Pick<FrightSpot, 'name' | 'status' | 'posted_minutes'>, survived = false): { name: string; detail: string | null } {
+  if (survived) return { name: spot.name, detail: null };
+  const closed = spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT';
+  if (closed) return { name: spot.name, detail: 'Closed' };
+  const wait = spot.posted_minutes;
+  return { name: spot.name, detail: typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${Math.round(wait)} min` : null };
+}
+
+/** A screen rectangle (points) the chips keep clear of: the right-rail HUD, a joystick. */
+export interface HudRect { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+
+/**
+ * How far to slide a chip (centered on x, top at y, w by h) so it stays 12 pt
+ * inside the screen edges AND clear of every HUD rect it would overlap
+ * vertically: a rect on the right side caps the chip's right edge at the
+ * rect's left edge (minus the margin); one on the left lifts its left edge.
+ */
+export function chipShiftClear(x: number, y: number, w: number, h: number, screenW: number, huds: readonly HudRect[],
+  margin = CHIP_EDGE_MARGIN): number {
+  if (!Number.isFinite(x) || !(screenW > 0)) return 0;
+  let lo = margin;
+  let hi = screenW - margin;
+  for (const r of huds) {
+    if (!(r.width > 0 && r.height > 0)) continue;
+    const overlapsY = Number.isFinite(y) ? y < r.y + r.height + 4 && y + h > r.y - 4 : true;
+    if (!overlapsY) continue;
+    if (r.x + r.width / 2 >= screenW / 2) hi = Math.min(hi, r.x - margin / 2);
+    else lo = Math.max(lo, r.x + r.width + margin / 2);
+  }
+  if (hi - lo < w) {
+    // Not enough room beside the HUD: fall back to the plain screen clamp.
+    return chipShift(x, w, screenW, margin);
+  }
+  const left = x - w / 2;
+  const right = x + w / 2;
+  if (left < lo) return Math.round(lo - left);
+  if (right > hi) return Math.round(hi - right);
+  return 0;
+}
+
 /** Chips stay this far inside the screen edges (points). */
 export const CHIP_EDGE_MARGIN = 12;
 

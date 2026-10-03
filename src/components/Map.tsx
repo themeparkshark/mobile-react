@@ -16,7 +16,7 @@ import { WaterGlints } from './map/alive/WaterGlints';
 import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
-import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput } from './map/fright';
+import { FrightMapLayer, FrightMapSources, FrightNightTint, onScreen, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
@@ -295,6 +295,30 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
+  // MapLibre iOS draws a MarkerView whose coordinate is off screen in the top-left corner, so the
+  // panned-away shark marker hides its content while the player is off screen (the Marker stays).
+  const [playerOff, setPlayerOff] = useState(false);
+  const lastCamera = useRef<{ latitude: number; longitude: number; zoom: number; heading: number } | null>(null);
+  const viewSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const checkPlayerOnScreen = useCallback(() => {
+    const cam = lastCamera.current;
+    const size = viewSizeRef.current;
+    const loc = locationRef.current;
+    if (!cam || !size || !loc) return;
+    const off = !onScreen(loc, cam, cam.zoom, cam.heading, size.width, size.height, 40);
+    setPlayerOff(prev => (prev === off ? prev : off));
+  }, []);
+  const trackCamera = (feature: { geometry: { coordinates: number[] }; properties?: { zoomLevel?: number; heading?: number } | null }) => {
+    const [lng, lat] = feature.geometry.coordinates;
+    const zoom = Number(feature.properties?.zoomLevel);
+    const heading = Number(feature.properties?.heading);
+    if (![lng, lat, zoom].every(Number.isFinite)) return;
+    lastCamera.current = { latitude: lat, longitude: lng, zoom, heading: Number.isFinite(heading) ? heading : 0 };
+    checkPlayerOnScreen();
+  };
+  useEffect(() => { checkPlayerOnScreen(); }, [location?.latitude, location?.longitude, checkPlayerOnScreen]);
+  // The right-rail controls, so fright haunt chips keep clear of them.
+  const [rail, setRail] = useState<HudRect | null>(null);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
   useEffect(() => {
@@ -427,7 +451,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         position: 'relative',
         flex: 1,
       }}
-      onLayout={event => setViewSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
+      onLayout={event => {
+        const size = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
+        viewSizeRef.current = size;
+        setViewSize(size);
+      }}
     >
       {/* Map controls */}
       <View
@@ -437,6 +465,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
+        }}
+        onLayout={event => {
+          const { x, y, width, height } = event.nativeEvent.layout;
+          setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
+            ? prev : { x, y, width, height }));
         }}
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
@@ -478,7 +511,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           void mapViewRef.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
           }).catch(() => undefined); }}
+        onRegionIsChanging={feature => trackCamera(feature)}
         onRegionDidChange={(feature) => {
+          trackCamera(feature);
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
@@ -573,13 +608,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             drag reloaded the outfit images and made the shark flash. */}
         {location && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
-            <View style={{ opacity: focusedOnPlayer ? 0 : 1 }}>{playerShark}</View>
+            <View style={{ opacity: focusedOnPlayer ? 0 : 1 }}>
+              {/* Off screen, MapLibre parks this marker in the top-left corner: hide it there. */}
+              <View style={{ opacity: playerOff ? 0 : 1 }}>{playerShark}</View>
+            </View>
           </Marker>
         )}
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
