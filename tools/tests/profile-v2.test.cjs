@@ -293,6 +293,12 @@ test("a stranger's stats render without null balances: Keys and Shark Coins tile
       { setInterval: () => 0, clearInterval: () => {} }, { exportName: 'AnimatedStat' });
     assert.match(tile.find((n) => n.type === 'Pressable').props.accessibilityLabel, new RegExp(`^${t.label}: `));
   }
+  // The hotfix's current fail-soft answer is 0, not null: a non-friend page hides balances anyway.
+  const zeroed = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 0 }, hideBalances: true });
+  const zl = []; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
+    if (typeof x.type === 'function') zl.push(x.props.label); walk(x.props?.children); })(zeroed.tree);
+  assert.deepEqual(zl, ['Park Coins', 'Parks', 'Ride Wins', 'Total XP']);
+  assert.match(read('src/screens/PlayerScreen.tsx'), /<Stats player=\{currentPlayer\} hideBalances=\{!isFriend\} \/>/);
   // The signed-in player still sees all six.
   const own = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 } });
   let n = 0; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);

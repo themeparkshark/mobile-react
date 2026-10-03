@@ -166,11 +166,15 @@ export function visibleCount(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export default function Stats({ player }: { readonly player: PlayerType }) {
+export default function Stats({ player, hideBalances = false }: {
+  readonly player: PlayerType;
+  /** Another player who is not your friend: balances are private (the kid-safety backend sends 0 or null). */
+  readonly hideBalances?: boolean;
+}) {
   const all = [
     {
       label: 'Keys',
-      value: visibleCount(player.keys),
+      value: hideBalances ? null : visibleCount(player.keys),
       iconIndex: 0,
     },
     {
@@ -185,7 +189,7 @@ export default function Stats({ player }: { readonly player: PlayerType }) {
     },
     {
       label: 'Shark Coins',
-      value: visibleCount(player.coins),
+      value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
     },
     {
