@@ -31,7 +31,7 @@ import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, t
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
-import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
@@ -140,7 +140,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean; flyTo: { x: number; y: number } | null } | null>(null);
   const [rideItem, setRideItem] = useState<PrepItemType | null>(null);
-  const [linger, setLinger] = useState<PrepItemType | null>(null);
+  // The map's mounted stage only ever swaps to a find whose stage is already built (idle prebuild), so
+  // nothing is built in render on the map; after a catch the finished ride stays until the next is ready.
+  const [readyItem, setReadyItem] = useState<PrepItemType | null>(null);
+  const [stageNonce, setStageNonce] = useState(0);
   const rideItemRef = useRef<PrepItemType | null>(null);
   rideItemRef.current = rideItem;
   const [primed, setPrimed] = useState<{ item: PrepItemType; from: { x: number; y: number } | null } | null>(null);
@@ -302,7 +305,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps
     // showing the finished ride (hidden) for 1.2 s, so the next find's stage is never built in the hand-back;
     // it is prebuilt at +600 ms and swapped in after.
-    setLinger(rideItemRef.current); setTimeout(() => setLinger(null), 1200);
+    if (rideItemRef.current) setReadyItem(rideItemRef.current);
+    setStageNonce(n => n + 1);
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
     showCatchChrome(false);
@@ -503,7 +507,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const sparks = item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
-  const stageFor = rideItem ?? primed?.item ?? linger ?? stageItem;
+  const stageFor = rideItem ?? primed?.item ?? readyItem;
   const sceneArt = useRideArt();
   // Launch warm-up, on the first idle after the map settles (never a fixed timer): the reveal's sunburst
   // shader and every ride kind in every sky are drawn once, tiny and invisible, one per idle slice. No catch
@@ -531,8 +535,33 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     { width: window.width, height: window.height }, insets, sceneArt) : null), [warming, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (warming) catchMark(`warm ${warming.kind} ${warming.sky}`); }, [warming]);
   const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
+  // The staged find (nearest in range) is prebuilt first and swapped in only once its stage exists.
+  useEffect(() => {
+    if (window.width === 0) return;
+    const target = stageItem && rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null;
+    if (!target) return;
+    const layerSize = { width: window.width, height: window.height };
+    const ready = () => rideStageReady(target, forceRide ?? null, layerSize, insets, sceneArt);
+    if (ready()) { setReadyItem(target); return; }
+    let live = true;
+    const kick = setTimeout(() => {
+      if (live && settled()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+    }, 0);
+    const poll = setInterval(() => {
+      if (!live) return;
+      if (settled() && !ready()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+      if (ready()) { setReadyItem(target); clearInterval(poll); }
+    }, 150);
+    return () => { live = false; clearTimeout(kick); clearInterval(poll); };
+  }, [stageItem?.id, stageItem?.rarity, forceRide?.kind, forceRide?.sky, stageNonce, window.width, window.height, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
   const rewardBusy = !!request || !!primed || !!ride || !!showing;
+  const rewardBusyRef = useRef(rewardBusy);
+  rewardBusyRef.current = rewardBusy;
+  const rewardEndRef = useRef(0);
+  useEffect(() => { if (!rewardBusy) rewardEndRef.current = Date.now(); }, [rewardBusy]);
+  const settled = () => !rewardBusyRef.current && Date.now() - rewardEndRef.current > 600;
   useEffect(() => {
     if (!warm || window.width === 0 || rewardBusy) return;
     const timer = setTimeout(() => {
@@ -628,15 +657,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
             <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
             {bonusXp ? <View style={styles.xpPill}><Text style={styles.xpText} numberOfLines={1}>+{bonusXp} XP</Text></View> : null}
           </Animated.View>}
-          {/* A ride the player never snapped: "New ride!" and a stamp row (the new ride pops, unbuilt rides are locks) */}
+          {/* A ride the player never snapped: "New ride!", the 3 ride stamps, "n of 3", then (after a divider) the
+              unbuilt rides as dim "coming soon" silhouettes, no locks and no number. No progress-bar fill. */}
           {newRide && <View style={styles.rideRow} pointerEvents="none"><Animated.View style={[styles.rideChip, rideStyle]}>
             <Text style={styles.rideText} numberOfLines={1}>New ride!</Text>
-            {newRide.stamps.map(stamp => stamp.state === 'locked'
-              ? <View key={stamp.kind} style={[styles.stamp, styles.stampLocked]}><GameIcon name="lock" size={9} /></View>
-              : <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
-                  <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
-                </View>)}
+            {newRide.stamps.filter(stamp => stamp.state !== 'soon').map(stamp => (
+              <View key={stamp.kind} style={[styles.stamp, stamp.state === 'new' && styles.stampNew, stamp.state === 'open' && styles.stampOpen]}>
+                <Image source={RIDE_STAMP[stamp.kind]} style={styles.stampArt} contentFit="contain" transition={0} />
+              </View>))}
             <Text style={styles.rideCount} numberOfLines={1}>{newRide.line}</Text>
+            <View style={styles.rideDivider} />
+            {newRide.stamps.filter(stamp => stamp.state === 'soon').map(stamp => (
+              <View key={stamp.kind} style={styles.stampSoon}><GameIcon name="ride" size={10} /></View>))}
           </Animated.View></View>}
         </Animated.View>
       </>
@@ -687,10 +719,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   stampNew: { borderColor: '#ff8a00', transform: [{ scale: 1.15 }] },
   stampOpen: { opacity: 0.45 },
-  stampLocked: { backgroundColor: '#6f7f96', borderColor: '#3f4d63', width: 15, height: 15, borderRadius: 8, borderWidth: 1.5 },
+  // Coming soon: a dim ride silhouette at 60% of a stamp, no lock (there is no key in play).
+  stampSoon: { width: 12, height: 12, alignItems: 'center', justifyContent: 'center', opacity: 0.35 },
+  rideDivider: { width: 1.5, height: 14, marginHorizontal: 2, backgroundColor: 'rgba(255,255,255,0.45)' },
   stampArt: { width: 16, height: 12 },
-  rideCount: { color: '#0b2f5c', fontFamily: 'Knockout', fontSize: 14 },
+  rideCount: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   rideChip: { maxWidth: BADGE_WIDTH, flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
-  rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#0b2f5c', borderWidth: 2, borderColor: '#ffcf3b' },
+  rideText: { color: '#ffcf3b', fontFamily: 'Shark', fontSize: 13 },
 });

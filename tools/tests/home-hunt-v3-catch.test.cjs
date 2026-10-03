@@ -432,7 +432,7 @@ test('round 4 variety: scene sky, season, photobombs and the rides-snapped line'
   assert.equal(rides.ridesSnappedLine([]).split(' of ')[1], String(takeable.size), 'denominator = rides pickRide can return');
   const stamps = plain(rides.rideStamps(['coaster'], 'flume'));
   assert.deepEqual(stamps.slice(0, 3).map(s => s.state), ['snapped', 'new', 'open']);
-  assert.equal(stamps.filter(s => s.state === 'locked').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are locks, no number');
+  assert.equal(stamps.filter(s => s.state === 'soon').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are dim coming-soon silhouettes, no number');
 });
 
 test('round 4 variety: every ride is a config with one paint for the live scene and the photo', () => {
@@ -554,7 +554,7 @@ test('round 5: floating cards leave while the quick menu is open (opacity 0, no 
   assert.match(fade, /menuOpen \? 'none' : 'box-none'/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
   const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
-  assert.match(preview, /cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
+  assert.match(preview, /cardFade\.style, BARE && \{ opacity: 0 \}\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
 });
 
 test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride', () => {
@@ -599,7 +599,8 @@ test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
   assert.match(moment, /READY_RIDES\.flatMap\(kind => \(\['day', 'sunset', 'night'\]/, 'every ride kind and sky is warmed at launch idle');
   assert.match(moment, /requestIdleCallback/);
   assert.doesNotMatch(moment, /setTimeout\(\(\) => setWarmShader\(true\), 2500\)/, 'no fixed warm timer');
-  assert.match(moment, /setLinger\(rideItemRef\.current\)/, 'the hand-back never builds the next stage');
+  assert.match(moment, /const stageFor = rideItem \?\? primed\?\.item \?\? readyItem;/, 'the map only shows a stage that is already built');
+  assert.match(moment, /if \(ready\(\)\) \{ setReadyItem\(target\); clearInterval\(poll\); \}/, 'the finished ride stays until the next is ready');
   const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
   const size = { width: 400, height: 800 };
   assert.equal(edges.bannerCovers({ x: 200, y: 560 }, size, 190), true);
@@ -607,4 +608,14 @@ test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
   assert.equal(edges.bannerCovers({ x: 200, y: 200 }, size, 190), false);
   const stage = read('src/screens/ExploreScreen/ridePhoto/rides/stage.ts');
   assert.match(stage, /y: top \+ 12, w: poleW/, 'a hung camera never reaches into the status bar');
+});
+
+test('ship fixes: the real print landing is logged (D2), stamp row is honest', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /if \(done\) \{ runOnJS\(markLanded\)\(Date\.now\(\)\); runOnJS\(onPrintLanded\)\(\); \}/);
+  assert.match(src, /catchMark\(`print-land ui=\$\{uiMs\}/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /New ride!<\/Text>\s*\{newRide\.stamps\.filter\(stamp => stamp\.state !== 'soon'\)/, 'New ride!, then the 3 stamps');
+  assert.doesNotMatch(moment, /name="lock"/, 'no locks in the row');
+  assert.doesNotMatch(moment, /rideChip: \{[^}]*backgroundColor: '#ffcf3b'/, 'no yellow progress-bar fill');
 });
