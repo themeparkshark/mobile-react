@@ -68,8 +68,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['ride_control', 'swords'] },
   { id: 'standings', title: 'Standings', art: 'standings',
     lines: [
-      'Coins Won counts every coin you collect at a park. Experience ranks XP.',
-      'Rides has Today (ride wins today), Collect (coins collected) and Master (coin levels).',
+      'This Week counts rides you win, each ride once a day. A new week starts every Monday.',
+      'Friends races you and your friends. All-Time shows who has collected the most ride coins.',
     ],
     terms: ['standings'] },
   { id: 'shop', title: 'Shark Shop, Supplies and ads', art: 'shop',
