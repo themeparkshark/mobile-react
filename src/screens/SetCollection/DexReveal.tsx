@@ -19,6 +19,7 @@ import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
+import { colors } from '../../design-system';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameButton, GameIcon } from '../../ui';
@@ -293,7 +294,8 @@ function HudCounter({ icon, value, gain, onDone }: { readonly icon: HudKey; read
   );
 }
 
-const CONFETTI = ['#ffcf3b', '#ef4a3c', '#2fb35d', '#2f7fe8', '#9b4dff', '#ffffff'];
+// Confetti in the brand gold and red plus the app-wide rarity colors (design-system).
+const CONFETTI = [BRAND.gold, BRAND.red, colors.rarity.common.main, colors.rarity.uncommon.main, colors.rarity.rare.main, BRAND.white];
 
 /** One fall of confetti, about 2.4 s, then gone. */
 function Confetti({ width, height }: { readonly width: number; readonly height: number }) {

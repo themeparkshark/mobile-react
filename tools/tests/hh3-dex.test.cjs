@@ -489,3 +489,13 @@ test('round 6: plurals, collect hold, no empty page, straight push, claim answer
   assert.match(cache, /if \(inflight\?\.ticket !== ticket\) return null;/);
   assert.match(read('src/context/AuthProvider.tsx'), /clearBook\(\);/);
 });
+
+test('no book file hard-codes a rarity color: only dexLook, which reads design-system', () => {
+  const files = ['src/screens/SetCollection/SetHuntSections.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/DexTile.tsx',
+    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollectionScreen.tsx'];
+  // RidePhoto.tsx is left out on purpose: its gold frame and blue share background are photo-grade art, not rarity.
+  // Old per-file rarity ramps (round 1 and earlier) and any copy of the design-system values outside dexLook.
+  const banned = /#(0879ca|ff9800|9c27b0|4caf50|00a5f5|ff6b00|ffd700|8fa9c2|1d9bf0|0a5fb0|e0a100|ff8a00|2fb35d|9b4dff|ff5a2b|f5b400|6f849c)\b/i;
+  for (const file of files) assert.doesNotMatch(read(file), banned, `${file} hard-codes a rarity color`);
+  assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /RARITY_COLOR/);
+});
