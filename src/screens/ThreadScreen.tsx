@@ -82,25 +82,30 @@ function Bubble({
         <View style={styles.avatarScale}><Avatar player={comment.player as ThreadType["player"]} size="sm" /></View>
       </PressScale>
       <View style={{ flex: 1 }}>
-        <View
+        {/* Tap a bubble to answer it; hold it for report, block or delete. */}
+        <PressScale
+          onPress={() => onReply(comment)}
+          onLongPress={() => onMenu(comment)}
+          scaleTo={0.98}
+          haptic="none"
           style={[styles.bubble, mine && styles.bubbleMine, highlight && styles.bubbleHighlight]}
-          accessible
           accessibilityLabel={`${name}, ${timeAgoSpoken(comment.created_at)}: ${comment.content ?? ''}`}
+          accessibilityHint="Tap to reply. Hold for more."
         >
           <View style={styles.bubbleHead}>
             <Text style={styles.bubbleName} numberOfLines={1}>{mine ? 'You' : name}</Text>
             <Text style={styles.bubbleTime}>{timeAgo(comment.created_at)}</Text>
           </View>
           <RichText style={styles.bubbleText}>{comment.content ?? ''}</RichText>
-        </View>
-        <View style={styles.bubbleActions}>
-          <PressScale onPress={() => onReply(comment)} style={styles.smallAction} accessibilityLabel={`Reply to ${name}`} hitSlop={6}>
-            <Text style={styles.smallActionText}>Reply</Text>
-          </PressScale>
-          <PressScale onPress={() => onMenu(comment)} style={styles.smallAction} accessibilityLabel={mine ? 'Delete my reply' : `Report or block ${name}`} hitSlop={6}>
-            <View style={styles.dotRow}><View style={styles.dot} /><View style={styles.dot} /><View style={styles.dot} /></View>
-          </PressScale>
-        </View>
+          <View style={styles.bubbleFoot}>
+            <PressScale onPress={() => onReply(comment)} hitSlop={14} accessibilityLabel={`Reply to ${name}`} style={styles.footAction}>
+              <Text style={styles.footReply}>Reply</Text>
+            </PressScale>
+            <PressScale onPress={() => onMenu(comment)} hitSlop={14} accessibilityLabel={mine ? 'Delete my reply' : `Report or block ${name}`} style={styles.footAction}>
+              <View style={styles.dotRow}><View style={styles.dot} /><View style={styles.dot} /><View style={styles.dot} /></View>
+            </PressScale>
+          </View>
+        </PressScale>
       </View>
     </Animated.View>
   );
@@ -526,7 +531,10 @@ const styles = StyleSheet.create({
   postActions: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTopWidth: 2, borderTopColor: '#e3eefb' },
   more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   dotRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.white },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.navySoft },
+  bubbleFoot: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 18, marginTop: 2 },
+  footAction: { paddingVertical: 2, paddingHorizontal: 2 },
+  footReply: { fontFamily: 'Shark', fontSize: 13, color: BRAND.blueBright, marginTop: 2 },
   dotBig: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.navySoft },
   repliesHead: { flexDirection: 'row', marginHorizontal: 14, marginTop: 14, marginBottom: 8 },
   noReplies: { alignItems: 'center', marginTop: 18, gap: 2 },
@@ -543,9 +551,6 @@ const styles = StyleSheet.create({
   bubbleName: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
   bubbleTime: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   bubbleText: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 24, color: '#10233f' },
-  bubbleActions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
-  smallAction: { minHeight: 44, minWidth: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, marginTop: 4, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.5)' },
-  smallActionText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
   ghost: { flex: 1, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 12, paddingVertical: 8 },
   ghostText: { fontFamily: 'Knockout', fontSize: 16, color: '#dbefff' },
   moreReplies: { marginLeft: 66, marginVertical: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },

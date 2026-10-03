@@ -3,6 +3,8 @@
  * composer. No React here so the tests can run every rule directly.
  */
 
+import RULES from './safetextRules.json';
+
 export type TopicKey = 'park_day' | 'rides' | 'snacks' | 'outfits' | 'collections' | 'ask';
 export type FeedTab = 'hottest' | 'latest' | 'friends' | 'team';
 
@@ -55,36 +57,42 @@ export function pickerReactions<T extends { name: string }>(types: readonly T[])
 
 // ── Draft checks (mirror the server's SafeText so kids see why before posting) ──
 
-export type DraftProblem = 'empty' | 'too_long' | 'personal_info' | 'link';
+export type DraftProblem = 'empty' | 'too_long' | 'personal_info' | 'grooming' | 'link';
 
 export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
   empty: 'Write something first!',
   too_long: 'That is a lot of words! Try a shorter post.',
   personal_info: "Stay safe! Don't share phone numbers, addresses, emails or other apps.",
+  grooming: "Let's keep it about parks. Don't ask people their age, school, or where they are.",
   link: "Links can't be posted here.",
 };
 
 /*
- * A port of the server's SafeText personal-info and link checks (same
- * normalising, same patterns), so a kid sees the reason before posting. The
- * server stays the gate; tools/tests/fixtures/safetext_cases.json is shared.
+ * The server's SafeText checks, run on the same shared rule table
+ * (safetextRules.json is a copy of backend resources/safetext/rules.json), so
+ * a kid sees the reason before posting. The server stays the gate;
+ * tools/tests/fixtures/safetext_cases.json is shared and both must pass it.
  */
+
 const CONFUSABLES: Record<string, string> = {
   'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm',
   'н': 'h', 'т': 't', 'в': 'b', 'α': 'a', 'ε': 'e', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'ν': 'v', 'κ': 'k', 'ι': 'i',
   'ս': 'u', 'օ': 'o', 'ց': 'g', 'հ': 'h', 'ո': 'n', 'ա': 'w', 'ք': 'p',
 };
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i', '|': 'l' };
-const NUMBER_WORDS: Record<string, string> = {
-  zero: '0', oh: '0', o: '0', one: '1', won: '1', two: '2', to: '2', too: '2', three: '3', four: '4', for: '4',
-  five: '5', six: '6', seven: '7', eight: '8', ate: '8', nine: '9',
-};
-const AMBIGUOUS = new Set(['oh', 'o', 'to', 'too', 'for', 'won', 'ate']);
-const CHAT_APPS = 'snap|snapchat|sc|insta|instagram|ig|kik|discord|telegram|whatsapp|whats app|messenger|wechat';
-const ALL_APPS = `${CHAT_APPS}|tiktok|tik tok|youtube|yt|twitch|roblox|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter`;
-const HANDLE = '(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_])[a-z0-9_.]{4,}';
-const THEMED_STREETS = ['main street usa', 'main street u s a', 'main st usa', 'main street', 'hollywood boulevard', 'hollywood blvd',
-  'sunset boulevard', 'sunset blvd', 'buena vista street', 'americana street', 'mediterranean harbor'];
+const NUMBER_WORDS: Record<string, string> = RULES.number_words;
+const AMBIGUOUS = new Set<string>(RULES.ambiguous_number_words);
+const CONNECTORS = new Set<string>(RULES.run_connectors);
+
+function compile(list: readonly string[]): RegExp[] {
+  return list.map((pattern) => {
+    let source = pattern;
+    for (const [name, value] of Object.entries(RULES.vars)) source = source.split(`{${name}}`).join(value);
+    return new RegExp(source, 'iu');
+  });
+}
+const PERSONAL_PATTERNS = compile(RULES.personal);
+const GROOMING_PATTERNS = compile(RULES.grooming);
 
 function baseForm(text: string): string {
   return [...text.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('');
@@ -98,73 +106,113 @@ function wordForm(text: string, leet = true): string {
   return t.replace(/\s+/g, ' ').trim();
 }
 
-function longestDigitRun(base: string): number {
-  const tokens = base.replace(/\b\d{1,3}(,\d{3})+\b/g, ' amount ').split(/[\s.\-()/,_+]+/).filter(Boolean);
-  const runs: string[][] = [[]];
-  for (const token of tokens) {
-    if (/^\d+$/.test(token) || token in NUMBER_WORDS) runs[runs.length - 1].push(token);
-    else runs.push([]);
-  }
-  let best = 0;
-  for (const run of runs) {
-    const real = run.filter((t) => t in NUMBER_WORDS && !AMBIGUOUS.has(t)).length;
-    let length = 0;
-    for (const t of run) {
-      if (/^\d+$/.test(t)) length += t.length;
-      else if (!AMBIGUOUS.has(t) || real >= 2) length += 1;
-      else { best = Math.max(best, length); length = 0; }
-    }
-    best = Math.max(best, length);
-  }
-  return best;
+/** "m e e t me" -> "meet me" (three or more single letters in a row). */
+function joinSingles(text: string): string {
+  return text.replace(/(?<![\p{L}\p{N}])\p{L}(?:\s+\p{L}(?![\p{L}\p{N}])){2,}/gu, (m) => m.replace(/\s+/g, ''));
 }
 
-const PERSONAL_PATTERNS: RegExp[] = [
-  /\b(my|our)\s+(home\s+)?address\b/, /\bi\s+live\s+(at|on|in|near|by)\b/, /\b(my|our)\s+(phone|cell|number|digits)\b/,
-  /\b(call|text|dm|message|facetime|email|snap|hmu|hit\s+me\s+up)\s+me\b/, /\bhmu\b/, /\b(add|follow|friend|find)\s+me\s+on\b/,
-  /\b(my|our)\s+(last\s+name|teacher\s?s?\s+name|real\s+name)\b/, /\b(my|our)\s+school\s+(is|name|called)\b/,
-  /\bi\s+go\s+to\s+[a-z ]{0,30}\s+(school|elementary|middle|academy)\b/, /\b(zip\s*code|password)\b/, /(^|\s)@[a-z0-9_.]{3,}/,
-  new RegExp(`\\b(on|in|my|add|follow|dm|find|me\\s+on)\\s+(${CHAT_APPS})\\b`),
-  new RegExp(`\\b(${ALL_APPS})\\s*(:|=|name\\b|handle\\b|username\\b|user\\b|id\\b|code\\b|tag\\b)`),
-  new RegExp(`\\b${HANDLE}\\s+(on|in)\\s+(${ALL_APPS})\\b`), new RegExp(`\\b(${ALL_APPS})\\s+${HANDLE}`),
-  /\b(insta|instagram|ig|sc|snapchat|kik|discord)\s+[a-z0-9_.]{3,}\s*$/, new RegExp(`\\bmy\\s+(${ALL_APPS})\\s+(is|=|:)`),
-  /\b(user\s?name|gamertag|ign|handle|friend\s+code)\s*(is|:|=)?\s*[a-z0-9_.]{3,}/,
-  /\bhow\s+old\s+(are|r)\s+(you|u|ya)\b/, /\bwhat\s?s?\s+(is\s+)?(your|ur)\s+age\b/,
-  /\b(i\s?m|i\s+am)\s+\d{1,2}\s*(years?\s+old|yrs?\s+old|yo|y\/o)?\s+and\s+i\s+live\b/, /\bwhere\s+(do|d)\s+(you|u|ya)\s+live\b/,
-  /\bwhere\s+(are|r)\s+(you|u|ya)\s+(staying|from|at)\b/, /\b(what|which)\s+(hotel|resort|room)\b/, /\b(what|which)\s+(school|grade)\b/,
-  /\broom\s*(number|#|no)?\s*\d{2,4}\b/,
-  /\bsend\s+(me\s+)?(a\s+|some\s+|ur\s+|your\s+)?(pic|pics|picture|pictures|photo|photos|selfie|selfies|vid|video)\b/,
-  /\b(can|could|will)\s+(you|u)\s+send\b/,
-  /\b(ur|you\s?re|your|you\s+are|u\s+r|u\s+are)\s+(so\s+|really\s+|very\s+)?(hot|cute|sexy|pretty|beautiful|gorgeous|fine)\b/,
-  /\b(be|wanna\s+be|want\s+to\s+be)\s+my\s+(gf|bf|girlfriend|boyfriend|bae)\b/, /\bdate\s+me\b/,
-  /\b(video\s+chat|videochat|video\s+call|facetime|face\s+time|private\s+chat|chat\s+privately|call\s+me)\b/,
-  /\bdon\s?t\s+tell\s+(your|ur)\s+(mom|dad|parents|mum)\b/, /\bkeep\s+(it|this)\s+(a\s+)?secret\b/,
-  /\bmeet\s*-?\s*(me|ups?|you|u)\b/, /\blet\s?s\s+meet\b/, /\bmeet\s+(at|by|near|in\s+front\s+of)\b/, /\bcome\s+find\s+me\b/,
-  /\bfind\s+me\s+(at|by|near)\b/, /\b(see|find)\s+me\s+(at|by|near)\b/, /\b(see|find)\s+(you|u)\s+(at|by|near)\s+\d/,
-  /\b(i\s?m|i\s+am)\s+(at|by|near)\s+the\s+[a-z ]{2,30}\s+(now|rn|right\s+now)\b/,
-];
+function forms(text: string): string[] {
+  const plain = wordForm(text, false);
+  const leet = wordForm(text);
+  const base = baseForm(text);
+  return [...new Set([leet, plain, base, joinSingles(plain), joinSingles(leet), joinSingles(base)])];
+}
 
-export function hasPersonalInfo(text: string): boolean {
+const matchesAny = (patterns: RegExp[], all: string[]) => patterns.some((p) => all.some((f) => p.test(f)));
+
+const GLUE_VOCAB = Object.entries(NUMBER_WORDS).filter(([w]) => !['o', 'to', 'too', 'for', 'won', 'ate'].includes(w));
+
+function numericToken(token: string): string | null {
+  if (/^\d+$/.test(token)) return token;
+  if (token in NUMBER_WORDS) return NUMBER_WORDS[token];
+  if (/\d/.test(token)) {
+    const folded = token.replace(/[oli|]/g, (c) => (c === 'o' ? '0' : '1'));
+    if (/^\d+$/.test(folded)) return folded;
+  }
+  const n = token.length;
+  if (n < 4 || !/^[a-z0-9]+$/.test(token)) return null;
+  const best: (string | undefined)[] = [''];
+  for (let i = 0; i < n; i++) {
+    const here = best[i];
+    if (here === undefined) continue;
+    if (/\d/.test(token[i]) && best[i + 1] === undefined) best[i + 1] = here + token[i];
+    for (const [word, digit] of GLUE_VOCAB) {
+      if (token.startsWith(word, i) && best[i + word.length] === undefined) best[i + word.length] = here + digit;
+    }
+  }
+  const out = best[n];
+  return out !== undefined && out.length >= 2 ? out : null;
+}
+
+function scoreRun(run: string, years: boolean): number {
+  if (!run || years) return 0;
+  if (run.length >= 7) {
+    let up = true;
+    let down = true;
+    for (let k = 1; k < run.length; k++) {
+      up = up && Number(run[k]) === (Number(run[k - 1]) + 1) % 10;
+      down = down && Number(run[k]) === (Number(run[k - 1]) + 9) % 10;
+    }
+    if (up || down) return 0;
+  }
+  return run.length;
+}
+
+function longestDigitRun(base: string): number {
+  const tokens = base.replace(/\b\d{1,3}(,\d{3})+\b/g, ' amount ').split(/[\s.\-()/,_+:;~*]+/u).filter(Boolean);
+  const parsed = tokens.map(numericToken);
+  let best = 0;
+  let run = '';
+  let years = true;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    let digits = parsed[i];
+    const neighbour = (i > 0 && parsed[i - 1] !== null && !AMBIGUOUS.has(tokens[i - 1]))
+      || (i + 1 < tokens.length && parsed[i + 1] !== null && !AMBIGUOUS.has(tokens[i + 1]));
+    if (digits !== null && AMBIGUOUS.has(token) && !neighbour) digits = null;
+    if (digits !== null) {
+      run += digits;
+      years = years && (/^(19|20)\d\d$/.test(token) || AMBIGUOUS.has(token));
+      continue;
+    }
+    if (run && CONNECTORS.has(token) && i + 1 < tokens.length && parsed[i + 1] !== null) continue;
+    best = Math.max(best, scoreRun(run, years));
+    run = '';
+    years = true;
+  }
+  return Math.max(best, scoreRun(run, years));
+}
+
+/** Phone numbers, emails and street addresses. */
+export function hasContactDetails(text: string): boolean {
   const base = baseForm(text);
   if (longestDigitRun(base) >= 7) return true;
-  if (/[a-z0-9._%+-]+\s*(@|\(at\)|\[at\])\s*[a-z0-9-]+\s*(\.|\(dot\)|\[dot\])\s*[a-z]{2,}/.test(base)) return true;
-  if (/\b[a-z0-9._]{2,}\s+at\s+[a-z0-9-]+\s+dot\s+(com|net|org|edu|co|us)\b/.test(wordForm(text, false))) return true;
+  if (/[a-z0-9._%+-]+\s*(@|\(at\)|\[at\])\s*[a-z0-9-]+\s*(\.|\(dot\)|\[dot\])\s*[a-z]{2,}/u.test(base)) return true;
+  if (/\b[a-z0-9._]{2,}\s+at\s+[a-z0-9-]+\s+dot\s+(com|net|org|edu|co|us)\b/u.test(wordForm(text, false))) return true;
   let streets = base;
-  for (const themed of THEMED_STREETS) streets = streets.split(themed).join(' park street ');
-  streets = streets.replace(/\d+\s+park street/g, ' ');
-  if (/\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/.test(streets)) return true;
-  const forms = [...new Set([wordForm(text), wordForm(text, false), base])];
-  return PERSONAL_PATTERNS.some((pattern) => forms.some((form) => pattern.test(form)));
+  for (const themed of RULES.themed_streets) streets = streets.split(themed).join(' park street ');
+  streets = streets.replace(/\d+\s+park street/gu, ' ');
+  return /\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/u.test(streets);
+}
+
+export function isGrooming(text: string): boolean {
+  return matchesAny(GROOMING_PATTERNS, forms(text));
+}
+
+export function hasPersonalInfo(text: string): boolean {
+  return hasContactDetails(text) || matchesAny(PERSONAL_PATTERNS, forms(text));
 }
 
 export function hasLink(text: string): boolean {
-  return /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\s*\.\s*(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b|\b[a-z0-9-]{2,}\s+dot\s+(com|net|org|io|gg|me|co|tv)\b)/.test(baseForm(text));
+  return /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\s*\.\s*(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b|\b[a-z0-9-]{2,}\s+dot\s+(com|net|org|io|gg|me|co|tv)\b)/u.test(baseForm(text));
 }
 
 export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
   const trimmed = text.trim();
   if (!trimmed) return 'empty';
   if (trimmed.length > max) return 'too_long';
+  if (hasContactDetails(trimmed)) return 'personal_info';
+  if (isGrooming(trimmed)) return 'grooming';
   if (hasPersonalInfo(trimmed)) return 'personal_info';
   if (hasLink(trimmed)) return 'link';
   return null;

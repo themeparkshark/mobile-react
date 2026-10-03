@@ -23,6 +23,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import { isTeam, TEAMS } from '../constants/teams';
+import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -119,6 +120,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   }), [load]);
 
   const onRefresh = () => {
+    setFreshId(null);
     setRefreshing(true);
     void load(1, 'refresh');
   };
@@ -134,10 +136,18 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       return;
     }
     playSound(TAB_SOUND, { volume: 0.45 });
+    setFreshId(null);
     setTab(next);
   };
 
   const openThread = useCallback((thread: ThreadType) => {
+    // The post screen's first frame uses the same art: warm the author's layers and photo.
+    const urls = [
+      thread.player?.avatar_url,
+      ...sharkBaseLayers(thread.player?.inventory).map((layer) => (typeof layer === 'string' ? layer : (layer as { uri?: string })?.uri)),
+      ...outfitLayerUrls(thread.player?.inventory),
+    ].filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
+    if (urls.length) Image.prefetch(urls).catch(() => undefined);
     navigation.navigate('Thread', { thread: thread.id, preview: thread });
   }, [navigation]);
 
@@ -182,10 +192,12 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: !reduced }), 50);
   };
 
-  // The glow fades after 4 seconds (and never fires on an unmounted screen).
+  // The glow fades after 4 seconds; the post stays on top until a refresh or a new tab.
+  const [glowId, setGlowId] = useState<number | null>(null);
   useEffect(() => {
     if (freshId === null) return undefined;
-    const id = setTimeout(() => setFreshId(null), 4000);
+    setGlowId(freshId);
+    const id = setTimeout(() => setGlowId(null), 4000);
     return () => clearTimeout(id);
   }, [freshId]);
 
@@ -318,13 +330,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
             <ThreadCard
               thread={item}
               index={index}
-              fresh={item.id === freshId}
+              fresh={item.id === glowId}
               onOpen={openThread}
               onMenu={openMenu}
               onTopic={setTopic}
             />
           )}
-          extraData={freshId}
+          extraData={glowId}
           estimatedItemSize={260}
           ListHeaderComponent={header}
           ListEmptyComponent={empty}

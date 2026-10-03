@@ -301,7 +301,7 @@ export function ReactionBar({
           accessibilityLabel="React"
           accessibilityHint="Shows the shark faces"
         >
-          <Image source={types[0]?.image_url ? { uri: types[0].image_url } : undefined} style={{ width: size * 0.8, height: size * 0.8, opacity: 0.55 }} contentFit="contain" />
+          <Image source={types[0]?.image_url ? { uri: types[0].image_url } : undefined} style={{ width: size * 0.85, height: size * 0.85 }} contentFit="contain" />
           <Text style={styles.plusText}>+</Text>
         </PressScale>
       )}
@@ -410,10 +410,10 @@ const styles = StyleSheet.create({
   faceMine: { backgroundColor: '#fff1c2', borderColor: BRAND.gold },
   faceCount: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft, marginTop: 2 },
   plus: {
-    flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 52, justifyContent: 'center',
-    paddingHorizontal: 8, borderRadius: 999, borderWidth: 2, borderStyle: 'dashed', borderColor: '#9fc3e8',
+    flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 56, justifyContent: 'center',
+    paddingHorizontal: 10, borderRadius: 999, borderWidth: 2, borderBottomWidth: 4, borderColor: '#0a4f9c', backgroundColor: '#eef6ff',
   },
-  plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navySoft, marginTop: 2 },
+  plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 2 },
   faceName: {
     position: 'absolute', top: -30, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3,

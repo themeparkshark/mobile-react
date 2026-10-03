@@ -90,7 +90,7 @@ export async function removeReaction(reactionId: number): Promise<void> {
   await client.delete(`/reactions/${reactionId}`);
 }
 
-export type ReportReason = 'disrespectful' | 'swearing' | 'personal_info' | 'spam' | 'unrelated' | 'selling';
+export type ReportReason = 'asked_about_me' | 'disrespectful' | 'swearing' | 'personal_info' | 'spam' | 'unrelated' | 'selling';
 
 export async function report(kind: 'thread' | 'comment', id: number, reason: ReportReason): Promise<void> {
   await client.post(kind === 'thread' ? `/threads/${id}/report` : `/comments/${id}/report`, { reason });
@@ -102,6 +102,17 @@ export async function blockPlayer(playerId: number): Promise<void> {
 
 export async function unblockPlayer(playerId: number): Promise<void> {
   await client.delete(`/players/${playerId}/block`);
+}
+
+/** The rules promise, kept on the server with the time. */
+export async function acceptSocialRules(): Promise<string | null> {
+  const { data } = await client.post<ApiResponseType<{ social_rules_accepted_at: string | null }>>('/me/social-rules');
+  return data.data.social_rules_accepted_at;
+}
+
+export async function fetchSocialRules(): Promise<string | null> {
+  const { data } = await client.get<ApiResponseType<{ social_rules_accepted_at: string | null }>>('/me/social-rules');
+  return data.data.social_rules_accepted_at;
 }
 
 export async function fetchBlocked(): Promise<PlayerType[]> {

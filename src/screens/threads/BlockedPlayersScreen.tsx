@@ -13,7 +13,7 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import type { PlayerType } from '../../models/player-type';
-import { BRAND, SharkLoader } from '../../ui';
+import { BRAND, SharkLoader, confirmGame } from '../../ui';
 import { PressScale, WATER, card } from './socialLook';
 import { emitSocial } from './socialEvents';
 
@@ -36,6 +36,12 @@ export default function BlockedPlayersScreen() {
 
   const unblock = async (player: PlayerType) => {
     if (busy) return;
+    const yes = await confirmGame({
+      title: 'Unblock?',
+      message: `${player.screen_name} will see your posts again and can reply to you.`,
+      confirmLabel: 'Unblock',
+    });
+    if (!yes) return;
     setBusy(player.id);
     try {
       await unblockPlayer(player.id);
