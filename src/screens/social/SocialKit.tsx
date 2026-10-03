@@ -168,7 +168,8 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
     <View style={kitError.wrap} accessibilityLiveRegion="polite">
       <View>
         <Image source={require('../../../assets/images/screens/pin-collections/shark.png')} style={kitError.art} contentFit="contain" />
-        <View style={kitError.sticker}><GameIcon name="close" size={22} /></View>
+        {/* The same wifi-off art as the offline banner, as a sticker on the shark. */}
+        <Image source={require('../../../assets/images/offline/offline.png')} style={kitError.sticker} contentFit="contain" />
       </View>
       <Text style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</Text>
       <Text style={kitError.text} maxFontSizeMultiplier={1.3}>Check your connection and try again.</Text>
@@ -180,10 +181,7 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
 const kitError = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 60 },
   art: { width: 150, height: 150 },
-  sticker: {
-    position: 'absolute', right: 8, top: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF',
-    borderWidth: 3, borderColor: INK, alignItems: 'center', justifyContent: 'center',
-  },
+  sticker: { position: 'absolute', right: 0, top: 4, width: 48, height: 48 },
   title: {
     fontFamily: FONT.display, fontSize: 26, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', marginTop: 10,
     textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
