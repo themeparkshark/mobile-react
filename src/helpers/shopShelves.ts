@@ -360,7 +360,7 @@ export type TryOnState = {
 };
 
 /** The try-on's one primary button and its message, for every state (the label cross-fades). */
-export function tryOnCta(s: TryOnState): { label: string; action: 'wear' | 'close' | 'vip' | 'retry_buy' | 'earn' | 'buy' | 'ask' | 'none'; note: string | null } {
+export function tryOnCta(s: TryOnState): { label: string; action: 'wear' | 'close' | 'vip' | 'retry_buy' | 'recheck' | 'earn' | 'buy' | 'ask' | 'none'; note: string | null } {
   if (s.owned) {
     if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.' };
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null };
@@ -368,7 +368,8 @@ export function tryOnCta(s: TryOnState): { label: string; action: 'wear' | 'clos
   }
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null };
   if (s.phase === 'failed') return { label: 'Try again', action: 'retry_buy', note: 'That didn’t go through. You weren’t charged.' };
-  if (s.phase === 'unknown') return { label: 'Check again', action: 'retry_buy', note: 'We couldn’t reach the shop. Check your coins, then try again.' };
+  // Never a silent re-buy: "Check again" only asks the server what happened.
+  if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.' };
   if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Catch ride coins or open your daily chest to earn more.' };
   if (s.phase === 'confirm' || s.phase === 'buying') return { label: 'Yes, buy it!', action: 'buy', note: null };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null };
@@ -380,4 +381,36 @@ export function levelProgress(level: number, before: number, needed: number, gai
   const after = before + gained;
   if (after >= need) return { level: level + 1, from: before / need, to: Math.min(1, (after - need) / need), levelUp: true };
   return { level, from: before / need, to: after / need, levelUp: false };
+}
+
+/** Shark art (shark-colored-v2 and every skin) measured once: width/height and the tail tip. */
+export const SHARK_ART = { aspect: 1180 / 1333, tailX: 0.725, tailY: 0.819 } as const;
+/** ShopStage plinth geometry: insets as fractions of the stage, plinth drawn in a 200x64 box, top face centre at y 27. */
+export const PLINTH = { side: 0.14, bottom: 0.03, aspect: 200 / 64, faceY: 27 / 64 } as const;
+
+/**
+ * Where the Playercard goes on a stage so the tail tip rests on the plinth's top
+ * face, for any stage size (square try-on and reveal, portrait hero). Playercard
+ * insets its art 5% of its width from the top and draws with contain.
+ */
+export function stageCard(stageW: number, stageH: number): {
+  box: { left: number; top: number; width: number; height: number };
+  plinthTopY: number; tailY: number; shadow: { left: string; top: string };
+} {
+  const plinthW = stageW * (1 - 2 * PLINTH.side);
+  const plinthH = plinthW / PLINTH.aspect;
+  const plinthTopY = stageH * (1 - PLINTH.bottom) - plinthH + plinthH * PLINTH.faceY;
+  // As big as the stage allows: the tail sits on the plinth and the head stays in frame.
+  const byHeight = plinthTopY / (SHARK_ART.tailY + 0.05 * SHARK_ART.aspect);
+  const height = Math.min(byHeight, (stageW / SHARK_ART.aspect) * 1.05);
+  const width = height * SHARK_ART.aspect;
+  const tailInBox = 0.05 * width + SHARK_ART.tailY * height;
+  const top = plinthTopY - tailInBox;
+  const left = (stageW - width) / 2;
+  return {
+    box: { left, top, width, height },
+    plinthTopY,
+    tailY: top + tailInBox,
+    shadow: { left: `${(SHARK_ART.tailX * 100 - 16).toFixed(1)}%`, top: `${((tailInBox / height) * 100 - 2.2).toFixed(1)}%` },
+  };
 }

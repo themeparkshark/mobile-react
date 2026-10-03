@@ -32,7 +32,7 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  afterBuyError, completesSet, formatCoins, lastChanceLine, pieceState, setProgressText, shortfall as shortBy, tryOnCta, wearingIds, wishHintCopy,
+  afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, setProgressText, shortfall as shortBy, tryOnCta, wearingIds, wishHintCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
@@ -50,10 +50,11 @@ const STAGE_H = Math.round(Math.min(300, SHEET_H * (SHEET_H < 760 ? 0.34 : 0.38)
 const STAGE_TOP = 52;
 const CTA_ROW = SCREEN_W - 32;
 const PRIMARY_W = Math.min(300, Math.round(CTA_ROW * 0.62));
-// The art box has air under the tail: drop it so the tail meets the plinth.
-const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
+// The tail rests on the plinth face (stageCard measures the art and the plinth).
+const CARD = stageCard(SCREEN_W - 28 - 6, STAGE_H - 6);
+const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
-type Phase = 'idle' | 'confirm' | 'buying' | 'bought' | 'failed' | 'unknown';
+type Phase = 'idle' | 'confirm' | 'buying' | 'landing' | 'bought' | 'failed' | 'unknown' | 'checking';
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
 
 export type Wearable = { id: number; name: string; icon_url: string | null; paper_url: string | null; no_eye_url?: string | null;
@@ -122,7 +123,7 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
-  onClose, onWish, onPurchased, onWorn }: {
+  onClose, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -138,6 +139,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly onPurchased: (item: ShopItem, reward: ShopSetReward | null) => void;
   /** Called once the player's look is refreshed with the item on (the shelf shows the toast). */
   readonly onWorn: (item: ShopItem) => void;
+  /** Asks the server whether this player now owns the item (refetches the shop). null if unreachable. */
+  readonly checkOwned: (itemId: number) => Promise<boolean | null>;
+  /** Today's shop is still building (fallback): buying waits a moment. */
+  readonly buyPaused?: boolean;
+  /** A set reward is waiting: close after the landing beat. */
+  readonly rewardPending?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -154,6 +161,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
+
+  // A set reward is waiting: let the landing breathe (~1.2 s), then slide away so the reveal can play.
+  useEffect(() => {
+    if (!rewardPending || landed === 0) return;
+    const t = setTimeout(() => closeRef.current(), still ? 400 : 1200);
+    return () => clearTimeout(t);
+  }, [rewardPending, landed]);
 
   useEffect(() => {
     setExtras([]); setPhase('idle'); setWear('idle'); setBalanceAfter(null); setLanded(0);
@@ -193,6 +207,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     if (still) { onClose(); return; }
     drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(onClose)(); });
   }, [still, onClose]);
+  const closeRef = useRef(closeAnimated);
+  closeRef.current = closeAnimated;
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
@@ -218,8 +234,11 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
-  const cta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost });
-  const boughtNow = landed > 0 || phase === 'bought';
+  const busyPhase = phase === 'landing' || phase === 'checking';
+  const cta = tryOnCta({ owned, worn, vipLocked, short, phase: busyPhase ? 'buying' : phase === 'confirm' && buyPaused ? 'idle' : phase,
+    wear, finishes, cost: item.cost });
+  const paused = buyPaused && !owned && (cta.action === 'ask' || cta.action === 'buy');
+  const boughtNow = landed > 0;
 
   const toggleFull = () => {
     playSound(require('../../../assets/sounds/inventory_item_tap.mp3'));
@@ -228,9 +247,11 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     setFullLook(v => !v);
   };
 
+  // NEW! and WEAR IT NOW appear when the piece lands, not when the server answers.
   const land = () => {
     setDropping(false);
     setLanded(l => l + 1);
+    setPhase('bought');
     playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   };
@@ -241,7 +262,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     try {
       const result = await purchase(item);
       const reward = result?.set_reward ?? null;
-      setPhase('bought');
+      setPhase('landing');
       setBalanceAfter(balance - item.cost);
       // The NEW! frame shows what you own, never unowned full-look pieces.
       setFullLook(false); setExtras([]);
@@ -259,15 +280,17 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       const data = (error as { response?: { data?: { code?: string } } })?.response?.data;
       if (data?.code === 'not_enough_currency') { void refreshPlayer(); setPhase('idle'); return; }
-      // Never claim "you weren't charged" without checking the server.
-      const fresh = await refreshPlayer().catch(() => null);
-      const outcome = afterBuyError(balance, item.cost, fresh ? {
-        coins: Number(fresh.coins ?? 0),
-        owns: !!fresh.inventory && Object.values(fresh.inventory).some(v => !!v && typeof v === 'object' && 'id' in v && (v as { id: number }).id === item.id),
-      } : null);
-      if (outcome === 'bought') { setPhase('bought'); setBalanceAfter(Number(fresh?.coins ?? balance)); onPurchased(item, null); land(); }
-      else setPhase(outcome === 'not_charged' ? 'failed' : 'unknown');
+      await settleUnknown();
     }
+  };
+
+  // Never claim "you weren't charged" without asking the server: owned (from a fresh shop) or coins gone.
+  const settleUnknown = async () => {
+    const [fresh, owns] = await Promise.all([refreshPlayer().catch(() => null), checkOwned(item.id).catch(() => null)]);
+    const outcome = afterBuyError(balance, item.cost, fresh && owns !== null ? { coins: Number(fresh.coins ?? 0), owns } : null);
+    if (outcome === 'bought') { setBalanceAfter(Number(fresh?.coins ?? balance)); onPurchased(item, null); land(); }
+    // Not charged: back to the normal two-tap buy. Still unknown: offer to check again.
+    else setPhase(outcome === 'not_charged' ? 'idle' : 'unknown');
   };
 
   const wearNow = async () => {
@@ -294,6 +317,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       case 'close': closeAnimated(); break;
       case 'vip': onClose(); RootNavigation.navigate('Membership'); break;
       case 'retry_buy': void buy(); break;
+      case 'recheck': setPhase('checking'); void settleUnknown(); break;
       case 'earn': onClose(); RootNavigation.navigate('Explore'); break;
       case 'buy': void buy(); break;
       case 'ask':
@@ -332,7 +356,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <LandFlash color={glow} still={still} trigger={landed} />
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
-                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow
+                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow}
                           popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping} style={PLAYERCARD_STYLE} />
                       ) : (
                         <View style={styles.flatArt}><TileArt item={item} size={170} thumb={false} /></View>
@@ -408,6 +432,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
             </View>
 
             <View style={styles.actions}>
+              {paused && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.note}>Today’s shop is opening in a moment. Buying is back right after.</Text>}
               {cta.note && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.note, (phase === 'failed' || phase === 'unknown' || wear === 'failed') && { color: BRAND.red }]}>{cta.note}</Text>}
               <View style={styles.row}>
                 {!owned && !confirming && !vipLocked && phase !== 'failed' && phase !== 'unknown' && (
@@ -419,7 +444,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
-                    loading={phase === 'buying' || wear === 'busy'} disabled={wear === 'spinning'} />
+                    loading={phase === 'buying' || busyPhase || wear === 'busy'} disabled={wear === 'spinning' || paused} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
                 {secondary && (

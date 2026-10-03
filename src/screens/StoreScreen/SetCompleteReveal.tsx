@@ -24,8 +24,9 @@ import { equipShopTitle } from '../../api/endpoints/me/shop-sets';
 import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { xpBar } from '../../helpers/shopShelves';
-import { isItemWorn } from '../../helpers/wardrobe';
+import { stageCard, xpBar } from '../../helpers/shopShelves';
+import { isItemWorn, slotForItem } from '../../helpers/wardrobe';
+import { getLook, putLook } from '../../api/endpoints/me/look';
 import { ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
@@ -33,7 +34,8 @@ import { MAX_FONT, ShopCta, ShopStage } from './shopUi';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
-const CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
+const CARD = stageCard(STAGE - 8, STAGE - 8);
+const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
@@ -98,19 +100,29 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
 
   if (!reward) return null;
 
+  // Optimistic: the hop and NOW WEARING play on tap; one look save (all slots) and the title go in
+  // parallel; a failure rolls back to "Try again".
   const wearAll = async () => {
     if (all === 'done' || all === 'busy') return;
-    setAll('busy');
+    setAll('done');
+    playSound(require('../../../assets/sounds/whoosh.mp3'));
+    if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     try {
-      if (reward.title) await equipShopTitle(reward.slug);
+      const slots: Record<string, number> = {};
       for (const piece of pieces) {
-        if (!isItemWorn(player?.inventory, piece)) await updateInventory({ id: piece.id } as never);
+        const slot = slotForItem({ item_type: { id: piece.item_type_id } } as never);
+        if (slot && !isItemWorn(player?.inventory, piece)) slots[slot] = piece.id;
       }
-      await refreshPlayer();
-      setAll('done');
-      playSound(require('../../../assets/sounds/whoosh.mp3'));
-      if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      const look = Object.keys(slots).length
+        ? getLook().then(current => putLook(current.version, slots)).then(async result => {
+          if (result.kind === 'unsupported') {
+            await Promise.all(pieces.filter(p => !isItemWorn(player?.inventory, p)).map(p => updateInventory({ id: p.id } as never)));
+          } else if (result.kind !== 'saved') throw new Error(result.kind);
+        })
+        : Promise.resolve();
+      await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
+      void refreshPlayer();
     } catch { setAll('failed'); }
   };
 
@@ -132,7 +144,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>
             <ShopStage rim={color} backdropUrl={stage?.backdrop} tone="night" rays still={still}>
               <Animated.View style={[StyleSheet.absoluteFill, hopStyle]}>
-                {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow style={CARD_STYLE} />}
+                {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} style={CARD_STYLE} />}
               </Animated.View>
             </ShopStage>
             {all === 'done' && (
@@ -158,7 +170,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
               </Animated.View>
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.xpTrack}><Animated.View style={[styles.xpFill, barStyle]} /></View>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>{xp?.caption ?? `+${reward.xp} XP`}</Text>
+                {/* The caption follows the badge: "+160 XP" until the level rolls, then "Level up!". */}
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>
+                  {xp?.levelUp && shownLevel === xp.level ? xp.caption : `+${reward.xp} XP`}</Text>
               </View>
             </View>
           )}

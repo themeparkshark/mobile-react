@@ -26,6 +26,7 @@ import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, ty
 import { Dimensions, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp, LinearTransition, type SharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { claimShopSet } from '../../api/endpoints/me/shop-sets';
+import getShopToday from '../../api/endpoints/stores/today';
 import updatePlayer from '../../api/endpoints/me/update-player';
 import { addToWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import Playercard from '../../components/Playercard';
@@ -33,7 +34,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
   dailyPill, dropReveal, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, newCountLabel, pieceState,
-  queueReveal, readySummary, restockBackoffMs, sectionAccent, setA11y, setProgressText, settleClaims, shortDate, stableOrder, wishSavedCopy,
+  queueReveal, readySummary, restockBackoffMs, sectionAccent, stageCard, setA11y, setProgressText, settleClaims, shortDate, stableOrder, wishSavedCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -60,8 +61,9 @@ const EVENT_TILE_W = Math.min(124, TILE_W + 8);
 const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
 const FIRST_OPEN_KEY = 'shop:first-open-day';
 const PENDING_REVEALS_KEY = 'shop:pending-reveals';
-// The art box has air under the tail: drop it so the tail meets the plinth.
-const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
+// Hero stage: 62% of the panel's inner width, full hero height; the tail rests on the plinth.
+const HERO_CARD = stageCard(Math.round((SCREEN_W - 28) * 0.62), HERO_H - 8);
+const HERO_CARD_STYLE = { position: 'absolute' as const, ...HERO_CARD.box };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
 type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
@@ -261,7 +263,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
         accessibilityLabel={`This week's star: ${itemDisplayName(item)}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
           <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
-            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow style={HERO_CARD_STYLE} />
+            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
         </View>
@@ -272,6 +274,8 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
         {badge.label ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View> : null}
         {set && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroSet} numberOfLines={1}>{set.name}: {setProgressText(set)}</Text>}
+        {/* In the text column, so it never sits on the hat. */}
+        <View pointerEvents="none" style={{ alignSelf: 'flex-start' }}><SectionPills section={section} offset={offset} still={still} /></View>
         {pieces.length > 1 && (
           <View style={styles.heroPieces}>
             {pieces.slice(0, extra ? 3 : 4).map(p => (
@@ -300,7 +304,6 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
           )}
         </View>
       </View>
-      <View style={styles.heroTimer} pointerEvents="none"><SectionPills section={section} offset={offset} still={still} /></View>
       {tease && <View style={styles.heroTease} pointerEvents="none"><TeaseChip tease={tease} label="NEXT WEEK" /></View>}
     </View>
   );
@@ -325,7 +328,6 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const playSound = useCallback((sound: number, options?: { volume?: number }) => soundRef.current(sound, options), []);
   const still = useReducedGameMotion();
   const [open, setOpen] = useState<Open>(null);
-  const [pending, setPending] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null }[]>([]);
   const [reveals, setReveals] = useState<{ reward: ShopSetReward; set: ShopSetSummary | null }[]>([]);
   const [askAlerts, setAskAlerts] = useState(false);
   const [bought, setBought] = useState<number[]>([]);
@@ -350,16 +352,21 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     return () => { live = false; };
   }, [today.shop_day]);
 
+  const restored = useRef(false);
   // A Set Complete won but not yet shown (the app closed mid-celebration) plays on the next open.
   useEffect(() => {
     void AsyncStorage.getItem(PENDING_REVEALS_KEY).then(raw => {
       const saved = raw ? (JSON.parse(raw) as { reward: ShopSetReward; set: ShopSetSummary | null }[]) : [];
-      if (saved.length) setReveals(list => saved.reduce((acc, r) => (acc.some(x => x.reward.slug === r.reward.slug) ? acc : [...acc, r]), list));
-    }).catch(() => undefined);
+      restored.current = true;
+      // Always a new array, so the save effect runs once with the merged queue.
+      setReveals(list => saved.reduce((acc, r) => (acc.some(x => x.reward.slug === r.reward.slug) ? acc : [...acc, r]), [...list]));
+    }).catch(() => { restored.current = true; setReveals(list => [...list]); });
   }, []);
-  const persistReveals = useCallback((list: { reward: ShopSetReward; set: ShopSetSummary | null }[]) => {
-    void AsyncStorage.setItem(PENDING_REVEALS_KEY, JSON.stringify(list)).catch(() => undefined);
-  }, []);
+  // One queue (won during a buy, or from Claim all), saved from one place, so nothing overwrites anything.
+  useEffect(() => {
+    if (!restored.current) return;
+    void AsyncStorage.setItem(PENDING_REVEALS_KEY, JSON.stringify(reveals)).catch(() => undefined);
+  }, [reveals]);
 
   // A tile stays where the kid saw it for this visit (per shop day).
   const seenOrder = useRef<{ day: string; order: Record<string, number[]> }>({ day: '', order: {} });
@@ -427,28 +434,23 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   // The reward is the shelf's the moment the server grants it: closing the try-on early never loses it.
   const onPurchased = useCallback((item: ShopItem, reward: ShopSetReward | null) => {
     setBought(list => (list.includes(item.id) ? list : [...list, item.id]));
+    // Queued at once (never lost to an early close); it plays when the sheet has slid away.
     if (reward) {
       const entry = { reward, set: setsBySlug.get(reward.slug) ?? null };
-      setPending(list => {
-        const next = queueReveal(list.map(x => ({ ...x, slug: x.reward.slug })), { ...entry, slug: reward.slug }).map(({ slug: _s, ...x }) => x);
-        persistReveals(next);
-        return next;
-      });
+      setReveals(list => queueReveal(list.map(x => ({ ...x, slug: x.reward.slug })), { ...entry, slug: reward.slug }).map(({ slug: _s, ...x }) => x));
     }
     void onRefresh();
-  }, [onRefresh, setsBySlug, persistReveals]);
+  }, [onRefresh, setsBySlug]);
 
-  // Play pending reveals once the sheet is gone; if the kid lingers, close it after the landing (1.5 s).
-  useEffect(() => {
-    if (!pending.length) return;
-    if (!open) {
-      setReveals(list => pending.reduce((acc, r) => (acc.some(x => x.reward.slug === r.reward.slug) ? acc : [...acc, r]), list));
-      setPending([]);
-      return;
-    }
-    const t = setTimeout(() => setOpen(null), 1500);
-    return () => clearTimeout(t);
-  }, [pending, open]);
+  // Has this player bought the item? Asks the server (a fresh shop), for "Check again".
+  const checkOwned = useCallback(async (itemId: number): Promise<boolean | null> => {
+    const fresh = await getShopToday(today.store_id).catch(() => null);
+    if (!fresh) return null;
+    setToday(fresh);
+    const onShelf = fresh.sections.some(sec => sec.items.some(i => i.id === itemId && (i.shop?.is_owned ?? i.has_purchased)));
+    const inSet = [...(fresh.sets ?? []), ...(fresh.ready_sets ?? [])].some(set => (set.owned_ids ?? []).includes(itemId));
+    return onShelf || inSet;
+  }, [today.store_id, setToday]);
 
   const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${itemDisplayName(item)}!`), [setToast]);
 
@@ -463,22 +465,17 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     setClaiming(false);
     if (failed.length) setToast(failed.length === ready.length ? 'Couldn’t claim that yet. Try again.' : 'Some sets will be ready to claim in a moment.');
     const queue = won.map(({ set, reward }) => ({ reward: { ...reward, item_ids: reward.item_ids ?? set.item_ids }, set }));
-    setReveals(list => { const next = [...list, ...queue]; persistReveals(next); return next; });
+    setReveals(list => [...list, ...queue]);
     void onRefresh();
-  }, [today.ready_sets, claiming, onRefresh, setToday, setToast, persistReveals]);
+  }, [today.ready_sets, claiming, onRefresh, setToday, setToast]);
 
   // iOS can't present a modal while the last one is still dismissing: hold the next reveal a beat.
   const [revealGate, setRevealGate] = useState(true);
   const finishReveal = useCallback(() => {
     setRevealGate(false);
     setTimeout(() => setRevealGate(true), 450);
-    setReveals(list => {
-      const next = list.slice(1);
-      const saved = list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : next;
-      persistReveals(saved);
-      return next;
-    });
-  }, [persistReveals]);
+    setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
+  }, []);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
@@ -589,7 +586,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
-          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn} />
+          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
+          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={reveals.some(r => r.reward.slug === open.item.shop?.set?.slug)} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
       {askAlerts && (
@@ -630,7 +628,7 @@ const styles = StyleSheet.create({
   teaseShape: { width: 24, height: 24, opacity: 0.85 },
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: '#dff3ff', ...SHADOW.card },
-  heroStage: { position: 'absolute', right: 0, top: 0, height: HERO_H, width: '62%' },
+  heroStage: { position: 'absolute', right: 0, top: 0, height: HERO_H - 8, width: '62%' },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroText: { position: 'absolute', left: 14, top: 14, height: HERO_H - 28, width: '46%', gap: 4 },
   heroKicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLip, letterSpacing: 1 },
@@ -651,7 +649,6 @@ const styles = StyleSheet.create({
   wearingChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: BRAND.green,
     borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white },
   wearingText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
-  heroTimer: { position: 'absolute', right: 10, top: 10 },
   heroTease: { position: 'absolute', left: 10, right: 10, bottom: 6 },
   setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: '#fffdf4', padding: 10, gap: 8 },
   readyCard: { borderColor: BRAND.gold, backgroundColor: '#fffaf0' },
