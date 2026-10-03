@@ -61,6 +61,7 @@ export const ICON_SOURCES: Record<GameIconName, number> = {
   medal3: require('../../assets/icons/game/medal3.png'),
   dice: require('../../assets/icons/game/dice.png'),
   sparkle: require('../../assets/icons/game/sparkle.png'),
+  moon: require('../../assets/icons/game/moon.png'),
   ride: require('../../assets/icons/game/ride.png'),
   camera: require('../../assets/icons/game/camera.png'),
   pause: require('../../assets/icons/game/pause.png'),

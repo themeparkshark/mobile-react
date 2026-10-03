@@ -151,8 +151,10 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 <View style={status ? styles.hidden : undefined} importantForAccessibility={status ? 'no-hide-descendants' : 'auto'}
                   accessibilityElementsHidden={!!status} pointerEvents={status ? 'none' : 'auto'}>
                   {/* While the claim is in flight the button stays yellow (no olive disabled look); presses are ignored. */}
+                  {/* In flight: GameButton's `loading` keeps the yellow art, pulses the label, ignores taps silently and reports busy. */}
                   <GameButton label={phase === 'claiming' ? 'Stamping...' : action?.label ?? 'Stamped!'} icon={action?.icon ?? 'check'}
-                    disabled={!action || phase === 'cascading' || phase === 'gotIt'} onPress={busy ? undefined : action?.onPress}
+                    loading={phase === 'claiming'} disabled={!action || phase === 'cascading' || phase === 'gotIt'}
+                    onPress={busy ? undefined : action?.onPress}
                     accessibilityLabel={action?.a11y} />
                 </View>
                 {!!status && (

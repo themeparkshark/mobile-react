@@ -171,7 +171,12 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.match(src, /<Content key=\{stamp\.id\} ref=\{content\}/);
   assert.ok(src.indexOf("<GameButton label={phase === 'claiming'") > src.indexOf('<Content key={stamp.id}'));
   // Pending stays yellow: the button is not disabled while the claim is in flight.
-  assert.match(src, /disabled=\{!action \|\| phase === 'cascading' \|\| phase === 'gotIt'\}/);
+  assert.match(src, /loading=\{phase === 'claiming'\} disabled=\{!action \|\| phase === 'cascading' \|\| phase === 'gotIt'\}/);
+  const btn = read('src/ui/GameButton.tsx');
+  assert.match(btn, /<Animated\.View style=\{\[\{ opacity: disabled \? 0\.5 : 1 \}/, 'loading must not dim the button');
+  assert.match(btn, /accessibilityState=\{\{ disabled: inactive, busy: loading \}\}/);
+  assert.match(btn, /if \(inactive \|\| !onPress\) return;/);
+  assert.match(btn, /if \(inactive \|\| reducedMotion \|\| !onPress\) return;/);
 });
 
 test('clocks truly rest: JS-kicked sweeps, per-tile gate, tags mounted only where needed, stable open', () => {
@@ -226,6 +231,7 @@ test('every Go! target opens with no params (Park needs a park id and is never a
     assert.ok(!/=\s*route\.params\s*[;\n]/.test(src) && !/\}\s*=\s*route\.params\b(?!\s*\?\?)/.test(src), `${t} destructures route.params`);
   }
   assert.equal(model.requirement({ metric: 'night_show', target: 1 }).go, 'Explore');
+  assert.equal(model.requirement({ metric: 'night_show', target: 1 }).icon, 'moon');
   assert.equal(model.sectionForMetric('night_show', false), 'special');
 });
 
