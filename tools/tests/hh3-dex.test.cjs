@@ -363,7 +363,7 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   // Swap flips in place with a stamp.
   assert.match(card, /Swapped!/);
   // One unclipped gem: each diamond in its own box.
-  assert.match(look, /const box = Math\.ceil\(gem \* 1\.45\)/);
+  assert.match(look, /const box = Math\.ceil\(\(gem \+ 4\) \* 1\.45\)/);
   assert.match(tile, /count: \{\s*position: 'absolute', bottom: 5, right: 4/, 'the count badge never covers the gems');
   // Claim clears the compass.
   assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
@@ -498,4 +498,20 @@ test('no book file hard-codes a rarity color: only dexLook, which reads design-s
   const banned = /#(0879ca|ff9800|9c27b0|4caf50|00a5f5|ff6b00|ffd700|8fa9c2|1d9bf0|0a5fb0|e0a100|ff8a00|2fb35d|9b4dff|ff5a2b|f5b400|6f849c)\b/i;
   for (const file of files) assert.doesNotMatch(read(file), banned, `${file} hard-codes a rarity color`);
   assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /RARITY_COLOR/);
+});
+
+test('round 7: reveal clears the dim and busy state at once, refreshes in background, Wear title clears the compass', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const celebrate = screen.slice(screen.indexOf('const celebrate = useCallback'), screen.indexOf('const claim = useCallback'));
+  assert.match(celebrate, /claimDim\.value = withTiming\(0/);
+  assert.match(celebrate, /setBusy\(null\)/);
+  assert.match(screen, /void refreshPlayer\(\)\.catch\(\(\) => undefined\)\.then\(\(\) => reloadAll\(\)\)/);
+  assert.doesNotMatch(screen, /await refreshPlayer\(\)\.catch\(\(\) => undefined\);\s*await reloadAll\(\);/);
+  assert.match(screen, /<Modal visible=\{claimWaiting\}/, 'the whole window dims during the wait');
+  assert.match(screen, /function ClaimBuildUp/);
+  assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,120}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
+  assert.match(screen, /if \(firstLand\.current\) \{/, 'the jump is first land only');
+  assert.match(read('src/screens/SetCollection/dexCache.ts'), /dex_land_offsets_v1_/);
+  assert.match(read('src/screens/SetCollection/DexReveal.tsx'), /if \(countTargets === 0\) later\(onCountsDone/);
+  assert.match(read('src/screens/SetCollection/dexLook.tsx'), /gemOutline/);
 });
