@@ -179,6 +179,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const logout = async () => {
+    // Friend answers and hearts belong to this player only.
+    try { require('../screens/social/socialStore').resetSocialStore(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);

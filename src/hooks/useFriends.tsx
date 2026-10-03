@@ -11,35 +11,38 @@ import { haptic } from '../gamekit/Haptics';
 import { playSfx } from '../gamekit/SFX';
 import { PlayerType } from '../models/player-type';
 import { nextStatus, statusOf, type FriendStatus, type FriendVerb } from '../screens/social/socialModel';
-import { adjustPendingIncoming, getOverrides, setStatus } from '../screens/social/socialStore';
+import {
+  adjustPendingIncoming, getOverrides, markJustFriended, setHearted, setStatus, wasHearted,
+} from '../screens/social/socialStore';
 import { confirmGame, gameAlert } from '../ui';
 
 const FAILED = 'Check your connection and try again.';
 
 type Target = Pick<PlayerType, 'id' | 'screen_name'> & Partial<Pick<PlayerType, 'friend_status' | 'is_friend' | 'has_friend_request_from'>>;
 
-/** Players cheered this session (the server allows one per player per day). */
-const cheeredToday = new Set<number>();
-
-export function wasCheered(id: number): boolean {
-  return cheeredToday.has(id);
-}
+/** Requests in flight, per player: a second tap while one is running does nothing. */
+const inFlight = new Set<number>();
 
 /**
  * Every friend action in one place, optimistic: the button changes the moment
  * it is tapped, every screen agrees through the social store, and a failure
  * puts it back and says so in the game dialog.
  *
- * One tap for the happy paths (Add, Yes, No, Cheer). A confirm only where a
- * mistake hurts: taking a request back, removing a friend, blocking.
+ * One tap for the happy paths (Add, Yes, No, Heart). A confirm only where a
+ * mistake hurts: taking a request back, removing a friend, blocking. A tap
+ * that would not change anything (a double tap) never reaches the network.
  */
 export function useFriendActions() {
-  const { refreshPlayer } = useContext(AuthContext);
+  const { refreshPlayer, player: viewer } = useContext(AuthContext);
+  const viewerId = viewer?.id ?? null;
 
   const run = useCallback(async (player: Target, verb: FriendVerb, call: () => Promise<unknown>, onError: string) => {
     const before = getOverrides().get(player.id) ?? statusOf(player);
     const after = nextStatus(before, verb);
+    if (after === before || inFlight.has(player.id)) return null;
+    inFlight.add(player.id);
     setStatus(player.id, after);
+    if (after === 'friends') markJustFriended(player.id);
     if (before === 'incoming' && after !== 'incoming') adjustPendingIncoming(-1);
     try {
       await call();
@@ -52,38 +55,39 @@ export function useFriendActions() {
       haptic('failBuzz');
       gameAlert(onError, FAILED);
       return null;
+    } finally {
+      inFlight.delete(player.id);
     }
   }, [refreshPlayer]);
 
   return useMemo(() => ({
     /** Add (or, if they already asked, this is a Yes). */
     add: async (player: Target): Promise<FriendStatus | null> => {
-      playSfx('whoosh');
-      haptic('hitSoft');
       const result = await run(player, 'add', () => sendFriendRequest(player as PlayerType), "Couldn't send that");
+      if (result === 'outgoing') { playSfx('whoosh'); haptic('hitSoft'); }
       if (result === 'friends') { playSfx('win'); haptic('success'); }
       return result;
     },
     accept: async (player: Target): Promise<FriendStatus | null> => {
-      playSfx('win');
-      haptic('success');
-      return run(player, 'accept', () => acceptFriendRequest(player as PlayerType), "Couldn't say yes");
+      const result = await run(player, 'accept', () => acceptFriendRequest(player as PlayerType), "Couldn't say yes");
+      if (result) { playSfx('win'); haptic('success'); }
+      return result;
     },
     decline: async (player: Target): Promise<FriendStatus | null> => {
-      playSfx('tap');
-      haptic('tapLight');
-      return run(player, 'decline', () => denyFriendRequest(player), "Couldn't answer that");
+      const result = await run(player, 'decline', () => denyFriendRequest(player), "Couldn't answer that");
+      if (result) { playSfx('tap'); haptic('tapLight'); }
+      return result;
     },
     cancel: async (player: Target): Promise<FriendStatus | null> => {
-      if (!(await confirmGame({ title: `Take back your request to ${player.screen_name}?`, confirmLabel: 'Take back', cancelLabel: 'Keep it', icon: 'shark' }))) return null;
+      if (!(await confirmGame({ title: `Take back your request to ${player.screen_name}?`, confirmLabel: 'Take back', cancelLabel: 'Keep it', icon: 'timer' }))) return null;
       return run(player, 'cancel', () => cancelFriendRequest(player), "Couldn't take it back");
     },
     remove: async (player: Target): Promise<FriendStatus | null> => {
       if (!(await confirmGame({ title: `Remove ${player.screen_name} from your friends?`, confirmLabel: 'Remove', cancelLabel: 'Keep', destructive: true }))) return null;
       return run(player, 'remove', () => unfriend(player as PlayerType), "Couldn't remove friend");
     },
-    block: async (player: Target): Promise<FriendStatus | null> => {
-      if (!(await confirmGame({
+    block: async (player: Target, skipConfirm = false): Promise<FriendStatus | null> => {
+      if (!skipConfirm && !(await confirmGame({
         title: `Block ${player.screen_name}?`,
         message: 'They will not be able to find you, add you or send you anything. They will not be told.',
         confirmLabel: 'Block',
@@ -93,25 +97,31 @@ export function useFriendActions() {
     },
     unblock: async (player: Target): Promise<FriendStatus | null> =>
       run(player, 'unblock', () => unblockPlayer(player), "Couldn't unblock"),
-    /** A heart for a friend's shark: sends them 5 coins, once a day. */
+    hearted: (id: number) => wasHearted(viewerId, id),
+    /** A heart for a friend: sends them 5 coins, once a day. */
     cheer: async (player: Target): Promise<boolean> => {
-      if (cheeredToday.has(player.id)) return true;
-      cheeredToday.add(player.id);
+      if (wasHearted(viewerId, player.id) || inFlight.has(-player.id)) return true;
+      inFlight.add(-player.id);
+      setHearted(viewerId, player.id, true);
       playSfx('coin');
       haptic('success');
       try {
         await createCompliment(player.id);
         return true;
       } catch (error: any) {
-        // 422 means "already today": that is still a sent heart.
-        if (error?.response?.status === 422) return true;
-        cheeredToday.delete(player.id);
+        const message = String(error?.response?.data?.message ?? '');
+        // "Already today" is still a sent heart; anything else puts it back.
+        if (error?.response?.status === 422 && !/friends/i.test(message)) return true;
+        setHearted(viewerId, player.id, false);
         playSfx('fail');
-        gameAlert("Couldn't send the heart", FAILED);
+        gameAlert(/friends/i.test(message) ? 'Hearts are for friends' : "Couldn't send the heart",
+          /friends/i.test(message) ? 'Add them as a friend first.' : FAILED);
         return false;
+      } finally {
+        inFlight.delete(-player.id);
       }
     },
-  }), [run]);
+  }), [run, viewerId]);
 }
 
 /**

@@ -11,7 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -23,6 +23,7 @@ import { getFriendsPage, searchFriends } from '../api/endpoints/me/friends';
 import getFriendRequests, { getSentFriendRequests } from '../api/endpoints/me/pending-requests';
 import getFriendSuggestions from '../api/endpoints/me/getFriendSuggestions';
 import searchPlayers from '../api/endpoints/players/search';
+import updatePlayer from '../api/endpoints/me/update-player';
 import { haptic } from '../gamekit/Haptics';
 import { playSfx } from '../gamekit/SFX';
 import type { PlayerType } from '../models/player-type';
@@ -32,11 +33,14 @@ import { BRAND, FONT } from '../ui/tokens';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import PlayerRow, { ROW_HEIGHT } from './social/PlayerRow';
 import SearchField from './social/SearchField';
-import { CountBadge, INK, Pill, SectionHeader, SocialBackdrop, kit, useSquash } from './social/SocialKit';
+import { CountBadge, INK, Pill, SectionHeader, SocialBackdrop, SocialError, kit, useSquash } from './social/SocialKit';
+import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
+const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
+const ADD_ART = require('../../assets/images/screens/friends/add_friend.png');
 const APP_LINK = 'https://apps.apple.com/app/theme-park-shark/id6758812566';
 
 type Row =
@@ -71,63 +75,73 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
       <SocialBackdrop>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
+        {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}
         <View style={{ flex: 1 }}>
-          {tab === 'friends' && <FriendsTabView onReady={() => setListReady(true)} onFind={() => setTab('find')} />}
-          {tab === 'requests' && <RequestsTabView onFind={() => setTab('find')} />}
-          {tab === 'find' && <FindTabView />}
+          <View style={[styles.pane, tab !== 'friends' && styles.hidden]} accessibilityElementsHidden={tab !== 'friends'} importantForAccessibility={tab === 'friends' ? 'auto' : 'no-hide-descendants'}>
+            <FriendsTabView onReady={() => setListReady(true)} onFind={() => setTab('find')} total={player?.friends_count ?? 0} />
+          </View>
+          <View style={[styles.pane, tab !== 'requests' && styles.hidden]} accessibilityElementsHidden={tab !== 'requests'} importantForAccessibility={tab === 'requests' ? 'auto' : 'no-hide-descendants'}>
+            <RequestsTabView onFind={() => setTab('find')} />
+          </View>
+          <View style={[styles.pane, tab !== 'find' && styles.hidden]} accessibilityElementsHidden={tab !== 'find'} importantForAccessibility={tab === 'find' ? 'auto' : 'no-hide-descendants'}>
+            <FindTabView active={tab === 'find'} onInvite={invite} />
+          </View>
         </View>
-        <RequestsCounter />
       </SocialBackdrop>
     </>
   );
 }
 
-/** Keeps the Requests badge true even when that tab was never opened. */
-function RequestsCounter() {
-  useEffect(() => {
-    let live = true;
-    getFriendRequests().then(list => { if (live) setPendingIncoming(list.length); }).catch(() => undefined);
-    return () => { live = false; };
-  }, []);
-  return null;
-}
-
 function Hero({ count, onInvite }: { readonly count: number; readonly onInvite: () => void }) {
+  const reduced = useUiReducedMotion();
+  const bounce = useSharedValue(0);
+  const last = useRef(count);
+  const [burst, setBurst] = useState(false);
+  useEffect(() => {
+    if (count > last.current) {
+      setBurst(true);
+      if (!reduced) bounce.value = withSequence(withTiming(1, { duration: 140 }), withSpring(0, { damping: 6, stiffness: 220 }));
+    }
+    last.current = count;
+  }, [count, reduced, bounce]);
+  const countStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.35 * bounce.value }, { translateY: -6 * bounce.value }] }));
+  const endBurst = useCallback(() => setBurst(false), []);
   return (
     <View style={[kit.card, styles.hero]}>
       <View style={kit.gloss} pointerEvents="none" />
       <Image source={CREST} style={styles.crest} contentFit="contain" accessibilityIgnoresInvertColors />
       <View style={{ flex: 1 }} accessible accessibilityLabel={`${count} ${count === 1 ? 'friend' : 'friends'}`}>
-        <Text style={styles.heroCount} maxFontSizeMultiplier={1.2}>{count}</Text>
+        <Animated.Text style={[styles.heroCount, countStyle]} maxFontSizeMultiplier={1.2}>{count}</Animated.Text>
         <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>{count === 1 ? 'Friend' : 'Friends'}</Text>
+        {burst && <Burst style={{ left: 20, top: 20 }} onDone={endBurst} />}
       </View>
-      <Pill label="Invite" icon="gift" tone="gold" onPress={onInvite} accessibilityLabel="Invite a friend to play" />
+      <Pill label="Invite" icon="arrow" tone="gold" onPress={onInvite} accessibilityLabel="Invite a friend to play" />
     </View>
   );
 }
 
-const TAB_LIST: readonly { key: FriendsTab; label: string; icon: GameIconName }[] = [
+const TAB_LIST: readonly { key: FriendsTab; label: string; icon: GameIconName; image?: number }[] = [
   { key: 'friends', label: 'Friends', icon: 'heart' },
-  { key: 'requests', label: 'Requests', icon: 'shark' },
+  { key: 'requests', label: 'Requests', icon: 'bell', image: REQUEST_ART },
   { key: 'find', label: 'Find', icon: 'search' },
 ];
 
 function Tabs({ tab, pending, onChange }: { readonly tab: FriendsTab; readonly pending: number; readonly onChange: (tab: FriendsTab) => void }) {
   return (
     <View style={styles.tabs} accessibilityRole="tablist">
-      {TAB_LIST.map(item => <TabChip key={item.key} label={item.label} icon={item.icon} active={tab === item.key} badge={item.key === 'requests' ? pending : 0} onPress={() => onChange(item.key)} />)}
+      {TAB_LIST.map(item => <TabChip key={item.key} label={item.label} icon={item.icon} image={item.image} active={tab === item.key} badge={item.key === 'requests' ? pending : 0} onPress={() => onChange(item.key)} />)}
     </View>
   );
 }
 
-function TabChip({ label, icon, active, badge, onPress }: { readonly label: string; readonly icon: GameIconName; readonly active: boolean; readonly badge: number; readonly onPress: () => void }) {
+function TabChip({ label, icon, image, active, badge, onPress }: { readonly label: string; readonly icon: GameIconName; readonly image?: number; readonly active: boolean; readonly badge: number; readonly onPress: () => void }) {
   const squash = useSquash();
   return (
     <Pressable onPress={onPress} onPressIn={squash.onPressIn} onPressOut={squash.onPressOut} style={{ flex: 1 }}
       accessibilityRole="tab" accessibilityState={{ selected: active }}
       accessibilityLabel={badge > 0 ? `${label}, ${badge} waiting` : label}>
       <Animated.View style={[styles.tab, active && styles.tabActive, squash.style]}>
-        <GameIcon name={icon} size={26} />
+        {image ? <Image source={image} style={{ width: 30, height: 30 }} contentFit="contain" /> : <GameIcon name={icon} size={26} />}
         <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.15}>{label}</Text>
       </Animated.View>
       <CountBadge count={badge} style={styles.tabBadge} />
@@ -137,8 +151,9 @@ function TabChip({ label, icon, active, badge, onPress }: { readonly label: stri
 
 // ---- Shared list ------------------------------------------------------------
 
-function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty }: {
+function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, header }: {
   readonly rows: readonly Row[];
+  readonly header?: React.ReactElement | null;
   readonly refreshing?: boolean;
   readonly onRefresh?: () => void;
   readonly onEndReached?: () => void;
@@ -161,6 +176,7 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty }
       keyboardDismissMode="on-drag"
       onEndReachedThreshold={0.6}
       onEndReached={onEndReached}
+      ListHeaderComponent={header}
       ListFooterComponent={footer}
       ListEmptyComponent={empty}
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" /> : undefined}
@@ -189,7 +205,10 @@ function Empty({ title, message, onFind }: { readonly title: string; readonly me
 
 // ---- Friends tab ------------------------------------------------------------
 
-function FriendsTabView({ onReady, onFind }: { readonly onReady: () => void; readonly onFind: () => void }) {
+/** Search my friends only once the list is long enough to need it. */
+export const FRIEND_SEARCH_MIN = 12;
+
+function FriendsTabView({ onReady, onFind, total }: { readonly onReady: () => void; readonly onFind: () => void; readonly total: number }) {
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const [load, setLoad] = useState<Load>('loading');
   const [page, setPage] = useState(1);
@@ -213,6 +232,16 @@ function FriendsTabView({ onReady, onFind }: { readonly onReady: () => void; rea
     return () => { if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A Yes or a Remove anywhere shows up here without a spinner.
+  const overrides = useFriendOverrides();
+  const friendSig = useMemo(() => [...overrides].filter(([, v]) => v === 'friends' || v === 'none').map(([k, v]) => `${k}${v}`).join(','), [overrides]);
+  const firstSig = useRef(friendSig);
+  useEffect(() => {
+    if (friendSig === firstSig.current) return;
+    firstSig.current = friendSig;
+    void first().catch(() => undefined);
+  }, [friendSig, first]);
 
   const more = useCallback(() => {
     if (!hasMore || paging === 'busy' || query) return;
@@ -238,11 +267,11 @@ function FriendsTabView({ onReady, onFind }: { readonly onReady: () => void; rea
   const rows = useMemo<Row[]>(() => shown.map(p => ({ type: 'player', key: `f${p.id}`, player: p, fallback: 'friends' })), [shown]);
 
   if (load === 'loading') return <SharkLoader state="loading" tone="onBlue" title="Finding your friends" />;
-  if (load === 'error') return <SharkLoader state="error" tone="onBlue" title="Friends didn't load" onRetry={() => { setLoad('loading'); first().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
+  if (load === 'error') return <SocialError title="Friends didn't load" onRetry={() => { setLoad('loading'); first().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
 
   return (
     <View style={{ flex: 1 }}>
-      {friends.length > 0 && <SearchField placeholder="Find a friend" accessibilityLabel="Search your friends" onChangeText={search} />}
+      {Math.max(total, friends.length) > FRIEND_SEARCH_MIN && <SearchField placeholder="Search my friends" accessibilityLabel="Search my friends" onChangeText={search} />}
       <SocialList
         rows={rows}
         refreshing={refreshing}
@@ -277,14 +306,23 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
 
   useEffect(() => { fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }, [fetchAll]);
 
-  // An answered "No", a block or a taken-back ask leaves the list; a "Yes" stays as a friend row until the next visit.
+  // A Yes turns the row green ("New friend!") for a moment, then it leaves Requests.
+  const [settled, setSettled] = useState<ReadonlySet<number>>(() => new Set());
+  useEffect(() => {
+    const fresh = incoming.filter(p => overrides.get(p.id) === 'friends' && !settled.has(p.id)).map(p => p.id);
+    if (!fresh.length) return;
+    const timer = setTimeout(() => setSettled(prev => new Set([...prev, ...fresh])), 1600);
+    return () => clearTimeout(timer);
+  }, [incoming, overrides, settled]);
+
+  // An answered "No", a block or a taken-back ask leaves the list at once.
   const rows = useMemo<Row[]>(() => {
-    const gone = (status: FriendStatus) => status === 'none' || status === 'blocked';
-    const ask = incoming.filter(p => !gone(effectiveStatus(p, overrides, 'incoming')));
-    const mine = sent.filter(p => !gone(effectiveStatus(p, overrides, 'outgoing')));
+    const gone = (status: FriendStatus, id: number) => status === 'none' || status === 'blocked' || (status === 'friends' && settled.has(id));
+    const ask = incoming.filter(p => !gone(effectiveStatus(p, overrides, 'incoming'), p.id));
+    const mine = sent.filter(p => !gone(effectiveStatus(p, overrides, 'outgoing'), p.id));
     const out: Row[] = [];
     if (ask.length) {
-      out.push({ type: 'header', key: 'h-ask', label: 'Want to be friends', icon: 'shark', count: ask.filter(p => effectiveStatus(p, overrides, 'incoming') === 'incoming').length });
+      out.push({ type: 'header', key: 'h-ask', label: 'Want to be friends', icon: 'heart', count: ask.filter(p => effectiveStatus(p, overrides, 'incoming') === 'incoming').length });
       for (const p of ask) out.push({ type: 'player', key: `i${p.id}`, player: p, fallback: 'incoming' });
     }
     if (mine.length) {
@@ -292,10 +330,10 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
       for (const p of mine) out.push({ type: 'player', key: `o${p.id}`, player: p, fallback: 'outgoing' });
     }
     return out;
-  }, [incoming, sent, overrides]);
+  }, [incoming, sent, overrides, settled]);
 
   if (load === 'loading') return <SharkLoader state="loading" tone="onBlue" title="Checking requests" />;
-  if (load === 'error') return <SharkLoader state="error" tone="onBlue" title="Requests didn't load" onRetry={() => { setLoad('loading'); fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
+  if (load === 'error') return <SocialError title="Requests didn't load" onRetry={() => { setLoad('loading'); fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
 
   return (
     <SocialList
@@ -309,20 +347,40 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
 
 // ---- Find tab ---------------------------------------------------------------
 
-function FindTabView() {
+function FindTabView({ active, onInvite }: { readonly active: boolean; readonly onInvite: () => void }) {
+  const { player, refreshPlayer } = useContext(AuthContext);
   const [suggested, setSuggested] = useState<PlayerType[]>([]);
-  const [load, setLoad] = useState<Load>('loading');
+  const [load, setLoad] = useState<Load | 'idle'>('idle');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlayerType[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [findMe, setFindMe] = useState<boolean>(!!player?.discoverable);
   const seqRef = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setFindMe(!!player?.discoverable); }, [player?.discoverable]);
 
   const fetchSuggested = useCallback(() => {
     setLoad('loading');
     getFriendSuggestions().then(list => { setSuggested(list); setLoad('ready'); }).catch(() => setLoad('error'));
   }, []);
-  useEffect(() => { fetchSuggested(); return () => { if (timer.current) clearTimeout(timer.current); }; }, [fetchSuggested]);
+  // Loads the first time the tab is opened, then stays.
+  useEffect(() => { if (active && load === 'idle') fetchSuggested(); }, [active, load, fetchSuggested]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const toggleFindMe = useCallback(async () => {
+    const next = !findMe;
+    setFindMe(next);
+    playSfx(next ? 'star' : 'tap');
+    haptic('tickSelection');
+    try {
+      await updatePlayer({ discoverable: next });
+      void refreshPlayer?.().catch(() => undefined);
+    } catch {
+      setFindMe(!next);
+      playSfx('fail');
+    }
+  }, [findMe, refreshPlayer]);
 
   const search = useCallback((text: string) => {
     setQuery(text);
@@ -349,27 +407,71 @@ function FindTabView() {
         : [];
     }
     if (!suggested.length) return [];
-    return [{ type: 'header', key: 'h-sug', label: 'Sharks to meet', icon: 'star' },
+    return [{ type: 'header', key: 'h-sug', label: 'Sharks you may know', icon: 'star' },
       ...suggested.map(p => ({ type: 'player' as const, key: `s${p.id}`, player: p, fallback: 'none' as FriendStatus }))];
   }, [hint, results, suggested]);
 
+  const cards = !query && (
+    <View>
+      <MyNameCard name={player?.screen_name ?? ''} onInvite={onInvite} />
+      <FindMeCard on={findMe} onToggle={toggleFindMe} />
+    </View>
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <SearchField placeholder="Type a shark's name" accessibilityLabel="Search all players by name" onChangeText={search} />
+      <SearchField placeholder="Type a friend's shark name" accessibilityLabel="Search players by shark name" onChangeText={search} />
       {load === 'error' && !query
-        ? <SharkLoader state="error" tone="onBlue" title="Couldn't load sharks to meet" onRetry={fetchSuggested} />
-        : load === 'loading' && !query
+        ? <SocialError title="Couldn't load sharks you may know" onRetry={fetchSuggested} />
+        : (load === 'loading' || load === 'idle') && !query
           ? <SharkLoader state="loading" tone="onBlue" title="Looking for sharks" />
           : (
             <SocialList
               rows={rows}
+              header={cards || null}
               footer={searching ? <SharkLoader state="loading" tone="onBlue" compact /> : null}
-              empty={searching ? null : results
-                ? <Empty title="No sharks found" message={`Nobody called "${query.trim()}". Check the spelling!`} />
-                : <Empty title="Find friends" message="Type a friend's shark name to find them." />}
+              empty={searching ? null : query
+                ? (results ? <Empty title="No sharks found" message="Check the spelling, or ask your friend for their exact shark name." /> : null)
+                : <Empty title="No sharks to meet yet" message={findMe
+                  ? 'Friends of your friends who turn on Let sharks find me show up here.'
+                  : 'Turn on Let sharks find me, or share your shark name so friends can add you.'} />}
             />
           )}
     </View>
+  );
+}
+
+/** The kid's own shark name works like a friend code: say it, share it. */
+function MyNameCard({ name, onInvite }: { readonly name: string; readonly onInvite: () => void }) {
+  return (
+    <View style={[kit.card, styles.findCard]}>
+      <View style={kit.gloss} pointerEvents="none" />
+      <Image source={ADD_ART} style={styles.findArt} contentFit="contain" />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>My shark name</Text>
+        <Text style={styles.findName} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>{name}</Text>
+        <Text style={styles.findText} maxFontSizeMultiplier={1.3}>Friends type it here to add you.</Text>
+      </View>
+      <Pill compact label="Share" icon="arrow" tone="gold" onPress={onInvite} accessibilityLabel="Share my shark name with a friend" />
+    </View>
+  );
+}
+
+/** "Let sharks find me": off by default (kid safety). */
+function FindMeCard({ on, onToggle }: { readonly on: boolean; readonly onToggle: () => void }) {
+  return (
+    <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }}
+      accessibilityLabel="Let sharks find me" accessibilityHint="When on, friends of your friends can find you by part of your name">
+      <View style={[kit.card, styles.findCard, styles.findMe]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>Let sharks find me</Text>
+          <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Friends of friends can find you.' : 'Only friends who know your name can add you.'}</Text>
+        </View>
+        <View style={[styles.switch, on && styles.switchOn]}>
+          <View style={[styles.knob, on && styles.knobOn]} />
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -387,10 +489,22 @@ const styles = StyleSheet.create({
   tabText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textTransform: 'uppercase', includeFontPadding: false },
   tabTextActive: { color: INK },
   tabBadge: { position: 'absolute', top: -8, right: -4 },
+  pane: { ...StyleSheet.absoluteFillObject },
+  hidden: { display: 'none' },
   hint: { fontFamily: FONT.display, fontSize: 18, color: '#FFFFFF', textAlign: 'center', paddingTop: 24, textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   footer: { alignItems: 'center', paddingVertical: 12 },
   empty: { alignItems: 'center', paddingHorizontal: 32, paddingTop: 36 },
   emptyArt: { width: 120, height: 120 },
+  findCard: { marginHorizontal: 14, marginTop: 4, marginBottom: 10, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, backgroundColor: BRAND.cream },
+  findMe: { backgroundColor: '#FFFFFF' },
+  findArt: { width: 56, height: 56 },
+  findLabel: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textTransform: 'uppercase' },
+  findName: { fontFamily: FONT.display, fontSize: 24, color: INK, textTransform: 'uppercase' },
+  findText: { fontFamily: FONT.body, fontSize: 16, color: BRAND.navySoft },
+  switch: { width: 64, height: 38, borderRadius: 19, borderWidth: 3, borderColor: INK, backgroundColor: '#C9D8EA', justifyContent: 'center', padding: 3 },
+  switchOn: { backgroundColor: '#4CC96A' },
+  knob: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: INK },
+  knobOn: { alignSelf: 'flex-end' },
   emptyTitle: { fontFamily: FONT.display, fontSize: 24, color: '#FFFFFF', textTransform: 'uppercase', marginTop: 8, textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   emptyText: { fontFamily: FONT.body, fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginTop: 4, textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
 });

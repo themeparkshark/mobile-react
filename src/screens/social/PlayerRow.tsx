@@ -1,19 +1,21 @@
 /**
- * One player on a social list: their real dressed shark, their name, their
- * level, and ONE clear thing to do that matches where you stand with them:
- *   friend     -> a heart (Cheer: 5 coins, once a day)
- *   asked you  -> Yes! / No
+ * One player on a social list: their own shark, their name, their level, and
+ * ONE clear thing to do that matches where you stand with them:
+ *   friend     -> Heart (5 coins, once a day; the heart flies to their shark)
+ *   asked you  -> No / Yes!  (Yes bursts and the row turns green: Friends!)
  *   you asked  -> Asked (tap to take it back)
  *   stranger   -> Add
  * Tap anywhere else to open their profile. Remove and Block live on the
  * profile, never one mis-tap away on a list.
  *
- * Memoized: a row re-renders only when its own player or status changes.
+ * Recycle-safe: nothing animates because a cell was reused. Moments play once,
+ * from the social store, on the row that shows that player. After any change
+ * the buttons ignore taps for 600 ms, so a double tap can't land on the next
+ * state (Add then "Take back?").
  */
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { ZoomIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import Avatar from '../../components/Avatar';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -21,11 +23,15 @@ import type { PlayerType } from '../../models/player-type';
 import GameIcon from '../../ui/GameIcon';
 import { BRAND, FONT } from '../../ui/tokens';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { useFriendActions, wasCheered } from '../../hooks/useFriends';
+import { useFriendActions } from '../../hooks/useFriends';
 import { friendButton, type FriendStatus } from './socialModel';
 import { INK, Pill, kit, useSquash } from './SocialKit';
+import { Burst, FlyHeart, SharkFace } from './SocialFx';
+import { takeJustFriended } from './socialStore';
 
 export const ROW_HEIGHT = 92;
+const ADD_ART = require('../../../assets/images/screens/friends/add_friend.png');
+const LOCK_MS = 600;
 
 function PlayerRow({ player, status, inset }: { readonly player: PlayerType; readonly status: FriendStatus; readonly inset?: boolean }) {
   const actions = useFriendActions();
@@ -33,22 +39,39 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
   const me = { ...player, friend_status: status };
   const reduced = useUiReducedMotion();
   const squash = useSquash();
-  const [cheered, setCheered] = useState(() => wasCheered(player.id));
+  const [hearted, setHearted] = useState(() => actions.hearted(player.id));
+  const [burst, setBurst] = useState(false);
+  const [flying, setFlying] = useState(false);
   const look = friendButton(status);
   const level = player.experience_level?.level;
 
-  // A just-made friendship gets a little pop.
-  const pop = useSharedValue(0);
-  const previous = useRef(status);
-  useEffect(() => {
-    if (previous.current !== 'friends' && status === 'friends' && !reduced) {
-      pop.value = withSequence(withTiming(1, { duration: 120 }), withSpring(0, { damping: 9, stiffness: 180 }));
-    }
-    previous.current = status;
-  }, [status, reduced, pop]);
-  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.06 * pop.value }] }));
+  // Recycled into a different player: reset local moments, never replay them.
+  const shownId = useRef(player.id);
+  const lockedUntil = useRef(0);
+  const shownStatus = useRef(status);
+  if (shownId.current !== player.id) {
+    shownId.current = player.id;
+    shownStatus.current = status;
+    lockedUntil.current = 0;
+  }
+  if (shownStatus.current !== status) {
+    shownStatus.current = status;
+    lockedUntil.current = Date.now() + LOCK_MS;
+  }
+  useEffect(() => { setHearted(actions.hearted(player.id)); setBurst(false); setFlying(false); }, [player.id, actions]);
 
-  useEffect(() => { setCheered(wasCheered(player.id)); }, [player.id]);
+  const pop = useSharedValue(0);
+  useEffect(() => {
+    if (status === 'friends' && takeJustFriended(player.id)) {
+      setBurst(true);
+      if (!reduced) pop.value = withSequence(withTiming(1, { duration: 120 }), withSpring(0, { damping: 7, stiffness: 200 }));
+    }
+  }, [status, player.id, reduced, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.07 * pop.value }] }));
+
+  const guard = (fn: () => unknown) => () => { if (Date.now() >= lockedUntil.current) fn(); };
+  const endBurst = useCallback(() => setBurst(false), []);
+  const endFly = useCallback(() => setFlying(false), []);
 
   const open = () => {
     playSfx('tap');
@@ -58,10 +81,11 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
 
   const levelText = level ? `Level ${level}` : null;
   const spoken = [player.screen_name, levelText, look.a11y(player.screen_name)].filter(Boolean).join('. ');
+  const justMade = burst && status === 'friends';
 
   return (
     <Animated.View style={[styles.wrap, inset && styles.wrapInset, popStyle]}>
-      <View style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk]}>
+      <View style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk, justMade && styles.cardNew]}>
         <Pressable
           onPress={open}
           onPressIn={squash.onPressIn}
@@ -72,47 +96,55 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
           accessibilityHint="Opens their profile"
         >
           <Animated.View style={[styles.main, squash.style]}>
-            <View style={styles.avatarRing}>
-              <Avatar player={player} size="md" />
-            </View>
+            <SharkFace player={player} />
             <View style={styles.text}>
               <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>{player.screen_name}</Text>
               {status === 'incoming' ? (
                 <Text style={[styles.sub, styles.subAsk]} numberOfLines={1} maxFontSizeMultiplier={1.25}>Wants to be friends!</Text>
+              ) : justMade ? (
+                <Animated.Text entering={reduced ? undefined : FadeIn} style={[styles.sub, styles.subNew]} numberOfLines={1} maxFontSizeMultiplier={1.25}>
+                  New friend!
+                </Animated.Text>
               ) : levelText ? (
                 <View style={styles.levelChip}><GameIcon name="xp" size={18} /><Text style={styles.sub} maxFontSizeMultiplier={1.25}>{levelText}</Text></View>
               ) : null}
             </View>
           </Animated.View>
         </Pressable>
-        <Animated.View key={`${status}-${cheered}`} entering={reduced ? undefined : ZoomIn.springify().damping(13)} style={styles.actions}>
+        <View style={styles.actions}>
           {status === 'friends' && (
             <Pill
               compact
-              tone={cheered ? 'grey' : 'white'}
+              tone={hearted ? 'grey' : 'white'}
               icon="heart"
-              label={cheered ? 'Sent' : 'Send'}
-              accessibilityLabel={cheered ? `Heart sent to ${player.screen_name} today` : `Send ${player.screen_name} a heart and 5 coins`}
-              disabled={cheered}
-              onPress={async () => { setCheered(true); if (!(await actions.cheer(me))) setCheered(false); }}
+              label={hearted ? 'Sent' : 'Heart'}
+              accessibilityLabel={hearted ? `Heart sent to ${player.screen_name} today` : `Send ${player.screen_name} a heart and 5 coins`}
+              disabled={hearted}
+              onPress={guard(async () => {
+                setHearted(true);
+                setFlying(true);
+                if (!(await actions.cheer(me))) setHearted(false);
+              })}
             />
           )}
           {status === 'incoming' && (
             <>
-              <Pill compact iconOnly tone="grey" icon="close" label="No" accessibilityLabel={`Say no to ${player.screen_name}`} onPress={() => actions.decline(me)} />
-              <Pill compact tone="green" icon="check" label="Yes!" accessibilityLabel={`Say yes to ${player.screen_name}`} onPress={() => actions.accept(me)} />
+              <Pill compact tone="grey" icon="close" label="No" accessibilityLabel={`Say no to ${player.screen_name}`} onPress={guard(() => actions.decline(me))} />
+              <Pill compact tone="green" icon="check" label="Yes!" accessibilityLabel={`Say yes to ${player.screen_name}`} onPress={guard(() => actions.accept(me))} />
             </>
           )}
           {status === 'outgoing' && (
-            <Pill compact tone="grey" icon="timer" label="Asked" accessibilityLabel={look.a11y(player.screen_name)} onPress={() => actions.cancel(me)} />
+            <Pill compact tone="grey" icon="timer" label="Asked" accessibilityLabel={look.a11y(player.screen_name)} onPress={guard(() => actions.cancel(me))} />
           )}
           {status === 'none' && (
-            <Pill compact tone="gold" icon="shark" label="Add" accessibilityLabel={look.a11y(player.screen_name)} onPress={() => actions.add(me)} />
+            <Pill compact tone="gold" image={ADD_ART} label="Add" accessibilityLabel={look.a11y(player.screen_name)} onPress={guard(() => actions.add(me))} />
           )}
           {status === 'blocked' && (
-            <Pill compact tone="grey" icon="lock" label="Blocked" accessibilityLabel={look.a11y(player.screen_name)} onPress={open} />
+            <Pill compact tone="grey" icon="close" label="Blocked" accessibilityLabel={look.a11y(player.screen_name)} onPress={open} />
           )}
-        </Animated.View>
+        </View>
+        {flying && <View style={styles.flyFrom}><FlyHeart dx={-(268 - 46)} dy={0} onDone={endFly} /></View>}
+        {justMade && <Burst style={styles.burstAt} onDone={endBurst} />}
       </View>
     </Animated.View>
   );
@@ -123,14 +155,17 @@ export default memo(PlayerRow, (a, b) => a.player === b.player && a.status === b
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingBottom: 10 },
   wrapInset: { paddingHorizontal: 0 },
-  card: { flexDirection: 'row', alignItems: 'center', minHeight: ROW_HEIGHT - 10, paddingRight: 10 },
+  card: { flexDirection: 'row', alignItems: 'center', minHeight: ROW_HEIGHT - 10, paddingRight: 10, overflow: 'visible' },
   cardAsk: { backgroundColor: '#F3EDFF' },
+  cardNew: { backgroundColor: '#E5F8E9', borderColor: BRAND.greenLip },
   main: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingLeft: 10, minHeight: 72 },
-  avatarRing: { borderRadius: 999, borderWidth: 3, borderColor: INK, backgroundColor: BRAND.sky, padding: 1 },
   text: { flex: 1, marginLeft: 12, marginRight: 6, justifyContent: 'center' },
   name: { fontFamily: FONT.display, fontSize: 19, color: INK, textTransform: 'uppercase', includeFontPadding: false },
   levelChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   sub: { fontFamily: FONT.body, fontSize: 16, color: BRAND.navySoft },
   subAsk: { color: '#5B35B8', marginTop: 2 },
+  subNew: { color: BRAND.greenLip, fontFamily: FONT.display, textTransform: 'uppercase' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  flyFrom: { position: 'absolute', right: 62, top: 30 },
+  burstAt: { left: 44, top: 44 },
 });

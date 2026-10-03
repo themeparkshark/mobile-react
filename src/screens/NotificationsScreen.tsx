@@ -30,8 +30,8 @@ import type { NotificationType } from '../models/notification-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { actorOf, isUnread, mergePage, resolveRoute, sectionize, type InboxRow } from './social/socialModel';
-import { INK, Pill, SectionHeader, SocialBackdrop } from './social/SocialKit';
+import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type InboxRow } from './social/socialModel';
+import { INK, Pill, SectionHeader, SocialBackdrop, SocialError } from './social/SocialKit';
 import { useFriendOverrides } from './social/socialStore';
 
 /** Mark-all-read only makes sense when something is unread. */
@@ -83,6 +83,13 @@ export default function NotificationsScreen() {
   const [markingAll, setMarkingAll] = useState(false);
   const lastFetch = useRef(0);
   const firstPaint = useRef(true);
+  // Callbacks read the latest list through refs, so they stay stable and a
+  // read or clear re-renders only the rows it touched.
+  const readRef = useRef(readIds);
+  readRef.current = readIds;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const pendingClears = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const loadFirst = useCallback(async () => {
     const result = await getNotificationsPage(1);
@@ -109,10 +116,10 @@ export default function NotificationsScreen() {
   }, [hasMore, paging, page]);
 
   const markRead = useCallback((item: NotificationType) => {
-    if (!isUnread(item, readIds)) return;
+    if (!isUnread(item, readRef.current)) return;
     setReadIds(prev => new Set(prev).add(item.id));
     markAsRead(item.id).then(refreshNotificationCount).catch(() => undefined);
-  }, [readIds, refreshNotificationCount]);
+  }, [refreshNotificationCount]);
 
   const open = useCallback((item: NotificationType) => {
     playSfx('tap');
@@ -126,29 +133,41 @@ export default function NotificationsScreen() {
 
   const answered = useCallback((item: NotificationType) => { markRead(item); }, [markRead]);
 
-  const clear = useCallback(async (item: NotificationType) => {
+  // Press and hold: the row goes at once, with an Undo toast; it is deleted
+  // on the server only if the toast is not undone.
+  const clear = useCallback((item: NotificationType) => {
     haptic('hitMedium');
-    if (!(await confirmGame({ title: 'Clear this one?', confirmLabel: 'Clear', cancelLabel: 'Keep', icon: 'bell' }))) return;
-    const index = items.findIndex(n => n.id === item.id);
-    setItems(list => list.filter(n => n.id !== item.id));
     playSfx('whoosh');
-    try {
-      await deleteNotification(item.id);
-      if (isUnread(item, readIds)) void refreshNotificationCount();
-      showToast({ type: 'info', icon: 'check', message: 'Cleared', duration: 1600 });
-    } catch {
-      setItems(list => { const next = [...list]; next.splice(Math.max(0, index), 0, item); return next; });
-      showToast({ type: 'error', message: "Couldn't clear it. Try again." });
-    }
-  }, [items, readIds, refreshNotificationCount, showToast]);
+    const index = itemsRef.current.findIndex(n => n.id === item.id);
+    const wasUnread = isUnread(item, readRef.current);
+    setItems(list => list.filter(n => n.id !== item.id));
+    const restore = () => {
+      const timer = pendingClears.current.get(item.id);
+      if (timer) clearTimeout(timer);
+      pendingClears.current.delete(item.id);
+      setItems(list => (list.some(n => n.id === item.id) ? list : (() => { const next = [...list]; next.splice(Math.max(0, index), 0, item); return next; })()));
+    };
+    pendingClears.current.set(item.id, setTimeout(() => {
+      pendingClears.current.delete(item.id);
+      deleteNotification(item.id)
+        .then(() => { if (wasUnread) void refreshNotificationCount(); })
+        .catch(() => { restore(); showToast({ type: 'error', message: "Couldn't clear it. Try again." }); });
+    }, 4000));
+    showToast({ type: 'info', icon: 'check', message: 'Cleared', duration: 4000, action: { label: 'Undo', onPress: restore } });
+  }, [refreshNotificationCount, showToast]);
+
+  // Leaving the screen sends any clears still waiting on their Undo.
+  useEffect(() => () => {
+    for (const [id, timer] of pendingClears.current) { clearTimeout(timer); void deleteNotification(id).catch(() => undefined); }
+  }, []);
 
   const readAll = useCallback(async () => {
     if (markingAll) return;
     setMarkingAll(true);
     playSfx('star');
     haptic('success');
-    const before = readIds;
-    setReadIds(new Set(items.map(n => n.id)));
+    const before = readRef.current;
+    setReadIds(new Set(itemsRef.current.map(n => n.id)));
     try {
       await markAllAsRead();
       await refreshNotificationCount();
@@ -158,16 +177,22 @@ export default function NotificationsScreen() {
     } finally {
       setMarkingAll(false);
     }
-  }, [items, markingAll, readIds, refreshNotificationCount, showToast]);
+  }, [markingAll, refreshNotificationCount, showToast]);
 
-  const rows = useMemo(() => sectionize(items, readIds), [items, readIds]);
+  // A request answered No leaves the bell at once (the server deletes it too).
+  const shown = useMemo(() => items.filter(n => {
+    const actor = actorOf(n);
+    return !(kindOf(n) === 'friend_request' && actor !== null && overrides.get(actor) === 'none');
+  }), [items, overrides]);
+  const rows = useMemo(() => sectionize(shown, readIds), [shown, readIds]);
+  const firstHeader = rows.find(r => r.type === 'header')?.key;
   const unreadCount = useMemo(() => items.filter(n => isUnread(n, readIds)).length, [items, readIds]);
 
   const renderItem = useCallback(({ item, index }: { item: InboxRow<NotificationType>; index: number }) => {
     if (item.type === 'header') {
       return (
-        <SectionHeader label={item.label} count={item.count} icon={item.key === 'h-new' ? 'bell' : 'timer'}
-          right={item.key === 'h-new' && showMarkAllRead(items, readIds)
+        <SectionHeader label={item.label} count={item.count} icon={item.key === 'h-today' ? 'bell' : 'timer'}
+          right={item.key === firstHeader && showMarkAllRead(itemsRef.current, readRef.current)
             ? <Pill compact tone="white" icon="check" label="Read all" onPress={readAll} disabled={markingAll} accessibilityLabel="Mark all as read" />
             : undefined} />
       );
@@ -186,7 +211,7 @@ export default function NotificationsScreen() {
     return firstPaint.current && !reduced && index < 7
       ? <Reanimated.View entering={FadeInDown.delay(index * 45).springify().damping(16)}>{row}</Reanimated.View>
       : row;
-  }, [readIds, overrides, open, clear, answered, reduced, items, readAll, markingAll]);
+  }, [readIds, overrides, open, clear, answered, reduced, readAll, markingAll, firstHeader]);
 
   return (
     <>
@@ -198,7 +223,7 @@ export default function NotificationsScreen() {
       <SocialBackdrop>
         {load === 'loading' && <SharkLoader state="loading" tone="onBlue" title="Checking your bell" />}
         {load === 'error' && (
-          <SharkLoader state="error" tone="onBlue" title="Notifications didn't load"
+          <SocialError title="Notifications didn't load"
             onRetry={() => { setLoad('loading'); loadFirst().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />
         )}
         {load === 'ready' && (

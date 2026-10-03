@@ -61,10 +61,52 @@ export function adjustPendingIncoming(delta: number): void {
   setPendingIncoming(pendingIncoming + delta);
 }
 
+// ---- Moments: a friendship just made here, played once by whichever row shows it.
+const justFriended = new Map<number, number>();
+const CELEBRATE_MS = 2500;
+
+export function markJustFriended(id: number, now: number = Date.now()): void {
+  justFriended.set(id, now);
+}
+
+/** True once per new friendship, within a short window (a recycled row never replays it). */
+export function takeJustFriended(id: number, now: number = Date.now()): boolean {
+  const at = justFriended.get(id);
+  if (at == null) return false;
+  justFriended.delete(id);
+  return now - at < CELEBRATE_MS;
+}
+
+// ---- Hearts sent today, per signed-in player and local day.
+let heartKey = '';
+const heartsSent = new Set<number>();
+
+function localDay(now: Date): string {
+  return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+}
+
+function heartScope(viewerId: number | null | undefined, now: Date): void {
+  const key = `${viewerId ?? 0}|${localDay(now)}`;
+  if (key !== heartKey) { heartKey = key; heartsSent.clear(); }
+}
+
+export function wasHearted(viewerId: number | null | undefined, id: number, now: Date = new Date()): boolean {
+  heartScope(viewerId, now);
+  return heartsSent.has(id);
+}
+
+export function setHearted(viewerId: number | null | undefined, id: number, sent: boolean, now: Date = new Date()): void {
+  heartScope(viewerId, now);
+  if (sent) heartsSent.add(id); else heartsSent.delete(id);
+}
+
 /** Sign-out and tests. */
 export function resetSocialStore(): void {
   overrides = new Map();
   pendingIncoming = null;
+  justFriended.clear();
+  heartsSent.clear();
+  heartKey = '';
   emit();
 }
 

@@ -126,8 +126,8 @@ test('Notifications: mark-all-read hides when nothing is unread, a failed load c
   assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }]), false);
   assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }, { read_at: null }]), true);
   assert.equal(mod.exports.showMarkAllRead([{ id: 'a', read_at: null }], new Set(['a'])), false, 'a row read on this screen counts');
-  assert.match(source, /item\.key === 'h-new' && showMarkAllRead\(items, readIds\)/, 'Read all sits on the New header, only while something is unread');
-  assert.match(source, /state="error"/);
+  assert.match(source, /item\.key === firstHeader && showMarkAllRead\(itemsRef\.current, readRef\.current\)/, 'Read all sits on the first header, only while something is unread');
+  assert.match(source, /<SocialError/);
   assert.match(source, /GameIcon name="bell"/);
 });
 
