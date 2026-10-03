@@ -1,5 +1,4 @@
 import { useFocusEffect, useRoute } from '@react-navigation/native';
-import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
@@ -534,29 +533,10 @@ export default function ProfileScreen() {
               >
                 {friends.length > 0 && (
                   <>
-                    <View
-                      style={{
-                        height: friends.length * 80,
-                      }}
-                    >
-                      <FlashList
-                        contentContainerStyle={{ paddingBottom: 8 }}
-                        data={friends}
-                        keyExtractor={(player) => player.id.toString()}
-                        renderItem={({ item }) => {
-                          return (
-                            <FriendPlayer
-                              player={item}
-                              isFriend
-                              onRemove={() => {
-                                requestFriends();
-                              }}
-                            />
-                          );
-                        }}
-                        estimatedItemSize={80}
-                      />
-                    </View>
+                    {/* Three rows at most: a plain map, no nested list. */}
+                    {friends.map((item) => (
+                      <FriendPlayer key={item.id} player={item} isFriend inset />
+                    ))}
                     <View
                       style={{
                         alignItems: 'center',

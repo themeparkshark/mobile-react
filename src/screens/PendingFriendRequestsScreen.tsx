@@ -1,97 +1,11 @@
-import { FlashList } from '@shopify/flash-list';
-import { useEffect, useState } from 'react';
-import { ImageBackground, ScrollView, View } from 'react-native';
-import { useAsyncEffect } from 'rooks';
-import getFriendRequests from '../api/endpoints/me/pending-requests';
-import FriendPlayer from '../components/FriendPlayer';
-import Loading from '../components/Loading';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import { PlayerType } from '../models/player-type';
+/**
+ * Old route kept for older notifications and links: Requests now live in the
+ * Friends screen's Requests tab.
+ */
+import FriendsScreen from './FriendsScreen';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { ParamListBase } from '@react-navigation/native';
 
-export default function PendingFriendRequestsScreen() {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [friendRequests, setFriendRequests] = useState<PlayerType[]>([]);
-
-  const requestFriendRequests = async () => {
-    setFriendRequests(await getFriendRequests());
-  };
-
-  useEffect(() => {
-    friendRequests ? setLoading(false) : setLoading(true);
-  }, [friendRequests]);
-
-  useAsyncEffect(async () => {
-    await requestFriendRequests();
-  }, []);
-
-  return (
-    <>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Pending Friend Requests</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
-      <View
-        style={{
-          marginTop: -8,
-          flex: 1,
-        }}
-      >
-        <ImageBackground
-          style={{
-            flex: 1,
-          }}
-          source={require('../../assets/images/seaweed_background.png')}
-        >
-          <View
-            style={{
-              flex: 1,
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, .6)',
-                flex: 1,
-              }}
-            >
-              {loading && <Loading />}
-              {!loading && (
-                <ScrollView>
-                  <View
-                    style={{
-                      paddingLeft: 16,
-                      paddingRight: 16,
-                      paddingBottom: 32,
-                    }}
-                  >
-                    <FlashList
-                      contentContainerStyle={{ paddingBottom: 8 }}
-                      data={friendRequests}
-                      keyExtractor={(player) => player.id.toString()}
-                      renderItem={({ item }) => (
-                        <FriendPlayer
-                          isPending
-                          player={item}
-                          onAccept={async () => {
-                            await requestFriendRequests();
-                          }}
-                        />
-                      )}
-                      estimatedItemSize={80}
-                    />
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-          </View>
-        </ImageBackground>
-      </View>
-    </>
-  );
+export default function PendingFriendRequestsScreen(props: NativeStackScreenProps<ParamListBase, 'PendingFriendRequests'>) {
+  return <FriendsScreen {...(props as any)} route={{ ...props.route, params: { tab: 'requests' } }} />;
 }

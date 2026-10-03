@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useContext, useEffect, useState } from 'react';
-import { Alert, Dimensions, ScrollView, Text, View } from 'react-native';
+import { useCallback, useContext, useState } from 'react';
+import { Dimensions, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import getPlayer from '../api/endpoints/players/get';
@@ -21,9 +21,12 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import useCompliment from '../hooks/useCompliment';
 import useCrumbs from '../hooks/useCrumbs';
-import useFriends from '../hooks/useFriends';
+import { useFriendActions } from '../hooks/useFriends';
+import { ICON_SOURCES, SharkLoader, confirmGame, gameAlert } from '../ui';
+import { effectiveStatus } from './social/socialModel';
+import { useFriendOverrides } from './social/socialStore';
+import { Pill } from './social/SocialKit';
 import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -38,9 +41,10 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const [currentPlayer, setCurrentPlayer] = useState<PlayerType>();
   const [parks, setParks] = useState<ParkType[]>([]);
   const { purchaseItem, purchaseModal } = usePurchaseItem();
-  const [isFriend, setIsFriend] = useState<boolean>(false);
-  const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { complimentPlayer } = useCompliment();
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const actions = useFriendActions();
+  const overrides = useFriendOverrides();
   const { checkPermission } = usePermissions();
   const { player: authPlayer } = useContext(AuthContext);
   const { prompts, messages } = useCrumbs();
@@ -54,20 +58,22 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     }, [])
   );
 
+  // A failed load shows a retry instead of a spinner forever.
   useAsyncEffect(async () => {
     setLoading(true);
-    setCurrentPlayer(await getPlayer(player));
-    setParks(await getVisitedParks(player));
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!currentPlayer) {
-      return;
+    setFailed(false);
+    try {
+      setCurrentPlayer(await getPlayer(player));
+      setParks(await getVisitedParks(player).catch(() => []));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
     }
+  }, [reloadKey]);
 
-    setIsFriend(currentPlayer.is_friend);
-  }, [currentPlayer]);
+  const status = currentPlayer ? effectiveStatus(currentPlayer, overrides) : 'none';
+  const isFriend = status === 'friends';
 
   const buttons = currentPlayer
     ? [
@@ -83,67 +89,42 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           permission: PermissionEnums.RedeemMascotGifts,
         },
         {
-          image: require('../../assets/images/screens/friends/remove_friend.png'),
-          onPress: () => {
-            removeFriend(currentPlayer, () => setIsFriend(false));
-          },
-          show: isFriend,
-          text: 'Remove friend',
-        },
-        {
-          image: require('../../assets/images/screens/friends/add_friend.png'),
-          onPress: async () => {
-            if (checkPermission(PermissionEnums.AddFriends)) {
-              currentPlayer?.has_friend_request_from
-                ? acceptFriend(currentPlayer)
-                : addFriend(currentPlayer);
-            }
-          },
-          show: !isFriend,
-          text: 'Add friend',
-          permission: PermissionEnums.AddFriends,
-        },
-        {
           image: require('../../assets/images/screens/player/compliment.png'),
           onPress: async () => {
             if (checkPermission(PermissionEnums.CreateCompliments)) {
-              await complimentPlayer(currentPlayer);
+              await actions.cheer(currentPlayer);
             }
           },
-          text: 'Compliment',
+          show: status !== 'blocked',
+          text: 'Heart',
           permission: PermissionEnums.CreateCompliments,
         },
         {
+          image: require('../../assets/images/screens/friends/remove_friend.png'),
+          onPress: () => { void actions.remove(currentPlayer); },
+          show: isFriend,
+          text: 'Remove',
+        },
+        {
           show: Boolean(currentPlayer.username),
-          image: require('../../assets/images/screens/explore/base.png'),
+          image: ICON_SOURCES.info,
           onPress: async () => {
-            if (checkPermission(PermissionEnums.CreateReports)) {
-              Alert.alert(
-                vsprintf(prompts.report_username, [currentPlayer.screen_name]),
-                '',
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel',
-                  },
-                  {
-                    text: 'Ok',
-                    onPress: async () => {
-                      await reportPlayer(currentPlayer.id);
-
-                      Alert.alert(messages.report_created, '', [
-                        {
-                          text: 'Ok',
-                        },
-                      ]);
-                    },
-                  },
-                ]
-              );
+            if (!checkPermission(PermissionEnums.CreateReports)) return;
+            if (!(await confirmGame({ title: vsprintf(prompts.report_username, [currentPlayer.screen_name]), confirmLabel: 'Report', icon: 'info' }))) return;
+            try {
+              await reportPlayer(currentPlayer.id);
+              gameAlert(messages.report_created || 'Report sent.', 'Thanks! A grown-up on our team will check it.', undefined, { icon: 'check', haptic: 'success' });
+            } catch {
+              gameAlert("Couldn't send the report", 'Check your connection and try again.');
             }
           },
           text: 'Report',
           permission: PermissionEnums.CreateReports,
+        },
+        {
+          image: ICON_SOURCES.lock,
+          onPress: () => { void (status === 'blocked' ? actions.unblock(currentPlayer) : actions.block(currentPlayer)); },
+          text: status === 'blocked' ? 'Unblock' : 'Block',
         },
       ]
     : [];
@@ -161,6 +142,9 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
+      {!loading && failed && (
+        <SharkLoader state="error" title="This profile didn't load" onRetry={() => setReloadKey(k => k + 1)} />
+      )}
       {!loading && currentPlayer && (
         <ScrollView
           style={{
@@ -210,6 +194,14 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 <FeaturedRideCoinCard coin={currentPlayer.featured_ride_coin} />
               )}
               <Experience player={currentPlayer} />
+              <FriendPanel
+                name={currentPlayer.screen_name}
+                status={status}
+                onAdd={() => { if (checkPermission(PermissionEnums.AddFriends)) void actions.add(currentPlayer); }}
+                onYes={() => { void actions.accept(currentPlayer); }}
+                onNo={() => { void actions.decline(currentPlayer); }}
+                onUndo={() => { void actions.cancel(currentPlayer); }}
+              />
               <PlayerButtons buttons={buttons} />
               {(currentPlayer.is_subscribed || currentPlayer.verified_at) && (
                 <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 8, gap: 8 }}>
@@ -238,5 +230,38 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
         </ScrollView>
       )}
     </>
+  );
+}
+
+/**
+ * The one big friend button a kid needs on a profile: Add friend, Asked
+ * (tap to take it back), Yes! / No when they asked you, or a happy
+ * "Friends" badge. Blocked shows nothing here (Unblock is in the buttons).
+ */
+function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
+  readonly name: string;
+  readonly status: string;
+  readonly onAdd: () => void;
+  readonly onYes: () => void;
+  readonly onNo: () => void;
+  readonly onUndo: () => void;
+}) {
+  if (status === 'blocked') return null;
+  return (
+    <View style={{ alignItems: 'center', marginTop: 14, marginBottom: 4 }}>
+      {status === 'incoming' && (
+        <>
+          <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
+            maxFontSizeMultiplier={1.2}>{name} wants to be friends!</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Pill tone="grey" icon="close" label="No" onPress={onNo} accessibilityLabel={`Say no to ${name}`} />
+            <Pill tone="green" icon="check" label="Yes!" onPress={onYes} accessibilityLabel={`Say yes to ${name}`} />
+          </View>
+        </>
+      )}
+      {status === 'none' && <Pill tone="gold" icon="shark" label="Add friend" onPress={onAdd} accessibilityLabel={`Add ${name} as a friend`} />}
+      {status === 'outgoing' && <Pill tone="grey" icon="timer" label="Asked" onPress={onUndo} accessibilityLabel={`You asked ${name}. Tap to take it back`} />}
+      {status === 'friends' && <Pill tone="green" icon="check" label="Friends" accessibilityLabel={`${name} is your friend`} />}
+    </View>
   );
 }

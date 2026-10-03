@@ -33,3 +33,13 @@ export async function searchFriends(query: string): Promise<PlayerType[]> {
 
   return data.data;
 }
+
+/** One page of friends plus whether another exists. */
+export async function getFriendsPage(page: number, perPage = 20): Promise<{ items: PlayerType[]; hasMore: boolean }> {
+  const { data } = await client.get<ApiResponseType<PlayerType[]> & { readonly links?: { readonly next?: string | null } }>(
+    '/me/friends',
+    { params: { page, perPage } }
+  );
+  const items = data.data ?? [];
+  return { items, hasMore: data.links ? Boolean(data.links.next) : items.length >= perPage };
+}

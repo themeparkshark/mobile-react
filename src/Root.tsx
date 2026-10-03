@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useContext, useCallback, useEffect } from 'react';
-import { View, StyleSheet as RNStyleSheet } from 'react-native';
+import { LogBox, View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext, LocationStatusContext } from './context/LocationProvider';
 import { useAsyncEffect } from 'rooks';
@@ -35,6 +35,10 @@ import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
 import { markUserActivity } from './hooks/useUserIdle';
 
 const Stack = createNativeStackNavigator();
+
+/** Dev only: screenshots and recordings without the joystick or the LogBox toast. */
+const CLEAN_CAPTURE = __DEV__ && process.env.EXPO_PUBLIC_CLEAN_CAPTURE === '1';
+if (CLEAN_CAPTURE) LogBox.ignoreAllLogs(true);
 
 export default function App() {
   const isLinePlayFlowPreview = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1';
@@ -319,6 +323,6 @@ function DevJoystickHost() {
   const { location, moveDevLocation } = useContext(LocationContext);
   const onMove = useCallback((dx: number, dy: number, speed: number) => moveDevLocation(dx, dy, speed), [moveDevLocation]);
   const onStop = useCallback(() => {}, []);
-  if (!location) return null;
+  if (!location || CLEAN_CAPTURE) return null;
   return <DevJoystick onMove={onMove} onStop={onStop} currentLat={location.latitude} currentLng={location.longitude} />;
 }
