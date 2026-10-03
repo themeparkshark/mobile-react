@@ -397,6 +397,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
                 <Image
                   key={`base-${index}`}
                   source={source}
+                  // The eyes layer is an animated blink: pause it off-screen and
+                  // under Reduce Motion, like the undressed shark_player.gif.
+                  autoplay={screenFocused && !reducedMotion}
                   style={{ width: 60, height: 60, position: 'absolute' }}
                   cachePolicy="memory-disk" transition={0}
                   contentFit="contain"
