@@ -21,7 +21,6 @@ import { CoinCollectFlight } from '../components/map/alive/CoinCollectFlight';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import RedeemModal from '../components/RedeemModal';
-import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
@@ -343,9 +342,11 @@ function ExploreScreen() {
   }, [pendingCollect, redeemFlowOpen]);
 
   // Handler for when user taps a prep item in home mode — enforce proximity
-  const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
+  // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
+  const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {
     if (!homeLocationConfirmed || !parkLoaded) return;
     if (isActive) { setPendingFind({ item: prepItem, pivotId }); return; }
+    if (source === 'auto') return;
     setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
     setTooFarIsHomeItem(true);
     // Check distance before allowing collection
@@ -385,6 +386,26 @@ function ExploreScreen() {
     }, 350);
     return () => clearTimeout(timer);
   }, [isActive, pendingFind, handlePrepItemNearby, hasCompleted]);
+
+  // Home Hunt v3: the catch plays on the map itself (HomeCatchMoment), never in a modal.
+  const homeCatch = useMemo(() => (showPrepItemModal && homeLocationConfirmed && !isActive && activePrepItem &&
+    activePrepItemPivotId ? { item: activePrepItem, pivotId: activePrepItemPivotId } : null),
+  [showPrepItemModal, homeLocationConfirmed, isActive, activePrepItem, activePrepItemPivotId]);
+  const onHomeCatchCollected = useCallback(() => {
+    collectedOnce.current = true;
+    setCaughtThisSession(true);
+    setHomeCollectionVersion((version) => version + 1);
+  }, []);
+  const onHomeCatchUnavailable = useCallback(() => setHomeCollectionVersion((version) => version + 1), []);
+  const onHomeCatchDone = useCallback(() => {
+    setShowPrepItemModal(false);
+    setActivePrepItem(null);
+    setActivePrepItemPivotId(null);
+    // After the very first catch, Finn says why it matters (once).
+    if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
+      setTimeout(() => startTutorial('home_first_find'), 500);
+    }
+  }, [hasCompleted, startTutorial]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
@@ -913,6 +934,8 @@ function ExploreScreen() {
           was cleared without a finished lookup. */}
       {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
+          catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
+          onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} />
@@ -920,28 +943,6 @@ function ExploreScreen() {
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
       
-      {/* Prep Item Redeem Modal (Home Mode) */}
-      <PrepItemRedeemModal
-        visible={showPrepItemModal && homeLocationConfirmed && !isActive}
-        prepItem={activePrepItem}
-        pivotId={activePrepItemPivotId}
-        onClose={() => {
-          setShowPrepItemModal(false);
-          setActivePrepItem(null);
-          setActivePrepItemPivotId(null);
-          // After the very first catch, Finn says why it matters (once).
-          if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
-            setTimeout(() => startTutorial('home_first_find'), 500);
-          }
-        }}
-        onCollected={() => {
-          collectedOnce.current = true;
-          setCaughtThisSession(true);
-          setHomeCollectionVersion((version) => version + 1);
-        }}
-        onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}
-        onViewSet={(slug) => RootNavigation.navigate('SetCollection', { slug })}
-      />
       {park && redeemables && (
         <>
           <View

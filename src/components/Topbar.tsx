@@ -7,6 +7,8 @@ import * as RootNavigation from '../RootNavigation';
 import { ThemeContext } from '../context/ThemeProvider';
 import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import Broadcasts from './Broadcasts';
+import ReAnimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { catchShown } from '../screens/ExploreScreen/catchPresence';
 
 const BACK_SOUND = require('../../assets/sounds/button_press.mp3');
 
@@ -99,14 +101,18 @@ export default function Topbar({
   readonly parkCoins?: number | null;
 }) {
   const { theme } = useContext(ThemeContext);
+  // A catch moment owns the whole screen: the header slides up on the UI thread (no re-render).
+  const headerSlide = useAnimatedStyle(() => ({
+    transform: [{ translateY: -(90 + Constants.statusBarHeight) * catchShown.value }],
+  }));
 
   return (
-    <View
-      style={{
+    <ReAnimated.View
+      style={[{
         width: Dimensions.get('window').width,
         zIndex: 20,
         position: 'relative',
-      }}
+      }, headerSlide]}
     >
       <SafeAreaView
         style={{
@@ -147,6 +153,6 @@ export default function Topbar({
           </View>
         </SafeAreaView>
       </ImageBackground>
-    </View>
+    </ReAnimated.View>
   );
 }
