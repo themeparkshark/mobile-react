@@ -1,8 +1,7 @@
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ImageBackground, Pressable } from 'react-native';
 import { Dimensions, ScrollView, Text, View } from 'react-native';
-import { vsprintf } from 'sprintf-js';
 import getPlayer from '../api/endpoints/players/get';
 import reportPlayer from '../api/endpoints/players/report';
 import getVisitedParks from '../api/endpoints/players/visited-parks';
@@ -22,12 +21,13 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import VisitedParks from '../components/VisitedParks';
 import { AuthContext } from '../context/AuthProvider';
-import useCrumbs from '../hooks/useCrumbs';
 import { useFriendActions } from '../hooks/useFriends';
-import { confirmGame, gameAlert } from '../ui';
+import { confirmGame, gameAlert, showGameDialog } from '../ui';
 import { effectiveStatus } from './social/socialModel';
-import { useFriendOverrides } from './social/socialStore';
-import { Pill } from './social/SocialKit';
+import { takeJustFriended, useFriendOverrides } from './social/socialStore';
+import { Burst } from './social/SocialFx';
+import { Pill, kit } from './social/SocialKit';
+import { BRAND } from '../ui/tokens';
 import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -52,7 +52,6 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const focused = useIsFocused();
   const levelCard = useCardOnScreen();
   const { player: authPlayer } = useContext(AuthContext);
-  const { prompts, messages } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -63,24 +62,29 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     }, [])
   );
 
+  // Reloads when the screen is reused for another player; an older answer is ignored (Social v2 r2).
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setFailed(false);
     let loaded: PlayerType;
     try {
       loaded = await getPlayer(player);
-      setCurrentPlayer(loaded);
     } catch {
-      setFailed(true);
-      setLoading(false);
+      if (seq === loadSeq.current) { setFailed(true); setLoading(false); }
       return;
     }
     // Parks are a bonus, and only fetched for friends (a stranger never gets a child's park history).
+    let visited: ParkType[] = [];
     try {
-      setParks(loaded.is_friend ? await getVisitedParks(player) : []);
+      visited = loaded.is_friend ? await getVisitedParks(player) : [];
     } catch {
-      setParks([]);
+      visited = [];
     }
+    if (seq !== loadSeq.current) return;
+    setCurrentPlayer(loaded);
+    setParks(visited);
     setLoading(false);
   }, [player]);
 
@@ -90,14 +94,25 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const status = currentPlayer ? effectiveStatus(currentPlayer, overrides) : 'none';
   const isFriend = status === 'friends';
 
+  // Social v2 r2: the reason is a picture-word choice, then "Block them too?".
   const report = async () => {
     if (!currentPlayer || !checkPermission(PermissionEnums.CreateReports)) return;
-    if (!(await confirmGame({ title: vsprintf(prompts.report_username, [currentPlayer.screen_name]), confirmLabel: 'Report', icon: 'info' }))) return;
+    const reasons = ['inappropriate_username', 'mean_to_me', 'something_else'] as const;
+    const choice = await showGameDialog({
+      title: `Tell us about ${currentPlayer.screen_name}`,
+      message: 'A grown-up on our team will check it.',
+      icon: 'info',
+      buttons: [{ text: 'Mean name' }, { text: 'Mean to me' }, { text: 'Something else' }, { text: 'Cancel', style: 'cancel' }],
+    });
+    if (choice == null || choice > 2) return;
     try {
-      await reportPlayer(currentPlayer.id);
-      gameAlert(messages.report_created || 'Report sent.', 'Thanks! A grown-up on our team will check it.', undefined, { icon: 'check', haptic: 'success' });
+      await reportPlayer(currentPlayer.id, reasons[choice]);
     } catch {
       gameAlert("Couldn't send the report", 'Check your connection and try again.');
+      return;
+    }
+    if (status !== 'blocked' && await confirmGame({ title: 'Thanks for telling us!', message: `Block ${currentPlayer.screen_name} too?`, confirmLabel: 'Block', cancelLabel: 'Not now', icon: 'check' })) {
+      void actions.block(currentPlayer, true);
     }
   };
 
@@ -105,7 +120,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   // request lives in the FriendPanel above the row.
   const shortcuts: ProfileShortcut[] = currentPlayer
     ? [
-        ...(status !== 'blocked' ? [{
+        // Hearts are for friends only (kid-safety hotfix; the server refuses strangers).
+        ...(isFriend ? [{
           key: 'compliment',
           label: 'Heart',
           image: require('../../assets/images/screens/player/compliment.png'),
@@ -295,9 +311,12 @@ function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
   readonly onNo: () => void;
   readonly onUndo: () => void;
 }) {
+  const [burst, setBurst] = useState(false);
   if (status === 'blocked') return null;
   return (
-    <View style={{ alignItems: 'center', marginTop: 14, marginBottom: 4 }}>
+    <View style={[kit.card, { alignItems: 'center', padding: 14, backgroundColor: status === 'friends' ? '#E5F8E9' : BRAND.cream }]}>
+      <FriendMoment status={status} name={name} onBurst={setBurst} />
+      {burst && <Burst style={{ left: '50%', top: 30 }} onDone={() => setBurst(false)} />}
       {status === 'incoming' && (
         <>
           <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#05346e', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
@@ -308,9 +327,22 @@ function FriendPanel({ name, status, onAdd, onYes, onNo, onUndo }: {
           </View>
         </>
       )}
-      {status === 'none' && <Pill tone="gold" icon="shark" label="Add friend" onPress={onAdd} accessibilityLabel={`Add ${name} as a friend`} />}
+      {status === 'none' && <Pill tone="gold" image={require('../../assets/images/screens/friends/add_friend.png')} label="Add friend" onPress={onAdd} accessibilityLabel={`Add ${name} as a friend`} />}
       {status === 'outgoing' && <Pill tone="grey" icon="timer" label="Asked" onPress={onUndo} accessibilityLabel={`You asked ${name}. Tap to take it back`} />}
       {status === 'friends' && <Pill tone="green" icon="check" label="Friends" accessibilityLabel={`${name} is your friend`} />}
     </View>
   );
+}
+
+/** Plays the new-friend burst once, when a Yes happens on this screen. */
+function FriendMoment({ status, name, onBurst }: { readonly status: string; readonly name: string; readonly onBurst: (on: boolean) => void }) {
+  const { params } = useRoute() as { params?: { player?: number } };
+  const id = Number(params?.player);
+  useEffect(() => {
+    if (status === 'friends' && id && takeJustFriended(id)) onBurst(true);
+  }, [status, id, onBurst]);
+  return status === 'friends' ? (
+    <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#237A3B', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}
+      maxFontSizeMultiplier={1.2}>You and {name} are friends!</Text>
+  ) : null;
 }

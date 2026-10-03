@@ -169,23 +169,30 @@ export type InboxRow<T> =
   | { readonly type: 'item'; readonly key: string; readonly item: T };
 
 /**
- * "New" first, then "Earlier", each newest first. A row's place comes from the
- * server's read state at load, so a row read or answered on this visit stays
- * where the player is looking (it only dims); the header counts what is still
- * unread. The next load re-sorts.
+ * Time buckets a kid can trust: Today, This week, Earlier. Each strictly newest
+ * first. Unread is shown on the row itself (glow and stripe), and the first
+ * header carries how many are still unread.
  */
-export function sectionize<T extends InboxItem>(items: readonly T[], readIds: ReadonlySet<string>): InboxRow<T>[] {
-  const fresh: T[] = [];
-  const earlier: T[] = [];
-  for (const item of items) (!item.read_at ? fresh : earlier).push(item);
-  const rows: InboxRow<T>[] = [];
-  if (fresh.length) {
-    rows.push({ type: 'header', key: 'h-new', label: 'New', count: fresh.filter(item => isUnread(item, readIds)).length });
-    for (const item of fresh) rows.push({ type: 'item', key: item.id, item });
+export function sectionize<T extends InboxItem>(items: readonly T[], readIds: ReadonlySet<string>, now: number = Date.now()): InboxRow<T>[] {
+  const day = new Date(now);
+  day.setHours(0, 0, 0, 0);
+  const today = day.getTime();
+  const week = today - 6 * 86_400_000;
+  const buckets: { key: string; label: string; items: T[] }[] = [
+    { key: 'h-today', label: 'Today', items: [] },
+    { key: 'h-week', label: 'This week', items: [] },
+    { key: 'h-earlier', label: 'Earlier', items: [] },
+  ];
+  const sorted = [...items].sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
+  for (const item of sorted) {
+    const at = Date.parse(item.created_at) || 0;
+    buckets[at >= today ? 0 : at >= week ? 1 : 2].items.push(item);
   }
-  if (earlier.length) {
-    rows.push({ type: 'header', key: 'h-earlier', label: 'Earlier', count: 0 });
-    for (const item of earlier) rows.push({ type: 'item', key: item.id, item });
+  const rows: InboxRow<T>[] = [];
+  for (const bucket of buckets) {
+    if (!bucket.items.length) continue;
+    rows.push({ type: 'header', key: bucket.key, label: bucket.label, count: bucket.items.filter(item => isUnread(item, readIds)).length });
+    for (const item of bucket.items) rows.push({ type: 'item', key: item.id, item });
   }
   return rows;
 }
@@ -254,8 +261,12 @@ export function searchHint(query: string): string | null {
  * Kid copy for the two friend rows (the stored server sentence is adult and
  * long). Anything that does not match the known sentence is shown as stored.
  */
-export function kidMessage(item: InboxItem, message: string): string {
+export function kidMessage(item: InboxItem, message: string, answer?: FriendStatus): string {
   const kind = kindOf(item);
+  const name = /^(\S+)\s/.exec(message.trim())?.[1];
+  // Answered Yes right here: the row says what is true now, in one line.
+  if (kind === 'friend_request' && answer === 'friends' && name) return `You and ${name} are friends now!`;
+  if (kind === 'friend_request' && item.friend_status === 'friends' && name) return `You and ${name} are friends now!`;
   const asked = /^(.+?) has sent you a friend request\.?$/i.exec(message.trim());
   if (kind === 'friend_request' && asked) return `${asked[1]} wants to be your friend!`;
   const yes = /^(.+?) has accepted your friend request\.?$/i.exec(message.trim());

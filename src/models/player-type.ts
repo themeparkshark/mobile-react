@@ -27,6 +27,8 @@ export interface PlayerType {
   readonly friend_status?: 'friends' | 'incoming' | 'outgoing' | 'blocked' | 'none';
   /** Social v2: requests waiting on me (on /me only). */
   readonly pending_friend_requests_count?: number;
+  /** "Let sharks find me" (on /me only; off by default). */
+  readonly discoverable?: boolean;
   readonly is_subscribed: boolean;
   readonly keys: number | null;
   readonly last_read_notifications_at: string;

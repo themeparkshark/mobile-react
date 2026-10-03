@@ -15,5 +15,7 @@ export interface NotificationType {
   /** Social v2 (optional on older servers). */
   readonly kind?: 'friend_request' | 'friend_accepted' | 'compliment' | 'reply' | 'park_coins' | 'prize' | 'news';
   readonly actor_id?: number | null;
+  /** The actor's own shark (server composite). */
+  readonly actor_avatar_url?: string | null;
   readonly friend_status?: 'friends' | 'incoming' | 'outgoing' | 'blocked' | 'none' | null;
 }

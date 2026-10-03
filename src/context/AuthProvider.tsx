@@ -182,6 +182,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const logout = async () => {
+    // Friend answers and hearts belong to this player only.
+    try { require('../screens/social/socialStore').resetSocialStore(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
     // Standings boards (friends' photos included) never outlive the session.
     endStandingsSession();

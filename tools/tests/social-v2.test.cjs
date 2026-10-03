@@ -60,6 +60,7 @@ test('friend rows speak kid: short, warm, the name first', () => {
   assert.equal(model.kidMessage(row({ kind: 'friend_accepted' }), 'Finn has accepted your friend request.'), "Finn said yes! You're friends now.");
   assert.equal(model.kidMessage(row({ kind: 'news' }), 'Kraken is attacking!'), 'Kraken is attacking!');
   assert.equal(model.kidMessage(ask, 'Something new from the server'), 'Something new from the server', 'unknown copy is shown as stored');
+  assert.equal(model.kidMessage(ask, 'BubbleBuddy has sent you a friend request.', 'friends'), 'You and BubbleBuddy are friends now!', 'answered Yes: one true line');
 });
 
 test('a friend request can be answered in the bell only while it is still waiting', () => {
@@ -74,12 +75,15 @@ test('a friend request can be answered in the bell only while it is still waitin
   assert.equal(model.actorOf(row({ kind: 'news', content: { message: 'm', route: { screen: 'User', params: { user: 12 } } } })), null);
 });
 
-test('New then Earlier, and a row read on this visit stays put (only its count drops)', () => {
-  const items = [row({ id: 'a' }), row({ id: 'b', read_at: '2026-10-01' }), row({ id: 'c' })];
+test('Today, This week, Earlier: strictly newest first, and unread counts on the header', () => {
+  const now = Date.parse('2026-10-03T18:00:00');
+  const at = h => new Date(now - h * 3600_000).toISOString();
+  const items = [row({ id: 'old', created_at: at(24 * 20), read_at: null }), row({ id: 'a', created_at: at(1) }),
+    row({ id: 'wk', created_at: at(24 * 3), read_at: '2026-10-01' }), row({ id: 'b', created_at: at(0.2), read_at: '2026-10-03' })];
   const shape = rows => rows.map(r => (r.type === 'header' ? `[${r.label} ${r.count}]` : r.item.id)).join(' ');
-  assert.equal(shape(model.sectionize(items, new Set())), '[New 2] a c [Earlier 0] b');
-  assert.equal(shape(model.sectionize(items, new Set(['a']))), '[New 1] a c [Earlier 0] b', 'an answered request stays in view');
-  assert.equal(shape(model.sectionize([], new Set())), '');
+  assert.equal(shape(model.sectionize(items, new Set(), now)), '[Today 1] b a [This week 0] wk [Earlier 1] old');
+  assert.equal(shape(model.sectionize(items, new Set(['a']), now)), '[Today 0] b a [This week 0] wk [Earlier 1] old', 'a row read here stays in place');
+  assert.equal(shape(model.sectionize([], new Set(), now)), '');
 });
 
 test('paging never duplicates a row that shifted pages', () => {
@@ -144,8 +148,11 @@ test('audit regressions stay fixed in the screens', () => {
   assert.doesNotMatch(rowSrc, /useState<boolean>\(!!notification\.read_at\)/, 'B3: a recycled row kept the last item\'s read flag');
   assert.match(rowSrc, /readonly unread: boolean/);
   assert.doesNotMatch(rowSrc, /Swipeable/, 'B14: no swipe that deletes with no undo');
+  assert.match(rowSrc, /actor_avatar_url/, 'the actor\'s own shark with a kind sticker');
   const screen = read('src/screens/NotificationsScreen.tsx');
   assert.match(screen, /if \(!hasMore \|\| paging === 'busy'\) return;/, 'B13: paging stops at the last page');
+  assert.match(screen, /action: \{ label: 'Undo', onPress: restore \}/, 'press and hold clears with Undo');
+  assert.match(screen, /isUnread\(item, readRef\.current\)/, 'stable callbacks read through refs');
   assert.match(screen, /markRead\(item\);\n\s*const target = resolveRoute/, 'B14: navigate without waiting on the network');
   const friends = read('src/screens/FriendsScreen.tsx');
   assert.match(friends, /getSentFriendRequests/, 'B10: a sent request can be taken back');
@@ -154,7 +161,8 @@ test('audit regressions stay fixed in the screens', () => {
   assert.match(rows, /actions\.decline\(me\)/, 'B10: requests can be answered No');
   assert.doesNotMatch(rows, /actions\.remove/, 'remove lives on the profile, not one mis-tap away');
   const profile = read('src/screens/PlayerScreen.tsx');
-  assert.match(profile, /state="error"/, 'B18: a failed profile can retry');
+  assert.match(profile, /<SocialError title="This profile didn't load" onRetry/, 'B18: a failed profile can retry');
+  assert.match(profile, /\[player, reloadKey\]/, '#22: a reused screen loads the new player');
   assert.doesNotMatch(profile, /Alert\.alert|explore\/base\.png/, 'B18: game dialogs and real art');
   assert.match(profile, /actions\.block/);
 });

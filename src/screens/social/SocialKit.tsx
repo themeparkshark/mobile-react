@@ -56,10 +56,12 @@ const TONES: Record<PillTone, { face: string; lip: string; text: string; outline
 
 /** A chunky pill button: outline, lip, optional art, one short word. */
 export const Pill = memo(function Pill({
-  label, icon, tone = 'gold', onPress, disabled, accessibilityLabel, accessibilityHint, compact, iconOnly, style,
+  label, icon, image, tone = 'gold', onPress, disabled, accessibilityLabel, accessibilityHint, compact, iconOnly, style,
 }: {
   readonly label: string;
   readonly icon?: GameIconName;
+  /** Bundled Alex art instead of a GameIcon. */
+  readonly image?: number;
   readonly tone?: PillTone;
   readonly onPress?: () => void;
   readonly disabled?: boolean;
@@ -89,7 +91,8 @@ export const Pill = memo(function Pill({
         <View style={[kit.pill, { height, minWidth: iconOnly ? height : 0, backgroundColor: t.lip, borderColor: t.outline }]}>
           <View style={[kit.pillFace, { backgroundColor: t.face, paddingHorizontal: iconOnly ? 0 : compact ? 12 : 16 }]}>
             <View style={kit.gloss} pointerEvents="none" />
-            {icon && <GameIcon name={icon} size={compact ? 24 : 28} />}
+            {image ? <Image source={image} style={{ width: compact ? 28 : 32, height: compact ? 28 : 32 }} contentFit="contain" />
+              : icon && <GameIcon name={icon} size={compact ? 24 : 28} />}
             {!iconOnly && (
               <Text style={[kit.pillText, { color: t.text, fontSize: compact ? 16 : 18 }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>
                 {label}
@@ -153,4 +156,40 @@ export const kit = StyleSheet.create({
   },
   sectionCount: { backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   sectionCountText: { fontFamily: FONT.display, fontSize: 14, color: '#FFFFFF' },
+});
+
+/**
+ * Error state in the kit's own look (the shared SharkLoader error used a
+ * different font, button and a floating wifi chip): the TPS shark with a
+ * wifi-off sticker, display title with an ink shadow, a gold Try again pill.
+ */
+export function SocialError({ title, onRetry }: { readonly title: string; readonly onRetry: () => void }) {
+  return (
+    <View style={kitError.wrap} accessibilityLiveRegion="polite">
+      <View>
+        <Image source={require('../../../assets/images/screens/pin-collections/shark.png')} style={kitError.art} contentFit="contain" />
+        <View style={kitError.sticker}><GameIcon name="close" size={22} /></View>
+      </View>
+      <Text style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</Text>
+      <Text style={kitError.text} maxFontSizeMultiplier={1.3}>Check your connection and try again.</Text>
+      <Pill label="Try again" icon="retry" tone="gold" onPress={onRetry} style={{ marginTop: 16 }} />
+    </View>
+  );
+}
+
+const kitError = StyleSheet.create({
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 60 },
+  art: { width: 150, height: 150 },
+  sticker: {
+    position: 'absolute', right: 8, top: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF',
+    borderWidth: 3, borderColor: INK, alignItems: 'center', justifyContent: 'center',
+  },
+  title: {
+    fontFamily: FONT.display, fontSize: 26, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', marginTop: 10,
+    textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+  },
+  text: {
+    fontFamily: FONT.body, fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginTop: 4,
+    textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
+  },
 });
