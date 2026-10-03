@@ -3,7 +3,7 @@
  * WEAR IT card after a claim. Logic lives in setHuntModel.ts.
  */
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { BRAND, GameButton, GameIcon, RADIUS } from '../../ui';
 import { ADDED_TO_INVENTORY, WEAR_IT, validPick, type ClaimOutcome, type MilestoneView } from './setHuntModel';
@@ -14,8 +14,10 @@ const card = {
 } as const;
 
 /** Pick a wearable for a wearable_pick milestone. Owned choices are shown but cannot be picked. */
-export function MilestonePickSheet({ view, busy, onConfirm, onClose }: {
+export function MilestonePickSheet({ view, busy, onConfirm, onClose, overlay }: {
   readonly view: MilestoneView | null;
+  /** Drawn over the whole sheet window (the claim build-up while the server answers). */
+  readonly overlay?: ReactNode;
   readonly busy: boolean;
   readonly onConfirm: (itemId: number) => void;
   readonly onClose: () => void;
@@ -48,6 +50,7 @@ export function MilestonePickSheet({ view, busy, onConfirm, onClose }: {
         <GameButton label="Claim" loading={busy} disabled={!view || !validPick(view, picked)} onPress={() => { if (picked != null) onConfirm(picked); }} />
         <GameButton label="Not now" variant="ghost" onPress={onClose} style={{ marginTop: 4 }} />
       </View>
+      {overlay}
     </Modal>
   );
 }

@@ -507,9 +507,9 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.match(celebrate, /setBusy\(null\)/);
   assert.match(screen, /void refreshPlayer\(\)\.catch\(\(\) => undefined\)\.then\(\(\) => reloadAll\(\)\)/);
   assert.doesNotMatch(screen, /await refreshPlayer\(\)\.catch\(\(\) => undefined\);\s*await reloadAll\(\);/);
-  assert.match(screen, /<Modal visible=\{claimWaiting\}/, 'the whole window dims during the wait');
+  assert.match(screen, /<Modal visible=\{claimWaiting && !picking\}/, 'the whole window dims during the wait');
   assert.match(screen, /function ClaimBuildUp/);
-  assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,120}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
+  assert.match(screen, /trackBottom\.current - \(viewportH\.current - CTA_CLEARANCE \+ 24\)[\s\S]{0,260}scrollToOffset\(\{ offset, animated: !reduced \}\)/);
   assert.match(screen, /if \(firstLand\.current\) \{/, 'the jump is first land only');
   assert.match(read('src/screens/SetCollection/dexCache.ts'), /dex_land_offsets_v1_/);
   assert.match(read('src/screens/SetCollection/DexReveal.tsx'), /if \(countTargets === 0\) later\(onCountsDone/);
@@ -531,4 +531,19 @@ test('ship gate: Ride Photo stays off unless the server sends player_stats.ride_
     'src/screens/ExploreScreen/HomeCatchMoment.tsx', 'src/screens/ExploreScreen/HomeFindMarker.tsx']) {
     assert.doesNotMatch(read(file), /rideSpec\([^)]*\)\.style/, `${file} must use the gated catchStyleFor`);
   }
+});
+
+test('round 7b: the after-stamp scroll only moves down and never stops with the set cards cut in half', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const onClose = screen.slice(screen.indexOf('<RewardReveal reveal={reveal} onClose'), screen.indexOf('<MilestonePickSheet'));
+  assert.match(onClose, /const offset = Math\.max\(overflow, pickerBottom\.current\)/);
+  assert.match(onClose, /overflow > scrollY\.current \+ 2/);
+  assert.match(screen, /onScroll=\{event => \{ scrollY\.current = event\.nativeEvent\.contentOffset\.y; \}\}/);
+});
+
+test('round 7b: a wearable pick claim shows the build-up inside the sheet (one iOS modal at a time)', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /overlay=\{claimWaiting \? buildUp : null\}/);
+  const sheet = read('src/screens/SetCollection/SetHuntSections.tsx');
+  assert.match(sheet, /\{overlay\}\s*<\/Modal>/);
 });

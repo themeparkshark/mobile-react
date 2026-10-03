@@ -538,7 +538,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // The staged find (nearest in range) is prebuilt first and swapped in only once its stage exists.
   useEffect(() => {
     if (window.width === 0) return;
-    const target = stageItem && rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null;
+    const target = stageItem && catchStyleFor(stageItem.rarity) === 'ride_photo' ? stageItem : null;
     if (!target) return;
     const layerSize = { width: window.width, height: window.height };
     const ready = () => rideStageReady(target, forceRide ?? null, layerSize, insets, sceneArt);
