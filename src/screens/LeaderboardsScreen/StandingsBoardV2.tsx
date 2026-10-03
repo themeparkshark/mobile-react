@@ -367,7 +367,7 @@ function YouCard({ model, climb, passed, hidden, now, onPress, onGoRide, onClimb
         </View>
         {climb > 0 && step >= passed.length && (
           <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
-            style={{ position: 'absolute', top: -18, left: 6, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
+            style={{ position: 'absolute', top: -26, left: 4, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
               height: 30, borderRadius: RADIUS.pill, backgroundColor: BRAND.green, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.greenLip }}>
             <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.white }}>{`Up ${climb}!`}</Text>
           </Animated.View>
