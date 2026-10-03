@@ -38,7 +38,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  chaseProgress, DIVIDER_HEIGHT, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  chaseChip, chaseProgress, DIVIDER_HEIGHT, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, weekDots, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -140,9 +140,12 @@ function ParkChips({ parks, value, loading, onChange }: {
 }
 
 /** A 64 pt row. Muted rows (friends with no rides yet) show the shark greyed and no number. */
-const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, detail, onPress }: {
+const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, detail, chase, onPress }: {
   readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean; readonly animate: boolean;
-  readonly index: number; readonly detail: string | null; readonly onPress: (row: StandingsRowModel) => void;
+  readonly index: number; readonly detail: string | null;
+  /** Your row while the You card is away: the chase bar, "+N" and the rival's face. */
+  readonly chase: { readonly progress: number; readonly chip: string; readonly avatar: StandingsRowModel['avatar'] } | null;
+  readonly onPress: (row: StandingsRowModel) => void;
 }) {
   const tenth = row.rank != null && row.rank % 10 === 0;
   return (
@@ -162,12 +165,22 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, de
               backgroundColor: tenth ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: BRAND.blueLip }}>
               <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: row.rank > 99 ? 12 : 16, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{row.rank}</Text>
             </View>
-          ) : <GameIcon name="ride" size={22} style={{ opacity: 0.35 }} />}
+          ) : <View style={{ opacity: 0.35 }}><ScoreIcon metric={metric} size={22} /></View>}
         </View>
         <View style={{ marginLeft: 6 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
-          {(row.isMe || detail) && (
+          {chase ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
+                <View style={{ width: `${Math.round(chase.progress * 100)}%`, height: 6, borderRadius: 3, backgroundColor: BRAND.blueBright }} />
+              </View>
+              <View style={{ paddingHorizontal: 4, height: 18, borderRadius: 9, justifyContent: 'center', backgroundColor: BRAND.blueBright }}>
+                <Text style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.white }}>{chase.chip}</Text>
+              </View>
+              <StandingsShark avatar={chase.avatar} size={18} />
+            </View>
+          ) : (row.isMe || detail) && (
             <Text numberOfLines={1} style={[textPreset('caption'), { color: row.isMe ? BRAND.goldLip : BRAND.navySoft }]}>{detail ?? 'YOU'}</Text>
           )}
         </View>
@@ -215,15 +228,20 @@ function GoalPips({ model }: { readonly model: StandingsBoardModel }) {
  * one line, and a bar that ends at the face of the player you are chasing
  * with a "+2" chip, so the goal reads without words.
  */
-function YouCard({ model, climb, passed, hidden, now, onPress }: {
+function YouCard({ model, climb, passed, hidden, now, onPress, onGoRide, onClimbDone }: {
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
   readonly hidden: boolean; readonly now: number; readonly onPress: () => void;
+  /** NEW players: the card's button opens the map. */
+  readonly onGoRide: () => void;
+  /** The climb finished; the card may slide away again if your row is on screen. */
+  readonly onClimbDone: () => void;
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
   const me = model.me;
   const line = youLine(model);
-  const progress = chaseProgress(model);
+  const chip = chaseChip(model, line.state);
+  const progress = line.state === 'join' ? 0.06 : line.state === 'review' ? 0 : chaseProgress(model);
   const fill = useSharedValue(reduced ? progress : 0);
   const shown = useSharedValue(reduced ? 1 : 0);
   const [step, setStep] = useState(-1);
@@ -243,7 +261,8 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
       playSound(rewardSound);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
-      return;
+      const done = setTimeout(onClimbDone, 1800);
+      return () => clearTimeout(done);
     }
     const timers = passed.map((_, i) => setTimeout(() => {
       setStep(i);
@@ -256,6 +275,7 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
     }, 500 + passed.length * 380));
+    timers.push(setTimeout(onClimbDone, 500 + passed.length * 380 + 1800));
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climb]);
@@ -265,6 +285,7 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
     opacity: shown.value,
     transform: [{ translateY: (1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
   }));
+  const joining = line.state === 'join';
   const label = `You are ${me?.rank ? `number ${me.rank}` : 'new this week'} with ${scoreText(model, me?.score ?? 0)}. ${line.text}.${line.sub ? ` ${line.sub}.` : ''}${climb > 0 ? ` Up ${climb} places.` : ''}`;
   const passing = step >= 0 && step < passed.length ? passed[step] : null;
 
@@ -272,7 +293,7 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
     <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 12, right: 12, bottom: YOU_CARD_BOTTOM }, cardStyle]}>
       {passing && (
         <Animated.View key={passing.key} entering={FadeInRight.springify().damping(14)} style={{
-          position: 'absolute', top: -46, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 38,
+          position: 'absolute', top: -46, left: 8, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 38,
           borderRadius: RADIUS.pill, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.skyDeep, ...SHADOW.card,
         }}>
           <GameIcon name="arrow" size={18} style={{ transform: [{ rotate: '-90deg' }] }} />
@@ -280,7 +301,8 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
           <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{`Passed ${passing.name}`}</Text>
         </Animated.View>
       )}
-      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Shows your row" onPress={onPress}
+      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens the map' : 'Shows your row'}
+        onPress={joining ? onGoRide : onPress}
         style={({ pressed }) => ({
           height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.lg,
           backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: urgent ? BRAND.goldLip : BRAND.gold, ...SHADOW.lifted,
@@ -292,6 +314,8 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
               <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 28, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{`#${me.rank}`}</Text>
               <Text style={[textPreset('label'), { color: BRAND.goldLip, fontSize: 12 }]}>YOU</Text>
             </>
+          ) : line.state === 'review' ? (
+            <GameIcon name="timer" size={34} />
           ) : (
             <View style={{ paddingHorizontal: 8, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip }}>
               <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>NEW</Text>
@@ -309,23 +333,41 @@ function YouCard({ model, climb, passed, hidden, now, onPress }: {
           </View>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
             style={{ fontFamily: 'Knockout', fontSize: 16, color: urgent ? BRAND.goldLip : BRAND.navy }}>{line.text}</Text>
+          {line.state === 'review' ? (
+            <Text numberOfLines={1} style={[textPreset('caption'), { color: BRAND.navySoft }]}>{line.sub}</Text>
+          ) : joining ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 24, borderRadius: 12,
+                backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.goldLip }}>
+                <GameIcon name="ride" size={16} />
+                <Text style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.navy }}>GO RIDE</Text>
+              </View>
+              <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
+                <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: BRAND.gold }, barStyle]} />
+              </View>
+              <View style={{ paddingHorizontal: 5, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.gold }}>
+                <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy }}>+1</Text>
+              </View>
+            </View>
+          ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
             <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
               <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: line.state === 'leader' ? BRAND.gold : BRAND.blueBright }, barStyle]} />
             </View>
-            {model.chase && (
+            {model.chase && chip && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <View style={{ paddingHorizontal: 5, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.blueBright }}>
-                  <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>{`+${model.chase.toPass}`}</Text>
+                  <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>{chip}</Text>
                 </View>
                 <StandingsShark avatar={model.chase.avatar} size={22} />
               </View>
             )}
           </View>
+          )}
         </View>
         {climb > 0 && step >= passed.length && (
           <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
-            style={{ position: 'absolute', top: -16, right: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
+            style={{ position: 'absolute', top: -18, left: 6, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
               height: 30, borderRadius: RADIUS.pill, backgroundColor: BRAND.green, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.greenLip }}>
             <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.white }}>{`Up ${climb}!`}</Text>
           </Animated.View>
@@ -396,6 +438,8 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const [switching, setSwitching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [climb, setClimb] = useState(0);
+  // While your climb plays, the You card stays up even if your row is on screen.
+  const [climbing, setClimbing] = useState(false);
   const [passed, setPassed] = useState<readonly StandingsRowModel[]>([]);
   const [celebrate, setCelebrate] = useState(false);
   const [meJoined, setMeJoined] = useState(false);
@@ -448,7 +492,7 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     const showResults = next.board === 'week' && !!next.lastWeek && !next.lastWeek.seen
       && resultsShown !== `${meId}:${next.lastWeek.weekStart}`;
     if (up > 0) {
-      const climbNow = () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimb(up); };
+      const climbNow = () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimbing(true); setClimb(up); };
       // The overtake waits for the Monday card, so it is never played behind it.
       if (showResults) pendingClimb.current = climbNow; else climbNow();
     }
@@ -502,7 +546,7 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
   const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
   const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
   const meOnPodium = podium.some(row => row?.isMe);
-  const line = model ? youLine(model) : null;
+  const line = useMemo(() => (model ? youLine(model) : null), [model]);
 
   const onRow = useCallback((row: StandingsRowModel) => {
     playSound(tapSound);
@@ -545,9 +589,12 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     return (
       <BoardRow row={item.row} metric={model?.metric ?? 'ride_wins'} muted={item.muted} index={index}
         animate={!reduced && !entered.current && index < 8 && celebrate}
-        detail={item.row.isMe && line ? line.text : null} onPress={onRow} />
+        detail={item.row.isMe && line ? line.text : null}
+        chase={item.row.isMe && model?.chase && line && (line.state === 'chasing' || line.state === 'tied')
+          ? { progress: chaseProgress(model), chip: chaseChip(model, line.state) ?? '', avatar: model.chase.avatar } : null}
+        onPress={onRow} />
     );
-  }, [model?.metric, reduced, celebrate, line, onRow]);
+  }, [model, reduced, celebrate, line, onRow]);
 
   const header = useMemo(() => (
     <View style={{ height: HEADER_HEIGHT }}>
@@ -615,7 +662,7 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
     );
   }
 
-  const hideYou = myRowVisible || (meOnPodium && podiumOnScreen);
+  const hideYou = !climbing && (myRowVisible || (meOnPodium && podiumOnScreen));
 
   return (
     <View style={{ flex: 1 }}>
@@ -642,10 +689,11 @@ export default function StandingsBoardV2({ board, meId, onMissing }: {
         />
         <TopRibbon podium={podium} metric={model.metric} scrollY={scrollY} />
       </View>
-      <YouCard model={model} climb={climb} passed={passed} hidden={hideYou} now={now} onPress={scrollToMe} />
+      <YouCard model={model} climb={climb} passed={passed} hidden={hideYou} now={now} onPress={scrollToMe}
+        onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }} onClimbDone={() => setClimbing(false)} />
       <SharkCard row={card} metric={model.metric} board={board} onClose={() => setCard(null)} />
       <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
-        onClose={() => { setResults(false); void markLastWeekSeen().catch(() => undefined); }} />
+        onClose={closeResults} />
     </View>
   );
 }

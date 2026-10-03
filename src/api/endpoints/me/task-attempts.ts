@@ -1,4 +1,6 @@
 import { markStandingsStale } from '../../../screens/LeaderboardsScreen/standingsCache';
+import { winNote } from '../../../screens/LeaderboardsScreen/standingsV2Model';
+import { showToast } from '../../../utils/toast';
 import type { PerkChipData } from '../../../components/coin/progressionModel';
 import client from '../../client';
 
@@ -140,6 +142,11 @@ export async function resolveTaskAttempt(
   );
   // Standings v2: a won ride changes your weekly number, so the next Standings
   // look refetches (and can celebrate the climb) instead of showing the old board.
-  if (data?.data?.attempt?.status === 'won') markStandingsStale();
+  if (data?.data?.attempt?.status === 'won') {
+    markStandingsStale();
+    // The weekly goal moment: after the win reveal, "Weekly goal: 8 rides! +25 XP".
+    const note = winNote((data.data.attempt.rewards as { standings?: unknown } | null | undefined)?.standings);
+    if (note) setTimeout(() => showToast(note.text, note.big ? 'reward' : 'success', note.big ? 4000 : 2200), 2600);
+  }
   return data.data;
 }
