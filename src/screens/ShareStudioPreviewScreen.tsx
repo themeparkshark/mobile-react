@@ -11,6 +11,7 @@ import { captureRef } from 'react-native-view-shot';
 import { FLEX_EXPORT, FLEX_SIZE, FlexCard, flexReveal, shareFlex, type FlexFormat } from '../share';
 import { FLEX_SAMPLES, SAMPLE_INVENTORY, type FlexSample } from '../share/samples';
 import { ArtReadinessProvider } from '../share/FlexArtwork';
+import { currentFlex, finishFlex } from '../share/store';
 import { Outlined } from '../share/Outlined';
 
 const RENDER = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === '1';
@@ -25,13 +26,33 @@ function open(sample: FlexSample, mode: 'sheet' | 'reveal', format: FlexFormat =
 
 export default function ShareStudioPreviewScreen() {
   useEffect(() => {
-    if (!OPEN) return;
+    if (!OPEN.startsWith('all:')) return;
+    // Capture-set mode: every sample's sheet in turn ("SHARE_OPEN <name> <format>" marks each one).
+    const format = OPEN.split(':')[1] === 'square' ? 'square' : 'story';
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const step = () => {
+      const current = currentFlex();
+      if (current) finishFlex(current.id);
+      if (i >= FLEX_SAMPLES.length) { console.log('SHARE_OPEN_DONE'); return; }
+      const sample = FLEX_SAMPLES[i++];
+      open(sample, 'sheet', format);
+      setTimeout(() => console.log(`SHARE_OPEN ${sample.name} ${format}`), 2600);
+      timer = setTimeout(step, 4000);
+    };
+    timer = setTimeout(step, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (!OPEN || OPEN.startsWith('all:')) return;
     const [name, mode, format] = OPEN.split(':');
     const sample = FLEX_SAMPLES.find(item => item.name === name);
     if (sample) setTimeout(() => open(sample, mode === 'reveal' ? 'reveal' : 'sheet', format === 'square' ? 'square' : 'story'), 5000);
   }, []);
   if (RENDER) return <RenderAll />;
   if (PROBE) return <RenderProbes />;
+  // A bare background (no 22-card gallery behind) for fps traces and screenshots of one moment.
+  if (process.env.EXPO_PUBLIC_SHARE_STUDIO_BARE === '1') return <View style={styles.root} />;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.h1}>Share Studio</Text>

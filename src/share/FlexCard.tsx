@@ -1,19 +1,21 @@
 /**
  * The flex card: one layout system, two formats.
  *
- *   Story 9:16 (360x640 pt, exported 1080x1920)
- *     wordmark / gold ribbon headline / the hero (big, framed, rays behind,
- *     the player's shark beside it) / "My ..." + name + rarity chip /
- *     the brag plate / CTA + App Store QR.
+ *   Story 9:16 (360x640 pt, exported 1080x1920). Everything that matters sits
+ *   inside Instagram/TikTok's safe zone, y 84..526 pt (252..1578 px): the top
+ *   and bottom bands carry only background, so Story chrome never covers it.
+ *     ribbon / hero with the giant brag number + the player's shark holding
+ *     its category prop / "My ..." + name / brag plate / wordmark, CTA, link, QR.
  *   Square 1:1 (360x360 pt, exported 1080x1080)
- *     ribbon / hero + shark left, words and plate right / wordmark, CTA, QR.
+ *     ribbon / hero + giant number, words and plate / shark, wordmark + CTA + link, QR.
  *
  * Everything printed comes from flexCopy(). No username, date, place or ride
  * name can reach the card (CONTRACT.md section 4).
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { forwardRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { forwardRef, memo, useMemo } from 'react';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import type { InventoryType } from '../models/inventory-type';
 import { flexCopy } from './copy';
@@ -22,7 +24,9 @@ import { FRAMES, RARITY_RAMP, type FlexFrame } from './frames';
 import { FlexHero } from './FlexHero';
 import { FlexShark, SHARK_ASPECT } from './FlexShark';
 import { FLEX_SIZE } from './formats';
+import { SHARE_LINK_DISPLAY } from './link';
 import { Outlined } from './Outlined';
+import { QR_BY_KIND } from './qr';
 import type { FlexCopy, FlexFormat, FlexKind, FlexPayload, FlexRarity } from './types';
 
 export { FLEX_EXPORT, FLEX_SIZE } from './formats';
@@ -31,11 +35,19 @@ export const CARD_CHROME = {
   pattern: require('../../assets/images/shark_background.png'),
   logo: require('../../assets/images/screens/login/logo.png'),
   ribbon: require('../../assets/images/ribbon.png'),
-  qr: require('../../assets/images/share/qr-app-store.png'),
 };
 
-/** Kinds whose hero already shows the shark (it is in the photo). */
-const SHARK_IN_HERO: ReadonlySet<FlexKind> = new Set<FlexKind>(['ride_photo']);
+/** Instagram/TikTok Story chrome covers the top ~250 px and bottom ~340 px of 1920 (pt at 3x). */
+export const STORY_SAFE = { top: 84, bottom: 114 } as const;
+
+/** Live-only hooks for the in-app Flex moment (never used for the exported image). */
+export interface FlexCardMotion {
+  /** Replaces the giant number's text (the count-up). */
+  readonly bigText?: string;
+  readonly bigStyle?: StyleProp<ViewStyle>;
+  readonly sharkStyle?: StyleProp<ViewStyle>;
+  readonly heroStyle?: StyleProp<ViewStyle>;
+}
 
 export interface FlexCardProps<K extends FlexKind = FlexKind> {
   readonly kind: K;
@@ -44,22 +56,21 @@ export interface FlexCardProps<K extends FlexKind = FlexKind> {
   /** The signed-in player's live look (payload.inventory wins). */
   readonly inventory: InventoryType | null | undefined;
   readonly onReadyChange?: (ready: boolean) => void;
+  readonly motion?: FlexCardMotion;
 }
 
-export const FlexCard = forwardRef<View, FlexCardProps>(function FlexCard({ kind, payload, format, inventory, onReadyChange }, ref) {
-  const copy = flexCopy(kind, payload);
+export const FlexCard = forwardRef<View, FlexCardProps>(function FlexCard({ kind, payload, format, inventory, onReadyChange, motion }, ref) {
+  const copy = useMemo(() => flexCopy(kind, payload), [kind, payload]);
   const frame = FRAMES[copy.frame];
   const shark = payload.inventory ?? inventory;
   const size = FLEX_SIZE[format];
-  const showShark = !SHARK_IN_HERO.has(kind);
+  const props: LayoutProps = { kind, payload, copy, frame, showShark: !copy.hideShark, inventory: shark, motion: motion ?? {} };
   return (
     <ArtReadinessProvider onReadyChange={onReadyChange}>
       <View ref={ref} collapsable={false} accessible accessibilityRole="image" accessibilityLabel={copy.a11y}
         style={[styles.card, size, { backgroundColor: frame.bg[1] }]}>
         <Backdrop frame={frame} format={format} />
-        {format === 'story'
-          ? <StoryLayout kind={kind} payload={payload} copy={copy} frame={frame} showShark={showShark} inventory={shark} />
-          : <SquareLayout kind={kind} payload={payload} copy={copy} frame={frame} showShark={showShark} inventory={shark} />}
+        {format === 'story' ? <StoryLayout {...props} /> : <SquareLayout {...props} />}
       </View>
     </ArtReadinessProvider>
   );
@@ -70,80 +81,169 @@ interface LayoutProps {
   readonly payload: FlexPayload;
   readonly copy: FlexCopy;
   readonly frame: FlexFrame;
-  /** Draw the shark beside the hero (off when the hero already shows it). */
+  /** Draw the shark beside the hero (off when the hero already shows one). */
   readonly showShark: boolean;
-  /** The player's look, for heroes that draw the shark themselves. */
+  /** The player's look. */
   readonly inventory: InventoryType | null | undefined;
+  readonly motion: FlexCardMotion;
 }
 
-function StoryLayout({ kind, payload, copy, frame, showShark, inventory }: LayoutProps) {
-  const heroSize = 200;
+/** Story: hero box, giant number and shark sizes (pt). The shark is ~38% of the card's width. */
+export const STORY_HERO = 146;
+export const STORY_SHARK_H = 170;
+
+function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
   return (
-    <View style={styles.storyBody}>
-      <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={styles.storyLogo} />
-      <Ribbon text={copy.ribbon} width={318} />
-      <View style={styles.storyHero}>
-        <Rays frame={frame} size={420} />
-        <View style={{ width: heroSize, height: heroSize, marginLeft: showShark ? -64 : 0 }}>
-          <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
+    <>
+      <StoryBands frame={frame} />
+      <View style={styles.storyBody}>
+        <Ribbon text={copy.ribbon} width={256} />
+        <View style={styles.storyHero}>
+          <View style={[styles.storyHeroRow, !showShark && { justifyContent: 'center' }]}>
+            <Animated.View style={[{ width: STORY_HERO, height: STORY_HERO }, motion.heroStyle]}>
+              <FlexHero kind={kind} payload={payload} frame={frame} size={STORY_HERO} inventory={inventory} />
+              {!!copy.big && <BigNumber copy={copy} frame={frame} size={62} width={210} text={motion.bigText}
+                labelSide={LABEL_BESIDE.has(kind) ? 'right' : 'top'} style={[styles.storyBig, motion.bigStyle]} />}
+            </Animated.View>
+            {showShark && (
+              <Animated.View style={[styles.storyShark, motion.sharkStyle]}>
+                <FlexShark inventory={inventory} height={STORY_SHARK_H} prop={copy.prop} />
+              </Animated.View>
+            )}
+          </View>
         </View>
-        {showShark && <FlexShark inventory={inventory} height={180} style={styles.storyShark} />}
-      </View>
-      <View style={styles.words}>
-        <Text style={[styles.kicker, { color: frame.accent }]} numberOfLines={1}>{copy.kicker}</Text>
-        <Outlined text={copy.title} style={[styles.storyTitle, titleSize(copy.title, 'story')]} outline={frame.outline} lines={2} />
-        {copy.rarity && <RarityChip rarity={copy.rarity} />}
-      </View>
-      <StatPlate copy={copy} frame={frame} compact={false} />
-      <View style={styles.storyFooter}>
-        <View style={{ flex: 1 }}>
-          <Outlined text={copy.cta} style={styles.cta} outline={frame.outline} lines={1} />
-          <Text style={styles.store}>Theme Park Shark · free on the App Store</Text>
+        <View style={styles.words}>
+          <Text style={[styles.kicker, { color: frame.ink }]} numberOfLines={1}>{copy.kicker}</Text>
+          <Outlined text={copy.title} style={[styles.storyTitle, titleSize(copy.title, 'story')]} outline={frame.outline} lines={1} />
+          {copy.rarity && <RarityChip rarity={copy.rarity} />}
         </View>
-        <Qr size={58} />
+        <StatPlate copy={copy} frame={frame} compact={false} />
+        <Footer kind={kind} copy={copy} frame={frame} logoWidth={120} qr={56} />
       </View>
-    </View>
+    </>
   );
 }
 
-function SquareLayout({ kind, payload, copy, frame, showShark, inventory }: LayoutProps) {
-  // Three bands, nothing overlapping and nothing off the canvas:
-  // ribbon / hero + words / the player's shark, CTA and QR along the bottom.
-  const heroSize = 146;
+/** Heroes that are grids of art: the number's caption sits beside it, never across the grid. */
+const LABEL_BESIDE: ReadonlySet<FlexKind> = new Set<FlexKind>(['fright_night', 'park_day']);
+
+/**
+ * Story chrome bands (y 0..252 and 1578..1920 px) sit under Instagram's UI, so
+ * they carry only decoration: the rays run the full card from the hero, and a
+ * few of Alex's stars and bubbles float in each band, so a saved or iMessage
+ * copy never looks empty.
+ */
+const StoryBands = memo(function StoryBands({ frame }: { readonly frame: FlexFrame }) {
+  const stars = [
+    { x: 30, y: 22, s: 22 }, { x: 300, y: 36, s: 18 }, { x: 196, y: 12, s: 12 }, { x: 96, y: 60, s: 12 },
+    { x: 42, y: 560, s: 18 }, { x: 290, y: 592, s: 24 }, { x: 170, y: 612, s: 12 }, { x: 236, y: 548, s: 14 },
+  ];
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={{ position: 'absolute', left: 180, top: 236 }}>
+        <Rays frame={frame} size={1180} />
+      </View>
+      {stars.map((star, i) => (
+        <FlexArtwork key={i} id={`band-star${i}`} art={BAND_STAR} fallback={BAND_STAR}
+          style={{ position: 'absolute', left: star.x, top: star.y, width: star.s, height: star.s, opacity: 0.85, transform: [{ rotate: `${i % 2 ? 14 : -12}deg` }] }} />
+      ))}
+      {[{ x: 250, y: 70, r: 7 }, { x: 128, y: 30, r: 4 }, { x: 80, y: 600, r: 6 }, { x: 330, y: 560, r: 4 }].map((b, i) => (
+        <View key={`b${i}`} style={{ position: 'absolute', left: b.x, top: b.y, width: b.r * 2, height: b.r * 2, borderRadius: b.r,
+          borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.15)' }} />
+      ))}
+    </View>
+  );
+});
+
+const BAND_STAR = require('../../assets/images/screens/pin-collections/star.png');
+
+function SquareLayout({ kind, payload, copy, frame, showShark, inventory, motion }: LayoutProps) {
+  // Square (Instagram feed): ribbon / the hero and the player's shark side by side (the shark is a
+  // co-star holding its prop, ~37% of the width) / the giant number beside the words / wordmark,
+  // CTA, link and QR. Nothing overlaps and nothing leaves the canvas.
+  const heroSize = 124;
+  const big = !!copy.big;
   return (
     <View style={styles.squareBody}>
-      <Ribbon text={copy.ribbon} width={250} />
-      <View style={styles.squareMid}>
-        <View style={styles.squareHeroCol}>
-          <Rays frame={frame} size={280} />
-          <View style={{ width: heroSize, height: heroSize }}>
+      <Ribbon text={copy.ribbon} width={226} />
+      <View style={styles.squareStage}>
+        <Rays frame={frame} size={360} />
+        <View style={[styles.squareStageRow, !showShark && { justifyContent: 'center' }]}>
+          <Animated.View style={[{ width: heroSize, height: heroSize }, motion.heroStyle]}>
             <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
-          </View>
+          </Animated.View>
+          {showShark && (
+            <Animated.View style={[styles.squareShark, motion.sharkStyle]}>
+              <FlexShark inventory={inventory} height={SQUARE_SHARK_H} prop={copy.prop} />
+            </Animated.View>
+          )}
         </View>
-        <View style={styles.squareWords}>
-          <Text style={[styles.kickerSmall, { color: frame.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
-          <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={3} />
-          {copy.rarity && <RarityChip rarity={copy.rarity} small />}
+      </View>
+      <View style={styles.squareWordsRow}>
+        {big && (
+          <View style={styles.squareBigCol}>
+            <BigNumber copy={copy} frame={frame} size={52} width={128} text={motion.bigText} labelSide="bottom" inline style={motion.bigStyle} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.kickerSmall, { color: frame.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
+          <Outlined text={copy.title} style={[styles.squareTitle, titleSize(copy.title, 'square')]} outline={frame.outline} lines={1} />
           <StatPlate copy={copy} frame={frame} compact />
         </View>
       </View>
-      <View style={styles.squareFooter}>
-        {showShark
-          ? <FlexShark inventory={inventory} height={SQUARE_SHARK_H} flip style={styles.squareShark} />
-          : <View style={{ width: Math.round(SQUARE_SHARK_H * SHARK_ASPECT) }} />}
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={styles.squareLogo} />
-          <Outlined text={copy.cta} style={styles.ctaSmall} outline={frame.outline} lines={1} />
-          <Text style={styles.storeSmall}>free on the App Store</Text>
-        </View>
-        <Qr size={50} />
-      </View>
+      <Footer kind={kind} copy={copy} frame={frame} logoWidth={104} qr={42} compact />
     </View>
   );
 }
 
-/** The square card's shark: its whole paper box sits inside the footer band. */
-export const SQUARE_SHARK_H = 104;
+/** The square card's shark: a co-star beside the hero (~37% of the width), holding its prop. */
+export const SQUARE_SHARK_H = 150;
+
+/** The giant brag number: a tilted outlined sticker (over the hero on Story), caption above, beside or under it. */
+function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', inline = false }: {
+  readonly copy: FlexCopy; readonly frame: FlexFrame; readonly size: number; readonly width: number;
+  readonly text?: string; readonly style?: StyleProp<ViewStyle>;
+  readonly labelSide?: 'top' | 'right' | 'bottom';
+  /** In the layout flow (Square) instead of an absolute sticker. */
+  readonly inline?: boolean;
+}) {
+  const label = copy.bigLabel ? (
+    <View style={[styles.bigLabel, labelSide === 'right' && styles.bigLabelRight, labelSide === 'bottom' && styles.bigLabelBottom, { backgroundColor: frame.outline }]}>
+      <Text style={[styles.bigLabelText, { fontSize: size >= 50 ? 11 : 9 }]} numberOfLines={labelSide === 'bottom' ? 2 : 1}>{copy.bigLabel}</Text>
+    </View>
+  ) : null;
+  const number = (
+    <Outlined text={text ?? copy.big ?? ''} outline={frame.outline} weight={Math.max(2.5, size * 0.075)}
+      style={{ fontFamily: 'Shark', fontSize: size, lineHeight: Math.round(size * 1.08), color: frame.bigFill, textAlign: 'left' }} />
+  );
+  return (
+    <Animated.View pointerEvents="none" style={[inline ? styles.bigInline : styles.bigWrap, { width }, style]}>
+      {labelSide === 'top' && label}
+      {labelSide === 'right'
+        ? <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}><View>{number}</View>{label}</View>
+        : number}
+      {labelSide === 'bottom' && label}
+    </Animated.View>
+  );
+}
+
+/** Wordmark + CTA + the readable short link, and the per-kind QR. */
+const Footer = memo(function Footer({ kind, copy, frame, logoWidth, qr, compact = false }: {
+  readonly kind: FlexKind; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly logoWidth: number; readonly qr: number; readonly compact?: boolean;
+}) {
+  return (
+    <View style={[styles.footer, compact && styles.footerCompact]}>
+      <View style={{ flex: 1, alignItems: compact ? 'center' : 'flex-start' }}>
+        <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={{ width: logoWidth, height: Math.round(logoWidth / 4) }} />
+        <Outlined text={copy.cta} style={[compact ? styles.ctaSmall : styles.cta, { color: frame.cta }]} outline={frame.outline} lines={1} />
+        <Text style={[compact ? styles.linkSmall : styles.link, { color: frame.small }]} numberOfLines={1}>{SHARE_LINK_DISPLAY}</Text>
+      </View>
+      <View style={[styles.qrTile, { width: qr + 8, height: qr + 8 }]}>
+        <FlexArtwork id="qr" art={QR_BY_KIND[kind]} fallback={QR_BY_KIND[kind]} style={{ width: qr, height: qr }} />
+      </View>
+    </View>
+  );
+});
 
 /** Title size by length, so long names wrap the same way in every outline copy. */
 export function titleSize(title: string, format: FlexFormat): { fontSize: number; lineHeight: number } {
@@ -153,7 +253,7 @@ export function titleSize(title: string, format: FlexFormat): { fontSize: number
 }
 
 /** Background: gradient, Alex's shark-pattern water, a soft vignette. */
-function Backdrop({ frame, format }: { readonly frame: FlexFrame; readonly format: FlexFormat }) {
+const Backdrop = memo(function Backdrop({ frame, format }: { readonly frame: FlexFrame; readonly format: FlexFormat }) {
   return (
     <>
       <LinearGradient colors={[frame.bg[0], frame.bg[1]]} style={StyleSheet.absoluteFill} />
@@ -163,10 +263,10 @@ function Backdrop({ frame, format }: { readonly frame: FlexFrame; readonly forma
         style={StyleSheet.absoluteFill} />
     </>
   );
-}
+});
 
 /** Flat Alex-style sunburst: 18 alternating wedges, no blur. */
-function Rays({ frame, size }: { readonly frame: FlexFrame; readonly size: number }) {
+const Rays = memo(function Rays({ frame, size }: { readonly frame: FlexFrame; readonly size: number }) {
   const wedges = 18;
   const r = size / 2;
   const d = Array.from({ length: wedges }, (_, i) => {
@@ -181,10 +281,10 @@ function Rays({ frame, size }: { readonly frame: FlexFrame; readonly size: numbe
       </Svg>
     </View>
   );
-}
+});
 
 /** Alex's gold ribbon with a white, navy-outlined headline. */
-function Ribbon({ text, width }: { readonly text: string; readonly width: number }) {
+const Ribbon = memo(function Ribbon({ text, width }: { readonly text: string; readonly width: number }) {
   const height = Math.round(width * (222 / 872));
   return (
     <View style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
@@ -195,10 +295,10 @@ function Ribbon({ text, width }: { readonly text: string; readonly width: number
       </View>
     </View>
   );
-}
+});
 
 /** Rarity chip: light chip, navy ink, 1-5 gems in the ramp color. */
-function RarityChip({ rarity, small = false }: { readonly rarity: FlexRarity; readonly small?: boolean }) {
+const RarityChip = memo(function RarityChip({ rarity, small = false }: { readonly rarity: FlexRarity; readonly small?: boolean }) {
   const look = RARITY_RAMP[rarity];
   const gem = small ? 7 : 9;
   return (
@@ -213,76 +313,66 @@ function RarityChip({ rarity, small = false }: { readonly rarity: FlexRarity; re
       <Text style={[styles.chipText, small && { fontSize: 13 }]}>{look.label}</Text>
     </View>
   );
-}
+});
 
-/** Cream plate with a navy outline and lip: big number (if any) + the brag line. */
-function StatPlate({ copy, frame, compact }: { readonly copy: FlexCopy; readonly frame: FlexFrame; readonly compact: boolean }) {
-  // Story: big number left, lines right. Square: big number on top, lines under (the column is narrow).
+/** Cream plate with an outline and lip: the brag line and one supporting line. */
+const StatPlate = memo(function StatPlate({ copy, frame, compact }: { readonly copy: FlexCopy; readonly frame: FlexFrame; readonly compact: boolean }) {
   return (
     <View style={[styles.plate, compact && styles.plateCompact, { backgroundColor: frame.plate, borderColor: frame.outline }]}>
-      {!!copy.big && <View style={compact ? styles.bigBoxCompact : undefined}>
-        <Outlined text={copy.big} outline="#7a3d00" lines={1}
-          style={[styles.big, compact && styles.bigCompact, { color: '#ffcf3b' }]} />
-      </View>}
-      <View style={compact ? styles.bigBoxCompact : { flex: 1 }}>
-        <Text style={[styles.statLine, compact && styles.statLineCompact, { color: frame.plateInk }]}
-          numberOfLines={compact ? 3 : 2}>{copy.stat}</Text>
-        {!!copy.sub && <Text style={[styles.subLine, compact && styles.subLineCompact, { color: frame.plateInk }]}
-          numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{copy.sub}</Text>}
-      </View>
+      <Text style={[styles.statLine, compact && styles.statLineCompact, { color: frame.plateInk }]} numberOfLines={2}>{copy.stat}</Text>
+      {!!copy.sub && <Text style={[styles.subLine, compact && styles.subLineCompact, { color: frame.plateInk }]}
+        numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{copy.sub}</Text>}
     </View>
   );
-}
+});
 
-function Qr({ size }: { readonly size: number }) {
-  return (
-    <View style={[styles.qrTile, { width: size + 8, height: size + 8 }]}>
-      <FlexArtwork art={CARD_CHROME.qr} fallback={CARD_CHROME.qr} style={{ width: size, height: size }} />
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   card: { overflow: 'hidden' },
   rays: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center', justifyContent: 'center' },
 
-  storyBody: { flex: 1, alignItems: 'center', paddingTop: 20, paddingBottom: 18, paddingHorizontal: 20 },
-  storyLogo: { width: 268, height: 67 },
-  storyHero: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 22, paddingBottom: 8 },
-  storyShark: { position: 'absolute', right: -16, bottom: -10 },
-  words: { alignItems: 'center', width: '100%', marginTop: 10 },
-  kicker: { fontFamily: 'Shark', fontSize: 20, textShadowColor: 'rgba(3,20,48,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  storyBody: { flex: 1, alignItems: 'center', paddingTop: STORY_SAFE.top, paddingBottom: STORY_SAFE.bottom, paddingHorizontal: 20 },
+  storyHero: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
+  storyHeroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', width: '100%', paddingLeft: 14 },
+  storyShark: { marginRight: -18, marginBottom: -20 },
+  storyBig: { left: -24, bottom: -8, transform: [{ rotate: '-8deg' }] },
+  words: { alignItems: 'center', width: '100%', marginTop: 12 },
+  kicker: { fontFamily: 'Shark', fontSize: 18, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
   storyTitle: { fontFamily: 'Shark', fontSize: 32, lineHeight: 36, color: '#ffffff', textAlign: 'center' },
-  storyFooter: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 12, gap: 10 },
-  cta: { fontFamily: 'Shark', fontSize: 21, color: '#ffcf3b' },
-  store: { fontFamily: 'Knockout', fontSize: 13, color: '#ffffff', marginTop: 3 },
 
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6, paddingHorizontal: 12, height: 30, borderRadius: 15, borderWidth: 3 },
+  bigWrap: { position: 'absolute', alignItems: 'flex-start' },
+  bigLabel: { marginBottom: -4, marginLeft: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, zIndex: 1 },
+  bigLabelRight: { marginBottom: 10, marginLeft: 6 },
+  bigLabelBottom: { marginBottom: 0, marginTop: -2, marginLeft: 2, alignSelf: 'flex-start', maxWidth: 124 },
+  bigInline: { alignItems: 'flex-start', transform: [{ rotate: '-6deg' }] },
+  bigLabelText: { fontFamily: 'Shark', color: '#ffffff', letterSpacing: 0.5 },
+
+  footer: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 8, gap: 10 },
+  footerCompact: { flex: 1, marginTop: 0, gap: 6, alignItems: 'flex-end' },
+  cta: { fontFamily: 'Shark', fontSize: 18, marginTop: 2 },
+  ctaSmall: { fontFamily: 'Shark', fontSize: 15, textAlign: 'center' },
+  link: { fontFamily: 'Knockout', fontSize: 13, marginTop: 1 },
+  linkSmall: { fontFamily: 'Knockout', fontSize: 11, textAlign: 'center' },
+  qrTile: { backgroundColor: '#ffffff', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#05346e' },
+
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4, paddingHorizontal: 12, height: 28, borderRadius: 14, borderWidth: 3 },
   chipSmall: { height: 24, paddingHorizontal: 9, gap: 5, marginTop: 4, alignSelf: 'flex-start' },
   chipText: { fontFamily: 'Shark', fontSize: 15, color: '#05346e' },
   gem: { transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: '#05346e' },
 
-  plate: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 12, marginTop: 12, paddingVertical: 9, paddingHorizontal: 14,
-    borderRadius: 18, borderWidth: 3, borderBottomWidth: 6 },
-  plateCompact: { flexDirection: 'column', alignItems: 'flex-start', gap: 0, marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14, borderBottomWidth: 5 },
-  big: { fontFamily: 'Shark', fontSize: 36, lineHeight: 42 },
-  bigCompact: { fontSize: 24, lineHeight: 28 },
-  bigBoxCompact: { alignSelf: 'stretch' },
-  statLine: { fontFamily: 'Shark', fontSize: 19, lineHeight: 23 },
+  plate: { width: '100%', marginTop: 8, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, borderWidth: 3, borderBottomWidth: 6 },
+  plateCompact: { marginTop: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14, borderBottomWidth: 5 },
+  statLine: { fontFamily: 'Shark', fontSize: 18, lineHeight: 22 },
   statLineCompact: { fontSize: 14, lineHeight: 17 },
-  subLine: { fontFamily: 'Knockout', fontSize: 15, marginTop: 1, opacity: 0.85 },
+  subLine: { fontFamily: 'Knockout', fontSize: 14, marginTop: 1, opacity: 0.85 },
   subLineCompact: { fontSize: 11 },
-  qrTile: { backgroundColor: '#ffffff', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#05346e' },
 
-  squareBody: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 10, paddingHorizontal: 14 },
-  squareMid: { flex: 1, flexDirection: 'row', width: '100%', alignItems: 'center' },
-  squareHeroCol: { width: 160, height: '100%', alignItems: 'center', justifyContent: 'center' },
-  squareShark: { marginLeft: -6, marginBottom: -8 },
-  squareWords: { flex: 1, paddingLeft: 12, justifyContent: 'center' },
-  kickerSmall: { fontFamily: 'Shark', fontSize: 15, textShadowColor: 'rgba(3,20,48,0.5)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
-  squareTitle: { fontFamily: 'Shark', fontSize: 23, lineHeight: 26, color: '#ffffff' },
-  squareFooter: { flexDirection: 'row', alignItems: 'flex-end', width: '100%', gap: 6, height: 96 },
-  squareLogo: { width: 128, height: 32, marginBottom: 2 },
-  ctaSmall: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b', textAlign: 'center' },
-  storeSmall: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff' },
+  squareBody: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 8, paddingHorizontal: 14 },
+  squareStage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 14 },
+  squareStageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
+  squareShark: { marginRight: -14, marginTop: 6, marginBottom: -14 },
+  squareWordsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8, marginTop: 2 },
+  squareBigCol: { width: 128, alignItems: 'flex-start' },
+  kickerSmall: { fontFamily: 'Shark', fontSize: 14, textShadowColor: 'rgba(3,20,48,0.35)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  squareTitle: { fontFamily: 'Shark', fontSize: 20, lineHeight: 23, color: '#ffffff' },
 });
