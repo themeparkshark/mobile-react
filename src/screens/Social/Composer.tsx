@@ -1,0 +1,383 @@
+/**
+ * The new-post screen. It replaces the old 78% sheet, whose header (close,
+ * Post) slid off the top of the phone when the keyboard opened, leaving a
+ * blank white box.
+ *
+ * Full screen, header pinned: X on the left, the gold POST button on the
+ * right, always visible. Then three big steps a 7-year-old can follow
+ * without reading much:
+ *   1. pick what it's about (six picture tiles)
+ *   2. write in the card that looks exactly like the post will
+ *   3. POST: it pulses while sending, then confetti, the shark and "Posted!"
+ * The draft is saved as you type, survives a failed post, and comes back
+ * if the screen is closed by accident.
+ */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
+import { useContext, useEffect, useRef, useState } from 'react';
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  ZoomIn,
+  useSharedValue,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { postThread, editThread } from '../../api/endpoints/social';
+import Avatar from '../../components/Avatar';
+import RewardBurst from '../../components/RewardBurst';
+import { AuthContext } from '../../context/AuthProvider';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
+import { isTeam, TEAMS } from '../../constants/teams';
+import * as Haptics from '../../helpers/haptics';
+import type { ThreadType } from '../../models/thread-type';
+import { BRAND, GameIcon } from '../../ui';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { GoldPill, PressScale, WATER, card, topicArt } from './socialLook';
+import {
+  DEFAULT_PROMPT,
+  DRAFT_LINES,
+  POST_MAX,
+  TOPICS,
+  checkDraft,
+  errorLine,
+  titleFrom,
+  topicFor,
+  type TopicKey,
+} from './socialModel';
+
+const SHARK = require('../../../assets/images/screens/pin-collections/shark.png');
+const TAP = require('../../../assets/sounds/tap.mp3');
+const SUCCESS = require('../../../assets/sounds/success.mp3');
+const NOPE = require('../../../assets/sounds/nope.mp3');
+const OPEN = require('../../../assets/sounds/modal_open.mp3');
+
+const draftKey = (playerId?: number) => `social.draft.v2.${playerId ?? 'guest'}`;
+
+interface Draft { text: string; topic: TopicKey | null; team: boolean }
+
+export default function Composer({
+  visible,
+  onClose,
+  onPosted,
+  editing,
+}: {
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly onPosted: (thread: ThreadType, edited: boolean) => void;
+  /** Edit an existing post instead of writing a new one. */
+  readonly editing?: ThreadType | null;
+}) {
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const reduced = useUiReducedMotion();
+  const { player } = useContext(AuthContext);
+  const { playSound } = useContext(SoundEffectContext);
+  const playerTeam = (player as { team?: { team?: string } } | null)?.team?.team;
+  const team = isTeam(playerTeam) ? TEAMS[playerTeam] : null;
+
+  const [text, setText] = useState('');
+  const [topic, setTopic] = useState<TopicKey | null>(null);
+  const [toTeam, setToTeam] = useState(false);
+  const [phase, setPhase] = useState<'write' | 'posting' | 'done'>('write');
+  const [serverLine, setServerLine] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+  const burst = useSharedValue(0);
+
+  // Load the saved draft (or the post being edited) each time the screen opens.
+  useEffect(() => {
+    if (!visible) return;
+    setPhase('write');
+    setServerLine(null);
+    setTouched(false);
+    burst.value = 0;
+    playSound(OPEN, { volume: 0.5 });
+    if (editing) {
+      setText(editing.content || editing.title || '');
+      setTopic((editing.topic as TopicKey) ?? null);
+      setToTeam(Boolean(editing.team));
+      return;
+    }
+    AsyncStorage.getItem(draftKey(player?.id))
+      .then((raw) => {
+        const saved: Draft | null = raw ? JSON.parse(raw) : null;
+        setText(saved?.text ?? '');
+        setTopic(saved?.topic ?? null);
+        setToTeam(Boolean(saved?.team && team));
+      })
+      .catch(() => undefined);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save as you type (new posts only).
+  useEffect(() => {
+    if (!visible || editing || phase === 'done') return;
+    const id = setTimeout(() => {
+      const draft: Draft = { text, topic, team: toTeam };
+      AsyncStorage.setItem(draftKey(player?.id), JSON.stringify(draft)).catch(() => undefined);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [text, topic, toTeam, visible, editing, phase, player?.id]);
+
+  const problem = checkDraft(text, POST_MAX);
+  const showProblem = problem && problem !== 'empty' ? DRAFT_LINES[problem] : null;
+  const line = serverLine ?? showProblem;
+  const canPost = !problem && phase === 'write';
+  const def = topicFor(topic);
+  const left = POST_MAX - text.trim().length;
+
+  const pickTopic = (key: TopicKey) => {
+    playSound(TAP, { volume: 0.5, rate: 1.1 });
+    setTopic((current) => (current === key ? null : key));
+    setServerLine(null);
+    if (!text.trim()) setTimeout(() => inputRef.current?.focus(), 120);
+  };
+
+  const close = async () => {
+    if (phase === 'posting') return;
+    Keyboard.dismiss();
+    // New posts keep their draft automatically, so closing never loses words.
+    onClose();
+  };
+
+  const submit = async () => {
+    setTouched(true);
+    if (!canPost) {
+      playSound(NOPE, { volume: 0.5 });
+      void Haptics.notificationAsync('warning');
+      if (problem === 'empty') inputRef.current?.focus();
+      return;
+    }
+    Keyboard.dismiss();
+    setPhase('posting');
+    setServerLine(null);
+    const content = text.trim();
+    try {
+      const thread = editing
+        ? await editThread(editing.id, content)
+        : await postThread({ content, title: titleFrom(content), topic, team: toTeam && playerTeam ? playerTeam : null });
+      setPhase('done');
+      playSound(SUCCESS, { volume: 0.7 });
+      void Haptics.notificationAsync('success');
+      if (!reduced) burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+      if (!editing) AsyncStorage.removeItem(draftKey(player?.id)).catch(() => undefined);
+      setTimeout(() => {
+        onPosted({ ...thread, player: thread.player ?? (player as ThreadType['player']) }, Boolean(editing));
+      }, reduced ? 700 : 1150);
+    } catch (error) {
+      setPhase('write');
+      setServerLine(errorLine(error));
+      playSound(NOPE, { volume: 0.5 });
+      void Haptics.notificationAsync('error');
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType={reduced ? 'fade' : 'slide'} presentationStyle="fullScreen" onRequestClose={close}>
+      <View style={styles.root}>
+        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {/* Header: never moves, never hides. */}
+          <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+            <PressScale onPress={close} hitSlop={8} accessibilityLabel="Close" accessibilityHint="Your words are saved for later">
+              <GameIcon name="close" size={44} />
+            </PressScale>
+            <Text style={styles.title} accessibilityRole="header">{editing ? 'Edit Post' : 'New Post'}</Text>
+            <GoldPill
+              label={phase === 'posting' ? 'Posting' : editing ? 'Save' : 'Post'}
+              onPress={submit}
+              loading={phase === 'posting'}
+              disabled={!canPost && phase === 'write'}
+              small
+              accessibilityLabel={editing ? 'Save post' : 'Post it'}
+            />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
+            {!editing && (
+              <>
+                <Text style={styles.step}>What's it about?</Text>
+                <View style={styles.topics} accessibilityRole="radiogroup">
+                  {TOPICS.map((item, i) => {
+                    const on = topic === item.key;
+                    return (
+                      <Animated.View key={item.key} entering={reduced ? undefined : FadeInDown.delay(40 * i).springify().damping(15)} style={styles.topicCell}>
+                        <PressScale
+                          onPress={() => pickTopic(item.key)}
+                          scaleTo={0.92}
+                          accessibilityRole="button"
+                          accessibilityLabel={item.label}
+                          accessibilityState={{ selected: on }}
+                          style={[styles.topicTile, { borderColor: on ? item.color : '#0a4f9c', backgroundColor: on ? item.chip : BRAND.white }, on && styles.topicTileOn]}
+                        >
+                          <Image source={topicArt(item.key)} style={styles.topicArt} contentFit="contain" />
+                          <Text style={styles.topicLabel} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
+                          {on && (
+                            <Animated.View entering={reduced ? undefined : ZoomIn.springify()} style={styles.tick}>
+                              <GameIcon name="check" size={30} />
+                            </Animated.View>
+                          )}
+                        </PressScale>
+                      </Animated.View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {team && !editing && (
+              <View style={styles.who}>
+                <Text style={styles.whoLabel}>Who sees it?</Text>
+                <View style={styles.seg}>
+                  <PressScale onPress={() => setToTeam(false)} accessibilityRole="button" accessibilityState={{ selected: !toTeam }} style={[styles.segBtn, !toTeam && styles.segOn]}>
+                    <GameIcon name="map" size={20} />
+                    <Text style={[styles.segText, !toTeam && styles.segTextOn]}>Everyone</Text>
+                  </PressScale>
+                  <PressScale onPress={() => setToTeam(true)} accessibilityRole="button" accessibilityState={{ selected: toTeam }} style={[styles.segBtn, toTeam && styles.segOn]}>
+                    <Image source={team.badge} style={{ width: 20, height: 20 }} contentFit="contain" />
+                    <Text style={[styles.segText, toTeam && styles.segTextOn]} numberOfLines={1}>{team.name}</Text>
+                  </PressScale>
+                </View>
+              </View>
+            )}
+
+            {/* The card the post will look like. */}
+            <View style={[card.shell, styles.preview, touched && problem === 'empty' && { borderColor: BRAND.red }]}>
+              <View style={styles.previewHead}>
+                <Avatar player={player as ThreadType['player']} size="sm" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewName} numberOfLines={1}>{player?.screen_name ?? 'You'}</Text>
+                  {def && (
+                    <View style={[styles.badge, { backgroundColor: def.chip, borderColor: def.color }]}>
+                      <Image source={topicArt(def.key)} style={{ width: 18, height: 18 }} contentFit="contain" />
+                      <Text style={styles.badgeText}>{def.label}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <TextInput
+                ref={inputRef}
+                value={text}
+                onChangeText={(value) => { setText(value); setServerLine(null); }}
+                placeholder={def?.prompt ?? DEFAULT_PROMPT}
+                placeholderTextColor="#7d95b5"
+                multiline
+                maxLength={POST_MAX + 50}
+                style={styles.input}
+                accessibilityLabel="Your post"
+                accessibilityHint={def?.prompt ?? DEFAULT_PROMPT}
+                textAlignVertical="top"
+                autoCapitalize="sentences"
+              />
+              <View style={styles.footer}>
+                {line ? (
+                  <Animated.View entering={reduced ? undefined : FadeIn} exiting={reduced ? undefined : FadeOut} style={styles.lineWrap} accessibilityLiveRegion="polite">
+                    <GameIcon name="info" size={20} />
+                    <Text style={styles.line}>{line}</Text>
+                  </Animated.View>
+                ) : (
+                  <View style={styles.lineWrap}>
+                    <GameIcon name="heart" size={18} />
+                    <Text style={styles.kind}>Be kind. No real names or addresses.</Text>
+                  </View>
+                )}
+                {left < 60 && <Text style={[styles.left, left < 0 && { color: BRAND.red }]}>{left}</Text>}
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {phase === 'done' && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <RewardBurst progress={burst} x={width / 2} y={height * 0.42} />
+            <Animated.View entering={reduced ? FadeIn : ZoomIn.springify().damping(10)} style={[styles.doneWrap, { top: height * 0.42 - 110 }]}>
+              <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
+              <View style={styles.doneRibbon}>
+                <Text style={styles.doneText}>{editing ? 'Saved!' : 'Posted!'}</Text>
+              </View>
+            </Animated.View>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BRAND.blue },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(5,52,110,0.35)',
+  },
+  title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, marginTop: 4, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  scroll: { padding: 14, gap: 12 },
+  step: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  topics: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 },
+  topicCell: { width: '33.333%', padding: 5 },
+  topicTile: {
+    borderRadius: 18,
+    borderWidth: 3,
+    borderBottomWidth: 6,
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 6,
+    minHeight: 92,
+  },
+  topicTileOn: { borderWidth: 4, borderBottomWidth: 7 },
+  topicArt: { width: 48, height: 48 },
+  topicLabel: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 4, paddingHorizontal: 4 },
+  tick: { position: 'absolute', top: -10, right: -8 },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  whoLabel: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  seg: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(5,52,110,0.45)', borderRadius: 999, padding: 4, gap: 4 },
+  segBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 999, minHeight: 44, paddingHorizontal: 8 },
+  segOn: { backgroundColor: BRAND.white },
+  segText: { fontFamily: 'Shark', fontSize: 15, color: '#cfe6ff', marginTop: 3 },
+  segTextOn: { color: BRAND.navy },
+  preview: { padding: 14, gap: 8 },
+  previewHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewName: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, marginTop: 2 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderWidth: 2, borderRadius: 999, paddingLeft: 4, paddingRight: 10, marginTop: 3 },
+  badgeText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 2 },
+  input: { fontFamily: 'Knockout', fontSize: 23, lineHeight: 28, color: '#10233f', minHeight: 130, paddingTop: 4 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 2, borderTopColor: '#e3eefb', paddingTop: 8 },
+  lineWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  line: { flex: 1, fontFamily: 'Knockout', fontSize: 17, color: BRAND.redLip },
+  kind: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
+  left: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft },
+  doneWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  doneShark: { width: 170, height: 150 },
+  doneRibbon: {
+    marginTop: -14,
+    backgroundColor: BRAND.gold,
+    borderWidth: 3,
+    borderBottomWidth: 6,
+    borderColor: '#7a3d00',
+    borderRadius: 18,
+    paddingHorizontal: 26,
+    paddingVertical: 6,
+  },
+  doneText: { fontFamily: 'Shark', fontSize: 34, color: '#7a3d00', marginTop: 4 },
+});
