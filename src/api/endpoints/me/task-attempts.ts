@@ -1,3 +1,4 @@
+import { markStandingsStale } from '../../../screens/LeaderboardsScreen/standingsCache';
 import type { PerkChipData } from '../../../components/coin/progressionModel';
 import client from '../../client';
 
@@ -137,5 +138,8 @@ export async function resolveTaskAttempt(
     `/me/task-attempts/${id}/resolve`,
     { outcome, ...(outcome === 'win' && proof ? { proof } : {}) },
   );
+  // Standings v2: a won ride changes your weekly number, so the next Standings
+  // look refetches (and can celebrate the climb) instead of showing the old board.
+  if (data?.data?.attempt?.status === 'won') markStandingsStale();
   return data.data;
 }

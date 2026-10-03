@@ -115,7 +115,7 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
     let live = true;
     void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
     // The other boards load in the background so the first switch is instant.
-    prefetchBoards(['friends', 'all_time'], meId);
+    prefetchBoards(meId, [{ board: 'week' }, { board: 'friends' }, { board: 'all_time' }]);
     return () => { live = false; };
   }, [meId]);
   useEffect(() => {

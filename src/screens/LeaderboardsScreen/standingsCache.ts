@@ -14,3 +14,19 @@ export function markStandingsStale(): void {
 export function standingsGeneration(): number {
   return generation;
 }
+
+/**
+ * Sign-out and account switches end the Standings session: every cached
+ * board (friends' photos included) is dropped before the next player sees
+ * the screen. Kept here, dependency free, so AuthProvider can call it.
+ */
+let session = 0;
+
+export function endStandingsSession(): void {
+  session += 1;
+  generation += 1;
+}
+
+export function standingsSession(): number {
+  return session;
+}

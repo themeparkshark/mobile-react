@@ -350,7 +350,7 @@ function DevJoystickHost() {
   const onStop = useCallback(() => {}, []);
   const route = useCurrentRouteName();
   // Dev only: Standings screen captures run without the joystick over the board.
-  if (process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') return null;
+  if (__DEV__ && process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') return null;
   // Never over the shops (nothing there moves with GPS), and never in capture builds.
   if (!location || NO_DEV_OVERLAYS || CLEAN_CAPTURE || (route && SCREENS_WITHOUT_JOYSTICK.has(route))) return null;
   return <DevJoystick onMove={onMove} onStop={onStop} currentLat={location.latitude} currentLng={location.longitude} />;

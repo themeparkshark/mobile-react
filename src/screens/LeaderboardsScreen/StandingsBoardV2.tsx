@@ -1,85 +1,137 @@
 /**
- * One Standings v2 board (PROPOSAL.md): a slim info strip, the barrel podium,
- * a virtualized list, and the pinned You card with the next target.
+ * One Standings v2 board (PROPOSAL.md, round 2 fixes in grading/r1).
  *
- * Kid first: one number per board, short words, big tap targets. Motion runs
- * on the UI thread and every animation has a reduced-motion path.
+ * Layout, top to bottom: one slim strip (the board's unit, the week's day
+ * dots or the park chips), a 236 pt podium that collapses into a sticky top-3
+ * ribbon on scroll, a fixed-height virtualized list, and the You card pinned
+ * at the bottom, which slides away whenever your own row is on screen.
+ *
+ * Kid first: one number per board, one icon per meaning (cart = this week,
+ * ride coin = forever), short words, big targets. Public rows open a safe
+ * shark card, never a profile. Celebrations play only for real changes, and
+ * the loudest one is yours: passing players, then "Up 4!".
  */
 import * as Haptics from 'expo-haptics';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, View, type ListRenderItem } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, ZoomIn } from 'react-native-reanimated';
+import { Image } from 'expo-image';
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AccessibilityInfo, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, View,
+  type ListRenderItem, type ViewToken,
+} from 'react-native';
+import Animated, {
+  Easing, FadeInRight, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
+  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction, type SharedValue,
+} from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
-import allParks from '../../api/endpoints/parks/allParks';
-import type { StandingsBoardKey } from '../../api/endpoints/me/standings';
-import Avatar from '../../components/Avatar';
-import FloatingParticles from '../../components/FloatingParticles';
+import { markLastWeekSeen, type StandingsBoardKey } from '../../api/endpoints/me/standings';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import type { ParkType } from '../../models/park-type';
-import type { PlayerType } from '../../models/player-type';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader, textPreset } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { useCountUp } from './PodiumSpot';
-import StandingsPodium from './StandingsPodium';
-import { StandingsRow } from './StandingsRow';
+import LastWeekCard from './LastWeekCard';
+import MiniPodium, { MINI_PODIUM_HEIGHT, ScoreIcon } from './MiniPodium';
+import { CROWN_ART } from './PodiumSpot';
+import SharkCard from './SharkCard';
+import StandingsShark from './StandingsShark';
 import { onStandingsDemo } from './standingsDemo';
-import { cachedBoard, loadBoard, readSeenRank, writeSeenRank } from './standingsV2Store';
 import {
-  chaseProgress, emptyCopy, isMissingEndpoint, rankClimb, resetCountdown, rowLabel, scoreSummary, splitPodium, unitWord, youLine,
-  type StandingsBoardModel, type StandingsRowModel,
+  cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
+} from './standingsV2Store';
+import {
+  chaseProgress, DIVIDER_HEIGHT, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, weekDots, youLine,
+  type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const rewardSound = require('../../../assets/sounds/reward.mp3');
+const BARREL = require('../../../assets/images/screens/leaderboard/barrel.png');
 
 /** Clears the raised compass button in the bottom bar. */
-const YOU_CARD_BOTTOM = 54;
-const YOU_CARD_HEIGHT = 92;
-
-// Parks list and the chosen All-Time park survive tab switches.
-const parksCache: { parks: ParkType[]; parkId: number | null } = { parks: [], parkId: null };
+const YOU_CARD_BOTTOM = 52;
+const YOU_CARD_HEIGHT = 84;
+const RIBBON_HEIGHT = 56;
+const HEADER_HEIGHT = MINI_PODIUM_HEIGHT + 18;
 
 type Status = 'loading' | 'ready' | 'error';
 
-const asPlayer = (row: StandingsRowModel) => row.avatar as unknown as PlayerType;
+let resultsShown = '';
 
-/** Small rounded pill on the blue strip: an icon and a few words. */
-function InfoPill({ icon, text, gold }: { readonly icon: 'ride' | 'timer' | 'heart'; readonly text: string; readonly gold?: boolean }) {
+/** The week's seven day dots, today glowing; gold on the last day, red in the last three hours. */
+function WeekDots({ endsAt, now }: { readonly endsAt: string | null; readonly now: number }) {
+  const reduced = useUiReducedMotion();
+  const week = weekDots(endsAt, now);
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (reduced || week.urgency === 'calm') { pulse.value = 1; return; }
+    pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
+  }, [week.urgency, reduced, pulse]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+  const tone = week.urgency === 'last_hours' ? BRAND.red : week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
+  const ink = week.urgency === 'calm' ? BRAND.navy : week.urgency === 'last_day' ? BRAND.navy : BRAND.white;
   return (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 36, borderRadius: RADIUS.pill,
-      backgroundColor: gold ? BRAND.gold : BRAND.white, borderWidth: 2, borderColor: gold ? BRAND.goldLip : 'rgba(5,52,110,0.18)',
-    }}>
-      <GameIcon name={icon} size={22} />
-      <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{text}</Text>
+    <Animated.View accessible accessibilityRole="text" accessibilityLabel={week.spoken} style={[{
+      flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 12, borderRadius: RADIUS.pill,
+      backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'last_hours' ? BRAND.redLip : week.urgency === 'last_day' ? BRAND.goldLip : 'rgba(5,52,110,0.18)',
+    }, style]}>
+      <View style={{ flexDirection: 'row', gap: 3 }}>
+        {week.dots.map((dot, i) => (
+          <View key={i} style={{
+            width: dot.state === 'today' ? 12 : 8, height: dot.state === 'today' ? 12 : 8, borderRadius: 6, alignSelf: 'center',
+            backgroundColor: dot.state === 'past' ? 'rgba(5,52,110,0.25)' : dot.state === 'today' ? BRAND.blueBright : week.urgency === 'calm' ? BRAND.sky : 'rgba(255,255,255,0.7)',
+            borderWidth: dot.state === 'today' ? 2 : 0, borderColor: BRAND.white,
+          }} />
+        ))}
+      </View>
+      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>{week.label}</Text>
+    </Animated.View>
+  );
+}
+
+function UnitChip({ metric }: { readonly metric: StandingsMetric }) {
+  const label = metric === 'ride_coins' ? 'Ride coins' : 'Rides won';
+  return (
+    <View accessible accessibilityRole="text" accessibilityLabel={metric === 'ride_coins' ? 'Ranked by ride coins collected' : 'Ranked by rides won this week'}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 40, borderRadius: RADIUS.pill,
+        backgroundColor: BRAND.white, borderWidth: 2, borderColor: 'rgba(5,52,110,0.18)' }}>
+      <ScoreIcon metric={metric} size={24} />
+      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{label}</Text>
     </View>
   );
 }
 
-/** All Parks plus one chip per park. The chosen chip is gold and springs in. */
-function ParkChips({ parks, value, onChange }: { readonly parks: readonly ParkType[]; readonly value: number | null; readonly onChange: (id: number | null) => void }) {
+/** All Parks plus one chip per park. The chosen chip is gold; it spins its coin while that park loads. */
+function ParkChips({ parks, value, loading, onChange }: {
+  readonly parks: readonly ParkType[]; readonly value: number | null; readonly loading: boolean; readonly onChange: (id: number | null) => void;
+}) {
   const { playSound } = useContext(SoundEffectContext);
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    spin.value = loading ? withRepeat(withTiming(360, { duration: 700, easing: Easing.linear }), -1) : withTiming(0, { duration: 120 });
+  }, [loading, spin]);
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
   const items = [{ id: null as number | null, label: 'All Parks' }, ...parks.map(p => ({ id: p.id as number | null, label: p.display_name ?? p.name }))];
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
+      <UnitChip metric="ride_coins" />
       {items.map(item => {
         const on = item.id === value;
         return (
-          <Pressable key={item.id ?? 'all'} accessibilityRole="button" accessibilityState={{ selected: on }}
-            accessibilityLabel={`Show ${item.label}`}
+          <Pressable key={item.id ?? 'all'} accessibilityRole="button" accessibilityState={{ selected: on, busy: on && loading }}
+            accessibilityLabel={`Show ${item.label}`} hitSlop={4}
             onPress={() => {
               if (on) return;
               playSound(tapSound);
               void Haptics.selectionAsync().catch(() => undefined);
               onChange(item.id);
             }}
-            hitSlop={6}
             style={({ pressed }) => ({
-              height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill, justifyContent: 'center',
+              height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill, flexDirection: 'row', alignItems: 'center', gap: 6,
               backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 2, borderBottomWidth: 4,
               borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }],
             })}>
-            <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>{item.label}</Text>
+            {on && loading && <Animated.View style={spinStyle}><ScoreIcon metric="ride_coins" size={16} /></Animated.View>}
+            <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -87,63 +139,192 @@ function ParkChips({ parks, value, onChange }: { readonly parks: readonly ParkTy
   );
 }
 
+/** A 64 pt row. Muted rows (friends with no rides yet) show the shark greyed and no number. */
+const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, detail, onPress }: {
+  readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean; readonly animate: boolean;
+  readonly index: number; readonly detail: string | null; readonly onPress: (row: StandingsRowModel) => void;
+}) {
+  const tenth = row.rank != null && row.rank % 10 === 0;
+  return (
+    <Animated.View entering={animate ? FadeInRight.delay(120 + index * 45).springify().damping(16).stiffness(180) : undefined}
+      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+      {tenth && <View style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 2, borderRadius: 1, backgroundColor: 'rgba(5,52,110,0.12)' }} />}
+      <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (detail ? `. ${detail}` : '')}
+        onPress={() => onPress(row)}
+        style={({ pressed }) => ({
+          height: ROW_HEIGHT - 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.md,
+          borderWidth: row.isMe ? 3 : 2, borderColor: row.isMe ? BRAND.gold : 'rgba(7,104,185,0.14)',
+          backgroundColor: row.isMe ? '#fff4cc' : BRAND.white, transform: [{ scale: pressed ? 0.98 : 1 }],
+        })}>
+        <View style={{ width: 40, alignItems: 'center' }}>
+          {row.rank ? (
+            <View style={{ minWidth: 32, height: 32, paddingHorizontal: 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+              backgroundColor: tenth ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: BRAND.blueLip }}>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: row.rank > 99 ? 12 : 16, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{row.rank}</Text>
+            </View>
+          ) : <GameIcon name="ride" size={22} style={{ opacity: 0.35 }} />}
+        </View>
+        <View style={{ marginLeft: 6 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+          {(row.isMe || detail) && (
+            <Text numberOfLines={1} style={[textPreset('caption'), { color: row.isMe ? BRAND.goldLip : BRAND.navySoft }]}>{detail ?? 'YOU'}</Text>
+          )}
+        </View>
+        {!muted && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <ScoreIcon metric={metric} size={22} />
+            <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.blue, fontVariant: ['tabular-nums'], minWidth: 28, textAlign: 'right' }}>{row.score}</Text>
+          </View>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+});
+
+function Divider({ label }: { readonly label: string }) {
+  return (
+    <View style={{ height: DIVIDER_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
+      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
+      <Text accessibilityRole="header" style={[textPreset('label'), { color: BRAND.navySoft }]}>{label}</Text>
+      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
+    </View>
+  );
+}
+
+/** The goal pips (3, 8, 15 rides this week): gold when reached. */
+function GoalPips({ model }: { readonly model: StandingsBoardModel }) {
+  if (!model.goals.length) return null;
+  const reached = model.goals.filter(g => g.reached).length;
+  return (
+    <View accessible accessibilityLabel={`Weekly goals: ${reached} of ${model.goals.length} reached. Next goal ${model.goals.find(g => !g.reached)?.at ?? 'done'} rides.`}
+      style={{ flexDirection: 'row', gap: 4 }}>
+      {model.goals.map(goal => (
+        <View key={goal.at} style={{ minWidth: 26, height: 22, paddingHorizontal: 5, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: goal.reached ? BRAND.gold : BRAND.white, borderWidth: 2, borderColor: goal.reached ? BRAND.goldLip : 'rgba(5,52,110,0.2)' }}>
+          {goal.reached ? <GameIcon name="check" size={14} />
+            : <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navySoft }}>{goal.at}</Text>}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
- * The pinned You card: your shark, rank and number, and one target line with
- * a bar that fills as you close in. A climb since your last look pops a gold
- * "Up 3!" badge with the reward sound and a success haptic.
+ * The pinned You card: rank (or NEW), your shark, your number and goal pips,
+ * one line, and a bar that ends at the face of the player you are chasing
+ * with a "+2" chip, so the goal reads without words.
  */
-function YouCard({ model, climb, onPress }: { readonly model: StandingsBoardModel; readonly climb: number; readonly onPress: () => void }) {
+function YouCard({ model, climb, passed, hidden, now, onPress }: {
+  readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
+  readonly hidden: boolean; readonly now: number; readonly onPress: () => void;
+}) {
   const reduced = useUiReducedMotion();
+  const { playSound } = useContext(SoundEffectContext);
   const me = model.me;
   const line = youLine(model);
   const progress = chaseProgress(model);
-  const score = useCountUp(me?.score ?? 0, true, reduced, 700);
   const fill = useSharedValue(reduced ? progress : 0);
-  const lift = useSharedValue(reduced ? 0 : 40);
+  const shown = useSharedValue(reduced ? 1 : 0);
+  const [step, setStep] = useState(-1);
+  const urgent = model.board !== 'all_time' && weekDots(model.endsAt, now).urgency !== 'calm' && !!model.chase && model.chase.toPass <= 2;
+
+  useEffect(() => { fill.value = reduced ? progress : withDelay250(progress); }, [progress, reduced, fill]);
   useEffect(() => {
-    fill.value = reduced ? progress : withDelay(250, withTiming(progress, { duration: 650 }));
-  }, [progress, reduced, fill]);
+    shown.value = reduced ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
+  }, [hidden, reduced, shown]);
+
+  // The overtake: each player you passed slides by with a tick, then "Up N!" lands.
   useEffect(() => {
-    lift.value = reduced ? 0 : withSpring(0, { damping: 15, stiffness: 180 });
-  }, [lift, reduced]);
+    if (climb <= 0) return;
+    const announce = () => AccessibilityInfo.announceForAccessibility(`Up ${climb} ${climb === 1 ? 'place' : 'places'}! You are number ${me?.rank ?? ''} now.`);
+    if (reduced || !passed.length) {
+      setStep(passed.length);
+      playSound(rewardSound);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      announce();
+      return;
+    }
+    const timers = passed.map((_, i) => setTimeout(() => {
+      setStep(i);
+      playSound(tapSound);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    }, 500 + i * 380));
+    timers.push(setTimeout(() => {
+      setStep(passed.length);
+      playSound(rewardSound);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      announce();
+    }, 500 + passed.length * 380));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [climb]);
+
   const barStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
-  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.value }] }));
-  const rankText = me?.rank ? `#${me.rank}` : '--';
-  const label = `You are ${me?.rank ? `rank ${me.rank}` : 'not ranked yet'} with ${me?.score ?? 0} ${unitWord(model.metric, me?.score ?? 0)}. ${line.text}.`;
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: shown.value,
+    transform: [{ translateY: (1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
+  }));
+  const label = `You are ${me?.rank ? `number ${me.rank}` : 'new this week'} with ${scoreText(model, me?.score ?? 0)}. ${line.text}.${line.sub ? ` ${line.sub}.` : ''}${climb > 0 ? ` Up ${climb} places.` : ''}`;
+  const passing = step >= 0 && step < passed.length ? passed[step] : null;
 
   return (
-    <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', left: 12, right: 12, bottom: YOU_CARD_BOTTOM }, cardStyle]}>
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 12, right: 12, bottom: YOU_CARD_BOTTOM }, cardStyle]}>
+      {passing && (
+        <Animated.View key={passing.key} entering={FadeInRight.springify().damping(14)} style={{
+          position: 'absolute', top: -46, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 38,
+          borderRadius: RADIUS.pill, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.skyDeep, ...SHADOW.card,
+        }}>
+          <GameIcon name="arrow" size={18} style={{ transform: [{ rotate: '-90deg' }] }} />
+          <StandingsShark avatar={passing.avatar} size={26} />
+          <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{`Passed ${passing.name}`}</Text>
+        </Animated.View>
+      )}
       <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Shows your row" onPress={onPress}
         style={({ pressed }) => ({
-          height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderRadius: RADIUS.lg,
-          backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.gold, ...SHADOW.lifted,
+          height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.lg,
+          backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: urgent ? BRAND.goldLip : BRAND.gold, ...SHADOW.lifted,
           transform: [{ scale: pressed ? 0.98 : 1 }],
         })}>
-        <View style={{ width: 62, alignItems: 'center' }}>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 30, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{rankText}</Text>
-          <Text style={[textPreset('label'), { color: BRAND.goldLip, fontSize: 12 }]}>YOU</Text>
+        <View style={{ width: 54, alignItems: 'center' }}>
+          {me?.rank ? (
+            <>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 28, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{`#${me.rank}`}</Text>
+              <Text style={[textPreset('label'), { color: BRAND.goldLip, fontSize: 12 }]}>YOU</Text>
+            </>
+          ) : (
+            <View style={{ paddingHorizontal: 8, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip }}>
+              <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>NEW</Text>
+            </View>
+          )}
         </View>
-        <View style={{ width: 54, height: 54, borderRadius: 27, overflow: 'hidden', backgroundColor: BRAND.sky, borderWidth: 2, borderColor: BRAND.white }}>
-          <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-            <GameIcon name="shark" size={42} />
-          </View>
-          {me && <Avatar player={asPlayer(me)} size="sm" />}
-        </View>
+        {me && <StandingsShark avatar={me.avatar} size={48} ring={BRAND.gold} />}
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <GameIcon name="ride" size={22} />
-            <Text style={{ fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>
-              {model.metric === 'ride_coins' && model.available ? `${score} of ${model.available}` : score}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ScoreIcon metric={model.metric} size={20} />
+              <Text style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{scoreText(model, me?.score ?? 0)}</Text>
+            </View>
+            <GoalPips model={model} />
           </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy }}>{line.text}</Text>
-          <View style={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', marginTop: 4, overflow: 'hidden' }}>
-            <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: line.state === 'chasing' ? BRAND.blueBright : BRAND.gold }, barStyle]} />
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
+            style={{ fontFamily: 'Knockout', fontSize: 16, color: urgent ? BRAND.goldLip : BRAND.navy }}>{line.text}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
+              <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: line.state === 'leader' ? BRAND.gold : BRAND.blueBright }, barStyle]} />
+            </View>
+            {model.chase && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <View style={{ paddingHorizontal: 5, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.blueBright }}>
+                  <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>{`+${model.chase.toPass}`}</Text>
+                </View>
+                <StandingsShark avatar={model.chase.avatar} size={22} />
+              </View>
+            )}
           </View>
         </View>
-        {climb > 0 && (
-          <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)}
-            accessibilityLabel={`Up ${climb} places`}
+        {climb > 0 && step >= passed.length && (
+          <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
             style={{ position: 'absolute', top: -16, right: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
               height: 30, borderRadius: RADIUS.pill, backgroundColor: BRAND.green, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.greenLip }}>
             <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.white }}>{`Up ${climb}!`}</Text>
@@ -154,193 +335,317 @@ function YouCard({ model, climb, onPress }: { readonly model: StandingsBoardMode
   );
 }
 
+const withDelay250 = (to: number) => withSequence(withTiming(0, { duration: 250 }), withTiming(to, { duration: 650 }));
+
+/** Three mini sharks with their numbers; appears when the podium scrolls away. */
+function TopRibbon({ podium, metric, scrollY }: {
+  readonly podium: readonly (StandingsRowModel | null)[]; readonly metric: StandingsMetric; readonly scrollY: SharedValue<number>;
+}) {
+  const style = useAnimatedStyle(() => {
+    const t = interpolate(scrollY.value, [MINI_PODIUM_HEIGHT - 90, MINI_PODIUM_HEIGHT - 30], [0, 1], Extrapolation.CLAMP);
+    return { opacity: t, transform: [{ translateY: (1 - t) * -RIBBON_HEIGHT }] };
+  });
+  const order = [podium[1], podium[0], podium[2]];
+  return (
+    <Animated.View pointerEvents="none" style={[{
+      position: 'absolute', top: 0, left: 12, right: 12, height: RIBBON_HEIGHT, borderBottomLeftRadius: RADIUS.lg, borderBottomRightRadius: RADIUS.lg,
+      backgroundColor: BRAND.navy, borderWidth: 2, borderTopWidth: 0, borderColor: BRAND.gold, flexDirection: 'row', alignItems: 'center',
+      justifyContent: 'space-around', ...SHADOW.card,
+    }, style]}>
+      {order.map((row, i) => {
+        const rank = i === 1 ? 1 : i === 0 ? 2 : 3;
+        return (
+          <View key={rank} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '33%' }}>
+            <GameIcon name={`medal${rank}` as 'medal1'} size={20} />
+            {row ? <StandingsShark avatar={row.avatar} size={30} ring={row.isMe ? BRAND.gold : undefined} /> : null}
+            <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{row ? row.score : '-'}</Text>
+          </View>
+        );
+      })}
+    </Animated.View>
+  );
+}
+
+/** First paint with no cache: the podium's open spots and grey rows, never a full-screen loader. */
+function Skeleton() {
+  return (
+    <View>
+      <MiniPodium podium={[null, null, null]} metric="ride_wins" celebrate={false} meJoined={false} playKey="skeleton" onPress={() => undefined} />
+      <View style={{ marginTop: -18, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, backgroundColor: BRAND.cream, paddingTop: 14 }}>
+        {[0, 1, 2, 3].map(i => (
+          <View key={i} accessible={false} style={{ height: ROW_HEIGHT - 8, marginHorizontal: 12, marginVertical: 4, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.06)' }} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function StandingsBoardV2({ board, meId, onMissing }: {
   readonly board: StandingsBoardKey;
   readonly meId: number | null;
-  /** The server has no v2 endpoint (or the viewer is signed out): show the legacy screen. */
+  /** The server has no v2 endpoint: show the legacy screen. */
   readonly onMissing: () => void;
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
-  const [parks, setParks] = useState<ParkType[]>(parksCache.parks);
-  const [parkId, setParkId] = useState<number | null>(board === 'all_time' ? parksCache.parkId : null);
-  const first = cachedBoard(board, parkId);
+  const [parks, setParks] = useState<ParkType[]>(cachedParks());
+  const [parkId, setParkId] = useState<number | null>(board === 'all_time' ? chosenAllTimePark() : null);
+  const first = cachedBoard(meId, board, parkId);
   const [model, setModel] = useState<StandingsBoardModel | null>(first?.model ?? null);
   const [status, setStatus] = useState<Status>(first ? 'ready' : 'loading');
+  const [switching, setSwitching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [climb, setClimb] = useState(0);
+  const [passed, setPassed] = useState<readonly StandingsRowModel[]>([]);
+  const [celebrate, setCelebrate] = useState(false);
+  const [meJoined, setMeJoined] = useState(false);
+  const [myRowVisible, setMyRowVisible] = useState(false);
+  const [card, setCard] = useState<StandingsRowModel | null>(null);
+  const [results, setResults] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const list = useRef<FlatList<StandingsRowModel>>(null);
+  const list = useRef<FlatList<ListItem>>(null);
   const request = useRef(0);
+  const entered = useRef(false);
+  const scrollY = useSharedValue(0);
+  const [podiumOnScreen, setPodiumOnScreen] = useState(true);
+  const pendingClimb = useRef<(() => void) | null>(null);
+  const closeResults = useCallback(() => {
+    setResults(false);
+    void markLastWeekSeen().catch(() => undefined);
+    const climbNow = pendingClimb.current;
+    pendingClimb.current = null;
+    if (climbNow) setTimeout(climbNow, 350);
+  }, []);
 
   useEffect(() => {
-    if (board !== 'all_time' || parksCache.parks.length) return;
+    if (board !== 'all_time') return;
     let live = true;
-    allParks().then(items => {
+    loadParks().then(list => {
       if (!live) return;
-      parksCache.parks = items ?? [];
-      setParks(parksCache.parks);
+      setParks(list);
+      // First All-Time open: warm every park so chip taps are instant.
+      prefetchBoards(meId, list.map(park => ({ board: 'all_time' as const, parkId: park.id })));
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [board]);
+  }, [board, meId]);
 
-  // The weekly countdown ticks once a minute while the app is open.
+  // Day dots tick once a minute while the app is open; a return to the app refreshes.
   useEffect(() => {
-    if (board === 'all_time') return;
     const timer = setInterval(() => { if (AppState.currentState === 'active') setNow(Date.now()); }, 60_000);
-    return () => clearInterval(timer);
-  }, [board]);
+    const sub = AppState.addEventListener('change', state => { if (state === 'active') { setNow(Date.now()); loadRef.current(false); } });
+    return () => { clearInterval(timer); sub.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const celebrate = useCallback(async (next: StandingsBoardModel) => {
-    const seen = await readSeenRank(next);
+  const react = useCallback(async (next: StandingsBoardModel) => {
+    const seen = await readSeenRank(meId, next);
     const up = rankClimb(seen, next.me?.rank);
-    writeSeenRank(next);
+    writeSeenRank(meId, next);
+    const changed = await podiumChanged(meId, next);
+    const top = podiumRows(next);
+    setCelebrate(changed);
+    setMeJoined(changed && top.some(row => row?.isMe) && (seen == null || seen > 3));
+    const showResults = next.board === 'week' && !!next.lastWeek && !next.lastWeek.seen
+      && resultsShown !== `${meId}:${next.lastWeek.weekStart}`;
     if (up > 0) {
-      setClimb(up);
-      playSound(rewardSound);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      const climbNow = () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimb(up); };
+      // The overtake waits for the Monday card, so it is never played behind it.
+      if (showResults) pendingClimb.current = climbNow; else climbNow();
     }
-  }, [playSound]);
+    // The Monday card shows once: unseen on the server and not already shown this session.
+    if (next.board === 'week' && next.lastWeek && !next.lastWeek.seen && resultsShown !== `${meId}:${next.lastWeek.weekStart}`) {
+      resultsShown = `${meId}:${next.lastWeek.weekStart}`;
+      setResults(true);
+    }
+  }, [meId]);
 
   const load = useCallback((force: boolean) => {
-    const hit = cachedBoard(board, parkId);
+    const hit = cachedBoard(meId, board, parkId);
     if (hit) {
       setModel(hit.model);
       setStatus('ready');
-      if (hit.fresh && !force) { void celebrate(hit.model); return; }
+      setSwitching(false);
+      if (hit.fresh && !force) { void react(hit.model); return; }
+    } else if (model) {
+      // Keep the last board on screen (dimmed) while the next one loads.
+      setSwitching(true);
     } else {
-      setModel(null);
       setStatus('loading');
     }
     const id = ++request.current;
-    loadBoard(board, parkId, meId).then(next => {
+    loadBoard(meId, board, parkId).then(next => {
       if (id !== request.current) return;
       setModel(next);
       setStatus('ready');
+      setSwitching(false);
       setRefreshing(false);
-      void celebrate(next);
+      void react(next);
     }).catch(error => {
       if (id !== request.current) return;
       setRefreshing(false);
+      setSwitching(false);
       if (isMissingEndpoint(error)) { onMissing(); return; }
+      if (isUnknownPark(error)) { chooseAllTimePark(null); setParkId(null); return; }
       // A background refresh that fails keeps the board on screen.
       setStatus(current => (hit || current === 'ready' ? 'ready' : 'error'));
     });
-  }, [board, parkId, meId, celebrate, onMissing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, parkId, meId, react, onMissing]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => { load(false); }, [load]);
+  useEffect(() => { const t = setTimeout(() => { entered.current = true; }, 900); return () => clearTimeout(t); }, []);
 
-  const rows = model?.rows ?? [];
-  const { podium, rest } = useMemo(() => splitPodium(rows), [rows]);
-  const scoreById = useMemo(() => new Map(rows.map(row => [row.id, row.score])), [rows]);
-  const podiumPlayers = podium.map(row => (row ? asPlayer(row) : null)) as [PlayerType | null, PlayerType | null, PlayerType | null];
-  const playKey = `${board}:${parkId ?? 'all'}:${podium.map(row => row?.id ?? 0).join(',')}`;
+  const items = useMemo(() => (model ? listItems(model) : []), [model]);
+  const layouts = useMemo(() => itemLayouts(items), [items]);
+  const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
+  const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
+  const meOnPodium = podium.some(row => row?.isMe);
+  const line = model ? youLine(model) : null;
 
-  const scrollToMe = () => {
+  const onRow = useCallback((row: StandingsRowModel) => {
+    playSound(tapSound);
+    // Friends may open each other's profile; a public row opens the safe shark card.
+    if (board === 'friends' && !row.isMe) RootNavigation.navigate('Player', { player: row.id });
+    else setCard(row);
+  }, [board, playSound]);
+
+  const scrollToMe = useCallback(() => {
     playSound(tapSound);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    const index = rest.findIndex(row => row.isMe);
-    if (index >= 0) list.current?.scrollToIndex({ index, viewPosition: 0.4, animated: !reduced });
+    if (myIndex >= 0) list.current?.scrollToIndex({ index: myIndex, viewPosition: 0.35, animated: !reduced });
     else list.current?.scrollToOffset({ offset: 0, animated: !reduced });
-  };
+  }, [myIndex, playSound, reduced]);
 
+  const pendingRef = useRef<(() => void) | null>(null);
+  pendingRef.current = results ? closeResults : null;
+  const cardRef = useRef<StandingsRowModel | null>(null);
+  cardRef.current = podium[0] ?? null;
   const scrollRef = useRef(scrollToMe);
   scrollRef.current = scrollToMe;
   useEffect(() => onStandingsDemo(event => {
     if (event.type === 'scrollMe') scrollRef.current();
-    if (event.type === 'park' && board === 'all_time') { parksCache.parkId = event.parkId; setParkId(event.parkId); }
+    if (event.type === 'park' && board === 'all_time') { chooseAllTimePark(event.parkId); setParkId(event.parkId); }
+    if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
+    if (event.type === 'card') setCard(cardRef.current);
   }), [board]);
 
+  const onScroll = useAnimatedScrollHandler(event => { scrollY.value = event.contentOffset.y; });
+  useAnimatedReaction(() => scrollY.value < MINI_PODIUM_HEIGHT - 60, (onScreen, before) => {
+    if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
+  });
+  const viewability = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    setMyRowVisible(viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe)));
+  }).current;
+
+  const renderItem: ListRenderItem<ListItem> = useCallback(({ item, index }) => {
+    if (item.type === 'divider') return <Divider label={item.label} />;
+    return (
+      <BoardRow row={item.row} metric={model?.metric ?? 'ride_wins'} muted={item.muted} index={index}
+        animate={!reduced && !entered.current && index < 8 && celebrate}
+        detail={item.row.isMe && line ? line.text : null} onPress={onRow} />
+    );
+  }, [model?.metric, reduced, celebrate, line, onRow]);
+
+  const header = useMemo(() => (
+    <View style={{ height: HEADER_HEIGHT }}>
+      <MiniPodium podium={podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
+        playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}`} onPress={onRow} />
+      <View style={{ marginTop: -2, height: 20, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
+        backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />
+    </View>
+  ), [podium, model?.metric, celebrate, meJoined, board, parkId, onRow]);
+
   const strip = (
-    <View style={{ paddingTop: 14, gap: 10 }}>
-      {board === 'all_time' && <ParkChips parks={parks} value={parkId} onChange={id => { parksCache.parkId = id; setParkId(id); }} />}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 16 }}>
-        <InfoPill icon="ride" text={model ? (model.metric === 'ride_coins' ? 'Ride coins' : 'Rides won') : board === 'all_time' ? 'Ride coins' : 'Rides won'} />
-        {board !== 'all_time' && model?.endsAt && <InfoPill icon="timer" text={`New week in ${resetCountdown(model.endsAt, now)}`} />}
-        {board === 'all_time' && model && <InfoPill icon="ride" gold text={`You ${scoreSummary(model)}`} />}
-      </View>
+    <View style={{ paddingTop: 10, paddingBottom: 6, minHeight: 56 }}>
+      {board === 'all_time' ? (
+        <ParkChips parks={parks} value={parkId} loading={switching} onChange={id => { chooseAllTimePark(id); setParkId(id); }} />
+      ) : (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 16 }}>
+          <UnitChip metric="ride_wins" />
+          <WeekDots endsAt={model?.endsAt ?? null} now={now} />
+        </View>
+      )}
     </View>
   );
 
   if (status === 'error') {
-    return <SharkLoader state="error" tone="onBlue" title="Standings didn't load" onRetry={() => load(true)} />;
-  }
-  if (status === 'loading' || !model) {
     return (
       <View style={{ flex: 1 }}>
         {strip}
-        <SharkLoader tone="onBlue" onRetry={() => load(true)} style={{ minHeight: 420 }} />
+        <SharkLoader state="error" tone="onBlue" compact title="Standings didn't load" onRetry={() => load(true)} />
       </View>
     );
   }
+  if (status === 'loading' || !model) {
+    return <View style={{ flex: 1 }}>{strip}<Skeleton /></View>;
+  }
 
-  const empty = rows.length === 0 || (board === 'friends' && !model.friendsCount);
-  const copy = emptyCopy(board, model.friendsCount);
-  const renderItem: ListRenderItem<StandingsRowModel> = ({ item, index }) => (
-    <View style={{ backgroundColor: BRAND.cream }}>
-      <StandingsRow player={asPlayer(item)} rank={item.rank ?? index + 4} index={index} score={item.score} scoreIcon="ride"
-        isMe={item.isMe} enterDelayBase={reduced ? 0 : 650} label={rowLabel(item, model.metric)} />
-    </View>
-  );
-
-  // Nobody to race yet (no friends, or an empty week): one big friendly card, no empty podium.
-  if (empty) {
+  const scored = model.rows.some(row => row.score > 0);
+  const noFriends = board === 'friends' && !model.friendsCount;
+  // Nobody to race yet: one big friendly card, no empty podium.
+  if (noFriends || (!scored && board !== 'friends')) {
+    const copy = emptyCopy(board, model.friendsCount);
     return (
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}
         refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}>
         {strip}
         <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14).stiffness(160)} style={{
-          marginHorizontal: 20, marginTop: 28, padding: 24, alignItems: 'center', borderRadius: RADIUS.xl,
+          marginHorizontal: 20, marginTop: 16, padding: 22, alignItems: 'center', borderRadius: RADIUS.xl, overflow: 'hidden',
           backgroundColor: BRAND.cream, borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white, ...SHADOW.lifted,
         }}>
-          <GameIcon name={board === 'friends' ? 'heart' : 'trophy'} size={84} />
-          <Text accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 8 }]}>{copy.title}</Text>
+          {board === 'friends' ? <GameIcon name="heart" size={84} /> : (
+            <View style={{ alignItems: 'center' }}>
+              <Image source={CROWN_ART[1]} style={{ width: 64, height: 64, marginBottom: -14, zIndex: 2 }} contentFit="contain" />
+              <View style={{ width: 200, height: 86, overflow: 'hidden', borderRadius: RADIUS.md }}>
+                <Image source={BARREL} style={{ width: 200, height: 200 * 683 / 1079, marginLeft: 0 }} contentFit="cover" />
+              </View>
+            </View>
+          )}
+          <Text accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 10 }]}>{copy.title}</Text>
           <Text style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 6, marginBottom: 18 }]}>{copy.message}</Text>
           <GameButton label={copy.action} icon={copy.target === 'Friends' ? 'heart' : 'ride'}
             onPress={() => { playSound(tapSound); RootNavigation.navigate(copy.target); }} />
         </Animated.View>
+        <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
+          onClose={closeResults} />
       </ScrollView>
     );
   }
 
+  const hideYou = myRowVisible || (meOnPodium && podiumOnScreen);
+
   return (
     <View style={{ flex: 1 }}>
-      <FlatList
-        ref={list}
-        data={rest as StandingsRowModel[]}
-        keyExtractor={row => row.key}
-        renderItem={renderItem}
-        initialNumToRender={10}
-        windowSize={7}
-        maxToRenderPerBatch={10}
-        removeClippedSubviews
-        onScrollToIndexFailed={info => {
-          list.current?.scrollToOffset({ offset: info.averageItemLength * info.index + 400, animated: !reduced });
-          setTimeout(() => list.current?.scrollToIndex({ index: info.index, viewPosition: 0.4, animated: !reduced }), 250);
-        }}
-        refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
-        ListHeaderComponent={(
-          <View>
-            {!reduced && <FloatingParticles count={8} />}
-            <StandingsPodium podium={podiumPlayers} scoreOf={player => scoreById.get(player.id) ?? 0} scoreIcon="ride"
-              meId={meId ?? undefined} playKey={playKey} header={strip} compact />
-            <View style={{
-              marginTop: -14, height: 26, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
-              backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white,
-            }} />
-          </View>
-        )}
-        ListEmptyComponent={(
-          <View style={{ backgroundColor: BRAND.cream, alignItems: 'center', paddingHorizontal: 24, paddingBottom: 12 }}>
-            <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, textAlign: 'center', paddingVertical: 12 }]}>
-              Open spots on the podium. Win a ride to claim one.
-            </Text>
-          </View>
-        )}
-        ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 40 }} />}
-      />
-      <YouCard model={model} climb={climb} onPress={scrollToMe} />
+      {strip}
+      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }}>
+        <Animated.FlatList
+          ref={list as never}
+          data={items as ListItem[]}
+          keyExtractor={item => item.key}
+          renderItem={renderItem}
+          ListHeaderComponent={header}
+          getItemLayout={(_, index) => ({
+            length: layouts[index]?.length ?? ROW_HEIGHT, offset: HEADER_HEIGHT + (layouts[index]?.offset ?? index * ROW_HEIGHT), index,
+          })}
+          initialNumToRender={10}
+          windowSize={9}
+          maxToRenderPerBatch={10}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          viewabilityConfig={viewability}
+          onViewableItemsChanged={onViewable}
+          refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
+          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 48 }} />}
+        />
+        <TopRibbon podium={podium} metric={model.metric} scrollY={scrollY} />
+      </View>
+      <YouCard model={model} climb={climb} passed={passed} hidden={hideYou} now={now} onPress={scrollToMe} />
+      <SharkCard row={card} metric={model.metric} board={board} onClose={() => setCard(null)} />
+      <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
+        onClose={() => { setResults(false); void markLastWeekSeen().catch(() => undefined); }} />
     </View>
   );
 }
-
