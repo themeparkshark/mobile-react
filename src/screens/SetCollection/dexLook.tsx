@@ -29,7 +29,7 @@ export interface RarityLook {
 }
 
 export const RARITY_LOOK: Readonly<Record<RarityTier, RarityLook>> = {
-  1: { key: 'common', label: 'Common', frame: '#8a9bb0', chip: '#e8edf3', ink: BRAND.navy },
+  1: { key: 'common', label: 'Common', frame: '#6f849c', chip: '#e8edf3', ink: BRAND.navy },
   2: { key: 'uncommon', label: 'Uncommon', frame: '#2fb35d', chip: '#dcf6e5', ink: BRAND.navy },
   3: { key: 'rare', label: 'Rare', frame: '#9b4dff', chip: '#eee2ff', ink: BRAND.navy },
   4: { key: 'epic', label: 'Epic', frame: '#ff5a2b', chip: '#ffe3d8', ink: BRAND.navy },
@@ -49,12 +49,14 @@ export function rarityLook(rarity: number): RarityLook {
 export function RarityGems({ rarity, size = 9, style }: { readonly rarity: number; readonly size?: number; readonly style?: StyleProp<ViewStyle> }) {
   const look = rarityLook(rarity);
   const count = Math.max(1, Math.min(5, Math.round(rarity)));
-  const box = Math.ceil(size * 1.45);
+  // A lone Common gem reads as big as the rest (it has the room).
+  const gem = count === 1 ? Math.round(size * 1.35) : size;
+  const box = Math.ceil(gem * 1.45);
   return (
     <View style={[styles.gems, style]} accessible={false}>
       {Array.from({ length: count }, (_, index) => (
         <View key={index} style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
-          <View style={[styles.gem, { width: size, height: size, backgroundColor: look.frame }]}>
+          <View style={[styles.gem, { width: gem, height: gem, backgroundColor: look.frame }, count === 1 && styles.gemCommon]}>
             <View style={styles.facet} />
           </View>
         </View>
@@ -81,6 +83,7 @@ export function TilePanel({ rarity, found, children, style }: {
 const styles = StyleSheet.create({
   gems: { flexDirection: 'row', gap: 1 },
   gem: { transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: BRAND.white, borderRadius: 2, overflow: 'hidden' },
+  gemCommon: { borderWidth: 2.5 },
   facet: { position: 'absolute', left: 0, top: 0, width: '50%', height: '50%', backgroundColor: 'rgba(255,255,255,0.55)' },
   panel: {
     borderRadius: 16, borderWidth: 3, borderBottomWidth: 6, overflow: 'hidden', alignItems: 'center',

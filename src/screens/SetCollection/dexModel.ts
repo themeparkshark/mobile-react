@@ -455,7 +455,7 @@ export function progressFraction(set: Pick<DexSet, 'found' | 'total'>): number {
 
 /** The set card pill, only when it says something: the special timing ("Sunset to 9 PM", "Oct 1 to Nov 2") with a live dot when it is on, "After sunset", "Opens Oct 15", "Saved". Null for an always-on set. */
 export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text: string; readonly live: boolean } | null {
-  if (set.status === 'retired') return { text: 'Saved', live: false };
+  if (set.status === 'retired') return { text: 'Kept forever', live: false };
   if (set.status === 'upcoming') {
     const start = set.startsAt ? new Date(set.startsAt) : null;
     const text = start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()

@@ -18,6 +18,7 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
@@ -95,7 +96,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const preview = previewSets != null;
 
   // Opens instantly from the session copy the menu prefetched; the reads below refresh it in place.
-  const seed = previewSets ? null : cachedBook();
+  const seed = previewSets ? null : cachedBook(player?.id);
   const seedSlug = seed ? initialSlug(seed.book.sets, linkedSlug) : null;
   const seedDetail = seed && seedSlug ? seed.details[seedSlug] : undefined;
   const [book, setBook] = useState<DexBook>(() => seed?.book ?? { sets: [], found: 0, total: 0, dailyRare: null });
@@ -153,7 +154,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       const legacy = previewSets ?? (reuse ? legacyList.current! : await getPrepItemSets(locationRef.current ?? undefined));
       legacyList.current = legacy;
       const next = buildBook(legacy, dex);
-      if (!previewSets) storeBook(legacy, dex, next);
+      if (!previewSets && player?.id != null) storeBook(player.id, legacy, dex, next);
       // Same data, same render: skip the state update entirely.
       const key = JSON.stringify(next);
       if (key !== bookKey.current) {
@@ -177,7 +178,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       const cached = light && dex != null ? legacyDetail.current[target] : undefined;
       const raw = previewDetails?.[target] ?? cached ?? await getPrepItemSet(target, locationRef.current ?? undefined);
       legacyDetail.current[target] = raw;
-      if (!preview) storeDetail(target, raw, dex);
+      if (!preview && player?.id != null) storeDetail(player.id, target, raw, dex);
       const payload = dex as { items?: unknown; exchange?: { spares?: unknown } } | null;
       const fresh = buildItems(raw, payload?.items);
       const spares = typeof payload?.exchange?.spares === 'number' ? payload.exchange.spares : Math.max(0, raw.progress.spare_count ?? 0);
@@ -419,15 +420,34 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const revealedFor = useRef<string | null>(null);
   const claimReady = !!set && (set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable'));
   const pickerBottom = useRef(0);
+  // The list stays invisible for the first layout pass only, so a first land on a claim never shows a scroll.
+  const [landed, setLanded] = useState(false);
+  const listFade = useSharedValue(0);
+  const showList = () => {
+    if (landed) return;
+    setLanded(true);
+    listFade.value = reduced ? 1 : withTiming(1, { duration: 140 });
+  };
+  const listFadeStyle = useAnimatedStyle(() => ({ opacity: listFade.value }));
+  useEffect(() => {
+    const safety = setTimeout(() => { setLanded(true); listFade.value = 1; }, 700);
+    return () => clearTimeout(safety);
+  }, [listFade]);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
   const revealClaim = () => {
-    if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) return;
+    if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) { if (set && !claimReady) showList(); return; }
     revealedFor.current = set.slug;
     const overflow = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
-    if (overflow <= 0) return;
+    if (overflow <= 0) { showList(); return; }
     // Never stop with the set cards cut in half: scroll them fully off (the ribbon header leads) when we must move.
     const offset = Math.max(overflow, pickerBottom.current);
+    // First land: jump there before the list is shown (no visible scroll from the picker to the claim panel).
+    if (!landed) {
+      listRef.current?.scrollToOffset({ offset, animated: false });
+      revealTimer.current = setTimeout(showList, 60);
+      return;
+    }
     revealTimer.current = setTimeout(() => listRef.current?.scrollToOffset({ offset, animated: !reduced }), 350);
   };
   const goal = swapGoal(items ?? [], spares, detail?.raw.progress.exchange_cost ?? 4);
@@ -496,7 +516,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </Topbar>
 
       <View style={styles.page} onLayout={event => { viewportH.current = event.nativeEvent.layout.height; revealClaim(); }}>
-        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" priority="high" cachePolicy="memory" transition={0} />
         <View style={[StyleSheet.absoluteFill, styles.dim]} />
         {loading ? (
           <BookSkeleton cell={cell} />
@@ -512,6 +532,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             <GameButton label="Open the map" icon="map" onPress={goToMap} />
           </View>
         ) : (
+          <Animated.View style={[{ flex: 1 }, listFadeStyle]}>
           <FlashList
             ref={listRef}
             data={data}
@@ -530,6 +551,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
               </View>
             )}
           />
+          </Animated.View>
         )}
       </View>
 
@@ -635,7 +657,8 @@ function SparesSheet({ visible, items, cost, onClose }: {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, marginTop: -8, backgroundColor: '#0b7fd1' },
+  // The water art's own average color, so the push never shows a plain blue frame while it decodes.
+  page: { flex: 1, marginTop: -8, backgroundColor: '#11b8db' },
   dim: { backgroundColor: 'rgba(5,52,110,0.2)' },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, paddingHorizontal: 24, gap: 12, width: '100%' },
   emptyTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textAlign: 'center' },

@@ -359,7 +359,7 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   // Swap flips in place with a stamp.
   assert.match(card, /Swapped!/);
   // One unclipped gem: each diamond in its own box.
-  assert.match(look, /const box = Math\.ceil\(size \* 1\.45\)/);
+  assert.match(look, /const box = Math\.ceil\(gem \* 1\.45\)/);
   assert.match(tile, /count: \{\s*position: 'absolute', bottom: 5, right: 4/, 'the count badge never covers the gems');
   // Claim clears the compass.
   assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
@@ -397,7 +397,7 @@ test('each set card says when it spawns and marks the focused set (moved from th
   assert.deepEqual(plain(dex.tabStatus({ ...base, spawningNow: false, spawnHint: 'After sunset' }, now)), { text: 'After sunset', live: false });
   assert.deepEqual(plain(dex.tabStatus({ ...base, status: 'resting', spawnHint: 'Weekends' }, now)), { text: 'Weekends', live: false });
   assert.equal(dex.tabStatus({ ...base, status: 'upcoming', startsAt: '2026-10-15T07:00:00Z' }, now).text, 'Opens Oct 15');
-  assert.equal(dex.tabStatus({ ...base, status: 'retired' }, now).text, 'Saved');
+  assert.equal(dex.tabStatus({ ...base, status: 'retired' }, now).text, 'Kept forever');
   const parts = read('src/screens/SetCollection/DexParts.tsx');
   assert.match(parts, /set\.focused && <View style=\{styles\.tabHunt\}>/);
   assert.match(parts, /your hunt/);
@@ -412,14 +412,14 @@ test('round 4: instant book, menu above the map, swap slot, grades, shimmer, tit
   const tile = read('src/screens/SetCollection/DexTile.tsx');
   const cache = read('src/screens/SetCollection/dexCache.ts');
   // The book opens from the menu-prefetched copy, or a skeleton in the real layout. Never a spinner.
-  assert.match(screen, /const seed = previewSets \? null : cachedBook\(\);/);
+  assert.match(screen, /const seed = previewSets \? null : cachedBook\(player\?\.id\);/);
   assert.match(screen, /<BookSkeleton/);
   assert.doesNotMatch(screen, /SharkLoader/);
-  assert.match(menu, /void prefetchBook\(\);/);
+  assert.match(menu, /void prefetchBook\(player\?\.id, location\);/);
   assert.match(cache, /has_claimable/);
   // The open menu is a Modal: nothing from the map draws above its scrim.
   assert.match(menu, /<Modal visible=\{mounted\}/);
-  assert.match(menu, /rgba\(5,52,110,0\.74\)/);
+  assert.match(menu, /rgba\(5,52,110,0\.86\)/);
   assert.match(menu, /intensity: 32 \* scrim\.value/);
   assert.doesNotMatch(menu, /isRight|row-reverse/, 'the unused right-side layout is gone');
   // The swap slot keeps its height; the burst draws behind the art.
@@ -441,4 +441,25 @@ test('round 4: instant book, menu above the map, swap slot, grades, shimmer, tit
   assert.match(menu, /timers\.current\.forEach\(clearTimeout\)/);
   assert.match(read('src/screens/SetCollection/RidePhoto.tsx'), /great: \{ outer: '#9fb8d4'/);
   assert.match(card, /position: 'absolute', top: 10, left: 10/, 'Golden Hour tag in the photo corner, away from the grade');
+});
+
+test('round 5: header stamp has no slab, cache is per player, smooth entry, retired pill, Common gem', () => {
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  // The animated (scaled, rotated) layer is a bare wrapper; the gold plate inside it never animates (no stale scaled copy).
+  const wrap = parts.match(/titleStampWrap: \{([^}]*)\}/)[1];
+  assert.doesNotMatch(wrap, /background|border|shadow/i);
+  assert.match(parts, /<Animated\.View style=\{\[styles\.titleStampWrap, style\]\}/);
+  assert.match(parts, /<View style=\{styles\.titleStamp\}>/);
+  const cache = read('src/screens/SetCollection/dexCache.ts');
+  assert.match(cache, /if \(cache && cache\.playerId !== playerId\) cache = null;/);
+  assert.match(cache, /getPrepItemSets\(location \?\? undefined\), getHomeHuntDex\(location\)/, 'same location params as the screen');
+  assert.match(read('src/components/QuickAccessMenu.tsx'), /clearBook\(\);/);
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /cachedBook\(player\?\.id\)/);
+  assert.match(screen, /scrollToOffset\(\{ offset, animated: false \}\)/, 'first land jumps before the list shows');
+  assert.match(screen, /backgroundColor: '#11b8db'/);
+  assert.match(read('src/components/QuickAccessMenu.tsx'), /export function useQuickMenuOpen/);
+  assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /item\.goldenHour && !photo && styles\.heroGolden/);
+  assert.match(parts, /set\.status === 'retired' \? 'lock' : 'timer'/);
+  assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const gem = count === 1 \? Math\.round\(size \* 1\.35\) : size;/);
 });

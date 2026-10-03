@@ -133,7 +133,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
         </View>
         {status && (
           <View style={styles.tabStatus}>
-            {status.live ? <View style={styles.liveDot} /> : <GameIcon name="timer" size={16} />}
+            {status.live ? <View style={styles.liveDot} /> : <GameIcon name={set.status === 'retired' ? 'lock' : 'timer'} size={16} />}
             <Text numberOfLines={1} style={styles.tabStatusText} maxFontSizeMultiplier={1.2}>{status.text}</Text>
           </View>
         )}
