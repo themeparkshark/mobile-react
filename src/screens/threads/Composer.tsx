@@ -103,6 +103,14 @@ export default function Composer({
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: wiggle.value }] }));
   const scrollRef = useRef<ScrollView>(null);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When the keyboard lands (or changes height) while typing, bring the post card fully into view.
+  useEffect(() => {
+    if (keyboard > 0 && inputRef.current?.isFocused()) {
+      const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: !reduced }), 60);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [keyboard, reduced]);
   useEffect(() => () => { if (doneTimer.current) clearTimeout(doneTimer.current); }, []);
 
   // Load the saved draft (or the post being edited) each time the screen opens.

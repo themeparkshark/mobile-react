@@ -140,7 +140,7 @@ const PERSONAL_PATTERNS: RegExp[] = [
   /\b(video\s+chat|videochat|video\s+call|facetime|face\s+time|private\s+chat|chat\s+privately|call\s+me)\b/,
   /\bdon\s?t\s+tell\s+(your|ur)\s+(mom|dad|parents|mum)\b/, /\bkeep\s+(it|this)\s+(a\s+)?secret\b/,
   /\bmeet\s*-?\s*(me|ups?|you|u)\b/, /\blet\s?s\s+meet\b/, /\bmeet\s+(at|by|near|in\s+front\s+of)\b/, /\bcome\s+find\s+me\b/,
-  /\bfind\s+me\s+(at|by|near)\b/, /\b(see|find)\s+(me|you|u)\s+(at|by|near)\s+(\d|the\b)/,
+  /\bfind\s+me\s+(at|by|near)\b/, /\b(see|find)\s+me\s+(at|by|near)\b/, /\b(see|find)\s+(you|u)\s+(at|by|near)\s+\d/,
   /\b(i\s?m|i\s+am)\s+(at|by|near)\s+the\s+[a-z ]{2,30}\s+(now|rn|right\s+now)\b/,
 ];
 
