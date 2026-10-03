@@ -19,25 +19,29 @@ import Animated, {
   Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import updateInventory from '../../api/endpoints/me/inventory/update-inventory';
 import { equipShopTitle } from '../../api/endpoints/me/shop-sets';
 import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { stageCard, xpBar } from '../../helpers/shopShelves';
+import { stageCard, wearAllCopy, wearAllNext, wearAllSlots, xpBar, type WearAllState } from '../../helpers/shopShelves';
 import { isItemWorn, slotForItem } from '../../helpers/wardrobe';
 import { getLook, putLook } from '../../api/endpoints/me/look';
 import { ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, ShopCta, ShopStage } from './shopUi';
+import { MAX_FONT, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
+import { wearItem } from './inventoryQueue';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
-const CARD = stageCard(STAGE - 8, STAGE - 8);
+// The WEAR IT ALL hop lifts the shark HOP pt (and tilts it): the card leaves room above the
+// tallest hat so the head never clips at the top of the hop.
+const HOP = 24;
+const CARD = stageCard(STAGE - 8, STAGE - 8, HOP + 6);
 const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
+
 
 export default function SetCompleteReveal({ reward, set, still, onDone }: {
   readonly reward: ShopSetReward | null;
@@ -48,7 +52,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
-  const [all, setAll] = useState<Busy>('idle');
+  const [all, setAll] = useState<WearAllState>('idle');
+  const allCopy = wearAllCopy(all);
   const [titleOnly, setTitleOnly] = useState<Busy>('idle');
   const color = set?.color ?? BRAND.gold;
   const xp = reward ? xpBar(reward.xp_before, reward.xp_after, reward.xp) : null;
@@ -94,7 +99,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
   const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, bar.value) }] }));
   const levelStyle = useAnimatedStyle(() => ({ transform: [{ scale: levelPulse.value }] }));
   const hopStyle = useAnimatedStyle(() => ({ transform: [
-    { translateY: -24 * Math.sin(Math.PI * Math.min(1, hop.value)) },
+    { translateY: -HOP * Math.sin(Math.PI * Math.min(1, hop.value)) },
     { rotate: `${Math.sin(hop.value * Math.PI * 4) * 8 * (1 - hop.value)}deg` },
   ] }));
 
@@ -103,27 +108,25 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
   // Optimistic: the hop and NOW WEARING play on tap; one look save (all slots) and the title go in
   // parallel; a failure rolls back to "Try again".
   const wearAll = async () => {
-    if (all === 'done' || all === 'busy') return;
-    setAll('done');
+    if (all === 'done') return;
+    setAll(s => wearAllNext(s, 'tap'));
     playSound(require('../../../assets/sounds/whoosh.mp3'));
     if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     try {
-      const slots: Record<string, number> = {};
-      for (const piece of pieces) {
-        const slot = slotForItem({ item_type: { id: piece.item_type_id } } as never);
-        if (slot && !isItemWorn(player?.inventory, piece)) slots[slot] = piece.id;
-      }
+      const slots = wearAllSlots(pieces.map(p => ({ id: p.id, worn: isItemWorn(player?.inventory, p),
+        slot: slotForItem({ item_type: { id: p.item_type_id } } as never) })));
       const look = Object.keys(slots).length
         ? getLook().then(current => putLook(current.version, slots)).then(async result => {
           if (result.kind === 'unsupported') {
-            await Promise.all(pieces.filter(p => !isItemWorn(player?.inventory, p)).map(p => updateInventory({ id: p.id } as never)));
+            // Older servers: one piece at a time, in order (inventory writes race otherwise).
+            for (const id of Object.values(slots)) await wearItem({ id });
           } else if (result.kind !== 'saved') throw new Error(result.kind);
         })
         : Promise.resolve();
       await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
       void refreshPlayer();
-    } catch { setAll('failed'); }
+    } catch { setAll(s => wearAllNext(s, 'fail')); }
   };
 
   const justTitle = async () => {
@@ -147,7 +150,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
                 {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} style={CARD_STYLE} />}
               </Animated.View>
             </ShopStage>
-            {all === 'done' && (
+            {allCopy.wearing && (
               <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.wearing}>
                 <Text style={styles.wearingText}>NOW WEARING</Text>
               </Animated.View>
@@ -177,8 +180,11 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
             </View>
           )}
           <View style={styles.buttons}>
-            <ShopCta label={all === 'done' ? 'All on!' : all === 'failed' ? 'Try again' : 'Wear it all'} icon="crown" width={Math.min(320, W - 48)}
-              onPress={() => void wearAll()} loading={all === 'busy'} done={all === 'done'} still={still}
+            {allCopy.note && (
+              <View style={styles.alert} accessibilityLiveRegion="polite"><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{allCopy.note}</Text></View>
+            )}
+            <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
+              onPress={() => void wearAll()} done={all === 'done'} still={still}
               accessibilityHint="Puts on the title and every piece of the set" />
             {reward.title && all !== 'done' && (
               <Pressable onPress={() => void justTitle()} accessibilityRole="button" style={styles.textButton}>
@@ -251,6 +257,8 @@ const styles = StyleSheet.create({
   xpTrack: { height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
   xpFill: { height: 14, width: '100%', borderRadius: 7, backgroundColor: BRAND.gold, transformOrigin: 'left' },
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
+  alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
+  alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   buttons: { width: '100%', alignItems: 'center', gap: 2, marginTop: 'auto' },
   textButton: { minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   link: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, textDecorationLine: 'underline' },

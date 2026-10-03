@@ -14,9 +14,9 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { formatCoins, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
+import { formatCoins, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
@@ -67,6 +67,10 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const plate = plateFor(item.rarity);
   const set = item.shop?.set;
   const artSize = width - 18;
+  // The band is decided from the tile's measured width (the prop is the first guess, so the first
+  // frame is already right and a matching measure never re-renders).
+  const [measured, setMeasured] = useState(width);
+  const band = tileBand(measured, badge.label, !!set && !owned, PixelRatio.getFontScale());
 
   // Heart pop on toggle (skipped under Reduce Motion).
   const heart = useSharedValue(1);
@@ -92,12 +96,13 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   }, [justBought]);
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-10deg' }] }));
 
-  const a11y = `${name}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked ? 'VIP only'
+  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked ? 'VIP only'
     : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
     <Pressable
       onPress={() => onOpen(item)}
+      onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
       style={({ pressed }) => [styles.tile, { width, borderColor: badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
@@ -120,8 +125,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       </View>
       {/* Reserved chip band: rarity and SET never sit on the art. */}
       <View style={styles.band}>
-        {/* Narrow tiles with a SET chip show rarity as a dot, so the band always fits. */}
-        {badge.label && !owned && (set && width < 120 ? (
+        {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
+        {badge.label && !owned && (band === 'dot' ? (
           <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
         ) : (
           <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>

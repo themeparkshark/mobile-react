@@ -353,26 +353,142 @@ export function afterBuyError(balanceBefore: number, cost: number, fresh: { coin
   return 'unknown';
 }
 
+export type TryOnPhase = 'idle' | 'confirm' | 'buying' | 'landing' | 'bought' | 'failed' | 'unknown' | 'checking';
+
 export type TryOnState = {
   readonly owned: boolean; readonly worn: boolean; readonly vipLocked: boolean; readonly short: number;
-  readonly phase: 'idle' | 'confirm' | 'buying' | 'bought' | 'failed' | 'unknown';
+  readonly phase: TryOnPhase;
   readonly wear: 'idle' | 'busy' | 'spinning' | 'failed'; readonly finishes: boolean; readonly cost: number;
+  /** Today's shop is still building (fallback): buying waits a moment. */
+  readonly paused?: boolean;
 };
 
-/** The try-on's one primary button and its message, for every state (the label cross-fades). */
-export function tryOnCta(s: TryOnState): { label: string; action: 'wear' | 'close' | 'vip' | 'retry_buy' | 'recheck' | 'earn' | 'buy' | 'ask' | 'none'; note: string | null } {
+export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' | 'ask' | 'none';
+
+/**
+ * The try-on's one primary button and its message, for every state (the label cross-fades).
+ * look: 'go' is the normal face, 'busy' pulses while the shop answers, 'paused' is the quiet
+ * "Opening soon" face that can't be tapped.
+ */
+export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' } {
   if (s.owned) {
-    if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.' };
-    if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null };
-    return { label: 'Wear it now', action: 'wear', note: null };
+    if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.', look: 'go' };
+    if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
+    return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };
   }
-  if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null };
-  if (s.phase === 'failed') return { label: 'Try again', action: 'retry_buy', note: 'That didn’t go through. You weren’t charged.' };
+  if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
+  // Its own state: asking the server never shows "Yes, buy it!".
+  if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'busy' };
+  // Confirmed not charged: Try again goes back to the confirm step (two taps, never a silent buy).
+  if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t go through. You weren’t charged.', look: 'go' };
   // Never a silent re-buy: "Check again" only asks the server what happened.
-  if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.' };
-  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Catch ride coins or open your daily chest to earn more.' };
-  if (s.phase === 'confirm' || s.phase === 'buying') return { label: 'Yes, buy it!', action: 'buy', note: null };
-  return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null };
+  if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
+  if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Catch ride coins or open your daily chest to earn more.', look: 'go' };
+  if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
+  if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
+  return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };
+}
+
+/**
+ * After a buy error is settled with the server, where the try-on goes. The first error that is
+ * confirmed not charged says so (failed: "You weren't charged", Try again). Only a "Check again"
+ * that finds nothing returns quietly to idle.
+ */
+export function settleBuyError(outcome: 'bought' | 'not_charged' | 'unknown', source: 'buy' | 'recheck'): 'bought' | 'failed' | 'idle' | 'unknown' {
+  if (outcome === 'bought') return 'bought';
+  if (outcome === 'unknown') return 'unknown';
+  return source === 'buy' ? 'failed' : 'idle';
+}
+
+/**
+ * The try-on's button row. While a buy is in flight (buying, landing, checking) the server's
+ * ownership is ignored: the row stays laid out as it was during buying and the wish heart never
+ * pops back. Owned shows only once the piece has landed.
+ */
+export function tryOnLayout(s: { phase: TryOnPhase; serverOwned: boolean; startBought: boolean; vipLocked: boolean }):
+  { owned: boolean; showWish: boolean; secondary: 'keep_shopping' | 'not_now' | null; secondaryEnabled: boolean } {
+  const inFlight = s.phase === 'buying' || s.phase === 'landing' || s.phase === 'checking';
+  const owned = s.startBought || s.phase === 'bought' || (!inFlight && s.serverOwned);
+  const holdRow = s.phase === 'confirm' || s.phase === 'buying' || s.phase === 'landing';
+  return {
+    owned,
+    showWish: !owned && !s.vipLocked && s.phase === 'idle',
+    secondary: owned ? 'keep_shopping' : holdRow ? 'not_now' : null,
+    secondaryEnabled: owned || s.phase === 'confirm',
+  };
+}
+
+/** Is a Set Complete reveal waiting for this item's set? (The try-on then closes after the landing beat.) */
+export function rewardPendingFor(reveals: { reward: { slug: string } }[], setSlug: string | null | undefined): boolean {
+  return !!setSlug && reveals.some(r => r.reward.slug === setSlug);
+}
+
+/** How long the landing breathes before the sheet slides away for the reveal (null: stay open). */
+export function revealHoldMs(rewardPending: boolean, landed: number, still: boolean): number | null {
+  if (!rewardPending || landed <= 0) return null;
+  return still ? 400 : 1200;
+}
+
+interface RecoverSet { readonly slug: string; readonly name: string; readonly title: string | null; readonly xp_reward?: number;
+  readonly item_ids?: number[]; readonly owned: number; readonly total: number; readonly reward_state: string }
+
+/**
+ * A buy that errored but went through (found by the check), and it finished a set. The purchase
+ * reply with the reward was lost, so: a set already rewarded plays its reveal from the fresh set;
+ * a set waiting for its title is on the ready card; with no fresh set, at least say "Set complete!".
+ */
+export function recoveredSetOutcome(finishes: boolean, set: RecoverSet | null | undefined):
+  { kind: 'reveal'; reward: { slug: string; name: string; title: string | null; xp: number; item_ids?: number[] } } | { kind: 'ready' } | { kind: 'toast' } | null {
+  if (!finishes) return null;
+  if (!set || set.owned < set.total) return { kind: 'toast' };
+  if (set.reward_state === 'claimed') return { kind: 'reveal', reward: { slug: set.slug, name: set.name, title: set.title, xp: set.xp_reward ?? 0, item_ids: set.item_ids } };
+  if (set.reward_state === 'ready') return { kind: 'ready' };
+  return { kind: 'toast' };
+}
+
+/** WEAR IT ALL, optimistic: done on tap, failed rolls back with a message, a tap on failed tries again. */
+export type WearAllState = 'idle' | 'done' | 'failed';
+export function wearAllNext(state: WearAllState, event: 'tap' | 'fail'): WearAllState {
+  if (event === 'fail') return state === 'done' ? 'failed' : state;
+  return 'done';
+}
+export function wearAllCopy(state: WearAllState): { label: string; note: string | null; wearing: boolean } {
+  if (state === 'done') return { label: 'All on!', note: null, wearing: true };
+  if (state === 'failed') return { label: 'Try again', note: 'Couldn’t put it all on. Your look didn’t change.', wearing: false };
+  return { label: 'Wear it all', note: null, wearing: false };
+}
+
+/** The slots to save for WEAR IT ALL: each piece not already worn, by its slot (last piece per slot wins). */
+export function wearAllSlots(pieces: { id: number; slot: string | null; worn: boolean }[]): Record<string, number> {
+  const slots: Record<string, number> = {};
+  for (const p of pieces) if (p.slot && !p.worn) slots[p.slot] = p.id;
+  return slots;
+}
+
+/**
+ * One request at a time, in order (inventory writes race on the server otherwise). A failed
+ * step rejects its own caller only; the next step still runs.
+ */
+export function createSerialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>) => {
+    const run = tail.then(task, task);
+    tail = run.catch(() => undefined);
+    return run;
+  };
+}
+
+/** Fallback polling: every 15 to 30 s (jittered so phones don't all ask at once). */
+export function fallbackPollMs(random: number): number {
+  return 15_000 + Math.round(Math.max(0, Math.min(1, random)) * 15_000);
+}
+
+/** An empty shop day (no shelves came back): what to say instead of a blank page. */
+export function emptyShelvesCopy(fallback: boolean | undefined): { title: string; body: string } {
+  return fallback
+    ? { title: 'Today’s shop is opening', body: 'Back in a moment. Pull down to check again.' }
+    : { title: 'The shelves are being stocked', body: 'Nothing here right now. Pull down to check again.' };
 }
 
 /** "Level 12 · 48% to 62%" for the reveal's XP bar (fractions 0..1). */
@@ -383,34 +499,151 @@ export function levelProgress(level: number, before: number, needed: number, gai
   return { level, from: before / need, to: after / need, levelUp: false };
 }
 
-/** Shark art (shark-colored-v2 and every skin) measured once: width/height and the tail tip. */
-export const SHARK_ART = { aspect: 1180 / 1333, tailX: 0.725, tailY: 0.819 } as const;
+/**
+ * Shark art (shark-colored-v2 and every skin) measured from the PNG (tools/tests checks these
+ * against the file): width/height, the tail tip (lowest opaque pixel), the head top and the left
+ * edge. Hats are drawn in a paper frame of the same shape, and the tallest (witch and magic hats,
+ * measured from the CDN art) reach its very top, so hatTop is 0.
+ */
+export const SHARK_ART = { aspect: 1180 / 1333, tailX: 0.725, tailY: 0.819, headTop: 0.183, hatTop: 0, leftEdge: 0.083 } as const;
 /** ShopStage plinth geometry: insets as fractions of the stage, plinth drawn in a 200x64 box, top face centre at y 27. */
 export const PLINTH = { side: 0.14, bottom: 0.03, aspect: 200 / 64, faceY: 27 / 64 } as const;
+/** Playercard draws its art 5% of its width down from the top of its box. */
+const CARD_INSET = 0.05;
 
 /**
- * Where the Playercard goes on a stage so the tail tip rests on the plinth's top
- * face, for any stage size (square try-on and reveal, portrait hero). Playercard
- * insets its art 5% of its width from the top and draws with contain.
+ * Where the Playercard goes on a stage so the tail tip rests on the plinth's top face, for any
+ * stage size (square try-on and reveal, portrait hero). `lift` is the most the stage ever moves
+ * the shark up (a hop): the card shrinks until a hat at the top of the paper frame still clears
+ * the stage top at the peak of the hop.
  */
-export function stageCard(stageW: number, stageH: number): {
+export function stageCard(stageW: number, stageH: number, lift = 0, widthCap = 1.05): {
   box: { left: number; top: number; width: number; height: number };
-  plinthTopY: number; tailY: number; shadow: { left: string; top: string };
+  plinthTopY: number; tailY: number; hatY: number; shadow: { left: string; top: string };
 } {
   const plinthW = stageW * (1 - 2 * PLINTH.side);
   const plinthH = plinthW / PLINTH.aspect;
   const plinthTopY = stageH * (1 - PLINTH.bottom) - plinthH + plinthH * PLINTH.faceY;
   // As big as the stage allows: the tail sits on the plinth and the head stays in frame.
-  const byHeight = plinthTopY / (SHARK_ART.tailY + 0.05 * SHARK_ART.aspect);
-  const height = Math.min(byHeight, (stageW / SHARK_ART.aspect) * 1.05);
+  const byHeight = plinthTopY / (SHARK_ART.tailY + CARD_INSET * SHARK_ART.aspect);
+  // Hat top (box top + inset + hatTop*h) minus the lift stays at or below the stage top.
+  const byLift = (plinthTopY - lift) / (SHARK_ART.tailY - SHARK_ART.hatTop);
+  const height = Math.min(byHeight, byLift, (stageW / SHARK_ART.aspect) * widthCap);
   const width = height * SHARK_ART.aspect;
-  const tailInBox = 0.05 * width + SHARK_ART.tailY * height;
+  const tailInBox = CARD_INSET * width + SHARK_ART.tailY * height;
   const top = plinthTopY - tailInBox;
   const left = (stageW - width) / 2;
   return {
     box: { left, top, width, height },
     plinthTopY,
     tailY: top + tailInBox,
+    hatY: top + CARD_INSET * width + SHARK_ART.hatTop * height,
     shadow: { left: `${(SHARK_ART.tailX * 100 - 16).toFixed(1)}%`, top: `${((tailInBox / height) * 100 - 2.2).toFixed(1)}%` },
   };
+}
+
+/** Advance widths of the Shark display font (units per em 1000), ASCII 32..126, from the TTF. */
+const SHARK_ADVANCE = [352, 233, 287, 707, 440, 524, 535, 143, 336, 305, 410, 364, 170, 359, 169, 370, 520, 274, 507, 446, 478, 437, 491,
+  474, 480, 473, 178, 169, 401, 414, 463, 454, 786, 550, 497, 499, 505, 490, 438, 504, 499, 161, 463, 468, 437, 537, 466, 499, 465, 500,
+  454, 469, 490, 508, 482, 599, 478, 499, 496, 219, 307, 220, 412, 462, 248, 448, 473, 396, 473, 416, 344, 448, 397, 139, 189, 391, 151,
+  496, 408, 389, 469, 478, 361, 333, 268, 389, 459, 495, 399, 476, 420, 440, 123, 437, 499];
+
+/** Width of a line set in the Shark font. */
+export function displayTextWidth(text: string, size: number, letterSpacing = 0): number {
+  let units = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    units += code >= 32 && code <= 126 ? SHARK_ADVANCE[code - 32] : ch === '\u2019' ? 144 : 520;
+  }
+  return (units * size) / 1000 + letterSpacing * [...text].length;
+}
+
+/** Tile chip band metrics (ShopTile styles): chip padding, the SET chip's icon, gaps. */
+export const TILE_BAND = { tileChrome: 6 + 8, gap: 4, chipPad: 10, chipBorder: 3, rarityFont: 12, rarityTracking: 0.4, setIcon: 12, setGap: 2 } as const;
+
+/**
+ * Rarity word or a rarity dot, from the tile's measured width: the full chips only when rarity
+ * plus SET fit inside the band. fontScale is the Dynamic Type growth the chips allow (max 1.1).
+ */
+export function tileBand(tileWidth: number, rarityLabel: string | null | undefined, hasSet: boolean, fontScale = 1): 'full' | 'dot' {
+  if (!rarityLabel || !hasSet) return 'full';
+  const k = Math.min(1.1, Math.max(1, fontScale));
+  const inner = tileWidth - TILE_BAND.tileChrome;
+  const rarity = displayTextWidth(rarityLabel, TILE_BAND.rarityFont * k, TILE_BAND.rarityTracking) + TILE_BAND.chipPad;
+  const set = TILE_BAND.setIcon + TILE_BAND.setGap + displayTextWidth('SET', TILE_BAND.rarityFont * k) + TILE_BAND.chipPad + TILE_BAND.chipBorder;
+  return rarity + TILE_BAND.gap + set <= inner ? 'full' : 'dot';
+}
+
+/**
+ * The Featured hero card, shared by ShopShelves and the layout test. A kicker row on top holds
+ * "THIS WEEK'S STAR" and the timer pill (never on the hat), then the text column on the left and
+ * the stage on the right.
+ */
+export const HERO = {
+  margin: 10, border: 4, pad: 14, kickerH: 36, kickerFont: 13, kickerTracking: 1, pillFont: 13, pillChrome: 20 + 15 + 5, rowGap: 8,
+  setLine: 18, pieces: 36, pieceGap: 6, piecesTop: 4, priceRow: 22, priceFont: 18, rarityFont: 12, cta: 44, ctaFont: 16, ctaPad: 16, gap: 4,
+  textCol: 0.46, stageCol: 0.62, sharkCap: 0.96, clear: 2,
+} as const;
+
+/**
+ * The hero card at a screen width. The shark is capped to the stage width, and the text column
+ * ends where the shark's art starts (it never sits on the shark); a narrow column gets a smaller
+ * name, fewer piece chips and a rarity dot.
+ */
+export function heroLayout(screenW: number): {
+  cardW: number; innerW: number; bodyH: number; stage: { left: number; top: number; width: number; height: number };
+  card: ReturnType<typeof stageCard>; sharkLeft: number; textW: number; textH: number; kickerW: number;
+  nameSize: number; nameLine: number; chips: number;
+} {
+  const cardW = screenW - 2 * HERO.margin;
+  const innerW = cardW - 2 * HERO.border;
+  const bodyH = Math.round(Math.min(320, screenW * 0.76));
+  const stageW = Math.round(innerW * HERO.stageCol);
+  const stage = { left: innerW - stageW, top: HERO.kickerH, width: stageW, height: bodyH - 8 };
+  const card = stageCard(stage.width, stage.height, 0, HERO.sharkCap);
+  const sharkLeft = stage.left + card.box.left + SHARK_ART.leftEdge * card.box.width;
+  const textW = Math.floor(Math.min(innerW * HERO.textCol, sharkLeft - HERO.pad - HERO.clear));
+  const nameSize = textW < 130 ? 21 : 24;
+  return {
+    cardW, innerW, bodyH, stage, card, sharkLeft, textW,
+    textH: bodyH - 2 * HERO.pad,
+    kickerW: innerW - 2 * HERO.pad,
+    nameSize, nameLine: nameSize + 2,
+    chips: Math.max(1, Math.floor((textW + HERO.pieceGap) / (HERO.pieces + HERO.pieceGap))),
+  };
+}
+
+/** Piece chips shown in the hero column: all if they fit, else n-1 and a "+N" chip. */
+export function heroChips(total: number, room: number): { shown: number; more: number } {
+  if (total <= room) return { shown: total, more: 0 };
+  const shown = Math.max(0, room - 1);
+  return { shown, more: total - shown };
+}
+
+/** Price and rarity on one row, or the rarity as a dot when the column is too narrow. */
+export function heroPriceRow(textW: number, cost: string, rarityLabel: string | null | undefined): 'inline' | 'dot' {
+  const price = 18 + 4 + displayTextWidth(cost, HERO.priceFont);
+  if (!rarityLabel) return 'inline';
+  return price + 4 + 14 + displayTextWidth(rarityLabel, HERO.rarityFont, 0.5) + 3 <= textW ? 'inline' : 'dot';
+}
+
+/** Width of the hero's TRY IT ON / WEAR IT pill. */
+export function heroCtaWidth(label: string): number {
+  return 2 * HERO.ctaPad + displayTextWidth(label, HERO.ctaFont) + 6;
+}
+
+/** Height the hero's text column needs (name, set line, pieces, then the price row and the CTA). */
+export function heroTextNeed(o: { nameLines: number; nameLine?: number; set: boolean; pieces: boolean; owned: boolean }): number {
+  const parts = [o.nameLines * (o.nameLine ?? 26)];
+  if (o.set) parts.push(HERO.setLine);
+  if (o.pieces) parts.push(HERO.pieces + HERO.piecesTop);
+  parts.push(o.owned ? HERO.cta : HERO.priceRow + HERO.gap + HERO.cta);
+  return parts.reduce((a, b) => a + b, 0) + HERO.gap * (parts.length - 1);
+}
+
+/** Does "THIS WEEK'S STAR" plus the pill fit the kicker row? */
+export function heroKickerFits(screenW: number, pillLabel: string): boolean {
+  const { kickerW } = heroLayout(screenW);
+  const kicker = displayTextWidth("THIS WEEK'S STAR", HERO.kickerFont, HERO.kickerTracking);
+  return kicker + HERO.rowGap + HERO.pillChrome + displayTextWidth(pillLabel, HERO.pillFont) <= kickerW;
 }

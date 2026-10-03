@@ -241,7 +241,7 @@ test('round 4: never say "you weren\'t charged" without checking', () => {
 
 test('round 4: wear failure has its own message and retry, never a buy', () => {
   const base = { owned: true, worn: false, vipLocked: false, short: 0, phase: 'bought', wear: 'idle', finishes: false, cost: 200 };
-  assert.deepEqual(plain(shelves.tryOnCta(base)), { label: 'Wear it now', action: 'wear', note: null });
+  assert.deepEqual(plain(shelves.tryOnCta(base)), { label: 'Wear it now', action: 'wear', note: null, look: 'go' });
   const failed = shelves.tryOnCta({ ...base, wear: 'failed' });
   assert.equal(failed.action, 'wear');
   assert.doesNotMatch(failed.note, /charged/);
@@ -272,4 +272,358 @@ test('round 5: "Check again" never re-buys', () => {
   assert.equal(shelves.afterBuyError(1000, 200, { coins: 1000, owns: false }), 'not_charged');
   const idle = shelves.tryOnCta({ owned: false, worn: false, vipLocked: false, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 200 });
   assert.equal(idle.action, 'ask');
+});
+
+// ---- Round 6 ----
+
+const src = file => fs.readFileSync(path.join(root, file), 'utf8');
+const base6 = { owned: false, worn: false, vipLocked: false, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 200 };
+
+test('round 6 B1: the first error confirmed not charged says so; Try again goes back to confirm', () => {
+  // settleUnknown('buy') after the purchase request errored and the check found coins untouched.
+  const outcome = shelves.afterBuyError(1000, 200, { coins: 1000, owns: false });
+  assert.equal(shelves.settleBuyError(outcome, 'buy'), 'failed');
+  const failed = shelves.tryOnCta({ ...base6, phase: 'failed' });
+  assert.equal(failed.label, 'Try again');
+  assert.match(failed.note, /You weren’t charged/);
+  assert.equal(failed.action, 'ask', 'Try again returns to the confirm step, never a direct buy');
+  // Only the recheck path returns quietly to idle.
+  assert.equal(shelves.settleBuyError(outcome, 'recheck'), 'idle');
+  assert.equal(shelves.settleBuyError('unknown', 'buy'), 'unknown');
+  assert.equal(shelves.settleBuyError('unknown', 'recheck'), 'unknown');
+  assert.equal(shelves.settleBuyError('bought', 'recheck'), 'bought');
+  // No state of the try-on buys without a confirm first.
+  for (const phase of ['idle', 'failed', 'unknown', 'checking', 'buying', 'landing', 'bought']) {
+    assert.notEqual(shelves.tryOnCta({ ...base6, phase }).action, 'buy', phase);
+  }
+  assert.equal(shelves.tryOnCta({ ...base6, phase: 'confirm' }).action, 'buy');
+  assert.equal(src('src/screens/StoreScreen/TryOnSheet.tsx').includes('retry_buy'), false);
+});
+
+test('round 6 S2: Checking is its own state and never says "Yes, buy it!"', () => {
+  const checking = shelves.tryOnCta({ ...base6, phase: 'checking' });
+  assert.equal(checking.label, 'Checking…');
+  assert.equal(checking.action, 'none');
+  assert.equal(checking.look, 'busy');
+  for (const extra of [{}, { short: 50 }, { paused: true }, { finishes: true }]) {
+    assert.equal(shelves.tryOnCta({ ...base6, ...extra, phase: 'checking' }).label, 'Checking…');
+  }
+  // The try-on passes its real phase (no mapping of checking onto buying).
+  assert.equal(/busyPhase/.test(src('src/screens/StoreScreen/TryOnSheet.tsx')), false);
+});
+
+test('round 6 S3: while landing, server ownership is ignored and the row holds still', () => {
+  const buying = shelves.tryOnLayout({ phase: 'buying', serverOwned: false, startBought: false, vipLocked: false });
+  for (const serverOwned of [false, true]) {
+    const landing = shelves.tryOnLayout({ phase: 'landing', serverOwned, startBought: false, vipLocked: false });
+    assert.deepEqual(plain(landing), plain(buying), `landing (server owned: ${serverOwned}) matches buying`);
+    assert.equal(landing.showWish, false, 'the wish heart never pops back mid-landing');
+  }
+  assert.equal(shelves.tryOnLayout({ phase: 'checking', serverOwned: true, startBought: false, vipLocked: false }).owned, false);
+  const bought = shelves.tryOnLayout({ phase: 'bought', serverOwned: true, startBought: false, vipLocked: false });
+  assert.equal(bought.owned, true);
+  assert.equal(bought.secondary, 'keep_shopping');
+  const idle = shelves.tryOnLayout({ phase: 'idle', serverOwned: false, startBought: false, vipLocked: false });
+  assert.equal(idle.showWish, true);
+  assert.equal(shelves.tryOnLayout({ phase: 'idle', serverOwned: true, startBought: false, vipLocked: false }).owned, true);
+  // Not now is shown but inert while the buy is in flight.
+  assert.equal(buying.secondary, 'not_now');
+  assert.equal(buying.secondaryEnabled, false);
+  assert.equal(shelves.tryOnLayout({ phase: 'confirm', serverOwned: false, startBought: false, vipLocked: false }).secondaryEnabled, true);
+});
+
+// Width of a string in the Shark display font, straight from the TTF (cmap format 4 + hmtx).
+function sharkFontWidths() {
+  const buf = fs.readFileSync(path.join(root, 'assets/fonts/shark-random-funnyness-2.ttf'));
+  const tables = {};
+  for (let i = 0, n = buf.readUInt16BE(4); i < n; i++) {
+    const r = 12 + i * 16;
+    tables[buf.toString('ascii', r, r + 4)] = buf.readUInt32BE(r + 8);
+  }
+  const upm = buf.readUInt16BE(tables.head + 18);
+  const numH = buf.readUInt16BE(tables.hhea + 34);
+  const cmap = tables.cmap;
+  let sub = null;
+  for (let i = 0, n = buf.readUInt16BE(cmap + 2); i < n; i++) {
+    const r = cmap + 4 + i * 8;
+    const off = cmap + buf.readUInt32BE(r + 4);
+    if (buf.readUInt16BE(off) === 4) { sub = off; break; }
+  }
+  const seg = buf.readUInt16BE(sub + 6) / 2;
+  const ends = sub + 14, starts = ends + seg * 2 + 2, deltas = starts + seg * 2, ranges = deltas + seg * 2;
+  const glyph = code => {
+    for (let i = 0; i < seg; i++) {
+      if (code > buf.readUInt16BE(ends + i * 2)) continue;
+      const start = buf.readUInt16BE(starts + i * 2);
+      if (code < start) return 0;
+      const delta = buf.readInt16BE(deltas + i * 2);
+      const ro = buf.readUInt16BE(ranges + i * 2);
+      if (!ro) return (code + delta) & 0xffff;
+      const g = buf.readUInt16BE(ranges + i * 2 + ro + (code - start) * 2);
+      return g ? (g + delta) & 0xffff : 0;
+    }
+    return 0;
+  };
+  const advance = g => buf.readUInt16BE(tables.hmtx + Math.min(g, numH - 1) * 4);
+  return { upm, advance: code => advance(glyph(code)) };
+}
+
+test('round 6: the layout font table is the real Shark TTF', () => {
+  const font = sharkFontWidths();
+  assert.equal(font.upm, 1000);
+  for (const text of ["THIS WEEK'S STAR", 'New on Wednesday', 'UNCOMMON', 'SET', 'Legendary 1,250']) {
+    const real = [...text].reduce((a, ch) => a + font.advance(ch.codePointAt(0)), 0) * 13 / 1000;
+    assert.ok(Math.abs(shelves.displayTextWidth(text, 13) - real) < 0.01, text);
+  }
+});
+
+// The pill labels the hero can show (Featured): every weekday, tonight, now.
+const heroPills = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(d => `New on ${d}`).concat(['New tonight', 'New now']);
+
+test('round 6 S1: hero kicker row and a 2-line name fit at 320, 375 and 390 pt', () => {
+  const art = shelves.SHARK_ART;
+  for (const w of [320, 375, 390]) {
+    const L = shelves.heroLayout(w);
+    for (const pill of heroPills) assert.ok(shelves.heroKickerFits(w, pill), `${w}pt: kicker + "${pill}"`);
+    for (const owned of [false, true]) {
+      const need = shelves.heroTextNeed({ nameLines: 2, nameLine: L.nameLine, set: true, pieces: true, owned });
+      assert.ok(need <= L.textH, `${w}pt: text column needs ${need}, has ${L.textH} (owned ${owned})`);
+    }
+    // The text column ends before the shark's art starts (the name never sits on the shark).
+    const card = L.card;
+    const sharkLeft = L.stage.left + card.box.left + art.leftEdge * card.box.width;
+    assert.ok(shelves.HERO.pad + L.textW <= sharkLeft, `${w}pt: text ends ${shelves.HERO.pad + L.textW}, shark starts ${sharkLeft}`);
+    assert.ok(Math.abs(card.tailY - card.plinthTopY) < 0.5, `${w}pt: hero tail on the plinth`);
+    assert.ok(card.box.width <= L.stage.width, `${w}pt: hero shark inside its stage`);
+    // Everything in the column fits its width: the CTA pills, the chips, and price plus rarity (or a dot).
+    for (const label of ['TRY IT ON', 'WEAR IT']) assert.ok(shelves.heroCtaWidth(label) <= L.textW, `${w}pt: ${label}`);
+    const chips = shelves.heroChips(5, L.chips);
+    const chipRow = (chips.shown + (chips.more ? 1 : 0)) * 36 + (chips.shown + (chips.more ? 1 : 0) - 1) * 6;
+    assert.ok(chipRow <= L.textW, `${w}pt: piece chips ${chipRow} in ${L.textW}`);
+    for (const label of ['UNCOMMON', 'RARE', 'EPIC']) {
+      const mode = shelves.heroPriceRow(L.textW, '1,250', label);
+      const row = 18 + 4 + shelves.displayTextWidth('1,250', 18) + (mode === 'inline' ? 4 + 14 + shelves.displayTextWidth(label, 12, 0.5) + 3 : 4 + 14);
+      assert.ok(row <= L.textW, `${w}pt: price row ${label} (${mode})`);
+    }
+    // A 2-line name wraps inside the column at the column's name size (never 3 lines for these).
+    for (const name of ['Purple Witch Hat', 'Castle Rainbow T-Shirt', 'Black Jurassic Shark Shirt']) {
+      const words = name.split(' ');
+      let lines = 1, line = '';
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (shelves.displayTextWidth(next, L.nameSize) > L.textW && line) { lines++; line = word; } else line = next;
+      }
+      assert.ok(lines <= 3, `${w}pt: ${name} takes ${lines} lines`);
+    }
+    // The stage sits under the kicker row, so the pill can never cover the hat.
+    assert.equal(L.stage.top, shelves.HERO.kickerH);
+    assert.ok(card.hatY >= 0, `${w}pt: hat inside the hero stage`);
+  }
+  const shelvesSrc = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(shelvesSrc, /heroLayout\(SCREEN_W\)/, 'ShopShelves draws from the tested layout');
+  assert.match(shelvesSrc, /styles\.heroKickerRow[\s\S]{0,200}SectionPills/, 'the pill lives in the kicker row');
+});
+
+test('round 6 S4: the chip band is decided from the measured tile width, and never overflows', () => {
+  for (const screen of [320, 375, 390, 430]) {
+    const tile = Math.floor((screen - 2 * (10 + 3 + 8) - 12 * 2) / 3);
+    for (const width of [tile, Math.min(124, tile + 8)]) {
+      for (const label of ['COMMON', 'UNCOMMON', 'RARE', 'EPIC']) {
+        const band = shelves.tileBand(width, label, true);
+        const inner = width - shelves.TILE_BAND.tileChrome;
+        const rarity = shelves.displayTextWidth(label, 12, 0.4) + 10;
+        const set = 12 + 2 + shelves.displayTextWidth('SET', 12) + 13;
+        if (band === 'full') assert.ok(rarity + 4 + set <= inner, `${width}pt ${label}`);
+        else assert.ok(rarity + 4 + set > inner, `${width}pt ${label} shows a dot only when it must`);
+        assert.equal(shelves.tileBand(width, label, false), 'full', 'no SET chip: the word always shows');
+      }
+    }
+  }
+  // A wide tile keeps the word even with SET (no fixed 120pt cutoff).
+  assert.equal(shelves.tileBand(130, 'RARE', true), 'full');
+  assert.equal(shelves.tileBand(118, 'EPIC', true), 'full');
+  assert.equal(shelves.tileBand(84, 'UNCOMMON', true), 'dot');
+  const tileSrc = src('src/screens/StoreScreen/ShopTile.tsx');
+  assert.equal(/width < 120/.test(tileSrc), false);
+  assert.match(tileSrc, /onLayout/);
+  assert.match(tileSrc, /badge\.label \? `, \$\{badge\.label\.toLowerCase\(\)\}`/, 'rarity is in the tile a11y label');
+});
+
+test('round 6 S5: fallback polls every 15 to 30 s and Buy shows "Opening soon"', () => {
+  assert.equal(shelves.fallbackPollMs(0), 15_000);
+  assert.equal(shelves.fallbackPollMs(1), 30_000);
+  assert.equal(shelves.fallbackPollMs(5), 30_000);
+  for (const phase of ['idle', 'confirm']) {
+    const paused = shelves.tryOnCta({ ...base6, phase, paused: true });
+    assert.equal(paused.label, 'Opening soon');
+    assert.equal(paused.look, 'paused');
+    assert.equal(paused.action, 'none');
+  }
+  // A buy already in flight is never relabelled; owned and wear states are untouched.
+  assert.equal(shelves.tryOnCta({ ...base6, phase: 'buying', paused: true }).label, 'Yes, buy it!');
+  assert.equal(shelves.tryOnCta({ ...base6, owned: true, phase: 'bought', paused: true }).label, 'Wear it now');
+  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /today\.fallback[\s\S]{0,300}fallbackPollMs/);
+});
+
+test('round 6 S6: a recovered set-completing buy queues the reveal, or says "Set complete!"', () => {
+  const set = { slug: 'pumpkin-patch', name: 'Pumpkin Patch', title: 'Patch Boss', xp_reward: 160, item_ids: [1, 2, 3, 20], owned: 4, total: 4, reward_state: 'claimed' };
+  assert.deepEqual(plain(shelves.recoveredSetOutcome(true, set)),
+    { kind: 'reveal', reward: { slug: 'pumpkin-patch', name: 'Pumpkin Patch', title: 'Patch Boss', xp: 160, item_ids: [1, 2, 3, 20] } });
+  assert.deepEqual(plain(shelves.recoveredSetOutcome(true, { ...set, reward_state: 'ready' })), { kind: 'ready' });
+  assert.deepEqual(plain(shelves.recoveredSetOutcome(true, null)), { kind: 'toast' });
+  assert.deepEqual(plain(shelves.recoveredSetOutcome(true, { ...set, owned: 3 })), { kind: 'toast' });
+  assert.equal(shelves.recoveredSetOutcome(false, set), null);
+  // The queued reveal then holds the try-on open for the landing beat.
+  assert.equal(shelves.rewardPendingFor([{ reward: { slug: 'pumpkin-patch' } }], 'pumpkin-patch'), true);
+  assert.equal(shelves.rewardPendingFor([{ reward: { slug: 'other' } }], 'pumpkin-patch'), false);
+  assert.equal(shelves.rewardPendingFor([], null), false);
+});
+
+test('round 6: rewardPending holds the landing, then closes', () => {
+  assert.equal(shelves.revealHoldMs(true, 0, false), null, 'not before the piece lands');
+  assert.equal(shelves.revealHoldMs(true, 1, false), 1200);
+  assert.equal(shelves.revealHoldMs(true, 1, true), 400);
+  assert.equal(shelves.revealHoldMs(false, 1, false), null);
+});
+
+test('round 6: WEAR IT ALL is optimistic, rolls back with a message, and saves only what is missing', () => {
+  let state = 'idle';
+  state = shelves.wearAllNext(state, 'tap');
+  assert.equal(state, 'done');
+  assert.equal(shelves.wearAllCopy(state).wearing, true, 'NOW WEARING on tap');
+  state = shelves.wearAllNext(state, 'fail');
+  assert.equal(state, 'failed');
+  const failed = shelves.wearAllCopy(state);
+  assert.equal(failed.label, 'Try again');
+  assert.match(failed.note, /Couldn’t put it all on/);
+  assert.equal(failed.wearing, false, 'the optimistic NOW WEARING rolls back');
+  assert.equal(shelves.wearAllNext('done', 'tap'), 'done', 'a second tap does nothing');
+  assert.equal(shelves.wearAllNext('failed', 'tap'), 'done', 'Try again retries');
+  assert.equal(shelves.wearAllCopy('idle').note, null);
+  assert.deepEqual(plain(shelves.wearAllSlots([
+    { id: 1, slot: 'head_item', worn: false }, { id: 2, slot: 'body_item', worn: true }, { id: 3, slot: null, worn: false },
+  ])), { head_item: 1 });
+  assert.match(src('src/screens/StoreScreen/SetCompleteReveal.tsx'), /allCopy\.note/);
+});
+
+test('round 6: inventory writes run one at a time, in order, even after a failure', async () => {
+  const run = shelves.createSerialQueue();
+  const log = [];
+  let active = 0;
+  const step = (name, ms, fail = false) => () => new Promise((resolve, reject) => {
+    active++; assert.equal(active, 1, `${name} overlapped`); log.push(`start ${name}`);
+    setTimeout(() => { active--; log.push(`end ${name}`); fail ? reject(new Error(name)) : resolve(name); }, ms);
+  });
+  const results = await Promise.allSettled([run(step('a', 20)), run(step('b', 5, true)), run(step('c', 1))]);
+  assert.deepEqual(log, ['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
+  assert.deepEqual(results.map(r => r.status), ['fulfilled', 'rejected', 'fulfilled']);
+  // Both shop write paths go through the one queue.
+  for (const file of ['src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx']) {
+    const code = src(file);
+    assert.equal(/updateInventory\(/.test(code), false, `${file} writes through wearItem`);
+    assert.match(code, /wearItem\(/);
+  }
+});
+
+test('round 6: an empty shop day has copy, never a blank page', () => {
+  assert.match(shelves.emptyShelvesCopy(false).body, /Pull down/);
+  assert.match(shelves.emptyShelvesCopy(true).title, /opening/);
+  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /emptyShelvesCopy\(today\.fallback\)/);
+});
+
+test('round 6: SVG gradient ids are unique per instance', () => {
+  const ui = src('src/screens/StoreScreen/shopUi.tsx');
+  const card = src('src/components/Playercard.tsx');
+  assert.equal(/id="light"|url\(#light\)/.test(ui), false);
+  assert.equal(/id="contact"|url\(#contact\)/.test(card), false);
+  assert.match(ui, /useSvgId\('stage-light'\)/);
+  assert.match(card, /contact-\$\{\+\+contactIds\}/);
+});
+
+// Decode an RGBA PNG with pngjs and measure the shark: tail tip (lowest opaque pixel), head top, left edge.
+function measureShark() {
+  const { PNG } = require(path.join(root, 'node_modules/pngjs'));
+  const png = PNG.sync.read(fs.readFileSync(path.join(root, 'assets/images/screens/inventory/shark-colored-v2.png')));
+  const { width, height, data } = png;
+  const opaque = (x, y) => data[(y * width + x) * 4 + 3] > 128;
+  let tail = null, top = null, left = width;
+  for (let y = height - 1; y >= 0 && !tail; y--) {
+    const xs = []; for (let x = 0; x < width; x++) if (opaque(x, y)) xs.push(x);
+    if (xs.length) tail = { y, x: (xs[0] + xs[xs.length - 1]) / 2 };
+  }
+  for (let y = 0; y < height && top == null; y++) for (let x = 0; x < width; x++) if (opaque(x, y)) { top = y; break; }
+  for (let y = 0; y < height; y += 2) for (let x = 0; x < left; x++) if (opaque(x, y)) { left = x; break; }
+  return { width, height, tail, top, left };
+}
+
+test('round 6: stage geometry is tied to the real shark PNG and the drawn plinth', () => {
+  const m = measureShark();
+  const art = shelves.SHARK_ART;
+  assert.ok(Math.abs(art.aspect - m.width / m.height) < 0.002, 'aspect');
+  assert.ok(Math.abs(art.tailY - m.tail.y / m.height) < 0.003, `tail y ${m.tail.y / m.height}`);
+  assert.ok(Math.abs(art.tailX - m.tail.x / m.width) < 0.003, `tail x ${m.tail.x / m.width}`);
+  assert.ok(Math.abs(art.headTop - m.top / m.height) < 0.003, `head top ${m.top / m.height}`);
+  assert.ok(art.leftEdge <= m.left / m.width + 0.002, `left edge ${m.left / m.width}`);
+  // The plinth constants match what ShopStage draws.
+  const ui = src('src/screens/StoreScreen/shopUi.tsx');
+  const wrap = /plinthWrap: \{[^}]*left: '(\d+)%', right: '(\d+)%', bottom: '(\d+)%', aspectRatio: (\d+) \/ (\d+)/.exec(ui);
+  assert.ok(wrap, 'plinthWrap style found');
+  assert.equal(Number(wrap[1]) / 100, shelves.PLINTH.side);
+  assert.equal(Number(wrap[2]) / 100, shelves.PLINTH.side);
+  assert.equal(Number(wrap[3]) / 100, shelves.PLINTH.bottom);
+  assert.equal(Number(wrap[4]) / Number(wrap[5]), shelves.PLINTH.aspect);
+  assert.match(ui, /viewBox="0 0 200 64"/);
+  const face = /<Ellipse cx="100" cy="(\d+)" rx="94" ry="22" fill="#d6ecfb"/.exec(ui);
+  assert.ok(face, 'top face ellipse found');
+  assert.equal(Number(face[1]) / 64, shelves.PLINTH.faceY);
+});
+
+test('round 6: hops never clip the head (tallest hats reach the paper frame top)', () => {
+  // [stage w, stage h, lift] as the try-on (wide), reveal (square) and hero (no hop) compute them.
+  const phones = [[320, 568], [375, 667], [375, 812], [390, 844], [430, 932]];
+  for (const [W, H] of phones) {
+    const sheetH = Math.min(H * 0.9, 780);
+    const stageH = Math.round(Math.min(300, sheetH * (sheetH < 760 ? 0.34 : 0.38)));
+    const tryOn = shelves.stageCard(W - 34, stageH - 6, 18 + 0.04 * (stageH / 2) + 4);
+    const reveal = Math.min(W - 40, H * 0.4) - 8;
+    const rev = shelves.stageCard(reveal, reveal, 24 + 6);
+    for (const [name, card, hop] of [['try-on', tryOn, 18 + 0.04 * (stageH / 2)], ['reveal', rev, 24]]) {
+      assert.ok(card.hatY - hop >= 0, `${W}x${H} ${name}: hat ${card.hatY.toFixed(1)} clears a ${hop.toFixed(1)}pt hop`);
+      assert.ok(Math.abs(card.tailY - card.plinthTopY) < 0.5, `${W}x${H} ${name}: tail on the plinth`);
+      assert.ok(card.box.height > (name === 'reveal' ? reveal : stageH) * 0.68, `${W}x${H} ${name}: shark still fills the stage`);
+    }
+  }
+  assert.match(src('src/screens/StoreScreen/SetCompleteReveal.tsx'), /stageCard\(STAGE - 8, STAGE - 8, HOP \+ 6\)/);
+  assert.match(src('src/screens/StoreScreen/TryOnSheet.tsx'), /stageCard\(SCREEN_W - 28 - 6, STAGE_H - 6, HOP \+ 0\.04 \* \(STAGE_H \/ 2\) \+ 4\)/);
+});
+
+test('round 6: shop surfaces are brand blue, never white, and every ink is AA', () => {
+  const ui = src('src/screens/StoreScreen/shopUi.tsx');
+  const block = /export const SHOP_SURFACE = \{([\s\S]*?)\} as const;/.exec(ui)[1];
+  const color = key => new RegExp(`\\b${key}: '(#[0-9a-f]{6})'`, 'i').exec(block)[1];
+  const lum = hex => {
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  for (const surface of ['panel', 'card', 'well']) {
+    assert.ok(lum(color(surface)) < 0.2, `${surface} is a blue, not a light surface`);
+    for (const ink of ['ink', 'inkSoft', 'inkGold']) {
+      assert.ok(contrast(color(ink), color(surface)) >= 4.5, `${ink} on ${surface}: ${contrast(color(ink), color(surface)).toFixed(2)}`);
+    }
+  }
+  assert.ok(contrast('#ffffff', color('alert')) >= 4.5, 'white on the error note');
+  // The shelves and both sheets read from it; none keeps a white or cream panel.
+  for (const file of ['src/screens/StoreScreen/ShopShelves.tsx', 'src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/WishlistSheet.tsx']) {
+    const code = src(file);
+    assert.match(code, /SHOP_SURFACE/, file);
+    assert.equal(/rgba\(255,\s*255,\s*255,\s*0\.88\)|backgroundColor: BRAND\.cream|#fffdf4|#fffaf0/.test(code), false, `${file} has no white or cream panel`);
+  }
+});
+
+test('round 6: copy never uses em dashes (new files too)', () => {
+  for (const file of ['src/screens/StoreScreen/WishlistSheet.tsx', 'src/screens/StoreScreen/inventoryQueue.ts', 'src/components/Playercard.tsx']) {
+    assert.equal(src(file).includes('—'), false, file);
+  }
 });
