@@ -57,7 +57,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
   const cups = seeded(variant.seed, 74) < 0.5 ? 3 : 4;
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
-    drawFarProps(canvas, crop, variant);
+    drawFarProps(canvas, crop, variant, undefined, [cam, cam.pole, box, { x: cx - cupW * 0.7, y: cy - cupW * 1.25, w: cupW * 1.4, h: cupW * 1.3 }]);
     const hedgeTop = drawGround(canvas, 'teacups', width, height, variant, art);
     drawTurntable(canvas, cx, cy, rx, ry, cupW, grade, PALETTES[palette]);
     drawSeason(canvas, width, height, variant, hedgeTop, art);

@@ -73,7 +73,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
-    drawFarProps(canvas, crop, variant, lut);
+    drawFarProps(canvas, crop, variant, lut, [cam, cam.pole, box]);
     drawTrestle(canvas, lut, height, grade);
     const hedgeTop = drawGround(canvas, 'flume', width, height, variant, art);
     drawPool(canvas, pool, height, grade);

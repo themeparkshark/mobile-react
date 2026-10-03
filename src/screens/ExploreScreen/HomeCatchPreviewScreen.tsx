@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Canvas, Group, Picture, Skia, createPicture } from '@shopify/react-native-skia';
+import { Canvas, Group, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
 import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
 import { LocationContext } from '../../context/LocationProvider';
@@ -97,6 +97,9 @@ function SeedSheet({ kind }: { kind: RideKind }) {
       stage.emissive?.(canvas, state, stage.data, art);
       const cam = stage.cam;
       const paint = Skia.Paint();
+      // The photo crop, outlined so the sheet shows what the print frames.
+      const outline = Skia.Paint(); outline.setStyle(PaintStyle.Stroke); outline.setStrokeWidth(4); outline.setColor(Skia.Color('#ff3b6b'));
+      canvas.drawRect(Skia.XYWHRect(stage.crop.x, stage.crop.y, stage.crop.w, stage.crop.h), outline);
       if (cam.beam) { paint.setColor(Skia.Color('#fff5e1')); canvas.drawRect(Skia.XYWHRect(cam.beam.x, cam.beam.y, cam.beam.w, cam.beam.h), paint); }
       if (art.cameraPole) canvas.drawImageRect(art.cameraPole, Skia.XYWHRect(0, 0, art.cameraPole.width(), art.cameraPole.height()), Skia.XYWHRect(cam.pole.x, cam.pole.y, cam.pole.w, cam.pole.h), paint);
       if (art.camera) {

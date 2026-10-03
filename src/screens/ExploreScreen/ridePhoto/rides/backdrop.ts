@@ -278,24 +278,28 @@ export function paintExtras(canvas: SkCanvas, t: number, clock: number, frameT: 
  * ride: a castle spire, a ferris wheel or a balloon cluster (seeded). Night adds the moon inside the crop.
  */
 export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: number; h: number }, variant: SceneVariant,
-  track?: { xs: number[]; ys: number[] }): void {
+  track?: { xs: number[]; ys: number[] }, avoid: { x: number; y: number; w: number; h: number }[] = []): void {
   const r = (salt: number) => seeded(variant.seed, salt);
   const night = variant.sky === 'night', sunset = variant.sky === 'sunset';
-  // How close the track runs to a point (the landmark and the moon never sit behind it).
+  // How clear a point is of the track and of the boxes in front (camera, hub): the landmark and the moon
+  // never sit behind them.
   const clearance = (x: number, y: number) => {
-    if (!track) return Infinity;
     let best = Infinity;
-    for (let k = 0; k < track.xs.length; k += 2) best = Math.min(best, Math.hypot(track.xs[k] - x, track.ys[k] - y));
+    if (track) for (let k = 0; k < track.xs.length; k += 2) best = Math.min(best, Math.hypot(track.xs[k] - x, track.ys[k] - y));
+    for (const b of avoid) {
+      const dx = Math.max(b.x - x, 0, x - (b.x + b.w)), dy = Math.max(b.y - y, 0, y - (b.y + b.h));
+      best = Math.min(best, Math.hypot(dx, dy));
+    }
     return best;
   };
-  // The object sits at 15 to 25% of the photo's height, on the side the track leaves clearer.
+  // The object sits at 15 to 25% of the photo's height, at the clearest of five slots (seeded tie-break).
   const midY = crop.y + crop.h * 0.2;
-  const leftX = crop.x + crop.w * 0.2, rightX = crop.x + crop.w * 0.8;
-  let left = r(51) < 0.5;
-  const need = crop.w * 0.16;
-  if (clearance(left ? leftX : rightX, midY) < need && clearance(left ? rightX : leftX, midY) > clearance(left ? leftX : rightX, midY)) left = !left;
-  const cx = left ? leftX : rightX;
-  const s = crop.h * 0.06;
+  const slots = [0.14, 0.32, 0.5, 0.68, 0.86].map(f => crop.x + crop.w * f);
+  const s = crop.h * 0.11;
+  const score = (x: number, y: number) => Math.min(clearance(x, y), s * 2.5) + r(51 + x) * s * 0.4;
+  let cx = slots[0];
+  for (const x of slots) if (score(x, midY) > score(cx, midY)) cx = x;
+  const left = cx < crop.x + crop.w / 2;
   const base = midY + s * 1.15;
   const tone = night ? '#2c3f7c' : sunset ? '#a88bc0' : '#8fbfe6';
   const ink = night ? '#18224a' : sunset ? '#7e66a0' : '#5f93c4';
@@ -343,9 +347,12 @@ export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: 
   if (night) {
     // The moon, inside the crop, on the other side from the landmark.
     // At 18 to 25% of the photo's height, opposite the landmark, and never behind the track.
-    let mx = crop.x + crop.w * (left ? 0.8 : 0.2), my = crop.y + crop.h * 0.21;
-    const mr = crop.h * 0.05;
-    if (clearance(mx, my) < mr * 2.2) { mx = crop.x + crop.w * (left ? 0.62 : 0.38); my = crop.y + crop.h * 0.19; }
+    const mr = crop.h * 0.05, my = crop.y + crop.h * 0.21;
+    let mx = slots[left ? 4 : 0];
+    for (const x of slots) {
+      if (Math.abs(x - cx) < crop.w * 0.3) continue;
+      if (Math.min(clearance(x, my), mr * 3) > Math.min(clearance(mx, my), mr * 3)) mx = x;
+    }
     const halo = Skia.Paint(); halo.setAntiAlias(true);
     halo.setShader(Skia.Shader.MakeRadialGradient(vec(mx, my), mr * 3, [Skia.Color('rgba(255,244,210,0.35)'), Skia.Color('rgba(255,244,210,0)')], null, 0));
     canvas.drawCircle(mx, my, mr * 3, halo);
