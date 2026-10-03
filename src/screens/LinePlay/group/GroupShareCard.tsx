@@ -7,10 +7,12 @@
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ShareCardArtwork from '../../../components/ShareCardArtwork';
-import { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../../../components/ParkDayShareCard';
+import { FLEX_SIZE } from '../../../share/formats';
 import type { GroupRecap } from '../../../services/lineplay/lineGroup';
 import PlayerBadge from './PlayerBadge';
 import { GameIcon } from '../../../ui';
+
+const { width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT } = FLEX_SIZE.story;
 
 export interface GroupShareCardProps {
   readonly recap: GroupRecap;
