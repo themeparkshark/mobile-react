@@ -379,7 +379,9 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
   const [results, setResults] = useState<PlayerType[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [findMe, setFindMe] = useState<boolean>(!!player?.discoverable);
+  const [refreshing, setRefreshing] = useState(false);
   const seqRef = useRef(0);
+  const overrides = useFriendOverrides();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setFindMe(!!player?.discoverable); }, [player?.discoverable]);
@@ -445,10 +447,11 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
           ...results.map(p => ({ type: 'player' as const, key: `r${p.id}`, player: p, fallback: 'none' as FriendStatus }))]
         : [];
     }
-    if (!suggested.length) return [];
+    const shownSuggested = suggested.filter(p => overrides.get(p.id) !== 'blocked');
+    if (!shownSuggested.length) return [];
     return [{ type: 'header', key: 'h-sug', label: 'Sharks you may know', icon: 'star' },
-      ...suggested.map(p => ({ type: 'player' as const, key: `s${p.id}`, player: p, fallback: 'none' as FriendStatus }))];
-  }, [hint, results, suggested]);
+      ...shownSuggested.map(p => ({ type: 'player' as const, key: `s${p.id}`, player: p, fallback: 'none' as FriendStatus }))];
+  }, [hint, results, suggested, overrides]);
 
   const cards = !query && (
     <View>
@@ -467,6 +470,8 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
           : (
             <SocialList
               rows={rows}
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); getFriendSuggestions().then(setSuggested).catch(() => undefined).finally(() => setRefreshing(false)); }}
               header={cards || null}
               footer={searching ? <SharkLoader state="loading" tone="onBlue" compact /> : null}
               empty={searching ? null : query
