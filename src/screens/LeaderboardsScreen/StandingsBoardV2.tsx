@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import { Image as ExpoImage } from 'expo-image';
 import { outfitLayerUrls } from '../../helpers/wardrobe';
 import type { InventoryType } from '../../models/inventory-type';
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
   type ListRenderItem, type ViewToken,
@@ -244,10 +244,12 @@ function GoalPips({ model }: { readonly model: StandingsBoardModel }) {
  * one line, and a bar that ends at the face of the player you are chasing
  * with a "+2" chip, so the goal reads without words.
  */
-function YouCard({ model, climb, climbId, passed, hidden, now, onPress, onGoRide, onClimbDone }: {
+function YouCard({ model, climb, climbId, passed, hidden, snapId, now, onPress, onGoRide, onClimbDone }: {
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
   /** Changes for every climb, so two climbs of the same size both play. */
   readonly climbId: number;
+  /** Changes when the board becomes the active tab: the card jumps to its state, no slide. */
+  readonly snapId: number;
   readonly hidden: boolean; readonly now: number; readonly onPress: () => void;
   /** NEW players: the card's button opens the map. */
   readonly onGoRide: () => void;
@@ -266,9 +268,12 @@ function YouCard({ model, climb, climbId, passed, hidden, now, onPress, onGoRide
   const urgent = model.board !== 'all_time' && weekDots(model.endsAt, now).urgency !== 'calm' && !!model.chase && model.chase.toPass <= 2;
 
   useEffect(() => { fill.value = reduced ? progress : withDelay250(progress); }, [progress, reduced, fill]);
-  useEffect(() => {
-    shown.value = reduced ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
-  }, [hidden, reduced, shown]);
+  const lastSnap = useRef(snapId);
+  useLayoutEffect(() => {
+    const snap = lastSnap.current !== snapId;
+    lastSnap.current = snapId;
+    shown.value = reduced || snap ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
+  }, [hidden, reduced, shown, snapId]);
 
   // The overtake: each player you passed slides by with a tick, then "Up N!" lands.
   useEffect(() => {
@@ -633,8 +638,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // Becoming the active tab: wake the list and work out from geometry whether your
   // row is on screen, so the You card never duplicates a visible row.
   const viewport = useRef(0);
-  useEffect(() => {
+  const [snapId, setSnapId] = useState(0);
+  useLayoutEffect(() => {
     if (!active) return;
+    setSnapId(id => id + 1);
     list.current?.recordInteraction();
     const index = items.findIndex(item => item.type === 'row' && item.row.isMe);
     const onScreen = index >= 0 && rowOnScreen(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
@@ -727,7 +734,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     );
   }
 
-  const hideYou = !climbing && (myRowVisible || (meOnPodium && podiumOnScreen));
+  // A hidden tab keeps its card down, so activating it can never flash a duplicate of your row.
+  const hideYou = !active || (!climbing && (myRowVisible || (meOnPodium && podiumOnScreen)));
 
   return (
     <View style={{ flex: 1 }}>
@@ -756,7 +764,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
         />
         <TopRibbon podium={podium} metric={model.metric} scrollY={scrollY} />
       </View>
-      <YouCard model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} now={now} onPress={scrollToMe}
+      <YouCard model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} onPress={scrollToMe}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); }} />
       <SharkCard row={card} metric={model.metric} board={board} onClose={() => setCard(null)} />

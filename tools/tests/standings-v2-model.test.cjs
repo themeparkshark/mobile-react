@@ -197,7 +197,7 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.equal((board.match(/onClose=\{closeResults\}/g) || []).length, 2, 'both results-card paths go through closeResults');
   assert.doesNotMatch(board, /onClose=\{\(\) => \{ setResults\(false\)/);
-  assert.match(board, /const hideYou = !climbing && /);
+  assert.match(board, /const hideYou = !active \|\| \(!climbing && /);
   assert.doesNotMatch(board, /position: 'absolute', top: -46/, 'the ticker plays inside your card, never over a row');
   assert.match(board, /\{`Up \$\{climb\}!`\}/, '"Up N!" lives in the rank column');
   assert.match(board, /onClimbDone=\{\(\) => \{ setClimbing\(false\); setClimb\(0\); setPassed\(\[\]\); \}\}/, 'the climb resets, so a same-size climb plays again');
