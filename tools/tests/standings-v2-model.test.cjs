@@ -133,11 +133,12 @@ test('only a server without v2 falls back; an expired session or a gone park nev
 
 test('copy: the Monday card, empty boards and spoken rows', () => {
   assert.deepEqual(plain(model.lastWeekCopy({ rank: 1, score: 14, playersCount: 28, title: 'Ride Champ', tickets: 5 })),
-    { headline: '14 rides last week!', line: '#1 this week. Ride Champ!', reward: '+5 Tickets' });
+    { headline: '14 rides last week!', line: 'Ride Champ! #1 last week', reward: '+5 Tickets' });
   const low = model.lastWeekCopy({ rank: 20, score: 6, playersCount: 25, title: null, tickets: 0 });
   assert.deepEqual(plain(low), { headline: '6 rides last week!', line: 'You finished #20', reward: null }, 'leads with rides, no "of 25"');
   const unpaid = model.lastWeekCopy({ rank: 1, score: 9, playersCount: 3, title: null, tickets: 0 });
-  assert.doesNotMatch(`${unpaid.headline} ${unpaid.line}`, /won|Champ/, 'never winner words for an unpaid result');
+  assert.deepEqual(plain(unpaid), { headline: '9 rides last week!', line: 'Great riding last week!', reward: null });
+  assert.doesNotMatch(`${unpaid.headline} ${unpaid.line}`, /won|Champ|#\d/, 'no winner words and no rank for an unpaid podium place');
   assert.equal(model.emptyCopy('week', null).title, 'The crown is up for grabs!');
   assert.equal(model.emptyCopy('friends', 0).target, 'Friends');
   assert.equal(model.rowLabel({ rank: null, name: 'mike', score: 0, isMe: false }, 'ride_wins'), 'Not ranked yet, mike, 0 rides');
@@ -204,4 +205,27 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
   assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /barrel-flipped\.png/);
   assert.match(read('src/api/endpoints/me/task-attempts.ts'), /winNote\(/);
+});
+
+test('round 5: your row visibility from geometry, the goal note held while the win screen is open', () => {
+  assert.equal(model.rowOnScreen(300, 64, 0, 600), true);
+  assert.equal(model.rowOnScreen(560, 64, 0, 600), true, '40 of 64 pt showing is enough');
+  assert.equal(model.rowOnScreen(580, 64, 0, 600), false);
+  assert.equal(model.rowOnScreen(300, 64, 400, 600), false, 'scrolled past');
+  assert.equal(model.rowOnScreen(300, 64, 0, 0), false, 'not laid out yet');
+
+  const cache = loadTs('src/screens/LeaderboardsScreen/standingsCache.ts');
+  cache.holdWinNotes(true);
+  cache.parkWinNote({ text: 'Weekly goal: 3 rides! +10 XP', big: true }, () => assert.fail('the fallback must wait while the win screen is open'));
+  cache.holdWinNotes(false);
+  assert.equal(cache.takeWinNote().text, 'Weekly goal: 3 rides! +10 XP');
+
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /list\.current\?\.recordInteraction\(\);/, 'an activated board wakes its list');
+  assert.match(board, /windowSize=\{active \? 9 : 3\}/);
+  const screen = read('src/screens/LeaderboardScreen.tsx');
+  assert.match(screen, /interpolateColor\(Math\.min\(1, Math\.abs\(pillX\.value - index\)\)/, 'labels follow the pill');
+  const modal = read('src/components/PostWinRewardsModal.tsx');
+  assert.ok(modal.indexOf('{goalNote && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');
+  assert.match(read('src/components/OfflineBanner.tsx'), /ROUTE_EXTRA_TOP[^\n]*Leaderboard: 66/);
 });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet } from 'react-native';
 import PostWinRewardsModal from '../components/PostWinRewardsModal';
+import { parkWinNote } from './LeaderboardsScreen/standingsCache';
 import CoinLevelingModal from '../components/CoinLevelingModal';
 import type { RideCoinLevelType } from '../models/ride-coin-level-type';
 
@@ -17,6 +18,13 @@ const previewCoin: RideCoinLevelType = {
 };
 
 export default function PostWinRewardsPreviewScreen() {
+  // Dev only: EXPO_PUBLIC_STANDINGS_GOAL_PREVIEW=1 parks a Standings goal note, as a real win would.
+  useState(() => {
+    if (__DEV__ && process.env.EXPO_PUBLIC_STANDINGS_GOAL_PREVIEW === '1') {
+      parkWinNote({ text: 'Weekly goal: 8 rides! +25 XP', big: true }, () => undefined);
+    }
+    return null;
+  });
   const [showWin, setShowWin] = useState(true);
   const [showCoin, setShowCoin] = useState(false);
   const [openCoinAfterHide, setOpenCoinAfterHide] = useState(false);
