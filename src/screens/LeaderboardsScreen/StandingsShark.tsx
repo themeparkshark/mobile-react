@@ -8,7 +8,7 @@ import { memo, useContext } from 'react';
 import { Image, View } from 'react-native';
 import Avatar from '../../components/Avatar';
 import { AuthContext } from '../../context/AuthProvider';
-import { liveOutfitFor, outfitLayerUrls } from '../../helpers/wardrobe';
+import { liveOutfitFor, outfitLayerUrls, sharkBaseLayers } from '../../helpers/wardrobe';
 import type { InventoryType } from '../../models/inventory-type';
 import type { PlayerType } from '../../models/player-type';
 import { BRAND } from '../../ui';
@@ -49,14 +49,24 @@ function StandingsShark({ avatar, size, muted = false, ring }: {
   const player = avatar as unknown as PlayerType;
   // You always see your own shark (the Classic you see on Profile), never a color.
   const isMe = !!signedIn && signedIn.id === avatar.id;
-  const dressed = isMe || !!avatar.avatar_url || wearsOwnLook(liveOutfitFor(player, signedIn) ?? null);
+  const outfit = liveOutfitFor(player, signedIn) ?? null;
+  const dressed = !!avatar.avatar_url || wearsOwnLook(outfit);
+  // Your own default look: Alex's Classic shark from the bundle (no network, no blank frame).
+  const ownClassic = isMe && !dressed;
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: BRAND.sky,
       borderWidth: ring ? Math.max(2, Math.round(size / 20)) : 2, borderColor: ring ?? BRAND.white, opacity: muted ? 0.55 : 1,
       alignItems: 'center', justifyContent: 'center',
     }}>
-      {dressed ? (
+      {ownClassic ? (
+        <View style={{ width: size * 1.1, height: size * 1.1, marginTop: size * 0.18 }}>
+          {sharkBaseLayers(null).map((layer, i) => (
+            <Image key={i} source={layer as number} fadeDuration={0} resizeMode="contain"
+              style={{ position: 'absolute', left: 0, top: 0, width: size * 1.1, height: size * 1.1 }} />
+          ))}
+        </View>
+      ) : dressed ? (
         <View style={{ width: AVATAR_PX, height: AVATAR_PX, transform: [{ scale: size / AVATAR_PX }] }}>
           <Avatar player={player} size="sm" />
         </View>

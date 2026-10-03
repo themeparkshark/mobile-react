@@ -30,3 +30,29 @@ export function endStandingsSession(): void {
 export function standingsSession(): number {
   return session;
 }
+
+/**
+ * The Standings note a ride win leaves ("Weekly goal: 8 rides! +25 XP"). The
+ * resolve call parks it here; the win screen shows it the moment its coin
+ * reveal ends, so it never talks over the catch. A note nobody shows within
+ * 15 s (another win path) is shown then by its own fallback.
+ */
+export interface PendingWinNote { readonly text: string; readonly big: boolean }
+let pendingNote: PendingWinNote | null = null;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function parkWinNote(note: PendingWinNote, fallback: (note: PendingWinNote) => void): void {
+  pendingNote = note;
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    const left = takeWinNote();
+    if (left) fallback(left);
+  }, 15_000);
+}
+
+export function takeWinNote(): PendingWinNote | null {
+  const note = pendingNote;
+  pendingNote = null;
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  return note;
+}
