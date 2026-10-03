@@ -232,7 +232,7 @@ test('locked bleed never reads as earned; postmark sits in the free corner; rari
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'bl' })).freeCorner, 'bl');
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'nope' })).freeCorner, 'tr');
   const tile = read('src/screens/stampbook/StampTile.tsx');
-  assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[stamp\.freeCorner\]\]\}/);
+  assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, stamp\.claimable \|\| isNew \|\| almost\)\]\]\}/);
   assert.match(tile, /5: \{ outline: '#8A5A00', page: '#FFC21A'/);
   const card = read('src/screens/stampbook/StampCard.tsx');
   assert.match(card, /<View pointerEvents="none" style=\{\[styles\.stampHere/);

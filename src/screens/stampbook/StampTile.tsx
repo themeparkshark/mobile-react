@@ -87,7 +87,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                 <Foil stamp={stamp} size={art} art="thumb" progress={shine} lag={col * 0.08} />
               )}
               {!!mark && (
-                <View style={[styles.postmark, CORNER[stamp.freeCorner]]} accessible={false}>
+                <View style={[styles.postmark, CORNER[postmarkCorner(stamp.freeCorner, stamp.claimable || isNew || almost)]]} accessible={false}>
                   <Text style={styles.pmMonth} maxFontSizeMultiplier={1}>{mark.month}</Text>
                   <Text style={styles.pmDay} maxFontSizeMultiplier={1}>{mark.day}</Text>
                   <Text style={styles.pmYear} maxFontSizeMultiplier={1}>{mark.year}</Text>
@@ -157,6 +157,12 @@ const RARITY_RING: Record<number, { outline: string; page: string; width: number
 };
 
 /** Postmark inside the art box, in the corner the art leaves empty (never on the name below). */
+/** A tag (CLAIM, NEW, Almost) sits on the top-right of the tile: the postmark then drops to the bottom corner on its side. */
+export function postmarkCorner(free: Corner, tagged: boolean): Corner {
+  if (!tagged) return free;
+  return free === 'tr' ? 'br' : free === 'tl' ? 'bl' : free;
+}
+
 const CORNER: Record<Corner, object> = {
   tl: { left: -2, top: -2 }, tr: { right: -2, top: -2 }, bl: { left: -2, bottom: -2 }, br: { right: -2, bottom: -2 },
 };
