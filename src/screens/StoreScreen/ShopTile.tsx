@@ -120,11 +120,14 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       </View>
       {/* Reserved chip band: rarity and SET never sit on the art. */}
       <View style={styles.band}>
-        {badge.label && !owned && (
+        {/* Narrow tiles with a SET chip show rarity as a dot, so the band always fits. */}
+        {badge.label && !owned && (set && width < 120 ? (
+          <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
+        ) : (
           <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
-            <Text maxFontSizeMultiplier={1.1} style={styles.rarityText}>{badge.label}</Text>
+            <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.rarityText}>{badge.label}</Text>
           </View>
-        )}
+        ))}
         {set && !owned && (
           <View style={[styles.setChip, { backgroundColor: set.color ?? BRAND.gold }]}>
             <GameIcon name="sparkle" size={12} />
@@ -174,7 +177,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   ribbonText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 0.6 },
   art: { marginHorizontal: 6 },
-  band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2 },
+  band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
+  rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
   coin: { width: 17, height: 17, marginRight: 3 },

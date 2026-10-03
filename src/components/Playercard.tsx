@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef } from 'react';
 import { Animated, GestureResponderEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
@@ -65,6 +66,7 @@ export default function Playercard({
   popFrom,
   dropIn = false,
   shadow = false,
+  shadowAt,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -83,6 +85,8 @@ export default function Playercard({
   readonly dropIn?: boolean;
   /** Stages: a contact shadow under the tail that grows and darkens as the shark bobs down. */
   readonly shadow?: boolean;
+  /** Where the tail rests, in this card's box (from stageCard): the shadow sits exactly there. */
+  readonly shadowAt?: { left: string; top: string };
 }) {
   const translate = useRef(new Animated.Value(0)).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -215,10 +219,22 @@ export default function Playercard({
           )
         )}
         {shadow && (
-          <Animated.View pointerEvents="none" style={[styles.shadow, {
-            opacity: translate.interpolate({ inputRange: [0, 10], outputRange: [0.16, 0.3] }),
+          <Animated.View pointerEvents="none" style={[styles.shadow, shadowAt ? { left: shadowAt.left as never, top: shadowAt.top as never } : null, {
+            opacity: translate.interpolate({ inputRange: [0, 10], outputRange: [0.55, 1] }),
             transform: [{ scaleX: translate.interpolate({ inputRange: [0, 10], outputRange: [0.82, 1] }) }],
-          }]} />
+          }]}>
+            {/* Soft contact shadow: a radial fade, not a flat pill. */}
+            <Svg width="100%" height="100%" viewBox="0 0 100 20" preserveAspectRatio="none">
+              <Defs>
+                <RadialGradient id="contact" cx="50%" cy="50%" r="50%">
+                  <Stop offset="0" stopColor="#05346e" stopOpacity={0.42} />
+                  <Stop offset="0.7" stopColor="#05346e" stopOpacity={0.16} />
+                  <Stop offset="1" stopColor="#05346e" stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Ellipse cx="50" cy="10" rx="50" ry="10" fill="url(#contact)" />
+            </Svg>
+          </Animated.View>
         )}
         <Animated.View
           style={{
@@ -280,7 +296,7 @@ export default function Playercard({
 
 const styles = StyleSheet.create({
   // Under the tail, where the shark meets the stage (art box coordinates).
-  shadow: { position: 'absolute', left: '40%', width: '36%', top: '83%', height: '4.5%', borderRadius: 999, backgroundColor: '#05346e' },
+  shadow: { position: 'absolute', left: '56.5%', width: '32%', top: '80%', height: '5%' },
   chestPin: { position: 'absolute', left: '47%', top: '52%', width: '11%', aspectRatio: 1 },
   image: {
     width: '100%',

@@ -251,5 +251,25 @@ test('round 4: wear failure has its own message and retry, never a buy', () => {
   assert.equal(shelves.tryOnCta({ ...idle, finishes: true }).label, 'Complete the look: 200');
   assert.equal(shelves.tryOnCta({ ...idle, phase: 'confirm' }).action, 'buy');
   assert.equal(shelves.tryOnCta({ ...idle, short: 120 }).label, 'Need 120 more coins');
-  assert.equal(shelves.tryOnCta({ ...idle, phase: 'unknown' }).action, 'retry_buy');
+  assert.equal(shelves.tryOnCta({ ...idle, phase: 'unknown' }).action, 'recheck');
+});
+
+test('round 5: the shark never floats (tail on the plinth for hero, try-on and reveal)', () => {
+  // Hero (portrait), try-on (wide), reveal (square), on small and large phones.
+  for (const [w, h] of [[233, 282], [250, 320], [347, 280], [374, 300], [335, 335], [362, 362]]) {
+    const card = shelves.stageCard(w, h);
+    assert.ok(Math.abs(card.tailY - card.plinthTopY) < 0.5, `${w}x${h}: tail ${card.tailY} vs plinth ${card.plinthTopY}`);
+    assert.ok(card.box.top > -card.box.height * 0.1, `${w}x${h}: head in frame`);
+    assert.ok(card.box.width <= w * 1.06, `${w}x${h}: not wider than the stage`);
+  }
+});
+
+test('round 5: "Check again" never re-buys', () => {
+  const unknown = shelves.tryOnCta({ owned: false, worn: false, vipLocked: false, short: 0, phase: 'unknown', wear: 'idle', finishes: false, cost: 200 });
+  assert.equal(unknown.label, 'Check again');
+  assert.equal(unknown.action, 'recheck');
+  // Not charged after the check: back to the normal two-tap buy.
+  assert.equal(shelves.afterBuyError(1000, 200, { coins: 1000, owns: false }), 'not_charged');
+  const idle = shelves.tryOnCta({ owned: false, worn: false, vipLocked: false, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 200 });
+  assert.equal(idle.action, 'ask');
 });
