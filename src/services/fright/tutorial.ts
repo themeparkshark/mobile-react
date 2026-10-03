@@ -58,14 +58,45 @@ export function introPlan(input: { readonly seen: SeenMap; readonly returning?: 
   return input.returning ? 'welcome_back' : 'intro';
 }
 
-/** The 5 swipe cards (one short line each). Kid-safe, COPY.md voice. */
+/**
+ * The 5 swipe cards: a short title and ONE line of 7 words or fewer (How to
+ * Play style). Kid-safe, COPY.md voice. Chaos Hour joins when the encounter
+ * ships (it is off in tranche 1, so the intro never promises it).
+ */
 export const TUTORIAL_CARDS: readonly { readonly key: string; readonly title: string; readonly line: string }[] = [
-  { key: 'haunts', title: 'Survive the haunts', line: 'Step into a haunt line, tap I\'m in line, and it counts.' },
-  { key: 'rank', title: 'Rank every haunt', line: 'One tap: 1 to 5 fins. See what the fans think.' },
-  { key: 'reefs', title: 'Hunt Case Files', line: 'Stand still in a Fright Reef. A new Case File finds you.' },
-  { key: 'chaos', title: 'Chaos Hour', line: 'Watch for Chuckles and Riptide. Chaos Hour is 11:11 PM.' },
-  { key: 'marquee', title: 'Your night, in lights', line: 'Your Marquee recap and the Deep Lantern card keep it all.' },
+  { key: 'haunts', title: 'Survive the haunts', line: 'In line? Tap I\'m in line.' },
+  { key: 'rank', title: 'Rank every haunt', line: 'One tap. One to five fins.' },
+  { key: 'reefs', title: 'Hunt Case Files', line: 'Stand still in a Fright Reef.' },
+  { key: 'marquee', title: 'Your night, in lights', line: 'Every haunt lands on your Marquee.' },
+  { key: 'lantern', title: 'The Deep Lantern', line: 'Your whole season on one card.' },
 ];
+
+/**
+ * Where card copy goes on the tutorial hero (720x1080): the clear sky band
+ * between the moon and stars above and the shark's head below, as fractions
+ * of the card height. Nothing decorative sits in this band.
+ */
+export const HERO_COPY_BAND = { top: 0.31, bottom: 0.47 } as const;
+
+/** Top bar (Skip) and bottom band (dots + Next) heights, in points, outside the safe area. */
+export const TUTORIAL_TOP_BAR = 6 + 44 + 10;
+export const TUTORIAL_BOTTOM_BAND = 14 + 56 + 36 + 12;
+
+/**
+ * Card size for a screen: the hero keeps its 2:3 shape, fits between the top
+ * bar (below the Dynamic Island / status bar) and the bottom band (above the
+ * home indicator), and never runs wider than the screen minus 20 pt gutters.
+ */
+export function cardLayout({ width, height, insetTop, insetBottom }: {
+  readonly width: number; readonly height: number; readonly insetTop: number; readonly insetBottom: number;
+}): { top: number; cardWidth: number; cardHeight: number; titleSize: number; lineSize: number; bottomBand: number } {
+  const top = insetTop + TUTORIAL_TOP_BAR;
+  const bottomBand = insetBottom + TUTORIAL_BOTTOM_BAND;
+  const available = Math.max(200, height - top - bottomBand - 8);
+  const cardHeight = Math.floor(Math.min(available, (width - 40) * 1.5));
+  const cardWidth = Math.floor(cardHeight / 1.5);
+  return { top, cardWidth, cardHeight, bottomBand, titleSize: Math.round(cardWidth * 0.092), lineSize: Math.round(cardWidth * 0.062) };
+}
 
 export interface CoachState {
   readonly queue: readonly FrightCoachKey[];

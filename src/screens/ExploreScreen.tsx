@@ -807,7 +807,7 @@ function ExploreScreen() {
     rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
   const parkTipReady = mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
-    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
