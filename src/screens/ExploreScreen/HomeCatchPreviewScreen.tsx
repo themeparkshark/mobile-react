@@ -222,7 +222,7 @@ export default function HomeCatchPreviewScreen() {
         {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
           <HomeFindMarker key={item.pivot_id} item={item} distance={null} inRange={FIXTURES[index].inRange}
             animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
-            fingerSide={sides[item.pivot_id!] ?? 'right'} />
+            fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
@@ -257,6 +257,9 @@ export default function HomeCatchPreviewScreen() {
 }
 
 const noop = () => undefined;
+/** The nearest in-range fixture shows the only finger (as in the app). */
+const nearestInRange = FIXTURES.map((f, i) => ({ i, d: f.inRange ? Math.hypot(f.north, f.east) : Infinity }))
+  .sort((a, b) => a.d - b.d)[0].i;
 
 const styles = StyleSheet.create({
   hidden: { opacity: 0 },

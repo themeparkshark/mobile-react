@@ -16,7 +16,7 @@ export function findLabel(item: PrepItemType, distance: number | null, inRange: 
  * One find on the home map, memoized: GPS ticks re-render it only when its
  * own range, rounded distance, motion budget or hidden state changes.
  */
-function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', count = 1, chromeless = false }: {
+function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', count = 1, chromeless = false, showFinger = true }: {
   readonly item: PrepItemType;
   readonly distance: number | null;
   readonly inRange: boolean;
@@ -29,6 +29,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   readonly count?: number;
   /** Under the header: art only. */
   readonly chromeless?: boolean;
+  readonly showFinger?: boolean;
 }) {
   const coordinate = useMemo(() => ({ latitude: item.latitude!, longitude: item.longitude! }), [item.latitude, item.longitude]);
   const press = useCallback(() => onTap(item, distance, inRange), [onTap, item, distance, inRange]);
@@ -36,7 +37,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
     <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press}
       accessibilityLabel={findLabel(item, distance, inRange)}>
-      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} />
+      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} />
     </Marker>
   );
 }

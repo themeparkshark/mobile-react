@@ -69,14 +69,22 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
     paint(canvas, { t: t.value, clock: clock.value, rock: rock.value, riderIn: riderIn.value, alpha: carVis.value,
       ghost: false, photo: false }, data, art);
     return recorder.finishRecordingAsPicture();
-  });
+  }, [stage, art]);
+  const { front } = stage;
+  const over = useDerivedValue(() => {
+    if (!front) return EMPTY;
+    const recorder = Skia.PictureRecorder();
+    const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, height));
+    front(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: carVis.value, ghost: false, photo: false }, data, art);
+    return recorder.finishRecordingAsPicture();
+  }, [stage, art]);
   const glow = useDerivedValue(() => {
     if (!emissive) return EMPTY;
     const recorder = Skia.PictureRecorder();
     const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, height));
     emissive(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: 1, ghost: false, photo: false }, data, art);
     return recorder.finishRecordingAsPicture();
-  });
+  }, [stage, art]);
 
   // The target: brackets close in like a shrinking ring, gold, then green on the window.
   const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
@@ -144,6 +152,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
       <Picture picture={stage.backdrop} />
       <Picture picture={dynamic} />
       <Picture picture={stage.foreground ?? EMPTY} />
+      <Picture picture={over} />
 
       <Group opacity={show}>
         <Path path={cone} opacity={coneOpacity}>

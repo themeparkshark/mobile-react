@@ -422,6 +422,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // The nearest Ride Photo find in range has its viewfinder mounted and warm before the tap.
   const stageItem = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item ?? null, [placed]);
+  // One finger cue on the map at a time: the nearest find in range.
+  const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange)
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
   const ridePhotoArt = placed.filter(entry => rideSpec(entry.item.rarity).style === 'ride_photo')
     .map(entry => entry.item.icon_url).filter((url): url is string => !!url).join('|');
   useEffect(() => {
@@ -537,7 +540,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
             hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1} chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1)}
             onTap={tapFind} onExpire={handlePrepItemExpire}
-            fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} />
+            fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot} />
         ))}
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}

@@ -541,7 +541,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           </View>
           {photo && <Animated.View style={[styles.gradeChip, { backgroundColor: GRADE_CHIP[photo.grade][0] }, gradeStyle]}>
             {Array.from({ length: GRADE_STARS[photo.grade] }, (_, i) => <GameIcon key={i} name="star" size={14} />)}
-            <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]}>{GRADE_LABEL[photo.grade]}{bonusXp ? `  +${bonusXp} XP` : ''}</Text>
+            <Text style={[styles.gradeText, { color: GRADE_CHIP[photo.grade][1] }]} numberOfLines={1}>{GRADE_LABEL[photo.grade]}</Text>
+            {bonusXp ? <View style={styles.xpPill}><Text style={styles.xpText} numberOfLines={1}>+{bonusXp} XP</Text></View> : null}
           </Animated.View>}
           {/* A ride the player never snapped: "New ride!" and the collection count */}
           {newRide && <Animated.View style={[styles.rideChip, rideStyle]}>
@@ -584,9 +585,12 @@ const styles = StyleSheet.create({
   fill: { width: '100%', height: 7, borderRadius: 4, transformOrigin: 'left' },
   count: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 14 },
   setName: { color: '#bcd6f5', fontFamily: 'Knockout', fontSize: 14, marginTop: 1 },
-  gradeChip: { position: 'absolute', right: 8, top: -24, flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 9, paddingVertical: 3,
+  // Anchored left of the copy and sized to its content (it used to clip "+25 XP" over the map).
+  gradeChip: { position: 'absolute', left: STICKER_LEFT + STICKER + 2, top: -26, flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 9, paddingVertical: 3,
     borderRadius: 12, borderWidth: 2, borderColor: '#0b2f5c' },
-  gradeText: { fontFamily: 'Shark', fontSize: 14, marginLeft: 3 },
+  gradeText: { fontFamily: 'Shark', fontSize: 14, marginLeft: 3, flexShrink: 0 },
+  xpPill: { marginLeft: 6, paddingHorizontal: 6, borderRadius: 8, backgroundColor: '#0b2f5c', flexShrink: 0 },
+  xpText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   rideChip: { position: 'absolute', left: STICKER_LEFT + STICKER + 4, bottom: -22, flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#0b2f5c' },
   rideText: { color: '#0b2f5c', fontFamily: 'Shark', fontSize: 13 },

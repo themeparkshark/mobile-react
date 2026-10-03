@@ -189,6 +189,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   rideRef.current = ride;
   const [print, setPrint] = useState<{ grade: PhotoGrade; soClose: boolean; key: number; double?: boolean } | null>(null);
   // Epic: photo 1 waits in the band's film strip, then flies with photo 2 as a fanned pair.
+  const [plateLeft, setPlateLeft] = useState(false);
   const [strip, setStrip] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [frameStage, setFrameStage] = useState<FrameStage>('white');
   const [printImage, setPrintImage] = useState<SkImage | null>(null);
@@ -597,6 +598,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const onShot = useCallback((grade: PhotoGrade, offset: number, direction: 'early' | 'late' | null, soClose: boolean, shotUAt: number) => {
     catchMark(`shot-${grade} offset=${Math.round(offset)}`);
+    // The grade plate goes on the corner away from the vehicle in the photo, so it never covers the find.
+    const v = stage.vehicleAt?.(shotUAt);
+    setPlateLeft(!!v && (v.x - crop.x) / crop.w > 0.5);
     shotThisPass.current = true;
     silentPasses.current = 0;
     setHandOn(false);
@@ -637,7 +641,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       if (parkedMode) return;
       t.value = withTiming(1, { duration: Math.max(240, (1 - t.value) * passMs), easing: Easing.linear });
     });
-  }, [takePhoto, spec, developPrint, onCaught, onRodeOff, retry, later, parkedMode, passMs, anchors.tFrame, stage.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [takePhoto, spec, developPrint, onCaught, onRodeOff, retry, later, parkedMode, passMs, anchors.tFrame, stage, crop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const arrivalMs = anchors.tFrame * passMs;
   const rarity = item?.rarity ?? 3;
@@ -893,6 +897,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           <View style={[styles.band, { height: bandH, paddingBottom: insets.bottom }]} pointerEvents="box-none">
             <View style={styles.bandSide} pointerEvents="none">
               <Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
+              <Text style={styles.rideName} numberOfLines={1}>on the {RIDES[stage.kind].name}</Text>
               {spec.photosNeeded > 1 && <View style={styles.strip} accessibilityLabel={`Photo ${Math.min(spec.photosNeeded, ride.photos.length + 1)} of ${spec.photosNeeded}`}>
                 {Array.from({ length: spec.photosNeeded }, (_, i) => (
                   <View key={i} style={[styles.slot, i === ride.photos.length && styles.slotNext]}
@@ -969,8 +974,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         <Image source={require('../../../../assets/images/ride-photo/glow.webp')} style={styles.printShadow} contentFit="fill" transition={0} />
         <LinearGradient colors={FRAME_FILL[frameStage]} style={[StyleSheet.absoluteFill, styles.printFill]} />
         <View style={[styles.goldBevel, { opacity: frameStage === 'white' ? 0 : 1 }]} />
-        {/* The ride's own print frame (a splash band for the flume, sprinkles for the teacups) */}
-        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none"><Picture picture={printFrame} /></Canvas>
         <Animated.View style={[StyleSheet.absoluteFill, styles.glint, glintStyle]} />
         <View style={styles.photo}>
           <Canvas style={{ width: PHOTO_W, height: PHOTO_H }}>
@@ -987,9 +990,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         </View>
         <View style={styles.caption}>
           <Text style={styles.captionName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{name}</Text>
-          <Text style={styles.captionDate}>{date}</Text>
+          <Text style={styles.captionDate}>on the {RIDES[stage.kind].name}  ·  {date}</Text>
         </View>
-        {print && <Animated.View style={[styles.stamp, stampStyle]}>
+        {/* The ride's own print frame, over the photo edge (a splash band for the flume, sprinkles for the teacups) */}
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none"><Picture picture={printFrame} /></Canvas>
+        {print && <Animated.View style={[styles.stamp, plateLeft && styles.stampLeft, stampStyle]}>
           <StampPlate grade={print.grade} soClose={print.soClose} double={print.double} size={PLATE_PEAK} />
         </Animated.View>}
       </Animated.View>
@@ -1010,6 +1015,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, backgroundColor: '#000000' },
   bandSide: { flex: 1, justifyContent: 'center' },
   name: { color: '#ffffff', fontFamily: 'Shark', fontSize: 17 },
+  rideName: { color: '#ffcf3b', fontFamily: 'Knockout', fontSize: 15, marginTop: 1 },
   sub: { color: '#bcd6f5', fontFamily: 'Knockout', fontSize: 14, marginTop: 4 },
   pairCard: { backgroundColor: '#ffffff' },
   strip: { flexDirection: 'row', gap: 6, marginTop: 6, padding: 3, borderRadius: 4, backgroundColor: '#1b1b1f', alignSelf: 'flex-start' },
@@ -1051,6 +1057,7 @@ const styles = StyleSheet.create({
   captionDate: { color: '#4a6a90', fontFamily: 'Knockout', fontSize: 15 },
   // Over the photo's bottom-right corner (about a third on the photo), never the caption; laid out at peak size.
   stamp: { position: 'absolute', right: -6, bottom: STRIP_H + 2, transformOrigin: 'right bottom' },
+  stampLeft: { right: undefined, left: -6, transformOrigin: 'left bottom' },
   pile: { position: 'absolute', left: 20, width: 70, height: 46 },
   pileCard: { position: 'absolute', left: 10, top: 4, width: 30, height: 34, borderRadius: 3, backgroundColor: '#3a4f6b',
     borderWidth: 2, borderColor: '#d6deea', alignItems: 'center', paddingTop: 3 },

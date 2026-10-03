@@ -102,6 +102,8 @@ interface Props {
   /** Which side the finger cue hovers on: away from the player's shark, so it never points at the player. */
   fingerSide?: FingerSide;
   count?: number;
+  /** Only one find on the map shows the pointing finger at a time (the nearest in range). */
+  showFinger?: boolean;
   chromeless?: boolean;
 }
 
@@ -176,7 +178,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   const imageSource = useMemo(() => findImageSource(prepItem),
@@ -248,7 +250,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
       {prepItem.is_new_variant && !chromeless && count === 1 && (inRange
         ? <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
         : <View style={styles.newDot} />)}
-      {inRange && !chromeless && <Animated.Image source={FINGER} style={[styles.finger, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
+      {inRange && !chromeless && showFinger && <Animated.Image source={FINGER} style={[styles.finger, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
       {leavingSoon && !chromeless && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
     </View>

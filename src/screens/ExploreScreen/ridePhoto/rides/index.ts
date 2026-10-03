@@ -47,11 +47,13 @@ export function drawStagePhoto(stage: RideStage, art: SceneArt, t: number, scale
     }
     stage.paint(canvas, state, stage.data, art);
     if (stage.foreground) canvas.drawPicture(stage.foreground);
+    stage.front?.(canvas, state, stage.data, art);
     canvas.restore();
   } else {
     canvas.drawPicture(stage.backdrop);
     stage.paint(canvas, state, stage.data, art);
     if (stage.foreground) canvas.drawPicture(stage.foreground);
+    stage.front?.(canvas, state, stage.data, art);
     if (stage.emissive) stage.emissive(canvas, state, stage.data, art);
   }
   surface.flush();

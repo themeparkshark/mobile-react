@@ -70,6 +70,10 @@ export interface RideStage {
   readonly foreground: SkPicture | null;
   readonly data: RideData;
   readonly paint: RidePaint;
+  /** Where the vehicle is at pass time t (scene points), so the grade plate can sit opposite it. */
+  readonly vehicleAt?: (t: number) => { x: number; y: number };
+  /** Moving parts drawn over the foreground (the flume's splash crown), or undefined. */
+  readonly front?: RidePaint;
   /** Lights that glow at night (bulbs), drawn after the night grade, or null. */
   readonly emissive: RidePaint | null;
   /** Spotlight beat (Epic): the scene outside the window sits dark; the window lights as the car arrives. */
