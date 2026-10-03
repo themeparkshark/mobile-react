@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, Text, View } from 'react-native';
-import { runOnJS, useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
 import { LocationContext } from '../../context/LocationProvider';
 import type { PrepItemType } from '../../models/prep-item-type';
@@ -18,7 +18,7 @@ import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { walkCloserLine } from './findPresentation';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
-import { useCatchOpen } from './catchPresence';
+import { catchShown, useCatchOpen } from './catchPresence';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
 import { catchTraceBuffer } from './ridePhoto/catchAudio';
@@ -79,6 +79,7 @@ export default function HomeCatchPreviewScreen() {
   const found = useRef(0);
   const lastGrade = useRef<PhotoGrade>('good');
   const catchOpen = useCatchOpen();
+  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
 
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
     id: 900 + index, pivot_id: 9000 + index, name: fixture.name, variant_slug: null, description: null,
@@ -225,16 +226,16 @@ export default function HomeCatchPreviewScreen() {
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
-      <View style={[StyleSheet.absoluteFill, catchOpen && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} />
-      </View>
-      {!request && <View style={styles.bottom} pointerEvents="box-none">
+      </Animated.View>
+      {!request && <Animated.View style={[styles.bottom, chromeFade]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
-      </View>}
-      <View style={[StyleSheet.absoluteFill, catchOpen && { opacity: 0.3 }]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      </Animated.View>}
+      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <QuickAccessMenu position="left" />
         <RadialStatsMenu />
-      </View>
+      </Animated.View>
       <HomeCatchMoment ref={catchRef} request={request} stageItem={rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null}
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
         mapStill={mapStill}

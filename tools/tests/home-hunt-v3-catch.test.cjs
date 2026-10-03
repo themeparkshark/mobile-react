@@ -222,7 +222,7 @@ test('round 2: per-find variety and edge arrows', () => {
 test('round 2: the map steps back during a catch and the catch never reads GPS on render', () => {
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /ambientFrozen=\{catchOpen\}/);
-  assert.match(home, /catchOpen && styles\.dimmed/);
+  assert.match(home, /\[StyleSheet\.absoluteFill, chromeFade\]/, "menus leave on the catch shared value");
   assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
   assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen\) return null;/);
   const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
@@ -429,4 +429,19 @@ test('round 4: per-ride print frames and the landing squash', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(src, /const HOP_MS = 280;/);
   assert.match(src, /withTiming\(1\.15, \{ duration: 1 \}\),\s*withTiming\(0\.92/);
+});
+
+test('round 5: no app or map chrome over the viewfinder; close without a grey strip or a double photo', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /catchShown\.value/, 'map controls and credit read the catch shared value');
+  assert.doesNotMatch(map, /\{!chromeHidden && <Pressable/, 'the credit stays mounted');
+  assert.match(map, /if \(isCatchShown\(\)\) return; void Linking\.openURL/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /const chromeFade = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, 1 - catchShown\.value/);
+  assert.match(read('src/components/Wrapper.tsx'), /backgroundColor: '#0e7fd9'/);
+  const stage = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(stage, /if \(done\) runOnJS\(chromeBack\)\(\);/, 'chrome starts back when the iris meets');
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /pendingPhoto\.current = \{ image, grade \};/);
+  assert.match(moment, /if \(pendingPhoto\.current\) \{ setPhoto\(pendingPhoto\.current\)/, 'the sticker gets the photo only on landing');
 });

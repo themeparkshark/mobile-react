@@ -69,7 +69,8 @@ export default function Wrapper({
   ];
 
   return (
-    <View style={{ flex: 1 }}>
+    // The tab bar's own blue behind it: when it slides back after a catch it never uncovers grey.
+    <View style={{ flex: 1, backgroundColor: '#0e7fd9' }}>
       <View style={{ flex: 1 }}>
         <View
           style={{
