@@ -17,7 +17,7 @@ import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import { getStamps } from '../api/endpoints/me/stamps';
-import { readStampDotCache, stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
+import { clearStampDotCache, readStampDotCache, stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
@@ -241,9 +241,11 @@ export default function ProfileScreen() {
     ];
   }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim]);
 
-  // Redirect guests to login: must be in useEffect, not during render
+  // Redirect guests to login: must be in useEffect, not during render.
+  // Signing out also forgets the Stamp Book dot (it is keyed by player too).
   useEffect(() => {
     if (!player) {
+      clearStampDotCache();
       RootNavigation.navigate('Login');
     }
   }, [player]);

@@ -1,5 +1,4 @@
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
-import { clearStampDotCache } from '../components/profile/stampDot';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, FC, ReactNode, useEffect, useRef, useState } from 'react';
@@ -181,7 +180,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const logout = async () => {
     hasInitialNavigated.current = false; // Allow navigation on next login
-    clearStampDotCache();
     delete client.defaults.headers.common.Authorization;
     setToken(undefined);
     setPlayer(null);

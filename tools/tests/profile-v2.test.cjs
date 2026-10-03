@@ -256,5 +256,5 @@ test('Stamp Book dot cache is per player and cleared on logout', () => {
   assert.equal(m.readStampDotCache(11, 1000 + 5 * 60_000), null, 'expires after 5 minutes');
   m.clearStampDotCache();
   assert.equal(m.readStampDotCache(11, 2000), null);
-  assert.match(read('src/context/AuthProvider.tsx'), /clearStampDotCache\(\);/);
+  assert.match(read('src/screens/ProfileScreen.tsx'), /if \(!player\) \{\n\s+clearStampDotCache\(\);/, 'cleared when the player signs out');
 });
