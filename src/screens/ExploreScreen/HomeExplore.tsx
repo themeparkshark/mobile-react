@@ -458,6 +458,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // The nearest Ride Photo find in range has its viewfinder mounted and warm before the tap.
   const stageItem = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item ?? null, [placed]);
+  // Every in-range Ride Photo find has its ride built in idle time, so no tap pays for it.
+  const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
+    .slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
   // One finger cue on the map at a time: the nearest find in range.
   const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange)
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
@@ -602,7 +605,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
-        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onFailed={onFailedStable} onDone={onDoneStable} />
+        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onFailed={onFailedStable} onDone={onDoneStable}
+        warm={warmFinds} />
 
 
       {introOpen && <HomeIntro onDone={markIntroSeen} />}

@@ -289,25 +289,52 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   assert.doesNotMatch(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /react-native-svg/);
 });
 
-test('round 4: catch N+1 opens with its own rarity, speed and hint rules', () => {
-  // Stage A (Rare) has been seen; B (Epic, first ride) is primed next.
-  const a = ride.openRules(3, false);
-  const b = ride.openRules(4, true);
-  assert.equal(b.passMs, ride.rideSpec(4).passMs);
-  assert.notEqual(b.passMs, a.passMs);
-  assert.equal(b.hint, 'hand', 'Epic first ride gets the hand, never the freeze');
-  assert.deepEqual(b.windows, ride.gradeWindows(4));
-  assert.equal(ride.openRules(3, true).hint, 'freeze');
-
-  const stage = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(stage, /prime: \(item: PrepItemType, from:/, 'prime carries the item');
-  assert.match(stage, /useLayoutEffect\(\(\) => \{\s*const pending = pendingPrime\.current;[\s\S]*?\}, \[item\?\.id, startOpen\]\)/,
-    'the open waits for the render that carries the primed item');
-  assert.match(stage, /openRules\(item\?\.rarity, firstRide\)/, 'startOpen reads the rendered item rules');
-  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  assert.doesNotMatch(moment, /setPrimed\([^)]*\);[\s\S]{0,120}stage\.current\?\.prime\(/, 'no synchronous prime before re-render');
-  assert.match(moment, /useLayoutEffect\(\(\) => \{\s*if \(primed\) stage\.current\?\.prime\(primed\.item, primed\.from\);/);
-  assert.match(moment, /const finish = [\s\S]{0,300}setRideItem\(null\)/, 'finish clears the ride item');
+test('round 4: catch N+1 opens with its own rarity, speed and hint rules (behaviour: a stage swap)', () => {
+  // A stand-in stage that runs the real prime gate and opens with the rules of the item it renders.
+  const items = { A: { id: 1, rarity: 3 }, B: { id: 2, rarity: 4 } };
+  function makeStage() {
+    const gate = ride.createPrimeGate();
+    let rendered = null;
+    const opens = [];
+    const open = (item, at) => opens.push({ id: item.id, at, rules: ride.openRules(item.rarity, true), passMs: ride.rideSpec(item.rarity).passMs });
+    return {
+      opens,
+      render(item) { rendered = item; const go = gate.rendered(item.id); if (go) open(item, go.at); },
+      prime(item, at) { const go = gate.prime(item.id, rendered && rendered.id, at); if (go) open(rendered, go.at); },
+      cancel() { gate.cancel(); },
+    };
+  }
+  // Staged on A (Rare). The kid taps B (Epic, first ride): nothing opens on A's render...
+  const stage = makeStage();
+  stage.render(items.A);
+  stage.prime(items.B, { x: 10, y: 20 });
+  assert.equal(stage.opens.length, 0, 'never opens with the stale item');
+  stage.render(items.A);
+  assert.equal(stage.opens.length, 0);
+  // ...and opens once the stage renders B, with B's own rules.
+  stage.render(items.B);
+  assert.equal(stage.opens.length, 1);
+  const opened = stage.opens[0];
+  assert.equal(opened.id, 2);
+  assert.deepEqual(plain(opened.at), { x: 10, y: 20 });
+  assert.equal(opened.rules.hint, 'hand', 'an Epic first ride gets the hand, never the freeze');
+  assert.equal(opened.passMs, ride.rideSpec(4).passMs);
+  assert.notEqual(opened.passMs, ride.rideSpec(3).passMs);
+  assert.deepEqual(plain(opened.rules.windows), plain(ride.gradeWindows(4)));
+  // Already rendered: a prime opens at once. A cancelled prime never opens later.
+  const ready = makeStage();
+  ready.render(items.B);
+  ready.prime(items.B, null);
+  assert.equal(ready.opens.length, 1);
+  const cancelled = makeStage();
+  cancelled.render(items.A);
+  cancelled.prime(items.B, null);
+  cancelled.cancel();
+  cancelled.render(items.B);
+  assert.equal(cancelled.opens.length, 0);
+  // The component uses this gate and clears the ride item on finish.
+  assert.match(read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx'), /primeGate\.rendered\(item\?\.id\)/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /const finish = [\s\S]{0,300}setRideItem\(null\)/);
 });
 
 test('round 4: a Blurry timer never touches a newer print (keyed prints)', () => {

@@ -163,12 +163,16 @@ export default function HomeCatchPreviewScreen() {
     const entry = SCRIPT[index];
     if (!entry) return;
     setStep(index);
-    const base = items[entry.index];
-    const next = { ...base, rarity: entry.rarity ?? base.rarity, is_new_variant: entry.owned ? false : base.is_new_variant,
-      // A fresh id per step, so each step builds its own ride.
-      id: base.id * 10 + index };
+    const next = scriptItem(index);
     stepItem.current = next;
     void startCatch(next);
+  };
+  const scriptItem = (index: number): PrepItemType => {
+    const entry = SCRIPT[index];
+    const base = items[entry.index];
+    return { ...base, rarity: entry.rarity ?? base.rarity, is_new_variant: entry.owned ? false : base.is_new_variant,
+      // A fresh id per step, so each step builds its own ride.
+      id: base.id * 10 + index };
   };
   const autoplay = __DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1';
   // UI-thread frame times while a catch plays, logged once a second (performance review).
@@ -241,6 +245,7 @@ export default function HomeCatchPreviewScreen() {
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
         forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
+        warm={autoplay ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
