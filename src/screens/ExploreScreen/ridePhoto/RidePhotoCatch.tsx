@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import {
-  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, type SkImage,
+  Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, createPicture, type SkImage,
 } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -51,6 +51,8 @@ const PLATE_PEAK = 1.6;
 const INK = '#0b2f5c';
 /** The find arcs from its pin into the seat in 280 ms, then squashes 1.15, 0.92, 1.0 on landing. */
 const HOP_MS = 280;
+/** The print's flight into the badge, ms (the badge sound is timed from its start). */
+const PRINT_FLIGHT_MS = 460;
 const RETRY_LEAD_MS = 900;
 
 type FrameStage = 'white' | 'silver' | 'gold';
@@ -176,6 +178,25 @@ function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?:
  * Build a find's ride stage in idle time (the map calls this when a Ride Photo find comes in range), so
  * the open never pays for the build or the picture recording.
  */
+/**
+ * Launch warm-up: one stage per ride kind and sky, drawn once into a hidden canvas while the app is idle,
+ * so no catch ever draws a ride's art, gradients or shaders for the first time during a reward.
+ */
+export function warmStagePicture(kind: RideKind, sky: Sky, layer: { width: number; height: number },
+  insets: { top: number; bottom: number }, art: SceneArt) {
+  const sceneH = Math.max(360, layer.height - (insets.bottom + 128));
+  const spec = rideSpec(3);
+  const stage = buildStage(kind, { width: layer.width, height: sceneH, top: insets.top, spec, tier: 3,
+    variant: { ...sceneVariant({ seed: 7, kind }), sky }, art });
+  const state = { t: stage.frameT, clock: 0, rock: 0, riderIn: 1, alpha: 1, ghost: false, photo: false };
+  const moving = createPicture(canvas => {
+    stage.paint(canvas, state, stage.data, art);
+    stage.front?.(canvas, state, stage.data, art);
+    stage.emissive?.(canvas, state, stage.data, art);
+  }, { width: layer.width, height: sceneH });
+  return { backdrop: stage.backdrop, foreground: stage.foreground, moving };
+}
+
 export function prebuildRideStage(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): void {
   const { key, build } = stageInputs(item, forceRide, layer, insets, art);
@@ -797,9 +818,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   useEffect(() => {
     if (!flyTarget) return;
     catchMark('print-fly');
+    // The badge thunk on the JS clock, started with the fixed 460 ms flight (not a UI-to-JS hop at landing).
+    later(reducedMotion ? 0 : PRINT_FLIGHT_MS, () => catchSound('badge'));
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
-    fly.value = withTiming(1, { duration: reducedMotion ? 1 : 460, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
+    fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
       if (done) runOnJS(onPrintLanded)();
     });
     dim.value = withTiming(0, { duration: 300 });

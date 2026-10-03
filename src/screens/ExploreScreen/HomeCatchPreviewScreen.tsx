@@ -51,13 +51,23 @@ const FIXTURES: Fixture[] = [
 // Recordings show the app, not the dev warning toast.
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
 
-const SCRIPT: { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean }[] = [
+type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean };
+/**
+ * Performance experiments (EXPO_PUBLIC_HH3_EXP): 'nowarm' disables the next-step stage warm; 'order'
+ * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds.
+ */
+const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
+const BASE_SCRIPT: ScriptStep[] = [
   { index: 0, kind: 'coaster', sky: 'day', shots: [-650] },
   { index: 0, kind: 'flume', sky: 'sunset', shots: [12], rarity: 2 },
   { index: 0, kind: 'teacups', sky: 'day', shots: [-300, 20] },
   { index: 0, kind: 'coaster', sky: 'night', shots: [55], owned: true },
   { index: 3, kind: 'flume', sky: 'night', shots: [-420, 6, 45] },
 ];
+const SCRIPT: ScriptStep[] = EXP === 'order'
+  ? [{ ...BASE_SCRIPT[2], shots: [-650] }, { ...BASE_SCRIPT[0], shots: [12] }, { ...BASE_SCRIPT[1], shots: [-300, 20] },
+    BASE_SCRIPT[3], BASE_SCRIPT[4]]
+  : BASE_SCRIPT;
 
 export default function HomeCatchPreviewScreen() {
   const { location } = useContext(LocationContext);
@@ -245,7 +255,7 @@ export default function HomeCatchPreviewScreen() {
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
         forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
-        warm={autoplay ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
+        warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {
