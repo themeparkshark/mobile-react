@@ -15,7 +15,16 @@ import allParks from '../../api/endpoints/parks/allParks';
 import { getStandings, type StandingsBoardKey } from '../../api/endpoints/me/standings';
 import type { ParkType } from '../../models/park-type';
 import { standingsGeneration, standingsSession } from './standingsCache';
-import { boardModel, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel } from './standingsV2Model';
+import { boardModel, isMissingEndpoint, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel } from './standingsV2Model';
+
+/**
+ * Preview build: the production API has no /me/standings yet. After the first
+ * 404 without X-Standings, remember it for the app session so no screen asks
+ * again and Standings opens straight on the classic boards.
+ */
+let serverMissing = false;
+const MISSING_ERROR = { response: { status: 404, headers: {} } };
+export function standingsV2Missing(): boolean { return serverMissing; }
 
 const FRESH_MS = 45_000;
 const boards = new Map<string, { model: StandingsBoardModel; at: number }>();
@@ -53,7 +62,12 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
   const key = keyOf(meId, board, parkId);
   const running = inFlight.get(key);
   if (running) return running;
+  if (serverMissing) return Promise.reject(MISSING_ERROR);
   const request = getStandings(board, board === 'all_time' ? parkId ?? null : null)
+    .catch((error: unknown) => {
+      if (isMissingEndpoint(error)) serverMissing = true;
+      throw error;
+    })
     .then(dto => {
       const model = boardModel(dto, board, meId);
       // A sign-out while this was in flight must not repopulate the cache.
@@ -134,6 +148,6 @@ export function resetStandingsV2Cache(): void {
  * missing), so the first Standings tap paints a real board, not a loader.
  */
 export function warmStandings(meId: number | null | undefined): void {
-  if (!meId) return;
+  if (!meId || serverMissing) return;
   prefetchBoards(meId, [{ board: 'week' }, { board: 'friends' }], true);
 }

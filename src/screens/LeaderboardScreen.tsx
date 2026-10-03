@@ -20,7 +20,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { usePresentationBadges } from '../hooks/usePresentationQueue';
 import { BRAND, GameIcon } from '../ui';
 import StandingsBoardV2 from './LeaderboardsScreen/StandingsBoardV2';
-import { prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
+import { prefetchBoards, standingsV2Missing } from './LeaderboardsScreen/standingsV2Store';
 import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standingsDemo';
 import { initialStandingsV2Tab, standingsV2Tabs, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -92,7 +92,7 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
  */
 export default function LeaderboardScreen() {
   const { player } = useContext(AuthContext);
-  const [v2Missing, setV2Missing] = useState(false);
+  const [v2Missing, setV2Missing] = useState(standingsV2Missing);
   if (!player || v2Missing) return <LegacyStandings />;
   return <StandingsV2 meId={player.id} onMissing={() => setV2Missing(true)} />;
 }
