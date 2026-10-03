@@ -53,6 +53,8 @@ export interface RideStage {
   readonly width: number;
   readonly height: number;
   readonly sky: Sky;
+  /** The scene variety this ride was built with (photobombs, season, weather). */
+  readonly variant: SceneVariant;
   /** Pass time (0..1) of the camera moment; grading is ms around frameT * passMs. */
   readonly frameT: number;
   /** Where the vehicle waits while the find hops in. */

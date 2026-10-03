@@ -23,7 +23,7 @@ import { lastRideKind } from './rides/rideMemory';
 import { buildPrintFrame } from './rides/printFrame';
 import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
-import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
+import { catchHaptic, catchMark, catchSound, duckForCheer, startRideAmbience, stopRideAmbience } from './catchAudio';
 import {
   GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, createPrimeGate, photoPayload, MISS_RETRY_MS, BLURRY_OUT_MS,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
@@ -334,9 +334,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const clearPassTimers = useCallback(() => { passTimers.current.forEach(clearTimeout); passTimers.current = []; }, []);
   useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
+  const missedThisPass = useRef(false);
   const passEndRef = useRef<() => void>(() => undefined);
   const runPass = useCallback((fromT: number) => {
     shotThisPass.current = false;
+    missedThisPass.current = false;
     clearPassTimers();
     frozen.value = false;
     armed.value = true;
@@ -360,11 +362,26 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         pip(i);
       }, delay));
     });
-    if (fromT <= anchors.tStation + 0.01 && (stage.kind === 'coaster' || stage.kind === 'flume') && spec.track !== 'family') {
-      catchSound('clack', { volume: 0.8 });
-    } else catchSound('whoosh', { volume: 0.5 });
+    // Ride sounds on the same pass clock: the flume's splash lands with the crown, the gull and fireworks
+    // with their photobombs, and now and then a happy "whee" at the big moment.
+    const at = (lead: number, play: () => void, evenIfShot = false) => {
+      const delay = arriveIn - lead;
+      if (delay < 0) return;
+      passTimers.current.push(setTimeout(() => { if (evenIfShot ? !missedThisPass.current : !shotThisPass.current) play(); }, delay));
+    };
+    if (stage.kind === 'flume') at(80, () => catchSound('flumeSplash', { volume: 0.9 }), true);
+    if (stage.variant.photobomb === 'gull') at(260, () => catchSound('gull', { volume: 0.7 }), true);
+    if (stage.variant.photobomb === 'fireworks') at(140, () => catchSound('fireworks', { volume: 0.7 }), true);
+    if ((stage.kind === 'coaster' && spec.track !== 'family') || stage.kind === 'flume') {
+      if (Math.random() < 0.35) at(220, () => catchSound('whee', { volume: 0.6 }), true);
+    }
+    const firstPass = fromT <= anchors.tStation + 0.01;
+    if (stage.kind === 'flume') catchSound(firstPass ? 'flumeChain' : 'whoosh', { volume: firstPass ? 0.8 : 0.5 });
+    else if (stage.kind === 'teacups') catchSound('teacupWhoosh', { volume: 0.7 });
+    else if (firstPass && spec.track !== 'family') catchSound('clack', { volume: 0.8 });
+    else catchSound('whoosh', { volume: 0.5 });
     catchMark(`pass ${stage.kind}`);
-  }, [parkedMode, passMs, anchors.tStation, anchors.tFrame, stage.kind, spec.track]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [parkedMode, passMs, anchors.tStation, anchors.tFrame, stage, spec.track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const retry = useCallback((missed: boolean) => {
     if (rideRef.current.outcome !== 'riding') return;
@@ -416,7 +433,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     buzz('tapLight', 1);
     catchMark('open');
     catchSound('whoosh', { volume: 0.6 });
-    later(reducedMotion ? 150 : 90 + HOP_MS, () => { catchSound('pop', { volume: 0.7 }); buzz('hitSoft', 1); });
+    later(reducedMotion ? 150 : 90 + HOP_MS, () => {
+      catchSound(stage.kind === 'teacups' ? 'teacupClink' : 'pop', { volume: 0.7 }); buzz('hitSoft', 1);
+    });
+    startRideAmbience(stage.kind);
+    if (golden) later(120, () => catchSound('golden', { volume: 0.8 }));
     later(reducedMotion ? 200 : 90 + HOP_MS + 420, () => runPass(owned ? anchors.tRetry : anchors.tStation));
   }, [clearTimers, layer.width, layer.height, anchors.tStation, anchors.tRetry, firstRide, parkedMode, reducedMotion, runPass, owned, item?.rarity]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -438,6 +459,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       if (!opened.current) return;
       opened.current = false;
       clearTimers(); clearPassTimers();
+      stopRideAmbience();
       armed.value = false;
       cancelAnimation(t);
       open.value = withTiming(0, { duration: 160 });
@@ -460,6 +482,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     armed.value = false; holding.value = false;
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
+    stopRideAmbience();
     // Confetti and sparkles end with the ride: they never keep a full-screen particle canvas busy over the map.
     fx.current?.clear();
     // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
@@ -671,6 +694,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     setRide(next);
     AccessibilityInfo.announceForAccessibility(isGoodShot(grade) ? GRADE_LABEL[grade] : direction === 'early' ? 'Too soon. Try again.' : 'Too late. Try again.');
     if (!isGoodShot(grade)) {
+      missedThisPass.current = true;
       misses.value = Math.min(3, misses.value + 1);
       if (direction) setMissNote({ dir: direction, key: Date.now() });
       photoStreak = 0;
@@ -685,6 +709,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       retry(true);
       return;
     }
+    if (stage.kind === 'coaster') later(650, () => catchSound('brakes', { volume: 0.7 }));
     if (rideRef.current.passes === 0) photoStreak += 1;
     setStreak(photoStreak);
     if (next.outcome === 'caught') { caughtRef.current = true; onCaught({ ...photoPayload(spec, next), ride_type: stage.kind }, grade); }

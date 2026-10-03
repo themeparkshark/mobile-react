@@ -90,7 +90,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
     grade, width, height, sky: variant.sky, weather: variant.weather, photobomb: variant.photobomb, box, lamps,
   };
   return {
-    kind: 'flume', width, height, sky: variant.sky, frameT, stationT, box, cam, crop, seat, riderSize,
+    kind: 'flume', width, height, sky: variant.sky, variant, frameT, stationT, box, cam, crop, seat, riderSize,
     backdrop, foreground, data, paint: paintFlume, front: paintFlumeSplash,
     vehicleAt: t => sampleTrack(lut, flumeProgress(t, uCrest, uBottom)),
     emissive: variant.sky === 'night' ? paintFlumeLamps : null,

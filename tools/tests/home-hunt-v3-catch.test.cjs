@@ -537,3 +537,16 @@ test('round 5: floating cards leave while the quick menu is open (opacity 0, no 
   const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
   assert.match(preview, /cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
 });
+
+test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride', () => {
+  const audio = read('src/screens/ExploreScreen/ridePhoto/catchAudio.ts');
+  for (const f of ['flume-splash-big', 'flume-lift-chain', 'teacup-clink', 'teacups-spin-whoosh', 'brakes-hiss', 'crowd-scream-fun', 'seagull', 'fireworks-pop', 'golden-hour-shimmer', 'organ-loop', 'flume-water-loop']) {
+    assert.match(audio, new RegExp(`rides/${f}\\.mp3`));
+    assert.ok(fs.existsSync(path.resolve(__dirname, '../..', `assets/sounds/ride-photo/rides/${f}.mp3`)), f);
+  }
+  assert.match(audio, /'ride\.organ'/);
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /if \(stage\.kind === 'flume'\) at\(80, \(\) => catchSound\('flumeSplash'/, 'the splash sound lands with the crown');
+  assert.match(src, /startRideAmbience\(stage\.kind\)/);
+  assert.match(src, /catchMark\('close'\);\s*stopRideAmbience\(\);/);
+});
