@@ -157,6 +157,11 @@ export default function LoadingScreen() {
     hasNavigated.current = true;
     // Team choice is deferred to the first gym tap; don't block the map.
     // Dev only: EXPO_PUBLIC_STANDINGS_PREVIEW=1 lands on Standings for screen captures.
+    // Dev only: EXPO_PUBLIC_STANDINGS_PROFILE_ID opens that player's profile (a stranger-profile capture).
+    if (__DEV__ && process.env.EXPO_PUBLIC_STANDINGS_PROFILE_ID) {
+      RootNavigation.navigate('Player', { player: Number(process.env.EXPO_PUBLIC_STANDINGS_PROFILE_ID) });
+      return;
+    }
     if (__DEV__ && process.env.EXPO_PUBLIC_STANDINGS_PREVIEW === '1') {
       RootNavigation.navigate('Leaderboard', { tab: process.env.EXPO_PUBLIC_STANDINGS_TAB });
       return;
