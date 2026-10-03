@@ -5,14 +5,14 @@
  * Report is a second step with five kid reasons. After a report or block
  * the item disappears at once and a kind toast says a grown-up will check.
  */
-import { useContext, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { blockPlayer, removeComment, removeThread, report, type ReportReason } from '../../api/endpoints/social';
 import { useToast } from '../../components/Toast';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { BRAND, GameIcon, confirmGame, type GameIconName } from '../../ui';
+import { BRAND, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { PressScale } from './socialLook';
 
@@ -67,7 +67,7 @@ export default function PostMenu({
 
   const close = () => {
     onClose();
-    setTimeout(() => setStep('menu'), 300);
+    setTimeout(() => { setStep('menu'); setConfirm(null); }, 300);
   };
 
   const run = async (item: MenuTarget, work: () => Promise<void>, why: 'deleted' | 'reported' | 'blocked', toast: string) => {
@@ -84,39 +84,34 @@ export default function PostMenu({
     }
   };
 
-  /** Dialogs live under this sheet, so close it before asking. */
-  const closeThen = (next: () => void) => {
-    close();
-    setTimeout(next, 380);
-  };
+  /**
+   * Delete and block ask once more inside this same sheet. A game dialog is
+   * its own native modal and iOS will not present it while this sheet is
+   * leaving, which left an invisible layer over the feed.
+   */
+  const [confirm, setConfirm] = useState<'delete' | 'block' | null>(null);
+  /** Edit opens the composer (a native modal) only once this sheet is fully gone. */
+  const editNext = useRef(false);
 
   const doDelete = () => {
     if (!target) return;
     const item = target;
-    closeThen(async () => {
-      const yes = await confirmGame({ title: `Delete ${noun}?`, message: 'It will be gone for everyone.', confirmLabel: 'Delete', destructive: true });
-      if (yes) await run(item, () => (item.kind === 'thread' ? removeThread(item.id) : removeComment(item.id)), 'deleted', `Your ${noun} is deleted.`);
-    });
+    close();
+    void run(item, () => (item.kind === 'thread' ? removeThread(item.id) : removeComment(item.id)), 'deleted', `Your ${noun} is deleted.`);
   };
 
   const doBlock = () => {
     if (!target?.authorId) return;
     const item = target;
-    closeThen(async () => {
-      const yes = await confirmGame({
-        title: 'Block player?',
-        message: `You won't see ${item.authorName} anymore, and they can't reply to you.`,
-        confirmLabel: 'Block',
-        destructive: true,
-      });
-      if (yes) await run(item, () => blockPlayer(item.authorId as number), 'blocked', `${item.authorName} is blocked.`);
-    });
+    close();
+    void run(item, () => blockPlayer(item.authorId as number), 'blocked', `${item.authorName} is blocked.`);
   };
 
   const doReport = (reason: ReportReason) => {
     if (!target) return;
     const item = target;
-    closeThen(() => run(item, () => report(item.kind, item.id, reason), 'reported', 'Thanks for telling us! A grown-up will check it.'));
+    close();
+    void run(item, () => report(item.kind, item.id, reason), 'reported', 'Thanks for telling us! A grown-up will check it.');
   };
 
   return (
@@ -127,6 +122,11 @@ export default function PostMenu({
       onSwipeComplete={close}
       swipeDirection="down"
       onModalWillShow={() => playSound(OPEN, { volume: 0.5 })}
+      onModalHide={() => {
+        if (!editNext.current) return;
+        editNext.current = false;
+        setTimeout(() => onEdit?.(), 60);
+      }}
       style={styles.modal}
       backdropColor={BRAND.navy}
       backdropOpacity={0.35}
@@ -137,18 +137,29 @@ export default function PostMenu({
     >
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.handle} />
-        {step === 'menu' ? (
+        {confirm ? (
+          <>
+            <Text style={styles.title} accessibilityRole="header">{confirm === 'delete' ? `Delete ${noun}?` : `Block ${target?.authorName ?? 'player'}?`}</Text>
+            <Text style={styles.sub}>
+              {confirm === 'delete' ? 'It will be gone for everyone.' : "You won't see them anymore, and they can't reply to you."}
+            </Text>
+            <Row icon={confirm === 'delete' ? 'close' : 'lock'} label={confirm === 'delete' ? 'Yes, delete' : 'Yes, block'} danger onPress={confirm === 'delete' ? doDelete : doBlock} />
+            <PressScale onPress={() => setConfirm(null)} style={styles.cancel} accessibilityLabel="No, go back" haptic="none">
+              <Text style={styles.cancelText}>No, go back</Text>
+            </PressScale>
+          </>
+        ) : step === 'menu' ? (
           <>
             <Text style={styles.title} accessibilityRole="header">{target?.mine ? `Your ${noun}` : `${target?.authorName ?? ''}'s ${noun}`}</Text>
             {target?.mine ? (
               <>
-                {target.kind === 'thread' && onEdit && <Row icon="edit" label="Edit" onPress={() => { close(); setTimeout(onEdit, 350); }} />}
-                <Row icon="close" label="Delete" danger onPress={doDelete} />
+                {target.kind === 'thread' && onEdit && <Row icon="edit" label="Edit" onPress={() => { editNext.current = true; close(); }} />}
+                <Row icon="close" label="Delete" danger onPress={() => setConfirm('delete')} />
               </>
             ) : (
               <>
                 <Row icon="info" label="Report" onPress={() => setStep('report')} />
-                {target?.authorId ? <Row icon="lock" label={`Block ${target.authorName}`} danger onPress={doBlock} /> : null}
+                {target?.authorId ? <Row icon="lock" label={`Block ${target.authorName}`} danger onPress={() => setConfirm('block')} /> : null}
               </>
             )}
             <PressScale onPress={close} style={styles.cancel} accessibilityLabel="Cancel" haptic="none">
