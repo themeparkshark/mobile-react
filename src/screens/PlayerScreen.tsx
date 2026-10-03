@@ -1,4 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { ImageBackground, Pressable } from 'react-native';
 import { Alert, Dimensions, ScrollView, Text, View } from 'react-native';
@@ -15,6 +15,8 @@ import Stats from '../components/Stats';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import ProfileEventChip from '../components/profile/ProfileEventChip';
+import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -31,6 +33,9 @@ import { PlayerType } from '../models/player-type';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
+/** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
+const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
+
 export default function PlayerScreen({ route, navigation }: NativeStackScreenProps<ParamListBase, 'Player'>) {
   const { player } = route.params as { player: number };
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,6 +47,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const { complimentPlayer } = useCompliment();
   const { checkPermission, hasPermission } = usePermissions();
   const [failed, setFailed] = useState(false);
+  const focused = useIsFocused();
+  const levelCard = useCardOnScreen();
   const { player: authPlayer } = useContext(AuthContext);
   const { prompts, messages } = useCrumbs();
 
@@ -57,16 +64,18 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
   const load = useCallback(async () => {
     setLoading(true);
     setFailed(false);
+    let loaded: PlayerType;
     try {
-      setCurrentPlayer(await getPlayer(player));
+      loaded = await getPlayer(player);
+      setCurrentPlayer(loaded);
     } catch {
       setFailed(true);
       setLoading(false);
       return;
     }
-    // Parks are a bonus: the page still opens without them.
+    // Parks are a bonus, and only fetched for friends (a stranger never gets a child's park history).
     try {
-      setParks(await getVisitedParks(player));
+      setParks(loaded.is_friend ? await getVisitedParks(player) : []);
     } catch {
       setParks([]);
     }
@@ -101,8 +110,21 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     );
   };
 
+  // Friendly actions first; Unfriend always last.
   const actions: ProfileShortcut[] = currentPlayer
     ? [
+        {
+          key: 'compliment',
+          label: 'Compliment',
+          image: require('../../assets/images/screens/player/compliment.png'),
+          hint: `Sends ${currentPlayer.screen_name} a compliment`,
+          locked: !hasPermission(PermissionEnums.CreateCompliments),
+          onPress: async () => {
+            if (checkPermission(PermissionEnums.CreateCompliments)) {
+              await complimentPlayer(currentPlayer);
+            }
+          },
+        },
         ...(currentPlayer.mascot ? [{
           key: 'gift',
           label: 'Gift',
@@ -139,18 +161,6 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             }
           },
         },
-        {
-          key: 'compliment',
-          label: 'Compliment',
-          image: require('../../assets/images/screens/player/compliment.png'),
-          hint: `Sends ${currentPlayer.screen_name} a compliment`,
-          locked: !hasPermission(PermissionEnums.CreateCompliments),
-          onPress: async () => {
-            if (checkPermission(PermissionEnums.CreateCompliments)) {
-              await complimentPlayer(currentPlayer);
-            }
-          },
-        },
       ]
     : [];
 
@@ -177,8 +187,11 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
             marginTop: -8,
             backgroundColor: '#dff4ff',
           }}
+          {...levelCard.scrollProps}
         >
           <View
+            ref={levelCard.contentRef}
+            onLayout={levelCard.remeasure}
             style={{
               paddingBottom: 56,
             }}
@@ -189,7 +202,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               } : require('../../assets/images/seaweed_background.png')}
               resizeMode="cover"
               style={{
-                height: 315,
+                height: STAGE_H,
                 overflow: 'hidden',
                 position: 'relative',
               }}
@@ -204,7 +217,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                   position: 'absolute',
                   width: Dimensions.get('window').width,
                   height: 455,
-                  marginTop: -55,
+                  marginTop: -55 - (315 - STAGE_H) / 2,
                 }}
               />
             </ImageBackground>
@@ -216,16 +229,15 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 paddingTop: 14,
               }}
             >
-              {!!currentPlayer.title && (
-                <View style={{ marginBottom: 12 }}>
-                  <TitlePill title={currentPlayer.title} />
-                </View>
-              )}
+              <View style={{ marginBottom: 12 }}>
+                <TitlePill title={currentPlayer.title}
+                  trophy={<ProfileEventChip playerId={currentPlayer.id} />} />
+              </View>
               {!!currentPlayer.featured_ride_coin && (
                 <FeaturedRideCoinCard coin={currentPlayer.featured_ride_coin} />
               )}
-              <View style={{ paddingTop: 4 }}>
-                <Experience player={currentPlayer} own={false} />
+              <View ref={levelCard.cardRef} onLayout={levelCard.remeasure} style={{ paddingTop: 4 }}>
+                <Experience player={currentPlayer} own={false} paused={!focused || levelCard.offscreen} />
               </View>
               <View style={{ marginTop: 18 }}>
                 <ProfileShortcuts items={actions} />
@@ -233,7 +245,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               <StatusBadges isVip={!!currentPlayer.is_subscribed} isVerified={!!currentPlayer.verified_at} own={false} />
               <Heading text="Statistics" />
               <Stats player={currentPlayer} />
-              {parks.length > 0 && (
+              {/* Park history is for friends only; strangers see the shark, title, level and stats. */}
+              {isFriend && parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />
                   <View

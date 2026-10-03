@@ -19,6 +19,10 @@ const FILES = [
   'src/screens/PlayerScreen.tsx',
   'src/components/Experience.tsx',
   'src/components/XpPotion.tsx',
+  'src/components/xpPotionModel.ts',
+  'src/components/profile/useCardOnScreen.ts',
+  'src/components/profile/stampDot.ts',
+  'src/components/profile/ProfileEventChip.tsx',
   'src/components/profile/ProfileShortcuts.tsx',
   'src/components/profile/StatusBadges.tsx',
   'src/components/profile/TitlePill.tsx',
@@ -95,12 +99,80 @@ test('VIP and Verified are solid badges with a meaning line, never a fading puls
   assert.match(badges, /Official shark/);
 });
 
-test('the XP potion pauses off screen, in the background and under Reduce Motion', () => {
+test('the XP potion pauses off screen, in the background, when covered and under Reduce Motion', () => {
   const potion = read('src/components/XpPotion.tsx');
-  assert.match(potion, /setActive\(!paused && !reduced && appActive\.current\)/);
+  assert.match(potion, /setActive\(!paused && reduced === false && appActive\.current\)/);
   assert.match(potion, /AppState\.addEventListener/);
   assert.match(potion, /useFrameCallback\([\s\S]*?, false\)/, 'the clock starts stopped');
   assert.equal((potion.match(/<Canvas/g) || []).length, 1, 'one canvas');
+  assert.doesNotMatch(potion, /BlurMask/, 'glow is a gradient, no per-frame blur');
+  assert.match(potion, /usePathValue/, 'paths are reused, not rebuilt');
   const profile = read('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /paused=\{!focused \|\| potionOffscreen\}/);
+  assert.match(profile, /paused=\{!focused \|\| levelCard\.offscreen\}/);
+  const player = read('src/screens/PlayerScreen.tsx');
+  assert.match(player, /paused=\{!focused \|\| levelCard\.offscreen\}/);
+});
+
+test('level up earned elsewhere plays on return: mount at level 5 data, now level 6', () => {
+  const { potionTransition } = loadTs('src/components/xpPotionModel.ts');
+  const before = { level: 5, progress: 0.8 };
+  const now = { level: 6, progress: 0.07 };
+  assert.equal(potionTransition(before, now, null), 'wait', 'Reduce Motion unknown: decide nothing yet');
+  assert.equal(potionTransition(before, now, false), 'levelUp', 'then the level up plays');
+  assert.equal(potionTransition(before, now, true), 'levelUp', 'Reduce Motion still gets the level up (still vial, sound, haptic, ribbon)');
+  assert.equal(potionTransition(null, now, false), 'pour');
+  assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.3 }, false), 'gain');
+  assert.equal(potionTransition({ level: 6, progress: 0.3 }, { level: 6, progress: 0.3 }, false), 'settle');
+  const potion = read('src/components/XpPotion.tsx');
+  assert.match(potion, /if \(kind === 'wait'\) return undefined;\n\s+last\.current = next;/, 'waiting never records the new level');
+  assert.match(potion, /if \(kind === 'levelUp'\) cbs\.current\.onLevelUpBurst\?\.\(\);/, 'Reduce Motion fires the burst callback');
+  const card = read('src/components/Experience.tsx');
+  assert.match(card, /Level up!/);
+  assert.match(card, /HapticPatterns\.levelUp\(\)/);
+});
+
+test('the off-screen check uses the card box in content coordinates', () => {
+  const { isOffscreen } = loadTs('src/components/profile/useCardOnScreen.ts', { react: { useCallback: (f) => f, useMemo: (f) => f(), useRef: (v) => ({ current: v }), useState: (v) => [v, () => undefined] } });
+  const card = { top: 560, bottom: 680 };
+  assert.equal(isOffscreen(card, { y: 0, height: 700 }), false, 'visible at rest');
+  assert.equal(isOffscreen(card, { y: 425, height: 700 }), false, 'round 1 froze it here while visible');
+  assert.equal(isOffscreen(card, { y: 690, height: 700 }), true, 'scrolled past');
+  assert.equal(isOffscreen(card, { y: 0, height: 0 }), false, 'unknown viewport: keep running');
+});
+
+test('Stamp Book dot counts earned stamps with unclaimed rewards, or the server count', () => {
+  const { stampClaimableCount } = loadTs('src/components/profile/stampDot.ts');
+  const reward = { energy: 0, tickets: 0, xp: 50, coins: 0, title: null };
+  const none = { energy: 0, tickets: 0, xp: 0, coins: 0, title: null };
+  const resp = { stamps: { parks: [
+    { is_earned: true, reward_claimed: false, rewards: reward },
+    { is_earned: true, reward_claimed: true, rewards: reward },
+    { is_earned: false, reward_claimed: false, rewards: reward },
+    { is_earned: true, reward_claimed: false, rewards: none },
+  ] }, summary: { total: 4, earned: 3 } };
+  assert.equal(stampClaimableCount(resp), 1);
+  assert.equal(stampClaimableCount({ ...resp, summary: { claimable: 3 } }), 3);
+  assert.equal(stampClaimableCount(null), 0);
+});
+
+test('layout: shortcuts before the coin card, Secret Store locks for non-VIP, friends fit, Ride Tracker is a card', () => {
+  const profile = read('src/screens/ProfileScreen.tsx');
+  assert.ok(profile.indexOf('<ProfileShortcuts') < profile.indexOf('<FeaturedRideCoinCard'), 'shortcut row comes first');
+  assert.match(profile, /locked: store\.is_secret_store && !player\?\.is_subscribed/);
+  assert.doesNotMatch(profile, /FlashList/);
+  assert.match(profile, /friends\.map\(\(friend\) =>/);
+  assert.match(profile, /borderBottomColor: '#c6e3f5'/);
+  assert.match(profile, /dot: stampsToClaim > 0/);
+  assert.match(profile, /trophy=\{<ProfileEventChip \/>\}/);
+});
+
+test("another player's page: kind actions first, park history for friends only, numbers never disagree", () => {
+  const player = read('src/screens/PlayerScreen.tsx');
+  const order = ['compliment', 'gift', 'remove-friend'].map((k) => player.indexOf(`key: '${k}'`));
+  assert.ok(order[0] < order[1] && order[1] < order[2], 'Compliment, Gift, then Unfriend');
+  assert.match(player, /isFriend && parks\.length > 0/);
+  assert.match(player, /loaded\.is_friend \? await getVisitedParks\(player\) : \[\]/);
+  assert.match(player, /trophy=\{<ProfileEventChip playerId=\{currentPlayer\.id\} \/>\}/);
+  const stats = read('src/components/Stats.tsx');
+  assert.match(stats, /Math\.max\(Number\(player\.total_experience\) \|\| 0, Number\(player\.experience\) \|\| 0\)/);
 });
