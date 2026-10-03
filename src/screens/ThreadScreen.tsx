@@ -1,474 +1,518 @@
-import { faEllipsis } from '@fortawesome/free-solid-svg-icons/faEllipsis';
-import { faComment } from '@fortawesome/free-solid-svg-icons/faComment';
-import { faBolt } from '@fortawesome/free-solid-svg-icons/faBolt';
-import { faHeart } from '@fortawesome/free-solid-svg-icons/faHeart';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+/**
+ * One post and its replies. The single detail view for feed taps, deep links
+ * from notifications and the post you just made (there used to be two: a
+ * bottom sheet in the feed and this screen, each with its own bugs).
+ *
+ * Reads like a chat: the post on top, replies oldest first in bubbles, a
+ * reply bar pinned above the keyboard. A reply to a reply stays in the same
+ * bubble group. Opens instantly from the feed's copy of the post and then
+ * refreshes. Hidden replies (removed, deleted, blocked) keep their place
+ * only when someone answered them, and never show their words.
+ */
+import type { ParamListBase } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useAsyncEffect } from 'rooks';
-import * as RootNavigation from '../RootNavigation';
-import getComments from '../api/endpoints/comments/getComments';
-import getThread from '../api/endpoints/threads/getThread';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchComments, fetchReplies, fetchThread, postComment } from '../api/endpoints/social';
 import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
-import Button from '../components/Button';
-import Comment from '../components/Comment';
-import CreateReply from '../components/CreateReply';
-import CreateReport from '../components/CreateReport';
-import Loading from '../components/Loading';
-import Reactions from '../components/Reactions';
-import ReactionsDropdown from '../components/ReactionsDropdown';
-import Tag from '../components/Tag';
-import ThreadActions from '../components/ThreadActions';
+import RichText from '../components/RichText';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
+import { isTeam, TEAMS } from '../constants/teams';
 import { AuthContext } from '../context/AuthProvider';
-import { ForumContext } from '../context/ForumProvider';
-import dayjs from '../helpers/dayjs';
-import useCrumbs from '../hooks/useCrumbs';
-import { CommentType } from '../models/comment-type';
-import { ThreadType } from '../models/thread-type';
-import config from '../config';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ParamListBase } from '@react-navigation/native';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
+import * as Haptics from '../helpers/haptics';
+import type { CommentType } from '../models/comment-type';
+import type { ThreadType } from '../models/thread-type';
+import * as RootNavigation from '../RootNavigation';
+import { BRAND, GameIcon, SharkLoader } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import Composer from './Social/Composer';
+import PostMenu, { type MenuTarget } from './Social/PostMenu';
+import { emitSocial } from './Social/socialEvents';
+import { CommentChip, PressScale, ReactionBar, TopicBadge, WATER, card } from './Social/socialLook';
+import { DRAFT_LINES, REPLY_MAX, checkDraft, errorLine, mergePage, timeAgo, timeAgoSpoken } from './Social/socialModel';
+import useReactions from './Social/useReactions';
+import { buildRows, hiddenLine, type Row } from './Social/socialRows';
 
-// ── Sort Filter Pills ─────────────────────────────────────
-const SORT_FILTERS = [
-  { label: 'New', value: 'latest', icon: faBolt, color: '#00a5f5' },
-  { label: 'Reactions', value: 'most_reactions', icon: faHeart, color: '#ef4444' },
-] as const;
+const SEND = require('../../assets/sounds/whoosh.mp3');
+const NOPE = require('../../assets/sounds/nope.mp3');
 
-function SortPills({
-  active,
-  onSelect,
+function Bubble({
+  comment,
+  depth,
+  mine,
+  highlight,
+  onReply,
+  onMenu,
 }: {
-  active: 'latest' | 'most_reactions';
-  onSelect: (value: 'latest' | 'most_reactions') => void;
+  readonly comment: CommentType;
+  readonly depth: 0 | 1;
+  readonly mine: boolean;
+  readonly highlight: boolean;
+  readonly onReply: (comment: CommentType) => void;
+  readonly onMenu: (comment: CommentType) => void;
 }) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
-    >
-      {SORT_FILTERS.map((f) => {
-        const isActive = active === f.value;
-        return (
-          <Pressable
-            key={f.value}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onSelect(f.value);
-            }}
-            style={[
-              sortStyles.pill,
-              isActive && { backgroundColor: f.color },
-            ]}
-          >
-            <FontAwesomeIcon icon={f.icon} size={12} color={isActive ? 'white' : '#8895a7'} />
-            <Text style={[sortStyles.pillText, isActive && { color: 'white' }]}>{f.label}</Text>
-          </Pressable>
-        );
-      })}
-      <View style={sortStyles.commentCountWrap}>
-        <FontAwesomeIcon icon={faComment} size={12} color="#8895a7" />
-        <Text style={sortStyles.commentCountText}>Comments</Text>
+  const reduced = useUiReducedMotion();
+  const hidden = Boolean(comment.hidden || (!comment.content && (comment.deleted_at || comment.removed_at)));
+  const name = comment.player?.screen_name ?? 'Shark fan';
+
+  if (hidden) {
+    return (
+      <View style={[styles.bubbleRow, depth === 1 && styles.indent]}>
+        <View style={styles.ghost}><Text style={styles.ghostText}>{hiddenLine(comment)}</Text></View>
       </View>
-    </ScrollView>
+    );
+  }
+
+  return (
+    <Animated.View entering={reduced ? undefined : FadeInDown.springify().damping(16)} style={[styles.bubbleRow, depth === 1 && styles.indent]}>
+      <PressScale
+        onPress={() => comment.player && RootNavigation.navigate('Player', { player: comment.player.id })}
+        accessibilityLabel={`${name}'s profile`}
+        style={styles.miniAvatar}
+      >
+        <View style={styles.avatarScale}><Avatar player={comment.player as ThreadType["player"]} size="sm" /></View>
+      </PressScale>
+      <View style={{ flex: 1 }}>
+        <View
+          style={[styles.bubble, mine && styles.bubbleMine, highlight && styles.bubbleHighlight]}
+          accessible
+          accessibilityLabel={`${name}, ${timeAgoSpoken(comment.created_at)}: ${comment.content ?? ''}`}
+        >
+          <View style={styles.bubbleHead}>
+            <Text style={styles.bubbleName} numberOfLines={1}>{mine ? 'You' : name}</Text>
+            <Text style={styles.bubbleTime}>{timeAgo(comment.created_at)}</Text>
+          </View>
+          <RichText style={styles.bubbleText}>{comment.content ?? ''}</RichText>
+        </View>
+        <View style={styles.bubbleActions}>
+          <PressScale onPress={() => onReply(comment)} style={styles.smallAction} accessibilityLabel={`Reply to ${name}`} hitSlop={6}>
+            <Text style={styles.smallActionText}>Reply</Text>
+          </PressScale>
+          <PressScale onPress={() => onMenu(comment)} style={styles.smallAction} accessibilityLabel={mine ? 'Delete my reply' : `Report or block ${name}`} hitSlop={6}>
+            <View style={styles.dotRow}><View style={styles.dot} /><View style={styles.dot} /><View style={styles.dot} /></View>
+          </PressScale>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
-const sortStyles = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  pillText: {
-    fontFamily: 'Shark',
-    fontSize: 13,
-    color: '#8895a7',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  commentCountWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  commentCountText: {
-    fontFamily: 'Shark',
-    fontSize: 13,
-    color: '#8895a7',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-});
-
-// ── Thread Header Card ────────────────────────────────────
-function ThreadHeader({
-  thread,
-  reactionTypes,
-  player,
-  onRefresh,
-}: {
-  thread: ThreadType;
-  reactionTypes: any[];
-  player: any;
-  onRefresh: () => void;
-}) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(15)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start();
-  }, []);
-
+function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; readonly onMenu: () => void; readonly onEdit?: () => void }) {
+  const { player } = useContext(AuthContext);
+  const { state, toggle, offered, extra } = useReactions(thread, Boolean(player));
+  const team = isTeam(thread.team) ? TEAMS[thread.team] : null;
+  const name = thread.player?.screen_name ?? 'Shark fan';
   return (
-    <Animated.View style={[headerStyles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      {/* Author row */}
-      <View style={headerStyles.authorRow}>
-        <Button onPress={() => RootNavigation.navigate('Player', { player: thread.player.id })}>
-          <Avatar size="md" player={thread.player} showLevel />
-        </Button>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={headerStyles.authorName}>{thread.player.screen_name}</Text>
-          <View style={headerStyles.timePill}>
-            <Text style={headerStyles.timeText}>
-              {dayjs(thread.created_at).startOf('second').fromNow()}
-            </Text>
+    <View style={[card.shell, styles.post]}>
+      <View style={styles.postHead}>
+        <PressScale onPress={() => thread.player && RootNavigation.navigate('Player', { player: thread.player.id })} accessibilityLabel={`${name}'s profile`}>
+          <Avatar player={thread.player} size="md" />
+        </PressScale>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.postName} numberOfLines={1}>{name}</Text>
+          <View style={styles.postMeta}>
+            <Text style={styles.postTime}>{timeAgo(thread.created_at)}</Text>
+            <TopicBadge topic={thread.topic} size="md" />
+            {team && (
+              <View style={[styles.teamFlag, { borderColor: team.color, backgroundColor: `${team.color}22` }]}>
+                <Image source={team.badge} style={{ width: 16, height: 16 }} contentFit="contain" />
+                <Text style={styles.teamFlagText}>{team.name}</Text>
+              </View>
+            )}
           </View>
         </View>
+        {player && (
+          <PressScale onPress={onMenu} style={styles.more} hitSlop={8} accessibilityLabel="More" accessibilityHint={onEdit ? 'Edit or delete' : 'Report or block'}>
+            <View style={styles.dotRow}><View style={styles.dotBig} /><View style={styles.dotBig} /><View style={styles.dotBig} /></View>
+          </PressScale>
+        )}
       </View>
-
-      {/* Title */}
-      <Text style={headerStyles.title}>{thread.title}</Text>
-
-      {/* Tags */}
-      {thread.tags?.length > 0 && (
-        <View style={headerStyles.tagRow}>
-          {thread.tags.map((tag) => (
-            <Tag key={tag.id} tag={tag} />
-          ))}
-        </View>
-      )}
-
-      {/* Content */}
-      {thread.content ? (
-        <Text style={headerStyles.content}>{thread.content}</Text>
-      ) : null}
-
-      {/* Attachments */}
+      <RichText style={styles.postText}>{thread.content || thread.title}</RichText>
       {thread.attachments?.length > 0 && (
-        <View style={headerStyles.attachmentRow}>
+        <View style={styles.photos}>
           {thread.attachments.map((attachment) => (
-            <View
-              key={attachment.id}
-              style={{
-                width: thread.attachments.length > 1 ? '33.3333%' : '100%',
-                padding: 4,
-              }}
-            >
+            <View key={attachment.id} style={{ width: thread.attachments.length > 1 ? '50%' : '100%', padding: 3 }}>
               <AttachmentModal attachment={attachment} />
             </View>
           ))}
         </View>
       )}
-
-      {/* Actions row */}
-      <View style={headerStyles.actionsRow}>
-        <View style={headerStyles.reactionWrap}>
-          <ReactionsDropdown
-            model={{ id: thread.id, type: 'thread' }}
-            activeReaction={thread.current_user_reaction}
-            onReactionChange={onRefresh}
-          >
-            {thread.current_user_reaction ? (
-              <View style={headerStyles.reactionBtn}>
-                <Image
-                  source={{ uri: thread.current_user_reaction.reaction_type.image_url }}
-                  style={{ width: 22, height: 22 }}
-                />
-                <Text style={headerStyles.reactionText}>
-                  {thread.current_user_reaction.reaction_type.name}
-                </Text>
-              </View>
-            ) : (
-              <View style={headerStyles.reactionBtn}>
-                <Image
-                  source={{ uri: reactionTypes[0]?.image_url }}
-                  style={{ width: 22, height: 22 }}
-                />
-                <Text style={[headerStyles.reactionText, { color: '#8895a7' }]}>React</Text>
-              </View>
-            )}
-          </ReactionsDropdown>
+      <View style={styles.postActions}>
+        <View style={{ flex: 1 }}>
+          <ReactionBar state={state} types={offered} extraTypes={extra} onToggle={toggle} disabled={!player} size={32} />
         </View>
-        {player && (
-          <CreateReport model={{ id: thread.id, type: 'thread' }} showText />
-        )}
       </View>
-
-      {/* Reactions summary */}
-      {thread.reactions_count > 0 && (
-        <View style={{ marginTop: 12, zIndex: -1 }}>
-          <Reactions
-            count={thread.reactions_count}
-            reactions={thread.reactions}
-            hasReacted={thread.current_user_reaction}
-          />
-        </View>
-      )}
-    </Animated.View>
+    </View>
   );
 }
 
-const headerStyles = StyleSheet.create({
-  card: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  authorName: {
-    fontFamily: 'Shark',
-    fontSize: 14,
-    color: '#0d1b2a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  timePill: {
-    backgroundColor: '#f0f4f8',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  timeText: {
-    fontSize: 11,
-    color: '#8895a7',
-    fontFamily: 'Shark',
-  },
-  title: {
-    fontFamily: 'Knockout',
-    fontSize: 28,
-    color: '#0d1b2a',
-    lineHeight: 32,
-    marginBottom: 8,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 8,
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#334155',
-    marginBottom: 12,
-  },
-  attachmentRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
-    marginBottom: 12,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f4f8',
-  },
-  reactionWrap: {
-    flex: 1,
-  },
-  reactionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  reactionText: {
-    fontFamily: 'Shark',
-    fontSize: 13,
-    color: '#0d1b2a',
-    textTransform: 'uppercase',
-  },
-});
+export default function ThreadScreen({ route }: NativeStackScreenProps<ParamListBase, 'Thread'>) {
+  const params = (route.params ?? {}) as { thread: number; preview?: ThreadType; comment?: number };
+  const threadId = Number(params.thread);
+  const insets = useSafeAreaInsets();
+  const reduced = useUiReducedMotion();
+  const { player } = useContext(AuthContext);
+  const { playSound } = useContext(SoundEffectContext);
 
-// ── Comment Card Wrapper ──────────────────────────────────
-function CommentCard({ comment, index, onReplyPress }: { comment: CommentType; index: number; onReplyPress: (c: CommentType) => void }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(12)).current;
+  const [thread, setThread] = useState<ThreadType | null>(params.preview ?? null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'gone'>(params.preview ? 'ready' : 'loading');
+  const [comments, setComments] = useState<CommentType[]>([]);
+  const [commentsState, setCommentsState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [extraReplies, setExtraReplies] = useState<Record<number, CommentType[]>>({});
+  const [replyTo, setReplyTo] = useState<CommentType | null>(null);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [line, setLine] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [highlight, setHighlight] = useState<number | null>(params.comment ?? null);
+  const inputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlashList<Row>>(null);
+
+  const loadThread = useCallback(async () => {
+    try {
+      const fresh = await fetchThread(threadId);
+      setThread(fresh);
+      setStatus('ready');
+      emitSocial({ type: 'thread-updated', thread: { id: fresh.id, comments_count: fresh.comments_count } });
+    } catch (error) {
+      const code = (error as { response?: { status?: number } })?.response?.status;
+      setStatus(code === 404 ? 'gone' : (current) => (current === 'ready' ? 'ready' : 'error'));
+      if (code === 404) emitSocial({ type: 'thread-gone', id: threadId });
+    }
+  }, [threadId]);
+
+  const loadComments = useCallback(async (nextPage: number) => {
+    try {
+      const result = await fetchComments(threadId, nextPage, 'oldest');
+      setComments((current) => mergePage(current, result.data, nextPage));
+      setHasMore(result.hasMore);
+      setPage(nextPage);
+      setCommentsState('ready');
+    } catch {
+      if (nextPage === 1) setCommentsState('error');
+    }
+  }, [threadId]);
 
   useEffect(() => {
-    const delay = Math.min(index * 50, 250);
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, delay, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start();
-  }, []);
+    void loadThread();
+    void loadComments(1);
+  }, [loadThread, loadComments]);
 
-  return (
-    <Animated.View
-      style={{
-        marginHorizontal: 12,
-        marginBottom: 8,
-        backgroundColor: 'white',
-        borderRadius: 14,
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        elevation: 2,
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }],
-      }}
-    >
-      <Comment comment={comment} onReplyPress={onReplyPress} />
-    </Animated.View>
-  );
-}
+  const rows = useMemo(() => buildRows(comments, extraReplies), [comments, extraReplies]);
 
-// ── Main Screen ───────────────────────────────────────────
-export default function ThreadScreen({ route }: NativeStackScreenProps<ParamListBase, 'Thread'>) {
-  const { thread } = route.params as { thread: number };
-  const { setActiveComment, reactionTypes } = useContext(ForumContext);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [currentThread, setCurrentThread] = useState<ThreadType>();
-  const [page, setPage] = useState<number>(1);
-  const [comments, setComments] = useState<CommentType[]>([]);
-  const { player } = useContext(AuthContext);
-  const { warnings, labels } = useCrumbs();
-  const [activeSort, setActiveSort] = useState<'latest' | 'most_reactions'>('latest');
+  // From a notification: scroll to the reply and glow it.
+  useEffect(() => {
+    if (!highlight || commentsState !== 'ready') return;
+    const index = rows.findIndex((row) => row.kind === 'comment' && row.comment.id === highlight);
+    if (index >= 0) setTimeout(() => listRef.current?.scrollToIndex({ index, animated: !reduced, viewPosition: 0.4 }), 250);
+    const id = setTimeout(() => setHighlight(null), 3500);
+    return () => clearTimeout(id);
+  }, [highlight, commentsState]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchComments = async (p: number) => {
-    if (!currentThread) return;
-    const response = await getComments(currentThread.id, p, { sort: activeSort });
-    setComments((prev) => (p === 1 ? response : [...prev, ...response]));
-  };
-
-  const requestThread = async () => {
+  const moreReplies = async (topId: number) => {
+    const have = (comments.find((c) => c.id === topId)?.children?.length ?? 0) + (extraReplies[topId]?.length ?? 0);
     try {
-      const response = await getThread(thread);
-      setCurrentThread(response);
-    } catch (error) {
-      Alert.alert(warnings.something_went_wrong, labels.please_try_again, [
-        { text: 'Go back', onPress: () => RootNavigation.goBack() },
-      ]);
+      const nextPage = Math.floor(have / 15) + 1;
+      const result = await fetchReplies(topId, nextPage);
+      setExtraReplies((current) => ({ ...current, [topId]: [...(current[topId] ?? []), ...result.data] }));
+    } catch {
+      // The button stays; a second tap tries again.
     }
   };
 
-  useAsyncEffect(requestThread, []);
+  const startReply = (comment: CommentType) => {
+    setReplyTo(comment);
+    setLine(null);
+    inputRef.current?.focus();
+  };
 
-  useAsyncEffect(async () => {
-    if (!currentThread) return;
-    await fetchComments(1);
-    setLoading(false);
-  }, [currentThread]);
+  const send = async () => {
+    if (!thread || sending) return;
+    const problem = checkDraft(text, REPLY_MAX);
+    if (problem) {
+      setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
+      playSound(NOPE, { volume: 0.5 });
+      void Haptics.notificationAsync('warning');
+      return;
+    }
+    setSending(true);
+    setLine(null);
+    // A reply to a reply joins the same group (one level of nesting keeps it readable).
+    const parent = replyTo ? (replyTo.parent_id ?? replyTo.id) : null;
+    try {
+      const created = await postComment(thread.id, text.trim(), parent);
+      playSound(SEND, { volume: 0.6 });
+      void Haptics.notificationAsync('success');
+      const mineCreated: CommentType = { ...created, player: created.player ?? (player as CommentType['player']), children: created.children ?? [], children_count: 0 };
+      if (parent) {
+        setExtraReplies((current) => ({ ...current, [parent]: [...(current[parent] ?? []), mineCreated] }));
+        setComments((current) => current.map((c) => (c.id === parent ? { ...c, children_count: (c.children_count ?? 0) + 1 } : c)));
+      } else {
+        setComments((current) => [...current, mineCreated]);
+      }
+      setThread((current) => (current ? { ...current, comments_count: (current.comments_count ?? 0) + 1 } : current));
+      emitSocial({ type: 'replies-changed', id: thread.id, delta: 1 });
+      setText('');
+      setReplyTo(null);
+      setHighlight(created.id);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: !reduced }), 120);
+    } catch (error) {
+      setLine(errorLine(error));
+      playSound(NOPE, { volume: 0.5 });
+      void Haptics.notificationAsync('error');
+    } finally {
+      setSending(false);
+    }
+  };
 
-  useAsyncEffect(async () => {
-    if (loading) return;
-    setComments([]);
-    await fetchComments(1);
-    setPage(1);
-  }, [activeSort]);
+  const openPostMenu = () => {
+    if (!thread) return;
+    setMenu({ kind: 'thread', id: thread.id, authorId: thread.player?.id ?? null, authorName: thread.player?.screen_name ?? 'this player', mine: thread.player?.id === player?.id });
+  };
 
-  useAsyncEffect(async () => {
-    if (page > 1) await fetchComments(page);
-  }, [page]);
+  const openCommentMenu = (comment: CommentType) => {
+    setMenu({ kind: 'comment', id: comment.id, authorId: comment.player?.id ?? null, authorName: comment.player?.screen_name ?? 'this player', mine: comment.player?.id === player?.id });
+  };
+
+  const draftProblem = checkDraft(text, REPLY_MAX);
+  const replyName = replyTo?.player?.screen_name;
+
+  if (status === 'gone') {
+    return (
+      <View style={styles.root}>
+        <Topbar><TopbarColumn stretch={false}><BackButton /></TopbarColumn><TopbarColumn><TopbarText>Post</TopbarText></TopbarColumn><TopbarColumn stretch={false} /></Topbar>
+        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <SharkLoader state="empty" tone="onBlue" title="This post is gone" message="It was deleted or hidden." action={{ label: 'Back to Social', onPress: () => RootNavigation.goBack() }} style={{ marginTop: 120, paddingHorizontal: 24 }} />
+      </View>
+    );
+  }
 
   return (
-    <>
+    <View style={styles.root}>
       <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton onPress={() => setActiveComment(undefined)} />
-        </TopbarColumn>
-        <TopbarColumn />
-        <TopbarColumn stretch={false}>
-          {currentThread && (
-            <ThreadActions
-              trigger={<FontAwesomeIcon icon={faEllipsis} size={24} color="white" />}
-              thread={currentThread}
-            />
-          )}
-        </TopbarColumn>
+        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
+        <TopbarColumn><TopbarText>Post</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false} />
       </Topbar>
-
-      {loading && <Loading />}
-      {!loading && currentThread && (
-        <View style={{ flex: 1, backgroundColor: '#f0f4f8' }}>
-          <FlashList
-            data={comments}
-            ListHeaderComponent={
-              <>
-                <ThreadHeader
-                  thread={currentThread}
-                  reactionTypes={reactionTypes}
-                  player={player}
-                  onRefresh={requestThread}
+      <View style={{ flex: 1 }}>
+        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+          {!thread ? (
+            <SharkLoader state={status === 'error' ? 'error' : 'loading'} tone="onBlue" onRetry={() => { setStatus('loading'); void loadThread(); void loadComments(1); }} style={{ marginTop: 80 }} />
+          ) : (
+            <FlashList
+              ref={listRef}
+              data={rows}
+              keyExtractor={(row) => row.key}
+              getItemType={(row) => row.kind}
+              estimatedItemSize={96}
+              extraData={highlight}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
+              ListHeaderComponent={
+                <View>
+                  <PostHeader thread={thread} onMenu={openPostMenu} onEdit={thread.player?.id === player?.id ? () => setEditing(true) : undefined} />
+                  <View style={styles.repliesHead}>
+                    <CommentChip count={thread.comments_count ?? 0} />
+                  </View>
+                </View>
+              }
+              ListEmptyComponent={
+                commentsState === 'loading' ? <SharkLoader compact tone="onBlue" style={{ marginTop: 16 }} />
+                  : commentsState === 'error' ? <SharkLoader compact state="error" tone="onBlue" onRetry={() => { setCommentsState('loading'); void loadComments(1); }} style={{ marginTop: 16 }} />
+                    : (
+                      <View style={styles.noReplies}>
+                        <Text style={styles.noRepliesTitle}>No replies yet</Text>
+                        <Text style={styles.noRepliesLine}>Say something nice!</Text>
+                      </View>
+                    )
+              }
+              renderItem={({ item }) => item.kind === 'more' ? (
+                <PressScale onPress={() => void moreReplies(item.topId)} style={styles.moreReplies} accessibilityLabel={`Show ${item.remaining} more replies`}>
+                  <Text style={styles.moreRepliesText}>Show {item.remaining} more {item.remaining === 1 ? 'reply' : 'replies'}</Text>
+                </PressScale>
+              ) : (
+                <Bubble
+                  comment={item.comment}
+                  depth={item.depth}
+                  mine={item.comment.player?.id === player?.id}
+                  highlight={item.comment.id === highlight}
+                  onReply={startReply}
+                  onMenu={openCommentMenu}
                 />
-                <SortPills active={activeSort} onSelect={setActiveSort} />
-              </>
-            }
-            renderItem={({ item, index }) => (
-              <CommentCard
-                comment={item}
-                index={index}
-                onReplyPress={(comment) => {
-                  setActiveComment(comment);
-                }}
-              />
-            )}
-            estimatedItemSize={120}
-            keyExtractor={(item) => item.id.toString()}
-            onEndReached={() => setPage((prev) => prev + 1)}
-            contentContainerStyle={{ paddingBottom: player ? 120 : 40 }}
-          />
-          {player && (
-            <CreateReply
-              thread={currentThread}
-              onSubmit={async () => {
-                setComments(await getComments(currentThread.id, 1, { sort: activeSort }));
-                setCurrentThread(await getThread(thread));
-                setPage(1);
-              }}
+              )}
+              onEndReached={() => { if (hasMore) void loadComments(page + 1); }}
+              onEndReachedThreshold={0.5}
             />
           )}
-        </View>
+
+          {player && thread ? (
+            <View style={[styles.replyBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              {(replyTo || line) && (
+                <Animated.View entering={reduced ? undefined : FadeIn} exiting={reduced ? undefined : FadeOut} style={styles.replyInfo}>
+                  {line ? (
+                    <>
+                      <GameIcon name="info" size={18} />
+                      <Text style={styles.replyLine} accessibilityLiveRegion="polite">{line}</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.replyingTo} numberOfLines={1}>Replying to {replyName ?? 'a reply'}</Text>
+                      <PressScale onPress={() => setReplyTo(null)} accessibilityLabel="Stop replying" hitSlop={10}>
+                        <GameIcon name="close" size={24} />
+                      </PressScale>
+                    </>
+                  )}
+                </Animated.View>
+              )}
+              <View style={styles.replyRow}>
+                <TextInput
+                  ref={inputRef}
+                  value={text}
+                  onChangeText={(value) => { setText(value); setLine(null); }}
+                  placeholder={replyName ? `Reply to ${replyName}` : 'Say something nice!'}
+                  placeholderTextColor="#7d95b5"
+                  multiline
+                  maxLength={REPLY_MAX + 20}
+                  style={styles.replyInput}
+                  accessibilityLabel="Your reply"
+                />
+                <PressScale
+                  onPress={send}
+                  disabled={sending}
+                  haptic="medium"
+                  scaleTo={0.88}
+                  accessibilityLabel="Send reply"
+                  accessibilityState={{ disabled: Boolean(draftProblem) || sending }}
+                  style={[styles.send, (draftProblem === 'empty' || sending) && styles.sendOff]}
+                >
+                  <GameIcon name="arrow" size={30} />
+                </PressScale>
+              </View>
+            </View>
+          ) : null}
+        </KeyboardAvoidingView>
+      </View>
+
+      <PostMenu
+        target={menu}
+        onClose={() => setMenu(null)}
+        onEdit={() => setEditing(true)}
+        onGone={(why, target) => {
+          if (target.kind === 'thread' || why === 'blocked' && target.authorId === thread?.player?.id) {
+            if (why === 'blocked' && target.authorId) emitSocial({ type: 'player-blocked', playerId: target.authorId });
+            else emitSocial({ type: 'thread-gone', id: target.id });
+            RootNavigation.goBack();
+            return;
+          }
+          if (why === 'blocked' && target.authorId) {
+            const drop = (list: CommentType[]): CommentType[] => list.filter((c) => c.player?.id !== target.authorId).map((c) => ({ ...c, children: drop(c.children ?? []) }));
+            setComments(drop);
+            setExtraReplies((current) => Object.fromEntries(Object.entries(current).map(([k, v]) => [k, drop(v)])));
+            emitSocial({ type: 'player-blocked', playerId: target.authorId });
+            return;
+          }
+          // A reply that others answered keeps its place as a placeholder, like the server does.
+          const hide = (list: CommentType[]): CommentType[] => list
+            .filter((c) => c.id !== target.id || (c.children_count ?? 0) > 0)
+            .map((c) => (c.id === target.id
+              ? { ...c, content: null, player: null, hidden: why === 'deleted' ? 'deleted' : 'reported' }
+              : { ...c, children: hide(c.children ?? []) }));
+          setComments(hide);
+          setExtraReplies((current) => Object.fromEntries(Object.entries(current).map(([k, v]) => [k, hide(v)])));
+          if (why === 'deleted') {
+            setThread((current) => (current ? { ...current, comments_count: Math.max(0, (current.comments_count ?? 1) - 1) } : current));
+            emitSocial({ type: 'replies-changed', id: threadId, delta: -1 });
+          }
+        }}
+      />
+
+      {thread && (
+        <Composer
+          visible={editing}
+          editing={thread}
+          onClose={() => setEditing(false)}
+          onPosted={(updated) => {
+            setEditing(false);
+            setThread((current) => (current ? { ...current, ...updated, player: current.player } : current));
+            emitSocial({ type: 'thread-updated', thread: { id: updated.id, content: updated.content, title: updated.title } });
+          }}
+        />
       )}
-    </>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BRAND.blue },
+  post: { marginHorizontal: 14, padding: 14 },
+  postHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  postName: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2 },
+  postMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  postTime: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
+  teamFlag: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 2, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
+  teamFlagText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, marginTop: 2 },
+  postText: { fontFamily: 'Knockout', fontSize: 24, lineHeight: 30, color: '#10233f' },
+  photos: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3, marginTop: 10 },
+  postActions: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTopWidth: 2, borderTopColor: '#e3eefb' },
+  more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  dotRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.white },
+  dotBig: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.navySoft },
+  repliesHead: { flexDirection: 'row', marginHorizontal: 14, marginTop: 14, marginBottom: 8 },
+  noReplies: { alignItems: 'center', marginTop: 18, gap: 2 },
+  noRepliesTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  noRepliesLine: { fontFamily: 'Knockout', fontSize: 18, color: '#dbefff' },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 14, paddingVertical: 4 },
+  indent: { paddingLeft: 52 },
+  miniAvatar: { width: 38, height: 38, borderRadius: 19, overflow: 'hidden', marginTop: 4 },
+  avatarScale: { width: 50, height: 50, transform: [{ scale: 0.76 }], marginLeft: -6, marginTop: -6 },
+  bubble: { backgroundColor: BRAND.white, borderRadius: 18, borderTopLeftRadius: 6, borderWidth: 2, borderColor: '#bcd8f5', paddingHorizontal: 12, paddingVertical: 8 },
+  bubbleMine: { backgroundColor: '#fff8e4', borderColor: '#f0d488' },
+  bubbleHighlight: { borderColor: BRAND.gold, borderWidth: 3 },
+  bubbleHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  bubbleName: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
+  bubbleTime: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
+  bubbleText: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 24, color: '#10233f' },
+  bubbleActions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
+  smallAction: { minHeight: 32, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, marginTop: 4, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.5)' },
+  smallActionText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
+  ghost: { flex: 1, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 12, paddingVertical: 8 },
+  ghostText: { fontFamily: 'Knockout', fontSize: 16, color: '#dbefff' },
+  moreReplies: { marginLeft: 66, marginVertical: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
+  moreRepliesText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
+  replyBar: { backgroundColor: BRAND.cream, borderTopWidth: 3, borderTopColor: BRAND.navy, paddingHorizontal: 10, paddingTop: 8, gap: 6 },
+  replyInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 },
+  replyLine: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.redLip },
+  replyingTo: { flex: 1, fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, marginTop: 2 },
+  replyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  replyInput: {
+    flex: 1,
+    fontFamily: 'Knockout',
+    fontSize: 20,
+    color: '#10233f',
+    backgroundColor: BRAND.white,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#bcd8f5',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 48,
+    maxHeight: 120,
+  },
+  send: { width: 52, height: 52, borderRadius: 26, backgroundColor: BRAND.gold, borderWidth: 3, borderBottomWidth: 5, borderColor: '#7a3d00', alignItems: 'center', justifyContent: 'center' },
+  sendOff: { opacity: 0.5 },
+});

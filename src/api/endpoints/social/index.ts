@@ -1,0 +1,104 @@
+/**
+ * Shark Social API. Unlike the old endpoints these never show an alert and
+ * never swallow errors: callers keep the draft and show errorLine(error).
+ */
+import client from '../../client';
+import type { ApiResponseType } from '../../../models/api-response-type';
+import type { ApiPaginatedResponseType } from '../../../models/api-paginated-response-type';
+import type { ThreadType } from '../../../models/thread-type';
+import type { CommentType } from '../../../models/comment-type';
+import type { ReactionType } from '../../../models/reaction-type';
+import type { PlayerType } from '../../../models/player-type';
+import type { FeedTab, Page, TopicKey } from '../../../screens/Social/socialModel';
+
+export async function fetchFeed(page: number, tab: FeedTab, options: { team?: string | null; topic?: TopicKey | null } = {}): Promise<Page<ThreadType>> {
+  const params: Record<string, string | number | boolean> = { page, pinned: false };
+  if (tab === 'friends') {
+    params.friends = true;
+    params.sort = 'latest';
+  } else if (tab === 'team') {
+    if (options.team) params.team = options.team;
+    params.sort = 'latest';
+  } else {
+    params.sort = tab;
+  }
+  if (options.topic) params.topic = options.topic;
+  const { data } = await client.get<ApiPaginatedResponseType<ThreadType[]>>('/threads', { params });
+  return { data: data.data, hasMore: Boolean(data.links?.next) };
+}
+
+export async function fetchPinned(): Promise<ThreadType[]> {
+  const { data } = await client.get<ApiResponseType<ThreadType[]>>('/threads', { params: { page: 1, pinned: true, sort: 'latest' } });
+  return data.data;
+}
+
+export async function fetchThread(id: number): Promise<ThreadType> {
+  const { data } = await client.get<ApiResponseType<ThreadType>>(`/threads/${id}`);
+  return data.data;
+}
+
+export async function fetchComments(threadId: number, page: number, sort: 'latest' | 'oldest' = 'oldest'): Promise<Page<CommentType>> {
+  const { data } = await client.get<ApiPaginatedResponseType<CommentType[]>>(`/threads/${threadId}/comments`, { params: { page, sort } });
+  return { data: data.data, hasMore: Boolean(data.links?.next) };
+}
+
+export async function fetchReplies(commentId: number, page: number): Promise<Page<CommentType>> {
+  const { data } = await client.get<ApiPaginatedResponseType<CommentType[]>>(`/comments/${commentId}/children`, { params: { page } });
+  return { data: data.data, hasMore: Boolean(data.links?.next) };
+}
+
+export async function postThread(body: { content: string; title: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
+  const { data } = await client.post<ApiResponseType<ThreadType>>('/threads', {
+    content: body.content,
+    title: body.title,
+    topic: body.topic ?? null,
+    team: body.team ?? null,
+  });
+  return data.data;
+}
+
+export async function editThread(id: number, content: string): Promise<ThreadType> {
+  const { data } = await client.put<ApiResponseType<ThreadType>>(`/threads/${id}`, { content });
+  return data.data;
+}
+
+export async function removeThread(id: number): Promise<void> {
+  await client.delete(`/threads/${id}`);
+}
+
+export async function postComment(threadId: number, content: string, parentId?: number | null): Promise<CommentType> {
+  const { data } = await client.post<ApiResponseType<CommentType>>(`/threads/${threadId}/comments`, { content, comment_id: parentId ?? null });
+  return data.data;
+}
+
+export async function removeComment(id: number): Promise<void> {
+  await client.delete(`/comments/${id}`);
+}
+
+export async function reactToThread(threadId: number, reactionTypeId: number): Promise<ReactionType> {
+  const { data } = await client.post<ApiResponseType<ReactionType>>(`/threads/${threadId}/add-reaction`, { reaction_type_id: reactionTypeId });
+  return data.data;
+}
+
+export async function removeReaction(reactionId: number): Promise<void> {
+  await client.delete(`/reactions/${reactionId}`);
+}
+
+export type ReportReason = 'disrespectful' | 'swearing' | 'personal_info' | 'spam' | 'unrelated' | 'selling';
+
+export async function report(kind: 'thread' | 'comment', id: number, reason: ReportReason): Promise<void> {
+  await client.post(kind === 'thread' ? `/threads/${id}/report` : `/comments/${id}/report`, { reason });
+}
+
+export async function blockPlayer(playerId: number): Promise<void> {
+  await client.post(`/players/${playerId}/block`);
+}
+
+export async function unblockPlayer(playerId: number): Promise<void> {
+  await client.delete(`/players/${playerId}/block`);
+}
+
+export async function fetchBlocked(): Promise<PlayerType[]> {
+  const { data } = await client.get<ApiResponseType<PlayerType[]>>('/me/blocks');
+  return data.data;
+}

@@ -44,9 +44,14 @@ const WS8_CLEAN = [
   'src/screens/PlayerScreen.tsx',
   'src/components/FriendPlayer.tsx',
   'src/screens/SocialScreen.tsx',
-  'src/components/CreateThreadModal.tsx',
   'src/components/SocialPost.tsx',
-  'src/components/Comment.tsx',
+  'src/screens/Social/Composer.tsx',
+  'src/screens/Social/ThreadCard.tsx',
+  'src/screens/Social/PostMenu.tsx',
+  'src/screens/Social/SocialHelp.tsx',
+  'src/screens/Social/socialLook.tsx',
+  'src/screens/Social/socialModel.ts',
+  'src/screens/ThreadScreen.tsx',
   'src/hooks/useFriends.tsx',
   'src/components/PushSoftAsk.tsx',
   'src/components/Toast.tsx',
@@ -65,8 +70,13 @@ const WS8_CLEAN = [
 const NO_ICON_FONT = [
   'src/screens/SettingsScreen.tsx',
   'src/screens/SocialScreen.tsx',
-  'src/components/CreateThreadModal.tsx',
-  'src/components/Comment.tsx',
+  'src/screens/Social/Composer.tsx',
+  'src/screens/Social/ThreadCard.tsx',
+  'src/screens/Social/PostMenu.tsx',
+  'src/screens/Social/SocialHelp.tsx',
+  'src/screens/Social/socialLook.tsx',
+  'src/screens/Social/socialModel.ts',
+  'src/screens/ThreadScreen.tsx',
 ];
 
 test('WS8 surfaces have no emoji, em dashes, glyph icons or third-party phrases', () => {
@@ -92,14 +102,15 @@ test('WS8 social and settings surfaces use hand-drawn art, not an icon font, and
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     assert.doesNotMatch(source, /@fortawesome|@expo\/vector-icons/, file);
   }
-  for (const file of ['src/screens/SocialScreen.tsx', 'src/components/CreateThreadModal.tsx']) {
+  for (const file of ['src/screens/SocialScreen.tsx', 'src/screens/Social/Composer.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
-    assert.match(source, /from '\.\.\/constants\/teams'/, `${file} reads teams from constants/teams.ts`);
+    assert.match(source, /from '(\.\.\/)+constants\/teams'/, `${file} reads teams from constants/teams.ts`);
     assert.doesNotMatch(source, /const TEAMS = \{/, `${file} has no local team copy`);
   }
   const social = fs.readFileSync(path.join(root, 'src/screens/SocialScreen.tsx'), 'utf8');
-  assert.match(social, /Tap \+ below/);
-  assert.doesNotMatch(social, /pencil icon above/);
+  // Threads v2: the empty state offers a real button instead of pointing at a corner +.
+  assert.match(social, /label: 'Write a post'/);
+  assert.doesNotMatch(social, /Tap \+ below|pencil icon above/);
 });
 
 test('toasts show art for their type, map legacy emoji to art, and never use a dark or purple fill', () => {

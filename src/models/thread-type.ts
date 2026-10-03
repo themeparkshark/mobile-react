@@ -19,4 +19,7 @@ export interface ThreadType {
   readonly reactions: ReactionType[];
   readonly current_user_reaction: ReactionType;
   readonly team: 'mouse' | 'globe' | 'shark' | null;
+  /** Threads v2 (optional on older servers). */
+  readonly topic?: string | null;
+  readonly reaction_counts?: { readonly reaction_type_id: number; readonly count: number }[];
 }
