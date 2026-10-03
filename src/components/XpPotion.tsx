@@ -77,6 +77,11 @@ const FRAME_MS = 33;
 // Lip centre after the tilt: where escaping bubbles and drops leave the bottle.
 const MOUTH = { x: CX - Math.sin(-TILT) * (CY - 20), y: CY - Math.cos(-TILT) * (CY - 20) };
 
+/** Burst progress per launch group: one 33 ms redraw at the start of the 1150 ms out-quad burst. */
+export const DROP_GROUP_LAG = 0.06;
+/** The gold stars start two redraws after the first drops. */
+export const SPARK_LAG = 0.11;
+
 const BUBBLES = [
   { x: 36, speed: 12, r: 3.4, phase: 0 },
   { x: 58, speed: 16, r: 2.8, phase: 31 },
@@ -376,8 +381,10 @@ function XpPotion({
     if (q <= 0) return;
     for (let i = 0; i < DROPS.length; i++) {
       const d = DROPS[i];
-      // Staggered launch (0 to about 2 frames apart) so the first frame is not a knot.
-      const lq = Math.max(0, (q - i * 0.012) / (1 - i * 0.012));
+      // Three launch groups one potion redraw apart (about 0, 33 and 66 ms on the
+      // eased burst curve), so the first redraw is never a knot of drops.
+      const lag = (i % 3) * DROP_GROUP_LAG;
+      const lq = Math.max(0, (q - lag) / (1 - lag));
       if (lq <= 0.02) continue;
       const r = d.r * (1 - lq);
       if (r < 3) continue; // below 3 pt the ink would swallow the green
@@ -386,7 +393,7 @@ function XpPotion({
   });
   const sparks = usePathValue((p) => {
     'worklet';
-    const q = burst.value;
+    const q = Math.max(0, (burst.value - SPARK_LAG) / (1 - SPARK_LAG));
     if (q <= 0) return;
     for (let i = 0; i < SPARKS.length; i++) {
       const s = SPARKS[i];

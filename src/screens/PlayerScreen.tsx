@@ -227,7 +227,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               </View>
               <StatusBadges isVip={!!currentPlayer.is_subscribed} isVerified={!!currentPlayer.verified_at} own={false} />
               <Heading text="Statistics" />
-              <Stats player={currentPlayer} />
+              <Stats player={currentPlayer} hideBalances={!isFriend} />
               {/* Park history is for friends only; strangers see the shark, title, level and stats. */}
               {isFriend && parks.length > 0 && (
                 <>

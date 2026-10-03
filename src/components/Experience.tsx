@@ -121,14 +121,16 @@ export default function Experience({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [own, playSound, reduced, countTo, level, current, needed]);
 
+  // A stranger's in-level XP is private (null): show the level only, never "0 / N XP".
+  const hideXp = player.experience === null || player.experience === undefined;
   const atMax = shown.needed > 0 && shown.current >= shown.needed && level === shown.level && current >= needed;
   const numbers = shown.needed > 0
     ? `${shown.current.toLocaleString()} / ${shown.needed.toLocaleString()} XP`
     : `${shown.current.toLocaleString()} XP`;
-  const toNext = shown.needed > 0 && !atMax ? `to Level ${shown.level + 1}` : null;
+  const toNext = shown.needed > 0 && !atMax && !hideXp ? `to Level ${shown.level + 1}` : null;
   const caption = own ? (atMax ? 'Top level reached' : nextLevelCaption(shown.level, rideBoss)) : null;
   // VoiceOver always reads the real values, never the animation's.
-  const spoken = needed > 0
+  const spoken = hideXp ? `Level ${level}.` : needed > 0
     ? `Level ${level}. ${current.toLocaleString()} of ${needed.toLocaleString()} XP to level ${level + 1}.`
     : `Level ${level}. ${current.toLocaleString()} XP.`;
   const ownCaption = own ? (current >= needed && needed > 0 ? 'Top level reached' : nextLevelCaption(level, rideBoss)) : null;
@@ -152,7 +154,9 @@ export default function Experience({
           {vsprintf(labels.experience_level || 'Level %s', [shown.level])}
         </Animated.Text>
         <View style={styles.numbersRow}>
-          <Text style={styles.numbers} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{numbers}</Text>
+          {!hideXp && (
+            <Text style={styles.numbers} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{numbers}</Text>
+          )}
           {toNext && <Text style={styles.toNext} numberOfLines={1}>{toNext}</Text>}
         </View>
         {caption && <Text style={styles.caption} numberOfLines={2}>{caption}</Text>}

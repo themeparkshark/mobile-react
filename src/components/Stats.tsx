@@ -10,7 +10,7 @@ import {
 import ProfileStatIcon from './ProfileStatIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
-function AnimatedStat({
+export function AnimatedStat({
   label,
   value,
   iconIndex,
@@ -159,56 +159,70 @@ function AnimatedStat({
   );
 }
 
-export default function Stats({ player }: { readonly player: PlayerType }) {
-  const stats = [
+/** A count the server may hide: null or undefined (a stranger's balances) means "do not show". */
+export function visibleCount(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export default function Stats({ player, hideBalances = false }: {
+  readonly player: PlayerType;
+  /** Another player who is not your friend: balances and park history are private (the kid-safety backend sends 0 or null). */
+  readonly hideBalances?: boolean;
+}) {
+  const all = [
     {
       label: 'Keys',
-      value: player.keys,
+      value: hideBalances ? null : visibleCount(player.keys),
       iconIndex: 0,
     },
     {
       label: 'Park Coins',
-      value: player.park_coins_count,
+      value: visibleCount(player.park_coins_count),
       iconIndex: 1,
     },
     {
       label: 'Parks',
-      value: player.visited_parks_count,
+      value: hideBalances ? null : visibleCount(player.visited_parks_count),
       iconIndex: 2,
     },
     {
       label: 'Shark Coins',
-      value: player.coins,
+      value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
     },
     {
       label: 'Ride Wins',
-      value: player.completed_tasks_count,
+      value: visibleCount(player.completed_tasks_count),
       iconIndex: 4,
     },
     {
       label: 'Total XP',
       // Lifetime XP can never read lower than the XP inside the current level.
-      value: Math.max(Number(player.total_experience) || 0, Number(player.experience) || 0),
+      value: visibleCount(player.total_experience) === null && visibleCount(player.experience) === null
+        ? null
+        : Math.max(Number(player.total_experience) || 0, Number(player.experience) || 0),
       iconIndex: 5,
     },
   ];
 
-  const row1 = stats.slice(0, 3);
-  const row2 = stats.slice(3, 6);
+  // Hidden values (a stranger's Keys and Shark Coins) drop their tile; the rest stay in even rows.
+  const stats = all.filter((s): s is typeof s & { value: number } => s.value !== null);
+  if (stats.length === 0) return null;
+  const perRow = stats.length === 4 ? 2 : 3;
+  const rows: (typeof stats)[] = [];
+  for (let i = 0; i < stats.length; i += perRow) rows.push(stats.slice(i, i + perRow));
 
   return (
     <View style={{ gap: 10, paddingHorizontal: 8 }}>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        {row1.map((stat, i) => (
-          <AnimatedStat key={stat.label} {...stat} delay={i * 80} />
-        ))}
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        {row2.map((stat, i) => (
-          <AnimatedStat key={stat.label} {...stat} delay={(i + 3) * 80} />
-        ))}
-      </View>
+      {rows.map((row, r) => (
+        <View key={r} style={{ flexDirection: 'row', gap: 10 }}>
+          {row.map((stat, i) => (
+            <AnimatedStat key={stat.label} {...stat} delay={(r * perRow + i) * 80} />
+          ))}
+        </View>
+      ))}
     </View>
   );
 }
