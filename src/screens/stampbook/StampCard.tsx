@@ -23,7 +23,7 @@
  * colour; colour bleeds up from an ink line past 75% (capped at 65%).
  * Reduce Motion: fades only; sound, haptics and announcements stay.
  */
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -40,7 +40,7 @@ import Animated, {
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
-import { rarityToneByName } from '../../constants/coinTiers';
+import { RARITY_INK, stampRarity } from './rarity';
 import GameIcon from '../../ui/GameIcon';
 import GameButton from '../../ui/GameButton';
 import Ribbon from '../../components/Ribbon';
@@ -111,7 +111,8 @@ function Frame(props: Props & { stamp: BookStamp }) {
     backdrop.value = withTiming(1, { duration: 120 });
     card.value = withSpring(1, { damping: 16, stiffness: 300 });
   }, [backdrop, card, reducedMotion]);
-  useEffect(() => { setPhase('idle'); }, [stamp.id]);
+  // Before paint, so a chained card never shows the previous card's "Got it!".
+  useLayoutEffect(() => { setPhase('idle'); }, [stamp.id]);
 
   const claimed = stamp.rewardClaimed || claimedIds.includes(stamp.id);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
@@ -149,8 +150,10 @@ function Frame(props: Props & { stamp: BookStamp }) {
               <View style={styles.actionSlot}>
                 <View style={status ? styles.hidden : undefined} importantForAccessibility={status ? 'no-hide-descendants' : 'auto'}
                   accessibilityElementsHidden={!!status} pointerEvents={status ? 'none' : 'auto'}>
-                  <GameButton label={action?.label ?? 'Stamped!'} icon={action?.icon ?? 'check'} loading={phase === 'claiming'}
-                    disabled={busy || !action} onPress={action?.onPress} accessibilityLabel={action?.a11y} />
+                  {/* While the claim is in flight the button stays yellow (no olive disabled look); presses are ignored. */}
+                  <GameButton label={phase === 'claiming' ? 'Stamping...' : action?.label ?? 'Stamped!'} icon={action?.icon ?? 'check'}
+                    disabled={!action || phase === 'cascading' || phase === 'gotIt'} onPress={busy ? undefined : action?.onPress}
+                    accessibilityLabel={action?.a11y} />
                 </View>
                 {!!status && (
                   <View style={styles.status} accessible accessibilityRole="text" accessibilityLabel={status}>
@@ -166,6 +169,10 @@ function Frame(props: Props & { stamp: BookStamp }) {
             )}
           </View>
           {!!message && <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text>}
+          {/* Keeps the reward icons decoded for the whole chain, so token discs are never blank on a new card. */}
+          <View style={styles.preload} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            {(['energy', 'ticket', 'xp', 'coin', 'crown', 'check', 'gift'] as GameIconName[]).map(n => <GameIcon key={n} name={n} size={8} />)}
+          </View>
         </View>
       </Animated.View>
     </View>
@@ -184,18 +191,21 @@ type ContentProps = Props & {
 
 const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp, accent, reducedMotion, fresh, wallet, claimed,
   shake, nextCount, onClaim, onNext, onPhase, onClaimed }, ref) {
-  const tone = rarityToneByName(stamp.rarity);
+  const tone = stampRarity(stamp.rarity);
   const rank = rarityRank(stamp.rarity);
   const legendary = stamp.earned && stamp.rarity === 'legendary';
   const req = requirement(stamp);
   const bleed = bleedFraction(stamp);
 
   const flash = useSharedValue(0);
-  const sx = useSharedValue(1);
-  const sy = useSharedValue(1);
-  const lift = useSharedValue(0);
-  const tilt = useSharedValue(stamp.earned ? -3 : 0);
-  const fade = useSharedValue(0);
+  // A fresh slam starts in its hover pose with the thumb visible, so the hold before the drop is never an empty stage.
+  const hover = stamp.earned && fresh && !reducedMotion;
+  const sx = useSharedValue(hover ? 1.35 : 1);
+  const sy = useSharedValue(hover ? 1.35 : 1);
+  const lift = useSharedValue(hover ? -6 : 0);
+  const tilt = useSharedValue(hover ? -12 : stamp.earned ? -3 : 0);
+  // Visible from the first frame: the cached thumb stands in until the big art arrives (never an empty stage).
+  const fade = useSharedValue(1);
   const hit = useSharedValue(0);
   const foil = useSharedValue(0);
   const breathe = useSharedValue(0);
@@ -236,16 +246,16 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       return;
     }
     const hold = rank >= 5 ? 120 : 50;
-    fade.value = 0; hit.value = 0;
+    hit.value = 0;
     sx.value = 1.35; sy.value = 1.35; lift.value = -6; tilt.value = -12;
-    fade.value = withTiming(1, { duration: 100 });
+    fade.value = withTiming(1, { duration: 80 });
     lift.value = withSequence(withTiming(-12, { duration: 140, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 160, easing: Easing.in(Easing.exp) }));
     tilt.value = withDelay(140, withTiming(-3, { duration: 160, easing: Easing.in(Easing.exp) }));
     const drop = { duration: 160, easing: Easing.in(Easing.exp) };
     const settle = { damping: 20, stiffness: 380 };
     sx.value = withSequence(withDelay(140, withTiming(0.92, drop)), withDelay(hold, withTiming(1.08, { duration: 60 })), withSpring(1, settle));
     sy.value = withSequence(withDelay(140, withTiming(0.92, drop)), withDelay(hold, withTiming(0.92, { duration: 60 })), withSpring(1, settle));
-    hit.value = withDelay(300, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }));
+    hit.value = withDelay(300, withTiming(1, { duration: 1200, easing: Easing.linear }));
     shake.value = withDelay(300, withSequence(
       withTiming(6, { duration: 30 }), withTiming(-5, { duration: 30 }), withTiming(3, { duration: 30 }), withTiming(0, { duration: 30 })));
     flash.value = withDelay(300, withSequence(withTiming(0.25, { duration: 16 }), withTiming(0, { duration: 120 })));
@@ -399,9 +409,9 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         accessibilityLabel={`${stamp.name} stamp, ${tone.label}${stamp.earned ? '. Tap to stamp it again' : '. Locked'}`}
       >
         {legendary && !reducedMotion && <Sunburst size={ART * 1.6} color={LEGENDARY_GOLD} running />}
-        {stamp.earned && rank >= 3 && !reducedMotion && <RarityBurst size={ART * 1.3} color={tone.color} hit={hit} />}
+        {stamp.earned && rank >= 3 && !reducedMotion && <RarityBurst size={ART * 1.3} color={tone.frame} hit={hit} />}
         {stamp.earned && <InkBurst seed={stamp.id} size={ART} color={INK} hit={hit} />}
-        {!stamp.earned && !stamp.secret && <Animated.View style={[styles.breathe, { backgroundColor: accent }, glowStyle]} />}
+        {!stamp.earned && !stamp.secret && <Animated.View style={[styles.breathe, { borderColor: accent }, glowStyle]} />}
         <Animated.View style={[styles.shadow, shadowStyle]}><SoftShadow width={ART * 0.62} height={26} /></Animated.View>
         <Animated.View style={[styles.artBox, artStyle]}>
           {stamp.secret ? (
@@ -412,7 +422,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
               {bleed > 0 && (
                 <View style={[styles.bleed, { height: `${Math.round(bleed * 100)}%` }]}>
                   <View style={styles.bleedInner}><StampArt stamp={stamp} size="full" locked={false} /></View>
-                  <View style={styles.inkEdge}><InkEdge width={ART} color={INK} /></View>
+                  <View style={styles.inkEdge}><InkEdge width={ART * 0.68} color={INK} /></View>
                 </View>
               )}
             </>
@@ -428,8 +438,9 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         <Animated.View pointerEvents="none" style={[styles.flash, flashStyle]} />
       </Pressable>
 
-      <View style={[styles.rarity, { backgroundColor: pillGold ? LEGENDARY_GOLD : tone.color }, pillGold && styles.rarityGold]}>
-        <Text style={[styles.rarityText, pillGold && styles.rarityTextGold]} maxFontSizeMultiplier={1.2}>{tone.label.toUpperCase()}</Text>
+      {/* App-wide ramp (rarity.ts): light chip, rarity frame, navy ink; gold is Legendary only. */}
+      <View style={[styles.rarity, { backgroundColor: tone.chip, borderColor: tone.frame }, pillGold && styles.rarityGold]}>
+        <Text style={styles.rarityText} maxFontSizeMultiplier={1.2}>{tone.label.toUpperCase()}</Text>
       </View>
 
       {stamp.earned ? (
@@ -499,16 +510,17 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
-  hud: { flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
+  hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   hudText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF' },
-  stage: { width: ART + 50, height: ART + 30, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  breathe: { position: 'absolute', width: ART * 0.9, height: ART * 0.9, borderRadius: ART, top: 15 + ART * (BADGE_CY - 0.45) },
+  stage: { zIndex: 1, width: ART + 50, height: ART + 30, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  // Pale core with the section colour as a ring: a bright accent at low alpha over the blue card reads olive.
+  breathe: { position: 'absolute', width: ART * 0.9, height: ART * 0.9, borderRadius: ART, top: 15 + ART * (BADGE_CY - 0.45), backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 5 },
   shadow: { position: 'absolute', bottom: 10 },
   artBox: { width: ART, height: ART },
   bleed: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   bleedInner: { position: 'absolute', left: 0, right: 0, bottom: 0, height: ART },
-  inkEdge: { position: 'absolute', left: 0, right: 0, top: -2 },
+  inkEdge: { position: 'absolute', left: ART * 0.16, top: -2 },
   stampHere: {
     position: 'absolute', left: ART * 0.08, right: ART * 0.08, top: ART * (BADGE_CY - 0.42), height: ART * 0.84,
     borderRadius: ART, borderWidth: 3, borderStyle: 'dashed',
@@ -518,11 +530,11 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
   },
   secret: { width: ART * 0.82, height: ART * 0.82, borderRadius: ART, borderWidth: 5, borderStyle: 'dashed', alignSelf: 'center', marginTop: ART * 0.09, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.15)' },
-  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FFFFFF', borderRadius: 30 },
-  rarity: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 3, borderWidth: 2, borderColor: '#FFFFFF' },
-  rarityGold: { borderColor: INK, borderWidth: 2.5 },
-  rarityText: { fontFamily: 'Shark', fontSize: 14, color: '#FFFFFF', letterSpacing: 1 },
-  rarityTextGold: { color: INK },
+  // Badge-shaped (round) flash on the badge, not a rectangle over the stage.
+  flash: { position: 'absolute', width: ART * 0.72, height: ART * 0.72, borderRadius: ART, backgroundColor: '#FFFFFF', top: 15 + ART * (BADGE_CY - 0.36) },
+  rarity: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 3, borderWidth: 2.5 },
+  rarityGold: { backgroundColor: LEGENDARY_GOLD, borderColor: INK, borderWidth: 2.5 },
+  rarityText: { fontFamily: 'Shark', fontSize: 14, color: RARITY_INK, letterSpacing: 1 },
   earned: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF', marginTop: 6, textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
   remainingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   remaining: { fontFamily: 'Shark', fontSize: 22, color: '#FFCF3B', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
@@ -549,5 +561,6 @@ const styles = StyleSheet.create({
     borderRadius: 20, backgroundColor: 'rgba(0,40,90,0.5)', borderWidth: 2.5, borderColor: '#FFFFFF',
   },
   statusText: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  preload: { position: 'absolute', opacity: 0, width: 1, height: 1, overflow: 'hidden' },
   message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
 });

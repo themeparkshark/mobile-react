@@ -245,7 +245,7 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (/^(park_coins_|ride_coins_)/.test(m)) return r('coin', ['coin', 'coins'], 'CoinShelf');
   if (m === 'verified_lineplay_sessions') return r('queue', ['line', 'lines'], 'Explore', null);
   if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'CoinShelf');
-  if (m === 'night_show') return r('map', ['night', 'nights'], 'Explore', null);
+  if (m === 'night_show') return r('star', ['night', 'nights'], 'Explore', null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
   return r('star', ['step', 'steps'], null, null);
