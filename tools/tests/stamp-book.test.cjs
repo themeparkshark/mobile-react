@@ -251,10 +251,13 @@ test('locked bleed never reads as earned; postmark sits in the free corner; rari
   assert.equal(model.toBookStamp(stamp({ art_free_corner: 'nope' })).freeCorner, 'tr');
   const tile = read('src/screens/stampbook/StampTile.tsx');
   assert.match(tile, /<View style=\{\[styles\.postmark, CORNER\[postmarkCorner\(stamp\.freeCorner, stamp\.claimable \|\| isNew \|\| almost\)\]\]\}/);
-  // App-wide ramp (mirrors dexLook RARITY_LOOK on claude/hh3-menu-dex): gold is Legendary only, gems give a shape cue.
+  // One app-wide palette: stamps read design-system colors.rarity (shop and wardrobe ladder); gold is Legendary only.
   const rarity = loadTs('src/screens/stampbook/rarity.ts');
+  const ds = loadTs('src/design-system.ts');
   assert.deepEqual(plain(['common', 'uncommon', 'rare', 'epic', 'legendary'].map(k => rarity.STAMP_RARITY[k].frame)),
-    ['#8a9bb0', '#2fb35d', '#9b4dff', '#ff5a2b', '#f5b400']);
+    plain(['common', 'uncommon', 'rare', 'epic', 'legendary'].map(k => ds.colors.rarity[k].main)));
+  assert.deepEqual(plain(['uncommon', 'rare', 'epic', 'legendary'].map(k => ds.wearableRarityUi[['common', 'uncommon', 'rare', 'epic', 'legendary'].indexOf(k) + 1].border)),
+    plain(['uncommon', 'rare', 'epic', 'legendary'].map(k => rarity.STAMP_RARITY[k].frame.toUpperCase())).map(c => c.replace('#00A5F5', '#00a5f5')));
   assert.deepEqual(plain(Object.values(rarity.STAMP_RARITY).map(r => r.gems)), [1, 2, 3, 4, 5]);
   assert.match(tile, /Array\.from\(\{ length: look\.gems \}/);
   assert.match(read('src/screens/stampbook/StampCard.tsx'), /backgroundColor: tone\.chip, borderColor: tone\.frame/);
