@@ -78,7 +78,7 @@ function loadClient(apiUrl, log) {
 }
 
 async function coldLaunchAtHome(client) {
-  const currentPark = loadTs('src/api/endpoints/me/current-park.ts', { '../../client': client }).default;
+  const currentPark = loadTs('src/api/endpoints/me/current-park.ts', { '../../client': client, '../../../screens/stampbook/dirty': { noteCurrentPark() {} } }).default;
   const { getTripGoal } = loadTs('src/api/endpoints/me/trip-goal.ts', { '../../client': client });
   const me = await client.get('/me');
   // LocationProvider.lookupParkAt: a 422 means outside, an error means unknown.

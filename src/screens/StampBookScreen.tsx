@@ -1,729 +1,558 @@
-import GameIcon from '../ui/GameIcon';
+/**
+ * Stamp Book v2: a passport sticker book on Alex's shark-camo ocean.
+ * Hero: progress ring, a gold "Claim n!" button that starts the claim chain,
+ * and a "Next stamp" slot with a Go button. Section chips with icons, counts
+ * and red dots scroll themselves into view. Each section is a page with a
+ * chest at the end of its bar; a small filtered section becomes a two-column
+ * album page with a "Next up" callout. Tap a stamp for the big card.
+ *
+ * Performance: one shared shine clock (BookFx), tiles never re-render on card
+ * open/close or scroll, stamp objects keep identity across refetches, the
+ * focus refetch is throttled to 30 s, and tile thumbs are prefetched.
+ */
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState, useCallback, useContext } from 'react';
-import {
-  Animated,
-  Dimensions,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
-import { claimStampReward, equipStampTitle, getStamps, StampData as ApiStampData, StampRewards } from '../api/endpoints/me/stamps';
+import * as RootNavigation from '../RootNavigation';
+import { claimStampReward, equipStampTitle, getStamps, type StampsResponse } from '../api/endpoints/me/stamps';
 import { AuthContext } from '../context/AuthProvider';
-import { RARITY_TONES } from '../constants/coinTiers';
+import { haptic } from '../gamekit/Haptics';
+import { playSfx } from '../gamekit/SFX';
+import GameIcon from '../ui/GameIcon';
+import type { GameIconName } from '../ui/iconNames';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import StampTile, { INK } from './stampbook/StampTile';
+import StampCard, { type Wallet } from './stampbook/StampCard';
+import StampArt from './stampbook/StampArt';
+import { BookFxProvider, useBookClocks, useBookFx } from './stampbook/BookFx';
+import { Confetti } from './stampbook/SlamFx';
+import { prefetchList } from './stampbook/art';
+import { loadCelebrated, loadSeen, saveCelebrated, saveSeen } from './stampbook/seen';
+import { takeStampsDirty } from './stampbook/dirty';
+import {
+  bookTotals, buildBook, claimQueue, nextUp, remainingLine, requirement, ring, stampIndex,
+  type BookSection, type BookStamp, type GoTarget,
+} from './stampbook/model';
 
-// ── Assets ──────────────────────────────────────────────
-const BOOK_BG = require('../../assets/images/stampbook-bg.png');
-const STAMP_LOGO = require('../../assets/images/stamps/stamp-logo.png');
-const STAMP_01 = require('../../assets/images/stamps/stamp-01.png');
-const STAMP_02 = require('../../assets/images/stamps/stamp-02.png');
-const STAMP_03 = require('../../assets/images/stamps/stamp-03.png');
-const STAMP_04 = require('../../assets/images/stamps/stamp-04.png');
-const STAMP_05 = require('../../assets/images/stamps/stamp-05.png');
-const STAMP_06 = require('../../assets/images/stamps/stamp-06.png');
-const STAMP_07 = require('../../assets/images/stamps/stamp-07.png');
-const STAMP_08 = require('../../assets/images/stamps/stamp-08.png');
-const STAMP_09 = require('../../assets/images/stamps/stamp-09.png');
-const FIRST_RIDE_COIN_STAMP = require('../../assets/images/stamps/first-ride-coin-v1.png');
-const RIDE_PASSPORT_STAMP = require('../../assets/images/stamps/ride-passport-complete-v1.png');
-
-const { width: SW } = Dimensions.get('window');
-const CARD_SIZE = (SW - 48) / 3; // 3 columns with gaps
-
-// ── Colors ──────────────────────────────────────────────
-const GOLD = '#C5933A';
-const INK = '#3E2712';
-const STAMP_EARNED_COLOR = '#4CAF50';
-const STAMP_LOCKED_COLOR = '#C4B69C';
-
-/** Shared blue, white and gold rarity ramp (epic is gold, never purple). */
-const RARITY_COLORS: Record<string, string> = Object.fromEntries(
-  Object.values(RARITY_TONES).map(tone => [tone.name, tone.color]),
-);
-
-// ── Image key mapping ───────────────────────────────────
-const IMAGE_KEY_MAP: Record<string, number> = {
-  'stamp-01': STAMP_01,
-  'stamp-02': STAMP_02,
-  'stamp-03': STAMP_03,
-  'stamp-04': STAMP_04,
-  'stamp-05': STAMP_05,
-  'stamp-06': STAMP_06,
-  'stamp-07': STAMP_07,
-  'stamp-08': STAMP_08,
-  'stamp-09': STAMP_09,
-  'first-ride-coin-v1': FIRST_RIDE_COIN_STAMP,
-  'ride-passport-complete-v1': RIDE_PASSPORT_STAMP,
+const GAP = 10;
+const SIDE = 14;
+const REFETCH_MS = 30_000;
+/** The floating compass nav covers about this much of the bottom. */
+const NAV_COVER = 150;
+const SECTION_ICON: Record<string, GameIconName> = {
+  parks: 'map', hunt: 'pin', rides: 'coin', friends: 'member', streaks: 'streak', milestones: 'trophy', special: 'star',
 };
 
-// ── Stamp data ──────────────────────────────────────────
-interface StampData {
-  id: number;
-  name: string;
-  goal: string;
-  image?: number;
-  earned: boolean;
-  progress?: number;
-  progressText?: string;
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-  rewardClaimed: boolean;
-  rewards: StampRewards;
-}
-
-function apiToLocal(s: ApiStampData): StampData {
-  return {
-    id: s.id,
-    name: s.name,
-    goal: s.goal,
-    image: s.slug === 'first-ride-coin'
-      ? FIRST_RIDE_COIN_STAMP : s.image_key ? IMAGE_KEY_MAP[s.image_key] : undefined,
-    earned: s.is_earned,
-    progress: s.progress_percentage,
-    progressText: s.progress_text,
-    rarity: s.rarity,
-    rewardClaimed: s.reward_claimed,
-    rewards: s.rewards,
-  };
-}
-
-function flattenStamps(groups: Record<string, ApiStampData[]>): StampData[] {
-  return Object.values(groups).flatMap((group) => group.map(apiToLocal));
-}
-
-const QUEUE_STAMP_PREVIEW: StampData[] = [
-  { id: -1, name: 'First Park Coin', goal: 'Collect your first park coin',
-    image: STAMP_01, earned: true, progress: 100, progressText: '1/1', rarity: 'common',
-    rewardClaimed: true, rewards: { energy: 10, tickets: 0, xp: 50, coins: 0, title: null } },
-  { id: -2, name: 'Queue Navigator', goal: 'Complete 10 verified minutes of LinePlay in one ride session',
-    image: STAMP_09, earned: true, progress: 100, progressText: '1/1', rarity: 'uncommon',
-    rewardClaimed: false, rewards: { energy: 20, tickets: 0, xp: 75, coins: 0, title: 'Queue Navigator' } },
-  { id: -3, name: 'Park Coin Artisan', goal: 'Upgrade a collected park coin',
-    image: STAMP_03, earned: false, progress: 0, progressText: '0/1', rarity: 'uncommon',
-    rewardClaimed: false, rewards: { energy: 25, tickets: 0, xp: 100, coins: 0, title: null } },
-];
-
-function rewardText(rewards: StampRewards): string {
-  return [
-    rewards.energy > 0 && `+${rewards.energy} Energy`,
-    rewards.tickets > 0 && `+${rewards.tickets} Ticket${rewards.tickets === 1 ? '' : 's'}`,
-    rewards.xp > 0 && `+${rewards.xp} XP`,
-    rewards.coins > 0 && `+${rewards.coins} Coins`,
-    rewards.title && `“${rewards.title}” title`,
-  ].filter(Boolean).join('  ·  ');
-}
-
-// ── Stamp Card ──────────────────────────────────────────
-function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number; onPress: () => void }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, delay: index * 40, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 120, delay: index * 40, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const handlePressIn = () => {
-    Animated.spring(pressScale, { toValue: 0.92, friction: 8, useNativeDriver: true }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(pressScale, { toValue: 1, friction: 4, tension: 300, useNativeDriver: true }).start();
-  };
-
-  const rarityColor = RARITY_COLORS[stamp.rarity];
-
-  return (
-    <Animated.View style={[cardStyles.wrapper, { opacity: fadeAnim, transform: [{ scale: Animated.multiply(scaleAnim, pressScale) }] }]}>
-      <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress}>
-        <View style={[cardStyles.card, { borderColor: stamp.earned ? rarityColor : '#e6d6b3' }]}>
-          {/* Rarity stripe */}
-          <View style={[cardStyles.stripe, { backgroundColor: stamp.earned ? rarityColor : STAMP_LOCKED_COLOR }]} />
-
-          {/* Image */}
-          <View style={cardStyles.imageWrap}>
-            <Image source={stamp.image || STAMP_01} style={cardStyles.stampImage} contentFit="contain" />
-            {!stamp.earned && <View style={cardStyles.lockedOverlay} />}
-          </View>
-
-          {/* Name */}
-          <Text style={[cardStyles.name, !stamp.earned && { color: '#7a6446' }]} numberOfLines={1}>
-            {stamp.name}
-          </Text>
-
-          {/* Goal */}
-          <Text style={cardStyles.goal} numberOfLines={2}>{stamp.goal}</Text>
-
-          {/* Progress bar */}
-          {stamp.progress !== undefined && (
-            <View style={cardStyles.progressWrap}>
-              <View style={cardStyles.progressBg}>
-                <View style={[cardStyles.progressFill, { width: `${stamp.progress}%`, backgroundColor: rarityColor }]} />
-              </View>
-              {stamp.progressText && <Text style={cardStyles.progressText}>{stamp.progressText}</Text>}
-            </View>
-          )}
-
-          {/* Badge */}
-          {stamp.earned ? (
-            <View style={[cardStyles.badge, { backgroundColor: STAMP_EARNED_COLOR }]}>
-              <GameIcon name="check" size={8 + 4} />
-            </View>
-          ) : (
-            <View style={[cardStyles.badge, { backgroundColor: '#9c8a6a' }]}>
-              <GameIcon name="lock" size={8 + 4} />
-            </View>
-          )}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-// ── Main Screen ─────────────────────────────────────────
 export default function StampBookScreen() {
   const previewMode = __DEV__ && process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1';
   const { player, refreshPlayer } = useContext(AuthContext);
-  const [stamps, setStamps] = useState<StampData[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [selectedStamp, setSelectedStamp] = useState<StampData | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [claiming, setClaiming] = useState(false);
-  const [equipping, setEquipping] = useState(false);
-  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
+  const reducedMotion = useUiReducedMotion();
+  const scroller = useRef<ScrollView>(null);
+  const chipScroller = useRef<ScrollView>(null);
+  const chipX = useRef<Record<string, { x: number; w: number }>>({});
 
-  const handleClaim = useCallback(async () => {
-    if (previewMode) return;
-    if (!selectedStamp || claiming || !selectedStamp.earned || selectedStamp.rewardClaimed) return;
-    const stampId = selectedStamp.id;
-    setClaiming(true);
-    setClaimMessage(null);
+  const [response, setResponse] = useState<StampsResponse | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [filter, setFilter] = useState<string>('all');
+  const [selected, setSelected] = useState<BookStamp | null>(null);
+  const [fresh, setFresh] = useState(false);
+  const [equipping, setEquipping] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  // Seen stamps live in a ref so opening a card never changes `open` (no tile re-render on the slam frame).
+  const seenRef = useRef<Set<string> | null>(null);
+  const [seenVersion, setSeenVersion] = useState(0);
+  const claimingRef = useRef(false);
+  const forceNext = useRef(false);
+  const [celebrate, setCelebrate] = useState<string | null>(null);
+  const lastFetch = useRef(0);
+  const prevIndex = useRef<Map<number, BookStamp>>(new Map());
+  const pendingPatch = useRef<number[]>([]);
+
+  const fx = useBookClocks(focused && !selected, reducedMotion);
+
+  const sections = useMemo(() => {
+    if (!response) return [];
+    const book = buildBook(response, prevIndex.current);
+    prevIndex.current = stampIndex(book);
+    return book;
+  }, [response]);
+  const totals = useMemo(() => bookTotals(sections), [sections]);
+  const queue = useMemo(() => claimQueue(sections), [sections]);
+  const next = useMemo(() => nextUp(sections, filter), [sections, filter]);
+  const shown = filter === 'all' ? sections : sections.filter(s => s.key === filter);
+  const accentFor = useCallback((key: string) => sections.find(s => s.key === key)?.color ?? '#2F6BFF', [sections]);
+
+  useEffect(() => { loadSeen().then(set => { seenRef.current = set; setSeenVersion(v => v + 1); }); }, []);
+
+  const load = useCallback((force: boolean) => {
+    if (previewMode) {
+      const { PREVIEW_BOOK } = require('./stampbook/preview');
+      setResponse(PREVIEW_BOOK);
+      setStatus('ready');
+      return;
+    }
+    // A catch or a park change since the last load skips the throttle once.
+    if (takeStampsDirty()) force = true;
+    if (!force && Date.now() - lastFetch.current < REFETCH_MS) return;
+    lastFetch.current = Date.now();
+    setStatus(current => (current === 'ready' ? current : 'loading'));
+    getStamps()
+      .then(data => {
+        setResponse(data);
+        setStatus('ready');
+        const urls = prefetchList(Object.values(data.stamps).flat().map(s => ({
+          slug: s.slug, earned: s.is_earned, iconUrl: s.icon_url ?? null, thumbUrl: s.icon_thumb_url ?? s.icon_url ?? null,
+          lockedUrl: s.locked_icon_url ?? null, lockedThumbUrl: s.locked_thumb_url ?? null,
+        })));
+        if (urls.length) Image.prefetch(urls, 'disk').catch(() => undefined);
+        // The big art for every stamp that will slam (claimable or unseen) is fetched before it is opened.
+        const seen = seenRef.current;
+        const big = Object.values(data.stamps).flat()
+          .filter(s => s.is_earned && s.icon_url && (!s.reward_claimed || !seen?.has(String(s.id))))
+          .map(s => s.icon_url as string);
+        if (big.length) Image.prefetch(big, 'disk').catch(() => undefined);
+      })
+      .catch(() => { lastFetch.current = 0; setStatus(current => (current === 'ready' ? current : 'error')); });
+  }, [previewMode]);
+
+  useFocusEffect(useCallback(() => {
+    const force = forceNext.current;
+    forceNext.current = false;
+    load(force);
+  }, [load, reloadKey]));
+
+  // Dev-only visual checks: open a section or a stamp card straight away.
+  const devHooks = __DEV__ && (previewMode || process.env.EXPO_PUBLIC_STAMP_BOOK_LIVE === '1');
+  useEffect(() => {
+    if (!devHooks || status !== 'ready') return;
+    const tab = process.env.EXPO_PUBLIC_STAMP_BOOK_TAB;
+    if (tab) setFilter(tab);
+    const slug = process.env.EXPO_PUBLIC_STAMP_BOOK_OPEN;
+    const found = slug ? sections.flatMap(s => s.stamps).find(s => s.slug === slug) : undefined;
+    if (found) { const t = setTimeout(() => { setFresh(true); setSelected(found); }, 900); return () => clearTimeout(t); }
+    // Preview should only run once on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devHooks, status]);
+
+  // Section completion moment: once per section per device.
+  useEffect(() => {
+    if (status !== 'ready' || !sections.length) return;
+    let active = true;
+    loadCelebrated().then(done => {
+      if (!active) return;
+      const complete = sections.find(s => s.total > 0 && s.earned >= s.total && !done.has(s.key));
+      if (!complete) return;
+      done.add(complete.key);
+      saveCelebrated(done);
+      setCelebrate(complete.key);
+      playSfx('fx.reward');
+      haptic('success');
+      setTimeout(() => setCelebrate(null), 1600);
+    });
+    return () => { active = false; };
+  }, [status, sections]);
+
+  /** Applies claims made while the card was open, once it closes (keeps the slam frame clean). */
+  const flushPatches = useCallback(() => {
+    const ids = pendingPatch.current;
+    if (!ids.length) return;
+    pendingPatch.current = [];
+    setResponse(current => current && {
+      ...current,
+      stamps: Object.fromEntries(Object.entries(current.stamps).map(([key, list]) =>
+        [key, list.map(s => (ids.includes(s.id) ? { ...s, reward_claimed: true } : s))])),
+    });
+  }, []);
+
+  /** Stamps opened while the card was up; their NEW tags clear when it closes, not on the slam frame. */
+  const openedRef = useRef<number[]>([]);
+  const flushSeen = useCallback(() => {
+    const set = seenRef.current;
+    const ids = openedRef.current;
+    openedRef.current = [];
+    if (!set || !ids.length) return;
+    ids.forEach(id => set.add(String(id)));
+    saveSeen(set);
+    setSeenVersion(v => v + 1);
+  }, []);
+
+  const open = useCallback((stamp: BookStamp) => {
+    const set = seenRef.current;
+    setMessage(null);
+    setFresh(stamp.earned && !!set && !set.has(String(stamp.id)) && !openedRef.current.includes(stamp.id));
+    setSelected(stamp);
+    if (stamp.earned) openedRef.current.push(stamp.id);
+  }, []);
+
+  const close = useCallback(() => {
+    playSfx('ui.modalClose', 0.5);
+    setSelected(null);
+    flushPatches();
+    flushSeen();
+  }, [flushPatches, flushSeen]);
+
+  const openNextClaim = useCallback(() => {
+    const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));
+    const target = waiting.find(s => s.id !== selected?.id) ?? waiting[0];
+    if (!target) return;
+    open(target);
+  }, [queue, selected, open]);
+
+  const claim = useCallback(async (): Promise<boolean> => {
+    if (!selected || claimingRef.current) return false;
+    if (previewMode) { pendingPatch.current.push(selected.id); return true; }
+    const id = selected.id;
+    claimingRef.current = true;
+    setMessage(null);
     try {
-      await claimStampReward(stampId);
-      setSelectedStamp((current) => current?.id === stampId ? { ...current, rewardClaimed: true } : current);
-      setStamps((current) => current.map((stamp) => stamp.id === stampId
-        ? { ...stamp, rewardClaimed: true } : stamp));
-      setClaimMessage('Stamp rewards claimed.');
-      try {
-        await refreshPlayer();
-      } catch {
-        setClaimMessage('Rewards claimed. Your profile will refresh when you reconnect.');
-      }
+      await claimStampReward(id);
+      pendingPatch.current.push(id);
+      refreshPlayer().catch(() => undefined);
+      return true;
     } catch {
       // A lost response can follow a successful claim. Read back before showing failure.
       try {
-        const response = await getStamps();
-        const fresh = flattenStamps(response.stamps);
-        const confirmed = fresh.find((stamp) => stamp.id === stampId);
-        setStamps(fresh);
-        if (confirmed) setSelectedStamp(confirmed);
-        if (confirmed?.rewardClaimed) {
-          setClaimMessage('Rewards claimed.');
-          await refreshPlayer().catch(() => undefined);
-        } else {
-          setClaimMessage('Claim did not go through. Please try again.');
-        }
+        const freshData = await getStamps();
+        const confirmed = Object.values(freshData.stamps).flat().find(s => s.id === id);
+        if (confirmed?.reward_claimed) { pendingPatch.current.push(id); refreshPlayer().catch(() => undefined); return true; }
+        haptic('warning');
+        setMessage('That did not go through. Try again.');
       } catch {
-        setClaimMessage('Claim status is uncertain. Reopen your Stamp Book to check.');
+        setMessage('Not sure that went through. Reopen the Stamp Book to check.');
       }
+      return false;
     } finally {
-      setClaiming(false);
+      claimingRef.current = false;
     }
-  }, [selectedStamp, claiming, refreshPlayer, previewMode]);
+  }, [selected, previewMode, refreshPlayer]);
 
-  const handleEquipTitle = useCallback(async () => {
-    if (previewMode) return;
-    if (!selectedStamp?.rewardClaimed || !selectedStamp.rewards.title || equipping) return;
-    const desiredTitle = player?.title === selectedStamp.rewards.title
-      ? null : selectedStamp.rewards.title;
+  const toggleTitle = useCallback(async () => {
+    if (!selected?.rewards.title || equipping || previewMode) return;
+    const wearing = player?.title === selected.rewards.title;
     setEquipping(true);
-    setClaimMessage(null);
+    setMessage(null);
     try {
-      await equipStampTitle(desiredTitle ? selectedStamp.id : null);
+      await equipStampTitle(wearing ? null : selected.id);
       await refreshPlayer();
-      setClaimMessage(desiredTitle ? 'Title is now on your profile.' : 'Title removed from your profile.');
+      haptic('success');
+      setMessage(wearing ? 'Title removed from your profile.' : 'Title is now on your profile.');
     } catch {
-      try {
-        const freshPlayer = await refreshPlayer();
-        setClaimMessage((freshPlayer?.title ?? null) === desiredTitle
-          ? 'Profile title updated.' : 'Could not update your profile title. Please try again.');
-      } catch {
-        setClaimMessage('Title status is uncertain. Reopen your profile to check.');
-      }
+      setMessage('Could not update your title. Try again.');
     } finally {
       setEquipping(false);
     }
-  }, [selectedStamp, equipping, player?.title, refreshPlayer, previewMode]);
+  }, [selected, equipping, previewMode, player?.title, refreshPlayer]);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      if (previewMode) {
-        setStamps(QUEUE_STAMP_PREVIEW);
-        setStatus('ready');
-        return () => { active = false; };
-      }
-      setStatus('loading');
-      setStamps([]);
-      (async () => {
-        try {
-          const resp = await getStamps();
-          const flat = flattenStamps(resp.stamps);
-          if (active) {
-            setStamps(flat);
-            setStatus('ready');
-          }
-        } catch {
-          if (active) setStatus('error');
-        }
-      })();
-      return () => { active = false; };
-    }, [reloadKey, previewMode])
-  );
+  const go = useCallback((stamp: BookStamp) => {
+    const target = requirement(stamp).go;
+    if (!target) return;
+    setSelected(null);
+    flushPatches();
+    flushSeen();
+    RootNavigation.navigate(target as GoTarget as never);
+  }, [flushPatches, flushSeen]);
+
+  const pick = useCallback((key: string) => {
+    if (key === filter) return;
+    playSfx('ui.select', 0.7);
+    haptic('tickSelection');
+    setFilter(key);
+    scroller.current?.scrollTo({ y: 0, animated: !reducedMotion });
+  }, [filter, reducedMotion]);
+
+  // Keep the active chip centred on screen.
+  useEffect(() => {
+    const c = chipX.current[filter];
+    if (!c) return;
+    chipScroller.current?.scrollTo({ x: Math.max(0, c.x + c.w / 2 - width / 2), animated: !reducedMotion });
+  }, [filter, width, reducedMotion]);
+
+  const onScroll = useAnimatedScrollHandler(e => { fx.scrollY.value = e.contentOffset.y; });
+  const wallet: Wallet = { energy: player?.energy ?? 0, tickets: player?.tickets ?? 0, xp: player?.total_experience ?? 0 };
 
   return (
     <Wrapper>
       <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Stamp Book</TopbarText>
-        </TopbarColumn>
+        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
+        <TopbarColumn><TopbarText>Stamp Book</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
 
-      <View style={styles.bookArea}>
-        {/* Book background */}
-        <Image source={BOOK_BG} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <View style={styles.darkOverlay} />
+      <BookFxProvider value={fx}>
+        <View style={styles.page} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
+          <Image source={require('../../assets/images/shark_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <View style={styles.dim} />
 
-        <ScrollView
-          style={[StyleSheet.absoluteFill, { zIndex: 5 }]}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Logo */}
-          <View style={styles.logoWrap}>
-            <Image source={STAMP_LOGO} style={styles.logo} contentFit="contain" />
-          </View>
-
-          {status !== 'ready' && (
-            <View style={styles.stateWrap}>
-              <Text style={styles.stateText}>
-                {status === 'loading' ? 'Opening your Stamp Book…' : 'Your Stamp Book could not load.'}
-              </Text>
+          {status !== 'ready' ? (
+            <View style={styles.state}>
+              <Text style={styles.stateText}>{status === 'loading' ? 'Opening your Stamp Book...' : 'Your Stamp Book could not load.'}</Text>
               {status === 'error' && (
-                <Pressable onPress={() => setReloadKey((key) => key + 1)} style={styles.retryButton}>
+                <Pressable onPress={() => { forceNext.current = true; lastFetch.current = 0; load(true); setReloadKey(k => k + 1); }} style={styles.retry} accessibilityRole="button">
                   <Text style={styles.retryText}>Try again</Text>
                 </Pressable>
               )}
             </View>
+          ) : (
+            <Animated.ScrollView ref={scroller as never} onScroll={onScroll} scrollEventThrottle={16}
+              contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} stickyHeaderIndices={[1]}>
+              <Hero earned={totals.earned} total={totals.total} toClaim={totals.toClaim} next={next}
+                accentFor={accentFor} onClaim={openNextClaim} onOpen={open} onGo={go} />
+
+              <View style={styles.tabsWrap}>
+                <Animated.ScrollView ref={chipScroller as never} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+                  {[{ key: 'all', label: 'All', color: '#FFFFFF', earned: totals.earned, total: totals.total, stamps: sections.flatMap(s => s.stamps) },
+                    ...sections].map(section => (
+                    <Tab key={section.key} label={section.label} color={section.color} icon={SECTION_ICON[section.key] ?? 'star'}
+                      active={filter === section.key} earned={section.earned} total={section.total}
+                      dot={section.stamps.some(s => s.claimable)}
+                      onLayout={e => {
+                        const c = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width };
+                        chipX.current[section.key] = c;
+                        if (section.key === filter) chipScroller.current?.scrollTo({ x: Math.max(0, c.x + c.w / 2 - width / 2), animated: false });
+                      }}
+                      onPress={() => pick(section.key)} />
+                  ))}
+                </Animated.ScrollView>
+              </View>
+
+              {sections.length === 0 && <Text style={styles.stateText}>No stamps yet. Check back soon.</Text>}
+
+              {shown.map(section => (
+                <SectionBlock key={section.key} section={section} width={width} album={filter !== 'all' && section.stamps.length < 6}
+                  seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} onGo={go} />
+              ))}
+              <View style={{ height: NAV_COVER + insets.bottom + 24 }} />
+            </Animated.ScrollView>
           )}
-          {status === 'ready' && stamps.length === 0 && (
-            <Text style={styles.stateText}>No stamps are available yet.</Text>
-          )}
+          {celebrate && <Confetti width={width} height={height} seed={7} count={40} />}
+        </View>
 
-          {/* Stamp grid */}
-          <View style={styles.grid}>
-            {stamps.map((stamp, i) => (
-              <StampCard key={stamp.id} stamp={stamp} index={i} onPress={() => {
-                setClaimMessage(null);
-                setSelectedStamp(stamp);
-              }} />
-            ))}
-          </View>
-
-          <View style={{ height: 30 }} />
-        </ScrollView>
-      </View>
-      {/* Stamp Detail Modal */}
-      <Modal
-        visible={!!selectedStamp}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedStamp(null)}
-      >
-        {selectedStamp && (
-          <Pressable style={modalStyles.overlay} onPress={() => setSelectedStamp(null)}>
-            <Pressable style={modalStyles.card} onPress={() => {}}>
-              {/* Stamp image */}
-              <View style={modalStyles.imageContainer}>
-                <Image
-                  source={selectedStamp.image || STAMP_01}
-                  style={modalStyles.stampImage}
-                  contentFit="contain"
-                />
-                {!selectedStamp.earned && <View style={modalStyles.lockedImageOverlay} />}
-              </View>
-
-              {/* Rarity badge */}
-              <View style={[modalStyles.rarityBadge, { backgroundColor: RARITY_COLORS[selectedStamp.rarity] }]}>  
-                <Text style={modalStyles.rarityText}>{selectedStamp.rarity.toUpperCase()}</Text>
-              </View>
-
-              {/* Name */}
-              <Text style={modalStyles.name}>{selectedStamp.name}</Text>
-
-              {/* Goal */}
-              <View style={modalStyles.goalBox}>
-                <Text style={modalStyles.goalLabel}>HOW TO EARN</Text>
-                <Text style={modalStyles.goalText}>{selectedStamp.goal}</Text>
-              </View>
-
-              {!!rewardText(selectedStamp.rewards) && (
-                <View style={modalStyles.goalBox}>
-                  <Text style={modalStyles.goalLabel}>REWARDS</Text>
-                  <Text style={modalStyles.goalText}>{rewardText(selectedStamp.rewards)}</Text>
-                </View>
-              )}
-
-              {/* Progress */}
-              {selectedStamp.progress !== undefined && (
-                <View style={modalStyles.progressSection}>
-                  <View style={modalStyles.progressBarBg}>
-                    <View style={[modalStyles.progressBarFill, { width: `${selectedStamp.progress}%`, backgroundColor: RARITY_COLORS[selectedStamp.rarity] }]} />
-                  </View>
-                  <Text style={modalStyles.progressLabel}>
-                    {selectedStamp.progressText || `${selectedStamp.progress}%`}
-                  </Text>
-                </View>
-              )}
-
-              {/* Status */}
-              {selectedStamp.earned ? (
-                <View style={modalStyles.earnedBox}>
-                  <GameIcon name="check" size={14 + 4} />
-                  <Text style={modalStyles.earnedText}>
-                    {selectedStamp.rewardClaimed && rewardText(selectedStamp.rewards) ? 'Rewards claimed' : 'Earned!'}
-                  </Text>
-                </View>
-              ) : (
-                <View style={modalStyles.lockedBox}>
-                  <GameIcon name="lock" size={14 + 4} />
-                  <Text style={modalStyles.lockedText}>Locked</Text>
-                </View>
-              )}
-
-              {selectedStamp.earned && !selectedStamp.rewardClaimed && !!rewardText(selectedStamp.rewards) && (
-                <Pressable
-                  style={[modalStyles.claimButton, claiming && { opacity: 0.5 }]}
-                  disabled={claiming}
-                  onPress={handleClaim}
-                >
-                  <Text style={modalStyles.claimText}>{claiming ? 'Checking…' : 'Claim rewards'}</Text>
-                </Pressable>
-              )}
-              {selectedStamp.rewardClaimed && !!selectedStamp.rewards.title && (
-                <Pressable
-                  style={[modalStyles.claimButton, equipping && { opacity: 0.5 }]}
-                  disabled={equipping}
-                  onPress={handleEquipTitle}
-                >
-                  <Text style={modalStyles.claimText}>
-                    {equipping ? 'Saving…' : player?.title === selectedStamp.rewards.title
-                      ? 'Remove profile title' : 'Wear profile title'}
-                  </Text>
-                </Pressable>
-              )}
-              {!!claimMessage && <Text style={modalStyles.claimMessage}>{claimMessage}</Text>}
-
-              {/* Close hint */}
-              <Text style={modalStyles.closeHint}>Tap outside to close</Text>
-            </Pressable>
-          </Pressable>
-        )}
-      </Modal>
-
+        <StampCard
+          stamp={selected}
+          accent={selected ? accentFor(selected.section) : '#2F6BFF'}
+          reducedMotion={reducedMotion}
+          fresh={fresh}
+          wallet={wallet}
+          equipping={equipping}
+          message={message}
+          wearingTitle={!!selected?.rewards.title && player?.title === selected.rewards.title}
+          nextCount={queue.filter(s => s.id !== selected?.id && !pendingPatch.current.includes(s.id)).length}
+          onClaim={claim}
+          onNext={openNextClaim}
+          onGo={go}
+          onToggleTitle={toggleTitle}
+          onClose={close}
+        />
+      </BookFxProvider>
     </Wrapper>
   );
 }
 
-// ── Styles ──────────────────────────────────────────────
+function Hero({ earned, total, toClaim, next, accentFor, onClaim, onOpen, onGo }: {
+  earned: number; total: number; toClaim: number; next: BookStamp | null; accentFor: (k: string) => string;
+  onClaim: () => void; onOpen: (s: BookStamp) => void; onGo: (s: BookStamp) => void;
+}) {
+  const fx = useBookFx();
+  const R = 36;
+  const { circumference, offset } = ring(total > 0 ? earned / total : 0, R);
+  const bounce = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * fx.pulse.value }, { rotate: `${-8 * fx.pulse.value}deg` }] }));
+  const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.04 * fx.pulse.value }] }));
+  return (
+    <View style={styles.hero}>
+      <View style={styles.heroTop}>
+        <View style={styles.heroRing} accessible accessibilityLabel={`${earned} of ${total} stamps`}>
+          <Svg width={92} height={92} viewBox="0 0 92 92">
+            <Circle cx={46} cy={46} r={R} stroke="rgba(255,255,255,0.25)" strokeWidth={10} fill="none" />
+            <Circle cx={46} cy={46} r={R} stroke="#FFCF3B" strokeWidth={10} fill="none" strokeLinecap="round"
+              strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} rotation={-90} origin="46, 46" />
+          </Svg>
+          <View style={styles.heroCount}>
+            <Text style={styles.heroNum} maxFontSizeMultiplier={1.2}>{earned}</Text>
+            <Text style={styles.heroOf} maxFontSizeMultiplier={1.2}>of {total}</Text>
+          </View>
+        </View>
+        <View style={styles.heroText}>
+          <Text style={styles.heroTitle} maxFontSizeMultiplier={1.2}>My Passport</Text>
+          {toClaim > 0 ? (
+            <Animated.View style={!fx.reducedMotion && pulse}>
+              <Pressable onPress={onClaim} style={styles.claimAll} accessibilityRole="button"
+                accessibilityLabel={`Claim rewards from ${toClaim} ${toClaim === 1 ? 'stamp' : 'stamps'}`}>
+                <View style={styles.claimAllFace}>
+                  <Animated.View style={!fx.reducedMotion && bounce}><GameIcon name="gift" size={26} /></Animated.View>
+                  <Text style={styles.claimAllText} maxFontSizeMultiplier={1.2}>Claim {toClaim}!</Text>
+                </View>
+                <View style={styles.badge}><Text style={styles.badgeText}>{toClaim}</Text></View>
+              </Pressable>
+            </Animated.View>
+          ) : (
+            <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>Every stamp is something you did!</Text>
+          )}
+        </View>
+      </View>
+      {next && (
+        <View style={styles.next}>
+          <Pressable style={styles.nextMain} onPress={() => onOpen(next)} accessibilityRole="button"
+            accessibilityLabel={`Next stamp: ${next.name}. ${remainingLine(next)}`}>
+            <View style={styles.nextArt}><StampArt stamp={next} size="thumb" placeholder={accentFor(next.section)} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.nextLabel} maxFontSizeMultiplier={1.2}>NEXT STAMP</Text>
+              <Text style={styles.nextName} numberOfLines={1} maxFontSizeMultiplier={1.2}>{next.shortName}</Text>
+              <Text style={styles.nextLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>{remainingLine(next)}</Text>
+            </View>
+          </Pressable>
+          {requirement(next).go && (
+            <Pressable onPress={() => onGo(next)} style={styles.go} accessibilityRole="button" accessibilityLabel={`Go. ${next.howTo}`}>
+              <Text style={styles.goText}>Go!</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function Tab({ label, color, icon, active, earned, total, dot, onPress, onLayout }: {
+  label: string; color: string; icon: GameIconName; active: boolean; earned: number; total: number; dot: boolean;
+  onPress: () => void; onLayout: (e: LayoutChangeEvent) => void;
+}) {
+  return (
+    <Pressable onPress={onPress} onLayout={onLayout} accessibilityRole="tab" accessibilityState={{ selected: active }}
+      accessibilityLabel={`${label}, ${earned} of ${total}${dot ? ', rewards to claim' : ''}`}
+      style={[styles.tab, active && { backgroundColor: color, borderColor: '#FFFFFF' }]}>
+      <GameIcon name={icon} size={20} />
+      <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
+      <Text style={[styles.tabCount, active && styles.tabTextActive]} maxFontSizeMultiplier={1.2}>{earned}/{total}</Text>
+      {dot && <View style={styles.dot} />}
+    </Pressable>
+  );
+}
+
+const SectionBlock = memo(function SectionBlock({ section, width, album, seenRef, seenVersion, celebrating, onOpen, onGo }: {
+  section: BookSection; width: number; album: boolean; seenRef: { readonly current: Set<string> | null }; seenVersion: number;
+  celebrating: boolean; onOpen: (s: BookStamp) => void; onGo: (s: BookStamp) => void;
+}) {
+  void seenVersion; // re-render this section (only) when NEW tags change
+  const seen = seenRef.current;
+  const sectionTop = useSharedValue(0);
+  const gridLocal = useSharedValue(0);
+  const gridTop = useDerivedValue(() => sectionTop.value + gridLocal.value);
+  const cols = album ? 2 : 3;
+  const tile = Math.floor((width - SIDE * 2 - GAP * (cols - 1)) / cols);
+  const tileH = Math.round(tile * (album ? 1.3 : 1.45));
+  const pct = section.total > 0 ? Math.round((section.earned / section.total) * 100) : 0;
+  const complete = section.total > 0 && section.earned >= section.total;
+  // Same pick as the hero's Next stamp on a filtered tab, so both point at one stamp.
+  const upNext = album ? nextUp([section]) ?? section.stamps.find(s => !s.earned && !s.secret) ?? null : null;
+  return (
+    <View style={styles.section} onLayout={e => { sectionTop.value = e.nativeEvent.layout.y; }}>
+      <View style={styles.sectionHead}>
+        <View style={[styles.sectionBadge, { backgroundColor: section.color }]}><GameIcon name={SECTION_ICON[section.key] ?? 'star'} size={22} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>{section.label}</Text>
+          <Text style={styles.sectionBlurb} maxFontSizeMultiplier={1.3}>{section.blurb}</Text>
+        </View>
+      </View>
+      <View style={styles.sectionBarRow}>
+        <View style={styles.sectionBar}>
+          <View style={[styles.sectionFill, { width: `${Math.max(pct, 3)}%`, backgroundColor: section.color }]} />
+          <Text style={styles.sectionBarText} maxFontSizeMultiplier={1.2}>{section.earned} / {section.total}</Text>
+        </View>
+        <GameIcon name={complete || celebrating ? 'chestOpen' : 'chest'} size={34} accessibilityLabel={complete ? 'Section complete' : 'Finish the section'} />
+      </View>
+      {upNext && (
+        <View style={styles.callout}>
+          <Pressable style={styles.calloutMain} onPress={() => onOpen(upNext)} accessibilityRole="button"
+            accessibilityLabel={`Next up: ${upNext.name}. ${remainingLine(upNext)}`}>
+            <GameIcon name={requirement(upNext).icon} size={26} />
+            <Text style={styles.calloutText} maxFontSizeMultiplier={1.3}>Next up: {upNext.shortName}. {remainingLine(upNext)}</Text>
+          </Pressable>
+          {requirement(upNext).go && (
+            <Pressable onPress={() => onGo(upNext)} style={styles.go} accessibilityRole="button" accessibilityLabel={`Go. ${upNext.howTo}`}>
+              <Text style={styles.goText}>Go!</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+      <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => { gridLocal.value = e.nativeEvent.layout.y; }}>
+        {section.stamps.map((stamp, i) => (
+          <StampTile key={stamp.id} stamp={stamp} size={tile} height={tileH} accent={section.color} col={i % cols}
+            isNew={!!seen && stamp.earned && !seen.has(String(stamp.id))} gridTop={gridTop as SharedValue<number>} onPress={onOpen} />
+        ))}
+      </View>
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
-  bookArea: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  darkOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(5,52,110,0.5)',
-    zIndex: 1,
-    pointerEvents: 'none',
-  },
-  scrollContent: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-  },
-  logoWrap: {
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  logo: {
-    width: SW * 0.85,
-    height: SW * 0.32,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  stateWrap: { alignItems: 'center', paddingVertical: 28 },
-  stateText: { color: '#fff', fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' },
-  retryButton: { marginTop: 12, borderRadius: 10, backgroundColor: GOLD, paddingHorizontal: 20, paddingVertical: 10 },
-  retryText: { color: INK, fontFamily: 'Knockout', fontSize: 15 },
-});
+  page: { flex: 1, overflow: 'hidden' },
+  dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.28)' },
+  scroll: { paddingTop: 12 },
+  state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  stateText: { color: '#FFFFFF', fontFamily: 'Shark', fontSize: 18, textAlign: 'center', paddingHorizontal: 24 },
+  retry: { marginTop: 14, borderRadius: 14, backgroundColor: '#FFCF3B', paddingHorizontal: 22, paddingVertical: 11, borderWidth: 3, borderColor: INK },
+  retryText: { color: INK, fontFamily: 'Shark', fontSize: 16 },
 
-const cardStyles = StyleSheet.create({
-  wrapper: {
-    width: CARD_SIZE,
+  hero: { marginHorizontal: SIDE, padding: 12, borderRadius: 22, backgroundColor: '#0a77bf', borderWidth: 2.5, borderColor: '#FFFFFF' },
+  heroTop: { flexDirection: 'row', alignItems: 'center' },
+  heroRing: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
+  heroCount: { position: 'absolute', alignItems: 'center' },
+  heroNum: { fontFamily: 'Shark', fontSize: 28, color: '#FFFFFF', lineHeight: 30 },
+  heroOf: { fontFamily: 'Knockout', fontSize: 13, color: '#E2F6FF' },
+  heroText: { flex: 1, marginLeft: 12 },
+  heroTitle: { fontFamily: 'Shark', fontSize: 26, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  heroSub: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', marginTop: 2 },
+  claimAll: { marginTop: 6, alignSelf: 'flex-start', borderRadius: 16, backgroundColor: '#C98A00', paddingBottom: 5 },
+  claimAllFace: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 46, paddingHorizontal: 14, borderRadius: 16,
+    backgroundColor: '#FFCF3B', borderWidth: 2.5, borderColor: '#FFFFFF',
   },
-  card: {
-    backgroundColor: '#fff8e4',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    padding: 6,
-    paddingTop: 8,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  stripe: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-  },
-  imageWrap: {
-    width: CARD_SIZE * 0.75,
-    height: CARD_SIZE * 0.65,
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  stampImage: {
-    width: '100%',
-    height: '100%',
-  },
-  lockedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,248,228,0.35)',
-  },
-  name: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    color: INK,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  goal: {
-    fontFamily: 'Knockout',
-    fontSize: 8,
-    color: '#6b5335',
-    textAlign: 'center',
-    lineHeight: 10,
-    marginTop: 1,
-    paddingHorizontal: 2,
-  },
-  progressWrap: {
-    width: '90%',
-    alignItems: 'center',
-    marginTop: 3,
-  },
-  progressBg: {
-    width: '100%',
-    height: 3,
-    backgroundColor: '#eadfc6',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  progressText: {
-    fontFamily: 'Knockout',
-    fontSize: 7,
-    color: '#7a6446',
-    marginTop: 1,
-  },
-  badge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+  claimAllText: { fontFamily: 'Shark', fontSize: 20, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
+  badge: { position: 'absolute', top: -8, right: -8, minWidth: 24, height: 24, borderRadius: 12, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  badgeText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF' },
+  next: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, backgroundColor: 'rgba(0,40,90,0.4)', borderRadius: 16, padding: 8 },
+  nextMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nextArt: { width: 54, height: 54 },
+  nextLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#FFCF3B', letterSpacing: 1 },
+  nextName: { fontFamily: 'Shark', fontSize: 17, color: '#FFFFFF' },
+  nextLine: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF' },
+  go: { minHeight: 44, minWidth: 64, borderRadius: 14, backgroundColor: '#3FBF3F', borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  goText: { fontFamily: 'Shark', fontSize: 19, color: '#FFFFFF', textShadowColor: '#1E6B1E', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
 
-// ── Modal styles ────────────────────────────────────────
-const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(5,52,110,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30,
+  tabsWrap: { paddingVertical: 10 },
+  tabs: { paddingHorizontal: SIDE, gap: 8 },
+  tab: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: 22,
+    backgroundColor: '#0768b9', borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.55)',
+    shadowColor: '#022a55', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.6, shadowRadius: 0,
   },
-  card: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: '#fff8e4',
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    padding: 24,
-    shadowColor: '#05346e',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    elevation: 10,
-  },
-  imageContainer: {
-    width: 180,
-    height: 160,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  stampImage: {
-    width: '100%',
-    height: '100%',
-  },
-  lockedImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,248,228,0.3)',
-  },
-  rarityBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  rarityText: {
-    fontFamily: 'Knockout',
-    fontSize: 11,
-    color: '#fff',
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  name: {
-    fontFamily: 'Shark',
-    fontSize: 24,
-    color: '#05346e',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  goalBox: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#f2e3bf',
-  },
-  goalLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 9,
-    color: '#a36609',
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  goalText: {
-    fontFamily: 'Knockout',
-    fontSize: 15,
-    color: '#05346e',
-    lineHeight: 20,
-  },
-  progressSection: {
-    width: '100%',
-    marginBottom: 14,
-  },
-  progressBarBg: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#eadfc6',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    color: '#6b5335',
-    textAlign: 'center',
-  },
-  earnedBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#e3f5e4',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  earnedText: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: '#2e7d32',
-    fontWeight: '700',
-  },
-  lockedBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#f3ead6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  lockedText: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: '#7a6446',
-  },
-  closeHint: {
-    fontFamily: 'Knockout',
-    fontSize: 11,
-    color: '#9c8a6a',
-    marginTop: 4,
-  },
-  claimButton: { backgroundColor: GOLD, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12, marginBottom: 10 },
-  claimText: { color: INK, fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' },
-  claimMessage: { color: '#05346e', fontFamily: 'Knockout', fontSize: 13, textAlign: 'center', marginBottom: 10 },
+  tabText: { fontFamily: 'Shark', fontSize: 15, color: '#FFFFFF' },
+  tabCount: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
+  tabTextActive: { color: INK },
+  dot: { position: 'absolute', top: -3, right: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: '#E3262E', borderWidth: 2, borderColor: '#FFFFFF' },
+
+  section: { marginTop: 10, paddingHorizontal: SIDE },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionBadge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2.5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textTransform: 'uppercase', textShadowColor: '#05346e', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  sectionBlurb: { fontFamily: 'Knockout', fontSize: 14, color: '#E2F6FF' },
+  sectionBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 14 },
+  sectionBar: { flex: 1, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,20,60,0.5)', overflow: 'hidden', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  sectionFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 9 },
+  sectionBarText: { fontFamily: 'Shark', fontSize: 13, color: '#FFFFFF', textAlign: 'center', textShadowColor: '#05346e', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  callout: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0a77bf', borderRadius: 16, borderWidth: 2.5, borderColor: '#FFFFFF', padding: 10, marginBottom: 14 },
+  calloutMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  calloutText: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: '#FFFFFF' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: GAP + 6 },
 });
