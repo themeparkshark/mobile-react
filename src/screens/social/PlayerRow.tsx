@@ -73,7 +73,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
     if (status === 'friends' && takeJustFriended(player.id, surface)) {
       setBurst(true);
       setFresh(true);
-      const t = setTimeout(() => setFresh(false), 1800);
+      const t = setTimeout(() => setFresh(false), 2400); // outlasts the 1.6 s settle, so the row leaves green
       if (!reduced) pop.value = withSequence(withTiming(1, { duration: 120 }), withSpring(0, { damping: 7, stiffness: 200 }));
       return () => clearTimeout(t);
     }
@@ -98,7 +98,7 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
   return (
     <Animated.View style={[styles.wrap, inset && styles.wrapInset, popStyle]}>
       <View style={[kit.card, styles.card, status === 'incoming' && styles.cardAsk, status === 'incoming' && styles.cardStack, justMade && styles.cardNew]}>
-        {burst && status === 'friends' && <Burst style={styles.burstAt} onDone={endBurst} />}
+        {burst && status === 'friends' && <Burst away style={styles.burstAt} onDone={endBurst} />}
         <Pressable
           onPress={open}
           onPressIn={squash.onPressIn}

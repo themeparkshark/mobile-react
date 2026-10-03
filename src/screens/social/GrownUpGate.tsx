@@ -7,7 +7,7 @@
  * Resolves true only when both steps pass. Reduce Motion: the ring jumps.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -69,7 +69,7 @@ export function GrownUpGate({ visible, onDone }: { readonly visible: boolean; re
 
   return (
     <Modal visible={visible} transparent animationType={reduced ? 'none' : 'fade'} onRequestClose={() => onDone(false)}>
-      <View style={styles.scrim}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.scrim}>
         <View style={styles.card} accessibilityViewIsModal>
           <GameIcon name="lock" size={56} />
           <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.2}>For grown-ups</Text>
@@ -93,12 +93,14 @@ export function GrownUpGate({ visible, onDone }: { readonly visible: boolean; re
                 keyboardType="number-pad" maxLength={3} autoFocus style={styles.input} accessibilityLabel={`Answer: what is ${problem.text}`}
                 onSubmitEditing={check} returnKeyType="done" />
               {wrong && <Text style={styles.wrong} accessibilityLiveRegion="polite">Not quite. Try again.</Text>}
-              <Pill label="Keep it off" tone="gold" onPress={() => onDone(false)} style={{ marginTop: 14, alignSelf: 'stretch' }} />
-              <Pill label="Check" tone="white" compact onPress={check} disabled={!value} style={{ marginTop: 10, alignSelf: 'center' }} />
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, alignSelf: 'stretch' }}>
+                <Pill label="Check" tone="white" compact onPress={check} disabled={!value} style={{ flex: 1 }} />
+                <Pill label="Keep it off" tone="gold" compact onPress={() => onDone(false)} style={{ flex: 2 }} />
+              </View>
             </>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

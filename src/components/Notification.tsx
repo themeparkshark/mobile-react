@@ -79,7 +79,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
       <View style={[kit.card, styles.card, unread ? styles.cardUnread : styles.cardRead, answeredYes && styles.cardYes]}>
         {unread && <View style={[styles.stripe, { backgroundColor: look.color }]} />}
         {/* Behind the face disc, inside the card: the burst never covers the new friend or the words. */}
-        {burst && <Burst big={1.6} style={{ left: 47, top: 44 }} onDone={endBurst} />}
+        {burst && <Burst big={1.6} away style={{ left: 47, top: 44 }} onDone={endBurst} />}
         <Pressable
           onPress={() => onOpen(notification)}
           onLongPress={() => onClear(notification)}

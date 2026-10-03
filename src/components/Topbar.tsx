@@ -117,15 +117,9 @@ export default function Topbar({
         <Broadcasts />
       </SafeAreaView>
       <ImageBackground
-        source={
-          purple
-            ? require('../../assets/images/screens/store/purple_topbar.png')
-            : theme?.top_bar_url
-              ? { uri: theme.top_bar_url }
-              : require('../../assets/images/original-top-bar.png')
-        }
-        // Offline or before the theme art downloads: the bundled bar, never a grey plate.
-        defaultSource={require('../../assets/images/original-top-bar.png')}
+        // The bundled bar is always underneath: offline, or before the theme
+        // art downloads, the header is never a grey plate.
+        source={purple ? require('../../assets/images/screens/store/purple_topbar.png') : require('../../assets/images/original-top-bar.png')}
         resizeMode="cover"
         style={{
           height: 70 + Constants.statusBarHeight,
@@ -133,6 +127,10 @@ export default function Topbar({
           justifyContent: 'flex-end',
         }}
       >
+        {!purple && !!theme?.top_bar_url && (
+          <Image source={{ uri: theme.top_bar_url }} cachePolicy="disk" contentFit="cover" transition={0}
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} accessibilityIgnoresInvertColors />
+        )}
         <SafeAreaView>
           <View
             style={{

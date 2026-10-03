@@ -37,7 +37,7 @@ import { CountBadge, INK, LeavingRow, Pill, SectionHeader, SocialBackdrop, Socia
 import { GrownUpGate } from './social/GrownUpGate';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
-import { SurfaceContext, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
+import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
@@ -190,9 +190,13 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
       renderItem={({ item, index }) => {
         if (item.type === 'header') return <SectionHeader label={item.label} icon={item.icon} count={item.count} />;
         if (item.type === 'hint') return <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{item.text}</Text>;
-        const row = item.leaving
-          ? <LeavingRow leaving onGone={item.onGone ?? NOOP}><PlayerRow player={item.player} status={item.leaving} /></LeavingRow>
-          : <PlayerRow player={item.player} status={effectiveStatus(item.player, overrides, item.fallback)} />;
+        // Always the same tree (LeavingRow around PlayerRow), so a row that starts
+        // leaving keeps its state (the green "New friend!" never blinks white).
+        const row = (
+          <LeavingRow leaving={!!item.leaving} onGone={item.onGone ?? NOOP}>
+            <PlayerRow player={item.player} status={item.leaving ?? effectiveStatus(item.player, overrides, item.fallback)} />
+          </LeavingRow>
+        );
         return <Animated.View entering={first.current && !reduced && index < 8 ? FadeInDown.delay(index * 40).springify().damping(16) : undefined}>{row}</Animated.View>;
       }}
     />
@@ -311,9 +315,16 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
   const [load, setLoad] = useState<Load>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const overrides = useFriendOverrides();
+  const [settled, setSettled] = useState<ReadonlySet<number>>(() => new Set());
+  const [away, setAway] = useState<ReadonlySet<number>>(() => new Set());
 
   const fetchAll = useCallback(async () => {
     const [ask, mine] = await Promise.all([getFriendRequests(), getSentFriendRequests().catch(() => [] as PlayerType[])]);
+    // A fresh answer from the server wins over any local answer for these players.
+    for (const p of ask) clearStatus(p.id);
+    for (const p of mine) clearStatus(p.id);
+    setAway(new Set());
+    setSettled(new Set());
     setIncoming(ask);
     setSent(mine);
     setPendingIncoming(ask.length);
@@ -322,7 +333,6 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
   useEffect(() => { fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }, [fetchAll]);
 
   // A Yes turns the row green ("New friend!") for a moment, then it leaves Requests.
-  const [settled, setSettled] = useState<ReadonlySet<number>>(() => new Set());
   useEffect(() => {
     const fresh = incoming.filter(p => overrides.get(p.id) === 'friends' && !settled.has(p.id)).map(p => p.id);
     if (!fresh.length) return;
@@ -332,7 +342,6 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
 
   // An answered "No", a block, a taken-back ask, or a settled Yes leaves
   // through LeavingRow (fade plus height to 0 in the cell), then the data goes.
-  const [away, setAway] = useState<ReadonlySet<number>>(() => new Set());
   const drop = useCallback((id: number) => setAway(prev => new Set(prev).add(id)), []);
   const rows = useMemo<Row[]>(() => {
     const leavingAs = (p: PlayerType, was: FriendStatus): FriendStatus | undefined => {
