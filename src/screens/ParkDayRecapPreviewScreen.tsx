@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import ParkDayRecapCard from './ParkDayRecapCard';
-import ParkDayShareCard from '../components/ParkDayShareCard';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -51,10 +50,8 @@ export default function ParkDayRecapPreviewScreen() {
     </Topbar>
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.context}>{live ? 'LOCAL PLAYER QA · confirmed park day' : 'Universal Studios Hollywood · sample park day'}</Text>
-      {process.env.EXPO_PUBLIC_SHARE_CARD_PREVIEW === '1'
-        ? <ParkDayShareCard recap={prior} sharkName="FinFan22" />
-        : <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
-          loadRecap={loadRecap} initiallyExpanded={!live} />}
+      <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
+        loadRecap={loadRecap} initiallyExpanded={!live} />
       {!live && <View style={styles.toolbar}>
         <Pressable onPress={() => { setAtPark(value => !value); setVersion(value => value + 1); }}>
           <Text style={styles.action}>{atPark ? 'At park' : 'At home'}</Text>

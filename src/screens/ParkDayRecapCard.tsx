@@ -1,15 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useContext, useRef, useState } from 'react';
-import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
-import { AuthContext } from '../context/AuthProvider';
-import ParkDayShareCard, { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../components/ParkDayShareCard';
-import { Image, PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
-import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
-import { parkDayCaptureSize } from '../components/parkDayShareMetrics';
+import { shareFlex } from '../share';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -27,38 +22,20 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
-  const [artworkReady, setArtworkReady] = useState(false);
-  const shareBusy = useRef(false);
-  const shareRef = useRef<View>(null);
-  const { player } = useContext(AuthContext);
-
-  // Capture the off-screen Story card at 1080x1920 and hand it to the share
-  // sheet (Instagram Stories, Messages, save to Photos).
-  const shareDay = async () => {
-    if (shareBusy.current || !shareRef.current || !artworkReady) return;
-    shareBusy.current = true;
-    setSharing(true);
-    try {
-      if (!await Sharing.isAvailableAsync()) {
-        gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
-        return;
-      }
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your park day' });
-    } catch {
-      gameAlert('Card not made', 'Your game moments are saved. Try sharing again.', undefined, { icon: 'retry' });
-    } finally {
-      shareBusy.current = false;
-      setSharing(false);
-    }
+  // The flex card (Share Studio): no username, park name, date or ride names on it.
+  const shareDay = () => {
+    if (!recap) return;
+    const coins = recap.coins ?? [];
+    shareFlex('park_day', {
+      coinsCaught: recap.distinct_rides_won,
+      newCoins: recap.new_coins,
+      coinUrls: coins.map(coin => coin.coin_url).filter((url): url is string => !!url),
+    }, { surface: 'park_day' });
   };
 
   useFocusEffect(useCallback(() => {
     let current = true;
     setRecap(null);
-    setArtworkReady(false);
     setError(false);
     void loadRecap(parkId, selectedDay ?? undefined).then(result => {
       if (current) setRecap(result);
@@ -128,18 +105,13 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         })}</Text>
       </View>)}
       {recap.distinct_rides_won > 0 && <Pressable style={styles.shareButton} accessibilityRole="button"
-        accessibilityLabel="Share your park day as an image" onPress={() => void shareDay()} disabled={sharing || !artworkReady}
-        accessibilityState={{ disabled: sharing || !artworkReady, busy: sharing || !artworkReady }}>
-        <Text style={styles.shareText}>{sharing ? 'Making your card…' : !artworkReady ? 'Preparing artwork…' : 'SHARE MY DAY'}</Text>
+        accessibilityLabel="Share your park day as an image" onPress={shareDay}>
+        <Text style={styles.shareText}>SHARE MY DAY</Text>
       </Pressable>}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
         <Text style={styles.linkText}>All your Ride Coins</Text>
         <GameIcon name="arrow" size={20} />
       </Pressable>
-      {recap.distinct_rides_won > 0 && <View style={styles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <ParkDayShareCard ref={shareRef} recap={recap} sharkName={player?.username}
-          avatarUrl={player?.avatar_url} onReadyChange={setArtworkReady} />
-      </View>}
     </> : <Text style={styles.copy}>
       {atPark ? "Your first ride challenge will start this day's story. LinePlay and coin upgrades add more moments."
         : 'No confirmed game moments here today. Your earlier park story is still available.'}
@@ -161,7 +133,6 @@ const styles = StyleSheet.create({
   shareButton: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   shareText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
-  offscreen: { position: 'absolute', left: -2000, top: 0, width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT },
   card: { backgroundColor: '#bdeaff', borderWidth: 3, borderColor: '#fff', borderRadius: 20,
     padding: 13, marginBottom: 16, shadowColor: '#064b89', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 4, elevation: 4 },
