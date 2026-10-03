@@ -599,7 +599,8 @@ test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
   assert.match(moment, /READY_RIDES\.flatMap\(kind => \(\['day', 'sunset', 'night'\]/, 'every ride kind and sky is warmed at launch idle');
   assert.match(moment, /requestIdleCallback/);
   assert.doesNotMatch(moment, /setTimeout\(\(\) => setWarmShader\(true\), 2500\)/, 'no fixed warm timer');
-  assert.match(moment, /setLinger\(rideItemRef\.current\)/, 'the hand-back never builds the next stage');
+  assert.match(moment, /const stageFor = rideItem \?\? primed\?\.item \?\? readyItem;/, 'the map only shows a stage that is already built');
+  assert.match(moment, /if \(ready\(\)\) \{ setReadyItem\(target\); clearInterval\(poll\); \}/, 'the finished ride stays until the next is ready');
   const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
   const size = { width: 400, height: 800 };
   assert.equal(edges.bannerCovers({ x: 200, y: 560 }, size, 190), true);

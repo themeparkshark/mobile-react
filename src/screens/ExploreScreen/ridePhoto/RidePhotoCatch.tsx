@@ -163,7 +163,7 @@ const STAGES = new Map<string, RideStage>();
 function remember(key: string, stage: RideStage) {
   STAGES.delete(key);
   STAGES.set(key, stage);
-  while (STAGES.size > 4) STAGES.delete(STAGES.keys().next().value as string);
+  while (STAGES.size > 6) STAGES.delete(STAGES.keys().next().value as string);
 }
 function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?: Sky } | null,
   layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): RideStage {
@@ -196,6 +196,12 @@ export function warmStagePicture(kind: RideKind, sky: Sky, layer: { width: numbe
     stage.emissive?.(canvas, state, stage.data, art);
   }, { width: layer.width, height: sceneH });
   return { backdrop: stage.backdrop, foreground: stage.foreground, moving };
+}
+
+/** Whether a find's stage is already built (so the map can swap to it without building in render). */
+export function rideStageReady(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,
+  layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): boolean {
+  return STAGES.has(stageInputs(item, forceRide, layer, insets, art).key);
 }
 
 export function prebuildRideStage(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,

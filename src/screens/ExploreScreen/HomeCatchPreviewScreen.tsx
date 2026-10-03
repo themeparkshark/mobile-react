@@ -58,7 +58,8 @@ if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignor
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean };
 /**
  * Performance experiments (EXPO_PUBLIC_HH3_EXP): 'nowarm' disables the next-step stage warm; 'order'
- * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds.
+ * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds; 'noforce' lets
+ * the picker choose every ride and sky (the production pick-and-warm path).
  */
 const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
 const BASE_SCRIPT: ScriptStep[] = [
@@ -316,9 +317,9 @@ function HomeCatchPreview() {
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
-        forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
+        forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
         onCascade={setCascadeOn} forceReducedMotion={autoplay && !!SCRIPT[step]?.reduced}
-        warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
+        warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: EXP === 'noforce' ? null : { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
         onDone={done => {

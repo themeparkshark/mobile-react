@@ -31,7 +31,7 @@ import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, t
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
-import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
@@ -140,7 +140,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   const [ride, setRide] = useState<{ key: number; closing: boolean; hint: boolean; flyTo: { x: number; y: number } | null } | null>(null);
   const [rideItem, setRideItem] = useState<PrepItemType | null>(null);
-  const [linger, setLinger] = useState<PrepItemType | null>(null);
+  // The map's mounted stage only ever swaps to a find whose stage is already built (idle prebuild), so
+  // nothing is built in render on the map; after a catch the finished ride stays until the next is ready.
+  const [readyItem, setReadyItem] = useState<PrepItemType | null>(null);
+  const [stageNonce, setStageNonce] = useState(0);
   const rideItemRef = useRef<PrepItemType | null>(null);
   rideItemRef.current = rideItem;
   const [primed, setPrimed] = useState<{ item: PrepItemType; from: { x: number; y: number } | null } | null>(null);
@@ -302,7 +305,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps
     // showing the finished ride (hidden) for 1.2 s, so the next find's stage is never built in the hand-back;
     // it is prebuilt at +600 ms and swapped in after.
-    setLinger(rideItemRef.current); setTimeout(() => setLinger(null), 1200);
+    if (rideItemRef.current) setReadyItem(rideItemRef.current);
+    setStageNonce(n => n + 1);
     setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     reveal.value = 0; gradeIn.value = 0;
     showCatchChrome(false);
@@ -503,7 +507,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
-  const stageFor = rideItem ?? primed?.item ?? linger ?? stageItem;
+  const stageFor = rideItem ?? primed?.item ?? readyItem;
   const sceneArt = useRideArt();
   // Launch warm-up, on the first idle after the map settles (never a fixed timer): the reveal's sunburst
   // shader and every ride kind in every sky are drawn once, tiny and invisible, one per idle slice. No catch
@@ -531,8 +535,33 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     { width: window.width, height: window.height }, insets, sceneArt) : null), [warming, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (warming) catchMark(`warm ${warming.kind} ${warming.sky}`); }, [warming]);
   const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
+  // The staged find (nearest in range) is prebuilt first and swapped in only once its stage exists.
+  useEffect(() => {
+    if (window.width === 0) return;
+    const target = stageItem && rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null;
+    if (!target) return;
+    const layerSize = { width: window.width, height: window.height };
+    const ready = () => rideStageReady(target, forceRide ?? null, layerSize, insets, sceneArt);
+    if (ready()) { setReadyItem(target); return; }
+    let live = true;
+    const kick = setTimeout(() => {
+      if (live && settled()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+    }, 0);
+    const poll = setInterval(() => {
+      if (!live) return;
+      if (settled() && !ready()) prebuildRideStage(target, forceRide ?? null, layerSize, insets, sceneArt);
+      if (ready()) { setReadyItem(target); clearInterval(poll); }
+    }, 150);
+    return () => { live = false; clearTimeout(kick); clearInterval(poll); };
+  }, [stageItem?.id, stageItem?.rarity, forceRide?.kind, forceRide?.sky, stageNonce, window.width, window.height, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
   const rewardBusy = !!request || !!primed || !!ride || !!showing;
+  const rewardBusyRef = useRef(rewardBusy);
+  rewardBusyRef.current = rewardBusy;
+  const rewardEndRef = useRef(0);
+  useEffect(() => { if (!rewardBusy) rewardEndRef.current = Date.now(); }, [rewardBusy]);
+  const settled = () => !rewardBusyRef.current && Date.now() - rewardEndRef.current > 600;
   useEffect(() => {
     if (!warm || window.width === 0 || rewardBusy) return;
     const timer = setTimeout(() => {

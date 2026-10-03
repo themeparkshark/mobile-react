@@ -455,7 +455,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item ?? null, [placed]);
   // Every in-range Ride Photo find has its ride built in idle time, so no tap pays for it.
   const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
-    .slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)).slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
   // While the reward banner is up, finds whose spot sits under it (banner, grade chip, rides row) drop their tags.
   const underBanner = (pivot: number | null | undefined) => {
     const point = pivot != null ? findPoints.current.get(pivot) : null;
