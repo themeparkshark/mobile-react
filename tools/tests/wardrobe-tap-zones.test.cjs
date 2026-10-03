@@ -10,12 +10,29 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
 
-const { slotAtPoint } = loadTs('src/helpers/wardrobe.ts');
+const { slotAtPoint, isShoulderPal } = loadTs('src/helpers/wardrobe.ts');
 const item = (id) => ({ id, name: `Item ${id}`, paper_url: `paper-${id}` });
+const pal = (id) => ({ id, name: `Owl Courier Shoulder Pal ${id}`, paper_url: `paper-${id}` });
 const SHOULDER = [0.73, 0.36];
 
 test('a shoulder pal is tapped as the neck item', () => {
-  assert.equal(slotAtPoint(...SHOULDER, { neck_item: item(1), hand_item: item(2) }), 'neck_item');
+  assert.equal(slotAtPoint(...SHOULDER, { neck_item: pal(1), hand_item: item(2) }), 'neck_item');
+  assert.equal(slotAtPoint(...SHOULDER, { neck_item: { id: 9, name: 'Mystery', subcategory: 'shoulder_pal' } }), 'neck_item');
+});
+
+test('a chest necklace does not capture taps on the shoulder spot', () => {
+  assert.equal(slotAtPoint(...SHOULDER, { neck_item: item(1), hand_item: item(2) }), 'hand_item');
+  assert.equal(slotAtPoint(...SHOULDER, { neck_item: item(1) }), null);
+  // ...and is still tapped on the chest
+  assert.equal(slotAtPoint(0.54, 0.50, { neck_item: item(1) }), 'neck_item');
+});
+
+test('isShoulderPal: subcategory first, then the name', () => {
+  assert.equal(isShoulderPal({ name: 'Gold Medal', subcategory: 'shoulder_pal' }), true);
+  assert.equal(isShoulderPal({ name: 'Dog Shoulder Toy' }), true);
+  assert.equal(isShoulderPal({ name: 'Hawaiian Lei' }), false);
+  assert.equal(isShoulderPal({ name: 'Owl Shoulder Toy', subcategory: 'necklace' }), false);
+  assert.equal(isShoulderPal(null), false);
 });
 
 test('with no neck item, the shoulder area falls through to the hand item', () => {
@@ -23,7 +40,7 @@ test('with no neck item, the shoulder area falls through to the hand item', () =
 });
 
 test('hats still win on the head, the right fin is still the hand', () => {
-  const all = { head_item: item(3), neck_item: item(1), hand_item: item(2) };
+  const all = { head_item: item(3), neck_item: pal(1), hand_item: item(2) };
   assert.equal(slotAtPoint(0.62, 0.14, all), 'head_item');
   assert.equal(slotAtPoint(0.70, 0.27, all), 'head_item', 'head wins where it overlaps the shoulder zone');
   assert.equal(slotAtPoint(0.78, 0.55, { hand_item: item(2) }), 'hand_item');

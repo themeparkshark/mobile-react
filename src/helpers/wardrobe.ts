@@ -45,12 +45,20 @@ export function hasDressedShark(inventory: InventoryType | null | undefined): bo
  * canvas). Checked in order; a zone whose slot is empty falls through to the
  * next match, so overlapping zones only matter when both slots are worn.
  */
-export const SLOT_ZONES: readonly { slot: SlotKey; yMin: number; yMax: number; xMin: number; xMax: number }[] = [
+/** A neck item drawn as a shoulder pal (perched behind the head), not a chest piece. */
+export function isShoulderPal(item: Pick<ItemType, 'name' | 'subcategory'> | null | undefined): boolean {
+  if (!item) return false;
+  if (item.subcategory) return item.subcategory === 'shoulder_pal';
+  return /shoulder (pal|toy)/i.test(item.name ?? '');
+}
+
+export const SLOT_ZONES: readonly { slot: SlotKey; yMin: number; yMax: number; xMin: number; xMax: number; shoulderOnly?: boolean }[] = [
   { slot: 'head_item', yMin: 0, yMax: 0.28, xMin: 0.42, xMax: 0.82 },
   { slot: 'face_item', yMin: 0.10, yMax: 0.40, xMin: 0.18, xMax: 0.60 },
   // Shoulder pals perch behind the head (paper x 0.65-0.81, y 0.28-0.45).
   // After head so a hat still wins above y 0.28, before the right fin.
-  { slot: 'neck_item', yMin: 0.26, yMax: 0.46, xMin: 0.62, xMax: 0.84 },
+  // Only a shoulder pal owns it: a chest necklace must not capture shoulder taps.
+  { slot: 'neck_item', yMin: 0.26, yMax: 0.46, xMin: 0.62, xMax: 0.84, shoulderOnly: true },
   // No shoulder pal: the same spot reads as the right-fin prop next door.
   { slot: 'hand_item', yMin: 0.26, yMax: 0.46, xMin: 0.62, xMax: 0.84 },
   { slot: 'hand_item', yMin: 0.40, yMax: 0.68, xMin: 0, xMax: 0.38 },    // left fin
@@ -65,7 +73,9 @@ export function slotAtPoint(xPct: number, yPct: number, inventory: InventoryType
   for (const zone of SLOT_ZONES) {
     if (yPct < zone.yMin || yPct > zone.yMax || xPct < zone.xMin || xPct > zone.xMax) continue;
     const worn = inventory[zone.slot];
-    if (worn && typeof worn === 'object' && 'id' in worn) return zone.slot;
+    if (!worn || typeof worn !== 'object' || !('id' in worn)) continue;
+    if (zone.shoulderOnly && !isShoulderPal(worn as ItemType)) continue;
+    return zone.slot;
   }
   return null;
 }
