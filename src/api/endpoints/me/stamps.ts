@@ -38,6 +38,8 @@ export interface StampData {
   locked_icon_url?: string | null;
   locked_thumb_url?: string | null;
   retired?: boolean;
+  /** Empty corner of the art for the postmark (stamps:import-art manifest). */
+  art_free_corner?: 'tl' | 'tr' | 'bl' | 'br' | null;
 }
 
 export interface StampSectionInfo {

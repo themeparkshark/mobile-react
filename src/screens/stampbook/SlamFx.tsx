@@ -6,7 +6,7 @@
  */
 import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Path, Polygon } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Path, Polygon, RadialGradient, Stop } from 'react-native-svg';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -62,17 +62,18 @@ export const InkBurst = memo(function InkBurst({ seed, size, color, hit }: InkPr
     return Array.from({ length: n }, () => {
       const a = rand() * Math.PI * 2;
       const dist = size * (0.45 + rand() * 0.25);
-      return { dx: Math.cos(a) * dist, dy: Math.sin(a) * dist, r: 3 + rand() * 5, fall: 10 + rand() * 26 };
+      return { dx: Math.cos(a) * dist, dy: Math.sin(a) * dist, r: 5 + rand() * 6, fall: 10 + rand() * 26 };
     });
   }, [seed, size]);
+  // Ink on paper: dark at the hit, then it holds as a faint 25% bleed under the sticker.
   const blot = useAnimatedStyle(() => ({
-    opacity: hit.value === 0 ? 0 : 0.3 + 0.5 * Math.max(0, 1 - hit.value * 1.6),
-    transform: [{ scale: hit.value === 0 ? 0.6 : Math.min(1, 0.6 + hit.value * 4) * 1.0 }],
+    opacity: hit.value === 0 ? 0 : 0.25 + 0.6 * Math.max(0, 1 - hit.value * 1.4),
+    transform: [{ scale: hit.value === 0 ? 0.6 : Math.min(1, 0.6 + hit.value * 4) }],
   }));
   return (
     <View pointerEvents="none" style={[styles.center, { width: S, height: S, marginLeft: -S / 2, marginTop: -S / 2 }]}>
       <Animated.View style={[StyleSheet.absoluteFill, blot]}>
-        <Svg width={S} height={S}><Path d={path} fill={color} /></Svg>
+        <Svg width={S} height={S}><Path d={path} fill={color} fillOpacity={0.85} /></Svg>
       </Animated.View>
       {drops.map((d, i) => <Drop key={i} {...d} color={color} hit={hit} S={S} />)}
     </View>
@@ -107,10 +108,23 @@ export const Sunburst = memo(function Sunburst({ size, color, running }: { size:
     });
   }, [size]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  // Saturated gold rays alternating with pale gold, around a white-hot core (never low-alpha gold over blue).
   return (
-    <Animated.View pointerEvents="none" style={[styles.center, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }, style]}>
-      <Svg width={size} height={size}>{rays.map(p => <Polygon key={p} points={p} fill={color} opacity={0.35} />)}</Svg>
-    </Animated.View>
+    <View pointerEvents="none" style={[styles.center, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, style]}>
+        <Svg width={size} height={size}>{rays.map((p, i) => <Polygon key={p} points={p} fill={i % 2 ? '#FFF4C2' : color} opacity={0.9} />)}</Svg>
+      </Animated.View>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <RadialGradient id="core" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.95" />
+            <Stop offset="0.35" stopColor="#FFF4C2" stopOpacity="0.7" />
+            <Stop offset="1" stopColor="#FFF4C2" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={size / 2} cy={size / 2} r={size * 0.36} fill="url(#core)" />
+      </Svg>
+    </View>
   );
 });
 
@@ -183,3 +197,30 @@ function Bit({ x, drift, delay, spin, w, h, color, height }: { x: number; drift:
   }));
   return <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: w, height: h, borderRadius: 2, backgroundColor: color }, style]} />;
 }
+
+/** Soft elliptical ground shadow (radial falloff), not a hard pill. */
+export const SoftShadow = memo(function SoftShadow({ width, height }: { width: number; height: number }) {
+  return (
+    <Svg width={width} height={height}>
+      <Defs>
+        <RadialGradient id="gs" cx="50%" cy="50%" rx="50%" ry="50%">
+          <Stop offset="0" stopColor="#022a55" stopOpacity="0.35" />
+          <Stop offset="1" stopColor="#022a55" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} fill="url(#gs)" />
+    </Svg>
+  );
+});
+
+/** A wavy ink line for the colour-bleed edge on a locked card. */
+export const InkEdge = memo(function InkEdge({ width, color }: { width: number; color: string }) {
+  const n = 8; const h = 10;
+  let d = `M 0 ${h / 2}`;
+  for (let i = 0; i < n; i++) {
+    const x0 = (i / n) * width; const x1 = ((i + 0.5) / n) * width; const x2 = ((i + 1) / n) * width;
+    d += ` Q ${x1.toFixed(1)} ${i % 2 ? h : 0} ${x2.toFixed(1)} ${h / 2}`;
+    void x0;
+  }
+  return <Svg width={width} height={h}><Path d={d} stroke={color} strokeWidth={3} fill="none" strokeLinecap="round" /></Svg>;
+});

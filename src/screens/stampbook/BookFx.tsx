@@ -2,19 +2,18 @@
  * Shared, UI-thread state for every tile in the book, passed by context so a
  * tile never re-renders when the card opens, the page scrolls or the shine runs.
  *
- * - `shine`: ONE clock for the whole book (0 -> 1 sweep in 1.1 s, then a real
- *   2.5 s rest where the value does not change, so mappers skip those frames).
- * - `paused`: true while the stamp card is open or the screen is blurred.
- * - `scrollY` / `viewportH`: tiles gate their own shine and bob to what is on screen.
- * - `pulse`: one slow 0..1 loop for claim tags, "Almost!" glows and NEW sparkles.
+ * Clocks truly rest: a JS timer starts each sweep (`shine` 0 -> 1 in 1.1 s
+ * every 3.6 s; `pulse` 0 -> 1 -> 0 in 0.8 s every 2 s). Between sweeps no
+ * animation is running and the values do not change, so no mapper runs and
+ * nothing is committed. Tiles copy a clock into their own value only while
+ * they are on screen (`useTileClock`), so off-screen tiles do no work at all.
  */
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import {
   cancelAnimation,
   Easing,
+  useAnimatedReaction,
   useSharedValue,
-  withDelay,
-  withRepeat,
   withSequence,
   withTiming,
   type SharedValue,
@@ -39,9 +38,12 @@ export function useBookFx(): BookFx {
 
 export const BookFxProvider = Ctx.Provider;
 
+export const SHINE_EVERY_MS = 3600;
+export const PULSE_EVERY_MS = 2000;
+
 /** Owns the clocks. `running` = screen focused and no card open. */
 export function useBookClocks(running: boolean, reducedMotion: boolean): BookFx {
-  const shine = useSharedValue(0);
+  const shine = useSharedValue(1);
   const pulse = useSharedValue(0);
   const paused = useSharedValue(!running);
   const scrollY = useSharedValue(0);
@@ -49,24 +51,25 @@ export function useBookClocks(running: boolean, reducedMotion: boolean): BookFx 
 
   useEffect(() => {
     paused.value = !running;
-    if (!running || reducedMotion) {
-      cancelAnimation(shine);
-      cancelAnimation(pulse);
+    if (!running || reducedMotion) return;
+    const sweep = () => {
       shine.value = 0;
-      pulse.value = 0;
-      return;
-    }
-    shine.value = 0;
-    shine.value = withRepeat(withSequence(
-      withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
-      withDelay(2500, withTiming(0, { duration: 0 })),
-    ), -1, false);
-    pulse.value = withRepeat(withSequence(
-      withTiming(1, { duration: 400, easing: Easing.inOut(Easing.quad) }),
-      withTiming(0, { duration: 400, easing: Easing.inOut(Easing.quad) }),
-      withDelay(1200, withTiming(0, { duration: 0 })),
-    ), -1, false);
-    return () => { cancelAnimation(shine); cancelAnimation(pulse); };
+      shine.value = withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) });
+    };
+    const beat = () => {
+      pulse.value = withSequence(
+        withTiming(1, { duration: 400, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 400, easing: Easing.inOut(Easing.quad) }),
+      );
+    };
+    sweep(); beat();
+    const a = setInterval(sweep, SHINE_EVERY_MS);
+    const b = setInterval(beat, PULSE_EVERY_MS);
+    return () => {
+      clearInterval(a); clearInterval(b);
+      cancelAnimation(shine); cancelAnimation(pulse);
+      shine.value = 1; pulse.value = 0;
+    };
   }, [running, reducedMotion, shine, pulse, paused]);
 
   return useMemo(() => ({ shine, pulse, paused, scrollY, viewportH, reducedMotion }),
@@ -77,4 +80,19 @@ export function useBookClocks(running: boolean, reducedMotion: boolean): BookFx 
 export function onScreen(top: number, h: number, scrollY: number, viewportH: number): boolean {
   'worklet';
   return top + h > scrollY - 40 && top < scrollY + viewportH + 40;
+}
+
+/**
+ * A tile's private copy of a book clock, updated only while the tile is on
+ * screen and the book is running. Off-screen it holds `rest`, so the tile's
+ * animated styles never re-evaluate.
+ */
+export function useTileClock(clock: SharedValue<number>, top: SharedValue<number>, height: number, rest: number): SharedValue<number> {
+  const fx = useBookFx();
+  const local = useSharedValue(rest);
+  useAnimatedReaction(
+    () => (!fx.paused.value && onScreen(top.value, height, fx.scrollY.value, fx.viewportH.value) ? clock.value : rest),
+    (next, prev) => { if (next !== prev) local.value = next; },
+  );
+  return local;
 }

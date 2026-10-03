@@ -35,7 +35,11 @@ export interface BookStamp {
   readonly shortName: string;
   readonly retired: boolean;
   readonly claimable: boolean;
+  /** The empty corner of the art (server hint), where the postmark goes. */
+  readonly freeCorner: Corner;
 }
+
+export type Corner = 'tl' | 'tr' | 'bl' | 'br';
 
 export interface BookSection {
   readonly key: string;
@@ -65,6 +69,7 @@ export function sectionForMetric(metric: string, hidden: boolean): string {
   if (['prep_items_collected', 'sets_completed', 'wild_legendary_variants'].includes(metric)) return 'hunt';
   if (/^(park_coins_|ride_coins_|ride_boss|verified_lineplay|trivia_|line_bonus)/.test(metric)) return 'rides';
   if (metric === 'friends_count') return 'friends';
+  if (metric === 'night_show') return 'special';
   if (['longest_streak', 'current_streak', 'login_streak_7'].includes(metric)) return 'streaks';
   if (['total_experience', 'experience_level', 'coins_earned', 'coins_held', 'tickets_earned', 'energy_earned'].includes(metric)) {
     return 'milestones';
@@ -95,6 +100,7 @@ export function toBookStamp(s: StampData): BookStamp {
     shortName: secret ? 'Secret' : (s.short_name ?? name).trim(),
     metric: s.metric ?? '',
     retired: !!s.retired,
+    freeCorner: (['tl', 'tr', 'bl', 'br'] as const).find(c => c === s.art_free_corner) ?? 'tr',
     claimable: !!s.is_earned && !s.reward_claimed && hasRewards(s.rewards),
     howTo: secret ? 'Keep playing to discover this one.' : (s.how_to ?? s.goal ?? '').trim(),
     section: s.section ?? sectionForMetric(s.metric ?? '', !!s.is_hidden),
@@ -127,7 +133,7 @@ export function compareStamps(a: BookStamp, b: BookStamp): number {
 
 /** Fields that change what a tile shows. Same key: reuse the old object so memoized tiles skip. */
 function stampKey(s: BookStamp): string {
-  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired].join('|');
+  return [s.progress, s.earned, s.earnedAt, s.rewardClaimed, s.iconUrl, s.thumbUrl, s.lockedThumbUrl, s.shortName, s.howTo, s.retired, s.freeCorner].join('|');
 }
 
 /**
@@ -179,7 +185,8 @@ export function claimQueue(sections: readonly BookSection[]): BookStamp[] {
 }
 
 /** The locked stamp closest to done (not secret, not retired): the hero "Next stamp". */
-export function nextUp(sections: readonly BookSection[]): BookStamp | null {
+export function nextUp(sections: readonly BookSection[], only?: string): BookStamp | null {
+  if (only && only !== 'all') sections = sections.filter(sc => sc.key === only);
   const open = sections.flatMap(s => s.stamps).filter(s => !s.earned && !s.secret && !s.retired && s.progress > 0);
   open.sort((a, b) => b.percent - a.percent || (a.target - a.progress) - (b.target - b.progress) || a.sortOrder - b.sortOrder);
   return open[0] ?? null;
@@ -193,8 +200,11 @@ export function almostThere(s: Pick<BookStamp, 'earned' | 'secret' | 'percent'>)
 /** The ghost (locked) art is only shown with a real color bleed once past 75%. */
 export function bleedFraction(s: Pick<BookStamp, 'earned' | 'percent'>): number {
   if (s.earned || s.percent < 75) return 0;
-  return Math.min(1, s.percent / 100);
+  // Capped well below "owned": an 85%-done stamp shows 55% colour, never more than 65%.
+  return Math.min(BLEED_CAP, (s.percent - 75) / 25 * 0.4 + 0.25);
 }
+
+export const BLEED_CAP = 0.65;
 
 // ── Zero-reading: what to do, as a picture ─────────────────────────────
 
@@ -212,7 +222,12 @@ export interface Requirement {
   readonly pips: boolean;
 }
 
-export type GoTarget = 'Explore' | 'CoinShelf' | 'Friends' | 'SetCollection' | 'LinePlay' | 'Park';
+/**
+ * Screens a Go! button may open. Every one opens with no params (tested in
+ * stamp-book.test.cjs): `Park` needs a park id and must never be a target.
+ */
+export const GO_TARGETS = ['Explore', 'CoinShelf', 'Friends', 'SetCollection'] as const;
+export type GoTarget = typeof GO_TARGETS[number];
 
 export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requirement {
   const m = s.metric;
@@ -228,8 +243,9 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (/^(park_shelf:|ride_passport_)/.test(m)) return r('ride', ['percent', 'percent'], 'CoinShelf', null);
   if (m === 'friends_count') return r('member', ['friend', 'friends'], 'Friends');
   if (/^(park_coins_|ride_coins_)/.test(m)) return r('coin', ['coin', 'coins'], 'CoinShelf');
-  if (m === 'verified_lineplay_sessions') return r('queue', ['line', 'lines'], 'Park', null);
-  if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'Park');
+  if (m === 'verified_lineplay_sessions') return r('queue', ['line', 'lines'], 'Explore', null);
+  if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'CoinShelf');
+  if (m === 'night_show') return r('map', ['night', 'nights'], 'Explore', null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
   return r('star', ['step', 'steps'], null, null);

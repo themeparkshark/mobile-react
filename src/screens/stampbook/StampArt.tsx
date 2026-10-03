@@ -19,12 +19,16 @@ interface Props {
   readonly placeholder?: string;
   readonly priority?: 'low' | 'normal' | 'high';
   readonly style?: StyleProp<ViewStyle>;
+  /** Fires once the image (or its fallback) has loaded. */
+  readonly onReady?: () => void;
 }
 
-function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style }: Props) {
+function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady }: Props) {
   const [failed, setFailed] = useState(false);
   const { source, ghostIsReal } = stampArt(stamp, size, locked);
   const dim = locked && !ghostIsReal && !tint;
+  // The big card shows the 256 px thumb (already cached by the grid) until the 768 px art arrives.
+  const thumb = size === 'full' && !tint ? stampArt(stamp, 'thumb', locked).source : undefined;
   return (
     <View style={[styles.box, style]}>
       {!!placeholder && !tint && <View style={[styles.placeholder, { backgroundColor: placeholder }]} />}
@@ -36,7 +40,10 @@ function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, prio
         transition={tint ? 0 : 140}
         priority={priority}
         recyclingKey={`${stamp.id}-${size}-${locked ? 'g' : 'c'}${tint ? '-t' : ''}`}
-        onError={() => setFailed(true)}
+        placeholder={thumb}
+        placeholderContentFit="contain"
+        onLoad={onReady}
+        onError={() => { setFailed(true); onReady?.(); }}
         accessible={false}
       />
     </View>

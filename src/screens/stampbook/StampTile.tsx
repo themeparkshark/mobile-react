@@ -15,14 +15,15 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import type { ReactNode } from 'react';
 import { rarityToneByName } from '../../constants/coinTiers';
 import GameIcon from '../../ui/GameIcon';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { onScreen, useBookFx } from './BookFx';
+import { useBookFx, useTileClock } from './BookFx';
 import Foil from './Foil';
 import StampArt from './StampArt';
-import { almostThere, hasShine, postmark, progressLabel, requirement, tileLabel, type BookStamp } from './model';
+import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, tileLabel, type BookStamp, type Corner } from './model';
 
 export const INK = '#14213D';
 export const LIP = '#B98F45';
@@ -50,14 +51,11 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
   const almost = almostThere(stamp);
   const mark = stamp.earned ? postmark(stamp.earnedAt) : null;
 
-  const visible = useDerivedValue(() =>
-    !fx.paused.value && onScreen(gridTop.value + localY.value, height, fx.scrollY.value, fx.viewportH.value));
-
+  const top = useDerivedValue(() => gridTop.value + localY.value);
+  const shine = useTileClock(fx.shine, top, height, 1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
-  const bob = useAnimatedStyle(() => ({
-    transform: [{ translateY: visible.value ? -3 * fx.pulse.value : 0 }, { scale: visible.value ? 1 + 0.08 * fx.pulse.value : 1 }],
-  }));
-  const glow = useAnimatedStyle(() => ({ opacity: visible.value ? 0.35 + 0.45 * fx.pulse.value : 0.35 }));
+  const rank = rarityRank(stamp.rarity);
+  const ring = stamp.earned ? RARITY_RING[rank] : null;
 
   const onLayout = (e: LayoutChangeEvent) => { localY.value = e.nativeEvent.layout.y; };
 
@@ -73,10 +71,10 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
       >
         {/* Alex card: lip, navy outline, white stroke, page, gloss */}
         <View style={[styles.lip, { backgroundColor: stamp.earned ? (legendary ? '#B8860B' : LIP) : 'rgba(5,30,70,0.55)' }]} />
-        <View style={[styles.outline, legendary && styles.outlineGold]}>
-          <View style={[styles.page, stamp.earned ? styles.pageEarned : styles.pageLocked]}>
+        <View style={[styles.outline, ring && { borderColor: ring.outline, borderWidth: ring.width }]}>
+          <View style={[styles.page, stamp.earned ? styles.pageEarned : styles.pageLocked, ring && { borderColor: ring.page }]}>
             {stamp.earned && <LinearGradient colors={['rgba(255,255,255,0.75)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
-            {almost && <Animated.View pointerEvents="none" style={[styles.almostGlow, glow]} />}
+            {almost && !fx.reducedMotion && <Pulsing top={top} height={height} kind="glow"><View style={styles.almostGlowFill} /></Pulsing>}
 
             <View style={[styles.artWrap, { width: art, height: art }]}>
               {!stamp.earned && !stamp.secret && <View style={[styles.stampHere, { borderColor: `${accent}AA` }]} />}
@@ -86,10 +84,10 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
                 <StampArt stamp={stamp} size="thumb" placeholder={accent} priority={col < 3 ? 'high' : 'normal'} />
               )}
               {hasShine(stamp) && !fx.reducedMotion && (
-                <Foil stamp={stamp} size={art} art="thumb" progress={fx.shine} visible={visible} lag={col * 0.08} />
+                <Foil stamp={stamp} size={art} art="thumb" progress={shine} lag={col * 0.08} />
               )}
               {!!mark && (
-                <View style={styles.postmark} accessible={false}>
+                <View style={[styles.postmark, CORNER[stamp.freeCorner]]} accessible={false}>
                   <Text style={styles.pmMonth} maxFontSizeMultiplier={1}>{mark.month}</Text>
                   <Text style={styles.pmDay} maxFontSizeMultiplier={1}>{mark.day}</Text>
                   <Text style={styles.pmYear} maxFontSizeMultiplier={1}>{mark.year}</Text>
@@ -133,12 +131,12 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
         </View>
 
         {stamp.claimable ? (
-          <Animated.View style={[styles.claim, !fx.reducedMotion && bob]}>
+          <Pulsing top={top} height={height} kind="bob" style={styles.claim} still={fx.reducedMotion}>
             <GameIcon name="gift" size={14} />
             <Text style={styles.claimText} maxFontSizeMultiplier={1.2}>CLAIM!</Text>
-          </Animated.View>
+          </Pulsing>
         ) : isNew && stamp.earned ? (
-          <Animated.View style={[styles.newTag, !fx.reducedMotion && bob]}><GameIcon name="new" size={30} /></Animated.View>
+          <Pulsing top={top} height={height} kind="bob" style={styles.newTag} still={fx.reducedMotion}><GameIcon name="new" size={30} /></Pulsing>
         ) : almost ? (
           <View style={styles.almost}><Text style={styles.almostText} maxFontSizeMultiplier={1.2}>Almost!</Text></View>
         ) : null}
@@ -149,21 +147,50 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
 
 export default memo(StampTile);
 
+/** Rarity on earned tiles: common keeps the navy card, higher tiers get their colour (epic and legendary gold). */
+const RARITY_RING: Record<number, { outline: string; page: string; width: number } | null> = {
+  1: null,
+  2: { outline: '#1d9bf0', page: '#BFE3FF', width: 2.5 },
+  3: { outline: '#0a5fb0', page: '#9FC8F0', width: 2.5 },
+  4: { outline: '#B07C00', page: '#FFD54A', width: 3 },
+  5: { outline: '#8A5A00', page: '#FFC21A', width: 3.5 },
+};
+
+/** Postmark inside the art box, in the corner the art leaves empty (never on the name below). */
+const CORNER: Record<Corner, object> = {
+  tl: { left: -2, top: -2 }, tr: { right: -2, top: -2 }, bl: { left: -2, bottom: -2 }, br: { right: -2, bottom: -2 },
+};
+
+/**
+ * A tag or glow that follows the book's pulse while its tile is on screen.
+ * Mounted only on tiles that need it, so ordinary tiles carry no pulse mapper.
+ */
+function Pulsing({ top, height, kind, style, still, children }: {
+  top: SharedValue<number>; height: number; kind: 'bob' | 'glow'; style?: object; still?: boolean; children: ReactNode;
+}) {
+  const fx = useBookFx();
+  const pulse = useTileClock(fx.pulse, top, height, 0);
+  const animated = useAnimatedStyle(() => (kind === 'bob'
+    ? { transform: [{ translateY: -3 * pulse.value }, { scale: 1 + 0.08 * pulse.value }] }
+    : { opacity: 0.35 + 0.45 * pulse.value }));
+  return <Animated.View pointerEvents="none" style={[kind === 'glow' && styles.almostGlow, style, !still && animated]}>{children}</Animated.View>;
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   lip: { position: 'absolute', left: 0, right: 0, top: 6, bottom: 0, borderRadius: 18 },
   outline: { flex: 1, marginBottom: 5, borderRadius: 18, borderWidth: 2, borderColor: '#0B2A55', overflow: 'hidden' },
-  outlineGold: { borderColor: '#8A5A00', borderWidth: 3 },
   page: { flex: 1, borderRadius: 16, borderWidth: 3, alignItems: 'center', paddingTop: 7, paddingHorizontal: 5 },
   pageEarned: { backgroundColor: '#FFF8E4', borderColor: '#FFFFFF' },
   pageLocked: { backgroundColor: 'rgba(8,52,120,0.55)', borderColor: 'rgba(255,255,255,0.35)' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '45%', opacity: 0.55 },
-  almostGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 14, borderWidth: 3, borderColor: '#FFCF3B' },
+  almostGlow: { ...StyleSheet.absoluteFillObject },
+  almostGlowFill: { ...StyleSheet.absoluteFillObject, borderRadius: 14, borderWidth: 3, borderColor: '#FFCF3B' },
   artWrap: { alignItems: 'center', justifyContent: 'center' },
   stampHere: { position: 'absolute', left: '4%', top: '4%', right: '4%', bottom: '4%', borderRadius: 999, borderWidth: 2.5, borderStyle: 'dashed' },
   secret: { width: '80%', height: '80%', borderRadius: 999, borderWidth: 3, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,207,59,0.12)' },
   postmark: {
-    position: 'absolute', right: -12, bottom: -10, width: 36, height: 36, borderRadius: 18, borderWidth: 2,
+    position: 'absolute', width: 34, height: 34, borderRadius: 17, borderWidth: 2,
     borderColor: 'rgba(11,42,85,0.72)', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }],
     backgroundColor: 'rgba(255,248,228,0.6)',
   },
