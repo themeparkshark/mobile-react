@@ -67,6 +67,7 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     // Standings v2: sign-out and account switches drop every cached board.
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => events.push(['standings-session-ended']) },
+    '../screens/SetCollection/dexCache': { clearBook() {} },
     '../services/push': {
       refreshPushRegistration: async () => undefined,
       listenForPushTaps: () => () => undefined,

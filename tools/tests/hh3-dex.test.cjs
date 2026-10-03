@@ -266,12 +266,16 @@ test('stable items, refresh pacing, swap progress, color separation, prize icons
   assert.equal(dex.spawnIcon('Anytime, anywhere'), 'map');
 });
 
-test('rarity: one ramp (Rare purple, Epic flame, Legendary gold), navy ink on light chips, gems on every tile', () => {
-  const look = loadTs('src/screens/SetCollection/dexLook.tsx', { 'expo-linear-gradient': {}, react: {}, 'react-native': { StyleSheet: { create: x => x } }, '../../ui': { BRAND: { navy: '#05346e', white: '#fff' } } });
+test('rarity: the app-wide design-system palette, navy ink on light chips, gems on every tile', () => {
+  const design = loadTs('src/design-system.ts');
+  const look = loadTs('src/screens/SetCollection/dexLook.tsx', { 'expo-linear-gradient': {}, react: {}, 'react-native': { StyleSheet: { create: x => x } },
+    '../../ui': { BRAND: { navy: '#05346e', white: '#fff' } }, '../../design-system': design });
   const ramp = plain(look.RARITY_LOOK);
   assert.deepEqual(Object.values(ramp).map(entry => entry.key), ['common', 'uncommon', 'rare', 'epic', 'legendary']);
-  assert.equal(ramp[3].frame, '#9b4dff', 'Rare is purple');
-  assert.equal(new Set(Object.values(ramp).map(entry => entry.frame)).size, 5);
+  // One palette app-wide: the book's frames are exactly design-system colors.rarity (fails on any drift).
+  for (const entry of Object.values(ramp)) assert.equal(entry.frame, design.colors.rarity[entry.key].main, entry.key);
+  assert.equal(ramp[3].frame, '#9C27B0');
+  assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const R = colors\.rarity;/);
   const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const entry of Object.values(ramp)) {
     const ratio = (lum(entry.chip) + 0.05) / (lum('#05346e') + 0.05);
@@ -460,6 +464,38 @@ test('round 5: header stamp has no slab, cache is per player, smooth entry, reti
   assert.match(screen, /backgroundColor: '#11b8db'/);
   assert.match(read('src/components/QuickAccessMenu.tsx'), /export function useQuickMenuOpen/);
   assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /item\.goldenHour && !photo && styles\.heroGolden/);
-  assert.match(parts, /set\.status === 'retired' \? 'lock' : 'timer'/);
+  assert.match(parts, /set\.status === 'retired' \? 'star' : 'timer'/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const gem = count === 1 \? Math\.round\(size \* 1\.35\) : size;/);
+});
+
+test('round 6: plurals, collect hold, no empty page, straight push, claim answers at once, player-tied prefetch', () => {
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  assert.doesNotMatch(parts, /\{spares\} spares/);
+  assert.match(parts, /suffix=\{spares === 1 \? ' spare' : ' spares'\}/);
+  assert.match(parts, /function AnimatedCount/);
+  assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /spareWord\(cost, 'spare', 'spares'\)/);
+  const reveal = read('src/screens/SetCollection/DexReveal.tsx');
+  assert.match(reveal, /function onCountsDone/);
+  assert.match(reveal, /later\(closeWithFade, 470\)/, 'pop plus a 350 ms hold after the totals land');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /contentOffset=\{seededOffset != null/);
+  assert.match(screen, /onLayout=\{armSafety\}/, 'safety timer starts at first layout');
+  assert.match(screen, /claimDim\.value = reduced \? 0\.6 : withTiming\(0\.6/);
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  assert.match(menu, /RootNavigation\.navigate\(item\.screen, item\.params\);\s*closeMenu\(\);/);
+  assert.match(menu, /rowsFadeStyle/);
+  const cache = read('src/screens/SetCollection/dexCache.ts');
+  assert.match(cache, /inflight && inflight\.playerId === playerId/);
+  assert.match(cache, /if \(inflight\?\.ticket !== ticket\) return null;/);
+  assert.match(read('src/context/AuthProvider.tsx'), /clearBook\(\);/);
+});
+
+test('no book file hard-codes a rarity color: only dexLook, which reads design-system', () => {
+  const files = ['src/screens/SetCollection/SetHuntSections.tsx', 'src/screens/SetCollection/DexParts.tsx', 'src/screens/SetCollection/DexTile.tsx',
+    'src/screens/SetCollection/DexItemCard.tsx', 'src/screens/SetCollection/DexReveal.tsx', 'src/screens/SetCollectionScreen.tsx'];
+  // RidePhoto.tsx is left out on purpose: its gold frame and blue share background are photo-grade art, not rarity.
+  // Old per-file rarity ramps (round 1 and earlier) and any copy of the design-system values outside dexLook.
+  const banned = /#(0879ca|ff9800|9c27b0|4caf50|00a5f5|ff6b00|ffd700|8fa9c2|1d9bf0|0a5fb0|e0a100|ff8a00|2fb35d|9b4dff|ff5a2b|f5b400|6f849c)\b/i;
+  for (const file of files) assert.doesNotMatch(read(file), banned, `${file} hard-codes a rarity color`);
+  assert.doesNotMatch(read('src/screens/SetCollection/SetHuntSections.tsx'), /RARITY_COLOR/);
 });

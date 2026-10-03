@@ -159,6 +159,7 @@ function provider({ me } = {}) {
     '../utils/apiCache': { async clearCache() { events.push(['clearAccountCache']); } },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => undefined },
+    '../screens/SetCollection/dexCache': { clearBook() {} },
     '../services/push': { refreshPushRegistration: async () => undefined, listenForPushTaps: () => () => undefined },
   };
   vm.runInNewContext(output, {

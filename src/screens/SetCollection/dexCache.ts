@@ -27,7 +27,7 @@ export interface BookCache {
 }
 
 let cache: BookCache | null = null;
-let inflight: Promise<BookCache | null> | null = null;
+let inflight: { playerId: number; ticket: object; promise: Promise<BookCache | null> } | null = null;
 
 export const FRESH_MS = 2 * 60 * 1000;
 
@@ -64,25 +64,28 @@ export function prefetchBook(playerId: number | null | undefined, location?: Loc
   if (playerId == null) { clearBook(); return Promise.resolve(null); }
   const current = cachedBook(playerId);
   if (current && Date.now() - current.at < FRESH_MS) return Promise.resolve(current);
-  if (inflight) return inflight;
-  inflight = (async () => {
+  if (inflight && inflight.playerId === playerId) return inflight.promise;
+  const ticket = {};
+  const promise = (async (): Promise<BookCache | null> => {
     try {
       const [legacy, dex] = await Promise.all([getPrepItemSets(location ?? undefined), getHomeHuntDex(location)]);
       const book = buildBook(legacy, dex);
+      if (inflight?.ticket !== ticket) return null; // signed out or switched while this was loading
       storeBook(playerId, legacy, dex, book);
       const slug = initialSlug(book.sets, null);
       if (slug && !cache?.details[slug]) {
         const [raw, page] = await Promise.all([getPrepItemSet(slug, location ?? undefined), getHomeHuntDexSet(slug, location)]);
         storeDetail(playerId, slug, raw, page);
       }
-      return cache;
+      return cache?.playerId === playerId ? cache : null;
     } catch {
-      return cache;
+      return cache?.playerId === playerId ? cache : null;
     } finally {
-      inflight = null;
+      if (inflight?.ticket === ticket) inflight = null;
     }
   })();
-  return inflight;
+  inflight = { playerId, ticket, promise };
+  return promise;
 }
 
 /** The server's flag when it has one, else what the cached book says. */

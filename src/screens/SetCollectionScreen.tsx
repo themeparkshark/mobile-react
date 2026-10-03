@@ -54,7 +54,7 @@ import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
-  buildBook, buildItems, initialSlug, mergeStable, refreshEveryMs, spawnIcon, swapGoal, swapProgress, tabStatus,
+  buildBook, buildItems, hasClaimable, initialSlug, mergeStable, refreshEveryMs, spawnIcon, swapGoal, swapProgress, tabStatus,
   type DexBook, type DexItem, type DexReward, type DexSet,
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
@@ -124,6 +124,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const [popKey, setPopKey] = useState(0);
   const [reveal, setReveal] = useState<{ set: DexSet; reward: DexReward; key: number } | null>(null);
   const [stamp, setStamp] = useState<{ slug: string; title: string } | null>(null);
+  const claimDim = useSharedValue(0);
+  const claimDimStyle = useAnimatedStyle(() => ({ opacity: claimDim.value }));
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
 
@@ -266,7 +268,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     }
     setBusy(reward.id);
     setError(null);
+    // Answer the tap at once (whoosh, haptic, the dim toward the reveal) so the server wait hides in the build-up.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    playSfx('fx.whooshRev', 0.7);
+    claimDim.value = reduced ? 0.6 : withTiming(0.6, { duration: 450 });
     try {
       if (preview) {
         setBook(current => ({ ...current, sets: current.sets.map(entry => entry.slug !== set.slug ? entry : {
@@ -305,8 +310,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       }
     } finally {
       setBusy(null);
+      // The reveal (opaque) is up now, or the claim failed: either way the pre-dim goes.
+      claimDim.value = withTiming(0, { duration: 200 });
     }
-  }, [set, busy, preview, refreshPlayer, reloadAll, celebrate]);
+  }, [set, busy, preview, refreshPlayer, reloadAll, celebrate, claimDim, reduced]);
 
   const wearIt = useCallback(async () => {
     const wear = claimResult?.wear;
@@ -420,21 +427,32 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const revealedFor = useRef<string | null>(null);
   const claimReady = !!set && (set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable'));
   const pickerBottom = useRef(0);
-  // The list stays invisible for the first layout pass only, so a first land on a claim never shows a scroll.
-  const [landed, setLanded] = useState(false);
-  const listFade = useSharedValue(0);
+  // First land on a claim: with a cached book the claim offset from the last visit is applied as the list's
+  // initial contentOffset (no paint at the top, no scroll, no hidden page). With no cache the list stays hidden
+  // only until its first layout pass decides the offset; the safety timer starts at that first layout.
+  const seededOffset = seed ? lastLandOffset.get(seedSlug ?? '') ?? null : null;
+  const seedSet = seed?.book.sets.find(entry => entry.slug === seedSlug);
+  const seedClaim = !!seedSet && hasClaimable(seedSet);
+  // Visible from the first frame when the cached page needs no scroll, or we already know where to start.
+  const startVisible = seededOffset != null || (!!seed && !seedClaim);
+  const [landed, setLanded] = useState(startVisible);
+  const listFade = useSharedValue(startVisible ? 1 : 0);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
   const showList = () => {
     if (landed) return;
     setLanded(true);
     listFade.value = reduced ? 1 : withTiming(1, { duration: 140 });
   };
   const listFadeStyle = useAnimatedStyle(() => ({ opacity: listFade.value }));
-  useEffect(() => {
-    const safety = setTimeout(() => { setLanded(true); listFade.value = 1; }, 700);
-    return () => clearTimeout(safety);
-  }, [listFade]);
-  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
+  const safetyArmed = useRef(false);
+  const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (safetyTimer.current) clearTimeout(safetyTimer.current); }, []);
+  const armSafety = () => {
+    if (safetyArmed.current || landed) return;
+    safetyArmed.current = true;
+    safetyTimer.current = setTimeout(() => { setLanded(true); listFade.value = 1; }, 700);
+  };
   const revealClaim = () => {
     if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) { if (set && !claimReady) showList(); return; }
     revealedFor.current = set.slug;
@@ -442,10 +460,11 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     if (overflow <= 0) { showList(); return; }
     // Never stop with the set cards cut in half: scroll them fully off (the ribbon header leads) when we must move.
     const offset = Math.max(overflow, pickerBottom.current);
+    lastLandOffset.set(set.slug, offset);
     // First land: jump there before the list is shown (no visible scroll from the picker to the claim panel).
-    if (!landed) {
-      listRef.current?.scrollToOffset({ offset, animated: false });
-      revealTimer.current = setTimeout(showList, 60);
+    if (!landed || seededOffset != null) {
+      if (seededOffset == null || Math.abs(seededOffset - offset) > 2) listRef.current?.scrollToOffset({ offset, animated: false });
+      showList();
       return;
     }
     revealTimer.current = setTimeout(() => listRef.current?.scrollToOffset({ offset, animated: !reduced }), 350);
@@ -535,6 +554,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
           <Animated.View style={[{ flex: 1 }, listFadeStyle]}>
           <FlashList
             ref={listRef}
+            contentOffset={seededOffset != null ? { x: 0, y: seededOffset } : undefined}
+            onLayout={armSafety}
             data={data}
             numColumns={COLUMNS}
             estimatedItemSize={cell + 46}
@@ -577,6 +598,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       </Modal>
 
       <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#031C3F' }, claimDimStyle]} />
       <RewardReveal reveal={reveal} onClose={() => {
         const won = reveal;
         setReveal(null);
@@ -593,6 +615,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     </Wrapper>
   );
 }
+
+/** Where the first land scrolled to, per set, for this session: the next open starts there before first paint. */
+const lastLandOffset = new Map<string, number>();
 
 /** The event card screen ships with the fright app; until it is in this build, no Events card shows. */
 function eventRouteExists(): boolean {

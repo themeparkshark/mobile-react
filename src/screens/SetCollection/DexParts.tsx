@@ -6,8 +6,8 @@
  */
 import { Image, type ImageSource } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -133,7 +133,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
         </View>
         {status && (
           <View style={styles.tabStatus}>
-            {status.live ? <View style={styles.liveDot} /> : <GameIcon name={set.status === 'retired' ? 'lock' : 'timer'} size={16} />}
+            {status.live ? <View style={styles.liveDot} /> : <GameIcon name={set.status === 'retired' ? 'star' : 'timer'} size={16} />}
             <Text numberOfLines={1} style={styles.tabStatusText} maxFontSizeMultiplier={1.2}>{status.text}</Text>
           </View>
         )}
@@ -285,6 +285,33 @@ export function StatusChip({ text, icon }: { readonly text: string; readonly ico
   );
 }
 
+export const spareWord = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** A count that ticks to its new value with a small pop when fresh data replaces the cached number. */
+function AnimatedCount({ value, style, suffix }: { readonly value: number; readonly style: StyleProp<TextStyle>; readonly suffix: string }) {
+  const reduced = useUiReducedMotion();
+  const [shown, setShown] = useState(value);
+  const pop = useSharedValue(1);
+  const last = useRef(value);
+  useEffect(() => {
+    const from = last.current;
+    last.current = value;
+    if (from === value) return;
+    if (reduced) { setShown(value); return; }
+    pop.value = withSequence(withTiming(1.2, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 260 }));
+    const steps = Math.min(8, Math.abs(value - from));
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 1;
+      setShown(Math.round(from + ((value - from) * i) / steps));
+      if (i >= steps) clearInterval(timer);
+    }, 45);
+    return () => { clearInterval(timer); setShown(value); };
+  }, [value, reduced, pop]);
+  const style2 = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  return <Animated.Text style={[style, style2]} maxFontSizeMultiplier={1.2}>{shown}{suffix}</Animated.Text>;
+}
+
 /** Spares as progress toward the next swap: sockets fill to the cheapest missing item's cost, then glow gold. */
 export function SparesMeter({ spares, cost, ready, extra, anyMissing, onPress }: {
   readonly spares: number; readonly cost: number; readonly ready: boolean; readonly extra: number; readonly anyMissing: boolean;
@@ -294,16 +321,16 @@ export function SparesMeter({ spares, cost, ready, extra, anyMissing, onPress }:
   if (!anyMissing) {
     // Nothing left to swap for in this set: just the spare count (they can still be shared with friends).
     return (
-      <SpringPress onPress={onPress} style={styles.meterPlaque} accessibilityLabel={`${spares} spare copies. Tap to see how swapping works.`}>
+      <SpringPress onPress={onPress} style={styles.meterPlaque} accessibilityLabel={`${spareWord(spares, 'spare copy', 'spare copies')}. Tap to see how swapping works.`}>
         <GameIcon name="swap" size={28} />
-        <Text style={styles.meterCount} maxFontSizeMultiplier={1.2}>{spares} spares</Text>
+        <AnimatedCount value={spares} style={styles.meterCount} suffix={spares === 1 ? ' spare' : ' spares'} />
       </SpringPress>
     );
   }
   return (
     <SpringPress onPress={onPress} style={[styles.meterPlaque, ready && styles.meterReady]}
-      accessibilityLabel={ready ? `Swap ready. You have ${spares} spares; a swap costs ${cost}. Tap to see how.`
-        : `${have} of ${cost} spares for a swap. Tap to see how.`}>
+      accessibilityLabel={ready ? `Swap ready. You have ${spareWord(spares, 'spare', 'spares')}; a swap costs ${cost}. Tap to see how.`
+        : `${have} of ${spareWord(cost, 'spare', 'spares')} for a swap. Tap to see how.`}>
       <GameIcon name="swap" size={28} />
       {ready ? (
         <Text style={styles.meterReadyText} maxFontSizeMultiplier={1.2}>Swap ready!</Text>
