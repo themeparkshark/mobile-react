@@ -623,3 +623,21 @@ test('ship fixes: the real print landing is logged (D2), stamp row is honest', (
   assert.doesNotMatch(moment, /name="lock"/, 'no locks in the row');
   assert.doesNotMatch(moment, /rideChip: \{[^}]*backgroundColor: '#ffcf3b'/, 'no yellow progress-bar fill');
 });
+
+test('post-ship: every seeded track profile keeps the car on its rail and the timed part unchanged', () => {
+  const shapes = loadTs('src/screens/ExploreScreen/ridePhoto/rides/shapes.ts');
+  const W = 402, H = 680;
+  for (const t of ['family', 'hill', 'dark', 'launch']) {
+    const timed = plain(shapes.COASTER_SHAPES[t]).filter(([x]) => x <= shapes.COASTER_FRAME_AT[t] + 0.06);
+    for (let p = 0; p < 3; p++) {
+      const shape = plain(shapes.coasterShape(t, p));
+      assert.deepEqual(shape.slice(0, timed.length), timed, 'station, lift, drop and the camera moment never change');
+      const lut = track.buildLut(shape, W, { top: Math.max(130, H * 0.3), height: H * 0.6 }, 0.47 * W, 160, shapes.COASTER_MAX_PITCH);
+      assert.ok(lut.clampError < (6 * Math.PI) / 180, `coaster ${t} profile ${p}`);
+    }
+  }
+  for (let p = 0; p < 3; p++) {
+    const lut = track.buildLut(shapes.flumeShape(p), W, { top: 160, height: H * 0.66 }, 0.73 * W, 200, shapes.FLUME_MAX_PITCH);
+    assert.ok(lut.clampError < (6 * Math.PI) / 180, `flume profile ${p}`);
+  }
+});
