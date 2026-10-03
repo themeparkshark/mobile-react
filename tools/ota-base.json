@@ -4,5 +4,10 @@
     "commit": "2ecb8dd",
     "binary": "1.7.0 (20260930.13)",
     "runtime": "f7aa10f32bc439b93f6a57f578d13ce54e208d6d"
+  },
+  "testflight": {
+    "commit": "ed76063",
+    "binary": "1.7.0 (20260930.14)",
+    "runtime": "f7aa10f32bc439b93f6a57f578d13ce54e208d6d"
   }
 }
