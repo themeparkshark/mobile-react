@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
 import { colors } from '../../design-system';
+import { tint } from './dexLook';
 import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameButton, GameIcon } from '../../ui';
@@ -99,6 +100,8 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
     setPaying(true);
     playSfx('fx.coin', 0.8);
     later(() => setPaid(true), 650);
+    // Title-only or wearable-only rewards have no counters to land: move on after the same beat.
+    if (countTargets === 0) later(onCountsDone, 650 + 120);
     // Safety net only: the fade normally starts from onCountsDone (counters land, pop, then a 350 ms hold).
     later(closeWithFade, 3200);
   };
@@ -295,7 +298,8 @@ function HudCounter({ icon, value, gain, onDone }: { readonly icon: HudKey; read
 }
 
 // Confetti in the brand gold and red plus the app-wide rarity colors (design-system).
-const CONFETTI = [BRAND.gold, BRAND.red, colors.rarity.common.main, colors.rarity.uncommon.main, colors.rarity.rare.main, BRAND.white];
+// Light tints of the purple and blue so they read on the navy scrim.
+const CONFETTI = [BRAND.gold, BRAND.red, colors.rarity.common.main, tint(colors.rarity.uncommon.main, 0.45), tint(colors.rarity.rare.main, 0.5), BRAND.white];
 
 /** One fall of confetti, about 2.4 s, then gone. */
 function Confetti({ width, height }: { readonly width: number; readonly height: number }) {

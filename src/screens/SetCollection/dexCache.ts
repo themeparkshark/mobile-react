@@ -11,6 +11,7 @@
  */
 import getPrepItemSets, { getPrepItemSet, type PrepItemSetDetailResponse, type PrepItemSetListItem } from '../../api/endpoints/me/prep-item-sets';
 import { getHomeHuntDex, getHomeHuntDexSet } from '../../api/endpoints/me/homeHuntDex';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LocationType } from '../../models/location-type';
 import { buildBook, hasClaimable, initialSlug, type DexBook } from './dexModel';
 
@@ -47,6 +48,7 @@ export function storeBook(playerId: number, legacy: PrepItemSetListItem[], dex: 
 export function clearBook(): void {
   cache = null;
   inflight = null;
+  landOffsets = null;
 }
 
 export function storeDetail(playerId: number, slug: string, raw: Detail, dex: unknown): void {
@@ -65,6 +67,7 @@ export function prefetchBook(playerId: number | null | undefined, location?: Loc
   const current = cachedBook(playerId);
   if (current && Date.now() - current.at < FRESH_MS) return Promise.resolve(current);
   if (inflight && inflight.playerId === playerId) return inflight.promise;
+  void loadLandOffsets(playerId);
   const ticket = {};
   const promise = (async (): Promise<BookCache | null> => {
     try {
@@ -93,4 +96,34 @@ export function rewardWaitingFrom(entry: BookCache | null): boolean {
   const flag = (entry?.dex as { has_claimable?: unknown } | null)?.has_claimable;
   if (typeof flag === 'boolean') return flag;
   return !!entry?.book.sets.some(hasClaimable);
+}
+
+// Where the book first landed per player and set (the claim panel offset), kept across launches so the first
+// open after a launch can start there before first paint.
+const LAND_KEY = (playerId: number) => `dex_land_offsets_v1_${playerId}`;
+let landOffsets: { playerId: number; map: Record<string, number> } | null = null;
+
+export function landOffset(playerId: number | null | undefined, slug: string | null | undefined): number | null {
+  if (playerId == null || !slug || landOffsets?.playerId !== playerId) return null;
+  const value = landOffsets.map[slug];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function saveLandOffset(playerId: number | null | undefined, slug: string, offset: number): void {
+  if (playerId == null) return;
+  if (landOffsets?.playerId !== playerId) landOffsets = { playerId, map: {} };
+  landOffsets.map[slug] = Math.round(offset);
+  void AsyncStorage.setItem(LAND_KEY(playerId), JSON.stringify(landOffsets.map)).catch(() => undefined);
+}
+
+/** Read the saved offsets once per player (the menu calls this with the prefetch). */
+export async function loadLandOffsets(playerId: number | null | undefined): Promise<void> {
+  if (playerId == null || landOffsets?.playerId === playerId) return;
+  try {
+    const raw = await AsyncStorage.getItem(LAND_KEY(playerId));
+    const map = raw ? JSON.parse(raw) as Record<string, number> : {};
+    landOffsets = { playerId, map: map && typeof map === 'object' ? map : {} };
+  } catch {
+    landOffsets = { playerId, map: {} };
+  }
 }
