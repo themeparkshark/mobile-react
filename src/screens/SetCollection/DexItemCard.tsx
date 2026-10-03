@@ -19,7 +19,7 @@ import { playSfx } from '../../gamekit/SFX';
 import * as Haptics from '../../helpers/haptics';
 import { BRAND, GameButton, GameIcon, gameAlert } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { BluePanel, CLOSE_X, itemArt, RIBBON, SILHOUETTE, StarBurst } from './DexParts';
+import { BluePanel, CLOSE_X, spareWord, itemArt, RIBBON, SILHOUETTE, StarBurst } from './DexParts';
 import { RarityGems, rarityLook } from './dexLook';
 import { caughtLine, spawnIcon, swapProgress, type DexItem, type DexSet } from './dexModel';
 import { Offscreen, RidePhoto, RidePhotoShareCard } from './RidePhoto';
@@ -167,10 +167,10 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 swap.ready ? (
                   <SwapReady cost={swap.need} busy={exchanging} reduced={reduced} onPress={onExchange} />
                 ) : (
-                  <View style={styles.locked} accessible accessibilityLabel={`Locked. ${swap.have} of ${swap.need} spares to swap for it.`}>
+                  <View style={styles.locked} accessible accessibilityLabel={`Locked. ${swap.have} of ${spareWord(swap.need, 'spare', 'spares')} to swap for it.`}>
                     <GameIcon name="lock" size={28} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.lockedText}>{swap.have}/{swap.need} spares to swap</Text>
+                      <Text style={styles.lockedText}>{swap.have}/{swap.need} {swap.need === 1 ? 'spare' : 'spares'} to swap</Text>
                       <View style={styles.meter}>
                         {Array.from({ length: swap.need }, (_, index) => (
                           <View key={index} style={[styles.meterCell, index < swap.have && styles.meterOn]} />
@@ -215,8 +215,8 @@ function SwapReady({ cost, busy, reduced, onPress }: { readonly cost: number; re
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   return (
     <Animated.View style={[{ marginTop: 10, height: 58, justifyContent: 'center' }, style]}>
-      <GameButton label={`Swap! (${cost} spares)`} icon="swap" loading={busy} onPress={onPress} fullWidth
-        accessibilityLabel={`Swap ${cost} spares for this item`} />
+      <GameButton label={`Swap! (${spareWord(cost, 'spare', 'spares')})`} icon="swap" loading={busy} onPress={onPress} fullWidth
+        accessibilityLabel={`Swap ${spareWord(cost, 'spare', 'spares')} for this item`} />
     </Animated.View>
   );
 }

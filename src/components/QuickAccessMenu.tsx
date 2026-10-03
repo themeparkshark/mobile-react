@@ -166,10 +166,16 @@ export default function QuickAccessMenu(_props: Props) {
     playSfx('ui.tap', 0.6);
     if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPopIndex(index);
-    later(() => closeMenu(() => RootNavigation.navigate(item.screen, item.params)), reduced ? 0 : 140);
+    // Push at once (the screen slides in under the fading menu): no stop on the map, no rows over a clear map.
+    later(() => {
+      RootNavigation.navigate(item.screen, item.params);
+      closeMenu();
+    }, reduced ? 0 : 90);
   };
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
+  // Rows fade out with the scrim, so on close they never float over an already clear map.
+  const rowsFadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, scrim.value * 1.4) }));
   const headerStyle = useAnimatedStyle(() => (reduced ? { opacity: scrim.value } : {
     opacity: scrim.value,
     transform: [{ translateY: (1 - scrim.value) * 16 }],
@@ -210,8 +216,8 @@ export default function QuickAccessMenu(_props: Props) {
         {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}
         <View pointerEvents="box-none" accessibilityViewIsModal={open} onAccessibilityEscape={() => { if (open) closeMenu(); }}
           style={[styles.stack, fabAt ? { top: undefined, left: fabAt.x, bottom: windowH - fabAt.y - FAB_SIZE } : { bottom, left: 14 }]}>
-          <View accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
-            pointerEvents={open ? 'box-none' : 'none'} style={{ alignItems: 'flex-start' }}>
+          <Animated.View accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+            pointerEvents={open ? 'box-none' : 'none'} style={[{ alignItems: 'flex-start' }, rowsFadeStyle]}>
             <Animated.View style={[styles.header, headerStyle]}>
               <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
               <Text style={styles.headerText} accessibilityRole="header" maxFontSizeMultiplier={1.2}>Menu</Text>
@@ -220,7 +226,7 @@ export default function QuickAccessMenu(_props: Props) {
               <MenuRow key={item.id} item={item} index={index} open={open} reduced={reduced} popped={popIndex === index}
                 badge={item.id === 'sets' && rewardWaiting} onPress={() => choose(item, index)} />
             ))}
-          </View>
+          </Animated.View>
           {fab(true)}
         </View>
       </Modal>

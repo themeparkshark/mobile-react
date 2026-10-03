@@ -460,6 +460,28 @@ test('round 5: header stamp has no slab, cache is per player, smooth entry, reti
   assert.match(screen, /backgroundColor: '#11b8db'/);
   assert.match(read('src/components/QuickAccessMenu.tsx'), /export function useQuickMenuOpen/);
   assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /item\.goldenHour && !photo && styles\.heroGolden/);
-  assert.match(parts, /set\.status === 'retired' \? 'lock' : 'timer'/);
+  assert.match(parts, /set\.status === 'retired' \? 'star' : 'timer'/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /const gem = count === 1 \? Math\.round\(size \* 1\.35\) : size;/);
+});
+
+test('round 6: plurals, collect hold, no empty page, straight push, claim answers at once, player-tied prefetch', () => {
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  assert.doesNotMatch(parts, /\{spares\} spares/);
+  assert.match(parts, /suffix=\{spares === 1 \? ' spare' : ' spares'\}/);
+  assert.match(parts, /function AnimatedCount/);
+  assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /spareWord\(cost, 'spare', 'spares'\)/);
+  const reveal = read('src/screens/SetCollection/DexReveal.tsx');
+  assert.match(reveal, /function onCountsDone/);
+  assert.match(reveal, /later\(closeWithFade, 470\)/, 'pop plus a 350 ms hold after the totals land');
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /contentOffset=\{seededOffset != null/);
+  assert.match(screen, /onLayout=\{armSafety\}/, 'safety timer starts at first layout');
+  assert.match(screen, /claimDim\.value = reduced \? 0\.6 : withTiming\(0\.6/);
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  assert.match(menu, /RootNavigation\.navigate\(item\.screen, item\.params\);\s*closeMenu\(\);/);
+  assert.match(menu, /rowsFadeStyle/);
+  const cache = read('src/screens/SetCollection/dexCache.ts');
+  assert.match(cache, /inflight && inflight\.playerId === playerId/);
+  assert.match(cache, /if \(inflight\?\.ticket !== ticket\) return null;/);
+  assert.match(read('src/context/AuthProvider.tsx'), /clearBook\(\);/);
 });

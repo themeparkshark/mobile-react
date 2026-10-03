@@ -98,13 +98,23 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
     setPaying(true);
     playSfx('fx.coin', 0.8);
     later(() => setPaid(true), 650);
-    later(closeWithFade, 1450);
+    // Safety net only: the fade normally starts from onCountsDone (counters land, pop, then a 350 ms hold).
+    later(closeWithFade, 3200);
   };
   const backdrop = () => {
     if (Date.now() - openedAt.current < REVEAL_TAP_GUARD_MS) return;
     dismiss();
   };
 
+  const fadingRef = useRef(false);
+  const hudPop = useSharedValue(1);
+  const hudPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: hudPop.value }] }));
+  const counted = useRef(0);
+  const countTargets = HUD.filter(key => (key === 'energy' ? reward.energy : key === 'ticket' ? reward.tickets : key === 'xp' ? reward.experience : reward.coins) > 0).length;
+  const counterDone = () => {
+    counted.current += 1;
+    if (counted.current >= Math.max(1, countTargets)) onCountsDone();
+  };
   const raysStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
   const slamStyle = useAnimatedStyle(() => ({ transform: [{ scale: slam.value }], opacity: Math.min(1, slam.value * 2) }));
   const ribbonStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, ribbon.value * 1.5), transform: [{ scaleX: 0.2 + 0.8 * ribbon.value }] }));
@@ -144,9 +154,9 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
         )}
         {!reduced && <Confetti width={width} height={height} />}
 
-        <View style={styles.hud} pointerEvents="none" accessibilityElementsHidden={!paid}>
-          {HUD.map(key => <HudCounter key={key} icon={key} value={counts[key]} gain={gain(key)} />)}
-        </View>
+        <Animated.View style={[styles.hud, hudPopStyle]} pointerEvents="none" accessibilityElementsHidden={!paid}>
+          {HUD.map(key => <HudCounter key={key} icon={key} value={counts[key]} gain={gain(key)} onDone={counterDone} />)}
+        </Animated.View>
 
         <View style={styles.center} pointerEvents="box-none" accessibilityViewIsModal>
           <Animated.View style={[styles.medalWrap, slamStyle]}>
@@ -204,7 +214,17 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
     </Modal>
   );
 
+  function onCountsDone() {
+    // Every total has landed: a 1.15 pop on the strip, a 350 ms hold to read it, then back to the book.
+    if (fadingRef.current) return;
+    hudPop.value = withSequence(withTiming(1.15, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 260 }));
+    playSfx('ui.confirm', 0.6);
+    later(closeWithFade, 470);
+  }
+
   function closeWithFade() {
+    if (fadingRef.current) return;
+    fadingRef.current = true;
     if (reduced) { onClose(); return; }
     fade.value = withTiming(0, { duration: 320 });
     later(onClose, 330);
@@ -247,9 +267,11 @@ function PrizePlaque({ icon, value, index, reduced, fly, slot, total, width }: {
   );
 }
 
-function HudCounter({ icon, value, gain }: { readonly icon: HudKey; readonly value: number; readonly gain: number }) {
+function HudCounter({ icon, value, gain, onDone }: { readonly icon: HudKey; readonly value: number; readonly gain: number; readonly onDone: () => void }) {
   const bump = useSharedValue(1);
   const [shown, setShown] = useState(value);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
   useEffect(() => {
     if (!gain) { setShown(value); return; }
     bump.value = withSequence(withTiming(1.3, { duration: 120 }), withSpring(1, { damping: 6, stiffness: 240 }));
@@ -258,7 +280,7 @@ function HudCounter({ icon, value, gain }: { readonly icon: HudKey; readonly val
     const timer = setInterval(() => {
       i += 1;
       setShown(Math.round(value + (gain * i) / steps));
-      if (i >= steps) clearInterval(timer);
+      if (i >= steps) { clearInterval(timer); doneRef.current(); }
     }, 40);
     return () => clearInterval(timer);
   }, [gain, value, bump]);
