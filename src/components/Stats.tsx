@@ -188,7 +188,8 @@ export default function Stats({ player }: { readonly player: PlayerType }) {
     },
     {
       label: 'Total XP',
-      value: player.total_experience,
+      // Lifetime XP can never read lower than the XP inside the current level.
+      value: Math.max(Number(player.total_experience) || 0, Number(player.experience) || 0),
       iconIndex: 5,
     },
   ];
