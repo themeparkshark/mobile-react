@@ -123,11 +123,20 @@ test('level up earned elsewhere plays on return: mount at level 5 data, now leve
   assert.equal(potionTransition(null, now, false), 'pour');
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.3 }, false), 'gain');
   assert.equal(potionTransition({ level: 6, progress: 0.3 }, { level: 6, progress: 0.3 }, false), 'settle');
+  // A quick refetch inside the build-up keeps the celebration; the burst fires once.
+  assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.1 }, false, true), 'defer');
+  assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 7, progress: 0.1 }, false, true), 'defer');
   const potion = read('src/components/XpPotion.tsx');
   assert.match(potion, /if \(kind === 'wait'\) return undefined;\n\s+last\.current = next;/, 'waiting never records the new level');
+  assert.match(potion, /timers\.current\.push\(setTimeout\(\(\) => cbs\.current\.onLevelUpBurst\?\.\(\), 520\)\)/, 'burst timer only unmount clears');
+  assert.doesNotMatch(potion, /return \(\) => clearTimeout\(timer\)/);
+  assert.match(potion, /if \(r < 3\) continue;/, 'no navy specks');
+  assert.match(potion, /return FILL_BASE - f \* \(FILL_BASE - FILL_TOP\)/, 'liquid never drops below the label line');
   assert.match(potion, /if \(kind === 'levelUp'\) cbs\.current\.onLevelUpBurst\?\.\(\);/, 'Reduce Motion fires the burst callback');
   const card = read('src/components/Experience.tsx');
   assert.match(card, /Level up!/);
+  assert.match(card, /useReduceMotionPreference\(\) === true/);
+  assert.match(card, /ribbonShadow[\s\S]*ribbonLip[\s\S]*ribbonEdge[\s\S]*ribbonFill/, 'nested ribbon');
   assert.match(card, /HapticPatterns\.levelUp\(\)/);
 });
 
@@ -161,7 +170,8 @@ test('layout: shortcuts before the coin card, Secret Store locks for non-VIP, fr
   assert.match(profile, /locked: store\.is_secret_store && !player\?\.is_subscribed/);
   assert.doesNotMatch(profile, /FlashList/);
   assert.match(profile, /friends\.map\(\(friend\) =>/);
-  assert.match(profile, /borderBottomColor: '#c6e3f5'/);
+  assert.match(profile, /backgroundColor: '#c6e3f5',\n\s+borderRadius: 20,\n\s+paddingBottom: 5,/, 'Ride Tracker uses the nested lip');
+  assert.match(profile, /5 \* 60_000/, 'Stamp Book dot fetch is throttled');
   assert.match(profile, /dot: stampsToClaim > 0/);
   assert.match(profile, /trophy=\{<ProfileEventChip \/>\}/);
 });

@@ -70,6 +70,10 @@ const R = 38;
 const TILT = (-22 * Math.PI) / 180;
 const FILL_BOTTOM = CY + R; // 114
 const FILL_TOP = 30;
+// The liquid never drops below the label line: at 0% a living, glowing base
+// sits under the label (like Alex's art) and progress fills from here to the neck.
+const FILL_BASE = CY + 12; // 88
+const CELEBRATION_MS = 1390; // ends just before the refill spring at 1400 ms
 const FRAME_MS = 33;
 // Lip centre after the tilt: where escaping bubbles and drops leave the bottle.
 const MOUTH = { x: CX - Math.sin(-TILT) * (CY - 20), y: CY - Math.cos(-TILT) * (CY - 20) };
@@ -119,19 +123,23 @@ function bottlePaths() {
   mouth.addOval(Skia.XYWHRect(CX - 16, 16, 32, 7));
   // The cream label: a band that wraps the lower body, curved with the sphere.
   const label = Skia.Path.Make();
-  label.moveTo(CX - 40, 82);
-  label.quadTo(CX, 92, CX + 40, 82);
-  label.lineTo(CX + 40, 101);
-  label.quadTo(CX, 111, CX - 40, 101);
+  // A steep diagonal sticker, like xp.png, that runs a little past the glass edge.
+  label.moveTo(CX - 44, 60);
+  label.quadTo(CX - 2, 70, CX + 44, 92);
+  label.lineTo(CX + 40, 112);
+  label.quadTo(CX - 4, 90, CX - 46, 80);
   label.close();
-  const labelClip = Skia.Path.MakeFromOp(label, body, PathOp.Intersect) ?? label;
+  const labelBounds = Skia.Path.Make();
+  labelBounds.addCircle(CX, CY, R + 5);
+  const labelClip = Skia.Path.MakeFromOp(label, labelBounds, PathOp.Intersect) ?? label;
   // "XP" in brush strokes, centred on the label.
   const letters = Skia.Path.Make();
-  letters.moveTo(CX - 13, 90); letters.lineTo(CX - 3, 103);
-  letters.moveTo(CX - 3, 90); letters.lineTo(CX - 13, 103);
-  letters.moveTo(CX + 4, 104); letters.lineTo(CX + 4, 90);
-  letters.quadTo(CX + 15, 89, CX + 14, 94);
-  letters.quadTo(CX + 13, 98, CX + 5, 98);
+  // Letters rotated with the sticker (about 25 degrees).
+  letters.moveTo(CX - 15, 73); letters.lineTo(CX - 9, 89);
+  letters.moveTo(CX - 6, 76); letters.lineTo(CX - 18, 86);
+  letters.moveTo(CX + 1, 95); letters.lineTo(CX + 7, 79);
+  letters.quadTo(CX + 18, 83, CX + 14, 89);
+  letters.quadTo(CX + 11, 93, CX + 3, 89);
   // Ooze over the lip, on the left, like Alex's.
   const ooze = Skia.Path.Make();
   ooze.moveTo(CX - 20, 15);
@@ -191,14 +199,20 @@ function XpPotion({
   const flash = useSharedValue(0);
 
   const last = useRef<PotionState | null>(initial ? { level: initial.level, progress: clamp01(initial.progress) } : null);
+  const celebrateUntil = useRef(0);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+  const latestTarget = useRef(target);
+  latestTarget.current = target;
   const cbs = useRef({ onTransition, onLevelUpBurst });
   cbs.current = { onTransition, onLevelUpBurst };
 
   useEffect(() => {
     const next = { level, progress: target };
-    const kind = potionTransition(last.current, next, reduced);
+    const kind = potionTransition(last.current, next, reduced, Date.now() < celebrateUntil.current);
     if (kind === 'wait') return undefined;
     last.current = next;
+    if (kind === 'defer') return undefined; // the celebration's own refill picks up latestTarget
     cbs.current.onTransition?.(kind);
     if (reduced) {
       cancelAnimation(fill);
@@ -209,11 +223,11 @@ function XpPotion({
       return undefined;
     }
     if (kind === 'levelUp') {
+      celebrateUntil.current = Date.now() + CELEBRATION_MS;
       fill.value = withSequence(
         withTiming(1.04, { duration: 520, easing: Easing.in(Easing.quad) }),
-        // Stay brimming while the drops fly, then drain and refill for the new level.
+        // Stay brimming while the drops fly, then drain to the base and refill for the new level.
         withDelay(420, withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) })),
-        withDelay(160, withSpring(target, { damping: 14, stiffness: 70 })),
       );
       burst.value = 0;
       burst.value = withDelay(520, withTiming(1, { duration: 1150, easing: Easing.out(Easing.quad) }, (done) => {
@@ -222,8 +236,12 @@ function XpPotion({
       flash.value = withDelay(500, withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 700 })));
       slosh.value = withSequence(withTiming(6, { duration: 300 }), withTiming(0, { duration: 1600 }));
       fizz.value = withSequence(withTiming(3, { duration: 200 }), withTiming(1, { duration: 2200 }));
-      const timer = setTimeout(() => cbs.current.onLevelUpBurst?.(), 520);
-      return () => clearTimeout(timer);
+      // Timers live in a ref that only unmount clears, so a refetch cannot cancel the burst.
+      timers.current.push(setTimeout(() => cbs.current.onLevelUpBurst?.(), 520));
+      timers.current.push(setTimeout(() => {
+        fill.value = withSpring(latestTarget.current, { damping: 14, stiffness: 70 });
+      }, 1400));
+      return undefined;
     }
     fill.value = withSpring(target, { damping: 12, stiffness: kind === 'pour' ? 50 : 80 });
     if (kind === 'gain' || kind === 'pour') {
@@ -262,7 +280,7 @@ function XpPotion({
 
   const surfaceY = useDerivedValue(() => {
     const f = Math.max(0, Math.min(1.04, fill.value));
-    return FILL_BOTTOM - f * (FILL_BOTTOM - FILL_TOP);
+    return FILL_BASE - f * (FILL_BASE - FILL_TOP);
   });
 
   const liquid = usePathValue((p) => {
@@ -323,13 +341,14 @@ function XpPotion({
       if (travel <= span - 3) continue;
       const q = (travel - (span - 3)) / 9; // 0..1 through the pop
       const x = b.x + Math.sin(t * 2 + b.phase) * 2;
-      p.addCircle(x, top + 1, b.r * (1 + q * 1.6));
+      const rr = b.r * (1 + q * 1.6);
+      // A small splash arc above the surface, not a full ring (two rings side by side read as a figure eight).
+      p.addArc(Skia.XYWHRect(x - rr, top + 1 - rr, rr * 2, rr * 2), 200, 140);
     }
   });
   // Every 4 s one bubble leaves through the mouth, floats up and pops.
   const escape = usePathValue((p) => {
     'worklet';
-    if (fill.value < 0.25) return;
     const cycle = time.value % 4;
     if (cycle > 1.1) return;
     const q = cycle / 1.1;
@@ -337,7 +356,6 @@ function XpPotion({
   });
   const escapePop = usePathValue((p) => {
     'worklet';
-    if (fill.value < 0.25) return;
     const cycle = time.value % 4;
     if (cycle <= 1.1 || cycle > 1.4) return;
     const q = (cycle - 1.1) / 0.3;
@@ -352,7 +370,7 @@ function XpPotion({
     for (let i = 0; i < DROPS.length; i++) {
       const d = DROPS[i];
       const r = d.r * (1 - q);
-      if (r < 0.6) continue;
+      if (r < 3) continue; // below 3 pt the ink would swallow the green
       p.addCircle(MOUTH.x + d.vx * q * 50, MOUTH.y - d.vy * q * 60 + q * q * 80, r);
     }
   });
@@ -394,11 +412,9 @@ function XpPotion({
       >
         <Group transform={[{ scale }, { translateX: PAD_X }, { translateY: PAD_TOP }]}>
           {/* Glow: a radial gradient (no blur pass), only its opacity moves */}
-          <Group opacity={glowOpacity}>
-            <Circle cx={CX} cy={CY - 6} r={R + 26}>
-              <RadialGradient c={vec(CX, CY - 6)} r={R + 26} colors={[GLOW, 'rgba(84, 240, 92, 0)']} positions={[0.55, 1]} />
-            </Circle>
-          </Group>
+          <Circle cx={CX} cy={CY - 6} r={R + 26} opacity={glowOpacity}>
+            <RadialGradient c={vec(CX, CY - 6)} r={R + 26} colors={[GLOW, 'rgba(84, 240, 92, 0)']} positions={[0.55, 1]} />
+          </Circle>
           {/* White sticker edge, then the glass */}
           <Path path={art.flask} style="stroke" strokeWidth={13} color="#ffffff" strokeJoin="round" />
           <Path path={art.lip} style="stroke" strokeWidth={13} color="#ffffff" strokeJoin="round" />
@@ -440,7 +456,7 @@ function XpPotion({
           <Path path={escapePop} style="stroke" strokeWidth={1.6} color="rgba(255,255,255,0.95)" />
           {/* Level-up burst */}
           <Path path={drops} color={LIQUID} />
-          <Path path={drops} style="stroke" strokeWidth={3} color={INK} />
+          <Path path={drops} style="stroke" strokeWidth={2.2} color={INK} />
           <Path path={sparks} color={GOLD} />
           <Path path={sparks} style="stroke" strokeWidth={1.6} color="#b07800" />
         </Group>

@@ -15,10 +15,15 @@ export type PotionTransition =
   | 'levelUp' // brim, burst, drain, refill (or a still level up under Reduce Motion)
   | 'gain' // rise with a slosh and fizz, count the XP up
   | 'pour' // first time this player's potion is seen: pour in from empty
-  | 'settle'; // nothing to celebrate: ease to the value
+  | 'settle' // nothing to celebrate: ease to the value
+  | 'defer'; // a level-up celebration is playing: keep it, ease to the new value when it ends
 
-export function potionTransition(prev: PotionState | null, next: PotionState, reduced: boolean | null): PotionTransition {
+export function potionTransition(
+  prev: PotionState | null, next: PotionState, reduced: boolean | null, celebrating = false,
+): PotionTransition {
   if (reduced === null) return 'wait';
+  // A refetch during the 520 ms build-up (pull to refresh, focus) must never cancel the burst.
+  if (celebrating) return 'defer';
   if (prev && next.level > prev.level) return 'levelUp';
   if (!prev) return 'pour';
   if (next.level === prev.level && next.progress > prev.progress + 0.001) return 'gain';
