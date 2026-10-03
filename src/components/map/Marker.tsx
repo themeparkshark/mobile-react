@@ -10,7 +10,7 @@ type LatLng = { readonly latitude: number | string; readonly longitude: number |
  * coordinate. Legacy-only props (tracksViewChanges, flat, stopPropagation,
  * tappable, zIndex) are accepted and ignored.
  */
-export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel }: {
+export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel, touchEnabled = true }: {
   readonly coordinate: LatLng;
   readonly anchor?: { x: number; y: number };
   readonly onPress?: () => void;
@@ -23,6 +23,11 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   readonly tappable?: boolean;
   readonly zIndex?: number;
   readonly accessibilityLabel?: string;
+  /**
+   * With onPress: false keeps the same Pressable mounted but takes no touches
+   * (a hidden spot). Toggling it never swaps the element inside the MarkerView.
+   */
+  readonly touchEnabled?: boolean;
 }) {
   const lng = Number(coordinate.longitude);
   const lat = Number(coordinate.latitude);
@@ -30,7 +35,9 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   return (
     <MarkerView coordinate={[lng, lat]} anchor={anchor ?? { x: 0.5, y: 0.5 }} allowOverlap>
       {onPress
-        ? <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>{children}</Pressable>
+        ? <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6} accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel} disabled={!touchEnabled} pointerEvents={touchEnabled ? 'auto' : 'none'}
+            accessibilityElementsHidden={!touchEnabled} importantForAccessibility={touchEnabled ? 'auto' : 'no-hide-descendants'}>{children}</Pressable>
         : <View pointerEvents="none">{children}</View>}
     </MarkerView>
   );

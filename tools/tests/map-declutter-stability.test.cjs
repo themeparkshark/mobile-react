@@ -25,7 +25,8 @@ test('Fin-ister art never mounts or unmounts animated Skia nodes on tier, budget
   assert.doesNotMatch(sprites, /ghostImg && ghosts && !dim &&/);
   assert.doesNotMatch(sprites, /take\(false\) && <SkidSparks/);
   assert.doesNotMatch(sprites, /animated && !lite && Array\.from\(\{ length: bats \}/);
-  assert.match(sprites, /Array\.from\(\{ length: Math\.max\(slots, count\) \}/, 'critter slots stay mounted');
+  // Fixed at `slots`, count clamped to it (fright r3 opacity-only pass): the budget never adds a node.
+  assert.match(sprites, /Array\.from\(\{ length: slots \}/, 'critter slots stay mounted');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /const glyph = lod === 'glyph' \|\| st\.tier === 'calm';/, 'standing still does not swap the reef canvas');
 });
