@@ -21,9 +21,11 @@ interface Props {
   readonly style?: StyleProp<ViewStyle>;
   /** Fires once the image (or its fallback) has loaded. */
   readonly onReady?: () => void;
+  /** Fires once the image is actually on screen (decoded and drawn). */
+  readonly onShown?: () => void;
 }
 
-function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady }: Props) {
+function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady, onShown }: Props) {
   const [failed, setFailed] = useState(false);
   const { source, ghostIsReal } = stampArt(stamp, size, locked);
   const dim = locked && !ghostIsReal && !tint;
@@ -43,7 +45,8 @@ function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, prio
         placeholder={thumb}
         placeholderContentFit="contain"
         onLoad={onReady}
-        onError={() => { setFailed(true); onReady?.(); }}
+        onDisplay={onShown}
+        onError={() => { setFailed(true); onReady?.(); onShown?.(); }}
         accessible={false}
       />
     </View>

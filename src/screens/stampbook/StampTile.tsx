@@ -156,7 +156,7 @@ export function postmarkCorner(free: Corner, tagged: boolean): Corner {
 }
 
 const CORNER: Record<Corner, object> = {
-  tl: { left: -12, top: -10 }, tr: { right: -12, top: -10 }, bl: { left: -12, bottom: -10 }, br: { right: -12, bottom: -10 },
+  tl: { left: -10, top: 0 }, tr: { right: -10, top: 0 }, bl: { left: -10, bottom: 0 }, br: { right: -10, bottom: 0 },
 };
 
 /**
