@@ -33,7 +33,7 @@ import { MAX_FONT, ShopCta, ShopStage } from './shopUi';
 
 const { width: W, height: H } = Dimensions.get('window');
 const STAGE = Math.min(W - 40, H * 0.4);
-const CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
+const CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
 

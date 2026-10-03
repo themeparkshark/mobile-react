@@ -306,7 +306,7 @@ export default function Playercard({
 
 const styles = StyleSheet.create({
   // Under the tail, where the shark meets the stage (art box coordinates).
-  shadow: { position: 'absolute', left: '44%', width: '34%', top: '93%', height: '5%', borderRadius: 999, backgroundColor: '#05346e' },
+  shadow: { position: 'absolute', left: '40%', width: '36%', top: '83%', height: '4.5%', borderRadius: 999, backgroundColor: '#05346e' },
   chestPin: { position: 'absolute', left: '47%', top: '52%', width: '11%', aspectRatio: 1 },
   image: {
     width: '100%',

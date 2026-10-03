@@ -152,10 +152,12 @@ export function ShopCta({ label, icon, width, onPress, loading = false, disabled
   const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const content = (
     <Animated.View key={`${done ? 'done' : 'go'}:${label}`} entering={still ? undefined : FadeIn.duration(160)} exiting={still ? undefined : FadeOut.duration(120)}
-      style={[StyleSheet.absoluteFill, styles.ctaLabel, labelStyle]}>
+      style={StyleSheet.absoluteFill}>
+    <Animated.View style={[StyleSheet.absoluteFill, styles.ctaLabel, labelStyle]}>
       {(done || icon) && <GameIcon name={done ? 'check' : icon!} size={Math.round(fontSize * 1.2)} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
       <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.2}
         style={[styles.ctaText, { fontSize }]}>{label}</Text>
+    </Animated.View>
     </Animated.View>
   );
   return (

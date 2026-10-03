@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useContext, useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet as RNStyleSheet } from 'react-native';
+import { LogBox, View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext, LocationStatusContext } from './context/LocationProvider';
 import { useAsyncEffect } from 'rooks';
@@ -316,6 +316,8 @@ function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; r
 
 /** Screenshot and recording builds: EXPO_PUBLIC_NO_DEV_OVERLAYS=1 hides every dev overlay (inlined at bundle time). */
 const NO_DEV_OVERLAYS = __DEV__ && process.env.EXPO_PUBLIC_NO_DEV_OVERLAYS === '1';
+// Capture builds: no LogBox toasts over the screen either.
+if (NO_DEV_OVERLAYS) LogBox.ignoreAllLogs(true);
 const SCREENS_WITHOUT_JOYSTICK = new Set(['Store', 'Membership', 'Inventory', 'Settings']);
 
 /** The focused route name, updated on every navigation. */

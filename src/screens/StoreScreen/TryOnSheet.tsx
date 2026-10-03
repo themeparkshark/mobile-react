@@ -51,7 +51,7 @@ const STAGE_TOP = 52;
 const CTA_ROW = SCREEN_W - 32;
 const PRIMARY_W = Math.min(300, Math.round(CTA_ROW * 0.62));
 // The art box has air under the tail: drop it so the tail meets the plinth.
-const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
+const PLAYERCARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
 
 type Phase = 'idle' | 'confirm' | 'buying' | 'bought' | 'failed' | 'unknown';
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';

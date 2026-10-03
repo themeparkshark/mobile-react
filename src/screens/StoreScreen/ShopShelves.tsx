@@ -61,7 +61,7 @@ const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
 const FIRST_OPEN_KEY = 'shop:first-open-day';
 const PENDING_REVEALS_KEY = 'shop:pending-reveals';
 // The art box has air under the tail: drop it so the tail meets the plinth.
-const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '6%' as const, bottom: '-2%' as const };
+const HERO_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: '-2%' as const, bottom: '6%' as const };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
 type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
@@ -467,7 +467,11 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     void onRefresh();
   }, [today.ready_sets, claiming, onRefresh, setToday, setToast, persistReveals]);
 
+  // iOS can't present a modal while the last one is still dismissing: hold the next reveal a beat.
+  const [revealGate, setRevealGate] = useState(true);
   const finishReveal = useCallback(() => {
+    setRevealGate(false);
+    setTimeout(() => setRevealGate(true), 450);
     setReveals(list => {
       const next = list.slice(1);
       const saved = list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : next;
@@ -587,7 +591,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
           startFullLook={open.fullLook} startBought={open.bought}
           onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn} />
       )}
-      {reveal && !open && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
+      {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
