@@ -515,3 +515,20 @@ test('round 7: reveal clears the dim and busy state at once, refreshes in backgr
   assert.match(read('src/screens/SetCollection/DexReveal.tsx'), /if \(countTargets === 0\) later\(onCountsDone/);
   assert.match(read('src/screens/SetCollection/dexLook.tsx'), /gemOutline/);
 });
+
+test('ship gate: Ride Photo stays off unless the server sends player_stats.ride_photo_enabled', () => {
+  const ride = loadTs('src/screens/ExploreScreen/ridePhoto.ts', {}, {});
+  assert.equal(ride.catchStyleFor(3), 'chomp', 'off by default (production sends no flag)');
+  ride.setRidePhotoServerEnabled('true');
+  assert.equal(ride.catchStyleFor(3), 'chomp', 'only a real true turns it on');
+  ride.setRidePhotoServerEnabled(true);
+  assert.equal(ride.catchStyleFor(3), 'ride_photo');
+  assert.equal(ride.catchStyleFor(1), 'chomp');
+  ride.setRidePhotoServerEnabled(undefined);
+  assert.equal(ride.catchStyleFor(5), 'chomp');
+  assert.match(read('src/api/endpoints/me/prep-items/index.ts'), /setRidePhotoServerEnabled\(/);
+  for (const file of ['src/screens/ExploreScreen/PrepItem.tsx', 'src/screens/ExploreScreen/HomeExplore.tsx',
+    'src/screens/ExploreScreen/HomeCatchMoment.tsx', 'src/screens/ExploreScreen/HomeFindMarker.tsx']) {
+    assert.doesNotMatch(read(file), /rideSpec\([^)]*\)\.style/, `${file} must use the gated catchStyleFor`);
+  }
+});

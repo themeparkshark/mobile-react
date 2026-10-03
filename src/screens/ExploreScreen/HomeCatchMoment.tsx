@@ -29,7 +29,7 @@ import { setHomeHuntRankLine } from './homeHuntRankStore';
 import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
 import { catchFind, type CatchResult } from './homeCatch';
-import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
+import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
@@ -185,7 +185,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   useImperativeHandle(ref, () => ({
     primeRide: (item, from) => {
-      if (rideSpec(item.rarity).style !== 'ride_photo' || layer.width === 0) return false;
+      if (catchStyleFor(item.rarity) !== 'ride_photo' || layer.width === 0) return false;
       setRideItem(item);
       const full = from ? { x: from.x + offset.x, y: from.y + offset.y } : null;
       setPrimed({ item, from: full });
@@ -326,7 +326,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     flyFromY.value = start.y;
 
     // Uncommon and rarer: the Ride Photo viewfinder (usually already opening from the tap).
-    if (rideSpec(item.rarity).style === 'ride_photo') {
+    if (catchStyleFor(item.rarity) === 'ride_photo') {
       itemGone.value = 1;
       redeemRun.current = null;
       setRideItem(item);
@@ -501,7 +501,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const item = showing?.item ?? null;
   const art = item ? findImageSource(item) : null;
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
-  const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
+  const sparks = item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? linger ?? stageItem;
   const sceneArt = useRideArt();
@@ -537,7 +537,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!warm || window.width === 0 || rewardBusy) return;
     const timer = setTimeout(() => {
       for (const entry of warm) {
-        if (rideSpec(entry.item.rarity).style !== 'ride_photo') continue;
+        if (catchStyleFor(entry.item.rarity) !== 'ride_photo') continue;
         prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
       }
     }, 600);

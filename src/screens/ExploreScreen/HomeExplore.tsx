@@ -23,7 +23,7 @@ import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
-import { rideSpec } from './ridePhoto';
+import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -451,10 +451,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 3).map(entry => entry.item.pivot_id)
     .concat(placed.filter(entry => entry.inRange).map(entry => entry.item.pivot_id))), [placed]);
   // The nearest Ride Photo find in range has its viewfinder mounted and warm before the tap.
-  const stageItem = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
+  const stageItem = useMemo(() => placed.filter(entry => entry.inRange && catchStyleFor(entry.item.rarity) === 'ride_photo')
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item ?? null, [placed]);
   // Every in-range Ride Photo find has its ride built in idle time, so no tap pays for it.
-  const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
+  const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && catchStyleFor(entry.item.rarity) === 'ride_photo')
     .slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
   // While the reward banner is up, finds whose spot sits under it (banner, grade chip, rides row) drop their tags.
   const underBanner = (pivot: number | null | undefined) => {
@@ -465,7 +465,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // One finger cue on the map at a time: the nearest find in range.
   const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange)
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
-  const ridePhotoArt = placed.filter(entry => rideSpec(entry.item.rarity).style === 'ride_photo')
+  const ridePhotoArt = placed.filter(entry => catchStyleFor(entry.item.rarity) === 'ride_photo')
     .map(entry => entry.item.icon_url).filter((url): url is string => !!url).join('|');
   useEffect(() => {
     if (ridePhotoArt) void preloadRidePhoto(ridePhotoArt.split('|'));
