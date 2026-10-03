@@ -1,11 +1,12 @@
 import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, vec, type SkCanvas } from '@shopify/react-native-skia';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
-import { drawHedge, drawSeason, drawSky, paintExtras } from './backdrop';
+import { drawGround, drawSeason, drawSky, paintExtras } from './backdrop';
 import { FLUME_MAX_PITCH, FLUME_SHAPE } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
 } from './stage';
+import { seeded } from './catalog';
 
 /**
  * Log flume: a slow clank up the lift, a float at the top, a fast slide down the
@@ -62,7 +63,8 @@ export function buildFlume(ctx: BuildCtx): RideStage {
 
   const bw = boatW * 1.15, bh = boatH * WATERLINE + riderSize * 0.95 + 26;
   const box = { x: lut.frameX - bw / 2, y: lut.frameY - bh + 10, w: bw, h: bh };
-  const cam = cameraRig(box, width, height, top);
+  // The lift and trough fill the left: the camera hangs above the splash on the right.
+  const cam = cameraRig(box, width, height, top, true, seeded(variant.seed, 47) < 0.5 ? 'hang' : 'pole');
   const crop = photoCrop(box, width, height, 0.75);
   const grade = gradeMatrix(variant.sky, variant.golden);
   const station = sampleTrack(lut, uStation);
@@ -72,7 +74,7 @@ export function buildFlume(ctx: BuildCtx): RideStage {
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
     drawTrestle(canvas, lut, height, grade);
-    const hedgeTop = drawHedge(canvas, width, height, variant, art);
+    const hedgeTop = drawGround(canvas, 'flume', width, height, variant, art);
     drawPool(canvas, pool, height, grade);
     drawTrough(canvas, lut, grade, 'back');
     drawConveyor(canvas, lut, uLiftTop, grade);
@@ -114,7 +116,7 @@ export function paintFlume(canvas: SkCanvas, s: PaintState, d: RideData, art: Sc
   canvas.translate(-boatW / 2, -boatH * WATERLINE);
   // The log, the find in its seat well, then the log's near wall over the find's lower half.
   drawImg(canvas, art.logBoat ?? null, 0, 0, boatW, boatH, paint);
-  drawRider(canvas, art.rider ?? null, boatW * SEAT_X, boatH * SEAT_Y, d.rider as number, -p.angle * 0.35, s.riderIn, paint);
+  drawRider(canvas, art.rider ?? null, boatW * SEAT_X, boatH * SEAT_Y, d.rider as number, -p.angle * 0.35, s.riderIn, paint, 1, d.sky === 'night' && !s.ghost);
   drawImg(canvas, art.logBoatFront ?? null, 0, 0, boatW, boatH, paint);
   canvas.restore();
 }

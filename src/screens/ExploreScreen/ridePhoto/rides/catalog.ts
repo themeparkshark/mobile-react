@@ -110,6 +110,8 @@ export interface SceneVariant {
   readonly golden: boolean;
   /** Where the camera moment sits within the ride's range (-1..1), so the frame moves ride to ride. */
   readonly frameShift: number;
+  /** Seeds prop positions so no two finds dress a ride the same way. */
+  readonly seed: number;
 }
 
 /** October is Halloween, December is the holidays (the device's local date). */
@@ -141,6 +143,7 @@ export function sceneVariant(opts: { seed: number; kind: RideKind; setName?: str
     photobomb,
     golden: opts.golden === true,
     frameShift: shifts[Math.floor(seeded(opts.seed, 19) * 3) % 3],
+    seed: Math.abs(Math.round(opts.seed)) % 100000,
   };
 }
 

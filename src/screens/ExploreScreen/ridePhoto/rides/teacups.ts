@@ -1,9 +1,10 @@
 import { PaintStyle, Skia, StrokeCap, createPicture, vec, type SkCanvas } from '@shopify/react-native-skia';
-import { drawHedge, drawSeason, drawSky, paintExtras } from './backdrop';
+import { drawGround, drawSeason, drawSky, paintExtras } from './backdrop';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
 } from './stage';
+import { seeded } from './catalog';
 
 /**
  * Teacups: three cups ride around a turntable while each one spins. The camera
@@ -39,7 +40,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
   const bw = cupW * 1.3, bh = cupH * 0.95 + riderSize * 0.55;
   const front = { x: cx, y: cy + ry };
   const box = { x: front.x - bw / 2, y: front.y - cupH * 0.92 - riderSize * 0.5, w: bw, h: bh };
-  const cam = cameraRig(box, width, height, top);
+  const cam = cameraRig(box, width, height, top, false, seeded(variant.seed, 47) < 0.4 ? 'hang' : 'pole');
   const crop = photoCrop(box, width, height, 0.75);
   const grade = gradeMatrix(variant.sky, variant.golden);
   const st = cupPose(stationT, frameT);
@@ -48,7 +49,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
-    const hedgeTop = drawHedge(canvas, width, height, variant, art);
+    const hedgeTop = drawGround(canvas, 'teacups', width, height, variant, art);
     drawTurntable(canvas, cx, cy, rx, ry, cupW, grade);
     drawSeason(canvas, width, height, variant, hedgeTop, art);
   }, { width, height });
@@ -159,7 +160,7 @@ export function paintTeacups(canvas: SkCanvas, s: PaintState, d: RideData, art: 
       const facing = Math.cos(spin);
       const riderPaint = facing >= 0 ? paint : spritePaint([0.35, 0, 0, 0, 0.05, 0, 0.35, 0, 0, 0.07, 0, 0, 0.45, 0, 0.12, 0, 0, 0, 1, 0], alpha);
       drawRider(canvas, art.rider ?? null, 0, -h * (1 - SEAT_Y), (d.rider as number) * scale, 0, s.riderIn, riderPaint,
-        Math.max(0.18, Math.abs(facing)));
+        Math.max(0.18, Math.abs(facing)), d.sky === 'night' && !s.ghost);
     }
     drawImg(canvas, art.cupFront ?? null, -w / 2, -h, w, h, paint);
     if (!s.ghost && !s.photo) drawSwoosh(canvas, w, h, spin, true, alpha);

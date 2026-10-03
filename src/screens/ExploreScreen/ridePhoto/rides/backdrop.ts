@@ -1,5 +1,5 @@
 import { PaintStyle, Skia, StrokeCap, StrokeJoin, vec, type SkCanvas } from '@shopify/react-native-skia';
-import type { SceneVariant } from './catalog';
+import { seeded, type RideKind, type SceneVariant } from './catalog';
 import { drawBulb, drawCover, drawImg, spritePaint, gradeMatrix, type SceneArt } from './stage';
 
 /**
@@ -46,8 +46,87 @@ export function drawHedge(canvas: SkCanvas, width: number, height: number, varia
   const near = art.near ?? null;
   const nearH = Math.min(height * 0.16, width * 0.3), nearW = nearH * 5;
   const paint = spritePaint(gradeMatrix(variant.sky, variant.golden));
-  for (let x = -nearW * 0.1; x < width; x += nearW - 4) drawImg(canvas, near, x, height - nearH, nearW, nearH, paint);
+  // Seeded offset: the hedge line never sits the same way twice.
+  const start = -nearW * (0.1 + 0.6 * seeded(variant.seed, 23));
+  for (let x = start; x < width; x += nearW - 4) drawImg(canvas, near, x, height - nearH, nearW, nearH, paint);
   return height - nearH;
+}
+
+/**
+ * Each ride's own ground: hedges by the coaster; rocks, reeds and a mist band by the flume's pool;
+ * a picket fence with bunting and paper lanterns around the teacups. Prop positions are seeded.
+ * Returns the top of the ground line (for the season props).
+ */
+export function drawGround(canvas: SkCanvas, kind: RideKind, width: number, height: number, variant: SceneVariant, art: SceneArt): number {
+  if (kind === 'coaster') return drawHedge(canvas, width, height, variant, art);
+  const filter = Skia.ColorFilter.MakeMatrix(gradeMatrix(variant.sky, variant.golden));
+  const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColorFilter(filter);
+  const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(3);
+  ink.setStrokeJoin(StrokeJoin.Round); ink.setStrokeCap(StrokeCap.Round); ink.setColorFilter(filter);
+  const r = (salt: number) => seeded(variant.seed, salt);
+  if (kind === 'flume') {
+    const groundTop = height - Math.min(height * 0.1, 70);
+    // Grass bank.
+    fill.setColor(Skia.Color('#6cc04a'));
+    const bank = Skia.Path.Make();
+    bank.moveTo(0, groundTop + 10);
+    for (let x = 0; x <= width; x += width / 6) bank.quadTo(x + width / 12, groundTop - 6, x + width / 6, groundTop + 8);
+    bank.lineTo(width, height); bank.lineTo(0, height); bank.close();
+    canvas.drawPath(bank, fill);
+    ink.setColor(Skia.Color('#3d7a2a')); canvas.drawPath(bank, ink);
+    // Reeds with cattail tops.
+    const reeds = 5 + Math.floor(r(31) * 4);
+    for (let i = 0; i < reeds; i++) {
+      const x = (i + r(40 + i) * 0.8) * (width / reeds), h = 30 + r(50 + i) * 26;
+      ink.setColor(Skia.Color('#3d7a2a')); ink.setStrokeWidth(4);
+      canvas.drawLine(x, groundTop + 6, x + (r(60 + i) - 0.5) * 8, groundTop + 6 - h, ink);
+      ink.setColor(Skia.Color('#7fd05a')); ink.setStrokeWidth(2);
+      canvas.drawLine(x, groundTop + 6, x + (r(60 + i) - 0.5) * 8, groundTop + 6 - h, ink);
+      fill.setColor(Skia.Color('#8a5a2b'));
+      canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x + (r(60 + i) - 0.5) * 8 - 3, groundTop + 6 - h - 4, 6, 14), 3, 3), fill);
+      ink.setColor(Skia.Color('#5a3a1a')); ink.setStrokeWidth(1.6);
+      canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x + (r(60 + i) - 0.5) * 8 - 3, groundTop + 6 - h - 4, 6, 14), 3, 3), ink);
+    }
+    // Rounded rocks.
+    const rocks = 3 + Math.floor(r(33) * 3);
+    for (let i = 0; i < rocks; i++) {
+      const x = r(70 + i) * width, w = 26 + r(80 + i) * 26, h = w * 0.6;
+      const rect = Skia.XYWHRect(x - w / 2, height - h - 6 - r(90 + i) * 14, w, h);
+      fill.setColor(Skia.Color('#a7a9b4')); canvas.drawOval(rect, fill);
+      ink.setColor(Skia.Color('#5d6070')); ink.setStrokeWidth(3); canvas.drawOval(rect, ink);
+      fill.setColor(Skia.Color('rgba(255,255,255,0.45)'));
+      canvas.drawOval(Skia.XYWHRect(rect.x + w * 0.2, rect.y + h * 0.15, w * 0.3, h * 0.22), fill);
+    }
+    return groundTop;
+  }
+  // Teacups: a white picket fence with bunting and paper lanterns.
+  const fenceTop = height - 54;
+  const pickets = Math.ceil(width / 22) + 1;
+  const off = r(35) * 22;
+  for (let i = 0; i < pickets; i++) {
+    const x = i * 22 - off;
+    const p = Skia.Path.Make();
+    p.moveTo(x, height); p.lineTo(x, fenceTop + 8); p.lineTo(x + 7, fenceTop); p.lineTo(x + 14, fenceTop + 8); p.lineTo(x + 14, height); p.close();
+    fill.setColor(Skia.Color('#fffaf0')); canvas.drawPath(p, fill);
+    ink.setColor(Skia.Color('#b9a38a')); ink.setStrokeWidth(2.5); canvas.drawPath(p, ink);
+  }
+  fill.setColor(Skia.Color('#fffaf0'));
+  canvas.drawRect(Skia.XYWHRect(0, fenceTop + 18, width, 7), fill);
+  ink.setColor(Skia.Color('#b9a38a')); canvas.drawRect(Skia.XYWHRect(0, fenceTop + 18, width, 7), ink);
+  // Bunting string across the upper scene, with pastel flags.
+  const y0 = height * (0.2 + r(36) * 0.06);
+  const string = Skia.Path.Make();
+  string.moveTo(-10, y0); string.quadTo(width / 2, y0 + 34, width + 10, y0);
+  ink.setColor(Skia.Color('#8a6a4a')); ink.setStrokeWidth(2); canvas.drawPath(string, ink);
+  const colors = ['#ff8fc4', '#ffd84a', '#8fd9ff', '#b98cff', '#7fe3a8'];
+  for (let i = 0; i < 9; i++) {
+    const t = (i + 0.5) / 9, x = -10 + (width + 20) * t, y = y0 + 34 * 2 * t * (1 - t);
+    const flag = Skia.Path.Make();
+    flag.moveTo(x - 9, y); flag.lineTo(x + 9, y); flag.lineTo(x, y + 16); flag.close();
+    fill.setColor(Skia.Color(colors[(i + Math.floor(r(37) * 5)) % 5])); canvas.drawPath(flag, fill);
+    ink.setColor(Skia.Color('#6a4a3a')); ink.setStrokeWidth(1.8); canvas.drawPath(flag, ink);
+  }
+  return fenceTop;
 }
 
 /** Halloween pumpkins on the hedge line, holiday bulbs on a garland. Simple outlined shapes in Alex's style. */
@@ -55,7 +134,7 @@ export function drawSeason(canvas: SkCanvas, width: number, height: number, vari
   if (variant.season === 'halloween') {
     const fill = Skia.Paint(); fill.setAntiAlias(true);
     const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(3);
-    [0.1, 0.46, 0.83].forEach((fx, i) => {
+    [0.08 + 0.1 * seeded(variant.seed, 41), 0.42 + 0.12 * seeded(variant.seed, 42), 0.78 + 0.12 * seeded(variant.seed, 43)].forEach((fx, i) => {
       const r = width * (i === 1 ? 0.045 : 0.037), x = fx * width, y = hedgeTop + r * 1.2;
       fill.setColor(Skia.Color('#ff8a2b'));
       canvas.drawOval(Skia.XYWHRect(x - r * 1.2, y - r, r * 2.4, r * 2), fill);

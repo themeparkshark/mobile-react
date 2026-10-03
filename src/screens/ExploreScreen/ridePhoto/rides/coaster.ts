@@ -7,6 +7,7 @@ import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
 } from './stage';
+import { seeded } from './catalog';
 
 /**
  * Coaster: the camera moment is at the bottom of the drop. A slow lift, a fast
@@ -52,7 +53,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
   // The lit window: the whole lead car with its rider fits inside.
   const bw = car.w * (cars > 1 ? 1.45 : 1.45), bh = car.h * RAIL_AT + car.rider * 0.95 + 14;
   const box = { x: lut.frameX - bw / 2, y: lut.frameY - bh + 12, w: bw, h: bh };
-  const cam = cameraRig(box, width, height, top);
+  const cam = cameraRig(box, width, height, top, false, seeded(variant.seed, 47) < 0.4 ? 'hang' : 'pole');
   const crop = photoCrop(box, width, height, 0.75);
   const grade = gradeMatrix(variant.sky, variant.golden);
   const station = sampleTrack(lut, uStation);
@@ -108,7 +109,7 @@ export function paintCoaster(canvas: SkCanvas, s: PaintState, d: RideData, art: 
     }
     canvas.translate(-carW / 2, -carH * RAIL_AT);
     drawImg(canvas, art.carBack ?? null, 0, 0, carW, carH, paint);
-    if (i === 0) drawRider(canvas, art.rider ?? null, carW * SEAT.x, carH * SEAT.y, size, -p.angle * 0.3, s.riderIn, paint);
+    if (i === 0) drawRider(canvas, art.rider ?? null, carW * SEAT.x, carH * SEAT.y, size, -p.angle * 0.3, s.riderIn, paint, 1, d.sky === 'night' && !s.ghost);
     drawImg(canvas, art.carFront ?? null, 0, 0, carW, carH, paint);
     canvas.restore();
   }
@@ -122,7 +123,7 @@ export function paintCoasterBulbs(canvas: SkCanvas, s: PaintState, d: RideData, 
   const head = s.photo ? 0 : Math.floor(s.clock * 6);
   for (let i = 0; i < n; i++) {
     const on = (i + head) % 4 === 0 ? 1 : 0.45;
-    drawBulb(canvas, art.glow ?? null, bulbs[i * 2], bulbs[i * 2 + 1], 12, on);
+    drawBulb(canvas, art.glow ?? null, bulbs[i * 2], bulbs[i * 2 + 1], 14, on);
   }
 }
 
