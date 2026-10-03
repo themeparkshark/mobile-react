@@ -79,8 +79,20 @@ export function pillSubLine(input: {
   readonly total: number;
   readonly shortest?: string | null;
 }): string {
-  if (input.inLine) return `In line: ${input.inLine.name} · ${input.inLine.minutes} min`;
+  if (input.inLine) return `In line: ${input.inLine.name} · ${input.inLine.minutes < 1 ? 'just joined' : `${input.inLine.minutes} min`}`;
   if (input.gatesOpen) return `Gates open ${input.gatesOpen}`;
   if (input.total > 0 && input.done >= input.total) return `All ${input.total}! Ten-in-One Fin unlocked.`;
   return input.shortest ?? 'Tap a haunt to log it';
+}
+
+/** "1 haunt" / "3 haunts". */
+export function hauntsWord(n: number): string {
+  const count = Math.max(0, Math.round(n));
+  return `${count} ${count === 1 ? 'haunt' : 'haunts'}`;
+}
+
+/** Under a locked "I survived it!": "Unlocks in 6 min" (null once it is enabled). */
+export function unlockText(minutesLeft: number): string | null {
+  const m = Math.ceil(minutesLeft);
+  return m > 0 ? `Unlocks in ${m} min` : null;
 }

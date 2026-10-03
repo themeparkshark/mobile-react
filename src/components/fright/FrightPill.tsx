@@ -23,7 +23,8 @@ export default function FrightPill({ night, engine, onHelp }: {
   readonly night: FrightNight;
   readonly engine: FrightEngine;
   /** Replay the tutorial ("?"). */
-  readonly onHelp: () => void;
+  /** Optional own "?" (off on the map: the map's one "?" opens a chooser while the mode is on). */
+  readonly onHelp?: () => void;
 }) {
   const [, setTick] = useState(0);
   const rowRef = useRef<View>(null);
@@ -67,10 +68,12 @@ export default function FrightPill({ night, engine, onHelp }: {
         {engine.pendingSync > 0 && <GameIcon name="retry" size={14} />}
         <GameIcon name="arrow" size={16} />
       </Pressable>
+      {onHelp && (
       <Pressable accessibilityRole="button" accessibilityLabel={`How ${title} works`} onPress={onHelp} hitSlop={8}
-        style={styles.help}>
-        <Text style={styles.helpText}>?</Text>
-      </Pressable>
+          style={styles.help}>
+          <Text style={styles.helpText}>?</Text>
+        </Pressable>
+      )}
     </View>
     {/* Chaos Hour: the live encounter (server-gated), hidden inside a haunt's quiet window. */}
     {engine.encounter && !engine.encounter.caught && !engine.quiet && (

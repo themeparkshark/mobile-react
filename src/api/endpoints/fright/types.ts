@@ -213,6 +213,8 @@ export interface FrightAssets {
   } | null;
   /** File names ("recap-bg.webp") to URLs. */
   readonly card?: Readonly<Record<string, string | null>> | null;
+  /** Event pins by slug ("ev-survived"): sizes ("256", "512", "locked") to URLs. */
+  readonly event_pins?: Readonly<Record<string, Readonly<Record<string, string | null>> | null>> | null;
   readonly haunts?: Readonly<Record<string, {
     readonly icon?: Readonly<Record<string, string | null>> | null;
     readonly layers?: FrightHauntLayers | null;

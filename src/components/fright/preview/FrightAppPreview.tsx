@@ -103,7 +103,7 @@ export default function FrightAppPreview({ state }: { readonly state: AppPreview
     modal: null, closeModal: noop, encounter: null, catchEncounter: async () => {}, pickSide: async () => {},
     rank: null, submitRank: async () => null, closeRank: noop, caseFile: null, closeCaseFile: noop,
     toast: state === 'in-line' ? COPY.inLineToast : null, clearToast: noop,
-    tutorial: null, finishTutorial: noop, replayTutorial: noop,
+    tutorial: null, introPending: false, finishTutorial: noop, replayTutorial: noop,
     coach: state === 'coach-pill' ? 'haunt_near' : null, dismissCoach: noop,
     recapOffer: null, dismissRecapOffer: noop,
     marquee: state === 'marquee-retry' ? { slug: 'preview-missing', nightOn: '2026-10-02' } : null,

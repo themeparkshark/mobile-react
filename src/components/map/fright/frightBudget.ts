@@ -103,11 +103,80 @@ export function ambienceOn(input: { readonly ambience?: boolean }, effectsOn: bo
 }
 
 /** The chip under a haunt: "The Robot City · 25m", just the name without a wait, "Closed" when closed. */
-export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'posted_minutes'>): string {
+export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'posted_minutes'>, survived = false): string {
+  // Survived tonight: just the name (the check badge on the facade says the rest).
+  if (survived) return spot.name;
   const closed = spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT';
   if (closed) return `${spot.name} · Closed`;
   const wait = spot.posted_minutes;
   return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)} min` : spot.name;
+}
+
+/** Chips stay this far inside the screen edges (points). */
+export const CHIP_EDGE_MARGIN = 12;
+
+/** A chip's rough width for its label (Knockout 11 pt plus padding), capped at the marker width. */
+export function chipWidth(label: string, maxWidth = 168): number {
+  return Math.min(maxWidth, Math.round(label.length * 5.9 + 20));
+}
+
+/**
+ * Where a map point lands on screen horizontally (points from the left), from
+ * the camera center, zoom and heading (the map turns with the phone).
+ */
+export function screenX(point: LatLng, center: LatLng, zoom: number, heading: number | null | undefined, screenW: number): number {
+  const ppm = pointsPerMeter(zoom, center.latitude);
+  const east = (point.longitude - center.longitude) * 111_320 * Math.cos(center.latitude * Math.PI / 180);
+  const north = (point.latitude - center.latitude) * 111_320;
+  const h = ((heading ?? 0) * Math.PI) / 180;
+  return screenW / 2 + (east * Math.cos(h) - north * Math.sin(h)) * ppm;
+}
+
+/** Where a map point lands on screen vertically (points from the top). */
+export function screenY(point: LatLng, center: LatLng, zoom: number, heading: number | null | undefined, screenH: number): number {
+  const ppm = pointsPerMeter(zoom, center.latitude);
+  const east = (point.longitude - center.longitude) * 111_320 * Math.cos(center.latitude * Math.PI / 180);
+  const north = (point.latitude - center.latitude) * 111_320;
+  const h = ((heading ?? 0) * Math.PI) / 180;
+  return screenH / 2 - (east * Math.sin(h) + north * Math.cos(h)) * ppm;
+}
+
+/**
+ * The spot's anchor point is on screen (with `slack` points of room). MapLibre
+ * iOS parks a MarkerView whose coordinate is off screen at the screen's top-left
+ * corner, so a spot draws only while its point is really on screen.
+ */
+export function onScreen(point: LatLng, center: LatLng | null, zoom: number, heading: number | null | undefined,
+  screenW: number, screenH: number, slack = 0): boolean {
+  if (!center || !(screenW > 0) || !(screenH > 0)) return true;
+  const x = screenX(point, center, zoom, heading, screenW);
+  const y = screenY(point, center, zoom, heading, screenH);
+  return x >= -slack && x <= screenW + slack && y >= -slack && y <= screenH + slack;
+}
+
+/**
+ * How far to slide a chip centered on screen x so it stays CHIP_EDGE_MARGIN
+ * inside both edges (0 when it already fits; a chip wider than the screen
+ * centers).
+ */
+export function chipShift(x: number, width: number, screenW: number, margin = CHIP_EDGE_MARGIN): number {
+  if (!Number.isFinite(x) || !(screenW > 0)) return 0;
+  const left = x - width / 2;
+  const right = x + width / 2;
+  if (width > screenW - margin * 2) return Math.round(screenW / 2 - x);
+  if (left < margin) return Math.round(margin - left);
+  if (right > screenW - margin) return Math.round(screenW - margin - right);
+  return 0;
+}
+
+/**
+ * The camera center for chip placement: the player while the map follows them
+ * (the visible bounds center is within 30 m of the player), else that center.
+ */
+export function cameraCenter(player: LatLng | null, bounds: Bounds | null): LatLng | null {
+  const mid = bounds ? boundsCenter(bounds) : null;
+  if (player && (!mid || distanceMeters(player, mid) < 30)) return player;
+  return mid ?? player;
 }
 
 /**

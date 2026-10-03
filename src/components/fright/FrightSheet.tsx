@@ -4,7 +4,7 @@
  * badge; "I'm in line", "Play in line", "I survived it!"; the reefs; and the
  * Spooky effects toggle. Night palette. No free text anywhere.
  */
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { FrightSpot } from '../../api/endpoints/fright';
 import { LocationContext } from '../../context/LocationProvider';
@@ -12,8 +12,8 @@ import * as RootNavigation from '../../RootNavigation';
 import { GameIcon } from '../../ui';
 import { COPY } from '../../services/fright/copy';
 import { nightDateLabel } from '../../services/fright/dates';
-import { enterBlockText, fanBadge, hauntCountText, sortHaunts } from '../../services/fright/pace';
-import { minutesInLine } from '../../services/fright/run';
+import { enterBlockText, fanBadge, hauntCountText, sortHaunts, unlockText } from '../../services/fright/pace';
+import { minutesInLine, quietMinutesLeft } from '../../services/fright/run';
 import { NIGHT } from '../../services/fright/theme';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { frightLinePlayRide } from './frightLinePlay';
@@ -29,6 +29,13 @@ function statusText(spot: FrightSpot): string {
 
 export default function FrightSheet({ night, engine }: { readonly night: FrightNight; readonly engine: FrightEngine }) {
   const { latestLocationSampleRef } = useContext(LocationContext);
+  const [, setTick] = useState(0);
+  // Keep "In line N min" / "Unlocks in N min" current while the sheet is open.
+  useEffect(() => {
+    if (!engine.sheetOpen || !engine.openRun) return;
+    const timer = setInterval(() => setTick(value => value + 1), 30_000);
+    return () => clearInterval(timer);
+  }, [engine.sheetOpen, engine.openRun]);
   const scroll = useRef<ScrollView>(null);
   const rowY = useRef<Record<string, number>>({});
   // A map tap opens the sheet on that haunt: scroll to it once the rows have laid out.
@@ -77,6 +84,9 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
             <NightButton label={COPY.survived} icon="check" disabled={!engine.canSurvive}
               loading={engine.busyKey === open.key} onPress={() => { void engine.survived(); }}
               accessibilityHint={engine.canSurvive ? undefined : 'Unlocks after the minimum time inside'} style={{ marginTop: 8 }} />
+            {!engine.canSurvive && unlockText(quietMinutesLeft(open, night.now(), engine.openSpot.walk_minutes)) && (
+              <Text style={styles.unlock}>{unlockText(quietMinutesLeft(open, night.now(), engine.openSpot.walk_minutes))}</Text>
+            )}
           </View>
         )}
 
@@ -165,6 +175,7 @@ const styles = StyleSheet.create({
   runName: { fontFamily: 'Shark', fontSize: 17, color: NIGHT.moon },
   runLine: { fontFamily: 'Knockout', fontSize: 15, color: NIGHT.fogLight, marginTop: 2 },
   row: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.25)' },
+  unlock: { fontFamily: 'Knockout', fontSize: 14, color: NIGHT.lantern, textAlign: 'center', marginTop: 4 },
   rowFocus: { backgroundColor: 'rgba(255,179,71,0.14)', borderRadius: 12, paddingHorizontal: 6 },
   blocked: { fontFamily: 'Knockout', fontSize: 14, color: NIGHT.lantern, marginTop: 4 },
   bead: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: NIGHT.fog, alignItems: 'center',

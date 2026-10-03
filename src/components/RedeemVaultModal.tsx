@@ -242,7 +242,7 @@ export default function RedeemVaultModal({
             )}
             <YellowButton
               disabled={
-                (redeemable.model as VaultType).item.cost > player.keys ||
+                (redeemable.model as VaultType).item.cost > (player.keys ?? 0) ||
                 isOpen
               }
               text="Unlock"

@@ -79,3 +79,25 @@ export function rememberFrightArt(next: Partial<FrightArtSet>): FrightArtSet {
 export function frightArt(): FrightArtSet {
   return cache;
 }
+
+/** "Pins N of M" from what the card actually shows (slots with pin or pin_art); server counts only as a fallback. */
+export function pinCounts(card: { readonly pins_earned: number; readonly pins_total: number;
+  readonly slots: readonly { readonly earned: boolean; readonly pin?: { image: string | null; earned_on: string | null } | null;
+    readonly pin_art?: { image: string | null; locked: string | null } | null }[] }): { earned: number; total: number } {
+  const pinSlots = card.slots.filter(slot => slot.pin || slot.pin_art?.image || slot.pin_art?.locked);
+  if (!pinSlots.length) return { earned: Math.max(0, card.pins_earned), total: Math.max(0, card.pins_total) };
+  return { earned: pinSlots.filter(slot => pinImage(slot).earned).length, total: pinSlots.length };
+}
+
+/** Case Files for the Lantern: found first (deck order), then the locked ones as small silhouettes. */
+export function orderCaseFiles<T extends { readonly found: boolean; readonly number: number }>(files: readonly T[]): { found: T[]; locked: T[] } {
+  const sorted = files.slice().sort((a, b) => a.number - b.number);
+  return { found: sorted.filter(file => file.found), locked: sorted.filter(file => !file.found) };
+}
+
+/** The Team tally shows only once encounters ship (flag on, or any side has points). */
+export function showTally(tally: { readonly chaos: number; readonly control: number } | null | undefined,
+  encountersEnabled?: boolean | null): boolean {
+  if (encountersEnabled) return true;
+  return !!tally && tally.chaos + tally.control > 0;
+}

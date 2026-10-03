@@ -86,6 +86,11 @@ export interface FrightEngine {
   readonly toast: string | null;
   readonly clearToast: () => void;
   readonly tutorial: IntroPlan | 'replay';
+  /**
+   * The season's Fin-ister intro (or Welcome back) is still owed tonight: it owns the first open
+   * on an event night, so the app's own onboarding waits for it.
+   */
+  readonly introPending: boolean;
   readonly finishTutorial: () => void;
   readonly replayTutorial: () => void;
   readonly coach: FrightCoachKey | null;
@@ -115,6 +120,14 @@ const ERROR_COPY: Partial<Record<string, string>> = {
   not_accepting: COPY.closed, not_open: 'Fin-ister Nights isn\'t on yet.', not_in_park: 'You need to be in the park.',
   too_soon: 'Almost! Finish the haunt first.', throttled: 'Easy, Fin-vestigator. Try again in a minute.',
 };
+
+/** The Fin-ister intro still owns tonight's first open (pure; tested). */
+export function frightIntroPending(input: { readonly modeOn: boolean; readonly hasEvent: boolean; readonly loaded: boolean;
+  readonly tutorial: IntroPlan | 'replay'; readonly plan: IntroPlan }): boolean {
+  if (!input.modeOn || !input.hasEvent) return false;
+  if (input.tutorial === 'intro' || input.tutorial === 'welcome_back') return true;
+  return !input.loaded || input.plan != null;
+}
 
 export default function useFrightEngine(night: FrightNight, opts: {
   readonly parkId: number | null;
@@ -680,6 +693,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
     caseFile, closeCaseFile: closeModal,
     toast: visibleToast, clearToast: () => setToast(null),
     tutorial: quiet || opts.blocked ? null : tutorial, finishTutorial, replayTutorial,
+    introPending: frightIntroPending({ modeOn, hasEvent: !!event, loaded, tutorial, plan: event ? introPlan({ seen, returning: me?.returning }) : null }),
     coach: canCoach ? coach.visible : null, dismissCoach,
     recapOffer, dismissRecapOffer: () => setRecapOffer(null),
     marquee, openMarquee: (slug, on) => { setRecapOffer(null); setMarquee({ slug, nightOn: on }); if (event) markSeen('recap'); },
