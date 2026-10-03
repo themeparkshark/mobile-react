@@ -175,6 +175,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
           style={{
             flex: 1,
             marginTop: -8,
+            backgroundColor: '#dff4ff',
           }}
         >
           <View
