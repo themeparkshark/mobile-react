@@ -10,6 +10,12 @@ import { runOnJS, useFrameCallback } from 'react-native-reanimated';
 
 const WARMUP_MS = 2000;
 
+/** Captures: start a fresh window (e.g. when the Friends list gains focus) so p5 measures only what follows. */
+const resetters = new Set<() => void>();
+export function resetFpsStats(): void {
+  for (const reset of resetters) reset();
+}
+
 function p5(samples: number[]): number {
   if (!samples.length) return 0;
   const sorted = [...samples].sort((a, b) => a - b);
@@ -22,6 +28,11 @@ export default function FpsOverlay() {
   const [js, setJs] = useState(0);
   const uiSamples = useRef<number[]>([]);
   const jsSamples = useRef<number[]>([]);
+  useEffect(() => {
+    const reset = () => { uiSamples.current = []; jsSamples.current = []; started.current = Date.now() - WARMUP_MS + 300; };
+    resetters.add(reset);
+    return () => { resetters.delete(reset); };
+  }, []);
 
   const pushUi = (fps: number) => {
     setUi(fps);
@@ -66,6 +77,7 @@ export default function FpsOverlay() {
     <View pointerEvents="none" style={styles.box}>
       <Text style={styles.text}>UI {ui} fps (p5 {p5(uiSamples.current)})</Text>
       <Text style={styles.text}>JS {js} fps (p5 {p5(jsSamples.current)})</Text>
+      <Text style={styles.text}>{uiSamples.current.length} samples</Text>
     </View>
   );
 }

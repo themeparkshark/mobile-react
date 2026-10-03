@@ -216,6 +216,7 @@ function Empty({ title, message, onFind }: { readonly title: string; readonly me
 export const FRIEND_SEARCH_MIN = 12;
 
 function FriendsTabView({ onReady, onFind, total }: { readonly onReady: () => void; readonly onFind: () => void; readonly total: number }) {
+
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const [load, setLoad] = useState<Load>('loading');
   const [page, setPage] = useState(1);
@@ -271,6 +272,11 @@ function FriendsTabView({ onReady, onFind, total }: { readonly onReady: () => vo
         .catch(() => { if (seq === searchSeq.current) setResults([]); });
     }, 300);
   }, []);
+
+  // Captures only: the FPS overlay's p5 window starts once the list is on screen.
+  useEffect(() => {
+    if (load === 'ready' && process.env.EXPO_PUBLIC_FPS_OVERLAY === '1') require('../dev/FpsOverlay').resetFpsStats();
+  }, [load]);
 
   const shown = results ?? friends;
   const rows = useMemo<Row[]>(() => shown.map(p => ({ type: 'player', key: `f${p.id}`, player: p, fallback: 'friends' })), [shown]);
