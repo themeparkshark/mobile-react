@@ -126,3 +126,56 @@ test('report, block and delete never stack a game dialog on the closing menu she
   assert.match(menu, /setConfirm\('block'\)/);
   assert.match(menu, /onModalHide/);
 });
+
+test('the app classifies the panel probe set like the server: personal info and links before posting', () => {
+  const cases = require('./fixtures/safetext_cases.json');
+  const wrong = [];
+  for (const [want, list] of Object.entries(cases)) {
+    for (const text of list) {
+      const got = model.checkDraft(text) ?? 'ok';
+      // Mean words are the server's job; the composer only explains safety rules early.
+      const expected = want === 'mean' ? 'ok' : want;
+      if (got !== expected) wrong.push(`${text} => ${got} (want ${expected})`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
+test('quick replies are fixed kind phrases that pass the filter', () => {
+  assert.ok(model.QUICK_REPLIES.length >= 4);
+  for (const phrase of model.QUICK_REPLIES) assert.equal(model.checkDraft(phrase, model.REPLY_MAX), null, phrase);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /void send\(phrase\)/);
+});
+
+test('keyboard: inset comes from the keyboard height, so a header can never leave the input behind it', () => {
+  const kb = loadTs('src/screens/threads/useKeyboardInset.ts', { react: {}, 'react-native': {} });
+  assert.equal(kb.keyboardInset({ endCoordinates: { height: 336, screenY: 508, width: 390 } }, 844), 336);
+  assert.equal(kb.keyboardInset({ endCoordinates: { height: 260, screenY: 200, width: 390 } }, 844), 0, 'floating keyboard covers nothing');
+  for (const file of ['src/screens/ThreadScreen.tsx', 'src/screens/threads/Composer.tsx']) {
+    const source = read(file);
+    assert.doesNotMatch(source, /KeyboardAvoidingView/, file);
+    assert.match(source, /paddingBottom: keyboard/, file);
+  }
+});
+
+test('an empty POST answers: wiggle, nope sound, focus; and it is never disabled', () => {
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /dimmed=\{!canPost/);
+  assert.doesNotMatch(composer, /disabled=\{!canPost/);
+  assert.match(composer, /wiggle\.value = withSequence/);
+  assert.doesNotMatch(composer, /\bsmall\b\s*\n\s*accessibilityLabel/);
+});
+
+test('first post waits for the rules promise; official posts show Theme Park Shark and cannot be blocked', () => {
+  const social = read('src/screens/SocialScreen.tsx');
+  assert.match(social, /hasPromised\(player\.id\)/);
+  assert.match(social, /authorId: official \? null/);
+  assert.match(read('src/screens/threads/ThreadCard.tsx'), /official \? <OfficialAvatar/);
+  assert.match(read('src/Root.tsx'), /name="BlockedPlayers"/);
+});
+
+test('a reply to a reply notifies the kid who was answered', () => {
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /const answered = replyTo && replyTo\.parent_id \? replyTo\.id : null/);
+  assert.match(read('src/api/endpoints/social/index.ts'), /reply_to_id: replyToId/);
+});

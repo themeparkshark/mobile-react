@@ -21,5 +21,7 @@ export interface ThreadType {
   readonly team: 'mouse' | 'globe' | 'shark' | null;
   /** Threads v2 (optional on older servers). */
   readonly topic?: string | null;
+  /** Pinned or written by a staff account: shown as Theme Park Shark with a check. */
+  readonly is_official?: boolean;
   readonly reaction_counts?: { readonly reaction_type_id: number; readonly count: number }[];
 }

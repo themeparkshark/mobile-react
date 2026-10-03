@@ -27,10 +27,10 @@ export interface MenuTarget {
 }
 
 const REASONS: readonly { reason: ReportReason; label: string; icon: GameIconName }[] = [
-  { reason: 'disrespectful', label: 'Mean or bullying', icon: 'heart' },
+  { reason: 'disrespectful', label: 'Mean or bullying', icon: 'swords' },
   { reason: 'swearing', label: 'Bad words', icon: 'close' },
   { reason: 'personal_info', label: 'Personal info', icon: 'lock' },
-  { reason: 'spam', label: 'Spam or selling', icon: 'coins' },
+  { reason: 'spam', label: 'Spam or selling', icon: 'ticket' },
   { reason: 'unrelated', label: 'Not about parks', icon: 'map' },
 ];
 
@@ -67,7 +67,6 @@ export default function PostMenu({
 
   const close = () => {
     onClose();
-    setTimeout(() => { setStep('menu'); setConfirm(null); }, 300);
   };
 
   const run = async (item: MenuTarget, work: () => Promise<void>, why: 'deleted' | 'reported' | 'blocked', toast: string) => {
@@ -123,6 +122,9 @@ export default function PostMenu({
       swipeDirection="down"
       onModalWillShow={() => playSound(OPEN, { volume: 0.5 })}
       onModalHide={() => {
+        // Reset for next time once it is out of sight.
+        setStep('menu');
+        setConfirm(null);
         if (!editNext.current) return;
         editNext.current = false;
         setTimeout(() => onEdit?.(), 60);

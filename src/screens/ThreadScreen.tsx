@@ -14,7 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchComments, fetchReplies, fetchThread, postComment } from '../api/endpoints/social';
@@ -36,9 +36,10 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import { emitSocial } from './threads/socialEvents';
-import { CommentChip, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
-import { DRAFT_LINES, REPLY_MAX, checkDraft, errorLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
+import { DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
+import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
 
 const SEND = require('../../assets/sounds/whoosh.mp3');
@@ -109,15 +110,20 @@ function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; r
   const { player } = useContext(AuthContext);
   const { state, toggle, offered, extra } = useReactions(thread, Boolean(player));
   const team = isTeam(thread.team) ? TEAMS[thread.team] : null;
-  const name = thread.player?.screen_name ?? 'Shark fan';
+  const official = Boolean(thread.is_official);
+  const name = official ? 'Theme Park Shark' : thread.player?.screen_name ?? 'Shark fan';
   return (
     <View style={[card.shell, styles.post]}>
       <View style={styles.postHead}>
-        <PressScale onPress={() => thread.player && RootNavigation.navigate('Player', { player: thread.player.id })} accessibilityLabel={`${name}'s profile`}>
-          <Avatar player={thread.player} size="md" />
-        </PressScale>
+        {official ? (
+          <OfficialAvatar size={60} />
+        ) : (
+          <PressScale onPress={() => thread.player && RootNavigation.navigate('Player', { player: thread.player.id })} accessibilityLabel={`${name}'s profile`}>
+            <Avatar player={thread.player} size="md" />
+          </PressScale>
+        )}
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.postName} numberOfLines={1}>{name}</Text>
+          {official ? <OfficialName size={20} /> : <Text style={styles.postName} numberOfLines={1}>{name}</Text>}
           <View style={styles.postMeta}>
             <Text style={styles.postTime}>{timeAgo(thread.created_at)}</Text>
             <TopicBadge topic={thread.topic} size="md" />
@@ -159,6 +165,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const threadId = Number(params.thread);
   const insets = useSafeAreaInsets();
   const reduced = useUiReducedMotion();
+  const { height: windowHeight } = useWindowDimensions();
+  const keyboard = useKeyboardInset(windowHeight, reduced);
   const { player } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
@@ -192,7 +200,11 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     }
   }, [threadId]);
 
+  const loadingPage = useRef<number | null>(null);
   const loadComments = useCallback(async (nextPage: number) => {
+    // Fast scrolling fires onEndReached many times: one request per page.
+    if (loadingPage.current === nextPage) return;
+    loadingPage.current = nextPage;
     try {
       const result = await fetchComments(threadId, nextPage, 'oldest');
       setComments((current) => mergePage(current, result.data, nextPage));
@@ -201,6 +213,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
       setCommentsState('ready');
     } catch {
       if (nextPage === 1) setCommentsState('error');
+    } finally {
+      loadingPage.current = null;
     }
   }, [threadId]);
 
@@ -237,33 +251,44 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     inputRef.current?.focus();
   };
 
-  const send = async () => {
+  /** Send the typed reply, or a one-tap quick reply (fixed kind phrases, nothing to filter). */
+  const send = async (quick?: string) => {
     if (!thread || sending) return;
-    const problem = checkDraft(text, REPLY_MAX);
+    const words = (quick ?? text).trim();
+    const problem = checkDraft(words, REPLY_MAX);
     if (problem) {
       setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
       playSound(NOPE, { volume: 0.5 });
       void Haptics.notificationAsync('warning');
+      if (problem === 'empty') inputRef.current?.focus();
       return;
     }
     setSending(true);
     setLine(null);
-    // A reply to a reply joins the same group (one level of nesting keeps it readable).
+    // Display stays one level deep (a reply to a reply joins its group), but the
+    // notification goes to the kid who was actually answered.
     const parent = replyTo ? (replyTo.parent_id ?? replyTo.id) : null;
+    const answered = replyTo && replyTo.parent_id ? replyTo.id : null;
     try {
-      const created = await postComment(thread.id, text.trim(), parent);
+      const created = await postComment(thread.id, words, parent, answered);
       playSound(SEND, { volume: 0.6 });
       void Haptics.notificationAsync('success');
       const mineCreated: CommentType = { ...created, player: created.player ?? (player as CommentType['player']), children: created.children ?? [], children_count: 0 };
-      if (parent) {
-        setExtraReplies((current) => ({ ...current, [parent]: [...(current[parent] ?? []), mineCreated] }));
-        setComments((current) => current.map((c) => (c.id === parent ? { ...c, children_count: (c.children_count ?? 0) + 1 } : c)));
-      } else {
-        setComments((current) => [...current, mineCreated]);
+      // Trust where the server put it (a retried send returns the reply already saved).
+      const group = created.parent_id ?? parent;
+      const already = comments.some((c) => c.id === created.id || (c.children ?? []).some((k) => k.id === created.id))
+        || Object.values(extraReplies).some((list) => list.some((k) => k.id === created.id));
+      if (!already) {
+        if (group) {
+          setExtraReplies((current) => ({ ...current, [group]: [...(current[group] ?? []), mineCreated] }));
+          setComments((current) => current.map((c) => (c.id === group ? { ...c, children_count: (c.children_count ?? 0) + 1 } : c)));
+        } else {
+          setComments((current) => [...current, mineCreated]);
+        }
+        setThread((current) => (current ? { ...current, comments_count: (current.comments_count ?? 0) + 1 } : current));
+        emitSocial({ type: 'replies-changed', id: thread.id, delta: 1 });
       }
-      setThread((current) => (current ? { ...current, comments_count: (current.comments_count ?? 0) + 1 } : current));
-      emitSocial({ type: 'replies-changed', id: thread.id, delta: 1 });
-      setText('');
+      if (!quick) setText('');
       setReplyTo(null);
       setHighlight(created.id);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: !reduced }), 120);
@@ -278,7 +303,15 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
 
   const openPostMenu = () => {
     if (!thread) return;
-    setMenu({ kind: 'thread', id: thread.id, authorId: thread.player?.id ?? null, authorName: thread.player?.screen_name ?? 'this player', mine: thread.player?.id === player?.id });
+    const official = Boolean(thread.is_official);
+    setMenu({
+      kind: 'thread',
+      id: thread.id,
+      // Theme Park Shark's own posts can be reported but not blocked.
+      authorId: official ? null : thread.player?.id ?? null,
+      authorName: official ? 'Theme Park Shark' : thread.player?.screen_name ?? 'this player',
+      mine: !official && thread.player?.id === player?.id,
+    });
   };
 
   const openCommentMenu = (comment: CommentType) => {
@@ -307,7 +340,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
       </Topbar>
       <View style={{ flex: 1 }}>
         <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+        {/* The body reaches the bottom of the window, so the keyboard's own height is the exact padding. */}
+        <View style={{ flex: 1, paddingBottom: keyboard }}>
           {!thread ? (
             <SharkLoader state={status === 'error' ? 'error' : 'loading'} tone="onBlue" onRetry={() => { setStatus('loading'); void loadThread(); void loadComments(1); }} style={{ marginTop: 80 }} />
           ) : (
@@ -359,7 +393,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
           )}
 
           {player && thread ? (
-            <View style={[styles.replyBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <View style={[styles.replyBar, { paddingBottom: keyboard > 0 ? 8 : Math.max(insets.bottom, 10) }]}>
               {(replyTo || line) && (
                 <Animated.View entering={reduced ? undefined : FadeIn} exiting={reduced ? undefined : FadeOut} style={styles.replyInfo}>
                   {line ? (
@@ -377,6 +411,29 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   )}
                 </Animated.View>
               )}
+              {!text.trim() && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.quickRow}
+                  accessibilityLabel="Quick replies"
+                >
+                  {QUICK_REPLIES.map((phrase) => (
+                    <PressScale
+                      key={phrase}
+                      onPress={() => void send(phrase)}
+                      disabled={sending}
+                      scaleTo={0.9}
+                      haptic="medium"
+                      style={styles.quick}
+                      accessibilityLabel={`Reply ${phrase}`}
+                    >
+                      <Text style={styles.quickText}>{phrase}</Text>
+                    </PressScale>
+                  ))}
+                </ScrollView>
+              )}
               <View style={styles.replyRow}>
                 <TextInput
                   ref={inputRef}
@@ -390,7 +447,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   accessibilityLabel="Your reply"
                 />
                 <PressScale
-                  onPress={send}
+                  onPress={() => void send()}
                   disabled={sending}
                   haptic="medium"
                   scaleTo={0.88}
@@ -403,7 +460,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
               </View>
             </View>
           ) : null}
-        </KeyboardAvoidingView>
+        </View>
       </View>
 
       <PostMenu
@@ -487,7 +544,7 @@ const styles = StyleSheet.create({
   bubbleTime: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   bubbleText: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 24, color: '#10233f' },
   bubbleActions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
-  smallAction: { minHeight: 32, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, marginTop: 4, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.5)' },
+  smallAction: { minHeight: 44, minWidth: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, marginTop: 4, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.5)' },
   smallActionText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
   ghost: { flex: 1, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 12, paddingVertical: 8 },
   ghostText: { fontFamily: 'Knockout', fontSize: 16, color: '#dbefff' },
@@ -498,6 +555,18 @@ const styles = StyleSheet.create({
   replyLine: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.redLip },
   replyingTo: { flex: 1, fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, marginTop: 2 },
   replyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  quickRow: { gap: 8, paddingHorizontal: 2, paddingBottom: 2 },
+  quick: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: BRAND.white,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: '#0a4f9c',
+  },
+  quickText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 3 },
   replyInput: {
     flex: 1,
     fontFamily: 'Knockout',

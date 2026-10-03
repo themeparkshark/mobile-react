@@ -33,6 +33,12 @@ export function topicFor(key: unknown): TopicDef | null {
 }
 
 export const POST_MAX = 500;
+
+/**
+ * One-tap replies (like quick chat in kids' games): kind, fixed, easy to
+ * read, nothing to type or filter.
+ */
+export const QUICK_REPLIES = ['So cool!', 'Same!', 'I want to go!', 'Love it!', 'Congrats!', 'Trade?'] as const;
 export const REPLY_MAX = 300;
 
 /**
@@ -58,18 +64,109 @@ export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
   link: "Links can't be posted here.",
 };
 
-const PHONE = /(\+?\d{1,2}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b|\b\d{3}[\s.-]\d{4}\b/;
-const EMAIL = /[a-z0-9._%+-]+\s*@\s*[a-z0-9-]+\s*\.\s*[a-z]{2,}/i;
-const ADDRESS = /\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/i;
-const CONTACT = /\b(my|our)\s+(home\s+)?address\b|\bi\s+live\s+(at|on)\b|\b(my|our)\s+(phone|cell|number)\b|\b(call|text|dm|facetime|email)\s+me\b|\b(add|follow|friend)\s+me\s+on\b|\bmeet\s*-?\s*(me|ups?)\b|\blet'?s\s+meet\b|(^|\s)@[a-z0-9_.]{3,}/i;
-const LINK = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b)/i;
+/*
+ * A port of the server's SafeText personal-info and link checks (same
+ * normalising, same patterns), so a kid sees the reason before posting. The
+ * server stays the gate; tools/tests/fixtures/safetext_cases.json is shared.
+ */
+const CONFUSABLES: Record<string, string> = {
+  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm',
+  'н': 'h', 'т': 't', 'в': 'b', 'α': 'a', 'ε': 'e', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'ν': 'v', 'κ': 'k', 'ι': 'i',
+  'ս': 'u', 'օ': 'o', 'ց': 'g', 'հ': 'h', 'ո': 'n', 'ա': 'w', 'ք': 'p',
+};
+const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i', '|': 'l' };
+const NUMBER_WORDS: Record<string, string> = {
+  zero: '0', oh: '0', o: '0', one: '1', won: '1', two: '2', to: '2', too: '2', three: '3', four: '4', for: '4',
+  five: '5', six: '6', seven: '7', eight: '8', ate: '8', nine: '9',
+};
+const AMBIGUOUS = new Set(['oh', 'o', 'to', 'too', 'for', 'won', 'ate']);
+const CHAT_APPS = 'snap|snapchat|sc|insta|instagram|ig|kik|discord|telegram|whatsapp|whats app|messenger|wechat';
+const ALL_APPS = `${CHAT_APPS}|tiktok|tik tok|youtube|yt|twitch|roblox|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter`;
+const HANDLE = '(?=[a-z0-9_.]*[a-z])(?=[a-z0-9_.]*[0-9_])[a-z0-9_.]{4,}';
+const THEMED_STREETS = ['main street usa', 'main street u s a', 'main st usa', 'main street', 'hollywood boulevard', 'hollywood blvd',
+  'sunset boulevard', 'sunset blvd', 'buena vista street', 'americana street', 'mediterranean harbor'];
+
+function baseForm(text: string): string {
+  return [...text.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('');
+}
+
+function wordForm(text: string, leet = true): string {
+  let t = baseForm(text).replace(/[’‘`]/g, "'");
+  if (leet) t = t.replace(/[a-z0-9@$!|]*[a-z][a-z0-9@$!|]*/g, (w) => [...w].map((ch) => LEET[ch] ?? ch).join(''));
+  t = t.replace(/(?<=\w)[*#%^~]+(?=\w)/g, '').replace(/'/g, '').replace(/[^\p{L}\p{N}\s#/]/gu, ' ');
+  t = t.replace(/(\p{L})\1{2,}/gu, '$1$1');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+function longestDigitRun(base: string): number {
+  const tokens = base.replace(/\b\d{1,3}(,\d{3})+\b/g, ' amount ').split(/[\s.\-()/,_+]+/).filter(Boolean);
+  const runs: string[][] = [[]];
+  for (const token of tokens) {
+    if (/^\d+$/.test(token) || token in NUMBER_WORDS) runs[runs.length - 1].push(token);
+    else runs.push([]);
+  }
+  let best = 0;
+  for (const run of runs) {
+    const real = run.filter((t) => t in NUMBER_WORDS && !AMBIGUOUS.has(t)).length;
+    let length = 0;
+    for (const t of run) {
+      if (/^\d+$/.test(t)) length += t.length;
+      else if (!AMBIGUOUS.has(t) || real >= 2) length += 1;
+      else { best = Math.max(best, length); length = 0; }
+    }
+    best = Math.max(best, length);
+  }
+  return best;
+}
+
+const PERSONAL_PATTERNS: RegExp[] = [
+  /\b(my|our)\s+(home\s+)?address\b/, /\bi\s+live\s+(at|on|in|near|by)\b/, /\b(my|our)\s+(phone|cell|number|digits)\b/,
+  /\b(call|text|dm|message|facetime|email|snap|hmu|hit\s+me\s+up)\s+me\b/, /\bhmu\b/, /\b(add|follow|friend|find)\s+me\s+on\b/,
+  /\b(my|our)\s+(last\s+name|teacher\s?s?\s+name|real\s+name)\b/, /\b(my|our)\s+school\s+(is|name|called)\b/,
+  /\bi\s+go\s+to\s+[a-z ]{0,30}\s+(school|elementary|middle|academy)\b/, /\b(zip\s*code|password)\b/, /(^|\s)@[a-z0-9_.]{3,}/,
+  new RegExp(`\\b(on|in|my|add|follow|dm|find|me\\s+on)\\s+(${CHAT_APPS})\\b`),
+  new RegExp(`\\b(${ALL_APPS})\\s*(:|=|name\\b|handle\\b|username\\b|user\\b|id\\b|code\\b|tag\\b)`),
+  new RegExp(`\\b${HANDLE}\\s+(on|in)\\s+(${ALL_APPS})\\b`), new RegExp(`\\b(${ALL_APPS})\\s+${HANDLE}`),
+  /\b(insta|instagram|ig|sc|snapchat|kik|discord)\s+[a-z0-9_.]{3,}\s*$/, new RegExp(`\\bmy\\s+(${ALL_APPS})\\s+(is|=|:)`),
+  /\b(user\s?name|gamertag|ign|handle|friend\s+code)\s*(is|:|=)?\s*[a-z0-9_.]{3,}/,
+  /\bhow\s+old\s+(are|r)\s+(you|u|ya)\b/, /\bwhat\s?s?\s+(is\s+)?(your|ur)\s+age\b/,
+  /\b(i\s?m|i\s+am)\s+\d{1,2}\s*(years?\s+old|yrs?\s+old|yo|y\/o)?\s+and\s+i\s+live\b/, /\bwhere\s+(do|d)\s+(you|u|ya)\s+live\b/,
+  /\bwhere\s+(are|r)\s+(you|u|ya)\s+(staying|from|at)\b/, /\b(what|which)\s+(hotel|resort|room)\b/, /\b(what|which)\s+(school|grade)\b/,
+  /\broom\s*(number|#|no)?\s*\d{2,4}\b/,
+  /\bsend\s+(me\s+)?(a\s+|some\s+|ur\s+|your\s+)?(pic|pics|picture|pictures|photo|photos|selfie|selfies|vid|video)\b/,
+  /\b(can|could|will)\s+(you|u)\s+send\b/,
+  /\b(ur|you\s?re|your|you\s+are|u\s+r|u\s+are)\s+(so\s+|really\s+|very\s+)?(hot|cute|sexy|pretty|beautiful|gorgeous|fine)\b/,
+  /\b(be|wanna\s+be|want\s+to\s+be)\s+my\s+(gf|bf|girlfriend|boyfriend|bae)\b/, /\bdate\s+me\b/,
+  /\b(video\s+chat|videochat|video\s+call|facetime|face\s+time|private\s+chat|chat\s+privately|call\s+me)\b/,
+  /\bdon\s?t\s+tell\s+(your|ur)\s+(mom|dad|parents|mum)\b/, /\bkeep\s+(it|this)\s+(a\s+)?secret\b/,
+  /\bmeet\s*-?\s*(me|ups?|you|u)\b/, /\blet\s?s\s+meet\b/, /\bmeet\s+(at|by|near|in\s+front\s+of)\b/, /\bcome\s+find\s+me\b/,
+  /\bfind\s+me\s+(at|by|near)\b/, /\b(see|find)\s+(me|you|u)\s+(at|by|near)\s+(\d|the\b)/,
+  /\b(i\s?m|i\s+am)\s+(at|by|near)\s+the\s+[a-z ]{2,30}\s+(now|rn|right\s+now)\b/,
+];
+
+export function hasPersonalInfo(text: string): boolean {
+  const base = baseForm(text);
+  if (longestDigitRun(base) >= 7) return true;
+  if (/[a-z0-9._%+-]+\s*(@|\(at\)|\[at\])\s*[a-z0-9-]+\s*(\.|\(dot\)|\[dot\])\s*[a-z]{2,}/.test(base)) return true;
+  if (/\b[a-z0-9._]{2,}\s+at\s+[a-z0-9-]+\s+dot\s+(com|net|org|edu|co|us)\b/.test(wordForm(text, false))) return true;
+  let streets = base;
+  for (const themed of THEMED_STREETS) streets = streets.split(themed).join(' park street ');
+  streets = streets.replace(/\d+\s+park street/g, ' ');
+  if (/\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/.test(streets)) return true;
+  const forms = [...new Set([wordForm(text), wordForm(text, false), base])];
+  return PERSONAL_PATTERNS.some((pattern) => forms.some((form) => pattern.test(form)));
+}
+
+export function hasLink(text: string): boolean {
+  return /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\s*\.\s*(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b|\b[a-z0-9-]{2,}\s+dot\s+(com|net|org|io|gg|me|co|tv)\b)/.test(baseForm(text));
+}
 
 export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
   const trimmed = text.trim();
   if (!trimmed) return 'empty';
   if (trimmed.length > max) return 'too_long';
-  if (EMAIL.test(trimmed) || PHONE.test(trimmed) || ADDRESS.test(trimmed) || CONTACT.test(trimmed)) return 'personal_info';
-  if (LINK.test(trimmed)) return 'link';
+  if (hasPersonalInfo(trimmed)) return 'personal_info';
+  if (hasLink(trimmed)) return 'link';
   return null;
 }
 

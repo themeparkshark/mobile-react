@@ -14,7 +14,7 @@ import { isTeam, TEAMS } from '../../constants/teams';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { CommentChip, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
+import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
 import { timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
 import useReactions from './useReactions';
 
@@ -37,7 +37,8 @@ function ThreadCard({
   const { player } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
   const { state, toggle, offered, extra } = useReactions(thread, Boolean(player));
-  const name = thread.player?.screen_name ?? 'Shark fan';
+  const official = Boolean(thread.is_official);
+  const name = official ? 'Theme Park Shark' : thread.player?.screen_name ?? 'Shark fan';
   const pinned = Boolean(thread.pinned_at);
   const team = isTeam(thread.team) ? TEAMS[thread.team] : null;
   const text = thread.content || thread.title;
@@ -61,7 +62,7 @@ function ThreadCard({
               {pinned && (
                 <View style={[styles.flag, { backgroundColor: '#fff1c2', borderColor: BRAND.gold }]}>
                   <GameIcon name="pin" size={16} />
-                  <Text style={styles.flagText}>From the Shark team</Text>
+                  <Text style={styles.flagText}>Pinned</Text>
                 </View>
               )}
               {team && (
@@ -74,9 +75,9 @@ function ThreadCard({
           )}
 
           <View style={styles.author}>
-            <Avatar player={thread.player} size="sm" />
+            {official ? <OfficialAvatar /> : <Avatar player={thread.player} size="sm" />}
             <View style={{ flex: 1, gap: 3 }}>
-              <Text style={styles.name} numberOfLines={1}>{name}</Text>
+              {official ? <OfficialName /> : <Text style={styles.name} numberOfLines={1}>{name}</Text>}
               <View style={styles.meta}>
                 <Text style={styles.time}>{timeAgo(thread.created_at)}</Text>
                 <TopicBadge topic={thread.topic} onPress={onTopic && thread.topic ? () => onTopic(thread.topic as TopicKey) : undefined} />
@@ -91,7 +92,7 @@ function ThreadCard({
 
         <View style={styles.actions}>
           <View style={{ flex: 1 }}>
-            <ReactionBar state={state} types={offered} extraTypes={extra} onToggle={toggle} disabled={!player} size={26} />
+            <ReactionBar state={state} types={offered} extraTypes={extra} onToggle={toggle} disabled={!player} size={26} compact />
           </View>
           <CommentChip count={thread.comments_count ?? 0} onPress={() => onOpen(thread)} label={false} />
         </View>
