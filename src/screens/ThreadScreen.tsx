@@ -38,6 +38,7 @@ import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import { emitSocial } from './threads/socialEvents';
 import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
 import { DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { PROD_DRAFT_LINES, PROD_MIN_CHARS, postText, prodCheckDraft } from './threads/prodCompat';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -141,7 +142,7 @@ function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; r
           </PressScale>
         )}
       </View>
-      <RichText style={styles.postText}>{thread.content || thread.title}</RichText>
+      <RichText style={styles.postText}>{postText(thread)}</RichText>
       {thread.attachments?.length > 0 && (
         <View style={styles.photos}>
           {thread.attachments.map((attachment) => (
@@ -255,9 +256,9 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const send = async (quick?: string) => {
     if (!thread || sending) return;
     const words = (quick ?? text).trim();
-    const problem = checkDraft(words, REPLY_MAX);
+    const problem = prodCheckDraft(words, REPLY_MAX);
     if (problem) {
-      setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
+      setLine(problem === 'empty' ? null : PROD_DRAFT_LINES[problem]);
       playSound(NOPE, { volume: 0.5 });
       void Haptics.notificationAsync('warning');
       if (problem === 'empty') inputRef.current?.focus();
@@ -419,7 +420,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   contentContainerStyle={styles.quickRow}
                   accessibilityLabel="Quick replies"
                 >
-                  {QUICK_REPLIES.map((phrase) => (
+                  {QUICK_REPLIES.filter((phrase) => phrase.length >= PROD_MIN_CHARS).map((phrase) => (
                     <PressScale
                       key={phrase}
                       onPress={() => void send(phrase)}

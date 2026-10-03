@@ -17,6 +17,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
 import { timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
 import useReactions from './useReactions';
+import { postText } from './prodCompat';
 
 function ThreadCard({
   thread,
@@ -41,7 +42,7 @@ function ThreadCard({
   const name = official ? 'Theme Park Shark' : thread.player?.screen_name ?? 'Shark fan';
   const pinned = Boolean(thread.pinned_at);
   const team = isTeam(thread.team) ? TEAMS[thread.team] : null;
-  const text = thread.content || thread.title;
+  const text = postText(thread);
   const photo = thread.attachments?.[0]?.path;
 
   return (

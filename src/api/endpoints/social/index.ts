@@ -38,9 +38,37 @@ export async function fetchThread(id: number): Promise<ThreadType> {
   return data.data;
 }
 
+/** Preview build: the production API only knows sort=latest (newest first) and 422s on sort=oldest. */
+function statusOf(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } })?.response?.status;
+}
+
+/** Old-server fallback for oldest-first: read every page newest-first (capped), then flip it. */
+const OLD_SERVER_COMMENT_PAGES = 10;
+let oldCommentsServer = false;
+
+async function fetchAllCommentsOldestFirst(threadId: number): Promise<Page<CommentType>> {
+  const all: CommentType[] = [];
+  for (let page = 1; page <= OLD_SERVER_COMMENT_PAGES; page += 1) {
+    const { data } = await client.get<ApiPaginatedResponseType<CommentType[]>>(`/threads/${threadId}/comments`, { params: { page } });
+    all.push(...data.data);
+    if (!data.links?.next) break;
+  }
+  return { data: all.reverse(), hasMore: false };
+}
+
 export async function fetchComments(threadId: number, page: number, sort: 'latest' | 'oldest' = 'oldest'): Promise<Page<CommentType>> {
-  const { data } = await client.get<ApiPaginatedResponseType<CommentType[]>>(`/threads/${threadId}/comments`, { params: { page, sort } });
-  return { data: data.data, hasMore: Boolean(data.links?.next) };
+  if (sort === 'oldest' && oldCommentsServer) {
+    return page === 1 ? fetchAllCommentsOldestFirst(threadId) : { data: [], hasMore: false };
+  }
+  try {
+    const { data } = await client.get<ApiPaginatedResponseType<CommentType[]>>(`/threads/${threadId}/comments`, { params: { page, sort } });
+    return { data: data.data, hasMore: Boolean(data.links?.next) };
+  } catch (error) {
+    if (sort !== 'oldest' || statusOf(error) !== 422) throw error;
+    oldCommentsServer = true;
+    return page === 1 ? fetchAllCommentsOldestFirst(threadId) : { data: [], hasMore: false };
+  }
 }
 
 export async function fetchReplies(commentId: number, page: number): Promise<Page<CommentType>> {
@@ -49,9 +77,11 @@ export async function fetchReplies(commentId: number, page: number): Promise<Pag
 }
 
 /** No title: the server makes it from the first line (sending it made the filter read the words twice). */
-export async function postThread(body: { content: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
+export async function postThread(body: { content: string; title?: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
   const { data } = await client.post<ApiResponseType<ThreadType>>('/threads', {
     content: body.content,
+    // Preview build: the production API still requires a 10+ character title.
+    ...(body.title ? { title: body.title } : {}),
     topic: body.topic ?? null,
     team: body.team ?? null,
   });
@@ -59,8 +89,17 @@ export async function postThread(body: { content: string; topic?: TopicKey | nul
 }
 
 export async function editThread(id: number, content: string): Promise<ThreadType> {
-  const { data } = await client.put<ApiResponseType<ThreadType>>(`/threads/${id}`, { content });
-  return data.data;
+  try {
+    const { data } = await client.put<ApiResponseType<ThreadType>>(`/threads/${id}`, { content });
+    return data.data;
+  } catch (error) {
+    // Preview build: the production API saves the edit, then 500s while building
+    // its reply. Read the post back; if the new words landed, the edit worked.
+    if ((statusOf(error) ?? 0) < 500) throw error;
+    const fresh = await fetchThread(id);
+    if ((fresh.content ?? '').trim() === content.trim()) return fresh;
+    throw error;
+  }
 }
 
 export async function removeThread(id: number): Promise<void> {
@@ -93,7 +132,14 @@ export async function removeReaction(reactionId: number): Promise<void> {
 export type ReportReason = 'disrespectful' | 'swearing' | 'personal_info' | 'spam' | 'unrelated' | 'selling';
 
 export async function report(kind: 'thread' | 'comment', id: number, reason: ReportReason): Promise<void> {
-  await client.post(kind === 'thread' ? `/threads/${id}/report` : `/comments/${id}/report`, { reason });
+  const url = kind === 'thread' ? `/threads/${id}/report` : `/comments/${id}/report`;
+  try {
+    await client.post(url, { reason });
+  } catch (error) {
+    // Preview build: the production API has no personal_info reason yet (422).
+    if (reason !== 'personal_info' || statusOf(error) !== 422) throw error;
+    await client.post(url, { reason: 'disrespectful' });
+  }
 }
 
 export async function blockPlayer(playerId: number): Promise<void> {

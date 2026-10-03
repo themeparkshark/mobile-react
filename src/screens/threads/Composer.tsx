@@ -38,6 +38,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postThread, editThread } from '../../api/endpoints/social';
+import { PROD_DRAFT_LINES, prodCheckDraft, prodTitleFrom } from './prodCompat';
 import Avatar from '../../components/Avatar';
 import RewardBurst from '../../components/RewardBurst';
 import { AuthContext } from '../../context/AuthProvider';
@@ -147,8 +148,8 @@ export default function Composer({
     return () => clearTimeout(id);
   }, [text, topic, toTeam, visible, editing, phase, player?.id]);
 
-  const problem = checkDraft(text, POST_MAX);
-  const showProblem = problem && problem !== 'empty' ? DRAFT_LINES[problem] : null;
+  const problem = prodCheckDraft(text, POST_MAX);
+  const showProblem = problem && problem !== 'empty' && (problem !== 'too_short' || touched) ? PROD_DRAFT_LINES[problem] : null;
   const line = serverLine ?? showProblem;
   const canPost = !problem && phase === 'write';
   const def = topicFor(topic);
@@ -191,7 +192,7 @@ export default function Composer({
     try {
       const thread = editing
         ? await editThread(editing.id, content)
-        : await postThread({ content, topic, team: toTeam && playerTeam ? playerTeam : null });
+        : await postThread({ content, title: prodTitleFrom(content), topic, team: toTeam && playerTeam ? playerTeam : null });
       setPhase('done');
       playSound(SUCCESS, { volume: 0.7 });
       void Haptics.notificationAsync('success');
