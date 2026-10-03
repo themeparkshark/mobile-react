@@ -556,7 +556,7 @@ test('round 5: floating cards leave while the quick menu is open (opacity 0, no 
   assert.match(fade, /useQuickMenuOpen/);
   assert.match(fade, /withTiming\(menuOpen \? 0 : 1, \{ duration: reduced \? 0 : 150 \}\)/);
   assert.match(fade, /menuOpen \? 'none' : 'box-none'/);
-  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, \{ bottom: slotBottom \}, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
   const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
   assert.match(preview, /cardFade\.style, BARE && \{ opacity: 0 \}\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
 });

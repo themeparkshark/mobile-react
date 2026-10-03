@@ -74,5 +74,5 @@ test('returning to the foreground restarts the watcher iOS may have paused', asy
 test('the map pauses its compass and idle loops while its screen is not focused', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/Map.tsx'), 'utf8');
   assert.match(src, /useFocusEffect\(useCallback\(\(\) => \{\s*setScreenFocused\(true\);\s*setHeadingEnabled\(true\);\s*return \(\) => \{ setScreenFocused\(false\); setHeadingEnabled\(false\); \};/);
-  assert.match(src, /if \(reducedMotion \|\| !screenFocused\)/);
+  assert.match(src, /if \(reducedMotion \|\| !screenFocused \|\| ambientFrozen\)/);
 });

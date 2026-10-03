@@ -19,8 +19,10 @@ export interface EdgeFind {
  * thumbnail, pointing the way (like a "Nearby" tracker). Tapping one gives the
  * walk-closer nudge.
  */
-function FindEdgeArrows({ finds, size, onPress }: {
+function FindEdgeArrows({ finds, size, onPress, insetTop = 70 }: {
   readonly finds: readonly EdgeFind[];
+  /** Where the top edge's tokens centre: below the HUD chip row (and the live bar when it shows). */
+  readonly insetTop?: number;
   readonly size: { width: number; height: number };
   readonly onPress: (find: EdgeFind) => void;
 }) {
@@ -28,7 +30,7 @@ function FindEdgeArrows({ finds, size, onPress }: {
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {finds.map(find => {
-        const at = edgeArrowPlacement(find.point, size, { top: 70, bottom: 190, side: 30 });
+        const at = edgeArrowPlacement(find.point, size, { top: insetTop, bottom: 190, side: 30 });
         const art = findImageSource(find.item);
         const color = rarityColor(find.item.rarity);
         return (

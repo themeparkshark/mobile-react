@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeInDown, FadeOut, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -18,6 +18,13 @@ export interface HuntChipMessage {
 
 export const HUNT_CHIP_TTL_MS = 2600;
 
+/** About how wide a chip's line draws (Shark 14 pt, padding, arrow), capped at the wrap's 320 pt. Errs wide. */
+export function chipWidthFor(message: HuntChipMessage | null): number {
+  if (!message) return 320;
+  return Math.min(320, Math.round(36 + message.text.length * 6.6 + (message.arrowDeg != null ? 26 : 0)));
+}
+const noop = () => undefined;
+
 /**
  * The only text that ever sits over the home map: one slim pill, gone on its
  * own after a moment or with a flick sideways. Never a card.
@@ -27,13 +34,24 @@ export default function HomeHuntChip({ message, onDismiss }: {
   readonly onDismiss: () => void;
 }) {
   const dx = useSharedValue(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  const stop = useCallback(() => { if (timer.current) clearTimeout(timer.current); timer.current = null; }, []);
+  // The countdown restarts in full when a finger lets go, so a slow reader can hold the line up.
+  const start = useCallback((ms: number | undefined) => {
+    stop();
+    if (ms === 0) return;
+    timer.current = setTimeout(() => dismissRef.current(), ms ?? HUNT_CHIP_TTL_MS);
+  }, [stop]);
   useEffect(() => {
     dx.value = 0;
-    if (!message || message.ttlMs === 0) return;
-    const timer = setTimeout(onDismiss, message.ttlMs ?? HUNT_CHIP_TTL_MS);
-    return () => clearTimeout(timer);
+    if (!message) return stop;
+    start(message.ttlMs);
+    return stop;
   }, [message?.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const swipe = Gesture.Pan().activeOffsetX([-12, 12]).onUpdate(event => {
+  // Status lines (no timer) stay put: no swipe, so "tap to retry" is never lost.
+  const swipe = Gesture.Pan().enabled(message?.ttlMs !== 0).activeOffsetX([-12, 12]).onUpdate(event => {
     dx.value = event.translationX;
   }).onEnd(event => {
     if (Math.abs(event.translationX) > 60 || Math.abs(event.velocityX) > 600) {
@@ -51,10 +69,14 @@ export default function HomeHuntChip({ message, onDismiss }: {
   const error = message.tone === 'error';
   return (
     <GestureDetector gesture={swipe}>
+      {/* The layout animation lives on the outer view, the swipe on the inner one (Reanimated warns when both
+          drive one view's opacity and transform). */}
       <Animated.View key={message.key} entering={FadeInDown.springify().damping(16)} exiting={FadeOut.duration(140)}
-        style={[styles.wrap, slide]}>
+        style={styles.wrap}>
+      <Animated.View style={slide}>
         <Pressable accessibilityRole={message.onPress ? 'button' : 'text'} accessibilityLabel={message.text}
-          accessibilityHint="Swipe sideways to dismiss" onPress={message.onPress ?? onDismiss}
+          accessibilityHint={message.ttlMs === 0 ? undefined : 'Swipe sideways to dismiss'} onPress={message.onPress ?? onDismiss}
+          onPressIn={stop} onPressOut={() => start(message.ttlMs)} onLongPress={noop}
           style={[styles.chip, error && styles.chipError]}>
           {message.arrowDeg != null && (
             <View style={[styles.arrow, { transform: [{ rotate: `${message.arrowDeg}deg` }] }]}>
@@ -65,6 +87,7 @@ export default function HomeHuntChip({ message, onDismiss }: {
           {error && <GameIcon name="retry" size={16} />}
           <Text style={styles.text} numberOfLines={1}>{message.text}</Text>
         </Pressable>
+      </Animated.View>
       </Animated.View>
     </GestureDetector>
   );
