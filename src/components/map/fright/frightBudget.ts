@@ -283,3 +283,20 @@ export function frameStats(samples: readonly number[]): { avg: number; p95: numb
 function round3(v: number): number {
   return Math.round(v * 1000) / 1000;
 }
+
+/**
+ * The fixed Marker order for a payload: reefs, prop spots, haunts, each by key.
+ * Pure (tools/tests/fright-mapfx-markers.test.cjs): the same payload always
+ * gives the same list, whatever the camera, ranking or tier.
+ */
+export function stableMarkerSpots(spots: readonly FrightSpot[]): {
+  readonly reefs: readonly FrightSpot[]; readonly props: readonly FrightSpot[]; readonly haunts: readonly FrightSpot[];
+  readonly all: readonly FrightSpot[];
+} {
+  const byKey = (a: FrightSpot, b: FrightSpot) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const reefs = spots.filter(s => s.kind === 'reef').slice().sort(byKey);
+  const props = spots.filter(s => spotProps(s.fx).length > 0).slice().sort(byKey);
+  const haunts = spots.filter(s => s.kind === 'haunt').slice().sort(byKey);
+  return { reefs, props, haunts, all: [...reefs, ...props, ...haunts] };
+}
+

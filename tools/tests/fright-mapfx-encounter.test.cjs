@@ -93,8 +93,9 @@ test('wiring: the encounter critter is tappable, its ring takes no touches; spar
   const api = read('src/api/endpoints/fright/types.ts');
   assert.match(api, /readonly chaos_hour\?: boolean \| null;/);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(sources, /onPress=\{onEncounterPress \? \(\) => onEncounterPress\(encounter\.key\) : undefined\}/);
-  const ring = sources.slice(sources.indexOf('<Marker key={`fe-'), sources.indexOf('</Marker>', sources.indexOf('<Marker key={`fe-')));
+  assert.match(sources, /onPress=\{encounterShown && encounter && onEncounterPress \? \(\) => onEncounterPress\(encounter\.key\) : undefined\}/, 'tappable only while shown');
+  const ring = sources.slice(sources.indexOf('<Marker key="fe"'), sources.indexOf('</Marker>', sources.indexOf('<Marker key="fe"')));
+  assert.ok(ring.length > 0, 'the ring marker exists');
   assert.doesNotMatch(ring, /onPress/);
   assert.match(sources, /id: `sparks:\$\{encounter\.key\}`, minGapMs: 20_000, maxGapMs: 45_000, durationMs: 1500/);
   assert.match(sources, /chaos=\{encounterChaos\(encounter\)\}/);
