@@ -27,6 +27,7 @@ import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { clusterFinds } from './findEdges';
 import type { FingerSide } from './PrepItem';
 import { screenBearing, walkCloserLine } from './findPresentation';
+import { nearestFind } from './nearestFind';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
 import * as RootNavigation from '../../RootNavigation';
@@ -101,6 +102,11 @@ interface Props {
   onIntroOpenChange?: (open: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
+  /**
+   * How to Play's "Let's go!" sends `highlightNearestFind` (a timestamp) with
+   * Explore: each new value glides the camera to the nearest find once.
+   */
+  highlightNearestFind?: number | null;
 }
 
 /**
@@ -109,7 +115,7 @@ interface Props {
  */
 export default function HomeExplore({ onPrepItemNearby, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, highlightNearestFind = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -355,6 +361,17 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     return { item, distance, inRange: !loadError && isInPickupRange(distance) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [prepItems, lat, lng, loadError]);
+  // How to Play hand-off: glide to the nearest find once per request (waits for the first finds to load).
+  const [findFocus, setFindFocus] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
+  const handledHighlight = useRef<number | null>(null);
+  useEffect(() => {
+    if (highlightNearestFind == null || handledHighlight.current === highlightNearestFind || !homeLocationConfirmed) return;
+    const nearest = nearestFind(placed);
+    if (!nearest) return;
+    handledHighlight.current = highlightNearestFind;
+    setFindFocus({ latitude: nearest.latitude, longitude: nearest.longitude, requestId: highlightNearestFind });
+    queueHaptic('tickSelection', 1);
+  }, [highlightNearestFind, placed, homeLocationConfirmed]);
   useEffect(() => {
     if (safetyLineShown || !homeLocationConfirmed) return;
     const top = activePrepItems.reduce((best, item) => Math.max(best, item.rarity ?? 0), 0);
@@ -524,7 +541,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         setContainerSize(current => (current.width === width && current.height === height ? current : { width, height }));
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled}
+      <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
         extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}

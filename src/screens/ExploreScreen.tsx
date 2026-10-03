@@ -138,6 +138,7 @@ function ExploreScreen() {
   const mapIdle = useUserIdle();
   const route = useRoute();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
+  const highlightNearestFind = (route.params as { highlightNearestFind?: number } | undefined)?.highlightNearestFind ?? null;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
@@ -938,7 +939,7 @@ function ExploreScreen() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} />
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
