@@ -36,3 +36,9 @@ export function clusterFinds(points: readonly { pivot: number; x: number; y: num
   const chromeless = leaders.filter(point => point.y < clearTop).map(point => point.pivot);
   return { counts, hidden, chromeless };
 }
+
+/** Whether a find's map spot sits under the reward banner (its tags would poke through the cascade). */
+export function bannerCovers(point: { x: number; y: number }, size: { width: number; height: number }, bottomSlot: number): boolean {
+  const bannerBottom = size.height - bottomSlot;
+  return Math.abs(point.x - size.width / 2) < 175 && point.y > bannerBottom - 110 && point.y < bannerBottom + 100;
+}

@@ -285,7 +285,7 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.doesNotMatch(moment, /snapshot\?\.\(\)/, 'no per-open map snapshot');
-  assert.match(moment, /closeRide\(true\);\s*setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
+  assert.match(moment, /closeRide\(true\);[\s\S]{0,400}setRide\(current => \(current \? \{ \.\.\.current, flyTo/);
   assert.doesNotMatch(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /react-native-svg/);
 });
 
@@ -334,7 +334,7 @@ test('round 4: catch N+1 opens with its own rarity, speed and hint rules (behavi
   assert.equal(cancelled.opens.length, 0);
   // The component uses this gate and clears the ride item on finish.
   assert.match(read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx'), /primeGate\.rendered\(item\?\.id\)/);
-  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /const finish = [\s\S]{0,300}setRideItem\(null\)/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /const finish = [\s\S]{0,700}setRideItem\(null\)/);
 });
 
 test('round 4: a Blurry timer never touches a newer print (keyed prints)', () => {
@@ -384,20 +384,35 @@ test('round 4: open-second decoupling and sound sync', () => {
 
 const rides = loadTs('src/screens/ExploreScreen/ridePhoto/rides/catalog.ts');
 
-test('round 4 variety: rides are themed by set, wilder for Legendary, never the same twice in a row', () => {
+test('round 6 variety: themed x2, no repeats, the one before at half, every ride within any 4 catches, none over 40%', () => {
   const ready = rides.READY_RIDES;
   assert.deepEqual(plain(ready), ['coaster', 'flume', 'teacups']);
-  // Sweet Treats leans to teacups; Parade Day (carousel not built yet) falls back to teacups.
-  const count = (opts, kind) => Array.from({ length: 400 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
-  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 200);
-  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 200);
-  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 200, 'dark ride falls back to the coaster');
-  assert.ok(count({ setName: 'Snack Stand', rarity: 5 }, 'teacups') < 60, 'Legendary avoids the gentle rides');
+  // A fresh player still leans to the set's ride (fallbacks: Parade Day to teacups, Spooky Snacks to the coaster).
+  const count = (opts, kind) => Array.from({ length: 2000 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
+  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 780);
+  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 780);
+  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 780);
   for (let seed = 0; seed < 200; seed++) {
-    for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, lastRide: last }), last);
+    for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, recent: [last] }), last);
   }
-  for (let seed = 0; seed < 50; seed++) assert.ok(ready.includes(rides.pickRide({ rarity: 2, seed })), 'only ready rides');
-  assert.equal(rides.pickRide({ rarity: 3, seed: 9, ready: ['flume'], lastRide: 'flume' }), 'flume', 'one ride: repeats are allowed');
+  assert.equal(rides.pickRide({ rarity: 3, seed: 9, ready: ['flume'], recent: ['flume'] }), 'flume', 'one ride: repeats are allowed');
+  // 10,000 seeded catches per set and rarity, feeding the picker its own history.
+  for (const set of ['Snack Stand', 'Sweet Treats', 'Ride Day Gear', 'Spooky Snacks', 'Parade Day', 'Night Glow', 'Churro Cart', 'Souvenir Shop', null]) {
+    for (const rarity of [2, 3, 4, 5]) {
+      const recent = []; const counts = {}; const lastSeen = {}; let cycle = 0, pairs = 0;
+      for (let i = 0; i < 10000; i++) {
+        const k = rides.pickRide({ setName: set, rarity, seed: i * 7919 + 13, recent });
+        if (recent.length >= 2) { pairs++; if (k !== recent[0] && k !== recent[1]) cycle++; }
+        counts[k] = (counts[k] || 0) + 1;
+        recent.unshift(k); recent.length = Math.min(recent.length, 4);
+        lastSeen[k] = i;
+        if (i >= 3) for (const r of ready) assert.ok(i - (lastSeen[r] ?? -1) <= 3, `${set} ${rarity}: ${r} missing from 4 catches in a row`);
+      }
+      for (const r of ready) assert.ok(counts[r] / 10000 <= 0.4, `${set} ${rarity}: ${r} at ${counts[r] / 100}%`);
+      // Surprise: not a strict round robin. 50 to 65% of picks continue the cycle.
+      assert.ok(cycle / pairs >= 0.5 && cycle / pairs <= 0.65, `${set} ${rarity}: cycle continuation ${(cycle / pairs * 100).toFixed(1)}%`);
+    }
+  }
 });
 
 test('round 4 variety: scene sky, season, photobombs and the rides-snapped line', () => {
@@ -414,7 +429,13 @@ test('round 4 variety: scene sky, season, photobombs and the rides-snapped line'
     if (v.photobomb === 'gull') assert.notEqual(v.sky, 'night');
     assert.equal(rides.sceneVariant({ seed, kind: 'teacups' }).sky, v.sky, 'seeded: a reopen looks the same');
   }
-  assert.equal(rides.ridesSnappedLine(['coaster', 'flume', 'flume', 'teacups']), '3 of 8 rides snapped');
+  assert.equal(rides.ridesSnappedLine(['coaster', 'flume', 'flume', 'teacups']), '3 of 3');
+  // Honest: the count is against the rides a find can actually take.
+  const takeable = new Set(Array.from({ length: 3000 }, (_, seed) => rides.pickRide({ rarity: 1 + (seed % 5), seed })));
+  assert.equal(rides.ridesSnappedLine([]).split(' of ')[1], String(takeable.size), 'denominator = rides pickRide can return');
+  const stamps = plain(rides.rideStamps(['coaster'], 'flume'));
+  assert.deepEqual(stamps.slice(0, 3).map(s => s.state), ['snapped', 'new', 'open']);
+  assert.equal(stamps.filter(s => s.state === 'soon').length, rides.ALL_RIDES.length - rides.READY_RIDES.length, 'unbuilt rides are dim coming-soon silhouettes, no number');
 });
 
 test('round 4 variety: every ride is a config with one paint for the live scene and the photo', () => {
@@ -444,7 +465,8 @@ test('round 4 map: overlapping finds collapse into one marker with a count; find
   assert.deepEqual(plain(out.hidden), [1]);
   assert.deepEqual(plain(out.chromeless), [4]);
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
-  assert.match(marker, /is_new_variant && !chromeless && count === 1/, 'never two NEW tags stacked');
+  assert.match(marker, /is_new_variant && count === 1/, "never two NEW tags stacked");
+  assert.match(marker, /newBadge, chromeless && styles.chromeOff/, "chrome hides by opacity, never by unmounting");
   assert.match(marker, /groundShadow: \{[^}]*borderRadius: 18[\s\S]*?scaleY: 0\.28/, 'round ground shadow, not a bar');
 });
 
@@ -523,7 +545,8 @@ test('round 5: How to Play hand-off glides to the nearest find and pulses it onc
 test('round 5: kid clarity: hand points down at the disc, miss chip shows the ride vehicle', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.doesNotMatch(src, /rotate: '-60deg'/);
-  assert.match(src, /handArt: \{ width: 36, height: 46 \}/);
+  assert.match(src, /handArt: \{ width: 44, height: 40 \}/);
+  assert.match(src, /fin-pointer\.webp/, "the hint pointer is Alex's own fins");
   assert.match(src, /VEHICLE_ICON\[stage\.kind\]/);
   assert.match(src, /setPlateLeft\(/, 'the plate sits opposite the vehicle');
 });
@@ -546,7 +569,7 @@ test('round 5: ride SFX are wired on the pass clock, with ambience beds per ride
   }
   assert.match(audio, /'ride\.organ'/);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /if \(stage\.kind === 'flume'\) at\(80, \(\) => catchSound\('flumeSplash'/, 'the splash sound lands with the crown');
+  assert.match(src, /if \(stage\.kind === 'flume'\) \{ const d = arriveIn - 80; if \(d >= 0\) rideTimers\.current\.push\(setTimeout\(\(\) => catchSound\('flumeSplash'/, 'the splash sound lands with the crown, on every pass (kept through a shot)');
   assert.match(src, /startRideAmbience\(stage\.kind\)/);
   assert.match(src, /catchMark\('close'\);\s*stopRideAmbience\(\);/);
 });
@@ -566,4 +589,55 @@ test('round 5: Home Hunt and Ride Photo use the app-wide rarity palette (drift g
   const files = ['src/screens/ExploreScreen/HomeCatchMoment.tsx', 'src/screens/ExploreScreen/PrepItem.tsx',
     'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx', 'src/screens/ExploreScreen/HomeExplore.tsx'];
   for (const f of files) assert.ok(!/#14B3A3|#2F7BFF|#A54BFF|#9AA4B2/i.test(read(f)), `${f} uses rarityColor()`);
+});
+
+test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /develop\.value = withTiming\(1, \{ duration: 160/);
+  assert.match(src, /stampIn\.value = withDelay\(150,/, 'the plate lands after the colour');
+  assert.match(src, /burst\.value = withDelay\(150,/);
+  assert.match(src, /PRINT_FLIGHT_MS, \(\) => catchSound\('badge'\)/, 'the badge thunk is on the flight clock');
+  assert.match(src, /translateX: shake\.value \}, \{ scale: shake\.value === 0 \? 1 : overscan \}/, 'the shake is overscanned');
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /if \(!warm \|\| window\.width === 0 \|\| rewardBusy\) return;/, 'no stage builds during a reward');
+  assert.match(moment, /READY_RIDES\.flatMap\(kind => \(\['day', 'sunset', 'night'\]/, 'every ride kind and sky is warmed at launch idle');
+  assert.match(moment, /requestIdleCallback/);
+  assert.doesNotMatch(moment, /setTimeout\(\(\) => setWarmShader\(true\), 2500\)/, 'no fixed warm timer');
+  assert.match(moment, /const stageFor = rideItem \?\? primed\?\.item \?\? readyItem;/, 'the map only shows a stage that is already built');
+  assert.match(moment, /if \(ready\(\)\) \{ setReadyItem\(target\); clearInterval\(poll\); \}/, 'the finished ride stays until the next is ready');
+  const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
+  const size = { width: 400, height: 800 };
+  assert.equal(edges.bannerCovers({ x: 200, y: 560 }, size, 190), true);
+  assert.equal(edges.bannerCovers({ x: 20, y: 560 }, size, 190), false);
+  assert.equal(edges.bannerCovers({ x: 200, y: 200 }, size, 190), false);
+  const stage = read('src/screens/ExploreScreen/ridePhoto/rides/stage.ts');
+  assert.match(stage, /y: top \+ 12, w: poleW/, 'a hung camera never reaches into the status bar');
+});
+
+test('ship fixes: the real print landing is logged (D2), stamp row is honest', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /if \(done\) \{ runOnJS\(markLanded\)\(Date\.now\(\)\); runOnJS\(onPrintLanded\)\(\); \}/);
+  assert.match(src, /catchMark\(`print-land ui=\$\{uiMs\}/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /New ride!<\/Text>\s*\{newRide\.stamps\.filter\(stamp => stamp\.state !== 'soon'\)/, 'New ride!, then the 3 stamps');
+  assert.doesNotMatch(moment, /name="lock"/, 'no locks in the row');
+  assert.doesNotMatch(moment, /rideChip: \{[^}]*backgroundColor: '#ffcf3b'/, 'no yellow progress-bar fill');
+});
+
+test('post-ship: every seeded track profile keeps the car on its rail and the timed part unchanged', () => {
+  const shapes = loadTs('src/screens/ExploreScreen/ridePhoto/rides/shapes.ts');
+  const W = 402, H = 680;
+  for (const t of ['family', 'hill', 'dark', 'launch']) {
+    const timed = plain(shapes.COASTER_SHAPES[t]).filter(([x]) => x <= shapes.COASTER_FRAME_AT[t] + 0.06);
+    for (let p = 0; p < 3; p++) {
+      const shape = plain(shapes.coasterShape(t, p));
+      assert.deepEqual(shape.slice(0, timed.length), timed, 'station, lift, drop and the camera moment never change');
+      const lut = track.buildLut(shape, W, { top: Math.max(130, H * 0.3), height: H * 0.6 }, 0.47 * W, 160, shapes.COASTER_MAX_PITCH);
+      assert.ok(lut.clampError < (6 * Math.PI) / 180, `coaster ${t} profile ${p}`);
+    }
+  }
+  for (let p = 0; p < 3; p++) {
+    const lut = track.buildLut(shapes.flumeShape(p), W, { top: 160, height: H * 0.66 }, 0.73 * W, 200, shapes.FLUME_MAX_PITCH);
+    assert.ok(lut.clampError < (6 * Math.PI) / 180, `flume profile ${p}`);
+  }
 });

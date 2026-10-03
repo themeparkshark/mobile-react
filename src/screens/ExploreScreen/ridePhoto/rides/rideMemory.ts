@@ -10,6 +10,8 @@ import { ALL_RIDES, type RideKind } from './catalog';
 const KEY = 'tps.ridePhoto.ridesSnapped.v1';
 let snapped: RideKind[] = [];
 let lastRide: RideKind | null = null;
+/** Newest first, up to 4: the picker spreads rides across them. */
+let recent: RideKind[] = [];
 let loaded: Promise<void> | null = null;
 let generation = 0;
 
@@ -18,7 +20,8 @@ export function loadRideMemory(): Promise<void> {
     const gen = generation;
     loaded = AsyncStorage.getItem(KEY).then(raw => {
       if (gen !== generation) return;
-      const parsed = raw ? JSON.parse(raw) as { snapped?: string[]; last?: string } : {};
+      const parsed = raw ? JSON.parse(raw) as { snapped?: string[]; last?: string; recent?: string[] } : {};
+      recent = (parsed.recent ?? []).filter((kind): kind is RideKind => (ALL_RIDES as string[]).includes(kind)).slice(0, 4);
       snapped = (parsed.snapped ?? []).filter((kind): kind is RideKind => (ALL_RIDES as string[]).includes(kind));
       lastRide = parsed.last && (ALL_RIDES as string[]).includes(parsed.last) ? parsed.last as RideKind : null;
     }).catch(() => undefined);
@@ -28,6 +31,10 @@ export function loadRideMemory(): Promise<void> {
 
 export function lastRideKind(): RideKind | null {
   return lastRide;
+}
+
+export function recentRides(): readonly RideKind[] {
+  return recent;
 }
 
 export function ridesSnapped(): readonly RideKind[] {
@@ -40,7 +47,8 @@ export function recordRide(kind: RideKind, serverSnapped?: readonly string[] | n
   const fresh = !snapped.includes(kind);
   if (fresh) snapped = [...snapped, kind];
   lastRide = kind;
-  void AsyncStorage.setItem(KEY, JSON.stringify({ snapped, last: kind })).catch(() => undefined);
+  recent = [kind, ...recent].slice(0, 4);
+  void AsyncStorage.setItem(KEY, JSON.stringify({ snapped, last: kind, recent })).catch(() => undefined);
   return fresh;
 }
 
@@ -49,6 +57,7 @@ export function resetRideMemoryForPreview(): void {
   generation += 1;
   snapped = [];
   lastRide = null;
+  recent = [];
   // A later load must not restore an older session's list over the reset.
   loaded = Promise.resolve();
   void AsyncStorage.removeItem(KEY).catch(() => undefined);
