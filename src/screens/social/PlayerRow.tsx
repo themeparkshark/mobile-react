@@ -60,7 +60,9 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
     shownStatus.current = status;
     lockedUntil.current = Date.now() + LOCK_MS;
   }
-  useEffect(() => { setHearted(actions.hearted(player.id)); setBurst(false); setFresh(false); setFlying(false); }, [player.id, actions]);
+  // Only a different player resets the row (actions change identity whenever the signed-in player refreshes).
+  const heartedNow = actions.hearted;
+  useEffect(() => { setHearted(heartedNow(player.id)); setBurst(false); setFresh(false); setFlying(false); }, [player.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const surface = useContext(SurfaceContext);
   const pop = useSharedValue(0);

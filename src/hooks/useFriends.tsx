@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo } from 'react';
+import { useCallback, useContext, useMemo, useRef } from 'react';
 import acceptFriendRequest from '../api/endpoints/players/accept-friend-request';
 import cancelFriendRequest from '../api/endpoints/players/cancel-friend-request';
 import denyFriendRequest from '../api/endpoints/players/deny-friend-request';
@@ -35,6 +35,9 @@ const inFlight = new Set<number>();
 export function useFriendActions() {
   const { refreshPlayer, player: viewer } = useContext(AuthContext);
   const viewerId = viewer?.id ?? null;
+  // AuthProvider makes a new refreshPlayer each render: read it through a ref so actions stay stable.
+  const refreshRef = useRef(refreshPlayer);
+  refreshRef.current = refreshPlayer;
   const surface = useContext(SurfaceContext);
 
   const run = useCallback(async (player: Target, verb: FriendVerb, call: () => Promise<unknown>, onError: string) => {
@@ -47,7 +50,7 @@ export function useFriendActions() {
     if (before === 'incoming' && after !== 'incoming') adjustPendingIncoming(-1);
     try {
       await call();
-      if (after === 'friends' || before === 'friends') void refreshPlayer?.().catch(() => undefined);
+      if (after === 'friends' || before === 'friends') void refreshRef.current?.().catch(() => undefined);
       return after;
     } catch {
       setStatus(player.id, before);
@@ -59,7 +62,7 @@ export function useFriendActions() {
     } finally {
       inFlight.delete(player.id);
     }
-  }, [refreshPlayer, surface]);
+  }, [surface]);
 
   return useMemo(() => ({
     /** Add (or, if they already asked, this is a Yes). */
