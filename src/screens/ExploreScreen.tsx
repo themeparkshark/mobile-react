@@ -72,6 +72,7 @@ import useNightShow from '../components/map/alive/useNightShow';
 // Fin-ister Nights (Halloween night mode layered on the park game).
 import useFrightNight from '../hooks/useFrightNight';
 import { FrightLayer, FrightPill, useFrightEngine } from '../components/fright';
+import { frightHelpChoices, frightOwnsParkTips, hideEveryRideOpen } from '../services/fright/hooks';
 import type { FrightMapInput } from '../components/map/fright';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
@@ -105,7 +106,7 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
-import { GameIcon, GameRichText } from '../ui';
+import { GameIcon, GameRichText, gameAlert } from '../ui';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
 import HelpButton from '../components/help/HelpButton';
@@ -240,7 +241,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
-  const { explain } = useHelp();
+  const { explain, openHowToPlay } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -285,30 +286,34 @@ function ExploreScreen() {
     navigation.setParams({ focusRide: undefined });
   }, [focusRide, navigation, park?.id, guideTo]);
 
+  // On an event night the Fin-ister intro owns the first open; Finn's onboarding waits for it.
+  const [frightIntroOwns, setFrightIntroOwns] = useState(false);
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
-    if (mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding')) {
+    if (mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
       const timer = setTimeout(() => {
         startTutorial('onboarding', { inPark: !!park });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
 
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
     if (!mapFocused || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
-      !hasCompleted('onboarding') || hasCompleted('park_arrival')) return;
+      !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns) return;
     const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
     return () => clearTimeout(timer);
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
   
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
+  // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
+  const [parkTipShowing, setParkTipShowing] = useState(false);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
@@ -505,13 +510,40 @@ function ExploreScreen() {
   // Fin-ister Nights: tonight's state (server clock, phases, polling) and the in-park engine.
   const frightNight = useFrightNight(player ? park?.id ?? null : null, mapFocused && !!player);
   const frightEngine = useFrightEngine(frightNight, { parkId: park?.id ?? null, focused: mapFocused, location,
-    sampleRef: latestLocationSampleRef, blocked: !isReady || isActive || homeIntroOpen });
-  const frightMap = useMemo<FrightMapInput | null>(() => frightNight.tonight && (frightNight.modeOn || frightNight.phase === 'after')
+    sampleRef: latestLocationSampleRef, blocked: !isReady || isActive || homeIntroOpen || parkTipShowing });
+  useEffect(() => { setFrightIntroOwns(frightEngine.introPending); }, [frightEngine.introPending]);
+  const frightStressSpots = useRef<readonly { latitude: number; longitude: number }[]>([]);
+  frightStressSpots.current = frightNight.tonight?.spots ?? [];
+  // Dev-only capture driver (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=card|profile|collection): opens that screen
+  // 25 s after the map loads so simulator captures can show real flows without touch input.
+  useEffect(() => {
+    const target = __DEV__ ? process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_NAV : undefined;
+    if (!target) return;
+    const timer = setTimeout(() => {
+      const slug = frightNight.tonight?.event?.slug;
+      if (target === 'card' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug });
+      if (target === 'profile') (navigation as any).navigate('Profile');
+      if (target === 'collection') (navigation as any).navigate('SetCollection');
+    }, 25_000);
+    return () => clearTimeout(timer);
+  }, [frightNight.tonight?.event?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Dev-only stress (EXPO_PUBLIC_FRIGHT_STRESS=1): every 45 s the mode turns off for 15 s (the map input
+  // goes away and comes back), exercising the one-time mount and unmount of the fright markers.
+  const [stressOff, setStressOff] = useState(false);
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_FRIGHT_STRESS !== '1') return;
+    let off = false;
+    const timer = setInterval(() => { off = !off; setStressOff(off); }, off ? 15_000 : 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const frightMap = useMemo<FrightMapInput | null>(() => !stressOff && frightNight.tonight /* mounted for the whole event-park session: markers never churn (MapLibre insert crash); active/phase fade them */
     && frightNight.eventPark ? {
       tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,
       player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
       cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
-    } : null, [frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+      onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
+      tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
+    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
@@ -596,6 +628,21 @@ function ExploreScreen() {
       .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
+  // Dev-only stress for the MapLibre marker guard (EXPO_PUBLIC_FRIGHT_STRESS=1): pans and zooms
+  // across every Fin-ister spot every 2.5 s so culling and LOD churn as hard as a walking guest.
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_FRIGHT_STRESS !== '1') return;
+    let i = 0;
+    const timer = setInterval(() => {
+      const spots = frightStressSpots.current;
+      if (!spots.length) return;
+      const s = spots[i % spots.length];
+      const zoom = [15.2, 16.4, 17.6, 18.6][i % 4];
+      i += 1;
+      setMapFocusRequest({ latitude: s.latitude, longitude: s.longitude, zoom, requestId: Date.now() });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
   const clusterRef = useRef({ rideClusters, mapZoom }); clusterRef.current = { rideClusters, mapZoom };
   // Tapping a folded island zooms into it; a lone island toggles selection.
   const handleTaskPress = useCallback((task: TaskType) => {
@@ -827,14 +874,17 @@ function ExploreScreen() {
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
   };
   const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
-  const parkTip = parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
-    rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
+  // While Fin-ister Nights is on (or its exit / Marquee card is up) the generic park tip stays away.
+  const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
+    ? null : parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
+      rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
   const parkTipReady = mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
-    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
+  useEffect(() => { setParkTipShowing(!!player && !!parkTip && parkTipReady); }, [player, parkTip, parkTipReady]);
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
   const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
@@ -960,7 +1010,12 @@ function ExploreScreen() {
             }}
           >
             {/* How to play, reachable at the park too (the home menu is not shown here). */}
-            <HelpButton topic="park" size={44} style={{ marginBottom: 10, marginLeft: 13 }} label="How to play at the park" />
+            {/* One "?": while Fin-ister Nights is on it offers the Fin-ister tutorial or the park help. */}
+            <HelpButton topic="park" size={44} style={{ marginBottom: 10, marginLeft: 13 }}
+              label={frightNight.modeOn ? `How to play: ${frightNight.title} or the park` : 'How to play at the park'}
+              onPress={frightNight.modeOn ? () => gameAlert('How to play', undefined, frightHelpChoices({
+                title: frightNight.title, onFright: frightEngine.replayTutorial, onPark: () => openHowToPlay('park'),
+              })) : undefined} />
             {/* Queue Times - moved from right side */}
             <View style={{ marginBottom: 8 }}>
               <Button
@@ -1117,7 +1172,7 @@ function ExploreScreen() {
         {/* Ride Control floats over the map so the map runs right up to the header. */}
         {player && (
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
-            <RideControlBar control={rideControl} tasks={visibleTasks}
+            <RideControlBar control={rideControl} tasks={visibleTasks} hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
               onFocusTask={(task) => setSelectedTask(task)} />
             <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
               mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
@@ -1132,7 +1187,7 @@ function ExploreScreen() {
                 const anchor = nightShow.show?.anchor;
                 if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
               }} />}
-            {frightNight.modeOn && <FrightPill night={frightNight} engine={frightEngine} onHelp={frightEngine.replayTutorial} />}
+            {frightNight.modeOn && <FrightPill night={frightNight} engine={frightEngine} />}
           </View>
         )}
         {leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder={() => true}
@@ -1417,7 +1472,7 @@ function ExploreScreen() {
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
         homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
-      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 8} />}
+      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
   );
 }

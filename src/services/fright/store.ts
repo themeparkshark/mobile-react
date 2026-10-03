@@ -15,6 +15,8 @@ export interface FrightSnapshot {
   /** Spooky effects off (calm mode). */
   readonly calm: boolean;
   readonly title: string | null;
+  /** Chaos Hour is switched on server-side (config.encounters_enabled). */
+  readonly encountersEnabled?: boolean;
 }
 
 export const FRIGHT_OFF: FrightSnapshot = {

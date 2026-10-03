@@ -138,3 +138,76 @@ test('fright copy and art stay kid-safe and free of real event names', () => {
   const total = fs.readdirSync(sounds).reduce((sum, f) => sum + fs.statSync(path.join(sounds, f)).size, 0);
   assert.ok(total < 1_000_000, `fright sounds are ${total} bytes`);
 });
+
+test('tier cap: the server cap clamps; without one the mode runs lite while ON', () => {
+  const t = args => fb.frightTier({ alive: 'full', spooky: true, reducedMotion: false, ...args });
+  assert.equal(t({ cap: 'lite' }), 'lite');
+  assert.equal(t({ cap: 'calm' }), 'calm');
+  assert.equal(t({ cap: 'full' }), 'full');
+  assert.equal(t({ alive: 'lite', cap: 'full' }), 'lite', 'a cap never raises the tier');
+  assert.equal(t({ reducedMotion: true, cap: 'full' }), 'calm');
+  assert.equal(fb.frightTierCap(undefined, true), 'lite', 'default while the mode is ON');
+  assert.equal(fb.frightTierCap(null, false), null);
+  assert.equal(fb.frightTierCap('full', true), 'full', 'the server can lift it');
+  assert.equal(fb.frightTierCap('calm', true), 'calm');
+  assert.equal(fb.frightTierCap('bogus', true), 'lite');
+  const state = read('src/components/map/fright/useFrightState.ts');
+  assert.match(state, /cap: frightTierCap\(input\.tierCap, livePhase\)/);
+});
+
+test('ambient sound bed is opt-in; thunder and pops follow Spooky and phones-down only', () => {
+  assert.equal(fb.ambienceOn({}, true), false, 'default off');
+  assert.equal(fb.ambienceOn({ ambience: false }, true), false);
+  assert.equal(fb.ambienceOn({ ambience: true }, true), true);
+  assert.equal(fb.ambienceOn({ ambience: true }, false), false, 'quiet or Spooky off still silences it');
+  const layer = read('src/components/map/fright/FrightMapLayer.tsx');
+  assert.match(layer, /useFrightSoundBed\(ambienceOn\(input, effectsOn\)/);
+  assert.match(layer, /const thunderOn = effectsOn && /, 'thunder does not need ambience');
+});
+
+test('intro: one thunder only (the tutorial plays it); the map stays quiet, then lights the haunts', () => {
+  assert.equal(fb.introStep(null, 'intro'), 'hold');
+  assert.equal(fb.introStep('intro', 'intro'), 'none');
+  assert.equal(fb.introStep('intro', null), 'light');
+  assert.equal(fb.introStep(null, null), 'none');
+  const layer = read('src/components/map/fright/FrightMapLayer.tsx');
+  const intro = layer.slice(layer.indexOf('// Season intro'), layer.indexOf('if (visible <= 0 || width <= 0'));
+  assert.ok(intro.length > 100);
+  assert.doesNotMatch(intro, /playThunder|flashAt|flashStrength/, 'no flash or thunder in the intro');
+  assert.match(intro, /step === 'light'/);
+});
+
+test('haunts are tappable with a name and wait chip; reefs and props stay non-interactive', () => {
+  assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: 'OPERATING', posted_minutes: 25 }), 'The Robot City · 25 min', 'minutes, never confused with metres');
+  assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: null, posted_minutes: null }), 'The Robot City');
+  assert.equal(fb.hauntChipLabel({ name: 'The Robot City', status: 'DOWN', posted_minutes: 25 }), 'The Robot City · Closed');
+  assert.equal(fb.HAUNT_CHIP_ZOOM, 16);
+  const sources = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(sources, /onPress=\{drawn && onHauntPress \? \(\) => onHauntPress\(haunt\.key\) : undefined\}/, 'hidden haunts take no taps');
+  assert.match(sources, /label=\{chips\.has\(haunt\.key\) \? hauntChipLabel\(haunt, beads\[haunt\.key\] !== undefined\) : null\}/);
+  const reefMarkers = sources.match(/<Marker key=(\{`f[rpe]-|"fe")[^>]*>/g) ?? [];
+  assert.ok(reefMarkers.length >= 3);
+  for (const m of reefMarkers) assert.doesNotMatch(m, /onPress/, 'reefs, props and the encounter take no taps');
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.match(sprites, /<View style=\{styles\.lantern\}>/, 'the facade view takes touches');
+  assert.match(sprites, /lantern: \{ width: LANTERN_W, height: LH \+ LANTERN_FOOT/);
+  const types = read('src/components/map/fright/types.ts');
+  assert.match(types, /readonly onHauntPress\?: \(spotKey: string\) => void;/);
+  assert.match(types, /readonly tierCap\?: 'full' \| 'lite' \| 'calm' \| null;/);
+  assert.match(types, /readonly ambience\?: boolean;/);
+});
+
+test('chips: only from zoom 16, and neighbouring haunts never stack their chips', () => {
+  const juke = { key: 'juke', latitude: 28.480557, longitude: -81.46841 };
+  const puzzle = { key: 'puzzle', latitude: 28.48037, longitude: -81.46844 }; // ~21 m away
+  const robot = { key: 'robot', latitude: 28.47779, longitude: -81.469558 };
+  assert.deepEqual([...fb.chipKeys([juke, puzzle, robot], 16.3)], ['juke', 'robot'], 'the nearer of two neighbours keeps its chip');
+  assert.deepEqual([...fb.chipKeys([puzzle, juke], 19.5)], ['puzzle', 'juke'], 'zoomed in, both fit');
+  assert.equal(fb.chipKeys([juke, robot], 15.9).size, 0, 'zoomed out: no chips');
+});
+
+test('Map re-applies a focus request made before the map first drew', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /focusCoordinate\?\.requestId, reducedMotion, covered\]\)/,
+    'a mount-time focus (previews, deep links) is dropped by the native camera until the map has drawn');
+});

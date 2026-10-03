@@ -6,9 +6,9 @@
  * sheets); the Skia placeholders only draw while art loads or if it fails.
  * `animated: false` draws a still frame.
  */
-import { BlurMask, Canvas, Circle, Group, Image as SkImage, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { BlurMask, Canvas, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { FrightAmbientAsset, FrightHauntLayers, FrightSheetAsset } from '../../../api/endpoints/fright/types';
@@ -21,7 +21,7 @@ import { flickerPlan, flickerProfile, silhouetteAt, silhouettePlan, windowLevel 
 import { hashString } from './random';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
 import { frightIntro } from './useFrightState';
-import type { FrightProp } from './frightBudget';
+import { chipShift, type FrightProp } from './frightBudget';
 
 /* ── Sheet frames ─────────────────────────────────────────────────────── */
 
@@ -43,6 +43,36 @@ function SheetFrame({ image, fw, fh, frame, row, x, y, opacity }: {
         <SkImage image={image} x={0} y={0} width={image.width() / 2} height={image.height() / 2} fit="fill" />
       </Group>
     </Group>
+  );
+}
+
+/* ── Soft edges ───────────────────────────────────────────────────────── */
+
+/**
+ * Masks its children to a soft ellipse inscribed in the box: fully opaque in
+ * the middle, fading to zero alpha before every edge. No fog sprite or
+ * critter cloud base ever shows a straight edge, at any zoom.
+ */
+export function SoftEllipse({ x, y, w, h, inner = 0.55, children }: {
+  x: number; y: number; w: number; h: number; inner?: number; children: ReactNode;
+}) {
+  const c = vec(x + w / 2, y + h / 2);
+  return (
+    <Mask mode="alpha" mask={
+      <Rect x={x} y={y} width={w} height={h}>
+        <RadialGradient c={c} r={w / 2} origin={c} transform={[{ scaleY: h / w }]}
+          colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']} positions={[0, inner, 1]} />
+      </Rect>
+    }>{children}</Mask>
+  );
+}
+
+/** Ground mist feathered to zero alpha on all four edges (never a hard band). */
+function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType; x: number; y: number; w: number; h: number; opacity: number }) {
+  return (
+    <SoftEllipse x={x} y={y} w={w} h={h} inner={0.35}>
+      <SkImage image={image} x={x} y={y} width={w} height={h} fit="fill" opacity={opacity} />
+    </SoftEllipse>
   );
 }
 
@@ -90,7 +120,10 @@ function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, i
       <Group transform={shadow}><Oval x={-10} y={-3} width={20} height={6} color="rgba(10,6,30,0.35)" /></Group>
       <Group transform={body}>
         {useSheet && sheet
-          ? <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 2} />
+          // The sheet's cloud base is a wide flat plate: mask it to a round, soft cloud.
+          ? <SoftEllipse x={-fw / 4} y={-fh / 2} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
+              <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 2} />
+            </SoftEllipse>
           : <CritterBody look={look} />}
       </Group>
     </Group>
@@ -125,11 +158,12 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
   const jumpStart = useSharedValue(-1000);
   useEffect(() => { if (jumpToken > 0) jumpStart.value = clock.value; }, [jumpToken, clock, jumpStart]);
   const seed = hashString(reefKey) % 10_000;
-  const mistW = W * 1.1;
-  const mistH = MIST_H * (mistW / MIST_W);
+  // Inside the canvas (a canvas edge would cut it into a hard band) and feathered on every side.
+  const mistW = W * 0.96;
+  const mistH = Math.min(H * 0.6, MIST_H * (mistW / MIST_W) * 1.6);
   return (
     <Canvas style={{ width: W, height: H }} pointerEvents="none">
-      {mist && <SkImage image={mist} x={cx - mistW / 2} y={cy - mistH * 0.6} width={mistW} height={mistH} opacity={0.6 * intensity} fit="fill" />}
+      {mist && <FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
       {Array.from({ length: count }, (_, i) => {
         const k = slugs.length ? i % slugs.length : 0;
         return (
@@ -152,7 +186,7 @@ export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }:
     <Canvas style={{ width: 52, height: 52 }} pointerEvents="none">
       <Oval x={4} y={36} width={44} height={12} color={NIGHT.fog} opacity={0.45 * Math.max(0.4, intensity)} />
       {still
-        ? <SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" />
+        ? <SoftEllipse x={6} y={2} w={40} h={41} inner={0.7}><SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" /></SoftEllipse>
         : <Group transform={[{ translateX: 26 }, { translateY: 42 }, { scale: 0.9 }]}><CritterBody look={look} /></Group>}
     </Canvas>
   );
@@ -162,6 +196,12 @@ export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }:
 
 const LW = 96;
 const LH = 100;
+/** Room under the facade for the bead and the name chip (always reserved, so the anchor never shifts). */
+const LANTERN_FOOT = 36;
+/** The marker is wider than the facade so the name chip is never squeezed to the facade's width. */
+const LANTERN_W = 168;
+/** The facade's ground point (glow pool center) as a marker anchor. */
+export const HAUNT_ANCHOR = { x: 0.5, y: (LH - 18) / (LH + LANTERN_FOOT) };
 const HOUSE = Skia.Path.MakeFromSVGString('M14 36 L38 12 L62 36 L62 74 L14 74 Z')!;
 const ROOF = Skia.Path.MakeFromSVGString('M9 38 L38 9 L67 38 L62 38 L38 15 L14 38 Z')!;
 const DOOR = Skia.Path.MakeFromSVGString('M32 74 L32 64 Q38 57 44 64 L44 74 Z')!;
@@ -282,11 +322,11 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
 
 /**
  * A haunt at its entrance: the facade from the server's layers (or its icon,
- * or the Skia placeholder), a warm glow pool, gold glow and a bead count
- * once survived, dim when closed. During the intro cinematic the haunts light
+ * or the Skia placeholder), a warm glow pool, gold glow and a check badge
+ * (the survived pin) once survived, dim when closed. During the intro cinematic the haunts light
  * one by one (120 ms apart).
  */
-export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion }: {
+export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label, chipX = null, screenW = 0, survivedPin = null }: {
   readonly spotKey: string;
   readonly flicker: string | null | undefined;
   readonly windows: number;
@@ -307,6 +347,13 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   readonly iconUrl: string | null;
   readonly intensity: number;
   readonly reducedMotion: boolean;
+  /** Name and posted wait chip ("The Robot City · 25m"); null hides it (zoomed out). */
+  readonly label: string | null;
+  /** The facade's projected screen x (points), to keep the chip 12 pt inside the screen edges. */
+  readonly chipX?: number | null;
+  readonly screenW?: number;
+  /** The survived pin art (assets.event_pins['ev-survived']); a gold check when missing. */
+  readonly survivedPin?: string | null;
 }) {
   const seed = hashString(spotKey);
   const base = useRemoteImage(layers?.base);
@@ -325,9 +372,12 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
     return 0.25 + 0.75 * on;
   });
   const showIcon = !base && !!iconUrl;
+  // The chip's real width (measured), so the edge clamp never guesses from the label length.
+  const [chipW, setChipW] = useState(0);
+  const shift = chipX !== null && chipW > 0 ? chipShift(chipX, chipW, screenW) : 0;
   return (
-    <View style={styles.lantern} pointerEvents="none">
-      <Canvas style={{ width: LW, height: LH }}>
+    <View style={styles.lantern}>
+      <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
         <Group opacity={lit}>
           <Circle cx={LW / 2} cy={LH - 18} r={36} opacity={glow}>
             <RadialGradient c={vec(LW / 2, LH - 18)} r={36} colors={[glowColor, `${glowColor}00`]} />
@@ -344,9 +394,17 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
         <Image source={{ uri: iconUrl! }} style={[styles.icon, dim && styles.iconDim]} contentFit="contain" cachePolicy="memory-disk" transition={0} />
       )}
       {done && (
-        <View style={styles.bead}>
-          <View style={styles.beadDot} />
-          <Text style={styles.beadText}>{beads > 1 ? `x${beads}` : '1'}</Text>
+        <View style={styles.survived} pointerEvents="none" accessibilityLabel={beads > 1 ? `Survived ${beads} times tonight` : 'Survived'}>
+          {survivedPin
+            ? <Image source={{ uri: survivedPin }} style={styles.survivedPin} contentFit="contain" cachePolicy="memory-disk" transition={0} />
+            : null}
+          <View style={styles.check}><Text style={styles.checkText}>✓</Text></View>
+        </View>
+      )}
+      {label && (
+        <View style={[styles.chip, dim && styles.chipDim, done && styles.chipDone, shift ? { transform: [{ translateX: shift }] } : null]}
+          onLayout={event => { const w = Math.round(event.nativeEvent.layout.width); if (Math.abs(w - chipW) > 1) setChipW(w); }}>
+          <Text style={styles.chipText} numberOfLines={1}>{label}</Text>
         </View>
       )}
     </View>
@@ -509,7 +567,7 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
   const batFrames = batAsset?.rows?.[0] ?? BAT_FRAMES;
   return (
     <Canvas style={{ width: PW, height: PH }} pointerEvents="none">
-      {mist && <SkImage image={mist} x={-20} y={PH - 70} width={PW + 40} height={70} fit="fill" opacity={0.55 * intensity} />}
+      {mist && <FeatheredMist image={mist} x={4} y={PH - 74} w={PW - 8} h={70} opacity={0.65 * intensity} />}
       {props.includes('eyes') && <Eyes seed={seed} clock={clock} sheet={eyesSheet} bush={bush} animated={take(true)} />}
       {props.includes('pumpkin') && <Pumpkin clock={clock} animated={take(false)} art={jack} asset={ambient?.['jack-o-lantern'] ?? null} />}
       {props.includes('lantern') && <HangingLantern seed={seed} clock={clock} animated={take(true)} art={lantern} asset={ambient?.lantern ?? null} />}
@@ -594,11 +652,19 @@ function TrailDot({ j, at }: { j: number; at: (lag: number) => { x: number; y: n
 }
 
 const styles = StyleSheet.create({
-  lantern: { width: LW, height: LH + 14, alignItems: 'center' },
+  // At least 44 pt wide and tall: the whole facade is the tap target.
+  lantern: { width: LANTERN_W, height: LH + LANTERN_FOOT, alignItems: 'center' },
+  chip: { maxWidth: LANTERN_W, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
+    backgroundColor: 'rgba(30,24,56,0.92)', borderWidth: 1.5, borderColor: NIGHT.lantern },
+  chipDim: { borderColor: NIGHT.dusk, opacity: 0.85 },
+  chipText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.moon },
   icon: { position: 'absolute', top: 10, width: 64, height: 64 },
   iconDim: { opacity: 0.5 },
-  bead: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: -8, paddingHorizontal: 6, paddingVertical: 1,
-    borderRadius: 9, backgroundColor: NIGHT.ink, borderWidth: 1.5, borderColor: NIGHT.candy },
-  beadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: NIGHT.candy },
-  beadText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.candy },
+  // Survived: the pin at the facade's top right with a check badge (replaces the old "1" bead).
+  survived: { position: 'absolute', top: 2, left: LANTERN_W / 2 + 14, width: 34, height: 34 },
+  survivedPin: { width: 34, height: 34 },
+  check: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, alignItems: 'center',
+    justifyContent: 'center', backgroundColor: NIGHT.candy, borderWidth: 2, borderColor: NIGHT.ink },
+  checkText: { fontSize: 11, lineHeight: 13, fontWeight: '900', color: NIGHT.ink },
+  chipDone: { borderColor: NIGHT.candy },
 });

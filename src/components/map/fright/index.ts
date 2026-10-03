@@ -3,6 +3,6 @@
  * MapView and FrightMapLayer above it when its `fright` prop is set.
  */
 export type { FrightMapInput } from './types';
-export { FrightMapSources } from './FrightMapSources';
+export { FrightMapSources, FrightNightTint } from './FrightMapSources';
 export { FrightMapLayer } from './FrightMapLayer';
-export { frightTier, frightWorstCase, phaseIntensity, frightVisibility } from './frightBudget';
+export { frightTier, frightWorstCase, phaseIntensity, frightVisibility, stableMarkerSpots } from './frightBudget';

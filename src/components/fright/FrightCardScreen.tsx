@@ -8,12 +8,17 @@
  * the 19th night glows extra bright.
  */
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFrightCard, type FrightCard, type FrightSlot } from '../../api/endpoints/fright';
-import { artFromCard, frameFor, pinImage, rememberFrightArt } from '../../services/fright/art';
+import { artFromCard, frameFor, orderCaseFiles, pinCounts, pinImage, rememberFrightArt, showTally } from '../../services/fright/art';
+import { getFrightSnapshot } from '../../services/fright/store';
+import { hauntsWord } from '../../services/fright/pace';
 import { COPY } from '../../services/fright/copy';
+import { withTimeout } from '../../services/fright/timeout';
+import { NightButton } from './ui';
 import { formatMinutes, nightDateLabel } from '../../services/fright/dates';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
@@ -50,6 +55,7 @@ export default function FrightCardScreen() {
   const params = (route.params ?? {}) as Partial<FrightCardParams>;
   const [card, setCard] = useState<FrightCard | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [recapNight, setRecapNight] = useState<string | null>(null);
   const [misty, setMisty] = useState(false);
   const taps = useRef<number[]>([]);
@@ -58,12 +64,13 @@ export default function FrightCardScreen() {
   useEffect(() => {
     if (!params.eventSlug) { setFailed(true); return; }
     let current = true;
-    void getFrightCard(params.eventSlug, params.playerId).then(next => {
+    setFailed(false);
+    void withTimeout(getFrightCard(params.eventSlug, params.playerId)).then(next => {
       if (!current) return;
       if (next) { setCard(next); rememberFrightArt(artFromCard(next.art)); } else setFailed(true);
     });
     return () => { current = false; };
-  }, [params.eventSlug, params.playerId]);
+  }, [params.eventSlug, params.playerId, attempt]);
 
   const brightNight = card?.nights === 19;
   useEffect(() => {
@@ -91,7 +98,10 @@ export default function FrightCardScreen() {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}><GameIcon name="back" size={34} /></Pressable>
-        <Text style={styles.empty}>{failed ? 'The Lantern is dark right now. Try again soon.' : 'The Lantern is loading. Hang tight.'}</Text>
+        <Text style={styles.empty} accessibilityLiveRegion="polite">
+          {failed ? 'Couldn\'t load your Deep Lantern. Check your signal and try again.' : 'The Lantern is loading. Hang tight.'}</Text>
+        {failed && params.eventSlug && <NightButton label="Retry" icon="retry" onPress={() => setAttempt(value => value + 1)}
+          style={{ marginTop: 16, alignSelf: 'center', minWidth: 160 }} />}
       </View>
     );
   }
@@ -106,9 +116,15 @@ export default function FrightCardScreen() {
   const lanternProgress = card.lantern.next_at ? Math.min(1, card.lantern.parts / card.lantern.next_at) : 1;
   const friend = !!params.playerId;
 
+  const pinCount = pinCounts(card);
+  const files = orderCaseFiles(card.case_files);
+  // Team Chaos vs Team Control stays hidden until encounters ship (server flag via tonight, or real tally points).
+  const tallyOn = showTally(card.tally, getFrightSnapshot().encountersEnabled);
+
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>
+      {/* Sticky header under the safe area: nothing scrolls under the Dynamic Island. */}
+      <View style={[styles.sticky, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}><GameIcon name="back" size={34} /></Pressable>
           <View style={{ flex: 1 }}>
@@ -125,13 +141,15 @@ export default function FrightCardScreen() {
           </View>
         </View>
 
+      </View>
+      <ScrollView contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>
         <View style={styles.ringWrap}>
           {frame && <ArtImage uri={frame} style={styles.frame} />}
           <View style={[styles.ring, card.ten_in_one && styles.ringGold, frame ? styles.ringFramed : null]}>
             {haunts.map((slot, index) => <Bead key={slot.key} slot={slot} index={index} total={haunts.length} gold={card.ten_in_one} ended={ended} />)}
             <Pressable onPress={tapGlass} accessibilityRole="button" accessibilityLabel={`Deep Lantern, level ${card.lantern.level}`} style={styles.glass}>
               <Animated.View style={[styles.glassGlow, { opacity: brightNight ? glow : 0.55 }]} />
-              <ArtImage uri={card.art.chip} style={{ width: 70, height: 70 }} fallback={<GameIcon name="sparkle" size={52} />} />
+              <ArtImage uri={card.art.chip} style={{ width: 70, height: 70 }} fallback={<Image source={require('./art/lantern.webp')} style={{ width: 70, height: 70 }} contentFit="contain" />} />
               <Text style={styles.level}>{`Lv${card.lantern.level}`}</Text>
             </Pressable>
           </View>
@@ -146,12 +164,14 @@ export default function FrightCardScreen() {
         <View style={styles.bar}><View style={[styles.barFill, { width: `${Math.round(lanternProgress * 100)}%` }]} /></View>
         <Text style={styles.meta}>{card.lantern.next_at ? `${card.lantern.parts} of ${card.lantern.next_at} Parts to Lv${card.lantern.level + 1}` : 'Fully lit!'}</Text>
 
-        <Text style={styles.section}>Team Chaos vs Team Control</Text>
-        <View style={styles.tally} accessibilityLabel={`Chaos ${card.tally.chaos}, Control ${card.tally.control}`}>
-          <View style={[styles.tallyChaos, { flex: chaosShare }]} />
-          <View style={[styles.tallyControl, { flex: 1 - chaosShare }]} />
-        </View>
-        <Text style={styles.meta}>{`Chaos ${card.tally.chaos} · Control ${card.tally.control}${card.tally.my_side ? ` · You: Team ${card.tally.my_side === 'chaos' ? 'Chaos' : 'Control'}` : ''}`}</Text>
+        {tallyOn && <>
+          <Text style={styles.section}>Team Chaos vs Team Control</Text>
+          <View style={styles.tally} accessibilityLabel={`Chaos ${card.tally.chaos}, Control ${card.tally.control}`}>
+            <View style={[styles.tallyChaos, { flex: chaosShare }]} />
+            <View style={[styles.tallyControl, { flex: 1 - chaosShare }]} />
+          </View>
+          <Text style={styles.meta}>{`Chaos ${card.tally.chaos} · Control ${card.tally.control}${card.tally.my_side ? ` · You: Team ${card.tally.my_side === 'chaos' ? 'Chaos' : 'Control'}` : ''}`}</Text>
+        </>}
 
         <Text style={styles.section}>Haunts</Text>
         {haunts.map(slot => (
@@ -178,7 +198,7 @@ export default function FrightCardScreen() {
           </View>
         ))}
 
-        {pins.length > 0 && <Text style={styles.section}>{`Pins ${card.pins_earned} of ${card.pins_total}`}</Text>}
+        {pins.length > 0 && <Text style={styles.section}>{`Pins ${pinCount.earned} of ${pinCount.total}`}</Text>}
         <View style={styles.pins}>
           {pins.map(slot => (
             (() => {
@@ -195,37 +215,50 @@ export default function FrightCardScreen() {
         </View>
 
         <Text style={styles.section}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
-          {card.case_files.map(file => (
-            <View key={file.key} style={[styles.file, !file.found && styles.fileLocked, file.found && file.image ? styles.fileArt : null]}
-              accessibilityLabel={file.found ? `Case File ${file.number}. ${file.title}. ${file.body}` : `Case File ${file.number}, not found yet`}>
-              {file.found && file.image ? (
-                <>
-                  {/* Card front art; its title plate is blank, so the title is overlaid. */}
-                  <ArtImage uri={file.image} fit="cover" style={StyleSheet.absoluteFill} />
-                  <View style={styles.filePlate}>
+        {files.found.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+            {files.found.map(file => (
+              <View key={file.key} style={[styles.file, file.image ? styles.fileArt : null]}
+                accessibilityLabel={`Case File ${file.number}. ${file.title}. ${file.body}`}>
+                {file.image ? (
+                  <>
+                    {/* Card front art; its title plate is blank, so the title is overlaid. */}
+                    <ArtImage uri={file.image} fit="cover" style={StyleSheet.absoluteFill} />
+                    <View style={styles.filePlate}>
+                      <Text style={styles.fileTitle} numberOfLines={2}>{file.title}</Text>
+                      <Text style={styles.fileYear}>{file.year_label}</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.fileYear}>{`${file.number} · ${file.year_label}`}</Text>
                     <Text style={styles.fileTitle} numberOfLines={2}>{file.title}</Text>
-                    <Text style={styles.fileYear}>{file.year_label}</Text>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.fileYear}>{`${file.number} · ${file.year_label}`}</Text>
-                  <Text style={styles.fileTitle} numberOfLines={2}>{file.found ? file.title : '???'}</Text>
-                  {file.found ? <Text style={styles.fileBody} numberOfLines={4}>{file.body}</Text>
-                    : file.cold_case ? <Text style={styles.cold}>Cold Case</Text> : null}
-                </>
-              )}
-            </View>
-          ))}
-        </ScrollView>
+                    <Text style={styles.fileBody} numberOfLines={4}>{file.body}</Text>
+                  </>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+        {/* Locked files: small silhouettes, never tall empty tiles. */}
+        {files.locked.length > 0 && (
+          <View style={styles.lockedGrid}>
+            {files.locked.map(file => (
+              <View key={file.key} style={[styles.lockedFile, file.cold_case && styles.coldFile]}
+                accessibilityLabel={`Case File ${file.number}, ${file.cold_case ? 'cold case' : 'not found yet'}`}>
+                <GameIcon name="lock" size={14} />
+                <Text style={styles.lockedNum}>{file.number}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {card.recaps.length > 0 && <Text style={styles.section}>Your nights</Text>}
         {card.recaps.slice().sort((a, b) => b.night_on.localeCompare(a.night_on)).map(item => (
           <Pressable key={item.night_on} accessibilityRole="button" onPress={() => setRecapNight(item.night_on)} style={styles.recapRow}
-            accessibilityLabel={`${nightDateLabel(item.night_on)}. ${item.haunts} haunts. Open the Marquee.`}>
+            accessibilityLabel={`${nightDateLabel(item.night_on)}. ${hauntsWord(item.haunts)}. Open the Marquee.`}>
             <Text style={[styles.slotName, { flex: 1 }]}>{nightDateLabel(item.night_on) ?? item.night_on}</Text>
-            <Text style={styles.meta}>{`${item.haunts} haunts · ${formatMinutes(item.minutes_in_line)}`}</Text>
+            <Text style={styles.meta}>{`${hauntsWord(item.haunts)} · ${formatMinutes(item.minutes_in_line)}`}</Text>
             <GameIcon name="arrow" size={16} />
           </Pressable>
         ))}
@@ -242,6 +275,13 @@ export default function FrightCardScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: NIGHT.midnight },
+  sticky: { backgroundColor: NIGHT.midnight, paddingHorizontal: 16, paddingBottom: 6, zIndex: 2,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.25)' },
+  lockedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  lockedFile: { width: 40, height: 52, borderRadius: 8, backgroundColor: NIGHT.haunt, borderWidth: 1, borderColor: NIGHT.dusk,
+    alignItems: 'center', justifyContent: 'center', opacity: 0.7 },
+  coldFile: { borderColor: NIGHT.fog },
+  lockedNum: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.fog, marginTop: 2 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: 'Shark', fontSize: 24, color: NIGHT.candy },
