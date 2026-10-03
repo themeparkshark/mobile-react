@@ -64,7 +64,7 @@ export function buildTeacups(ctx: BuildCtx): RideStage {
     weather: variant.weather, photobomb: variant.photobomb, box, bulbs,
   };
   return {
-    kind: 'teacups', width, height, sky: variant.sky, frameT, stationT, box, cam, crop, seat, riderSize,
+    kind: 'teacups', width, height, sky: variant.sky, variant, frameT, stationT, box, cam, crop, seat, riderSize,
     backdrop, foreground: null, data, paint: paintTeacups,
     vehicleAt: t => { const p = cupPose(t, frameT); return { x: cx + rx * Math.cos(p.orbit), y: cy + ry * Math.sin(p.orbit) }; },
     emissive: variant.sky === 'night' ? paintTeacupBulbs : null,

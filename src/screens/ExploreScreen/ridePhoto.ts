@@ -287,3 +287,27 @@ export function createPrintClock() {
     isCurrent: (key: number) => key === current,
   };
 }
+
+/**
+ * The prime handshake (catch N+1 uses its own rules): a prime for a find that is not rendered yet waits;
+ * the open runs on the first render that carries that find. Pure, so the swap is tested as behaviour.
+ */
+export function createPrimeGate<At>() {
+  let pending: { id: number; at: At } | null = null;
+  return {
+    /** A tap primed `id`. Returns `{ at }` to open now (the stage already shows it), or null to wait. */
+    prime(id: number, renderedId: number | null | undefined, at: At): { at: At } | null {
+      if (id === renderedId) { pending = null; return { at }; }
+      pending = { id, at };
+      return null;
+    },
+    /** The stage rendered `renderedId`. Returns `{ at }` when a waiting prime can open now. */
+    rendered(renderedId: number | null | undefined): { at: At } | null {
+      if (!pending || pending.id !== renderedId) return null;
+      const open = { at: pending.at };
+      pending = null;
+      return open;
+    },
+    cancel() { pending = null; },
+  };
+}

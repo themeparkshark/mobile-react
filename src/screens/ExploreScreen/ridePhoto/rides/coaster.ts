@@ -78,7 +78,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
     box, bulbs,
   };
   return {
-    kind: 'coaster', width, height, sky: variant.sky, frameT, stationT, box, cam, crop, seat, riderSize: car.rider,
+    kind: 'coaster', width, height, sky: variant.sky, variant, frameT, stationT, box, cam, crop, seat, riderSize: car.rider,
     backdrop, foreground: null, data, paint: paintCoaster,
     vehicleAt: t => sampleTrack(lut, rideProgress(track, t)),
     emissive: variant.sky === 'night' ? paintCoasterBulbs : null,

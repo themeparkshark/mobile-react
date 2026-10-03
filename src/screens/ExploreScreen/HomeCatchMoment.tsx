@@ -22,7 +22,8 @@ import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, rideSpec, type PhotoGrade } from './ridePhoto';
-import RidePhotoCatch, { BLANK_IMAGE, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
 import { RIDES, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
@@ -107,10 +108,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly autoShots?: number[] | null;
   /** Development recordings: pin the ride and sky. */
   readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
+  /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
+  readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, refreshAfterCatch = true }, ref) {
   const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
   const { currencies } = useContext(CurrencyContext);
@@ -470,6 +473,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const sparks = item && !reducedMotion && rideSpec(item.rarity).style === 'chomp' ? burstSparkCount(item.rarity) : 0;
   const name = item ? findDisplayName(item.name, item.set_name) : '';
   const stageFor = rideItem ?? primed?.item ?? stageItem;
+  const sceneArt = useRideArt();
+  const warmKey = (warm ?? []).map(entry => `${entry.item.id}:${entry.forceRide?.kind ?? ''}:${entry.forceRide?.sky ?? ''}`).join(',');
+  useEffect(() => {
+    if (!warm || window.width === 0) return;
+    for (const entry of warm) {
+      if (rideSpec(entry.item.rarity).style !== 'ride_photo') continue;
+      prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
+    }
+  }, [warmKey, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
   const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);
   const showingFrom = showing?.from;

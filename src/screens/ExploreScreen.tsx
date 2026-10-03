@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
-import { Text, View, Pressable } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
 import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
@@ -48,6 +48,7 @@ import HomeExplore from './ExploreScreen/HomeExplore';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './ExploreScreen/homePickupRange';
 import { rideFocusForPark, type ParkRideMapFocus } from './ExploreScreen/parkRideMapFocus';
 import ParkProjectWidget from './ExploreScreen/ParkProjectWidget';
+import { useMenuCardFade } from './ExploreScreen/menuCardFade';
 import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
@@ -137,6 +138,7 @@ function ExploreScreen() {
   // Idle (no touch, no walking for 2 min): the map's live polls slow down.
   const mapIdle = useUserIdle();
   const route = useRoute();
+  const cardFade = useMenuCardFade();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
   const highlightNearestFind = (route.params as { highlightNearestFind?: number } | undefined)?.highlightNearestFind ?? null;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
@@ -912,11 +914,14 @@ function ExploreScreen() {
           </TopbarColumn>
         )}
       </Topbar>
-      {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
+      {/* The floating park card leaves (opacity 0, no touches) while the quick menu is open */}
+      {player && <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
+        <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
         pillHidden={!!park && suggestionSlots.right !== 'project'}
         pillCollapsed={!!park && suggestionSlots.rightStub}
-        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />}
+        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />
+      </Animated.View>}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}

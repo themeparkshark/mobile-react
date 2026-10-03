@@ -12,6 +12,18 @@ import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
 const S = {
   shutter: require('../../../../assets/sounds/ride-photo/shutter.mp3'),
   notYet: require('../../../../assets/sounds/ride-photo/not-yet.mp3'),
+  // Ride sounds (licensed, Epidemic Sound; sfx/rides, trimmed and looped in round 5).
+  flumeSplash: require('../../../../assets/sounds/ride-photo/rides/flume-splash-big.mp3'),
+  flumeChain: require('../../../../assets/sounds/ride-photo/rides/flume-lift-chain.mp3'),
+  teacupClink: require('../../../../assets/sounds/ride-photo/rides/teacup-clink.mp3'),
+  teacupWhoosh: require('../../../../assets/sounds/ride-photo/rides/teacups-spin-whoosh.mp3'),
+  brakes: require('../../../../assets/sounds/ride-photo/rides/brakes-hiss.mp3'),
+  whee: require('../../../../assets/sounds/ride-photo/rides/crowd-scream-fun.mp3'),
+  gull: require('../../../../assets/sounds/ride-photo/rides/seagull.mp3'),
+  fireworks: require('../../../../assets/sounds/ride-photo/rides/fireworks-pop.mp3'),
+  golden: require('../../../../assets/sounds/ride-photo/rides/golden-hour-shimmer.mp3'),
+  organLoop: require('../../../../assets/sounds/ride-photo/rides/organ-loop.mp3'),
+  waterLoop: require('../../../../assets/sounds/ride-photo/rides/flume-water-loop.mp3'),
   flash: require('../../../../assets/sounds/ride-photo/flash.mp3'),
   charge: require('../../../../assets/sounds/ride-photo/flash-charge.mp3'),
   film: require('../../../../assets/sounds/ride-photo/film.mp3'),
@@ -24,12 +36,22 @@ const S = {
   pip7: require('../../../../assets/sounds/ride-photo/pip-7.mp3'),
 };
 
-export type CatchSound = 'shutter' | 'notYet' | 'flash' | 'charge' | 'film' | 'cheer' | 'pop' | 'badge' | 'clack'
+export type CatchSound = 'shutter' | 'notYet' | 'flumeSplash' | 'flumeChain' | 'teacupClink' | 'teacupWhoosh' | 'brakes'
+  | 'whee' | 'gull' | 'fireworks' | 'golden' | 'flash' | 'charge' | 'film' | 'cheer' | 'pop' | 'badge' | 'clack'
   | 'pip0' | 'pip3' | 'pip7' | 'tick' | 'chime' | 'sparkle' | 'aww' | 'whoosh';
 
 const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinger' | 'ui'; maxVoices: number; durationMs: number }> = {
   'ride.shutter': { src: S.shutter, gainDb: 0, bus: 'sfx', maxVoices: 2, durationMs: 350 },
   'ride.notYet': { src: S.notYet, gainDb: -2, bus: 'ui', maxVoices: 1, durationMs: 110 },
+  'ride.flumeSplash': { src: S.flumeSplash, gainDb: -3, bus: 'sfx', maxVoices: 1, durationMs: 1000 },
+  'ride.flumeChain': { src: S.flumeChain, gainDb: -10, bus: 'sfx', maxVoices: 1, durationMs: 2100 },
+  'ride.teacupClink': { src: S.teacupClink, gainDb: -8, bus: 'sfx', maxVoices: 1, durationMs: 150 },
+  'ride.teacupWhoosh': { src: S.teacupWhoosh, gainDb: -10, bus: 'sfx', maxVoices: 1, durationMs: 280 },
+  'ride.brakes': { src: S.brakes, gainDb: -12, bus: 'sfx', maxVoices: 1, durationMs: 1600 },
+  'ride.whee': { src: S.whee, gainDb: -8, bus: 'sfx', maxVoices: 1, durationMs: 700 },
+  'ride.gull': { src: S.gull, gainDb: -10, bus: 'sfx', maxVoices: 1, durationMs: 320 },
+  'ride.fireworks': { src: S.fireworks, gainDb: -10, bus: 'sfx', maxVoices: 1, durationMs: 900 },
+  'ride.golden': { src: S.golden, gainDb: -6, bus: 'sfx', maxVoices: 1, durationMs: 1300 },
   'ride.flash': { src: S.flash, gainDb: -3, bus: 'sfx', maxVoices: 1, durationMs: 600 },
   'ride.charge': { src: S.charge, gainDb: -6, bus: 'sfx', maxVoices: 1, durationMs: 500 },
   'ride.film': { src: S.film, gainDb: -5, bus: 'sfx', maxVoices: 1, durationMs: 600 },
@@ -47,6 +69,12 @@ const HOUSE: Partial<Record<CatchSound, string>> = { tick: 'ui.select', chime: '
 const STINGERS = new Set<CatchSound>(['cheer', 'sparkle']);
 const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3 };
 
+/** Ride ambience beds (loop while the viewfinder is open): the teacups' organ, the flume's water. */
+const BEDS = {
+  'ride.organ': { src: S.organLoop, gainDb: -14 },
+  'ride.water': { src: S.waterLoop, gainDb: -12 },
+};
+
 let registered = false;
 let ready: Promise<void> | null = null;
 const limiter = createSfxLimiter({ maxVoices: 4 });
@@ -57,6 +85,7 @@ export function preloadCatchAudio(): Promise<void> {
   if (ready) return ready;
   if (!registered) {
     GameAudio.registerCues(CUES as never);
+    GameAudio.registerBeds(BEDS as never);
     registered = true;
   }
   ready = GameAudio.preload([...Object.keys(CUES), ...Object.values(HOUSE) as string[]]).catch(() => undefined);
@@ -110,4 +139,22 @@ export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: nu
 /** The crowd swells over everything else for a Frame It!. */
 export function duckForCheer(): void {
   try { GameAudio.duck(6, 60, 1100, 300); } catch { /* optional */ }
+}
+
+/** Start a ride's ambience bed (teacups organ, flume water) for the open; no-op for rides without one. */
+export function startRideAmbience(kind: string): void {
+  const bed = kind === 'teacups' ? 'ride.organ' : kind === 'flume' ? 'ride.water' : null;
+  if (!bed) return;
+  trace('sound', `bed-${bed}`);
+  void (async () => {
+    try {
+      if (!registered) await preloadCatchAudio();
+      if (!GameAudio.backend) await GameAudio.init();
+      await GameAudio.music.play(bed, 400);
+    } catch { /* ambience is decoration */ }
+  })();
+}
+
+export function stopRideAmbience(): void {
+  try { GameAudio.music.stop(300); } catch { /* optional */ }
 }

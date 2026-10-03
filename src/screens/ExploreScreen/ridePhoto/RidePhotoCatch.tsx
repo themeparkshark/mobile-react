@@ -18,14 +18,14 @@ import { FxStage, type FxStageHandle } from '../../../gamekit/fx/FxStage';
 import { Sunburst, Shimmer } from '../../../gamekit/fx/ShaderFx';
 import { GameIcon } from '../../../ui';
 import RideScene from './RideScene';
-import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type SceneArt, type Sky } from './rides';
+import { RIDES, buildStage, drawStagePhoto, pickRide, sceneVariant, type RideKind, type RideStage, type SceneArt, type Sky } from './rides';
 import { lastRideKind } from './rides/rideMemory';
 import { buildPrintFrame } from './rides/printFrame';
 import StampPlate from './StampPlate';
 import { useRideArt, useRider } from './rideAssets';
-import { catchHaptic, catchMark, catchSound, duckForCheer } from './catchAudio';
+import { catchHaptic, catchMark, catchSound, duckForCheer, startRideAmbience, stopRideAmbience } from './catchAudio';
 import {
-  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, photoPayload, MISS_RETRY_MS, BLURRY_OUT_MS,
+  GRADE_HOLD_MS, GRADE_LABEL, RIDE_START, READY_PIPS, gradeOffset, hintMode, isGoodShot, openRules, createPrintClock, createPrimeGate, photoPayload, MISS_RETRY_MS, BLURRY_OUT_MS,
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
 } from '../ridePhoto';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -140,6 +140,51 @@ export interface RidePhotoProps {
   readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
 }
 
+/** Everything that decides a ride's stage, so the map can build it ahead in idle time. */
+function stageInputs(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?: Sky } | null,
+  layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt) {
+  const spec = rideSpec(item?.rarity ?? 3);
+  const golden = item?.golden_hour === true;
+  const kind: RideKind = forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity, seed: item?.id ?? 0, lastRide: lastRideKind() });
+  const base = sceneVariant({ seed: item?.id ?? 0, kind, setName: item?.set_name, golden });
+  // Epic's spotlight beat is a night ride.
+  const sky: Sky = forceRide?.sky ?? (spec.litMs != null && !golden ? 'night' : base.sky);
+  const variant = { ...base, sky };
+  const sceneH = Math.max(360, layer.height - (insets.bottom + 128));
+  // The art count is in the key: a stage built before the art decoded is never reused after.
+  const loaded = Object.values(art).filter(Boolean).length;
+  const key = [kind, item?.id ?? 0, item?.rarity ?? 0, sky, golden ? 1 : 0, layer.width, sceneH, insets.top, loaded].join('|');
+  return { key, build: () => buildStage(kind, { width: layer.width, height: sceneH, top: insets.top, spec,
+    tier: rarityTier(item?.rarity), variant, art }) };
+}
+const STAGES = new Map<string, RideStage>();
+function remember(key: string, stage: RideStage) {
+  STAGES.delete(key);
+  STAGES.set(key, stage);
+  while (STAGES.size > 4) STAGES.delete(STAGES.keys().next().value as string);
+}
+function stageFor(item: PrepItemType | null, forceRide: { kind?: RideKind; sky?: Sky } | null,
+  layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): RideStage {
+  const { key, build } = stageInputs(item, forceRide, layer, insets, art);
+  const hit = STAGES.get(key);
+  if (hit) return hit;
+  const stage = build();
+  remember(key, stage);
+  return stage;
+}
+/**
+ * Build a find's ride stage in idle time (the map calls this when a Ride Photo find comes in range), so
+ * the open never pays for the build or the picture recording.
+ */
+export function prebuildRideStage(item: PrepItemType, forceRide: { kind?: RideKind; sky?: Sky } | null,
+  layer: { width: number; height: number }, insets: { top: number; bottom: number }, art: SceneArt): void {
+  const { key, build } = stageInputs(item, forceRide, layer, insets, art);
+  if (STAGES.has(key)) return;
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+  const run = () => { if (!STAGES.has(key)) remember(key, build()); };
+  if (idle) idle(run, { timeout: 1500 }); else setTimeout(run, 0);
+}
+
 /**
  * Ride Photo, the catch for Uncommon and rarer finds: a true full-screen camera.
  * The app's header and tab bar slide away; the coaster runs from the status bar
@@ -157,22 +202,15 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const owned = item?.is_new_variant === false;
   const golden = item?.golden_hour === true;
 
-  // Which ride, and how it looks: themed by the set, wilder for Legendary, never the last ride twice.
-  const kind: RideKind = useMemo(() => forceRide?.kind ?? pickRide({ setName: item?.set_name, rarity: item?.rarity,
-    seed: item?.id ?? 0, lastRide: lastRideKind() }), [item?.id, forceRide?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
-  const variant = useMemo(() => {
-    const base = sceneVariant({ seed: item?.id ?? 0, kind, setName: item?.set_name, golden });
-    // Epic's spotlight beat is a night ride.
-    const sky: Sky = forceRide?.sky ?? (spec.litMs != null && !golden ? 'night' : base.sky);
-    return { ...base, sky };
-  }, [item?.id, kind, golden, spec.litMs, forceRide?.sky]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const art = useRideArt();
   const riderSource = item ? (item.icon_url && /^(https?|file):/i.test(item.icon_url) ? item.icon_url : null) : null;
   const rider = useRider(riderSource);
   const images: SceneArt = useMemo(() => ({ ...art, rider }), [art, rider]);
-  const stage = useMemo(() => buildStage(kind, { width: sceneW, height: sceneH, top: insets.top, spec, tier, variant, art: images }),
-    [kind, sceneW, sceneH, insets.top, spec, tier, variant, images]);
+  // The stage depends on the scene art only (never the rider's late image), and comes from the idle-time
+  // prebuild cache when the find was warmed on the map.
+  const stage = useMemo(() => stageFor(item, forceRide ?? null, layer, insets, art),
+    [item?.id, item?.rarity, item?.golden_hour, forceRide?.kind, forceRide?.sky, layer.width, layer.height, insets.top, insets.bottom, art]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kind = stage.kind;
   const box = stage.box;
   const printFrame = useMemo(() => buildPrintFrame(RIDES[stage.kind].frame, HERO_W, HERO_H, { x: 12, y: 12, w: PHOTO_W, h: PHOTO_H }), [stage.kind]);
   const anchors = useMemo(() => ({
@@ -195,7 +233,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const [print, setPrint] = useState<{ grade: PhotoGrade; soClose: boolean; key: number; double?: boolean } | null>(null);
   // Epic: photo 1 waits in the band's film strip, then flies with photo 2 as a fanned pair.
   const [plateLeft, setPlateLeft] = useState(false);
-  const [strip, setStrip] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
+  const [strip, setStrip] = useState<{ image: SkImage | null; grade: PhotoGrade; image2?: SkImage | null } | null>(null);
   const [frameStage, setFrameStage] = useState<FrameStage>('white');
   const [printImage, setPrintImage] = useState<SkImage | null>(null);
   const [missNote, setMissNote] = useState<{ dir: 'early' | 'late'; key: number } | null>(null);
@@ -296,9 +334,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const clearPassTimers = useCallback(() => { passTimers.current.forEach(clearTimeout); passTimers.current = []; }, []);
   useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
+  const missedThisPass = useRef(false);
   const passEndRef = useRef<() => void>(() => undefined);
   const runPass = useCallback((fromT: number) => {
     shotThisPass.current = false;
+    missedThisPass.current = false;
     clearPassTimers();
     frozen.value = false;
     armed.value = true;
@@ -322,11 +362,26 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         pip(i);
       }, delay));
     });
-    if (fromT <= anchors.tStation + 0.01 && (stage.kind === 'coaster' || stage.kind === 'flume') && spec.track !== 'family') {
-      catchSound('clack', { volume: 0.8 });
-    } else catchSound('whoosh', { volume: 0.5 });
+    // Ride sounds on the same pass clock: the flume's splash lands with the crown, the gull and fireworks
+    // with their photobombs, and now and then a happy "whee" at the big moment.
+    const at = (lead: number, play: () => void, evenIfShot = false) => {
+      const delay = arriveIn - lead;
+      if (delay < 0) return;
+      passTimers.current.push(setTimeout(() => { if (evenIfShot ? !missedThisPass.current : !shotThisPass.current) play(); }, delay));
+    };
+    if (stage.kind === 'flume') at(80, () => catchSound('flumeSplash', { volume: 0.9 }), true);
+    if (stage.variant.photobomb === 'gull') at(260, () => catchSound('gull', { volume: 0.7 }), true);
+    if (stage.variant.photobomb === 'fireworks') at(140, () => catchSound('fireworks', { volume: 0.7 }), true);
+    if ((stage.kind === 'coaster' && spec.track !== 'family') || stage.kind === 'flume') {
+      if (Math.random() < 0.35) at(220, () => catchSound('whee', { volume: 0.6 }), true);
+    }
+    const firstPass = fromT <= anchors.tStation + 0.01;
+    if (stage.kind === 'flume') catchSound(firstPass ? 'flumeChain' : 'whoosh', { volume: firstPass ? 0.8 : 0.5 });
+    else if (stage.kind === 'teacups') catchSound('teacupWhoosh', { volume: 0.7 });
+    else if (firstPass && spec.track !== 'family') catchSound('clack', { volume: 0.8 });
+    else catchSound('whoosh', { volume: 0.5 });
     catchMark(`pass ${stage.kind}`);
-  }, [parkedMode, passMs, anchors.tStation, anchors.tFrame, stage.kind, spec.track]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [parkedMode, passMs, anchors.tStation, anchors.tFrame, stage, spec.track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const retry = useCallback((missed: boolean) => {
     if (rideRef.current.outcome !== 'riding') return;
@@ -378,30 +433,33 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     buzz('tapLight', 1);
     catchMark('open');
     catchSound('whoosh', { volume: 0.6 });
-    later(reducedMotion ? 150 : 90 + HOP_MS, () => { catchSound('pop', { volume: 0.7 }); buzz('hitSoft', 1); });
+    later(reducedMotion ? 150 : 90 + HOP_MS, () => {
+      catchSound(stage.kind === 'teacups' ? 'teacupClink' : 'pop', { volume: 0.7 }); buzz('hitSoft', 1);
+    });
+    startRideAmbience(stage.kind);
+    if (golden) later(120, () => catchSound('golden', { volume: 0.8 }));
     later(reducedMotion ? 200 : 90 + HOP_MS + 420, () => runPass(owned ? anchors.tRetry : anchors.tStation));
   }, [clearTimers, layer.width, layer.height, anchors.tStation, anchors.tRetry, firstRide, parkedMode, reducedMotion, runPass, owned, item?.rarity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A prime waits for the render that carries its item; then it opens with that item's rules.
-  const pendingPrime = useRef<{ id: number; at: { x: number; y: number } | null } | null>(null);
+  // A prime waits for the render that carries its item; then it opens with that item's rules (createPrimeGate).
+  const primeGate = useRef(createPrimeGate<{ x: number; y: number } | null>()).current;
   useLayoutEffect(() => {
-    const pending = pendingPrime.current;
-    if (!pending || pending.id !== item?.id) return;
-    pendingPrime.current = null;
-    startOpen(pending.at);
-  }, [item?.id, startOpen]);
+    const open = primeGate.rendered(item?.id);
+    if (open) startOpen(open.at);
+  }, [item?.id, startOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useImperativeHandle(ref, () => ({
     prime: (next, at) => {
       if (opened.current) return;
-      if (next.id === item?.id) { startOpen(at); return; }
-      pendingPrime.current = { id: next.id, at };
+      const open = primeGate.prime(next.id, item?.id, at);
+      if (open) startOpen(open.at);
     },
     unprime: () => {
-      pendingPrime.current = null;
+      primeGate.cancel();
       if (!opened.current) return;
       opened.current = false;
       clearTimers(); clearPassTimers();
+      stopRideAmbience();
       armed.value = false;
       cancelAnimation(t);
       open.value = withTiming(0, { duration: 160 });
@@ -424,6 +482,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     armed.value = false; holding.value = false;
     cancelAnimation(t); cancelAnimation(rock);
     catchMark('close');
+    stopRideAmbience();
+    // Confetti and sparkles end with the ride: they never keep a full-screen particle canvas busy over the map.
+    fx.current?.clear();
     // The hand-off, in order: the bars close over the whole screen (0 to 160 ms, the print stays on top),
     // then fade to the map (160 to 380 ms); only then does the app's chrome come back (onIrisClosed).
     // The chrome starts back as the bars start to fade (160 ms), so header, tab bar and map arrive
@@ -443,7 +504,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       const made = madeImages.current;
       madeImages.current = [];
       printImageRef.current = null;
-      setTimeout(() => made.forEach(image => { if (image !== handed) image.dispose(); }), 400);
+      // One image per frame, never a batch in a single frame.
+      const toFree = made.filter(image => image !== handed);
+      const freeNext = () => { const image = toFree.shift(); if (!image) return; image.dispose(); requestAnimationFrame(freeNext); };
+      setTimeout(freeNext, 400);
       open.value = 0; printIn.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; ghost.value = 0; iris.value = 0;
     });
   }, [closing]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -521,6 +585,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       const photos = rideRef.current.photos;
       const double = caught && photos.length >= 2 && photos.every(p => p === 'frame_it');
       if (double) setPrint(current => (current && current.key === key ? { ...current, double: true } : current));
+      // Epic photo 2 fills slot 2 of the film strip (click and glow) before the grade lands.
+      if (caught && spec.photosNeeded > 1) {
+        setStrip(current => (current ? { ...current, image2: printImageRef.current } : current));
+        slotGlow.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 420 }));
+        catchSound('pop', { volume: 0.8, pitch: 6 });
+      }
       catchMark(`reveal-${grade}`);
       setFrameStage(STAGE_FOR[grade]);
       develop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
@@ -624,6 +694,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     setRide(next);
     AccessibilityInfo.announceForAccessibility(isGoodShot(grade) ? GRADE_LABEL[grade] : direction === 'early' ? 'Too soon. Try again.' : 'Too late. Try again.');
     if (!isGoodShot(grade)) {
+      missedThisPass.current = true;
       misses.value = Math.min(3, misses.value + 1);
       if (direction) setMissNote({ dir: direction, key: Date.now() });
       photoStreak = 0;
@@ -638,6 +709,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       retry(true);
       return;
     }
+    if (stage.kind === 'coaster') later(650, () => catchSound('brakes', { volume: 0.7 }));
     if (rideRef.current.passes === 0) photoStreak += 1;
     setStreak(photoStreak);
     if (next.outcome === 'caught') { caughtRef.current = true; onCaught({ ...photoPayload(spec, next), ride_type: stage.kind }, grade); }
@@ -910,10 +982,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
                       const target = event.currentTarget;
                       target.measureInWindow((x, y, w, h) => { stripX.value = x + w / 2; stripY.value = y + h / 2; });
                     } : undefined}>
-                    {i === 0 && <Canvas style={[styles.slotPhoto, !strip?.image && styles.hiddenSlot]}>
-                      <SkImageNode image={strip?.image ?? BLANK} x={0} y={0} width={28} height={34} fit="cover" />
+                    {i < 2 && <Canvas style={[styles.slotPhoto, !(i === 0 ? strip?.image : strip?.image2) && styles.hiddenSlot]}>
+                      <SkImageNode image={(i === 0 ? strip?.image : strip?.image2) ?? BLANK} x={0} y={0} width={28} height={34} fit="cover" />
                     </Canvas>}
-                    {i === 0 && <Animated.View pointerEvents="none" style={[styles.slotGlow, slotGlowStyle]} />}
+                    {i === (strip?.image2 ? 1 : 0) && <Animated.View pointerEvents="none" style={[styles.slotGlow, slotGlowStyle]} />}
                   </View>
                 ))}
               </View>}
