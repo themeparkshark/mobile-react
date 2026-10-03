@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCatchOpen } from '../screens/ExploreScreen/catchPresence';
 import { AppState, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -66,6 +67,7 @@ function probe(): Promise<unknown> {
  * the theme are kept last-good, so the park view itself may not load.
  */
 export default function OfflineBanner() {
+  const catchOpen = useCatchOpen();
   const reduceMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('hidden');
@@ -189,7 +191,8 @@ export default function OfflineBanner() {
     transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * shrink.value }],
   }));
 
-  if (!mounted) return null;
+  // A catch moment owns the screen; the banner waits (its probe keeps running).
+  if (!mounted || catchOpen) return null;
   const back = phase === 'back';
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.

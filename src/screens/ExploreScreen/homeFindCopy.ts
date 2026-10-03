@@ -56,6 +56,8 @@ function setNoun(setName: string | null | undefined): string | null {
 /** "Snickerdoodle" in the Churro Collection reads "Snickerdoodle Churro". */
 export function findDisplayName(name: string, setName?: string | null): string {
   const trimmed = name.trim();
+  // Only the old "X Collection" sets name their items by flavor ("Snickerdoodle"); v3 items carry full names.
+  if (!setName || !/\bcollection\b/i.test(setName)) return trimmed;
   const noun = setNoun(setName);
   if (!noun) return trimmed;
   const singular = noun.replace(/s$/i, '');

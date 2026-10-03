@@ -38,6 +38,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'MenuPreview', getComponent: () => require('./screens/MenuPreviewScreen').default },
       { name: 'SetCollectionPreview', getComponent: () => require('./screens/SetCollectionPreviewScreen').default },
       { name: 'HomeHuntPreview', getComponent: () => require('./screens/ExploreScreen/HomeHuntPreviewScreen').default },
+      { name: 'HomeCatchPreview', getComponent: () => require('./screens/ExploreScreen/HomeCatchPreviewScreen').default },
       { name: 'InventoryPreview', getComponent: () => require('./screens/InventoryPreviewScreen').default },
       { name: 'ProfilePreview', getComponent: () => require('./screens/ProfilePreviewScreen').default },
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
@@ -54,6 +55,7 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) return null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
+    [on(process.env.EXPO_PUBLIC_HOME_CATCH_PREVIEW), 'HomeCatchPreview'],
     [on(process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW), 'MapAlivePreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MAP_PREVIEW), 'BossMapPreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MECHANICS_PREVIEW), 'BossMechanicsPreview'],
