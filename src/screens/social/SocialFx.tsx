@@ -43,7 +43,7 @@ function Piece({ icon, angle, dist, size, delay }: { icon: GameIconName; angle: 
   return <Animated.View style={[styles.piece, style]}><GameIcon name={icon} size={size} /></Animated.View>;
 }
 
-/** Pops once where it is mounted; with Reduce Motion it shows one still check. */
+/** Pops once where it is mounted; with Reduce Motion it draws nothing. */
 export const Burst = memo(function Burst({ style, onDone }: { readonly style?: StyleProp<ViewStyle>; readonly onDone?: () => void }) {
   const reduced = useUiReducedMotion();
   const ring = useSharedValue(0);
@@ -58,7 +58,8 @@ export const Burst = memo(function Burst({ style, onDone }: { readonly style?: S
   }));
   return (
     <View pointerEvents="none" style={[styles.burst, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      {reduced ? <GameIcon name="check" size={30} /> : (
+      {/* Reduce Motion: no burst; the green card and "New friend!" carry the moment. */}
+      {reduced ? null : (
         <>
           <Animated.View style={[styles.ring, ringStyle]} />
           {PIECES.map((p, i) => <Piece key={i} {...p} delay={i * 18} />)}
