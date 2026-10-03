@@ -1,13 +1,16 @@
 /**
  * Case File reveal: the card flips from the locked silhouette to its front
  * (server art when present, the title overlaid on the blank plate), with the
- * year badge, a NEW stamp for a first find, the body and "Into the Lantern".
+ * year badge, a NEW stamp for a first find, the body and "Into the Lantern",
+ * which really opens the Deep Lantern (FrightCard for this event); without an
+ * event slug the button reads "Keep it" and just closes.
  * Reduce Motion: a plain fade, no flip.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, StyleSheet, Text, View } from 'react-native';
 import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import * as RootNavigation from '../../RootNavigation';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
 import ArtImage from './ArtImage';
@@ -16,7 +19,12 @@ import { NightButton } from './ui';
 const CARD_W = 260;
 const CARD_H = 360;
 
-export default function CaseFileReveal({ file, onClose }: { readonly file: FrightCaseFileDrop | null; readonly onClose: () => void }) {
+export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
+  readonly file: FrightCaseFileDrop | null;
+  readonly onClose: () => void;
+  /** The event whose Deep Lantern "Into the Lantern" opens. */
+  readonly eventSlug?: string | null;
+}) {
   const reduced = useReducedGameMotion();
   const flip = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
@@ -64,7 +72,11 @@ export default function CaseFileReveal({ file, onClose }: { readonly file: Frigh
           )}
         </Animated.View>
         {front && <Text style={styles.body}>{file.body}</Text>}
-        <NightButton label="Into the Lantern" onPress={onClose} style={{ marginTop: 14, minWidth: 220 }} />
+        <NightButton label={eventSlug ? 'Into the Lantern' : 'Keep it'} style={{ marginTop: 14, minWidth: 220 }}
+          onPress={() => {
+            onClose();
+            if (eventSlug) RootNavigation.navigate('FrightCard', { eventSlug });
+          }} />
       </Animated.View>
     </Modal>
   );

@@ -8,12 +8,13 @@
  */
 import { FillLayer, ShapeSource, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { useWindowDimensions, View } from 'react-native';
-import { memo, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
-import type { FrightSpot } from '../../../api/endpoints/fright/types';
+import type { FrightAmbientAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
+import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
 import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
 import { critterSlugs } from './frightArt';
 import { activeShowStart, critterAsset, encounterChaos, hauntLayers, iconAsset } from './frightAssets';
@@ -21,7 +22,7 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, cameraCenter, canvasProps, chipKeys, hauntChipLabel, onScreen, screenX, SHOW_WINDOW_MS, stableMarkerSpots, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, cameraCenter, canvasProps, chipKeys, hauntChipLabel, hauntChipParts, onScreen, screenX, screenY, SHOW_WINDOW_MS, stableMarkerSpots, type HudRect, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
@@ -64,11 +65,13 @@ function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: 
 
 const hauntDim = (s: FrightSpot) => s.status === 'CLOSED' || s.status === 'DOWN' || s.status === 'REFURBISHMENT';
 
-export const FrightMapSources = memo(function FrightMapSources({ input, zoom, mapRef }: {
+export const FrightMapSources = memo(function FrightMapSources({ input, zoom, mapRef, hud = null }: {
   readonly input: FrightMapInput;
   /** Camera zoom (Map's cameraZoom). */
   readonly zoom: number;
   readonly mapRef: RefObject<MapViewRef | null>;
+  /** The map's own right-rail controls (screen rect), measured by Map.tsx. */
+  readonly hud?: HudRect | null;
 }) {
   const st = useFrightState(input);
   const { heading } = useContext(HeadingContext);
@@ -148,7 +151,11 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   })();
   const lod = critterLod(zoom);
   const onHauntPress = input.onHauntPress;
+  const onHauntPressRef = useRef(onHauntPress);
+  onHauntPressRef.current = onHauntPress;
   const onEncounterPress = input.onEncounterPress;
+  const onEncounterPressRef = useRef(onEncounterPress);
+  onEncounterPressRef.current = onEncounterPress;
   // Lagoon Glow-Down: show spots that ask for it (fx.props), only while a performance runs.
   const glowAsset = assets?.ambient?.['lagoon-glow'] ?? null;
   const glowSpots = glowAsset?.file ? order('show')
@@ -222,6 +229,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 
   // Chips stay 12 pt inside the screen edges: project each facade and slide its chip in.
   const chipCenter = cameraCenter(player, bounds);
+  // Chips also keep clear of the HUD: the map's right rail plus any rects ExploreScreen passes.
+  const huds = useMemo(() => [...(hud ? [hud] : []), ...(input.hudRects ?? [])], [hud, input.hudRects]);
   // MapLibre iOS draws a MarkerView whose point is off screen at the top-left corner (the
   // "facade in the corner" and edge-clipped chips). Every Marker stays mounted (the crash
   // guard); a spot whose point is off screen draws the hidden stand-in instead.
@@ -232,30 +241,43 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     const at = spotAt.get(key);
     return !at || onScreen(at, chipCenter, zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
   };
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
   const encounterShown = encounterLive && !!encounter && visible > 0 && nearView(encounter, bounds, 1);
   const encounterOnScreen = encounterShown && !!encounter && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  const encounterTapRef = useRef<string | null>(null);
+  encounterTapRef.current = encounterOnScreen && encounter ? encounter.key : null;
   // One encounter Marker, always mounted; it parks on the first spot when no encounter is live.
   const encounterAt = encounter && validPoint(encounter) ? encounter : stable.all[0] ?? PARKED;
   return (
     <>
       {stable.reefs.map(reef => {
-        if (!shown(reef.key)) return <Marker key={`fr-${reef.key}`} coordinate={reef}><HiddenSpot /></Marker>;
+        // Opacity-only: the reef's whole sprite tree stays mounted for the payload. Off screen,
+        // hidden or faded = opacity 0 with motion paused; LOD cross-fades glyph and critters.
+        const on = shown(reef.key);
         const slugs = critterSlugs(reef.fx?.critter);
         const d = player ? distanceMeters(player, reef) : Infinity;
         const reaction = reefReaction(d, reef.radius);
-        const watch = reaction === 'ignore' || !player ? 0 : faceToward(bearingDeg(reef, player), heading);
+        const watch = !on || reaction === 'ignore' || !player ? 0 : faceToward(bearingDeg(reef, player), heading);
         const ppm = pointsPerMeter(zoom, reef.latitude);
-        const wander = Math.max(18, Math.min(110, reef.radius * ppm * 0.8));
+        // Capped at 90 pt: a reef canvas is (2 x wander + 90) points square at 3x, and four of them add up.
+        const wander = Math.max(18, Math.min(90, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
-        const glyph = lod === 'glyph' || st.tier === 'calm' || n === 0;
+        const glyph = lod === 'glyph' || st.tier === 'calm';
+        const slots = critterWant(reef.fx);
         const sheets = slugs.map(slug => critterAsset(assets, slug));
         return (
           <Marker key={`fr-${reef.key}`} coordinate={reef}>
-            {glyph
-              ? <ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />
-              : <ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n} wanderPts={wander} clock={alive.clock}
-                  animated={animate} lite={lite} watch={watch} jumpToken={tokens[`jump:${reef.key}`] ?? 0}
-                  jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible} mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+            <PlacedSpot id={`reef:${reef.key}`}>
+              <ShowWhen on={on}>
+                <ReefLod glyph={glyph}
+                  critters={<ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
+                    wanderPts={wander} clock={alive.clock} animated={on && !glyph && animate && n > 0} lite={lite} watch={watch}
+                    jumpToken={tokens[`jump:${reef.key}`] ?? 0} jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible}
+                    mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+                  glyphArt={<ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />} />
+              </ShowWhen>
+            </PlacedSpot>
           </Marker>
         );
       })}
@@ -263,68 +285,83 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const props = canvasProps(spotProps(spot.fx));
         const bats = batAlloc[spot.key] ?? 0;
         const movingNow = propAlloc[spot.key] ?? 0;
-        const drawn = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
+        const on = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
         return (
           <Marker key={`fp-${spot.key}`} coordinate={spot}>
-            {drawn
-              ? <SpotProps spotKey={spot.key} props={props} bats={bats} movingAllowed={movingNow} clock={alive.clock}
-                  animated={animate} lite={lite} intensity={visible} ambient={assets?.ambient ?? null}
-                  mistUrl={assets?.fog_night?.ground_mist ?? null} />
-              : <HiddenSpot />}
+            <ShowWhen on={on}>
+              <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
+                animated={on && animate} lite={lite} intensity={visible} ambient={assets?.ambient ?? null}
+                mistUrl={assets?.fog_night?.ground_mist ?? null} />
+            </ShowWhen>
           </Marker>
         );
       })}
       {stable.haunts.map(haunt => {
         const offset = haunt.fx?.offset;
         const at = offset && offset.length === 2 ? offsetMeters(haunt, Number(offset[0]) || 0, Number(offset[1]) || 0) : haunt;
-        const drawn = shown(haunt.key);
+        const on = shown(haunt.key);
+        const chip = on && chips.has(haunt.key);
+        const parts = hauntChipParts(haunt, beads[haunt.key] !== undefined);
         return (
+          // Always a Pressable (never swapped): hidden haunts just take no touches.
           <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={HAUNT_ANCHOR}
-            onPress={drawn && onHauntPress ? () => onHauntPress(haunt.key) : undefined}
-            accessibilityLabel={drawn ? `${haunt.name}, haunt` : undefined}>
-            {drawn
-              ? <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
-                  animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
-                  rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
+            onPress={() => { if (shownRef.current(haunt.key)) onHauntPressRef.current?.(haunt.key); }}
+            touchEnabled={on && !!onHauntPress}
+            accessibilityLabel={`${haunt.name}, haunt`}>
+            <PlacedSpot id={`haunt:${haunt.key}`} anchor={HAUNT_GROUND} fold>
+              <ShowWhen on={on}>
+                <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
+                  animatedWindows={on ? windowAlloc[haunt.key] ?? 0 : 0} clock={alive.clock} animated={on && animate}
+                  rate={on && (windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
                   ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-                  layers={layersOf(haunt)} label={chips.has(haunt.key) ? hauntChipLabel(haunt, beads[haunt.key] !== undefined) : null}
-                  chipX={chipCenter && chips.has(haunt.key) ? screenX(at, chipCenter, zoom, heading, screenW) : null} screenW={screenW}
+                  layers={layersOf(haunt)}
+                  label={chip ? parts.name : null}
+                  chipDetail={parts.detail}
+                  chipX={chipCenter && chip ? screenX(at, chipCenter, zoom, heading, screenW) : null}
+                  chipY={chipCenter && chip ? screenY(at, chipCenter, zoom, heading, screenH) + CHIP_BELOW_ANCHOR : null}
+                  screenW={screenW} huds={huds}
                   survivedPin={assets?.event_pins?.['ev-survived']?.['256'] ?? null}
                   done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)}
                   index={rankIndex.get(haunt.key) ?? 0}
                   iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
-              : <HiddenSpot />}
+              </ShowWhen>
+            </PlacedSpot>
           </Marker>
         );
       })}
       {stable.props.filter(spot => spot.kind === 'show' && spotProps(spot.fx).includes('lagoon-glow')).map(spot => {
         const glow = glowSpots.find(g => g.spot.key === spot.key);
+        const on = !!glow && !!glowAsset && visible > 0;
         return (
           <Marker key={`fg-${spot.key}`} coordinate={spot}>
-            {glow && glowAsset && visible > 0
-              ? <LagoonGlow asset={glowAsset} widthPts={glow.widthPts} clock={alive.clock} intensity={visible}
-                  fps={alive.running && st.tier !== 'calm' ? (lite ? 6 : 10) : 0} />
-              : <HiddenSpot />}
+            {/* Always mounted: no performance running = opacity 0, frame held. */}
+            <ShowWhen on={on}>
+              <LagoonGlow asset={glowAsset ?? LAGOON_PARKED} widthPts={glow?.widthPts ?? 80} clock={alive.clock} intensity={visible}
+                fps={on && alive.running && st.tier !== 'calm' ? (lite ? 6 : 10) : 0} />
+            </ShowWhen>
           </Marker>
         );
       })}
       <Marker key="fe" coordinate={encounterShown && encounter ? encounter : encounterAt}>
-        {encounterOnScreen && encounter
-          ? <EncounterRing ringPts={Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude)))}
-              clock={alive.clock} animated={animate} sparkToken={tokens[`sparks:${encounter.key}`] ?? 0}
-              sparks={assets?.ambient?.['skid-fin-sparks'] ?? null} />
-          : <HiddenSpot />}
+        {/* The ring is always mounted: no encounter = opacity 0, paused. */}
+        <ShowWhen on={encounterOnScreen && !!encounter}>
+          <EncounterRing ringPts={encounter ? Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude))) : 30}
+            clock={alive.clock} animated={encounterOnScreen && !!encounter && animate}
+            sparkToken={encounter ? tokens[`sparks:${encounter.key}`] ?? 0 : 0}
+            sparks={assets?.ambient?.['skid-fin-sparks'] ?? null} />
+        </ShowWhen>
       </Marker>
-      {(
-        <Marker key="fc" coordinate={encounterShown && encounter ? encounter : encounterAt}
-          onPress={encounterOnScreen && encounter && onEncounterPress ? () => onEncounterPress(encounter.key) : undefined}
-          accessibilityLabel={encounterOnScreen && encounter ? `${encounter.name}, encounter` : undefined}>
-          {encounterOnScreen && encounter
-            ? <EncounterCritter critter={encounter.critter} asset={iconAsset(assets, encounter.critter)}
-                chaos={encounterChaos(encounter)} clock={alive.clock} animated={animate} full={st.tier === 'full'} />
-            : <HiddenSpot />}
-        </Marker>
-      )}
+      {/* Always a Pressable (never swapped): no encounter on screen = no touches. */}
+      <Marker key="fc" coordinate={encounterShown && encounter ? encounter : encounterAt}
+        onPress={() => { if (encounterTapRef.current) onEncounterPressRef.current?.(encounterTapRef.current); }}
+        touchEnabled={encounterOnScreen && !!encounter && !!onEncounterPress}
+        accessibilityLabel={encounter ? `${encounter.name}, encounter` : 'Encounter'}>
+        <ShowWhen on={encounterOnScreen && !!encounter}>
+          <EncounterCritter critter={encounter?.critter ?? 'chuckles'} asset={encounter ? iconAsset(assets, encounter.critter) : null}
+            chaos={encounter ? encounterChaos(encounter) : false} clock={alive.clock}
+            animated={encounterOnScreen && !!encounter && animate} full={st.tier === 'full'} />
+        </ShowWhen>
+      </Marker>
     </>
   );
 });
@@ -332,15 +369,62 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
 /** How far past the view (in screens) a spot still counts for budget ranking. */
 export const DRAW_MARGIN_SCREENS = 1;
 /** A spot draws while its point is on screen, give or take this many points. */
-export const ON_SCREEN_SLACK = 0;
+export const ON_SCREEN_SLACK = 40;
+/** The chip's top sits this far below the facade's anchor point (glow pool to chip). */
+export const CHIP_BELOW_ANCHOR = 20;
 
-/** A mounted, invisible stand-in: the Marker stays, nothing draws and nothing takes touches. */
-function HiddenSpot() {
-  return <View pointerEvents="none" style={HIDDEN_STYLE} />;
+/** The haunt lantern's ground point inside its 168 x 136 box (FrightSprites HAUNT_ANCHOR), in points. */
+const HAUNT_GROUND = { x: 84, y: 82 } as const;
+
+/**
+ * A spot's art under the map declutter: fades or shrinks with its placement
+ * (opacity and transform only, never a prop of the Skia art) and shows "+N"
+ * for haunts folded into it. Only this spot re-renders when its placement moves.
+ */
+function PlacedSpot({ id, anchor, fold = false, children }: {
+  readonly id: string;
+  readonly anchor?: { readonly x: number; readonly y: number };
+  readonly fold?: boolean;
+  readonly children: ReactNode;
+}) {
+  const placement = usePlacement(id);
+  return (
+    <Placed placement={placement} anchor={anchor}
+      overlay={fold ? <FoldBadge count={placement.folded} style={{ left: 40, top: 6 }} /> : undefined}>
+      {children}
+    </Placed>
+  );
 }
-const HIDDEN_STYLE = { width: 1, height: 1, opacity: 0 } as const;
+
+/**
+ * Opacity-only visibility: the child tree stays mounted whatever `on` is (never
+ * a swap of element types inside a Marker: the MapLibre and RN Skia crashes);
+ * hidden is opacity 0 and takes no touches.
+ */
+function ShowWhen({ on, children }: { readonly on: boolean; readonly children: ReactNode }) {
+  return <View pointerEvents={on ? 'box-none' : 'none'} style={on ? SHOWN_STYLE : HIDDEN_STYLE}>{children}</View>;
+}
+const SHOWN_STYLE = { opacity: 1 } as const;
+const HIDDEN_STYLE = { opacity: 0 } as const;
+
+/**
+ * Reef LOD as a cross-fade: the critters and the still glyph are both mounted;
+ * the glyph sits centered over the critter canvas and one of them is at opacity 0.
+ */
+function ReefLod({ glyph, critters, glyphArt }: { readonly glyph: boolean; readonly critters: ReactNode; readonly glyphArt: ReactNode }) {
+  return (
+    <View pointerEvents="none">
+      <View style={glyph ? HIDDEN_STYLE : SHOWN_STYLE}>{critters}</View>
+      <View style={[LOD_GLYPH, glyph ? SHOWN_STYLE : HIDDEN_STYLE]}>{glyphArt}</View>
+    </View>
+  );
+}
+const LOD_GLYPH = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' } as const;
+
 /** Where the hidden encounter Marker waits when a payload has no spots at all. */
 const PARKED = { latitude: 0, longitude: 0 } as const;
+/** The glow's stand-in before the asset exists (keeps the tree fixed; nothing draws). */
+const LAGOON_PARKED: FrightAmbientAsset = { file: null };
 
 
 /**

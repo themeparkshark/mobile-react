@@ -126,13 +126,15 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   const sword = read('src/components/GymBattle/SwordMarker.tsx');
   assert.match(sword, /if \(!active\) return;\s*const interval = setInterval\(updateTime, 1000\)/);
   assert.match(sword, /autoplay=\{running\}/);
-  assert.match(read('src/screens/ExploreScreen/VaultMarker.tsx'), /autoplay=\{running\}/);
+  // A vault the declutter hid stops decoding too.
+  assert.match(read('src/screens/ExploreScreen/VaultMarker.tsx'), /autoplay=\{running && placement\.visible\}/);
   const gym = read('src/components/GymBattle/GymMarker.tsx');
   assert.match(gym, /if \(!running\) \{\s*cancelAnimation\(pulseScale\)/);
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
   // Pausing never mounts or unmounts views inside a map marker (MapLibre crash).
   assert.doesNotMatch(marker, /alive\.(running|active) \?|&& alive\.(running|active) &&|alive\.(running|active) && /);
-  assert.match(marker, /<MarkerTimer expiresAt=\{expiresAt!\} ticking=\{alive\.active\}/);
+  assert.match(marker, /const timerTicking = shown \? alive\.active : false;/);
+  assert.match(marker, /<MarkerTimer expiresAt=\{expiresAt!\} ticking=\{timerTicking\}/);
   assert.match(read('src/components/map/RideAmbience.tsx'), /const \{ running \} = useMapAlive\(\);\s*useEffect\(\(\) => \{\s*if \(!running\) \{ cancelAnimation\(p\); return; \}/);
   const pill = read('src/components/LiveEventsPill.tsx');
   assert.match(pill, /const ticking = focused && appActive && \(rushes\.length > 0 \|\| raid\?\.status === 'active'\)/);

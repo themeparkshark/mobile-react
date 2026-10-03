@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import { COPY } from '../../services/fright/copy';
+import { overlayRightInset } from '../../services/fright/layout';
 import { NIGHT } from '../../services/fright/theme';
 import { COACH_LINES, type FrightCoachKey } from '../../services/fright/tutorial';
 import { GameIcon } from '../../ui';
@@ -65,10 +66,11 @@ export function FrightExitCard({ visible, onOpen, onClose }: { readonly visible:
 }
 
 const styles = StyleSheet.create({
-  toast: { position: 'absolute', left: 16, right: 16, zIndex: 60, backgroundColor: NIGHT.midnight, borderRadius: 16,
+  // Right edge stops left of the map's right rail (overlayRightInset).
+  toast: { position: 'absolute', left: 16, right: overlayRightInset(), zIndex: 60, backgroundColor: NIGHT.midnight, borderRadius: 16,
     borderWidth: 2, borderColor: NIGHT.fog, paddingVertical: 10, paddingHorizontal: 14 },
   toastText: { fontFamily: 'Knockout', fontSize: 16, color: NIGHT.moon, textAlign: 'center' },
-  coach: { position: 'absolute', left: 16, right: 16, zIndex: 59, alignItems: 'center' },
+  coach: { position: 'absolute', left: 16, right: overlayRightInset(), zIndex: 59, alignItems: 'center' },
   pointerUp: { width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 12, borderLeftColor: 'transparent',
     borderRightColor: 'transparent', borderBottomColor: NIGHT.lantern },
   coachBody: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: NIGHT.haunt, borderRadius: 16, borderWidth: 3,

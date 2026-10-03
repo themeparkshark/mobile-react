@@ -37,7 +37,7 @@ export default function FrightLayer({ night, engine, top = 132 }: {
       {night.modeOn && <FrightSheet night={night} engine={engine} />}
       {/* One modal at a time (engine.modal): rank, Case File, rewards, team pick. */}
       <RankCard key={engine.modal?.kind === 'rank' ? engine.modal.id : 'rank'} prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
-      <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} />
+      <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} eventSlug={night.tonight?.event?.slug ?? null} />
       <RewardReveal rewards={engine.modal?.kind === 'rewards' ? engine.modal.rewards : null} onClose={engine.closeModal} />
       <SidePicker name={engine.modal?.kind === 'side' ? engine.modal.name : null} onClose={engine.closeModal}
         onPick={side => { void engine.pickSide(side); }} />

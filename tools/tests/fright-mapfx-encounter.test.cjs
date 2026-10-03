@@ -93,12 +93,14 @@ test('wiring: the encounter critter is tappable, its ring takes no touches; spar
   const api = read('src/api/endpoints/fright/types.ts');
   assert.match(api, /readonly chaos_hour\?: boolean \| null;/);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(sources, /onPress=\{encounterOnScreen && encounter && onEncounterPress \? \(\) => onEncounterPress\(encounter\.key\) : undefined\}/, 'tappable only while shown');
+  // Always a Pressable (fixed tree): touches are gated, never the onPress itself.
+  assert.match(sources, /onPress=\{\(\) => \{ if \(encounterTapRef\.current\) onEncounterPressRef\.current\?\.\(encounterTapRef\.current\); \}\}/);
+  assert.match(sources, /touchEnabled=\{encounterOnScreen && !!encounter && !!onEncounterPress\}/, 'tappable only while shown');
   const ring = sources.slice(sources.indexOf('<Marker key="fe"'), sources.indexOf('</Marker>', sources.indexOf('<Marker key="fe"')));
   assert.ok(ring.length > 0, 'the ring marker exists');
   assert.doesNotMatch(ring, /onPress/);
   assert.match(sources, /id: `sparks:\$\{encounter\.key\}`, minGapMs: 20_000, maxGapMs: 45_000, durationMs: 1500/);
-  assert.match(sources, /chaos=\{encounterChaos\(encounter\)\}/);
+  assert.match(sources, /chaos=\{encounter \? encounterChaos\(encounter\) : false\}/);
   assert.match(sources, /activeShowStart\(spot\.times, st\.serverNow, SHOW_WINDOW_MS\)/);
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.match(sprites, /ENCOUNTER_CRITTER_PT = 88/, 'tap target over 44 pt');

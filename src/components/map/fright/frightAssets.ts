@@ -41,6 +41,15 @@ export function rowIndex(asset: Pick<FrightSheetAsset, 'rows'>, name: string): n
   return asset.rows.findIndex(row => row === name || row.startsWith(`${name} `));
 }
 
+/**
+ * A critter sheet's [idle, lurk, jump] rows. The scareactor redo names its
+ * pop-out row "scare" (rows idle, lurk, scare, slide): it plays as the jump.
+ */
+export function critterRows(asset: Pick<FrightSheetAsset, 'rows'>): number[] {
+  const jump = rowIndex(asset, 'jump');
+  return [rowIndex(asset, 'idle'), rowIndex(asset, 'lurk'), jump >= 0 ? jump : rowIndex(asset, 'scare')];
+}
+
 /** Frames per row (manifest value, 10 by default) and the frame rate (10 fps, never above 10). */
 export function sheetTiming(asset: Pick<FrightSheetAsset, 'frames_per_row' | 'fps'>): { frames: number; fps: number } {
   const frames = Math.max(1, Math.floor(Number(asset.frames_per_row) || 10));
@@ -200,24 +209,40 @@ export interface ImageCache<T> {
   get(url: string): T | null;
   /** The loaded image without starting a load. */
   peek(url: string): T | null;
+  /** A component starts using the URL (keeps its decoded image alive). */
+  retain(url: string): void;
+  /** A component stops using it; unused images are released after IMAGE_IDLE_MS. */
+  release(url: string): void;
+  /** Drop decoded images nobody has used for IMAGE_IDLE_MS. Returns how many were dropped. */
+  sweep(): number;
   subscribe(listener: () => void): () => void;
   /** Loads started so far (tests). */
   loads(): number;
+  /** Decoded images held right now (tests, the perf probe). */
+  size(): number;
 }
+
+/** A decoded image nobody draws is released after this long (memory on a long night). */
+export const IMAGE_IDLE_MS = 60_000;
 
 /**
  * One loader per URL for the whole app: every marker asking for the same
  * sheet shares one fetch and one decoded image. A failure is retried at most
- * once a minute (no fetch storm on a bad connection).
+ * once a minute (no fetch storm on a bad connection). Images are reference
+ * counted: once no marker uses one for a minute (mode off, off screen, calm)
+ * it is disposed, so a long night never piles up decoded sheets.
  */
-export function createImageCache<T>(load: (url: string) => Promise<T | null>, now: () => number = Date.now): ImageCache<T> {
+export function createImageCache<T>(load: (url: string) => Promise<T | null>, now: () => number = Date.now,
+  dispose: (image: T) => void = () => undefined): ImageCache<T> {
   const images = new Map<string, T>();
   const pending = new Set<string>();
   const failedAt = new Map<string, number>();
+  const refs = new Map<string, number>();
+  const idleSince = new Map<string, number>();
   const listeners = new Set<() => void>();
   let started = 0;
   const notify = () => listeners.forEach(fn => fn());
-  return {
+  const cache: ImageCache<T> = {
     get(url) {
       const hit = images.get(url);
       if (hit) return hit;
@@ -228,7 +253,11 @@ export function createImageCache<T>(load: (url: string) => Promise<T | null>, no
       started++;
       load(url).then(image => {
         pending.delete(url);
-        if (image) { images.set(url, image); failedAt.delete(url); } else failedAt.set(url, now());
+        if (image) {
+          images.set(url, image);
+          failedAt.delete(url);
+          if (!refs.get(url)) idleSince.set(url, now());
+        } else failedAt.set(url, now());
         notify();
       }, () => {
         pending.delete(url);
@@ -240,10 +269,37 @@ export function createImageCache<T>(load: (url: string) => Promise<T | null>, no
     peek(url) {
       return images.get(url) ?? null;
     },
+    retain(url) {
+      refs.set(url, (refs.get(url) ?? 0) + 1);
+      idleSince.delete(url);
+    },
+    release(url) {
+      const n = Math.max(0, (refs.get(url) ?? 0) - 1);
+      if (n > 0) { refs.set(url, n); return; }
+      refs.delete(url);
+      idleSince.set(url, now());
+    },
+    sweep() {
+      let dropped = 0;
+      const at = now();
+      for (const [url, since] of idleSince) {
+        if (refs.get(url) || at - since < IMAGE_IDLE_MS) continue;
+        idleSince.delete(url);
+        const image = images.get(url);
+        if (!image) continue;
+        images.delete(url);
+        try { dispose(image); } catch { /* already gone */ }
+        dropped++;
+      }
+      if (dropped) notify();
+      return dropped;
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
     loads: () => started,
+    size: () => images.size,
   };
+  return cache;
 }

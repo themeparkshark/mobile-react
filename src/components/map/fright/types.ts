@@ -36,6 +36,11 @@ export interface FrightMapInput {
   /** The live encounter's critter was tapped (encounter.key). */
   readonly onEncounterPress?: (encounterKey: string) => void;
   /**
+   * Screen rects (points) of HUD the haunt chips keep clear of, beyond the map's
+   * own right rail (which Map measures): a joystick, the energy meter.
+   */
+  readonly hudRects?: readonly { readonly x: number; readonly y: number; readonly width: number; readonly height: number }[];
+  /**
    * Highest FX tier (server config.fx_tier_cap). Absent: 'lite' while the mode
    * is ON, until battery use is measured.
    */

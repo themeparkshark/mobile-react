@@ -4,7 +4,7 @@
  * marker, so it stays on the water as the map moves; the twinkle is a pure
  * function of the shared ambient clock (UI thread, frozen when the map pauses).
  */
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { Marker } from '../Marker';
@@ -30,14 +30,25 @@ export const WaterGlints = memo(function WaterGlints({ spots }: {
 }) {
   const { clock, caps, light, running } = useMapAlive();
   const count = light.glints > 0.02 && running ? Math.min(caps.waterGlints, spots.length) : 0;
+  // A fixed pool of slots keyed by index: panning moves glints between slots instead of
+  // mounting new markers mid-list (MapLibre insertReactSubview crash). Empty slots draw nothing.
+  const parked = useRef<{ latitude: number; longitude: number } | null>(null);
+  if (!parked.current && spots.length) parked.current = spots[0];
+  if (!parked.current) return null;
   return <>
-    {spots.slice(0, count).map(spot => (
-      <Marker key={`${spot.latitude.toFixed(6)},${spot.longitude.toFixed(6)}`} coordinate={spot}>
-        <View style={styles.box}><Glint clock={clock} seed={spot.seed} strength={0.9 * light.glints} /></View>
-      </Marker>
-    ))}
+    {Array.from({ length: GLINT_SLOTS }, (_, slot) => {
+      const spot = slot < count ? spots[slot] : undefined;
+      return (
+        <Marker key={`glint-${slot}`} coordinate={spot ?? parked.current!}>
+          <View style={styles.box}>{spot ? <Glint key={spot.seed} clock={clock} seed={spot.seed} strength={0.9 * light.glints} /> : null}</View>
+        </Marker>
+      );
+    })}
   </>;
 });
+
+/** Water glints on the map at most (ALIVE_CAPS full waterGlints). */
+export const GLINT_SLOTS = 6;
 
 const styles = StyleSheet.create({
   box: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },

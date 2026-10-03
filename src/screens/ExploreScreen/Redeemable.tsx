@@ -2,6 +2,9 @@ import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import Countdown, { zeroPad } from 'react-countdown';
 import { Text, View } from 'react-native';
+import { TagSlot } from '../../components/map/declutter/Placed';
+import type { TagPlacement } from '../../components/map/declutter/solver';
+import { REDEEMABLE_BODY, FIND_BOX, FIND_ROOT, FIND_TAG } from './parkMapLayout';
 import { useTimeoutWhen } from 'rooks';
 import { RedeemableType } from '../../models/redeemable-type';
 
@@ -12,9 +15,12 @@ import { RedeemableType } from '../../models/redeemable-type';
 export default function Redeemable({
   redeemable,
   onExpire,
+  tag,
 }: {
   readonly redeemable: RedeemableType;
   readonly onExpire: () => void;
+  /** Where the declutter put the timer chip (undefined: default, null: hidden). */
+  readonly tag?: TagPlacement | null;
 }) {
   useTimeoutWhen(
     () => {
@@ -28,36 +34,38 @@ export default function Redeemable({
   const lightColor = themeColor + '30';
 
   return (
-    <View style={{ alignItems: 'center', width: 80 }}>
-      {/* Timer badge */}
-      <View style={{
-        backgroundColor: lightColor,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 5,
-        marginBottom: 8,
-        borderWidth: 2,
-        borderColor: themeColor,
-        shadowColor: themeColor,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.4,
-        shadowRadius: 4,
-        elevation: 4,
-      }}>
-        <Countdown
-          date={Date.parse(redeemable.active_to)}
-          renderer={({ minutes, seconds }) => (
-            <Text style={{
-              fontFamily: 'Shark',
-              fontSize: 15,
-              color: themeColor,
-              textAlign: 'center',
-            }}>
-              {minutes}:{zeroPad(seconds)}
-            </Text>
-          )}
-        />
-      </View>
+    <View style={FIND_ROOT}>
+      {/* Timer chip: the declutter places it on a free side (TagSlot). */}
+      <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
+        fallback={{ x: -FIND_TAG.w / 2, y: REDEEMABLE_BODY.y - FIND_TAG.h - 3 }}>
+        <View style={{
+          backgroundColor: lightColor,
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 5,
+          borderWidth: 2,
+          borderColor: themeColor,
+          shadowColor: themeColor,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.4,
+          shadowRadius: 4,
+          elevation: 4,
+        }}>
+          <Countdown
+            date={Date.parse(redeemable.active_to)}
+            renderer={({ minutes, seconds }) => (
+              <Text style={{
+                fontFamily: 'Shark',
+                fontSize: 15,
+                color: themeColor,
+                textAlign: 'center',
+              }}>
+                {minutes}:{zeroPad(seconds)}
+              </Text>
+            )}
+          />
+        </View>
+      </TagSlot>
 
       {/* Redeemable with static glow */}
       <View>

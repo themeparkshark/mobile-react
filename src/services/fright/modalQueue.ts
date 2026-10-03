@@ -11,6 +11,10 @@ export interface RankModalPrompt {
   readonly name: string;
   readonly reSwim: boolean;
   readonly lastScore: number | null;
+  /** XP the finish granted (shown on the rank stamp). */
+  readonly xp?: number | null;
+  /** The rank_first coach line, shown on the first rank card of the season. */
+  readonly hint?: string | null;
 }
 
 export type FrightModal =
