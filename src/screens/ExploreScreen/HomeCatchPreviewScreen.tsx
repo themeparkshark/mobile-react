@@ -1,5 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { LogBox, StyleSheet, Text, View } from 'react-native';
+import { LogBox, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Canvas, Group, Picture, Skia, createPicture } from '@shopify/react-native-skia';
 import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
 import { LocationContext } from '../../context/LocationProvider';
@@ -18,7 +20,8 @@ import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers } from './findEdges';
 import { walkCloserLine } from './findPresentation';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
-import { preloadRidePhoto } from './ridePhoto/rideAssets';
+import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
+import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
 import { catchShown, useCatchOpen } from './catchPresence';
 import type { RideKind, Sky } from './ridePhoto/rides';
 import { resetRideMemoryForPreview } from './ridePhoto/rides/rideMemory';
@@ -52,25 +55,81 @@ const FIXTURES: Fixture[] = [
 // Recordings show the app, not the dev warning toast.
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
 
-type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean };
+type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean };
 /**
  * Performance experiments (EXPO_PUBLIC_HH3_EXP): 'nowarm' disables the next-step stage warm; 'order'
  * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds.
  */
 const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
 const BASE_SCRIPT: ScriptStep[] = [
+  // Five different finds (tall, wide and round art), every ride, three skies, an owned find and the Epic.
   { index: 0, kind: 'coaster', sky: 'day', shots: [-650] },
-  { index: 0, kind: 'flume', sky: 'sunset', shots: [12], rarity: 2 },
-  { index: 0, kind: 'teacups', sky: 'day', shots: [-300, 20] },
-  { index: 0, kind: 'coaster', sky: 'night', shots: [55], owned: true },
+  { index: 2, kind: 'flume', sky: 'sunset', shots: [12], rarity: 2 },
+  { index: 5, kind: 'teacups', sky: 'day', shots: [-300, 20], rarity: 3 },
+  { index: 1, kind: 'coaster', sky: 'night', shots: [55], rarity: 3, owned: true },
   { index: 3, kind: 'flume', sky: 'night', shots: [-420, 6, 45] },
+  // Reduce Motion: the car waits in the frame, one tap is a Great, no shake, hop or sunburst.
+  { index: 4, kind: 'teacups', sky: 'sunset', shots: [-400], rarity: 2, reduced: true },
 ];
 const SCRIPT: ScriptStep[] = EXP === 'order'
   ? [{ ...BASE_SCRIPT[2], shots: [-650] }, { ...BASE_SCRIPT[0], shots: [12] }, { ...BASE_SCRIPT[1], shots: [-300, 20] },
     BASE_SCRIPT[3], BASE_SCRIPT[4]]
   : BASE_SCRIPT;
 
+/**
+ * EXPO_PUBLIC_HH3_EXP=seeds:<ride>: the 9-seed scenery sheet. Nine finds' stages for one ride, drawn still
+ * (backdrop, ride, camera rig) in a 3 x 3 grid, so dressing, props, mounts and skies can be compared.
+ */
+function SeedSheet({ kind }: { kind: RideKind }) {
+  const art = useRideArt();
+  const insets = useSafeAreaInsets();
+  const win = useWindowDimensions();
+  const sceneH = Math.max(360, win.height - (insets.bottom + 128));
+  const tiles = useMemo(() => Array.from({ length: 9 }, (_, i) => {
+    const seed = 101 + i * 37;
+    const variant = sceneVariant({ seed, kind });
+    const stage = buildStage(kind, { width: win.width, height: sceneH, top: insets.top, spec: rideSpec(3), tier: 3, variant, art });
+    const state = { t: stage.stationT + (stage.frameT - stage.stationT) * 0.85, clock: 0, rock: 0, riderIn: 1, alpha: 1, ghost: false, photo: false };
+    const moving = createPicture(canvas => {
+      stage.paint(canvas, state, stage.data, art);
+      stage.front?.(canvas, state, stage.data, art);
+      stage.emissive?.(canvas, state, stage.data, art);
+      const cam = stage.cam;
+      const paint = Skia.Paint();
+      if (cam.beam) { paint.setColor(Skia.Color('#fff5e1')); canvas.drawRect(Skia.XYWHRect(cam.beam.x, cam.beam.y, cam.beam.w, cam.beam.h), paint); }
+      if (art.cameraPole) canvas.drawImageRect(art.cameraPole, Skia.XYWHRect(0, 0, art.cameraPole.width(), art.cameraPole.height()), Skia.XYWHRect(cam.pole.x, cam.pole.y, cam.pole.w, cam.pole.h), paint);
+      if (art.camera) {
+        canvas.save();
+        if (cam.facing === 'right') { canvas.translate(cam.x * 2 + cam.w, 0); canvas.scale(-1, 1); }
+        canvas.drawImageRect(art.camera, Skia.XYWHRect(0, 0, art.camera.width(), art.camera.height()), Skia.XYWHRect(cam.x, cam.y, cam.w, cam.h), paint);
+        canvas.restore();
+      }
+    }, { width: win.width, height: sceneH });
+    return { seed, sky: variant.sky, backdrop: stage.backdrop, foreground: stage.foreground, moving };
+  }), [kind, art, win.width, sceneH, insets.top]);
+  const tileW = win.width / 3, scale = tileW / win.width, tileH = sceneH * scale;
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0b2f5c', paddingTop: insets.top + 8 }}>
+      <Text style={{ color: '#fff', fontFamily: 'Shark', fontSize: 16, textAlign: 'center', marginBottom: 6 }}>{RIDES[kind].name}: 9 seeds</Text>
+      <Canvas style={{ width: win.width, height: tileH * 3 }}>
+        {tiles.map((tile, i) => (
+          <Group key={tile.seed} transform={[{ translateX: (i % 3) * tileW }, { translateY: Math.floor(i / 3) * tileH }, { scale }]}>
+            <Picture picture={tile.backdrop} />
+            {tile.foreground ? <Picture picture={tile.foreground} /> : null}
+            <Picture picture={tile.moving} />
+          </Group>
+        ))}
+      </Canvas>
+    </View>
+  );
+}
+
 export default function HomeCatchPreviewScreen() {
+  if (EXP.startsWith('seeds:')) return <SeedSheet kind={EXP.slice(6) as RideKind} />;
+  return <HomeCatchPreview />;
+}
+
+function HomeCatchPreview() {
   const { location } = useContext(LocationContext);
   const base = useRef<{ latitude: number; longitude: number } | null>(null);
   if (!base.current && location) base.current = { latitude: location.latitude, longitude: location.longitude };
@@ -258,7 +317,7 @@ export default function HomeCatchPreviewScreen() {
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
         forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
-        onCascade={setCascadeOn}
+        onCascade={setCascadeOn} forceReducedMotion={autoplay && !!SCRIPT[step]?.reduced}
         warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}

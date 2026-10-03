@@ -120,12 +120,16 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
   /** The reward banner is on the map (map markers under it hide their tags). */
   readonly onCascade?: (active: boolean) => void;
+  /** Development recordings: play this catch as if Reduce Motion were on. */
+  readonly forceReducedMotion?: boolean;
   readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, onCascade, refreshAfterCatch = true }, ref) {
-  const reducedMotion = useReducedGameMotion();
+  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, refreshAfterCatch = true }, ref) {
+  const systemReduced = useReducedGameMotion();
+  // Development recordings can show one catch with Reduce Motion on.
+  const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
   const { refreshPlayer } = useContext(AuthContext);
   const { currencies } = useContext(CurrencyContext);
   const { triggerFly } = useCurrencyFly();
