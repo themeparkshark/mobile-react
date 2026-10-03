@@ -20,6 +20,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import {
   prizeChips, progressFraction, rewardTrack, tabStatus, type DexItem, type DexReward, type DexSet,
 } from './dexModel';
+import type { EventCard } from './eventCards';
 
 export const GIFT = require('../../../assets/images/screens/player/gift.png');
 export const RIBBON = require('../../../assets/images/ribbon.png');
@@ -140,6 +141,43 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
         {claim && <View style={styles.tabDot}><GameIcon name="gift" size={22} /></View>}
         {set.isComplete && !claim && <View style={styles.tabDot}><GameIcon name="star" size={22} /></View>}
       </Animated.View>
+    </SpringPress>
+  );
+});
+
+/**
+ * An Events card in the same set picker (after the Home Hunt sets): night
+ * colors, the event's own art (or a lantern fallback), a haunts ring, and the
+ * lifetime haunts count on the newest card. Gold rim when every haunt was
+ * done in one night. Opens the event's own card screen.
+ */
+export const EventTab = memo(function EventTab({ card, lifetimeHaunts, onPress }: {
+  readonly card: EventCard; readonly lifetimeHaunts: number | null; readonly onPress: (card: EventCard) => void;
+}) {
+  const [artFailed, setArtFailed] = useState(false);
+  const fraction = card.total > 0 ? card.done / card.total : 0;
+  return (
+    <SpringPress onPress={() => onPress(card)} style={{ marginRight: SET_TAB_GAP }}
+      accessibilityLabel={`${card.cardTitle}, ${card.done} of ${card.total} haunts${lifetimeHaunts != null ? `, ${lifetimeHaunts} haunts all time` : ''}`}>
+      <View style={styles.tabGlow}>
+        <View style={[styles.tabFace, styles.eventFace, card.tenInOne && styles.tabFaceGold]}>
+          <LinearGradient colors={['#2b1f5c', '#0f1636']} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
+          <ProgressRing progress={fraction} size={74} stroke={7} color={card.complete ? BRAND.gold : '#9df0c2'} track="rgba(255,255,255,0.2)">
+            <View style={[styles.tabBadgeWell, styles.eventWell]}>
+              {card.art && !artFailed
+                ? <Image source={{ uri: card.art }} style={styles.tabBadge} contentFit="contain" onError={() => setArtFailed(true)} />
+                : <GameIcon name="star" size={34} />}
+            </View>
+          </ProgressRing>
+          <Text numberOfLines={2} style={styles.tabName} maxFontSizeMultiplier={1.2}>{card.cardTitle}</Text>
+        </View>
+      </View>
+      {lifetimeHaunts != null && lifetimeHaunts > 0 && (
+        <View style={[styles.tabStatus, styles.eventPill]}>
+          <Text numberOfLines={1} style={styles.tabStatusText} maxFontSizeMultiplier={1.2}>{lifetimeHaunts} haunts</Text>
+        </View>
+      )}
     </SpringPress>
   );
 });
@@ -443,6 +481,9 @@ const styles = StyleSheet.create({
     width: SET_TAB_WIDTH, height: 148, borderRadius: 22, alignItems: 'center', paddingTop: 12, overflow: 'hidden',
     borderWidth: 3, borderColor: 'rgba(5,52,110,0.55)', borderBottomWidth: 6,
   },
+  eventFace: { backgroundColor: '#1b1747', borderColor: '#8f7cff' },
+  eventWell: { backgroundColor: 'rgba(15,22,54,0.85)' },
+  eventPill: { borderColor: '#2b1f5c' },
   tabFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
   tabLower: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '30%' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },

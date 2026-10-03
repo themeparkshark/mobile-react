@@ -44,11 +44,12 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { showToast } from '../utils/toast';
 import GiftPrepVariantPanel from './GiftPrepVariantPanel';
 import {
-  BookStrip, itemArt, RewardTrack, SET_TAB_GAP, SET_TAB_WIDTH, SetHeader, SetTab, SparesMeter, StatusChip, WATER,
+  BookStrip, EventTab, itemArt, RewardTrack, SET_TAB_GAP, SET_TAB_WIDTH, SetHeader, SetTab, SparesMeter, StatusChip, WATER,
 } from './SetCollection/DexParts';
 import { ItemCard } from './SetCollection/DexItemCard';
 import { RewardReveal } from './SetCollection/DexReveal';
 import { cachedBook, storeBook, storeDetail } from './SetCollection/dexCache';
+import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/eventCards';
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
@@ -124,6 +125,20 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const [stamp, setStamp] = useState<{ slug: string; title: string } | null>(null);
   const { info: huntInfo, error: huntInfoError, retry: retryHuntInfo } = useHomeHuntInfo(oddsOpen);
   const pickerRef = useRef<ScrollView>(null);
+
+  // Events (the fright mode and later ones): only when the player earned something and the card screen exists in this build.
+  const [events, setEvents] = useState<EventShelf>({ cards: [], lifetimeHaunts: 0 });
+  useEffect(() => {
+    if (preview) return;
+    let live = true;
+    void getEventShelf().then(shelf => { if (live) setEvents(shelf); });
+    return () => { live = false; };
+  }, [preview]);
+  const openEvent = useCallback((card: EventCard) => {
+    playSfx('fx.whoosh', 0.4);
+    RootNavigation.navigate('FrightCard', { eventSlug: card.eventSlug });
+  }, []);
+  const eventsReady = events.cards.length > 0 && eventRouteExists();
 
   // The legacy payloads carry claim routes and wearable picks; they change only on actions. A timer
   // tick with v3 live re-reads just the v3 dex (2 requests per tick, not 4) over the last legacy copy.
@@ -428,6 +443,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         onLayout={event => { pickerBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height; }}
         style={styles.pickerBleed} onContentSizeChange={() => centerPicker(false)}>
         {sets.map(entry => <SetTab key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} />)}
+        {eventsReady && events.cards.map((card, index) => (
+          <EventTab key={`event-${card.eventSlug}`} card={card} lifetimeHaunts={index === 0 ? events.lifetimeHaunts : null} onPress={openEvent} />
+        ))}
       </ScrollView>
       {set && (
         <>
@@ -550,6 +568,16 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />
     </Wrapper>
   );
+}
+
+/** The event card screen ships with the fright app; until it is in this build, no Events card shows. */
+function eventRouteExists(): boolean {
+  try {
+    const state = RootNavigation.navigationRef.getRootState();
+    return !!state?.routeNames?.includes('FrightCard');
+  } catch {
+    return false;
+  }
 }
 
 /** First open with nothing cached: the real layout in placeholder panels (never a blank page or a spinner). */
