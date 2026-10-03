@@ -1,18 +1,23 @@
 /**
  * The Fin-ister pill on the map (R6 mode ON, R7, F5): mode name, "4 of 10
  * haunts", the pace line, or "Gates open 6:30 PM" in early. Phones-down shows
- * a quiet "Phones down" state. A small "?" replays the tutorial.
+ * "In line: {haunt} · {mm} min" while in a queue. A small "?" replays the tutorial.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GameIcon } from '../../ui';
 import { parkTimeLabel } from '../../services/fright/dates';
-import { hauntCountText, paceText, paceVisible } from '../../services/fright/pace';
+import { hauntCountText, pillSubLine, shortestLineText } from '../../services/fright/pace';
+import { minutesInLine } from '../../services/fright/run';
 import { countdownTarget } from '../../services/fright/phase';
 import { NIGHT } from '../../services/fright/theme';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import ArtImage from './ArtImage';
 import type { FrightEngine } from './useFrightEngine';
+
+/** The real Deep Lantern art, bundled, so every player sees it (server art only overrides). */
+const LANTERN = require('./art/lantern.webp');
 
 export default function FrightPill({ night, engine, onHelp }: {
   readonly night: FrightNight;
@@ -21,6 +26,9 @@ export default function FrightPill({ night, engine, onHelp }: {
   readonly onHelp: () => void;
 }) {
   const [, setTick] = useState(0);
+  const rowRef = useRef<View>(null);
+  const { setPillBottom } = engine;
+  useEffect(() => () => setPillBottom(null), [setPillBottom]);
   useEffect(() => {
     const timer = setInterval(() => setTick(value => value + 1), 30_000);
     return () => clearInterval(timer);
@@ -31,18 +39,22 @@ export default function FrightPill({ night, engine, onHelp }: {
   const haunts = tonight.spots.filter(spot => spot.kind === 'haunt');
   const done = tonight.me?.haunts_tonight ?? 0;
   const early = phase === 'early' || countdownTarget(tonight.night, now) != null;
-  const closes = Date.parse(tonight.night.closes_at);
-  const sub = engine.quiet ? 'Phones down. Eyes up.'
-    : early ? `Gates open ${parkTimeLabel(tonight.night.opens_at, tonight.event?.timezone) ?? ''}`.trim()
-      : paceVisible(tonight.spots) ? paceText(done, haunts.length, Number.isFinite(closes) ? closes - now : null)
-        : hauntCountText(done, haunts.length);
+  const sub = pillSubLine({
+    inLine: engine.openRun && engine.openSpot ? { name: engine.openSpot.name, minutes: minutesInLine(engine.openRun, now) } : null,
+    gatesOpen: early ? parkTimeLabel(tonight.night.opens_at, tonight.event?.timezone) : null,
+    done, total: haunts.length, shortest: shortestLineText(tonight.spots, engine.doneKeys),
+  });
   const label = `${title}. ${hauntCountText(done, haunts.length)}. ${sub}. Open the haunt list.`;
   return (
-    <View style={styles.row}>
+    <View ref={rowRef} style={styles.row} onLayout={() => {
+      // Coach marks and toasts sit just under the pill, never on top of it.
+      rowRef.current?.measureInWindow((_x, y, _w, h) => { if (Number.isFinite(y) && h > 0) setPillBottom(y + h); });
+    }}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => engine.setSheetOpen(true)}
         style={({ pressed }) => [styles.pill, pressed && { opacity: 0.9 }]}>
         <View style={styles.lantern}>
-          <ArtImage uri={engine.art.chip} style={{ width: 30, height: 30 }} fallback={<GameIcon name="sparkle" size={18} />} />
+          <ArtImage uri={engine.art.chip} style={{ width: 34, height: 34 }}
+            fallback={<Image source={LANTERN} style={{ width: 34, height: 34 }} contentFit="contain" />} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{title}  <Text style={styles.count}>{hauntCountText(done, haunts.length)}</Text></Text>

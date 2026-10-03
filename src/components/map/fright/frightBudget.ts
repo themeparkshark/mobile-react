@@ -67,8 +67,10 @@ export const LOW_BATTERY = 0.2;
  * the player's toggle, Reduce Motion and power. `lowPower` and `batteryLevel`
  * are optional: this build has no battery module, so they stay undefined.
  */
-export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLevel }: {
+export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLevel, cap }: {
   readonly alive: AliveTier;
+  /** Highest tier allowed (server config.fx_tier_cap). */
+  readonly cap?: AliveTier | null;
   readonly spooky: boolean;
   readonly reducedMotion: boolean;
   readonly lowPower?: boolean;
@@ -76,9 +78,50 @@ export function frightTier({ alive, spooky, reducedMotion, lowPower, batteryLeve
 }): AliveTier {
   if (!spooky || reducedMotion || alive === 'calm') return 'calm';
   if (typeof batteryLevel === 'number' && batteryLevel >= 0 && batteryLevel < LOW_BATTERY) return 'calm';
-  if (lowPower) return 'lite';
-  return alive;
+  const computed: AliveTier = lowPower && alive === 'full' ? 'lite' : alive;
+  return cap ? minTier(computed, cap) : computed;
 }
+
+const TIER_RANK: Readonly<Record<AliveTier, number>> = { calm: 0, lite: 1, full: 2 };
+
+export function minTier(a: AliveTier, b: AliveTier): AliveTier {
+  return TIER_RANK[a] <= TIER_RANK[b] ? a : b;
+}
+
+/**
+ * The cap in force: the server's when sent; otherwise `lite` while the mode is
+ * ON (battery is not measured yet), none when the mode is off.
+ */
+export function frightTierCap(serverCap: AliveTier | null | undefined, modeOn: boolean): AliveTier | null {
+  if (serverCap === 'full' || serverCap === 'lite' || serverCap === 'calm') return serverCap;
+  return modeOn ? 'lite' : null;
+}
+
+/** The ambient sound bed is opt-in (`ambience: true`) and needs effects on. Thunder and pops do not need it. */
+export function ambienceOn(input: { readonly ambience?: boolean }, effectsOn: boolean): boolean {
+  return input.ambience === true && effectsOn;
+}
+
+/** The chip under a haunt: "The Robot City · 25m", just the name without a wait, "Closed" when closed. */
+export function hauntChipLabel(spot: Pick<FrightSpot, 'name' | 'status' | 'posted_minutes'>): string {
+  const closed = spot.status === 'CLOSED' || spot.status === 'DOWN' || spot.status === 'REFURBISHMENT';
+  if (closed) return `${spot.name} · Closed`;
+  const wait = spot.posted_minutes;
+  return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0 ? `${spot.name} · ${Math.round(wait)}m` : spot.name;
+}
+
+/**
+ * Intro cue edges: 'hold' when the intro starts (haunts unlit, no flash or
+ * thunder: the tutorial plays the night's one thunder), 'light' when it ends.
+ */
+export function introStep(prev: 'intro' | null, next: 'intro' | null): 'hold' | 'light' | 'none' {
+  if (next === 'intro' && prev !== 'intro') return 'hold';
+  if (prev === 'intro' && next !== 'intro') return 'light';
+  return 'none';
+}
+
+/** Haunt chips show from this zoom in (they would crowd ride markers further out). */
+export const HAUNT_CHIP_ZOOM = 16;
 
 export type FrightCaps = Pick<AliveCaps, 'frightCritters' | 'frightFog' | 'frightBats' | 'frightWindows' | 'frightBolts' | 'frightProps'>;
 

@@ -137,6 +137,10 @@ export interface FrightConfig {
   readonly reef_dwell_seconds: number;
   readonly poll_seconds: number;
   readonly fan_min_raters: number;
+  /** Highest map FX tier tonight ('lite' caps battery use). */
+  readonly fx_tier_cap?: 'full' | 'lite' | 'calm' | null;
+  /** Looping ambience default (false: opt-in from the haunt sheet). */
+  readonly ambience_default?: boolean | null;
 }
 
 /** GET /parks/{id}/fright */

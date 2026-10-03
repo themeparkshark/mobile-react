@@ -4,7 +4,7 @@
  * badge; "I'm in line", "Play in line", "I survived it!"; the reefs; and the
  * Spooky effects toggle. Night palette. No free text anywhere.
  */
-import { useContext } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { FrightSpot } from '../../api/endpoints/fright';
 import { LocationContext } from '../../context/LocationProvider';
@@ -12,8 +12,8 @@ import * as RootNavigation from '../../RootNavigation';
 import { GameIcon } from '../../ui';
 import { COPY } from '../../services/fright/copy';
 import { nightDateLabel } from '../../services/fright/dates';
-import { fanBadge, hauntCountText, sortHaunts } from '../../services/fright/pace';
-import { quietMinutesLeft } from '../../services/fright/run';
+import { enterBlockText, fanBadge, hauntCountText, sortHaunts } from '../../services/fright/pace';
+import { minutesInLine } from '../../services/fright/run';
 import { NIGHT } from '../../services/fright/theme';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { frightLinePlayRide } from './frightLinePlay';
@@ -29,6 +29,18 @@ function statusText(spot: FrightSpot): string {
 
 export default function FrightSheet({ night, engine }: { readonly night: FrightNight; readonly engine: FrightEngine }) {
   const { latestLocationSampleRef } = useContext(LocationContext);
+  const scroll = useRef<ScrollView>(null);
+  const rowY = useRef<Record<string, number>>({});
+  // A map tap opens the sheet on that haunt: scroll to it once the rows have laid out.
+  useEffect(() => {
+    if (!engine.sheetOpen || !engine.focusKey) return;
+    const key = engine.focusKey;
+    const timer = setTimeout(() => {
+      const y = rowY.current[key];
+      if (y != null) scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [engine.sheetOpen, engine.focusKey]);
   const { tonight, title } = night;
   if (!tonight?.event) return null;
   const event = tonight.event;
@@ -58,9 +70,9 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
           <View style={styles.runCard} accessibilityLiveRegion="polite">
             <Text style={styles.runName}>{engine.openSpot.name}</Text>
             {engine.quiet ? (
-              <Text style={styles.runLine}>{`${COPY.shusherEnter} (${quietMinutesLeft(open, night.now(), engine.openSpot.walk_minutes)} min)`}</Text>
+              <Text style={styles.runLine}>{`In line ${minutesInLine(open, night.now())} min. ${COPY.inLineWait}`}</Text>
             ) : (
-              <Text style={styles.runLine}>Out of the haunt? Tap below.</Text>
+              <Text style={styles.runLine}>{COPY.outOfHaunt}</Text>
             )}
             <NightButton label={COPY.survived} icon="check" disabled={!engine.canSurvive}
               loading={engine.busyKey === open.key} onPress={() => { void engine.survived(); }}
@@ -68,15 +80,18 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
           </View>
         )}
 
-        <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingBottom: 12 }}>
+        <ScrollView ref={scroll} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingBottom: 12 }}>
           {!haunts.length && <Text style={styles.empty}>{COPY.empty}</Text>}
           {haunts.map(spot => {
             const run = runs.get(spot.key);
             const done = !!run?.done_at;
             const check = engine.enterCheck(spot);
             const badge = fanBadge(spot.fan_rank);
+            const blocked = enterBlockText(check);
+            const focused = engine.focusKey === spot.key;
             return (
-              <View key={spot.key} style={styles.row}>
+              <View key={spot.key} style={[styles.row, focused && styles.rowFocus]}
+                onLayout={event => { rowY.current[spot.key] = event.nativeEvent.layout.y; }}>
                 <View style={[styles.bead, done && styles.beadLit]}>
                   {done ? <GameIcon name="check" size={16} />
                     : <ArtImage uri={spot.art?.icon} style={{ width: 28, height: 28 }} fallback={<Text style={styles.beadText}>{spot.sort}</Text>} />}
@@ -89,8 +104,8 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
                   <View style={styles.actions}>
                     {!open && !done && (
                       <NightButton label={COPY.inLine} icon="queue" disabled={!check.ok} loading={engine.busyKey === spot.key}
-                        onPress={() => { void engine.enter(spot); }}
-                        accessibilityHint={check.ok ? 'Starts the phones-down timer' : 'Walk to the haunt entrance first'} />
+                        onPress={() => { void engine.enter(spot); }} variant={focused ? 'candy' : 'pumpkin'}
+                        accessibilityHint={blocked ?? 'Logs this haunt. Play in line while you wait.'} />
                     )}
                     <NightButton label={COPY.playInLine} variant="ghost" icon="play"
                       onPress={() => {
@@ -98,6 +113,7 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
                         RootNavigation.navigate('LinePlay', { ride: frightLinePlayRide(spot, event.park_id, Date.now()) });
                       }} />
                   </View>
+                  {!open && !done && blocked && <Text style={styles.blocked}>{blocked}</Text>}
                 </View>
               </View>
             );
@@ -121,6 +137,14 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
             <Switch value={engine.spooky} onValueChange={engine.setSpooky} accessibilityLabel={COPY.spooky}
               trackColor={{ true: NIGHT.pumpkin, false: NIGHT.dusk }} />
           </View>
+          <View style={styles.toggle}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{COPY.ambient}</Text>
+              <Text style={styles.meta}>{COPY.ambientHint}</Text>
+            </View>
+            <Switch value={engine.ambient} onValueChange={engine.setAmbient} accessibilityLabel={COPY.ambient}
+              trackColor={{ true: NIGHT.pumpkin, false: NIGHT.dusk }} />
+          </View>
           <NightButton label="Open my Deep Lantern" variant="ghost" icon="star" style={{ marginTop: 10 }}
             onPress={() => { close(); RootNavigation.navigate('FrightCard', { eventSlug: event.slug }); }} />
         </ScrollView>
@@ -141,6 +165,8 @@ const styles = StyleSheet.create({
   runName: { fontFamily: 'Shark', fontSize: 17, color: NIGHT.moon },
   runLine: { fontFamily: 'Knockout', fontSize: 15, color: NIGHT.fogLight, marginTop: 2 },
   row: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.25)' },
+  rowFocus: { backgroundColor: 'rgba(255,179,71,0.14)', borderRadius: 12, paddingHorizontal: 6 },
+  blocked: { fontFamily: 'Knockout', fontSize: 14, color: NIGHT.lantern, marginTop: 4 },
   bead: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: NIGHT.fog, alignItems: 'center',
     justifyContent: 'center', backgroundColor: NIGHT.haunt },
   beadLit: { backgroundColor: NIGHT.candy, borderColor: NIGHT.moon },

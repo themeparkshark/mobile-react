@@ -4,7 +4,10 @@
  * tutorial, the exit moment and the Marquee. Mounted outside the in-park block
  * so the exit moment and the Marquee still show after the presence leaves.
  */
+import { useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import type { FrightNight } from '../../hooks/useFrightNight';
+import { overlayTop } from '../../services/fright/layout';
 import FrightSheet from './FrightSheet';
 import { CaseFileReveal, FrightCoachMark, FrightExitCard, FrightToast } from './FrightOverlays';
 import MarqueeRecap from './MarqueeRecap';
@@ -18,13 +21,19 @@ export default function FrightLayer({ night, engine, top = 132 }: {
   /** Where the toast and coach line sit (below the pill column). */
   readonly top?: number;
 }) {
+  const box = useRef<View>(null);
+  const [boxY, setBoxY] = useState<number | null>(null);
+  const lineTop = overlayTop(engine.pillBottom, boxY, top);
   return (
     <>
+      <View ref={box} style={[StyleSheet.absoluteFill, { zIndex: 60 }]} pointerEvents="box-none"
+        onLayout={() => box.current?.measureInWindow((_x, y) => { if (Number.isFinite(y)) setBoxY(y); })}>
+        <FrightToast text={engine.toast} onClose={engine.clearToast} top={lineTop} />
+        {!engine.toast && <FrightCoachMark coach={engine.coach} onClose={engine.dismissCoach} top={lineTop} />}
+      </View>
       {night.modeOn && <FrightSheet night={night} engine={engine} />}
       <RankCard prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
       <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} />
-      <FrightToast text={engine.toast} onClose={engine.clearToast} top={top} />
-      {!engine.toast && <FrightCoachMark coach={engine.coach} onClose={engine.dismissCoach} top={top} />}
       <FrightExitCard visible={!!engine.recapOffer}
         onOpen={() => engine.recapOffer && engine.openMarquee(engine.recapOffer.slug, engine.recapOffer.nightOn)}
         onClose={engine.dismissRecapOffer} />

@@ -43,3 +43,44 @@ export function sortHaunts(spots: readonly FrightSpot[], from?: { latitude: numb
 export function fanBadge(fanRank: number | null | undefined): string | null {
   return fanRank != null && fanRank >= 1 && fanRank <= 3 ? `Fan favorite #${fanRank}` : null;
 }
+
+/**
+ * The visible reason under a disabled "I'm in line" (kid-friendly, no jargon):
+ * "Walk closer · 140 m", "Closed right now", "Finding your GPS...". Null when enabled.
+ */
+export function enterBlockText(check: { readonly ok: boolean; readonly reason?: string; readonly distance?: number | null }): string | null {
+  if (check.ok) return null;
+  if (check.reason === 'not_accepting') return 'Closed right now';
+  if (check.reason === 'too_far') {
+    const meters = check.distance != null ? Math.max(10, Math.round(check.distance / 10) * 10) : null;
+    return meters != null ? `Walk closer · ${meters} m` : 'Walk closer';
+  }
+  return 'Finding your GPS...';
+}
+
+/**
+ * The pill's one meaningful sub-line: the shortest open line among haunts not
+ * done tonight ("Shortest: The Robot City · 25 min"), or null when no haunt
+ * has a posted wait.
+ */
+export function shortestLineText(spots: readonly FrightSpot[], doneKeys: readonly string[]): string | null {
+  const open = spots.filter(spot => spot.kind === 'haunt' && spot.accepting && spot.posted_minutes != null
+    && (!spot.status || spot.status === 'OPERATING') && !doneKeys.includes(spot.key))
+    .sort((a, b) => (a.posted_minutes ?? 0) - (b.posted_minutes ?? 0) || a.sort - b.sort);
+  const best = open[0];
+  return best ? `Shortest: ${best.name} · ${best.posted_minutes} min` : null;
+}
+
+/** The pill's single sub-line, in priority order (no duplicate counts: the title carries "4 of 10 haunts"). */
+export function pillSubLine(input: {
+  readonly inLine?: { readonly name: string; readonly minutes: number } | null;
+  readonly gatesOpen?: string | null;
+  readonly done: number;
+  readonly total: number;
+  readonly shortest?: string | null;
+}): string {
+  if (input.inLine) return `In line: ${input.inLine.name} · ${input.inLine.minutes} min`;
+  if (input.gatesOpen) return `Gates open ${input.gatesOpen}`;
+  if (input.total > 0 && input.done >= input.total) return `All ${input.total}! Ten-in-One Fin unlocked.`;
+  return input.shortest ?? 'Tap a haunt to log it';
+}

@@ -1,12 +1,12 @@
 /**
  * F4: when the Marquee (night recap) is offered. Pure, unit tested.
  *
- * Offered ONCE per night, at the first of:
+ * Offered ONCE per night, and only when at least one haunt was logged that
+ * night (a zero-haunt night has no recap to show), at the first of:
  *  (a) the park presence leaves after 9 PM park time with 1+ haunts done;
  *  (b) the phase reaches `after`;
  *  (c) the next app open within 36 h of close.
  * The night is the server's `night_on` (park-local), never the phone's date.
- * Zero haunts still gets a card ("Scouted the reefs tonight.") through (b)/(c).
  */
 import type { FrightPhase, FrightTonight } from '../../api/endpoints/fright/types';
 import { FRIGHT_DEFAULTS } from './config';
@@ -42,12 +42,12 @@ export interface RecapInput {
 
 export function recapTrigger(input: RecapInput): { slug: string; nightOn: string; reason: RecapReason } | null {
   const { record, now, phase, phaseNightOn, serverSeen, parkLeft, appOpened } = input;
-  if (!record || record.offered || serverSeen) return null;
+  if (!record || record.offered || serverSeen || record.haunts < 1) return null;
   const closes = Date.parse(record.closesAt);
   if (Number.isFinite(closes) && now - closes > FRIGHT_DEFAULTS.recapWindowMs) return null;
   const hit = (reason: RecapReason) => ({ slug: record.slug, nightOn: record.nightOn, reason });
   if (phase === 'after' && (!phaseNightOn || phaseNightOn === record.nightOn)) return hit('after');
-  if (parkLeft && record.haunts >= 1) {
+  if (parkLeft) {
     const nine = nightInstant(record.nightOn, `${String(FRIGHT_DEFAULTS.recapExitHour).padStart(2, '0')}:00`, record.opensAt);
     if (nine != null && now >= nine) return hit('exit');
   }

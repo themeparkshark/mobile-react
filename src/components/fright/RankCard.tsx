@@ -39,7 +39,7 @@ export default function RankCard({ prompt, onSubmit, onClose }: {
           <Pressable accessibilityRole="button" accessibilityLabel="Skip" onPress={finish} hitSlop={10} style={styles.skip}>
             <GameIcon name="close" size={26} />
           </Pressable>
-          <Text style={styles.title} accessibilityRole="header">{rankPrompt(prompt.name, prompt.reSwim, prompt.key)}</Text>
+          <Text style={styles.title} accessibilityRole="header">{rankPrompt(prompt.name, prompt.reSwim, prompt.key, prompt.lastScore)}</Text>
           {result ? <Text style={styles.result} accessibilityLiveRegion="polite">{result}</Text> : (
             <>
               <View style={styles.fins}>

@@ -162,6 +162,10 @@ export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }:
 
 const LW = 96;
 const LH = 100;
+/** Room under the facade for the bead and the name chip (always reserved, so the anchor never shifts). */
+const LANTERN_FOOT = 36;
+/** The facade's ground point (glow pool center) as a marker anchor. */
+export const HAUNT_ANCHOR = { x: 0.5, y: (LH - 18) / (LH + LANTERN_FOOT) };
 const HOUSE = Skia.Path.MakeFromSVGString('M14 36 L38 12 L62 36 L62 74 L14 74 Z')!;
 const ROOF = Skia.Path.MakeFromSVGString('M9 38 L38 9 L67 38 L62 38 L38 15 L14 38 Z')!;
 const DOOR = Skia.Path.MakeFromSVGString('M32 74 L32 64 Q38 57 44 64 L44 74 Z')!;
@@ -286,7 +290,7 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
  * once survived, dim when closed. During the intro cinematic the haunts light
  * one by one (120 ms apart).
  */
-export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion }: {
+export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label }: {
   readonly spotKey: string;
   readonly flicker: string | null | undefined;
   readonly windows: number;
@@ -307,6 +311,8 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   readonly iconUrl: string | null;
   readonly intensity: number;
   readonly reducedMotion: boolean;
+  /** Name and posted wait chip ("The Robot City · 25m"); null hides it (zoomed out). */
+  readonly label: string | null;
 }) {
   const seed = hashString(spotKey);
   const base = useRemoteImage(layers?.base);
@@ -326,8 +332,8 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   });
   const showIcon = !base && !!iconUrl;
   return (
-    <View style={styles.lantern} pointerEvents="none">
-      <Canvas style={{ width: LW, height: LH }}>
+    <View style={styles.lantern}>
+      <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
         <Group opacity={lit}>
           <Circle cx={LW / 2} cy={LH - 18} r={36} opacity={glow}>
             <RadialGradient c={vec(LW / 2, LH - 18)} r={36} colors={[glowColor, `${glowColor}00`]} />
@@ -347,6 +353,11 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
         <View style={styles.bead}>
           <View style={styles.beadDot} />
           <Text style={styles.beadText}>{beads > 1 ? `x${beads}` : '1'}</Text>
+        </View>
+      )}
+      {label && (
+        <View style={[styles.chip, dim && styles.chipDim]}>
+          <Text style={styles.chipText} numberOfLines={1}>{label}</Text>
         </View>
       )}
     </View>
@@ -594,7 +605,12 @@ function TrailDot({ j, at }: { j: number; at: (lag: number) => { x: number; y: n
 }
 
 const styles = StyleSheet.create({
-  lantern: { width: LW, height: LH + 14, alignItems: 'center' },
+  // At least 44 pt wide and tall: the whole facade is the tap target.
+  lantern: { width: LW, height: LH + LANTERN_FOOT, alignItems: 'center' },
+  chip: { maxWidth: 132, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
+    backgroundColor: 'rgba(30,24,56,0.92)', borderWidth: 1.5, borderColor: NIGHT.lantern },
+  chipDim: { borderColor: NIGHT.dusk, opacity: 0.85 },
+  chipText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.moon },
   icon: { position: 'absolute', top: 10, width: 64, height: 64 },
   iconDim: { opacity: 0.5 },
   bead: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: -8, paddingHorizontal: 6, paddingVertical: 1,

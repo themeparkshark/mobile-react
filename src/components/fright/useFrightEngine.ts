@@ -23,7 +23,7 @@ import {
   dueActions, enqueue, parseQueue, pruneQueue, settle, type QueuedAction,
 } from '../../services/fright/queue';
 import { nightRecordFrom, parseNightRecord, recapTrigger, type NightRecord } from '../../services/fright/recap';
-import { canEnter, finishDecision, localRun, minDoneAt, runStage, type FinishMethod } from '../../services/fright/run';
+import { canEnter, exitStep, finishDecision, localRun, minDoneAt, runStage, type ExitHold, type FinishMethod } from '../../services/fright/run';
 import { FRIGHT_KEYS, readJson, readKey, writeJson, writeKey } from '../../services/fright/storage';
 import {
   coachDismiss, coachEnqueue, coachTick, coachWaitMs, EMPTY_COACH, introPlan, isChaosHour, markSeenLocal, mergeSeen,
@@ -36,13 +36,25 @@ export interface RankPrompt {
   readonly key: string;
   readonly name: string;
   readonly reSwim: boolean;
+  /** The player's last score for this haunt (re-swim card asks "Still a four?"). */
+  readonly lastScore: number | null;
 }
 
 export interface FrightEngine {
   readonly spooky: boolean;
   readonly setSpooky: (on: boolean) => void;
+  readonly ambient: boolean;
+  readonly setAmbient: (on: boolean) => void;
   readonly sheetOpen: boolean;
   readonly setSheetOpen: (open: boolean) => void;
+  /** The haunt the sheet should scroll to and highlight (map tap). */
+  readonly focusKey: string | null;
+  readonly openSheetAt: (key: string) => void;
+  /** Window y of the Fin-ister pill's bottom edge (coach marks and toasts sit below it). */
+  readonly pillBottom: number | null;
+  readonly setPillBottom: (y: number | null) => void;
+  /** One qualifying exit fix is held; a second 60 s later confirms the exit. */
+  readonly exitPending: boolean;
   /** The open haunt run (server or optimistic local). */
   readonly openRun: FrightRun | null;
   readonly openSpot: FrightSpot | null;
@@ -109,7 +121,20 @@ export default function useFrightEngine(night: FrightNight, opts: {
 
   const [loaded, setLoaded] = useState(false);
   const [spooky, setSpookyState] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpenState] = useState(false);
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [ambient, setAmbientState] = useState<boolean | null>(null);
+  const [pillBottom, setPillBottom] = useState<number | null>(null);
+  const lastScores = useRef<Record<string, number>>({});
+  const setSheetOpen = useCallback((open: boolean) => {
+    setSheetOpenState(open);
+    if (!open) setFocusKey(null);
+  }, []);
+  /** Open the haunt sheet scrolled to one haunt (map facade tap). */
+  const openSheetAt = useCallback((key: string) => {
+    setFocusKey(key);
+    setSheetOpenState(true);
+  }, []);
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [local, setLocal] = useState<{ nightOn: string; run: FrightRun } | null>(null);
   const [record, setRecord] = useState<NightRecord | null>(null);
@@ -126,7 +151,8 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const [art, setArt] = useState<FrightArtSet>(frightArt);
   const reefHold = useRef<ReefHold | null>(null);
   const finishing = useRef(false);
-  const lastOpenCount = useRef(0);
+  const exitHold = useRef<ExitHold | null>(null);
+  const [exitPending, setExitPending] = useState(false);
 
   const now = night.now;
   const fix = useCallback(() => sampleToFix(sampleRef.current, offset), [sampleRef, offset]);
@@ -154,8 +180,9 @@ export default function useFrightEngine(night: FrightNight, opts: {
   useEffect(() => {
     let current = true;
     void Promise.all([readKey(FRIGHT_KEYS.queue), readKey(FRIGHT_KEYS.night), readKey(FRIGHT_KEYS.seen),
-      readKey(FRIGHT_KEYS.spooky), readJson<{ nightOn: string; run: FrightRun }>(FRIGHT_KEYS.run)])
-      .then(([q, n, s, sp, run]) => {
+      readKey(FRIGHT_KEYS.spooky), readJson<{ nightOn: string; run: FrightRun }>(FRIGHT_KEYS.run), readKey(FRIGHT_KEYS.ambient)])
+      .then(([q, n, s, sp, run, amb]) => {
+        if (amb === '1' || amb === '0') setAmbientState(amb === '1');
         if (!current) return;
         setQueue(parseQueue(q));
         setRecord(parseNightRecord(n));
@@ -177,6 +204,13 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const setLocalRun = useCallback((next: { nightOn: string; run: FrightRun } | null) => {
     setLocal(next);
     void writeJson(FRIGHT_KEYS.run, next);
+  }, []);
+
+  /** Looping ambience is opt-in (battery): default from config.ambience_default, else off. */
+  const ambientOn = ambient ?? (tonight?.config?.ambience_default === true);
+  const setAmbient = useCallback((on: boolean) => {
+    setAmbientState(on);
+    void writeKey(FRIGHT_KEYS.ambient, on ? '1' : '0');
   }, []);
 
   const setSpooky = useCallback((on: boolean) => {
@@ -254,9 +288,10 @@ export default function useFrightEngine(night: FrightNight, opts: {
     const spot = spotByKey.get(key);
     applyResult(key, result);
     setLocalRun(null);
-    setRank({ key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim });
+    const lastScore = result.run?.score ?? me?.runs.find(run => run.key === key)?.score ?? lastScores.current[key] ?? null;
+    setRank({ key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim, lastScore });
     enqueueCoach('rank_first');
-  }, [spotByKey, applyResult, setLocalRun, enqueueCoach]);
+  }, [spotByKey, applyResult, setLocalRun, enqueueCoach, me?.runs]);
 
   const afterFound = useCallback((key: string, result: FrightActionResult) => {
     applyResult(key, result, { found: true, side: null });
@@ -278,7 +313,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
     }
     setLocalRun({ nightOn, run: localRun(spot.key, sample.at, spot.walk_minutes, spot.posted_minutes,
       tonight?.config?.min_dwell_extra_minutes) });
-    setToast(COPY.shusherEnter);
+    setToast(COPY.inLineToast);
     setSheetOpen(false);
     const wire = toWireFix(sample);
     try {
@@ -302,7 +337,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
     const key = openRun.key;
     setBusyKey(key);
     const sample = fix();
-    const wireMethod = method === 'exit' ? 'gps' : method === 'next_open' ? 'open' : 'button';
+    const wireMethod = method === 'exit' ? 'gps' : 'button';
     try {
       // An entry still in the queue goes first.
       const pendingEnter = queueRef.current.find(item => item.kind === 'enter' && item.key === key);
@@ -340,10 +375,14 @@ export default function useFrightEngine(night: FrightNight, opts: {
     if (!loaded || !tonight || !nightOn) return;
     const sample = fix();
     const t = now();
-    // H6a: auto-finish on exit.
+    // H6a: GPS exit needs 2 qualifying fixes 60 s apart (exitStep).
     if (openRun) {
-      const decision = finishDecision({ run: openRun, spot: openSpot, fix: sample, now: t, appOpened: false });
-      if (decision) void finish(decision);
+      const step = exitStep(exitHold.current, openRun, openSpot, sample, t);
+      exitHold.current = step.hold;
+      setExitPending(!!step.hold);
+      if (finishDecision({ run: openRun, spot: openSpot, now: t, exitConfirmed: step.exit })) void finish('exit');
+    } else {
+      exitHold.current = null;
     }
     if (!modeOn || !sample) return;
     // F1: reefs.
@@ -396,14 +435,22 @@ export default function useFrightEngine(night: FrightNight, opts: {
     return () => clearTimeout(timer);
   }, [location, reefPoll, modeOn, foreground, nightOn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // H6b: next app open after min dwell finishes the run.
+  // H6a: a player who stops walking after the first exit fix gets no new samples; ask for one after 60 s.
+  // (There is deliberately no next-app-open finish: unlocking the phone in line never credits a haunt.)
   useEffect(() => {
-    if (!loaded || !foreground || openCount === lastOpenCount.current) return;
-    lastOpenCount.current = openCount;
-    if (!openRun) return;
-    const decision = finishDecision({ run: openRun, spot: openSpot, fix: fix(), now: now(), appOpened: true });
-    if (decision) void finish(decision);
-  }, [loaded, foreground, openCount, openRun, openSpot, fix, now, finish]);
+    const hold = exitHold.current;
+    if (!exitPending || !hold || !openRun || !foreground) return;
+    const timer = setTimeout(() => {
+      void freshFix(5_000).then(sample => {
+        if (!exitHold.current) return;
+        const step = exitStep(exitHold.current, openRun, openSpot, sample, now());
+        exitHold.current = step.hold;
+        setExitPending(!!step.hold);
+        if (finishDecision({ run: openRun, spot: openSpot, now: now(), exitConfirmed: step.exit })) void finish('exit');
+      });
+    }, Math.max(1000, hold.first.at + 61_000 - now()));
+    return () => clearTimeout(timer);
+  }, [exitPending, openRun, foreground]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Offline queue: retry while open.
   useEffect(() => {
@@ -504,7 +551,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
   }, [markSeen]);
 
   // Toasts never show during phones-down, except the Shusher line itself.
-  const visibleToast = toast && (!quiet || toast === COPY.shusherEnter) ? toast : null;
+  const visibleToast = toast && (!quiet || toast === COPY.inLineToast) ? toast : null;
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 4500);
@@ -525,6 +572,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
     const key = rank.key;
     const result = await scoreFrightSpot(key, score, reaction);
     if (!result.ok) return null;
+    lastScores.current[key] = score;
     applyResult(key, result, { patch: { score, reaction } });
     const runs = (me?.runs ?? []).map(run => run.key === key ? { ...run, score } : run);
     const myRank = 1 + runs.filter(run => run.key !== key && (run.score ?? 0) > score).length;
@@ -534,15 +582,17 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const doneKeys = useMemo(() => (me?.runs ?? []).filter(run => run.done_at).map(run => run.key), [me?.runs]);
 
   return {
-    spooky, setSpooky, sheetOpen, setSheetOpen, openRun, openSpot, quiet,
+    spooky, setSpooky, ambient: ambientOn, setAmbient, sheetOpen, setSheetOpen, focusKey, openSheetAt,
+    pillBottom, setPillBottom, exitPending, openRun, openSpot, quiet,
     canSurvive: stage === 'ready', busyKey, pendingSync: queue.length,
     enter, survived,
-    // UI gate: only "closed" and "too far" disable the button; a stale or rough fix is refreshed on tap.
+    // UI gate: closed, too far or no GPS yet disable the button; a stale or rough fix is refreshed on tap.
     enterCheck: (spot: FrightSpot) => {
       const sample = fix();
       const check = canEnter(spot, sample ? { ...sample, accuracy: Math.min(sample.accuracy ?? 50, 50) } : null,
         sample?.at ?? now(), { enterAccuracyM: 50 });
-      return check.reason === 'not_accepting' || check.reason === 'too_far' ? check : { ok: true, distance: check.distance };
+      return check.reason === 'not_accepting' || check.reason === 'too_far' || check.reason === 'no_fix' ? check
+        : { ok: true, distance: check.distance };
     },
     rank: quiet ? null : rank, submitRank, closeRank: () => setRank(null),
     caseFile: quiet ? null : caseFile, closeCaseFile: () => setCaseFile(null),

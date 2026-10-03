@@ -20,11 +20,11 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, HAUNT_CHIP_ZOOM, hauntChipLabel, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
-import { EncounterSprite, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
+import { EncounterSprite, HAUNT_ANCHOR, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
 import type { FrightMapInput } from './types';
 import { useFrightState } from './useFrightState';
 
@@ -130,6 +130,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   }, [player?.latitude, player?.longitude, reefCircles, st.effectsOn, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lod = critterLod(zoom);
+  const onHauntPress = input.onHauntPress;
   const reefCount = (key: string) => (lod === 'sprites' ? critterAlloc[key] ?? 0 : 0);
   const sources: AmbientSource[] = [];
   if (animate) {
@@ -243,12 +244,13 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const offset = haunt.fx?.offset;
         const at = offset && offset.length === 2 ? offsetMeters(haunt, Number(offset[0]) || 0, Number(offset[1]) || 0) : haunt;
         return (
-          <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={{ x: 0.5, y: 0.82 }}>
+          <Marker key={`fh-${haunt.key}`} coordinate={at} anchor={HAUNT_ANCHOR}
+            onPress={onHauntPress ? () => onHauntPress(haunt.key) : undefined} accessibilityLabel={`${haunt.name}, haunt`}>
             <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
               animatedWindows={windowAlloc[haunt.key] ?? 0} clock={alive.clock} animated={animate}
               rate={(windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
               ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-              layers={layersOf(haunt)}
+              layers={layersOf(haunt)} label={zoom >= HAUNT_CHIP_ZOOM ? hauntChipLabel(haunt) : null}
               done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)} index={i}
               iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
           </Marker>

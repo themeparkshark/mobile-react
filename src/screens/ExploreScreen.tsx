@@ -487,7 +487,9 @@ function ExploreScreen() {
       tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,
       player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
       cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
-    } : null, [frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+      onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
+      tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
+    } : null, [frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
@@ -1110,7 +1112,7 @@ function ExploreScreen() {
         {/* Ride Control floats over the map so the map runs right up to the header. */}
         {player && (
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
-            <RideControlBar control={rideControl} tasks={visibleTasks}
+            <RideControlBar control={rideControl} tasks={visibleTasks} hideAllOpen={frightNight.modeOn}
               onFocusTask={(task) => setSelectedTask(task)} />
             <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
               mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
@@ -1410,7 +1412,7 @@ function ExploreScreen() {
       <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
         homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
-      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 8} />}
+      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
   );
 }

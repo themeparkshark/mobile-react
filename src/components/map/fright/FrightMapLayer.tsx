@@ -20,14 +20,13 @@ import { CLOUDS_H, CLOUDS_W, FOG_TILE, FRIGHT_ART, NIGHT } from './frightArt';
 import { frightEvents } from './events';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
 import { FRIGHT_SOUNDS, playFrightSfx, useFrightSoundBed } from './frightAudio';
-import { frameStats } from './frightBudget';
+import { ambienceOn, frameStats } from './frightBudget';
 import { distanceMeters, pointsPerMeter, validPoint } from './geo';
 import { flashLevel, startThunder, stepThunder, type ThunderState } from './thunder';
 import type { FrightMapInput } from './types';
-import { frightIntro, useFrightState } from './useFrightState';
+import { frightIntro, introStep, useFrightState } from './useFrightState';
 
 export const INTRO_MS = 4000;
-const INTRO_FLASH_MS = 1400;
 const BOLT = Skia.Path.MakeFromSVGString('M0 0 L-7 16 L-1 16 L-9 34 L6 12 L0 12 L6 0 Z')!;
 
 function playThunder(volume: number) {
@@ -139,40 +138,30 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   // Sound bed: only with the mode ON, Spooky effects on, phones up, map on screen, app open.
   const nearLantern = useMemo(() => !!player && input.tonight.spots.some(s => s.kind === 'haunt' && s.status === 'OPERATING' &&
     distanceMeters(player, s) < 35), [player?.latitude, player?.longitude, input.tonight.spots]); // eslint-disable-line react-hooks/exhaustive-deps
-  useFrightSoundBed(effectsOn && visible > 0, nearLantern);
+  useFrightSoundBed(ambienceOn(input, effectsOn) && visible > 0, nearLantern);
 
-  // Season intro: night drops fast, fog rolls in from the edges, one flash and
-  // thunder, lanterns light one by one. Reduce Motion: a plain fade, no flash.
-  const [introOn, setIntroOn] = useState(false);
+  // Season intro (one thunder only: the tutorial modal plays it). While the
+  // intro runs the map stays quiet with the haunts unlit: no flash, no
+  // thunder. When it ends the haunts light one by one, 120 ms apart.
   const doneRef = useRef(input.onCinematicDone);
   doneRef.current = input.onCinematicDone;
-  const effectsRef = useRef(effectsOn);
-  effectsRef.current = effectsOn;
+  const prevCinematic = useRef<FrightMapInput['cinematic']>(null);
   useEffect(() => {
-    if (input.cinematic !== 'intro') return;
-    setIntroOn(true);
-    frightIntro.value = 0;
-    frightIntro.value = withTiming(1, { duration: INTRO_MS, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    if (!alive.reducedMotion && st.tier !== 'calm') {
-      timers.push(setTimeout(() => {
-        flashStrength.value = 1;
-        flashAt.value = clock.value;
-        if (effectsRef.current) timers.push(setTimeout(() => playThunder(0.36), 900));
-      }, INTRO_FLASH_MS));
+    const step = introStep(prevCinematic.current ?? null, input.cinematic ?? null);
+    prevCinematic.current = input.cinematic ?? null;
+    if (step === 'hold') {
+      frightIntro.value = 0;
+      // Fallback: report the intro done if nothing else ends it.
+      const timer = setTimeout(() => doneRef.current?.(), INTRO_MS + 200);
+      return () => clearTimeout(timer);
     }
-    timers.push(setTimeout(() => {
-      setIntroOn(false);
-      doneRef.current?.();
-    }, INTRO_MS + 200));
-    return () => {
-      timers.forEach(clearTimeout);
-      frightIntro.value = 1;
-    };
-  }, [input.cinematic]); // eslint-disable-line react-hooks/exhaustive-deps
-  const hole = useDerivedValue(() => Math.max(0, 1 - frightIntro.value * 1.6));
-  const maskPositions = useDerivedValue(() => [hole.value * 0.7, Math.min(1, hole.value * 0.7 + 0.3)]);
-  const diag = Math.hypot(width, height) / 2;
+    if (step === 'light') {
+      frightIntro.value = 0.5;
+      frightIntro.value = withTiming(1, { duration: 2000, easing: Easing.linear, reduceMotion: ReduceMotion.Never });
+    }
+    return undefined;
+  }, [input.cinematic]);
+  useEffect(() => () => { frightIntro.value = 1; }, []);
 
   if (visible <= 0 || width <= 0 || height <= 0) return null;
   const fogLayers = (
@@ -210,14 +199,7 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
             </Group>
           )}
         </Group>
-        {introOn ? (
-          // Fog rolls in from the edges: the clear middle closes as the intro runs.
-          <Mask mode="alpha" mask={
-            <Rect x={0} y={0} width={width} height={height}>
-              <RadialGradient c={vec(width / 2, height / 2)} r={diag} colors={['rgba(0,0,0,0)', 'rgba(0,0,0,1)']} positions={maskPositions} />
-            </Rect>
-          }>{fogLayers}</Mask>
-        ) : fogLayers}
+        {fogLayers}
         {/* Lightning: a soft violet-white flash and a small bolt by the moon. */}
         {caps.frightBolts > 0 && (
           <Group>

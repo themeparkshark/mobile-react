@@ -11,6 +11,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { captureRef } from 'react-native-view-shot';
 import { getFrightRecap, type FrightRecap } from '../../api/endpoints/fright';
 import { frightArt } from '../../services/fright/art';
+import { withTimeout } from '../../services/fright/timeout';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon, gameAlert } from '../../ui';
 import FrightRecapCard from './FrightRecapCard';
@@ -41,17 +42,19 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, background, onClose 
   const [recap, setRecap] = useState<FrightRecap | null>(null);
   const [failed, setFailed] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const card = useRef<View>(null);
   useEffect(() => {
     let current = true;
     setRecap(null);
     setFailed(false);
-    void getFrightRecap(eventSlug, nightOn, playerId).then(next => {
+    // 12 s cap: a slow or missing recap shows an error with Retry, never an endless spinner.
+    void withTimeout(getFrightRecap(eventSlug, nightOn, playerId)).then(next => {
       if (!current) return;
       if (next) setRecap(next); else setFailed(true);
     });
     return () => { current = false; };
-  }, [eventSlug, nightOn, playerId]);
+  }, [eventSlug, nightOn, playerId, attempt]);
   return (
     <View style={styles.sheet}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} style={styles.close}>
@@ -59,7 +62,10 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, background, onClose 
       </Pressable>
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 52 }}>
         {recap ? <FrightRecapCard ref={card} recap={recap} background={background ?? frightArt().recapBg} />
-          : <Text style={styles.wait}>{failed ? 'The Lantern is loading. Hang tight.' : 'Lighting the marquee...'}</Text>}
+          : <Text style={styles.wait} accessibilityLiveRegion="polite">
+            {failed ? 'Couldn\'t load your night. Check your signal and try again.' : 'Lighting the marquee...'}</Text>}
+        {failed && <NightButton label="Retry" icon="retry" onPress={() => setAttempt(value => value + 1)}
+          style={{ marginTop: 14, alignSelf: 'center', minWidth: 160 }} />}
         {recap && !playerId && (
           <NightButton label="Share my night" icon="camera" loading={sharing} style={{ marginTop: 14 }}
             onPress={async () => { setSharing(true); await shareRecapCard(card.current); setSharing(false); }} />

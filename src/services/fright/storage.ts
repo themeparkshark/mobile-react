@@ -10,6 +10,7 @@ export const FRIGHT_KEYS = {
   seen: 'fright.seen.v1',
   spooky: 'fright.spooky.v1',
   run: 'fright.localrun.v1',
+  ambient: 'fright.ambient.v1',
 } as const;
 
 export async function readKey(key: string): Promise<string | null> {

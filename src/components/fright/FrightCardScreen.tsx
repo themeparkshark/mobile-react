@@ -8,12 +8,15 @@
  * the 19th night glows extra bright.
  */
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFrightCard, type FrightCard, type FrightSlot } from '../../api/endpoints/fright';
 import { artFromCard, frameFor, pinImage, rememberFrightArt } from '../../services/fright/art';
 import { COPY } from '../../services/fright/copy';
+import { withTimeout } from '../../services/fright/timeout';
+import { NightButton } from './ui';
 import { formatMinutes, nightDateLabel } from '../../services/fright/dates';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
@@ -50,6 +53,7 @@ export default function FrightCardScreen() {
   const params = (route.params ?? {}) as Partial<FrightCardParams>;
   const [card, setCard] = useState<FrightCard | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [recapNight, setRecapNight] = useState<string | null>(null);
   const [misty, setMisty] = useState(false);
   const taps = useRef<number[]>([]);
@@ -58,12 +62,13 @@ export default function FrightCardScreen() {
   useEffect(() => {
     if (!params.eventSlug) { setFailed(true); return; }
     let current = true;
-    void getFrightCard(params.eventSlug, params.playerId).then(next => {
+    setFailed(false);
+    void withTimeout(getFrightCard(params.eventSlug, params.playerId)).then(next => {
       if (!current) return;
       if (next) { setCard(next); rememberFrightArt(artFromCard(next.art)); } else setFailed(true);
     });
     return () => { current = false; };
-  }, [params.eventSlug, params.playerId]);
+  }, [params.eventSlug, params.playerId, attempt]);
 
   const brightNight = card?.nights === 19;
   useEffect(() => {
@@ -91,7 +96,10 @@ export default function FrightCardScreen() {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}><GameIcon name="back" size={34} /></Pressable>
-        <Text style={styles.empty}>{failed ? 'The Lantern is dark right now. Try again soon.' : 'The Lantern is loading. Hang tight.'}</Text>
+        <Text style={styles.empty} accessibilityLiveRegion="polite">
+          {failed ? 'Couldn\'t load your Deep Lantern. Check your signal and try again.' : 'The Lantern is loading. Hang tight.'}</Text>
+        {failed && params.eventSlug && <NightButton label="Retry" icon="retry" onPress={() => setAttempt(value => value + 1)}
+          style={{ marginTop: 16, alignSelf: 'center', minWidth: 160 }} />}
       </View>
     );
   }
@@ -131,7 +139,7 @@ export default function FrightCardScreen() {
             {haunts.map((slot, index) => <Bead key={slot.key} slot={slot} index={index} total={haunts.length} gold={card.ten_in_one} ended={ended} />)}
             <Pressable onPress={tapGlass} accessibilityRole="button" accessibilityLabel={`Deep Lantern, level ${card.lantern.level}`} style={styles.glass}>
               <Animated.View style={[styles.glassGlow, { opacity: brightNight ? glow : 0.55 }]} />
-              <ArtImage uri={card.art.chip} style={{ width: 70, height: 70 }} fallback={<GameIcon name="sparkle" size={52} />} />
+              <ArtImage uri={card.art.chip} style={{ width: 70, height: 70 }} fallback={<Image source={require('./art/lantern.webp')} style={{ width: 70, height: 70 }} contentFit="contain" />} />
               <Text style={styles.level}>{`Lv${card.lantern.level}`}</Text>
             </Pressable>
           </View>
