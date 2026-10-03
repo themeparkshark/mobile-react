@@ -118,11 +118,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Development recordings: pin the ride and sky. */
   readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
   /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
+  /** The reward banner is on the map (map markers under it hide their tags). */
+  readonly onCascade?: (active: boolean) => void;
   readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, onCascade, refreshAfterCatch = true }, ref) {
   const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
   const { currencies } = useContext(CurrencyContext);
@@ -165,8 +167,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromY = useSharedValue(0);
   const rideIn = useSharedValue(0);
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion };
+  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade });
+  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
@@ -213,6 +215,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     const next = catchSummary(item, data);
     setSummary(next);
+    latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
     if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
     latest.current.onCollected(data);
@@ -289,6 +292,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   const finish = (caught: boolean) => {
     catchMark('done');
+    latest.current.onCascade?.(false);
     releasePhoto();
     newRideRef.current = false; setNewRide(null); rideIn.value = 0;
     // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps

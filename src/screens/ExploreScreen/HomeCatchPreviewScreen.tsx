@@ -15,6 +15,7 @@ import type { FingerSide } from './PrepItem';
 import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
+import { bannerCovers } from './findEdges';
 import { walkCloserLine } from './findPresentation';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
@@ -168,6 +169,7 @@ export default function HomeCatchPreviewScreen() {
   const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
   const [step, setStep] = useState(0);
   const [sides, setSides] = useState<Record<number, FingerSide>>({});
+  const [cascadeOn, setCascadeOn] = useState(false);
   const stepItem = useRef<PrepItemType | null>(null);
   const runStep = (index: number) => {
     const entry = SCRIPT[index];
@@ -236,7 +238,8 @@ export default function HomeCatchPreviewScreen() {
         {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
           <HomeFindMarker key={item.pivot_id} item={item} distance={null} inRange={FIXTURES[index].inRange}
             animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
-            fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange} />
+            fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
+            chromeless={cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
@@ -255,6 +258,7 @@ export default function HomeCatchPreviewScreen() {
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
         forceRide={autoplay && SCRIPT[step] ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
+        onCascade={setCascadeOn}
         warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}

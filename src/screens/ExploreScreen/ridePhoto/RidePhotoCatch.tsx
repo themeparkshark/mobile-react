@@ -621,17 +621,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       }
       catchMark(`reveal-${grade}`);
       setFrameStage(STAGE_FOR[grade]);
-      develop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+      // One reveal per photo: the colour completes first (160 ms); the plate, stars, burst, shake and chime
+      // all land together on the developed print (about 270 ms), never on a grey one.
+      develop.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
       sheen.value = 0;
       sheen.value = withTiming(1, { duration: 420, easing: Easing.inOut(Easing.quad) });
       printLift.value = reducedMotion ? withTiming(1, { duration: 1 }) : withSpring(1, { damping: 12, stiffness: 220, mass: 0.8 });
       dim.value = withTiming(1, { duration: 220 });
-      if (BURST[grade]) burst.value = withTiming(double ? 1.35 : grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 160 });
-      stampIn.value = withDelay(80, withTiming(1, { duration: reducedMotion ? 1 : 140, easing: Easing.in(Easing.quad) }));
+      if (BURST[grade] && !reducedMotion) burst.value = withDelay(150, withTiming(double ? 1.35 : grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 120 }));
+      stampIn.value = withDelay(150, withTiming(1, { duration: reducedMotion ? 1 : 120, easing: Easing.in(Easing.quad) }));
       const amp = grade === 'frame_it' ? 4 : grade === 'great' ? 2 : 0;
-      if (amp && !reducedMotion) shake.value = withDelay(200, withSequence(withTiming(amp, { duration: 30 }), withTiming(-amp, { duration: 40 }),
+      if (amp && !reducedMotion) shake.value = withDelay(270, withSequence(withTiming(amp, { duration: 30 }), withTiming(-amp, { duration: 40 }),
         withTiming(amp * 0.5, { duration: 40 }), withTiming(0, { duration: 40 })));
-      later(200, () => {
+      later(270, () => {
         if (grade === 'frame_it') {
           duckForCheer(); catchSound('cheer'); catchSound('chime');
           fx.current?.burst('confetti', layer.width / 2, sceneH * 0.45);

@@ -27,7 +27,7 @@ import { rideSpec } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { clusterFinds } from './findEdges';
+import { bannerCovers, clusterFinds } from './findEdges';
 import type { FingerSide } from './PrepItem';
 import { screenBearing, walkCloserLine } from './findPresentation';
 import { nearestFind } from './nearestFind';
@@ -162,6 +162,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
   const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
+  const [cascadeOn, setCascadeOn] = useState(false);
   const [findGroups, setFindGroups] = useState<ReturnType<typeof clusterFinds>>({ counts: {}, hidden: [], chromeless: [] });
   // The catch reads GPS through a ref, so it never re-renders on a fix.
   const fixRef = useRef({ latestLocationSampleRef, location });
@@ -455,6 +456,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   // Every in-range Ride Photo find has its ride built in idle time, so no tap pays for it.
   const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
     .slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
+  // While the reward banner is up, finds whose spot sits under it (banner, grade chip, rides row) drop their tags.
+  const underBanner = (pivot: number | null | undefined) => {
+    const point = pivot != null ? findPoints.current.get(pivot) : null;
+    if (!point || containerSize.width === 0) return false;
+    return bannerCovers(point, containerSize, BOTTOM_SLOT);
+  };
   // One finger cue on the map at a time: the nearest find in range.
   const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange)
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
@@ -571,7 +578,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
             hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1)}
-            count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1} chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1)}
+            count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
+            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
             pulseKey={pulse && pulse.pivot === prepItem.pivot_id ? pulse.key : null} />
@@ -600,7 +608,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
         onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onFailed={onFailedStable} onDone={onDoneStable}
-        warm={warmFinds} />
+        warm={warmFinds} onCascade={setCascadeOn} />
 
 
       {introOpen && <HomeIntro onDone={markIntroSeen} />}

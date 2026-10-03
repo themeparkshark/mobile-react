@@ -585,3 +585,25 @@ test('round 5: Home Hunt and Ride Photo use the app-wide rarity palette (drift g
     'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx', 'src/screens/ExploreScreen/HomeExplore.tsx'];
   for (const f of files) assert.ok(!/#14B3A3|#2F7BFF|#A54BFF|#9AA4B2/i.test(read(f)), `${f} uses rarityColor()`);
 });
+
+test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /develop\.value = withTiming\(1, \{ duration: 160/);
+  assert.match(src, /stampIn\.value = withDelay\(150,/, 'the plate lands after the colour');
+  assert.match(src, /burst\.value = withDelay\(150,/);
+  assert.match(src, /PRINT_FLIGHT_MS, \(\) => catchSound\('badge'\)/, 'the badge thunk is on the flight clock');
+  assert.match(src, /translateX: shake\.value \}, \{ scale: shake\.value === 0 \? 1 : overscan \}/, 'the shake is overscanned');
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /if \(!warm \|\| window\.width === 0 \|\| rewardBusy\) return;/, 'no stage builds during a reward');
+  assert.match(moment, /READY_RIDES\.flatMap\(kind => \(\['day', 'sunset', 'night'\]/, 'every ride kind and sky is warmed at launch idle');
+  assert.match(moment, /requestIdleCallback/);
+  assert.doesNotMatch(moment, /setTimeout\(\(\) => setWarmShader\(true\), 2500\)/, 'no fixed warm timer');
+  assert.match(moment, /setLinger\(rideItemRef\.current\)/, 'the hand-back never builds the next stage');
+  const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
+  const size = { width: 400, height: 800 };
+  assert.equal(edges.bannerCovers({ x: 200, y: 560 }, size, 190), true);
+  assert.equal(edges.bannerCovers({ x: 20, y: 560 }, size, 190), false);
+  assert.equal(edges.bannerCovers({ x: 200, y: 200 }, size, 190), false);
+  const stage = read('src/screens/ExploreScreen/ridePhoto/rides/stage.ts');
+  assert.match(stage, /y: top \+ 12, w: poleW/, 'a hung camera never reaches into the status bar');
+});
