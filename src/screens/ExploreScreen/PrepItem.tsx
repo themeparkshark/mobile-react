@@ -89,6 +89,8 @@ export function findImageSource(prepItem: Pick<PrepItemType, 'icon_url' | 'varia
     getChurroImage(prepItem.name)) as ImageSource | null;
 }
 
+export type FingerSide = 'left' | 'right' | 'below-left' | 'below-right';
+
 interface Props {
   prepItem: PrepItemType;
   onExpire: () => void;
@@ -98,7 +100,9 @@ interface Props {
   /** Full motion only for finds in range and the nearest few (battery); the rest sit still. */
   animated?: boolean;
   /** Which side the finger cue hovers on: away from the player's shark, so it never points at the player. */
-  fingerSide?: 'left' | 'right';
+  fingerSide?: FingerSide;
+  count?: number;
+  chromeless?: boolean;
 }
 
 /** The find sits at the exact centre of the marker box, so its art is on its real spot. */
@@ -172,7 +176,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right' }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false }: Props) {
   const { clock, active } = useMapAlive();
   const leavingSoon = useLeavingSoon(prepItem.active_to, onExpire, active);
   const imageSource = useMemo(() => findImageSource(prepItem),
@@ -200,13 +204,16 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     const wave = 0.5 + 0.5 * Math.sin((clock.value * (inRange ? 1.1 : 0.5) + phase) * Math.PI * 2);
     return { opacity: (inRange ? 0.6 : 0.35) + 0.35 * wave, transform: [{ scale: 0.9 + 0.2 * wave }] };
   }, [inRange, phase, moving]);
-  const tilt = fingerSide === 'left' ? '-28deg' : '28deg';
+  const below = fingerSide === 'below-left' || fingerSide === 'below-right';
+  const leftSide = fingerSide === 'left' || fingerSide === 'below-left';
+  // Below the find the finger points up at it (rotated), so it stays off the player's shark.
+  const tilt = below ? '210deg' : leftSide ? '-28deg' : '28deg';
   const finger = useAnimatedStyle(() => {
     if (!moving) return { transform: [{ translateY: 0 }, { rotate: tilt }] };
     // Out of phase with the item's hop.
     const tap = Math.abs(Math.sin(clock.value * Math.PI * 1.15 + phase * Math.PI + 1.4));
-    return { transform: [{ translateY: -5 * tap }, { rotate: tilt }] };
-  }, [phase, moving, tilt]);
+    return { transform: [{ translateY: (below ? 5 : -5) * tap }, { rotate: tilt }] };
+  }, [phase, moving, tilt, below]);
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
 
   return (
@@ -233,16 +240,17 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
           color={look.rays ? BRAND.goldLight : color} animated={moving} />)}
       </View>
       {/* Ride Photo finds wear a camera badge that also carries the rarity mark (pips, gem or crown). */}
-      {ridePhoto && <View style={[styles.cameraBadge, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
+      {ridePhoto && !chromeless && <View style={[styles.cameraBadge, { backgroundColor: color }, !inRange && styles.cameraBadgeFar]}>
         <GameIcon name="camera" size={inRange ? 16 : 12} />
         {inRange && <RarityMark tier={tier} />}
       </View>}
-      {prepItem.is_new_variant && (inRange
+      {count > 1 && !chromeless && <View style={styles.countBadge}><Text style={styles.countText}>×{count}</Text></View>}
+      {prepItem.is_new_variant && !chromeless && count === 1 && (inRange
         ? <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
         : <View style={styles.newDot} />)}
-      {inRange && <Animated.Image source={FINGER} style={[styles.finger, fingerSide === 'left' ? styles.fingerLeft : styles.fingerRight, finger]} />}
+      {inRange && !chromeless && <Animated.Image source={FINGER} style={[styles.finger, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
-      {leavingSoon && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
+      {leavingSoon && !chromeless && <View style={styles.timePill}><GameIcon name="timer" size={14} /><Text style={styles.timeText}>{leavingSoon}</Text></View>}
     </View>
   );
 }
@@ -255,9 +263,10 @@ const styles = StyleSheet.create({
   box: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
   hidden: { opacity: 0 },
   scaled: { width: B, height: B, alignItems: 'center', justifyContent: 'center' },
-  groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 8, width: 38, height: 9, borderRadius: 5,
-    backgroundColor: 'rgba(5,52,110,0.22)' },
-  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 26, width: 92, height: 40 },
+  // Round, soft ground marks (an ellipse, never a pill that reads as a loading bar).
+  groundShadow: { position: 'absolute', top: B / 2 + A / 2 - 24, width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(5,52,110,0.18)', transform: [{ scaleY: 0.28 }] },
+  groundGlow: { position: 'absolute', top: B / 2 + A / 2 - 42, width: 72, height: 72, transform: [{ scaleY: 0.5 }] },
   rays: { position: 'absolute', width: 96, height: 96, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
   ray: { position: 'absolute', width: 96, height: 8, borderRadius: 4 },
   aura: { position: 'absolute', width: 96, height: 96 },
@@ -268,18 +277,23 @@ const styles = StyleSheet.create({
   sparkle: { position: 'absolute' },
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.white },
   markGlyph: { fontSize: 12, lineHeight: 13, color: BRAND.white },
-  cameraBadge: { position: 'absolute', top: B / 2 - A / 2 - 6, right: B / 2 - A / 2 - 14, height: 26, borderRadius: 13, flexDirection: 'row',
+  cameraBadge: { position: 'absolute', top: B / 2 + A / 2 - 20, right: B / 2 - A / 2 - 22, height: 26, borderRadius: 13, flexDirection: 'row',
     gap: 3, paddingHorizontal: 6, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   cameraBadgeFar: { height: 16, minWidth: 16, borderRadius: 8, paddingHorizontal: 1, top: B / 2 - A / 2 + 8, right: B / 2 - A / 2 + 4 },
   newDot: { position: 'absolute', top: B / 2 - A / 2 + 10, left: B / 2 - A / 2 + 6, width: 10, height: 10, borderRadius: 5,
     backgroundColor: BRAND.gold, borderWidth: 1.5, borderColor: BRAND.white },
-  newBadge: { position: 'absolute', top: B / 2 - A / 2 + 4, left: B / 2 - A / 2 - 2, backgroundColor: BRAND.gold,
+  newBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 0 },
   newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14 },
+  countBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.navy,
+    borderWidth: 2, borderColor: BRAND.white, borderRadius: 10, paddingHorizontal: 6 },
+  countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 15 },
   // Hovers 6 pt off the art with the fingertip toward the find, on the side away from the player.
   finger: { position: 'absolute', top: B / 2 - A / 2 - 30, width: 30, height: 38 },
   fingerRight: { left: B / 2 + A / 2 - 4 },
   fingerLeft: { left: B / 2 - A / 2 - 26 },
+  // Under the find's lower-left corner: clear of the camera badge (bottom right) and the timer pill.
+  fingerBelow: { top: B / 2 + A / 2 - 20, left: B / 2 - A / 2 - 30 },
   footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
   timePill: { position: 'absolute', bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
     borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },

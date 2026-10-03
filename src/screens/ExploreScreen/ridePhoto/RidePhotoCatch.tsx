@@ -2,6 +2,7 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayou
 import { AccessibilityInfo, PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import {
   Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Rect, Skia, type SkImage,
 } from '@shopify/react-native-skia';
@@ -47,7 +48,7 @@ const RETRY_LEAD_MS = 900;
 
 type FrameStage = 'white' | 'silver' | 'gold';
 const FRAME_FILL: Record<FrameStage, [string, string]> = {
-  white: ['#ffffff', '#f1f4f8'], silver: ['#f7f9fc', '#b6c3d4'], gold: ['#fff1a8', '#e3a400'],
+  white: ['#ffffff', '#f1f4f8'], silver: ['#dde4ec', '#c9d3dc'], gold: ['#fff1a8', '#e3a400'],
 };
 const STAGE_FOR: Record<PhotoGrade, FrameStage> = { blurry: 'white', good: 'white', great: 'silver', frame_it: 'gold' };
 const BURST: Record<PhotoGrade, string | null> = { blurry: null, good: '#ffffff', great: '#d8e4f2', frame_it: '#ffcf3b' };
@@ -181,7 +182,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const [ride, setRide] = useState<RideState>(RIDE_START);
   const rideRef = useRef(ride);
   rideRef.current = ride;
-  const [print, setPrint] = useState<{ grade: PhotoGrade; soClose: boolean; key: number } | null>(null);
+  const [print, setPrint] = useState<{ grade: PhotoGrade; soClose: boolean; key: number; double?: boolean } | null>(null);
+  // Epic: photo 1 waits in the band's film strip, then flies with photo 2 as a fanned pair.
+  const [strip, setStrip] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [frameStage, setFrameStage] = useState<FrameStage>('white');
   const [printImage, setPrintImage] = useState<SkImage | null>(null);
   const [missNote, setMissNote] = useState<{ dir: 'early' | 'late'; key: number } | null>(null);
@@ -233,6 +236,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const edgeGlint = useSharedValue(0);
   const hop = useSharedValue(0);
   const nudgeBlink = useSharedValue(0);
+  const toStrip = useSharedValue(0);
+  const slotGlow = useSharedValue(0);
+  const stripX = useSharedValue(0);
+  const stripY = useSharedValue(0);
   useEffect(() => { parked.value = parkedMode; }, [parkedMode, parked]);
 
   // Scene seconds for loops (bulbs, bob, spray): ticks only while the viewfinder is open.
@@ -342,7 +349,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     clearTimers(); clearPassTimers();
     hopFrom.current = at ?? { x: layer.width / 2, y: layer.height / 2 };
     setPrint(null); setPrintImage(null); setMissNote(null); setNudge(false); setMissed(m => (m.length ? [] : m)); setFrameStage('white');
-    setRide(RIDE_START); setStreak(photoStreak);
+    setRide(RIDE_START); setStreak(photoStreak); setStrip(null);
     silentPasses.current = 0;
     misses.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; printIn.value = 0; stampIn.value = 0; iris.value = 0;
     veil.value = 1; holding.value = false; approach.value = 0; ready.value = 0;
@@ -413,7 +420,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     }));
     later(1000, () => {
       opened.current = false;
-      setPrint(null); setPrintImage(null); setMissed([]);
+      setPrint(null); setPrintImage(null); setMissed([]); setStrip(null);
       // Native photo memory is invisible to Hermes' GC: free every photo this ride made except the one
       // handed to the badge (the catch layer frees that one once its sticker clears).
       const handed = caughtRef.current ? printImageRef.current : null;
@@ -427,9 +434,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
 
   // ── The photo: only the crop, at device resolution, drawn by hand (no reconciler, no re-parse) ──
   const crop = stage.crop;
-  const takePhoto = useCallback((atT: number) => {
+  const takePhoto = useCallback((atT: number, blurry = false) => {
     try {
-      return drawStagePhoto(stage, images, atT, (PHOTO_W / crop.w) * PixelRatio.get());
+      return drawStagePhoto(stage, images, atT, (PHOTO_W / crop.w) * PixelRatio.get(), blurry);
     } catch { return null; }
   }, [stage, images, crop]);
 
@@ -466,7 +473,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     catchSound('film', { volume: 0.7 });
     const beats = spec.developBeats;
     const beatMs = 360;
-    const tick = () => { printTick.value = withSequence(withTiming(1.04, { duration: 60 }), withTiming(1, { duration: 90 })); };
+    // Each step-up ticks to 1.04 and holds two frames at the peak, so it reads at 30 fps.
+    const tick = () => { printTick.value = withSequence(withTiming(1.04, { duration: 50 }), withDelay(34, withTiming(1, { duration: 90 }))); };
     for (let i = 0; i < beats; i++) {
       later(240 + i * beatMs, () => {
         if (fastForward.current || !printKey.isCurrent(key)) return;
@@ -477,7 +485,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         buzz('tickSelection', 1);
         // The frame steps up toward the earned grade, never past it: silver on beat 1 for Great or better,
         // a gold edge glint on the last beat for Frame It! only.
-        if (i === 0 && (grade === 'great' || grade === 'frame_it')) { setFrameStage('silver'); tick(); }
+        if (i === 0 && (grade === 'great' || grade === 'frame_it')) {
+          setFrameStage('silver'); tick();
+          // A 120 ms brushed-metal sweep across the frame.
+          edgeGlint.value = withSequence(withTiming(0.8, { duration: 60 }), withTiming(0, { duration: 120 }));
+        }
         if (i === beats - 1 && grade === 'frame_it') {
           edgeGlint.value = withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 220 }));
           tick();
@@ -489,6 +501,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const revealNow = () => {
       if (pendingReveal.current !== revealNow) return;
       pendingReveal.current = null;
+      // Both Epic photos Frame It!: the plate escalates (a second row of stars, a brighter burst).
+      const photos = rideRef.current.photos;
+      const double = caught && photos.length >= 2 && photos.every(p => p === 'frame_it');
+      if (double) setPrint(current => (current && current.key === key ? { ...current, double: true } : current));
       catchMark(`reveal-${grade}`);
       setFrameStage(STAGE_FOR[grade]);
       develop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
@@ -496,7 +512,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       sheen.value = withTiming(1, { duration: 420, easing: Easing.inOut(Easing.quad) });
       printLift.value = reducedMotion ? withTiming(1, { duration: 1 }) : withSpring(1, { damping: 12, stiffness: 220, mass: 0.8 });
       dim.value = withTiming(1, { duration: 220 });
-      if (BURST[grade]) burst.value = withTiming(grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 160 });
+      if (BURST[grade]) burst.value = withTiming(double ? 1.35 : grade === 'frame_it' ? 1 : grade === 'great' ? 0.65 : 0.4, { duration: 160 });
       stampIn.value = withDelay(80, withTiming(1, { duration: reducedMotion ? 1 : 140, easing: Easing.in(Easing.quad) }));
       const amp = grade === 'frame_it' ? 4 : grade === 'great' ? 2 : 0;
       if (amp && !reducedMotion) shake.value = withDelay(200, withSequence(withTiming(amp, { duration: 30 }), withTiming(-amp, { duration: 40 }),
@@ -513,18 +529,26 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         }
         AccessibilityInfo.announceForAccessibility(`${GRADE_LABEL[grade]} ${caught ? 'Caught it!' : ''}`);
       });
-      // x during the develop: the reveal plays at once and hands off with no hold.
-      const hold = fastForward.current ? 0 : Math.round(GRADE_HOLD_MS[grade] * (owned ? 0.6 : 1));
+      // x during the develop: the reveal plays at once and hands off with no hold. An owned Epic's
+      // first photo holds only 450 ms (by the 10th Epic the first hold must not be a wait).
+      const firstOfTwo = !caught && spec.photosNeeded > 1;
+      const hold = fastForward.current ? 0 : firstOfTwo && owned ? 450 : Math.round(GRADE_HOLD_MS[grade] * (owned ? 0.6 : 1));
       const done = () => {
         finishHold.current = null;
         holding.value = false;
         burst.value = withTiming(0, { duration: 250 });
         if (caught) { catchMark('print-ready'); onPrintReady(grade, printImageRef.current); }
         else {
-          // Epic's first photo: it slides aside and the car goes around again.
-          printIn.value = withTiming(0, { duration: 200 });
+          // Epic's first photo drops into slot 1 of the film strip in the band, with a click and a glow,
+          // and the car goes around again for photo 2.
+          setStrip({ image: printImageRef.current, grade });
+          toStrip.value = withTiming(1, { duration: reducedMotion ? 1 : 280, easing: Easing.in(Easing.cubic) });
           dim.value = withTiming(0, { duration: 200 });
-          later(220, () => setPrint(null));
+          later(reducedMotion ? 20 : 290, () => {
+            setPrint(null); printIn.value = 0; toStrip.value = 0;
+            slotGlow.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 420 }));
+            catchSound('pop', { volume: 0.8, pitch: 4 }); buzz('tapLight', 2);
+          });
           retry(false);
         }
       };
@@ -570,7 +594,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     // The photo renders on the next frame, so the click's JS turn stays tiny.
     const shotKey = printKey.peekNext();
     requestAnimationFrame(() => {
-      const image = takePhoto(shotUAt);
+      const image = takePhoto(shotUAt, !isGoodShot(grade));
       if (image) madeImages.current.push(image);
       if (!printKey.isCurrent(shotKey)) return;
       printImageRef.current = image;
@@ -757,15 +781,30 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const lift = printLift.value;
     const baseY = printTop + (heroTop - printTop) * lift;
     const start = { x: flyFrom.x, y: baseY + HERO_H / 2 };
-    const p = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    const fly0 = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    const k = toStrip.value;
+    const p = k > 0 ? { x: start.x + (stripX.value - start.x) * k, y: start.y + (stripY.value - start.y) * k } : fly0;
     // Laid out at hero size: rest is 0.76, the reveal lifts to 1.0, the flight shrinks to the sticker (0.18).
     const held = (0.6 + 0.4 * printIn.value) * (REST_SCALE + (1 - REST_SCALE) * lift) * printTick.value;
-    const scale = held + (0.18 - held) * f;
+    const scale = k > 0 ? held + (0.13 - held) * k : held + (0.18 - held) * f;
     const shown = (open.value > 0.02 || f > 0) && f < 0.999 ? 1 : 0;
     return {
       opacity: Math.min(1, printIn.value * 2) * shown,
       transform: [{ translateX: p.x - HERO_W / 2 }, { translateY: p.y - HERO_H / 2 + (1 - printIn.value) * 90 }, { scale },
         { rotate: `${(-4 + printShake.value * 3) * (1 - f)}deg` }],
+    };
+  });
+  // Epic: photo 1 rides behind photo 2 as a fanned pair into the badge.
+  const pairStyle = useAnimatedStyle(() => {
+    const f = fly.value;
+    const start = { x: flyFrom.x, y: printTop + (heroTop - printTop) * printLift.value + HERO_H / 2 };
+    const p = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    const held = REST_SCALE + (1 - REST_SCALE) * printLift.value;
+    const scale = held + (0.18 - held) * f;
+    return {
+      opacity: f > 0 && f < 0.999 ? 1 : 0,
+      transform: [{ translateX: p.x - HERO_W / 2 + 18 * (1 - f) }, { translateY: p.y - HERO_H / 2 - 6 * (1 - f) }, { scale },
+        { rotate: `${8 * (1 - f) + 4}deg` }],
     };
   });
   // The plate slams from its laid-out peak size down to rest, kept 16 pt inside the screen.
@@ -778,6 +817,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const grainOpacity = useDerivedValue(() => 0.07 * Math.max(0, 1 - develop.value * 1.15));
   const nudgeStyle = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * nudgeBlink.value, transform: [{ scale: 1 + 0.08 * nudgeBlink.value }] }));
   const glintStyle = useAnimatedStyle(() => ({ opacity: edgeGlint.value }));
+  const slotGlowStyle = useAnimatedStyle(() => ({ opacity: slotGlow.value, transform: [{ scale: 1 + 0.3 * slotGlow.value }] }));
   const closeStyle = useAnimatedStyle(() => ({ opacity: open.value * veil.value }));
   const nudgeFinger = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * nudgeBlink.value }] }));
 
@@ -792,6 +832,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   if (!item || layer.width === 0) return null;
   return (
     <View pointerEvents={visible && !closing ? 'box-none' : 'none'} style={StyleSheet.absoluteFill}>
+      {/* Status bar icons stay light over the viewfinder and the hold */}
+      {visible && !closing && <StatusBar style="light" />}
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.view, { width: layer.width, height: layer.height }, viewStyle]}>
           <Canvas style={{ width: sceneW, height: sceneH }}>
@@ -799,8 +841,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
               flash={flash} dim={dim} lit={lit} ghostT={ghostT} ghost={ghost} riderIn={riderIn} rock={rock} carVis={carVis}
               nudgeBlink={nudgeBlink} golden={golden} />
             {/* Always mounted (Skia 1.5 crashes when a shader bound to shared values remounts); the grade sets the strength. */}
-            <Sunburst cx={sceneW / 2} cy={heroTop + HERO_H / 2} radius={sceneW * 0.8} intensity={burst} colorA="#ffd84a"
-              width={sceneW} height={sceneH} speed={0.35} />
+            <Sunburst cx={sceneW / 2} cy={heroTop + HERO_H / 2} radius={sceneW * 0.8} intensity={burst} colorA="#ffd34d"
+              width={sceneW} height={sceneH} speed={0.14} />
           </Canvas>
           {/* Viewfinder corner marks, 16 pt inside the screen */}
           <View pointerEvents="none" style={[styles.corner, { left: 16, top: insets.top + 8 + 44 + 8, borderLeftWidth: 3, borderTopWidth: 3 }]} />
@@ -841,7 +883,20 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           <View style={[styles.band, { height: bandH, paddingBottom: insets.bottom }]} pointerEvents="box-none">
             <View style={styles.bandSide} pointerEvents="none">
               <Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
-              {spec.photosNeeded > 1 && <Text style={styles.sub}>Photo {Math.min(spec.photosNeeded, ride.photos.length + 1)} of {spec.photosNeeded}</Text>}
+              {spec.photosNeeded > 1 && <View style={styles.strip} accessibilityLabel={`Photo ${Math.min(spec.photosNeeded, ride.photos.length + 1)} of ${spec.photosNeeded}`}>
+                {Array.from({ length: spec.photosNeeded }, (_, i) => (
+                  <View key={i} style={[styles.slot, i === ride.photos.length && styles.slotNext]}
+                    onLayout={i === 0 ? event => {
+                      const target = event.currentTarget;
+                      target.measureInWindow((x, y, w, h) => { stripX.value = x + w / 2; stripY.value = y + h / 2; });
+                    } : undefined}>
+                    {i === 0 && <Canvas style={[styles.slotPhoto, !strip?.image && styles.hiddenSlot]}>
+                      <SkImageNode image={strip?.image ?? BLANK} x={0} y={0} width={28} height={34} fit="cover" />
+                    </Canvas>}
+                    {i === 0 && <Animated.View pointerEvents="none" style={[styles.slotGlow, slotGlowStyle]} />}
+                  </View>
+                ))}
+              </View>}
               {spec.maxRides != null && <Text style={styles.sub}>Ride {Math.min(spec.maxRides, ride.passes + 1)} of {spec.maxRides}</Text>}
             </View>
             <View style={styles.shutterWrap} pointerEvents="none">
@@ -891,11 +946,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         <Image source={{ uri: riderSource }} style={{ width: riderSize, height: riderSize }} contentFit="contain" transition={0} />
       </Animated.View>}
 
+      {/* Epic: photo 1 fanned behind photo 2 for the flight */}
+      {strip?.image && <Animated.View pointerEvents="none" style={[styles.print, styles.pairCard, pairStyle]}>
+        <View style={styles.photo}>
+          <Canvas style={{ width: PHOTO_W, height: PHOTO_H }}>
+            <SkImageNode image={strip.image} x={0} y={0} width={PHOTO_W} height={PHOTO_H} fit="fill" />
+          </Canvas>
+        </View>
+      </Animated.View>}
       {/* The print, laid out at hero size: develops, holds with its grade, then flies to the badge on the map */}
       <Animated.View pointerEvents="none" style={[styles.print, printStyle]}>
         <Image source={require('../../../../assets/images/ride-photo/glow.webp')} style={styles.printShadow} contentFit="fill" transition={0} />
         <LinearGradient colors={FRAME_FILL[frameStage]} style={[StyleSheet.absoluteFill, styles.printFill]} />
-        <View style={[styles.goldBevel, { opacity: frameStage === 'gold' ? 1 : 0 }]} />
+        <View style={[styles.goldBevel, { opacity: frameStage === 'white' ? 0 : 1 }]} />
         <Animated.View style={[StyleSheet.absoluteFill, styles.glint, glintStyle]} />
         <View style={styles.photo}>
           <Canvas style={{ width: PHOTO_W, height: PHOTO_H }}>
@@ -915,7 +978,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           <Text style={styles.captionDate}>{date}</Text>
         </View>
         {print && <Animated.View style={[styles.stamp, stampStyle]}>
-          <StampPlate grade={print.grade} soClose={print.soClose} size={PLATE_PEAK} />
+          <StampPlate grade={print.grade} soClose={print.soClose} double={print.double} size={PLATE_PEAK} />
         </Animated.View>}
       </Animated.View>
 
@@ -936,6 +999,13 @@ const styles = StyleSheet.create({
   bandSide: { flex: 1, justifyContent: 'center' },
   name: { color: '#ffffff', fontFamily: 'Shark', fontSize: 17 },
   sub: { color: '#bcd6f5', fontFamily: 'Knockout', fontSize: 14, marginTop: 4 },
+  pairCard: { backgroundColor: '#ffffff' },
+  strip: { flexDirection: 'row', gap: 6, marginTop: 6, padding: 3, borderRadius: 4, backgroundColor: '#1b1b1f', alignSelf: 'flex-start' },
+  slot: { width: 34, height: 40, borderRadius: 3, backgroundColor: '#2e3440', borderWidth: 2, borderColor: '#5b6575', alignItems: 'center', justifyContent: 'center' },
+  slotNext: { borderColor: '#ffcf3b' },
+  slotPhoto: { width: 28, height: 34 },
+  hiddenSlot: { opacity: 0 },
+  slotGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b' },
   shutterWrap: { width: SHUTTER + 20, height: SHUTTER + 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
   halo: { position: 'absolute', width: SHUTTER + 18, height: SHUTTER + 18, borderRadius: (SHUTTER + 18) / 2, borderWidth: 3, borderColor: '#ffc93c' },
   hand: { position: 'absolute', left: (SHUTTER + 20) / 2 - 54 * 0.6, top: -69 - 2, width: 54, height: 69 },

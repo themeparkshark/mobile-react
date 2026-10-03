@@ -24,6 +24,8 @@ import { rideSpec } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
+import { clusterFinds } from './findEdges';
+import type { FingerSide } from './PrepItem';
 import { screenBearing, walkCloserLine } from './findPresentation';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
@@ -145,7 +147,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
-  const [findSides, setFindSides] = useState<Record<number, 'left' | 'right'>>({});
+  const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
+  const [findGroups, setFindGroups] = useState<ReturnType<typeof clusterFinds>>({ counts: {}, hidden: [], chromeless: [] });
   // The catch reads GPS through a ref, so it never re-renders on a fix.
   const fixRef = useRef({ latestLocationSampleRef, location });
   fixRef.current = { latestLocationSampleRef, location };
@@ -440,9 +443,16 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       }
       findPoints.current = next;
       // The finger cue goes on the side away from the player's shark (screen centre while following).
-      const sides: Record<number, 'left' | 'right'> = {};
-      next.forEach((point, pivot) => { sides[pivot] = point.x < containerSize.width / 2 ? 'left' : 'right'; });
+      const sides: Record<number, FingerSide> = {};
+      // Below the shark, the finger hangs under the find, so it never lands on the shark's board.
+      next.forEach((point, pivot) => {
+        const side = point.x < containerSize.width / 2 ? 'left' : 'right';
+        sides[pivot] = point.y > containerSize.height / 2 ? (side === 'left' ? 'below-left' : 'below-right') : side;
+      });
       setFindSides(current => (JSON.stringify(current) === JSON.stringify(sides) ? current : sides));
+      const distances = new globalThis.Map(placed.map(entry => [entry.item.pivot_id, entry.distance] as const));
+      const groups = clusterFinds([...next.entries()].map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })));
+      setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
       setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 4));
     })();
     return () => { alive = false; };
@@ -520,7 +530,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
-            animated={animatedPivots.has(prepItem.pivot_id)} hidden={catchingPivot === prepItem.pivot_id}
+            animated={animatedPivots.has(prepItem.pivot_id)}
+            hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1)}
+            count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1} chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1)}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} />
         ))}

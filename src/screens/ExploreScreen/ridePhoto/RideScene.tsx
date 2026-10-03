@@ -104,7 +104,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
     useDerivedValue(() => 0.62 * (1 - lampOn[2].value)),
   ];
   const flashOpacity = useDerivedValue(() => flash.value);
-  const dimOpacity = useDerivedValue(() => 0.6 * dim.value);
+  const dimOpacity = useDerivedValue(() => dim.value);
   // Spotlight (Epic): outside the window sits at about 35%; the window lights fully only as the car arrives.
   const outsideDark = stage.spotlight ? 0.62 : 0;
   const windowDark = useDerivedValue(() => (stage.spotlight ? 0.7 * (1 - lit.value) : 0));
@@ -187,7 +187,11 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
           <Path path={star} style="stroke" strokeWidth={3} color="#c98a00" strokeJoin="round" />
           <Path path={star} color="#ffffff" />
         </Group>
-        <Rect x={0} y={0} width={width} height={height} color="#05213f" opacity={dimOpacity} />
+        {/* The hold: a deep navy vignette (55% centre, 80% edges), never a grey wash */}
+        <Rect x={0} y={0} width={width} height={height} opacity={dimOpacity}>
+          <RadialGradient c={vec(width / 2, height * 0.45)} r={Math.max(width, height) * 0.75}
+            colors={['rgba(3,18,48,0.55)', 'rgba(3,18,48,0.8)']} />
+        </Rect>
         <Rect x={0} y={0} width={width} height={height} color="#ffffff" opacity={flashOpacity} />
         <Circle cx={cam.lens.x} cy={cam.lens.y} r={140} opacity={flashOpacity}>
           <RadialGradient c={vec(cam.lens.x, cam.lens.y)} r={140} colors={['#ffffff', 'rgba(255,248,214,0)']} />

@@ -11,6 +11,7 @@ import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
+import type { FingerSide } from './PrepItem';
 import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -104,6 +105,13 @@ export default function HomeCatchPreviewScreen() {
       }
     }
     setEdges(next);
+    // Same finger rule as the app: away from the shark, under the find when it sits below the shark.
+    const nextSides: Record<number, FingerSide> = {};
+    points.current.forEach((point, pivot) => {
+      const side = point.x < size.width / 2 ? 'left' : 'right';
+      nextSides[pivot] = point.y > size.height / 2 ? (side === 'left' ? 'below-left' : 'below-right') : side;
+    });
+    setSides(nextSides);
   }, [items, toLocal, size.width, size.height]);
 
   const fakeRedeem: typeof redeemPrepItem = async (id, _pivot, _lat, _lng, details) => {
@@ -146,6 +154,7 @@ export default function HomeCatchPreviewScreen() {
   }, []);
   const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
   const [step, setStep] = useState(0);
+  const [sides, setSides] = useState<Record<number, FingerSide>>({});
   const stepItem = useRef<PrepItemType | null>(null);
   const runStep = (index: number) => {
     const entry = SCRIPT[index];
@@ -199,7 +208,8 @@ export default function HomeCatchPreviewScreen() {
         }}>
         {items.filter(item => !caught.has(item.pivot_id!)).map((item, index) => (
           <HomeFindMarker key={item.pivot_id} item={item} distance={null} inRange={FIXTURES[index].inRange}
-            animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop} />
+            animated={index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
+            fingerSide={sides[item.pivot_id!] ?? 'right'} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
