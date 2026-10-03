@@ -168,7 +168,7 @@ export function visibleCount(value: unknown): number | null {
 
 export default function Stats({ player, hideBalances = false }: {
   readonly player: PlayerType;
-  /** Another player who is not your friend: balances are private (the kid-safety backend sends 0 or null). */
+  /** Another player who is not your friend: balances and park history are private (the kid-safety backend sends 0 or null). */
   readonly hideBalances?: boolean;
 }) {
   const all = [
@@ -184,7 +184,7 @@ export default function Stats({ player, hideBalances = false }: {
     },
     {
       label: 'Parks',
-      value: visibleCount(player.visited_parks_count),
+      value: hideBalances ? null : visibleCount(player.visited_parks_count),
       iconIndex: 2,
     },
     {
