@@ -5,6 +5,7 @@ import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
+import { parkDayFlexPayload } from '../share/parkDay';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -22,15 +23,9 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  // The flex card (Share Studio): no username, park name, date or ride names on it.
+  // The flex card (Share Studio): only coin counts and coin art cross over (parkDayFlexPayload).
   const shareDay = () => {
-    if (!recap) return;
-    const coins = recap.coins ?? [];
-    shareFlex('park_day', {
-      coinsCaught: recap.distinct_rides_won,
-      newCoins: recap.new_coins,
-      coinUrls: coins.map(coin => coin.coin_url).filter((url): url is string => !!url),
-    }, { surface: 'park_day' });
+    if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
   };
 
   useFocusEffect(useCallback(() => {

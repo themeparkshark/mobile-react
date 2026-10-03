@@ -10,8 +10,11 @@ import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react
 import { captureRef } from 'react-native-view-shot';
 import { FLEX_EXPORT, FLEX_SIZE, FlexCard, flexReveal, shareFlex, type FlexFormat } from '../share';
 import { FLEX_SAMPLES, SAMPLE_INVENTORY, type FlexSample } from '../share/samples';
+import { ArtReadinessProvider } from '../share/FlexArtwork';
+import { Outlined } from '../share/Outlined';
 
 const RENDER = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === '1';
+const PROBE = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === 'probe';
 const OPEN = process.env.EXPO_PUBLIC_SHARE_STUDIO_OPEN ?? '';
 
 function open(sample: FlexSample, mode: 'sheet' | 'reveal', format: FlexFormat = 'story') {
@@ -28,6 +31,7 @@ export default function ShareStudioPreviewScreen() {
     if (sample) setTimeout(() => open(sample, mode === 'reveal' ? 'reveal' : 'sheet', format === 'square' ? 'square' : 'story'), 5000);
   }, []);
   if (RENDER) return <RenderAll />;
+  if (PROBE) return <RenderProbes />;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.h1}>Share Studio</Text>
@@ -83,6 +87,42 @@ function RenderAll() {
       <FlexCard key={`${job.sample.name}-${job.format}`} ref={ref} kind={job.sample.kind} payload={job.sample.payload}
         format={job.format} inventory={SAMPLE_INVENTORY} onReadyChange={setReady} />
       <Text style={styles.name}>{index + 1}/{jobs.length} {job.sample.name} {job.format} {FLEX_SIZE[job.format].width}</Text>
+    </View>
+  );
+}
+
+/**
+ * Outline pixel probes: every big number the cards print, white fill with a
+ * magenta outline on flat navy, at a roomy size and squeezed into a narrow box.
+ * tools/share-studio/outline-pixel-check.cjs fails on ghost copies or smears.
+ */
+export const OUTLINE_PROBES = ['6', '7', '37', '12/12', 'LV 7', 'LV 10', '#2', 'TOP 10%'];
+function RenderProbes() {
+  const jobs = OUTLINE_PROBES.flatMap(text => [{ text, box: 150, size: 36 }, { text, box: 70, size: 36 }]);
+  const [index, setIndex] = useState(0);
+  const [ready, setReady] = useState(false);
+  const ref = useRef<View>(null);
+  const job = jobs[index];
+  useEffect(() => {
+    if (!job || !ready) return;
+    const t = setTimeout(async () => {
+      const uri = await captureRef(ref, { format: 'png', result: 'tmpfile' });
+      console.log(`SHARE_PROBE ${index}-${job.box}-${encodeURIComponent(job.text)} ${uri}`);
+      setReady(false); setIndex(i => i + 1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [job, ready, index]);
+  useEffect(() => { if (index >= jobs.length) console.log('SHARE_PROBE_DONE'); }, [index, jobs.length]);
+  if (!job) return <View style={styles.root} />;
+  return (
+    <View style={[styles.root, { alignItems: 'flex-start' }]}>
+      <ArtReadinessProvider key={index} onReadyChange={setReady}>
+        <View ref={ref} collapsable={false} style={{ width: job.box + 24, padding: 12, backgroundColor: '#000080', alignItems: 'flex-start' }}>
+          <View style={{ width: job.box, alignItems: 'center' }}>
+            <Outlined text={job.text} outline="#ff00ff" style={{ fontFamily: 'Shark', fontSize: job.size, color: '#ffffff' }} />
+          </View>
+        </View>
+      </ArtReadinessProvider>
     </View>
   );
 }

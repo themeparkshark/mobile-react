@@ -143,3 +143,110 @@ test('the iOS share sheet reports the destination as a short label; dismissal is
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.Message'), 'messages');
   assert.equal(capture.activityLabel(null), null);
 });
+
+/* ---------------- Round 2: privacy locks ---------------- */
+const fs = require('node:fs');
+const pathMod = require('node:path');
+const repo = pathMod.resolve(__dirname, '../..');
+const { PLACE_NAMES } = loadTs('src/share/placeNames.ts');
+const REAL_PLACES = [
+  'Magic Kingdom', 'EPCOT', 'Epic Universe', 'Universal Studios Florida', 'Universal Studios Hollywood', 'Disneyland',
+  'Islands of Adventure', 'Volcano Bay', 'Animal Kingdom', 'Hollywood Studios', 'California Adventure',
+  'Space Mountain', 'Revenge of the Mummy', 'Haunted Mansion', 'Harry Potter and the Forbidden Journey', 'VelociCoaster',
+  "Hagrid's Magical Creatures Motorbike Adventure", 'Pirates of the Caribbean', 'Big Thunder Mountain Railroad',
+  'TRON Lightcycle / Run', 'Rise of the Resistance', 'Halloween Horror Nights',
+];
+
+/** Every string reachable in a payload, replaced with `value` (arrays and nested objects too). */
+function poison(payload, value) {
+  if (typeof payload === 'string') return value;
+  if (Array.isArray(payload)) return payload.map(item => poison(item, value));
+  if (payload && typeof payload === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(payload)) {
+      out[key] = /url|art|uri|Url|Uri|rarity|grade|difficulty|source|inventory/.test(key) ? item : poison(item, value);
+    }
+    return out;
+  }
+  return payload;
+}
+
+test('the place list covers every real park and the rides we test with', () => {
+  const lower = new Set(PLACE_NAMES.map(name => name.toLowerCase()));
+  for (const place of REAL_PLACES) assert.ok(lower.has(place.toLowerCase()) || PLACE_NAMES.some(name => place.toLowerCase().includes(name.toLowerCase())), place);
+});
+
+test('no park or ride name reaches any card text, through any text field of any kind', () => {
+  for (const sample of FLEX_SAMPLES) {
+    for (const place of REAL_PLACES) {
+      for (const wrap of [place, `${place} Edition`, `My night at ${place}!`, place.toUpperCase()]) {
+        const c = copy.flexCopy(sample.kind, poison(sample.payload, wrap));
+        const text = [c.ribbon, c.kicker, c.title, c.big, c.stat, c.sub, c.cta, c.a11y].filter(Boolean).join(' | ').toLowerCase();
+        assert.ok(!text.includes(place.toLowerCase()), `${sample.name} leaked "${place}" via "${wrap}": ${text}`);
+        assert.ok(c.title.length > 0, `${sample.name} lost its title`);
+      }
+    }
+  }
+});
+
+test('the sanitizer strips place names but keeps catalog words that only look similar', () => {
+  assert.equal(copy.cleanName('6 haunts survived at Universal Studios Florida!'), '6 haunts survived!');
+  assert.equal(copy.cleanName('Hogwarts Express Edition'), 'Edition');
+  assert.equal(copy.cleanName('Mummy Dog'), 'Mummy Dog');
+  assert.equal(copy.cleanName('Sand Castle'), 'Sand Castle');
+  assert.equal(copy.cleanName('Pirate King'), 'Pirate King');
+});
+
+test('Park Day shares only coin counts and coin art: never park, day, rides, moments or the player', () => {
+  const { parkDayFlexPayload } = loadTs('src/share/parkDay.ts');
+  const recap = {
+    park_id: 3, park_name: 'Universal Studios Florida', park_day: '2026-10-02', previous_active_day: '2026-10-01', timezone: 'America/New_York',
+    distinct_rides_won: 7, new_coins: 3, ride_wins: 7, line_play_sessions: 2, eligible_line_minutes: 36, ride_parts_earned: 4, coin_upgrades: 1,
+    park_project_points: 5, username: 'kiddo_22',
+    coins: [{ asset_id: 1, ride_name: 'Revenge of the Mummy', coin_url: 'https://cdn.example/a.png', new: true }, { asset_id: 2, ride_name: 'Hulk', coin_url: null, new: false }],
+    moments: [{ type: 'new_coin', title: 'Collected Revenge of the Mummy coin', at: '2026-10-02T14:10:00Z' }],
+  };
+  const payload = JSON.parse(JSON.stringify(parkDayFlexPayload(recap)));
+  assert.deepEqual(Object.keys(payload).sort(), ['coinUrls', 'coinsCaught', 'newCoins']);
+  assert.deepEqual(payload, { coinsCaught: 7, newCoins: 3, coinUrls: ['https://cdn.example/a.png'] });
+  const json = JSON.stringify(payload);
+  for (const leak of ['Universal', 'Mummy', 'Hulk', '2026', 'kiddo', 'America/']) assert.ok(!json.includes(leak), leak);
+
+  const card = fs.readFileSync(pathMod.join(repo, 'src/screens/ParkDayRecapCard.tsx'), 'utf8');
+  assert.match(card, /shareFlex\('park_day', parkDayFlexPayload\(recap\), \{ surface: 'park_day' \}\)/);
+  assert.doesNotMatch(card, /AuthContext|username|avatar_url|captureRef|ParkDayShareCard/);
+  assert.equal(card.match(/shareFlex\(/g).length, 1);
+});
+
+test('park-identifying reveals wait until the player leaves the park; re-share never waits', () => {
+  store.__resetFlexQueue();
+  assert.equal(store.holdWhileInPark({ mode: 'reveal', kind: 'park_day' }, true), true);
+  assert.equal(store.holdWhileInPark({ mode: 'reveal', kind: 'ride_coin' }, true), true);
+  assert.equal(store.holdWhileInPark({ mode: 'reveal', kind: 'ride_coin' }, false), false);
+  assert.equal(store.holdWhileInPark({ mode: 'sheet', kind: 'park_day' }, true), false);
+  assert.equal(store.holdWhileInPark({ mode: 'reveal', kind: 'find' }, true), false);
+  store.flexReveal('park_day', { coinsCaught: 3, coinUrls: [] }, { surface: 'earn' });
+  store.holdFlex(store.currentFlex().id);
+  store.flexReveal('park_day', { coinsCaught: 5, coinUrls: [] }, { surface: 'earn' });
+  store.holdFlex(store.currentFlex().id);
+  assert.equal(store.currentFlex(), null);
+  store.releaseHeldFlex();
+  assert.equal(store.currentFlex().payload.coinsCaught, 5, 'only the latest park day replays');
+  store.finishFlex(store.currentFlex().id);
+  assert.equal(store.currentFlex(), null);
+});
+
+test('outlined text is sized once: a single line fits its box, never grows, never below half', () => {
+  const { fitScale } = loadTs('src/share/Outlined.tsx', {
+    react: { useId: () => 'x', useState: v => [v, () => {}] }, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
+    'react-native': { StyleSheet: { create: s => s, flatten: s => s }, Text: 'Text', View: 'View' },
+    './FlexArtwork': { useReadyGate() {} },
+  });
+  assert.equal(fitScale(100, 200), 0.5);
+  assert.equal(fitScale(150, 200), 0.75);
+  assert.equal(fitScale(300, 200), 1);
+  assert.equal(fitScale(100, 1000), 0.5);
+  assert.equal(fitScale(0, 200), 1);
+  const src = fs.readFileSync(pathMod.join(repo, 'src/share/Outlined.tsx'), 'utf8');
+  assert.doesNotMatch(src, /adjustsFontSizeToFit/, 'no outline copy may fit itself');
+});

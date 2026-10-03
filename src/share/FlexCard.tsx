@@ -20,7 +20,7 @@ import { flexCopy } from './copy';
 import { ArtReadinessProvider, FlexArtwork } from './FlexArtwork';
 import { FRAMES, RARITY_RAMP, type FlexFrame } from './frames';
 import { FlexHero } from './FlexHero';
-import { FlexShark } from './FlexShark';
+import { FlexShark, SHARK_ASPECT } from './FlexShark';
 import { FLEX_SIZE } from './formats';
 import { Outlined } from './Outlined';
 import type { FlexCopy, FlexFormat, FlexKind, FlexPayload, FlexRarity } from './types';
@@ -107,17 +107,18 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory }: Layou
 }
 
 function SquareLayout({ kind, payload, copy, frame, showShark, inventory }: LayoutProps) {
-  const heroSize = 150;
+  // Three bands, nothing overlapping and nothing off the canvas:
+  // ribbon / hero + words / the player's shark, CTA and QR along the bottom.
+  const heroSize = 146;
   return (
     <View style={styles.squareBody}>
-      <Ribbon text={copy.ribbon} width={262} />
+      <Ribbon text={copy.ribbon} width={250} />
       <View style={styles.squareMid}>
         <View style={styles.squareHeroCol}>
-          <Rays frame={frame} size={300} />
-          <View style={{ width: heroSize, height: heroSize, marginTop: 4, marginLeft: showShark ? 22 : 0 }}>
+          <Rays frame={frame} size={280} />
+          <View style={{ width: heroSize, height: heroSize }}>
             <FlexHero kind={kind} payload={payload} frame={frame} size={heroSize} inventory={inventory} />
           </View>
-          {showShark && <FlexShark inventory={inventory} height={112} flip style={styles.squareShark} />}
         </View>
         <View style={styles.squareWords}>
           <Text style={[styles.kickerSmall, { color: frame.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker}</Text>
@@ -127,16 +128,22 @@ function SquareLayout({ kind, payload, copy, frame, showShark, inventory }: Layo
         </View>
       </View>
       <View style={styles.squareFooter}>
-        <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={styles.squareLogo} />
+        {showShark
+          ? <FlexShark inventory={inventory} height={SQUARE_SHARK_H} flip style={styles.squareShark} />
+          : <View style={{ width: Math.round(SQUARE_SHARK_H * SHARK_ASPECT) }} />}
         <View style={{ flex: 1, alignItems: 'center' }}>
+          <FlexArtwork art={CARD_CHROME.logo} fallback={CARD_CHROME.logo} style={styles.squareLogo} />
           <Outlined text={copy.cta} style={styles.ctaSmall} outline={frame.outline} lines={1} />
           <Text style={styles.storeSmall}>free on the App Store</Text>
         </View>
-        <Qr size={44} />
+        <Qr size={50} />
       </View>
     </View>
   );
 }
+
+/** The square card's shark: its whole paper box sits inside the footer band. */
+export const SQUARE_SHARK_H = 104;
 
 /** Title size by length, so long names wrap the same way in every outline copy. */
 export function titleSize(title: string, format: FlexFormat): { fontSize: number; lineHeight: number } {
@@ -267,15 +274,15 @@ const styles = StyleSheet.create({
   subLineCompact: { fontSize: 11 },
   qrTile: { backgroundColor: '#ffffff', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#05346e' },
 
-  squareBody: { flex: 1, alignItems: 'center', paddingTop: 10, paddingBottom: 10, paddingHorizontal: 14 },
+  squareBody: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 10, paddingHorizontal: 14 },
   squareMid: { flex: 1, flexDirection: 'row', width: '100%', alignItems: 'center' },
-  squareHeroCol: { width: 172, height: '100%', alignItems: 'center', justifyContent: 'center' },
-  squareShark: { position: 'absolute', left: -30, bottom: -4 },
+  squareHeroCol: { width: 160, height: '100%', alignItems: 'center', justifyContent: 'center' },
+  squareShark: { marginLeft: -6, marginBottom: -8 },
   squareWords: { flex: 1, paddingLeft: 12, justifyContent: 'center' },
   kickerSmall: { fontFamily: 'Shark', fontSize: 15, textShadowColor: 'rgba(3,20,48,0.5)', textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
   squareTitle: { fontFamily: 'Shark', fontSize: 23, lineHeight: 26, color: '#ffffff' },
-  squareFooter: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 8 },
-  squareLogo: { width: 140, height: 35 },
+  squareFooter: { flexDirection: 'row', alignItems: 'flex-end', width: '100%', gap: 6, height: 96 },
+  squareLogo: { width: 128, height: 32, marginBottom: 2 },
   ctaSmall: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b', textAlign: 'center' },
   storeSmall: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff' },
 });

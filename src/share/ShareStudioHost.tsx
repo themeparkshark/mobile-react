@@ -22,7 +22,8 @@ import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
 import { HERO_ART } from './FlexHero';
 import { Image } from 'expo-image';
 import { FRAMES } from './frames';
-import { currentFlex, finishFlex, subscribeFlex } from './store';
+import { currentFlex, finishFlex, holdFlex, holdWhileInPark, releaseHeldFlex, subscribeFlex } from './store';
+import { LocationStatusContext } from '../context/LocationProvider';
 import { trackShare } from './track';
 import type { FlexFormat, FlexRequest } from './types';
 
@@ -31,6 +32,12 @@ export const REVEAL_TAP_GUARD_MS = 900;
 export function ShareStudioHost() {
   const [request, setRequest] = useState<FlexRequest | null>(currentFlex);
   useEffect(() => subscribeFlex(() => setRequest(currentFlex())), []);
+  // Park-identifying reveals (park day, ride coin) wait until the player has left the park.
+  const { park } = useContext(LocationStatusContext);
+  const inPark = !!park;
+  useEffect(() => { if (request && holdWhileInPark(request, inPark)) holdFlex(request.id); }, [request, inPark]);
+  useEffect(() => { if (!inPark) releaseHeldFlex(); }, [inPark]);
+  if (request && holdWhileInPark(request, inPark)) return <WarmChrome />;
   return <>
     <WarmChrome />
     {request && (request.mode === 'reveal'

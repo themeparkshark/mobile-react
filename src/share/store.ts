@@ -9,6 +9,16 @@ type Listener = () => void;
 
 let nextId = 1;
 const queue: FlexRequest[] = [];
+/** Reveals held back while the player is in the park (they replay after leaving). */
+const held: FlexRequest[] = [];
+
+/** Kinds whose art identifies the park: no automatic full-screen reveal while the player is there. */
+export const HOLD_IN_PARK: ReadonlySet<string> = new Set(['park_day', 'ride_coin']);
+
+/** True when this request should wait until the player has left the park. */
+export function holdWhileInPark(request: Pick<FlexRequest, 'mode' | 'kind'>, inPark: boolean): boolean {
+  return inPark && request.mode === 'reveal' && HOLD_IN_PARK.has(request.kind);
+}
 const listeners = new Set<Listener>();
 
 function push(request: FlexRequest): void {
@@ -42,6 +52,23 @@ export function finishFlex(id: number): void {
   listeners.forEach(listener => listener());
 }
 
+/** Set a request aside until releaseHeldFlex() (the host calls this when the player leaves the park). */
+export function holdFlex(id: number): void {
+  const index = queue.findIndex(request => request.id === id);
+  if (index < 0) return;
+  held.push(...queue.splice(index, 1));
+  listeners.forEach(listener => listener());
+}
+
+/** Replay held reveals, newest only per kind (one park day, not five). */
+export function releaseHeldFlex(): void {
+  if (!held.length) return;
+  const latest = new Map<string, FlexRequest>();
+  held.splice(0, held.length).forEach(request => latest.set(request.kind, request));
+  latest.forEach(request => queue.push({ ...request, id: nextId++ }));
+  listeners.forEach(listener => listener());
+}
+
 export function subscribeFlex(listener: Listener): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -50,5 +77,6 @@ export function subscribeFlex(listener: Listener): () => void {
 /** Tests only. */
 export function __resetFlexQueue(): void {
   queue.splice(0, queue.length);
+  held.splice(0, held.length);
   nextId = 1;
 }

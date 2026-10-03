@@ -76,3 +76,10 @@ export function FlexArtwork({ art, fallback, style, contentFit = 'contain', id }
 const HIDDEN = { opacity: 0 } as const;
 /** While the fallback holds the slot, the still-loading image sits out of the layout. */
 const HIDDEN_BEHIND = { opacity: 0, position: 'absolute' } as const;
+
+/** Holds the card's capture until `done` (e.g. text measured and sized). */
+export function useReadyGate(key: string, done: boolean): void {
+  const readiness = useContext(ReadinessContext);
+  useEffect(() => { readiness?.register(key); }, [key, readiness]);
+  useEffect(() => { if (done) readiness?.ready(key); }, [done, key, readiness]);
+}

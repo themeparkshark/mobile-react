@@ -3,6 +3,7 @@
  * the rules (no usernames, no dates, no places, "My ..." phrasing, when the
  * percent-of-players line shows) are unit tested in one place.
  */
+import { PLACE_NAMES } from './placeNames';
 import type { FlexCopy, FlexKind, FlexPayload, FlexPayloads, FlexRarity, FrameKey, RarityInput } from './types';
 
 export const RARITY_LABELS: Readonly<Record<FlexRarity, string>> = {
@@ -35,16 +36,26 @@ const URL_LIKE = /\b(?:https?:\/\/|www\.)\S+/gi;
 const EMAIL = /\S+@\S+\.\S+/g;
 const LONG_DIGITS = /\d{5,}/g;
 
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Any park, resort, land, franchise or ride name, as a whole phrase, any case. */
+const PLACE = new RegExp(`(^|[^A-Za-z0-9])(?:${PLACE_NAMES.map(escapeRe).join('|')})(?=$|[^A-Za-z0-9])`, 'gi');
+
 /**
  * Catalog names and server lines only, but scrub anything that could carry
- * personal data (a handle, an email, a link, a long number) and clamp length.
+ * personal data or pin a place: a handle, an email, a link, a long number, or
+ * a park/ride name (a live Story from the park must not say where the kid is).
  */
 export function cleanName(value: string | null | undefined, max = 34): string {
-  const text = String(value ?? '')
+  const raw = String(value ?? '')
     .replace(EMAIL, '')
     .replace(URL_LIKE, '')
     .replace(HANDLE, '')
-    .replace(LONG_DIGITS, '')
+    .replace(LONG_DIGITS, '');
+  const unplaced = raw.replace(PLACE, '$1');
+  // "survived at Universal!" -> "survived!": drop the preposition a removed place leaves behind.
+  const text = (unplaced === raw ? raw : unplaced.replace(/\s+(?:at|in|on|from|to|of)(?=\s*(?:[!.?,]|$))/gi, ''))
+    .replace(/\s+([,.!?:])/g, '$1')
+    .replace(/^[\s,.:;\-–·]+|[\s,:;\-–·]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
@@ -313,10 +324,18 @@ const COPY: { readonly [K in FlexKind]: CopyFn<K> } = {
   },
 };
 
+const FALLBACK_TITLE: Readonly<Record<FlexKind, string>> = {
+  crowned: 'Shark Crown', find: 'A New Find', ride_photo: 'Ride Photo', set_complete: 'Full Set', boss_win: 'Ride Boss',
+  stamp: 'New Stamp', coin_level: 'Ride Coin', standings: 'This Week', fright_night: 'Night Survived', fright_badge: 'A Haunt',
+  fright_lifetime: 'Haunts Survived', ride_coin: 'Ride Coin', streak: 'Streak', level_up: 'Level Up', title: 'New Title', park_day: 'Park Day',
+};
+
 export function flexCopy<K extends FlexKind>(kind: K, payload: FlexPayload<K>): FlexCopy {
   const fn = COPY[kind] as CopyFn<K> | undefined;
   if (!fn) throw new Error(`Unknown flex kind: ${String(kind)}`);
-  const base = fn(payload);
+  const raw = fn(payload);
+  // A name scrubbed down to nothing still needs a title.
+  const base = raw.title ? raw : { ...raw, title: FALLBACK_TITLE[kind] };
   const a11y = [base.ribbon, base.kicker, base.title, base.big, base.stat, base.sub].filter(Boolean).join('. ');
   return { ...base, a11y };
 }
