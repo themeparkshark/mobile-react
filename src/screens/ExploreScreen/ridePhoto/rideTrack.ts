@@ -19,6 +19,8 @@ export interface TrackLut {
   readonly frameY: number;
   /** Support posts: x, top y. */
   readonly posts: { x: number; y: number }[];
+  /** The largest gap between the real (smoothed) slope and the clamped pitch, radians. Kept under 6 deg. */
+  readonly clampError: number;
 }
 
 /** The worklet-safe part of the LUT (no strings, no posts), so gestures and reactions capture less. */
@@ -90,10 +92,14 @@ export function buildLut(shape: readonly (readonly [number, number])[], width: n
     raw.push(Math.atan2(dense[j][1] - dense[j - 1][1], dense[j][0] - dense[j - 1][0]));
   }
   // Smooth the pitch over 5 samples (no LUT stepping) and clamp it.
+  let clampError = 0;
   const angles = raw.map((_, k) => {
     let sum = 0, n = 0;
     for (let d = -2; d <= 2; d++) { const i = k + d; if (i >= 0 && i < raw.length) { sum += raw[i]; n++; } }
-    return Math.max(-maxPitch, Math.min(maxPitch, sum / n));
+    const smooth = sum / n;
+    const clamped = Math.max(-maxPitch, Math.min(maxPitch, smooth));
+    clampError = Math.max(clampError, Math.abs(smooth - clamped));
+    return clamped;
   });
   const path = `M ${dense.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(' L ')}`;
   let nearest = 0;
@@ -105,7 +111,7 @@ export function buildLut(shape: readonly (readonly [number, number])[], width: n
     for (let k = 1; k < samples; k++) if (Math.abs(xs[k] - x) < Math.abs(xs[best] - x)) best = k;
     posts.push({ x: xs[best], y: ys[best] });
   }
-  return { xs, ys, angles, path, frameX: xs[nearest], frameY, posts };
+  return { xs, ys, angles, path, frameX: xs[nearest], frameY, posts, clampError };
 }
 
 /** Time fraction (0..1) at which a monotonic progress curve reaches u. */

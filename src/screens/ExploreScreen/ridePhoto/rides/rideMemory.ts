@@ -11,10 +11,13 @@ const KEY = 'tps.ridePhoto.ridesSnapped.v1';
 let snapped: RideKind[] = [];
 let lastRide: RideKind | null = null;
 let loaded: Promise<void> | null = null;
+let generation = 0;
 
 export function loadRideMemory(): Promise<void> {
   if (!loaded) {
+    const gen = generation;
     loaded = AsyncStorage.getItem(KEY).then(raw => {
+      if (gen !== generation) return;
       const parsed = raw ? JSON.parse(raw) as { snapped?: string[]; last?: string } : {};
       snapped = (parsed.snapped ?? []).filter((kind): kind is RideKind => (ALL_RIDES as string[]).includes(kind));
       lastRide = parsed.last && (ALL_RIDES as string[]).includes(parsed.last) ? parsed.last as RideKind : null;
@@ -43,6 +46,10 @@ export function recordRide(kind: RideKind, serverSnapped?: readonly string[] | n
 
 /** Development previews start clean. */
 export function resetRideMemoryForPreview(): void {
+  generation += 1;
   snapped = [];
   lastRide = null;
+  // A later load must not restore an older session's list over the reset.
+  loaded = Promise.resolve();
+  void AsyncStorage.removeItem(KEY).catch(() => undefined);
 }

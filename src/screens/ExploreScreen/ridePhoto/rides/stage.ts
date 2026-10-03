@@ -70,6 +70,10 @@ export interface RideStage {
   readonly foreground: SkPicture | null;
   readonly data: RideData;
   readonly paint: RidePaint;
+  /** Where the vehicle is at pass time t (scene points), so the grade plate can sit opposite it. */
+  readonly vehicleAt?: (t: number) => { x: number; y: number };
+  /** Moving parts drawn over the foreground (the flume's splash crown), or undefined. */
+  readonly front?: RidePaint;
   /** Lights that glow at night (bulbs), drawn after the night grade, or null. */
   readonly emissive: RidePaint | null;
   /** Spotlight beat (Epic): the scene outside the window sits dark; the window lights as the car arrives. */
@@ -132,7 +136,7 @@ export function drawCover(canvas: SkCanvas, image: SkImage | null, x: number, y:
  * and a lean against the vehicle's pitch.
  */
 export function drawRider(canvas: SkCanvas, rider: SkImage | null, x: number, y: number, size: number, lean: number,
-  riderIn: number, paint: SkPaint, scaleX = 1): void {
+  riderIn: number, paint: SkPaint, scaleX = 1, rim = false): void {
   'worklet';
   if (!rider || riderIn <= 0) return;
   // riderIn runs 1.15 (squash on landing), 0.92 (rebound), then 1: wide and short, tall and thin, rest.
@@ -141,6 +145,14 @@ export function drawRider(canvas: SkCanvas, rider: SkImage | null, x: number, y:
   canvas.translate(x, y);
   canvas.rotate((lean * 180) / Math.PI, 0, 0);
   canvas.scale(scaleX * k, 2 - k);
+  if (rim) {
+    // Night: a 2 pt warm rim light so the find reads on a dark vehicle.
+    const halo = Skia.Paint(); halo.setAntiAlias(true);
+    halo.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('#ffd98a'), BlendMode.SrcIn));
+    const g = 2.2;
+    canvas.drawImageRect(rider, Skia.XYWHRect(0, 0, rider.width(), rider.height()),
+      Skia.XYWHRect(-size / 2 - g, -size * 0.92 - g, size + g * 2, size + g * 2), halo);
+  }
   canvas.drawImageRect(rider, Skia.XYWHRect(0, 0, rider.width(), rider.height()),
     Skia.XYWHRect(-size / 2, -size * 0.92, size, size), paint);
   canvas.restore();
@@ -153,7 +165,7 @@ export function drawBulb(canvas: SkCanvas, glow: SkImage | null, x: number, y: n
   paint.setAntiAlias(true);
   if (glow && on > 0) {
     paint.setBlendMode(BlendMode.Plus);
-    paint.setAlphaf(0.55 * on);
+    paint.setAlphaf(0.9 * on);
     canvas.drawImageRect(glow, Skia.XYWHRect(0, 0, glow.width(), glow.height()), Skia.XYWHRect(x - r, y - r, r * 2, r * 2), paint);
     paint.setBlendMode(BlendMode.SrcOver);
   }
@@ -163,7 +175,7 @@ export function drawBulb(canvas: SkCanvas, glow: SkImage | null, x: number, y: n
 }
 
 /** Camera rig placed beside the window, kept 16 pt inside the screen edge, clear of the frame. */
-export function cameraRig(box: Box, width: number, height: number, top: number): CamRig {
+export function cameraRig(box: Box, width: number, height: number, top: number, preferRight = false, mount: 'pole' | 'hang' = 'pole'): CamRig {
   const w = Math.min(width * 0.25, 104), h = w * (190 / 200);
   const inset = 16;
   // Clear of the brackets even at their 1.3x approach size.
@@ -174,10 +186,10 @@ export function cameraRig(box: Box, width: number, height: number, top: number):
   let x: number;
   let y = Math.max(top + 64, box.y - h * 0.7);
   if (roomRight >= w) x = box.x + box.w + gap;
-  else if (roomLeft >= w) { facing = 'right'; x = box.x - gap - w; }
+  else if (roomLeft >= w && !preferRight) { facing = 'right'; x = box.x - gap - w; }
   else {
     // No room beside the window: the camera rides above it, at the roomier side, pole beside the window.
-    facing = roomRight >= roomLeft ? 'left' : 'right';
+    facing = preferRight || roomRight >= roomLeft ? 'left' : 'right';
     x = facing === 'left' ? width - inset - w : inset;
     y = Math.max(top + 64, box.y - h * 0.15 - box.h * 0.15 - h);
   }
@@ -190,7 +202,9 @@ export function cameraRig(box: Box, width: number, height: number, top: number):
   const poleX = facing === 'left' ? Math.min(x + w * 0.8, Math.max(x + w * 0.5, box.x + box.w + gap))
     : Math.max(x + w * 0.2, Math.min(x + w * 0.5, box.x - gap));
   return { x, y, w, h, lens, lamps, lampR: Math.max(9, w * 0.07), facing,
-    pole: { x: poleX - poleW / 2, y: poleTop, w: poleW, h: height - poleTop + 4 } };
+    // Two mounts: on a pole to the ground, or hung from a beam above the scene.
+    pole: mount === 'hang' ? { x: x + w * 0.5 - poleW / 2, y: -4, w: poleW, h: y + h * 0.12 + 4 }
+      : { x: poleX - poleW / 2, y: poleTop, w: poleW, h: height - poleTop + 4 } };
 }
 
 /** Photo crop: the window and a margin, kept inside the scene. */

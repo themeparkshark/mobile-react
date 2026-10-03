@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import {
   Circle, ColorMatrix, Group, Image as SkImage, LinearGradient, Path, Picture, RadialGradient, Rect, RoundedRect, Skia,
-  createPicture, vec, FillType, type SkPicture,
+  createPicture, vec, type SkPicture,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { gradeMatrix } from './rides/stage';
@@ -69,14 +69,22 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
     paint(canvas, { t: t.value, clock: clock.value, rock: rock.value, riderIn: riderIn.value, alpha: carVis.value,
       ghost: false, photo: false }, data, art);
     return recorder.finishRecordingAsPicture();
-  });
+  }, [stage, art]);
+  const { front } = stage;
+  const over = useDerivedValue(() => {
+    if (!front) return EMPTY;
+    const recorder = Skia.PictureRecorder();
+    const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, height));
+    front(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: carVis.value, ghost: false, photo: false }, data, art);
+    return recorder.finishRecordingAsPicture();
+  }, [stage, art]);
   const glow = useDerivedValue(() => {
     if (!emissive) return EMPTY;
     const recorder = Skia.PictureRecorder();
     const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, height));
     emissive(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: 1, ghost: false, photo: false }, data, art);
     return recorder.finishRecordingAsPicture();
-  });
+  }, [stage, art]);
 
   // The target: brackets close in like a shrinking ring, gold, then green on the window.
   const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
@@ -86,7 +94,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
   });
   const bracketColor = useDerivedValue(() => (ready.value === 3 ? '#3ee07a' : '#ffc21a'));
   const bracketOpacity = useDerivedValue(() => 0.65 + 0.35 * approach.value);
-  const windowOpacity = useDerivedValue(() => 0.1 + 0.26 * approach.value);
+  const windowOpacity = useDerivedValue(() => (stage.spotlight ? 0 : 0.1 + 0.26 * approach.value));
   const coneOpacity = useDerivedValue(() => (stage.spotlight ? 0.15 + 0.75 * lit.value : 0.2 + 0.35 * approach.value));
   const starScale = useDerivedValue(() => {
     const s = ready.value === 3 ? 1.35 : 1;
@@ -106,8 +114,13 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
   const flashOpacity = useDerivedValue(() => flash.value);
   const dimOpacity = useDerivedValue(() => dim.value);
   // Spotlight (Epic): outside the window sits at about 35%; the window lights fully only as the car arrives.
-  const outsideDark = stage.spotlight ? 0.62 : 0;
-  const windowDark = useDerivedValue(() => (stage.spotlight ? 0.7 * (1 - lit.value) : 0));
+  // Spotlight (Epic): a soft light pool, not a box. The scene sits dark; a warm pool opens on the window as
+  // the car arrives (radius and warmth follow `lit`), shaped by the camera's beam cone.
+  const spot = stage.spotlight ? 1 : 0;
+  const poolR = Math.hypot(box.w, box.h) * 0.62;
+  const poolRadius = useDerivedValue(() => poolR * (0.55 + 0.65 * lit.value));
+  const poolDark = useDerivedValue(() => spot * 0.64);
+  const warmth = useDerivedValue(() => spot * 0.6 * lit.value);
 
   const cone = useMemo(() => {
     const path = Skia.Path.Make();
@@ -128,14 +141,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
     path.moveTo(r - k, b); path.lineTo(r, b); path.lineTo(r, b - k);
     return path;
   }, [box]);
-  const spotHole = useMemo(() => {
-    const path = Skia.Path.Make();
-    path.addRect(Skia.XYWHRect(0, 0, width, height));
-    path.addRRect(Skia.RRectXY(Skia.XYWHRect(box.x - 8, box.y - 8, box.w + 16, box.h + 16), 18, 18));
-    path.addPath(cone);
-    path.setFillType(FillType.EvenOdd);
-    return path;
-  }, [width, height, box, cone]);
+
   const star = useMemo(() => starPath(9), []);
   const show = staticOnly ? 0 : 1;
 
@@ -144,6 +150,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
       <Picture picture={stage.backdrop} />
       <Picture picture={dynamic} />
       <Picture picture={stage.foreground ?? EMPTY} />
+      <Picture picture={over} />
 
       <Group opacity={show}>
         <Path path={cone} opacity={coneOpacity}>
@@ -163,8 +170,13 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
       </Group>
 
       <Picture picture={glow} />
-      <Path path={spotHole} color="#040a1c" opacity={outsideDark} />
-      <RoundedRect x={box.x - 8} y={box.y - 8} width={box.w + 16} height={box.h + 16} r={18} color="#040a1c" opacity={windowDark} />
+      <Rect x={0} y={0} width={width} height={height} opacity={poolDark}>
+        <RadialGradient c={vec(cx, cy)} r={poolRadius} positions={[0, 0.55, 1]}
+          colors={['rgba(4,10,28,0)', 'rgba(4,10,28,0.35)', 'rgba(4,10,28,1)']} />
+      </Rect>
+      <Circle cx={cx} cy={cy} r={poolR * 0.75} opacity={warmth} blendMode="plus">
+        <RadialGradient c={vec(cx, cy)} r={poolR * 0.75} colors={['rgba(255,236,190,0.6)', 'rgba(255,236,190,0)']} />
+      </Circle>
 
       <Group opacity={show}>
         {cam.lamps.map((lamp, i) => (

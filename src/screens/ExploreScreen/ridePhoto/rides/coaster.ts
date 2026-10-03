@@ -2,10 +2,12 @@ import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, type SkCanvas }
 import { rideProgress, type RideTrack } from '../../ridePhoto';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
 import { drawHedge, drawSeason, drawSky, paintExtras } from './backdrop';
+import { COASTER_FRAME_AT, COASTER_MAX_PITCH, COASTER_SHAPES, COASTER_STATION_X } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
 } from './stage';
+import { seeded } from './catalog';
 
 /**
  * Coaster: the camera moment is at the bottom of the drop. A slow lift, a fast
@@ -19,15 +21,10 @@ export const SEAT = { x: 0.393, y: 0.5 };
 /** The rail line sits this far down the car sprite (between the running wheels and the upstops). */
 export const RAIL_AT = 0.842;
 
-// The drop's run-out sits left of centre, so the camera rig stands right of the window, clear of the track.
-const SHAPES: Readonly<Record<RideTrack, readonly (readonly [number, number])[]>> = {
-  family: [[-0.25, 0.75], [0.04, 0.74], [0.16, 0.74], [0.26, 0.56], [0.36, 0.7], [0.5, 0.7], [0.7, 0.62], [0.9, 0.7], [1.25, 0.68]],
-  hill: [[-0.25, 0.78], [0.04, 0.78], [0.14, 0.78], [0.24, 0.2], [0.29, 0.16], [0.36, 0.5], [0.42, 0.8], [0.56, 0.76], [0.74, 0.6], [0.92, 0.72], [1.25, 0.72]],
-  dark: [[-0.25, 0.78], [0.04, 0.78], [0.14, 0.78], [0.24, 0.24], [0.29, 0.2], [0.36, 0.54], [0.42, 0.8], [0.56, 0.76], [0.74, 0.6], [0.92, 0.72], [1.25, 0.72]],
-  launch: [[-0.25, 0.72], [0.04, 0.72], [0.18, 0.72], [0.3, 0.38], [0.36, 0.3], [0.42, 0.7], [0.56, 0.74], [0.74, 0.58], [0.92, 0.7], [1.25, 0.66]],
-};
-const FRAME_AT: Readonly<Record<RideTrack, number>> = { family: 0.44, hill: 0.47, dark: 0.47, launch: 0.47 };
-const STATION_X = 0.1;
+// Shapes, frame positions and the pitch clamp live in shapes.ts (tested: no car ever sits off its rail).
+const SHAPES = COASTER_SHAPES;
+const FRAME_AT = COASTER_FRAME_AT;
+const STATION_X = COASTER_STATION_X;
 
 export function carSize(width: number) {
   const w = Math.round(width * CAR_SCALE);
@@ -41,7 +38,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
   const { width, height, top, spec, tier, variant, art } = ctx;
   const track: RideTrack = spec.track;
   const band = { top: Math.max(top + 70, height * 0.3), height: height * 0.6 };
-  const lut = buildLut(SHAPES[track], width, band, (FRAME_AT[track] + (variant.frameShift - 0.6) * 0.04) * width);
+  const lut = buildLut(SHAPES[track], width, band, (FRAME_AT[track] + (variant.frameShift - 0.6) * 0.04) * width, 160, COASTER_MAX_PITCH);
   const progress = (t: number) => rideProgress(track, t);
   const uFrame = uAtX(lut, lut.frameX);
   const frameT = tAtProgress(progress, uFrame);
@@ -56,7 +53,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
   // The lit window: the whole lead car with its rider fits inside.
   const bw = car.w * (cars > 1 ? 1.45 : 1.45), bh = car.h * RAIL_AT + car.rider * 0.95 + 14;
   const box = { x: lut.frameX - bw / 2, y: lut.frameY - bh + 12, w: bw, h: bh };
-  const cam = cameraRig(box, width, height, top);
+  const cam = cameraRig(box, width, height, top, false, seeded(variant.seed, 47) < 0.4 ? 'hang' : 'pole');
   const crop = photoCrop(box, width, height, 0.75);
   const grade = gradeMatrix(variant.sky, variant.golden);
   const station = sampleTrack(lut, uStation);
@@ -83,6 +80,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
   return {
     kind: 'coaster', width, height, sky: variant.sky, frameT, stationT, box, cam, crop, seat, riderSize: car.rider,
     backdrop, foreground: null, data, paint: paintCoaster,
+    vehicleAt: t => sampleTrack(lut, rideProgress(track, t)),
     emissive: variant.sky === 'night' ? paintCoasterBulbs : null,
     spotlight: spec.litMs != null,
   };
@@ -111,7 +109,7 @@ export function paintCoaster(canvas: SkCanvas, s: PaintState, d: RideData, art: 
     }
     canvas.translate(-carW / 2, -carH * RAIL_AT);
     drawImg(canvas, art.carBack ?? null, 0, 0, carW, carH, paint);
-    if (i === 0) drawRider(canvas, art.rider ?? null, carW * SEAT.x, carH * SEAT.y, size, -p.angle * 0.3, s.riderIn, paint);
+    if (i === 0) drawRider(canvas, art.rider ?? null, carW * SEAT.x, carH * SEAT.y, size, -p.angle * 0.3, s.riderIn, paint, 1, d.sky === 'night' && !s.ghost);
     drawImg(canvas, art.carFront ?? null, 0, 0, carW, carH, paint);
     canvas.restore();
   }
@@ -125,7 +123,7 @@ export function paintCoasterBulbs(canvas: SkCanvas, s: PaintState, d: RideData, 
   const head = s.photo ? 0 : Math.floor(s.clock * 6);
   for (let i = 0; i < n; i++) {
     const on = (i + head) % 4 === 0 ? 1 : 0.45;
-    drawBulb(canvas, art.glow ?? null, bulbs[i * 2], bulbs[i * 2 + 1], 12, on);
+    drawBulb(canvas, art.glow ?? null, bulbs[i * 2], bulbs[i * 2 + 1], 14, on);
   }
 }
 
@@ -156,9 +154,10 @@ function drawLattice(canvas: SkCanvas, lut: TrackLut, height: number, grade: num
   paint.setStrokeWidth(1.6); paint.setColor(Skia.Color(LATTICE)); canvas.drawPath(braces, paint);
 }
 
-/** A little station platform with a striped awning where the car waits for the find. */
+/** A little station platform (and a striped sign) where the car waits for the find. */
 function drawStation(canvas: SkCanvas, x: number, railY: number, carW: number, height: number, grade: number[]) {
-  const w = carW * 1.7, deckY = railY + 6, left = x - w / 2;
+  // The platform sits under the flat stretch of rail only.
+  const w = carW * 1.25, deckY = railY + 6, left = x - w / 2;
   const fill = Skia.Paint(); fill.setAntiAlias(true); fill.setColorFilter(Skia.ColorFilter.MakeMatrix(grade));
   const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(3.5);
   ink.setStrokeJoin(StrokeJoin.Round); ink.setColorFilter(Skia.ColorFilter.MakeMatrix(grade));
@@ -173,31 +172,18 @@ function drawStation(canvas: SkCanvas, x: number, railY: number, carW: number, h
   const deck = Skia.RRectXY(Skia.XYWHRect(left, deckY, w, 14), 5, 5);
   canvas.drawRRect(deck, fill);
   ink.setColor(Skia.Color('#1d3f75')); canvas.drawRRect(deck, ink);
-  // Awning: red and cream stripes on two slim poles.
-  const awnY = railY - carW * 0.95;
+  // A small striped sign on the left post (no awning: the rail never runs through the station's roof).
+  const signY = deckY - carW * 0.62;
   fill.setColor(Skia.Color('#fff5e1'));
-  canvas.drawRect(Skia.XYWHRect(left + 4, awnY, 5, deckY - awnY), fill);
-  canvas.drawRect(Skia.XYWHRect(left + w - 9, awnY, 5, deckY - awnY), fill);
+  canvas.drawRect(Skia.XYWHRect(left + 2, signY, 5, deckY - signY), fill);
   ink.setColor(Skia.Color('#b98a58'));
-  canvas.drawRect(Skia.XYWHRect(left + 4, awnY, 5, deckY - awnY), ink);
-  canvas.drawRect(Skia.XYWHRect(left + w - 9, awnY, 5, deckY - awnY), ink);
-  const stripes = 6, sw = (w + 12) / stripes;
-  for (let i = 0; i < stripes; i++) {
-    fill.setColor(Skia.Color(i % 2 ? '#fff5e1' : '#e8473c'));
-    const scallop = Skia.Path.Make();
-    const sx = left - 6 + i * sw;
-    scallop.moveTo(sx, awnY - 16); scallop.lineTo(sx + sw, awnY - 16); scallop.lineTo(sx + sw, awnY);
-    scallop.quadTo(sx + sw / 2, awnY + 10, sx, awnY); scallop.close();
-    canvas.drawPath(scallop, fill);
-  }
-  const outline = Skia.Path.Make();
-  outline.moveTo(left - 6, awnY - 16); outline.lineTo(left + w + 6, awnY - 16);
-  for (let i = stripes - 1; i >= 0; i--) {
-    const sx = left - 6 + i * sw;
-    outline.lineTo(sx + sw, awnY); outline.quadTo(sx + sw / 2, awnY + 10, sx, awnY);
-  }
-  outline.close();
-  ink.setColor(Skia.Color(RAIL_INK)); canvas.drawPath(outline, ink);
+  canvas.drawRect(Skia.XYWHRect(left + 2, signY, 5, deckY - signY), ink);
+  const sign = Skia.RRectXY(Skia.XYWHRect(left - 12, signY - 18, 34, 20), 6, 6);
+  fill.setColor(Skia.Color('#e8473c')); canvas.drawRRect(sign, fill);
+  ink.setColor(Skia.Color(RAIL_INK)); canvas.drawRRect(sign, ink);
+  fill.setColor(Skia.Color('#fff5e1'));
+  canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(left - 6, signY - 12, 22, 4), 2, 2), fill);
+  canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(left - 6, signY - 6, 14, 4), 2, 2), fill);
 }
 
 /** Ties and the two-tone rail tube over the hedge line. */

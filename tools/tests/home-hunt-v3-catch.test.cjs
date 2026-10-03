@@ -445,3 +445,34 @@ test('round 5: no app or map chrome over the viewfinder; close without a grey st
   assert.match(moment, /pendingPhoto\.current = \{ image, grade \};/);
   assert.match(moment, /if \(pendingPhoto\.current\) \{ setPhoto\(pendingPhoto\.current\)/, 'the sticker gets the photo only on landing');
 });
+
+test('round 5: every ride track keeps the car on its rail (real slope within 6 deg of the clamp)', () => {
+  const shapes = loadTs('src/screens/ExploreScreen/ridePhoto/rides/shapes.ts');
+  const W = 402, H = 680;
+  for (const [name, shape] of Object.entries(shapes.COASTER_SHAPES)) {
+    const lut = track.buildLut(shape, W, { top: Math.max(130, H * 0.3), height: H * 0.6 }, 0.47 * W, 160, shapes.COASTER_MAX_PITCH);
+    assert.ok(lut.clampError < (6 * Math.PI) / 180, `coaster ${name} clamp error ${(lut.clampError * 180 / Math.PI).toFixed(1)} deg`);
+  }
+  const flume = track.buildLut(shapes.FLUME_SHAPE, W, { top: Math.max(120, H * 0.24), height: H * 0.66 }, 0.73 * W, 200, shapes.FLUME_MAX_PITCH);
+  assert.ok(flume.clampError < (6 * Math.PI) / 180);
+  assert.ok(shapes.FLUME_MAX_PITCH <= (45 * Math.PI) / 180, 'one chute, not a coaster drop');
+  // The flume is its own silhouette: a flat float trough along the top (not a needle peak).
+  const top = flume.ys.reduce((m, y) => Math.min(m, y), Infinity);
+  const flat = flume.xs.filter((x, k) => x > 0 && x < W && Math.abs(flume.ys[k] - top) < 4).length;
+  assert.ok(flat > 20, 'a float trough along the top');
+});
+
+test('round 5: the flume splash peaks at the camera moment, holds, and is drawn in front of the log', () => {
+  const flume = read('src/screens/ExploreScreen/ridePhoto/rides/flume.ts');
+  assert.match(flume, /front: paintFlumeSplash/);
+  assert.match(read('src/screens/ExploreScreen/ridePhoto/rides/index.ts'), /stage\.front\?\.\(canvas, state, stage\.data, art\)/, 'in the photo too');
+  // Envelope: rise 80, hold 140, fall 300.
+  const src = flume.slice(flume.indexOf('export function splashLevel'), flume.indexOf('export function buildFlume'));
+  const splashLevel = new Function(`${src.replace(/export function/, 'function').replace(/: number/g, '').replace(/'worklet';/, '')}; return splashLevel;`)();
+  assert.equal(splashLevel(0), 1);
+  assert.equal(splashLevel(140), 1);
+  assert.equal(splashLevel(-100), 0);
+  assert.ok(splashLevel(-40) > 0 && splashLevel(-40) < 1);
+  assert.ok(splashLevel(300) > 0 && splashLevel(300) < 1);
+  assert.equal(splashLevel(500), 0);
+});
