@@ -8,6 +8,8 @@ export default async function updatePlayer(payload: {
   readonly username?: string;
   /** "Let sharks find me" (servers with the kid-safety update). */
   readonly discoverable?: boolean;
+  /** Sent only after the grown-up gate passes (the server needs it to turn discovery on). */
+  readonly grown_up_confirmed?: boolean;
 }): Promise<PlayerType> {
   const { data } = await client.put<ApiResponseType<PlayerType>>(
     '/me',

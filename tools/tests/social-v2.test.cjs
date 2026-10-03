@@ -182,9 +182,9 @@ test('audit regressions stay fixed in the screens', () => {
 
 test('round 3: Find tells the truth, asks a grown-up, and never nudges discovery', () => {
   const friends = read('src/screens/FriendsScreen.tsx');
-  assert.match(friends, /Sharks can add you only if they type your exact shark name\./);
+  assert.match(friends, /Sharks can't search for you\./);
   assert.match(friends, /Sharks can find you by part of your name\./);
-  assert.match(friends, /if \(next && !\(await confirmGame\(\{\s*title: 'Ask a grown-up first'/, 'turning it on needs a grown-up');
+  assert.match(friends, /else setGate\(true\);/, 'turning it on needs the grown-up gate');
   assert.match(friends, /if \(saving\.current\) return;/, 'no racing toggles');
   assert.doesNotMatch(friends, /Turn on Let sharks find me/, 'never suggest turning discovery on');
   assert.match(friends, /Share your shark name!/);
@@ -197,9 +197,37 @@ test('round 3: strangers see Friends only, Block and Unblock have their own art,
   assert.match(profile, /ICON_SOURCES\.retry/);
   assert.match(profile, /equalChoices: true/);
   const bell = read('src/screens/NotificationsScreen.tsx');
-  assert.match(bell, /prepareForLayoutAnimationRender\(\)/);
-  assert.match(bell, /extraData=\{\[overrides, readIds\]\}/);
   const row = read('src/components/Notification.tsx');
   assert.match(row, /request_sticker\.png/);
   assert.match(row, /useHop\(burst\)/);
+});
+
+test('round 4: a real grown-up gate, honest Off copy, rows leave inside the cell', () => {
+  const { numberWords, makeProblem } = loadTs('src/screens/social/GrownUpGate.tsx', {
+    react: { useEffect() {}, useMemo: f => f(), useRef: v => ({ current: v }), useState: v => [v, () => {}] },
+    'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' },
+    'react-native': { StyleSheet: { create: v => v } }, 'react-native-reanimated': {}, '../../gamekit/Haptics': {}, '../../gamekit/SFX': {},
+    '../../ui/GameIcon': {}, '../../ui/tokens': { BRAND: {}, FONT: {} }, '../../ui/useUiReducedMotion': {}, './SocialKit': {},
+  });
+  assert.equal(numberWords(7), 'seven');
+  assert.equal(numberWords(40), 'forty');
+  assert.equal(numberWords(47), 'forty-seven');
+  const seq = [0.5, 0.5];
+  const p = makeProblem(() => seq.shift() ?? 0);
+  assert.equal(p.answer, 53 + 19);
+  assert.equal(p.text, 'fifty-three plus nineteen');
+  const gate = read('src/screens/social/GrownUpGate.tsx');
+  assert.match(gate, /const HOLD_MS = 3000/);
+  assert.match(gate, /label="Keep it off" tone="gold"/, 'Keep it off is the primary button');
+  const friends = read('src/screens/FriendsScreen.tsx');
+  assert.match(friends, /grown_up_confirmed: true/);
+  assert.match(friends, /or taps you on a leaderboard or post, can still ask/);
+  assert.doesNotMatch(friends, /LayoutAnimation/, 'LayoutAnimation does not animate FlashList cells on the new architecture');
+  assert.match(friends, /leaving: leavingAs\(p, 'incoming'\)/, 'a refused row is drawn frozen, never as Add');
+  const bell = read('src/screens/NotificationsScreen.tsx');
+  assert.doesNotMatch(bell, /LayoutAnimation/);
+  assert.match(bell, /<LeavingRow leaving=\{declined\}/);
+  assert.match(bell, /const extraData = useMemo/);
+  const kit = read('src/screens/social/SocialKit.tsx');
+  assert.match(kit, /export function LeavingRow/);
 });

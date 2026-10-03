@@ -65,7 +65,7 @@ export const Burst = memo(function Burst({ style, onDone, big = 1 }: { readonly 
         <>
           <Animated.View style={[styles.ring, ringStyle]} />
           {(big > 1 ? [...PIECES, ...PIECES.map(p => ({ ...p, angle: p.angle + 0.3, dist: p.dist * 0.6 }))] : PIECES)
-            .map((p, i) => <Piece key={i} {...p} big={big} delay={i * 14} />)}
+            .map((p, i) => <Piece key={i} {...p} big={big} delay={i * 6} />)}
         </>
       )}
     </View>

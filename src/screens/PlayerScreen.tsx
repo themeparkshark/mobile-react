@@ -197,7 +197,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
                 {currentPlayer.verified_at && <View style={{ flex: 1 }}><Verified /></View>}
               </View>
             )}
-            {!isFriend && (currentPlayer.profile_access ?? 'public') !== 'self' ? (
+            {!isFriend && currentPlayer.id !== authPlayer?.id && (currentPlayer.profile_access ?? 'public') === 'public' ? (
               // Strangers see who they are, not six zeros.
               <View style={[kit.card, { padding: 16, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
                 accessible accessibilityLabel={`Friends only. Become friends with ${currentPlayer.screen_name} to see their stats and parks.`}>
