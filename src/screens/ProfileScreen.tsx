@@ -17,7 +17,7 @@ import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import { getStamps } from '../api/endpoints/me/stamps';
-import { stampClaimableCount } from '../components/profile/stampDot';
+import { clearStampDotCache, readStampDotCache, stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
@@ -50,9 +50,6 @@ import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
-/** Last Stamp Book dot count, shared across Profile mounts. */
-let stampDotCache: { at: number; count: number } | null = null;
-
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
 
@@ -77,18 +74,20 @@ export default function ProfileScreen() {
   const levelCard = useCardOnScreen();
   const [stampsToClaim, setStampsToClaim] = useState(0);
   const requestStampDot = useCallback((force = false) => {
-    if (isProfilePreview) return;
+    if (isProfilePreview || !player) return;
+    const playerId = player.id;
     // The stamp list is a big payload: read it at most every 5 minutes on focus (pull to refresh forces).
-    if (!force && stampDotCache && Date.now() - stampDotCache.at < 5 * 60_000) {
-      setStampsToClaim(stampDotCache.count);
+    const cached = force ? null : readStampDotCache(playerId);
+    if (cached !== null) {
+      setStampsToClaim(cached);
       return;
     }
     void getStamps().then((r) => {
       const count = stampClaimableCount(r);
-      stampDotCache = { at: Date.now(), count };
+      writeStampDotCache(playerId, count);
       setStampsToClaim(count);
     }).catch(() => setStampsToClaim(0));
-  }, [isProfilePreview]);
+  }, [isProfilePreview, player?.id]);
 
   // Scroll refs
   const route = useRoute();
@@ -201,8 +200,10 @@ export default function ProfileScreen() {
       }
       RootNavigation.navigate('Store', { store: store.id });
     };
+    // An older server without the Shark Shop keeps its legacy Store badge instead (profileStores).
+    const showSharkShop = !!sharkShop || stores.length === 0;
     return [
-      {
+      ...(showSharkShop ? [{
         key: 'shark-shop',
         label: 'Shark Shop',
         image: require('../../assets/images/screens/profile/shortcut_shark_shop.png'),
@@ -211,7 +212,7 @@ export default function ProfileScreen() {
           if (sharkShop) RootNavigation.navigate('Store', { store: sharkShop.id });
           else RootNavigation.navigate('Store', { store: 'shark-shop' });
         },
-      },
+      } as ProfileShortcut] : []),
       {
         key: 'stamp-book',
         label: 'Stamp Book',
@@ -240,9 +241,11 @@ export default function ProfileScreen() {
     ];
   }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim]);
 
-  // Redirect guests to login: must be in useEffect, not during render
+  // Redirect guests to login: must be in useEffect, not during render.
+  // Signing out also forgets the Stamp Book dot (it is keyed by player too).
   useEffect(() => {
     if (!player) {
+      clearStampDotCache();
       RootNavigation.navigate('Login');
     }
   }, [player]);

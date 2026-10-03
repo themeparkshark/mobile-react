@@ -46,7 +46,7 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import { useReduceMotionPreference } from '../hooks/useReducedGameMotion';
-import { potionTransition, type PotionState, type PotionTransition } from './xpPotionModel';
+import { BURST_AT_MS, createPotionDriver, type PotionState, type PotionTransition } from './xpPotionModel';
 
 const INK = '#1d3550';
 const LABEL_INK = '#3a0d12';
@@ -72,8 +72,7 @@ const FILL_BOTTOM = CY + R; // 114
 const FILL_TOP = 30;
 // The liquid never drops below the label line: at 0% a living, glowing base
 // sits under the label (like Alex's art) and progress fills from here to the neck.
-const FILL_BASE = CY + 2; // 78: the label line
-const CELEBRATION_MS = 1390; // ends just before the refill spring at 1400 ms
+const FILL_BASE = CY - 4; // 72: 6 pt above the label line, so the resting bubbles show
 const FRAME_MS = 33;
 // Lip centre after the tilt: where escaping bubbles and drops leave the bottle.
 const MOUTH = { x: CX - Math.sin(-TILT) * (CY - 20), y: CY - Math.cos(-TILT) * (CY - 20) };
@@ -201,59 +200,58 @@ function XpPotion({
   const burst = useSharedValue(0);
   const flash = useSharedValue(0);
 
-  const last = useRef<PotionState | null>(initial ? { level: initial.level, progress: clamp01(initial.progress) } : null);
-  const celebrateUntil = useRef(0);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
-  const latestTarget = useRef(target);
-  latestTarget.current = target;
   const cbs = useRef({ onTransition, onLevelUpBurst });
   cbs.current = { onTransition, onLevelUpBurst };
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+
+  const driver = useMemo(() => createPotionDriver(
+    initial ? { level: initial.level, progress: clamp01(initial.progress) } : null,
+    {
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+      burst: () => cbs.current.onLevelUpBurst?.(),
+      refill: (latest) => {
+        fill.value = withSpring(latest.progress, { damping: 14, stiffness: 70 });
+      },
+      play: (kind, next) => {
+        cbs.current.onTransition?.(kind);
+        if (reducedRef.current) {
+          cancelAnimation(fill);
+          fill.value = next.progress;
+          slosh.value = 0;
+          burst.value = 0;
+          return;
+        }
+        if (kind === 'levelUp') {
+          fill.value = withSequence(
+            withTiming(1.04, { duration: BURST_AT_MS, easing: Easing.in(Easing.quad) }),
+            // Stay brimming while the drops fly, then drain to the base; the driver refills.
+            withDelay(420, withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) })),
+          );
+          burst.value = 0;
+          burst.value = withDelay(BURST_AT_MS, withTiming(1, { duration: 1150, easing: Easing.out(Easing.quad) }, (done) => {
+            if (done) burst.value = 0;
+          }));
+          flash.value = withDelay(500, withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 700 })));
+          slosh.value = withSequence(withTiming(6, { duration: 300 }), withTiming(0, { duration: 1600 }));
+          fizz.value = withSequence(withTiming(3, { duration: 200 }), withTiming(1, { duration: 2200 }));
+          return;
+        }
+        fill.value = withSpring(next.progress, { damping: 12, stiffness: kind === 'pour' ? 50 : 80 });
+        if (kind === 'gain' || kind === 'pour') {
+          slosh.value = withSequence(withTiming(kind === 'gain' ? 5 : 3.5, { duration: 220 }), withTiming(0, { duration: 1400 }));
+          fizz.value = withSequence(withTiming(kind === 'gain' ? 2.6 : 1.8, { duration: 160 }), withTiming(1, { duration: 1800 }));
+        }
+      },
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), []);
+  useEffect(() => () => driver.dispose(), [driver]);
 
   useEffect(() => {
-    const next = { level, progress: target };
-    const kind = potionTransition(last.current, next, reduced, Date.now() < celebrateUntil.current);
-    if (kind === 'wait') return undefined;
-    last.current = next;
-    if (kind === 'defer') return undefined; // the celebration's own refill picks up latestTarget
-    cbs.current.onTransition?.(kind);
-    if (reduced) {
-      cancelAnimation(fill);
-      fill.value = target;
-      slosh.value = 0;
-      burst.value = 0;
-      if (kind === 'levelUp') cbs.current.onLevelUpBurst?.();
-      return undefined;
-    }
-    if (kind === 'levelUp') {
-      celebrateUntil.current = Date.now() + CELEBRATION_MS;
-      fill.value = withSequence(
-        withTiming(1.04, { duration: 520, easing: Easing.in(Easing.quad) }),
-        // Stay brimming while the drops fly, then drain to the base and refill for the new level.
-        withDelay(420, withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) })),
-      );
-      burst.value = 0;
-      burst.value = withDelay(520, withTiming(1, { duration: 1150, easing: Easing.out(Easing.quad) }, (done) => {
-        if (done) burst.value = 0;
-      }));
-      flash.value = withDelay(500, withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 700 })));
-      slosh.value = withSequence(withTiming(6, { duration: 300 }), withTiming(0, { duration: 1600 }));
-      fizz.value = withSequence(withTiming(3, { duration: 200 }), withTiming(1, { duration: 2200 }));
-      // Timers live in a ref that only unmount clears, so a refetch cannot cancel the burst.
-      timers.current.push(setTimeout(() => cbs.current.onLevelUpBurst?.(), 520));
-      timers.current.push(setTimeout(() => {
-        fill.value = withSpring(latestTarget.current, { damping: 14, stiffness: 70 });
-      }, 1400));
-      return undefined;
-    }
-    fill.value = withSpring(target, { damping: 12, stiffness: kind === 'pour' ? 50 : 80 });
-    if (kind === 'gain' || kind === 'pour') {
-      slosh.value = withSequence(withTiming(kind === 'gain' ? 5 : 3.5, { duration: 220 }), withTiming(0, { duration: 1400 }));
-      fizz.value = withSequence(withTiming(kind === 'gain' ? 2.6 : 1.8, { duration: 160 }), withTiming(1, { duration: 1800 }));
-    }
-    return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, level, reduced]);
+    driver.update({ level, progress: target }, reduced);
+  }, [driver, target, level, reduced]);
 
   // The clock: UI thread, about 30 redraws a second, only while visible.
   const frame = useFrameCallback((info) => {
@@ -302,7 +300,7 @@ function XpPotion({
 
   const surfaceLine = usePathValue((p) => {
     'worklet';
-    const y0 = surfaceY.value + 1.8;
+    const y0 = surfaceY.value + 1.2;
     const t = time.value;
     const amp = 1.4 + slosh.value;
     for (let x = 0; x <= 110; x += 5) {
@@ -313,40 +311,46 @@ function XpPotion({
   });
 
   // Rising bubbles, and a ring where each one pops at the surface.
+  // Bubbles rise through the top band of the liquid (above the sticker), so the
+  // potion visibly bubbles at rest; each one pops into tiny droplets at the surface.
+  const BAND = 18;
   const bubbles = usePathValue((p) => {
     'worklet';
     const top = surfaceY.value;
-    const span = FILL_BOTTOM - top;
-    if (span < 8) return;
+    const span = Math.min(BAND, FILL_BOTTOM - top);
+    if (span < 6) return;
     const t = time.value;
     const k = fizz.value;
     for (let i = 0; i < BUBBLES.length; i++) {
       const b = BUBBLES[i];
       if (i >= 4 && k < 1.4) continue;
-      const travel = (b.phase + t * b.speed * k) % (span + 6);
-      if (travel > span - 3) continue; // popping: drawn as a ring below
-      const y = FILL_BOTTOM - 5 - travel;
+      const travel = (b.phase + t * b.speed * k) % (span + 4);
+      if (travel > span - 2) continue; // popping: drawn as droplets below
+      const y = top + span - travel;
       const x = b.x + Math.sin(t * 2 + b.phase) * 2;
-      p.addCircle(x, y, b.r * (0.8 + 0.3 * (travel / span)));
+      p.addCircle(x, y, b.r * (0.7 + 0.35 * (travel / span)));
     }
   });
   const pops = usePathValue((p) => {
     'worklet';
     const top = surfaceY.value;
-    const span = FILL_BOTTOM - top;
-    if (span < 8) return;
+    const span = Math.min(BAND, FILL_BOTTOM - top);
+    if (span < 6) return;
     const t = time.value;
     const k = fizz.value;
     for (let i = 0; i < BUBBLES.length; i++) {
       const b = BUBBLES[i];
       if (i >= 4 && k < 1.4) continue;
-      const travel = (b.phase + t * b.speed * k) % (span + 6);
-      if (travel <= span - 3) continue;
-      const q = (travel - (span - 3)) / 9; // 0..1 through the pop
+      const travel = (b.phase + t * b.speed * k) % (span + 4);
+      if (travel <= span - 2) continue;
+      // 0..1 over 150 ms of the pop, then nothing.
+      const q = (travel - (span - 2)) / (b.speed * k * 0.15);
+      if (q > 1) continue;
       const x = b.x + Math.sin(t * 2 + b.phase) * 2;
-      const rr = b.r * (1 + q * 1.6);
-      // A small splash arc above the surface, not a full ring (two rings side by side read as a figure eight).
-      p.addArc(Skia.XYWHRect(x - rr, top + 1 - rr, rr * 2, rr * 2), 200, 140);
+      const r = 1.3 * (1 - q * 0.6);
+      p.addCircle(x - 3 * q - 1, top - 4 * q, r);
+      p.addCircle(x, top - 1 - 4.5 * q, r);
+      p.addCircle(x + 3 * q + 1, top - 4 * q, r);
     }
   });
   // Every 4 s one bubble leaves through the mouth, floats up and pops.
@@ -372,9 +376,12 @@ function XpPotion({
     if (q <= 0) return;
     for (let i = 0; i < DROPS.length; i++) {
       const d = DROPS[i];
-      const r = d.r * (1 - q);
+      // Staggered launch (0 to about 2 frames apart) so the first frame is not a knot.
+      const lq = Math.max(0, (q - i * 0.012) / (1 - i * 0.012));
+      if (lq <= 0.02) continue;
+      const r = d.r * (1 - lq);
       if (r < 3) continue; // below 3 pt the ink would swallow the green
-      p.addCircle(MOUTH.x + d.vx * q * 50, MOUTH.y - d.vy * q * 60 + q * q * 80, r);
+      p.addCircle(MOUTH.x + d.vx * (8 + lq * 50), MOUTH.y - d.vy * (6 + lq * 60) + lq * lq * 80, r);
     }
   });
   const sparks = usePathValue((p) => {
@@ -431,10 +438,10 @@ function XpPotion({
               <Path path={bubbles} color="rgba(255,255,255,0.85)" />
               <Path path={bubbles} style="stroke" strokeWidth={1.2} color="rgba(20,90,30,0.5)" />
             </Group>
-            <Path path={surfaceLine} style="stroke" strokeWidth={2.8} strokeCap="round" color={LIQUID_TOP} />
-            <Path path={pops} style="stroke" strokeWidth={1.4} color="rgba(255,255,255,0.9)" />
+            <Path path={surfaceLine} style="stroke" strokeWidth={1.5} strokeCap="round" color={LIQUID_TOP} />
+            <Path path={pops} color="rgba(255,255,255,0.95)" />
             {/* The label sits on the glass, over the liquid */}
-            <Path path={art.label} color="rgba(236, 244, 210, 0.82)" />
+            <Path path={art.label} color="#f4ecd0" />
             <Path path={art.label} style="stroke" strokeWidth={3} color={INK} />
             <Path path={art.letters} style="stroke" strokeWidth={5} strokeCap="round" strokeJoin="round" color={LABEL_INK} />
           </Group>

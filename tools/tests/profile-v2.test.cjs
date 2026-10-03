@@ -127,12 +127,9 @@ test('level up earned elsewhere plays on return: mount at level 5 data, now leve
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 6, progress: 0.1 }, false, true), 'defer');
   assert.equal(potionTransition({ level: 6, progress: 0.07 }, { level: 7, progress: 0.1 }, false, true), 'defer');
   const potion = read('src/components/XpPotion.tsx');
-  assert.match(potion, /if \(kind === 'wait'\) return undefined;\n\s+last\.current = next;/, 'waiting never records the new level');
-  assert.match(potion, /timers\.current\.push\(setTimeout\(\(\) => cbs\.current\.onLevelUpBurst\?\.\(\), 520\)\)/, 'burst timer only unmount clears');
-  assert.doesNotMatch(potion, /return \(\) => clearTimeout\(timer\)/);
+  assert.match(potion, /useEffect\(\(\) => \(\) => driver\.dispose\(\), \[driver\]\)/, 'timers clear only on unmount');
   assert.match(potion, /if \(r < 3\) continue;/, 'no navy specks');
   assert.match(potion, /return FILL_BASE - f \* \(FILL_BASE - FILL_TOP\)/, 'liquid never drops below the label line');
-  assert.match(potion, /if \(kind === 'levelUp'\) cbs\.current\.onLevelUpBurst\?\.\(\);/, 'Reduce Motion fires the burst callback');
   const card = read('src/components/Experience.tsx');
   assert.match(card, /Level up!/);
   assert.match(card, /useReduceMotionPreference\(\) === true/);
@@ -171,7 +168,7 @@ test('layout: shortcuts before the coin card, Secret Store locks for non-VIP, fr
   assert.doesNotMatch(profile, /FlashList/);
   assert.match(profile, /friends\.map\(\(friend\) =>/);
   assert.match(profile, /backgroundColor: '#c6e3f5',\n\s+borderRadius: 20,\n\s+paddingBottom: 5,/, 'Ride Tracker uses the nested lip');
-  assert.match(profile, /5 \* 60_000/, 'Stamp Book dot fetch is throttled');
+  assert.match(profile, /readStampDotCache\(playerId\)/, 'Stamp Book dot fetch is cached per player');
   assert.match(profile, /dot: stampsToClaim > 0/);
   assert.match(profile, /trophy=\{<ProfileEventChip \/>\}/);
 });
@@ -185,4 +182,79 @@ test("another player's page: kind actions first, park history for friends only, 
   assert.match(player, /trophy=\{<ProfileEventChip playerId=\{currentPlayer\.id\} \/>\}/);
   const stats = read('src/components/Stats.tsx');
   assert.match(stats, /Math\.max\(Number\(player\.total_experience\) \|\| 0, Number\(player\.experience\) \|\| 0\)/);
+});
+
+function fakeClock() {
+  let now = 0;
+  let queue = [];
+  return {
+    setTimer: (fn, ms) => { const h = { at: now + ms, fn }; queue.push(h); return h; },
+    clearTimer: (h) => { queue = queue.filter((x) => x !== h); },
+    advance(ms) {
+      const end = now + ms;
+      for (;;) {
+        queue.sort((a, b) => a.at - b.at);
+        const next = queue[0];
+        if (!next || next.at > end) break;
+        queue.shift();
+        now = next.at;
+        next.fn();
+      }
+      now = end;
+    },
+  };
+}
+
+function runDriver(initial) {
+  const { createPotionDriver } = loadTs('src/components/xpPotionModel.ts');
+  const clock = fakeClock();
+  const log = [];
+  const driver = createPotionDriver(initial, {
+    setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    play: (kind, next) => log.push(`play:${kind}:${next.level}`),
+    burst: () => log.push('burst'),
+    refill: (latest) => log.push(`refill:${latest.level}:${latest.progress}`),
+  });
+  return { driver, clock, log };
+}
+
+test('driver: a refetch 300 ms into a level up keeps it, the burst fires once, the refill uses the latest value', () => {
+  const { driver, clock, log } = runDriver({ level: 5, progress: 0.85 });
+  assert.equal(driver.update({ level: 6, progress: 0.07 }, false), 'levelUp');
+  clock.advance(300);
+  assert.equal(driver.update({ level: 6, progress: 0.1 }, false), 'defer');
+  clock.advance(3000);
+  assert.deepEqual(log, ['play:levelUp:6', 'burst', 'refill:6:0.1']);
+});
+
+test('driver: a second level up inside the celebration is queued and gets its own burst', () => {
+  const { driver, clock, log } = runDriver({ level: 5, progress: 0.85 });
+  driver.update({ level: 6, progress: 0.9 }, false);
+  clock.advance(300);
+  assert.equal(driver.update({ level: 7, progress: 0.05 }, false), 'defer');
+  clock.advance(5000);
+  assert.deepEqual(log, ['play:levelUp:6', 'burst', 'play:levelUp:7', 'burst', 'refill:7:0.05']);
+});
+
+test('driver: unknown Reduce Motion waits, Reduce Motion bursts at once, dispose cancels pending timers', () => {
+  const a = runDriver({ level: 5, progress: 0.8 });
+  assert.equal(a.driver.update({ level: 6, progress: 0.1 }, null), 'wait');
+  assert.equal(a.driver.update({ level: 6, progress: 0.1 }, true), 'levelUp');
+  assert.deepEqual(a.log, ['play:levelUp:6', 'burst']);
+  const b = runDriver({ level: 5, progress: 0.8 });
+  b.driver.update({ level: 6, progress: 0.1 }, false);
+  b.driver.dispose();
+  b.clock.advance(5000);
+  assert.deepEqual(b.log, ['play:levelUp:6']);
+});
+
+test('Stamp Book dot cache is per player and cleared on logout', () => {
+  const m = loadTs('src/components/profile/stampDot.ts');
+  m.writeStampDotCache(11, 3, 1000);
+  assert.equal(m.readStampDotCache(11, 2000), 3);
+  assert.equal(m.readStampDotCache(12, 2000), null, 'another kid on the same device sees no dot');
+  assert.equal(m.readStampDotCache(11, 1000 + 5 * 60_000), null, 'expires after 5 minutes');
+  m.clearStampDotCache();
+  assert.equal(m.readStampDotCache(11, 2000), null);
+  assert.match(read('src/screens/ProfileScreen.tsx'), /if \(!player\) \{\n\s+clearStampDotCache\(\);/, 'cleared when the player signs out');
 });
