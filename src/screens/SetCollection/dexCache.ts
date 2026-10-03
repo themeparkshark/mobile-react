@@ -11,11 +11,14 @@
  */
 import getPrepItemSets, { getPrepItemSet, type PrepItemSetDetailResponse, type PrepItemSetListItem } from '../../api/endpoints/me/prep-item-sets';
 import { getHomeHuntDex, getHomeHuntDexSet } from '../../api/endpoints/me/homeHuntDex';
+import type { LocationType } from '../../models/location-type';
 import { buildBook, hasClaimable, initialSlug, type DexBook } from './dexModel';
 
 type Detail = PrepItemSetDetailResponse['data'];
 
 export interface BookCache {
+  /** The signed-in player this copy belongs to: another player (or signed out) never sees it. */
+  readonly playerId: number;
   readonly at: number;
   readonly legacy: PrepItemSetListItem[];
   readonly dex: unknown;
@@ -28,16 +31,26 @@ let inflight: Promise<BookCache | null> | null = null;
 
 export const FRESH_MS = 2 * 60 * 1000;
 
-export function cachedBook(): BookCache | null {
+/** The copy for this player, or null (signed out, another account, or nothing read yet). */
+export function cachedBook(playerId: number | null | undefined): BookCache | null {
+  if (playerId == null) { cache = null; return null; }
+  if (cache && cache.playerId !== playerId) cache = null;
   return cache;
 }
 
-export function storeBook(legacy: PrepItemSetListItem[], dex: unknown, book: DexBook): void {
-  cache = { at: Date.now(), legacy, dex, book, details: cache?.details ?? {} };
+export function storeBook(playerId: number, legacy: PrepItemSetListItem[], dex: unknown, book: DexBook): void {
+  const keep = cache?.playerId === playerId ? cache.details : {};
+  cache = { playerId, at: Date.now(), legacy, dex, book, details: keep };
 }
 
-export function storeDetail(slug: string, raw: Detail, dex: unknown): void {
-  if (!cache) return;
+/** Sign-out and account switches: drop everything. */
+export function clearBook(): void {
+  cache = null;
+  inflight = null;
+}
+
+export function storeDetail(playerId: number, slug: string, raw: Detail, dex: unknown): void {
+  if (!cache || cache.playerId !== playerId) return;
   cache = { ...cache, details: { ...cache.details, [slug]: { raw, dex } } };
 }
 
@@ -46,18 +59,21 @@ export function invalidateBook(): void {
 }
 
 /** Read the list (and the first set's page) into the cache. Safe to call often: one request set at a time, skipped while fresh. */
-export function prefetchBook(): Promise<BookCache | null> {
-  if (cache && Date.now() - cache.at < FRESH_MS) return Promise.resolve(cache);
+/** Same requests (and the same location params) the book screen sends, so the copy matches what it would read. */
+export function prefetchBook(playerId: number | null | undefined, location?: LocationType | null): Promise<BookCache | null> {
+  if (playerId == null) { clearBook(); return Promise.resolve(null); }
+  const current = cachedBook(playerId);
+  if (current && Date.now() - current.at < FRESH_MS) return Promise.resolve(current);
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const [legacy, dex] = await Promise.all([getPrepItemSets(), getHomeHuntDex()]);
+      const [legacy, dex] = await Promise.all([getPrepItemSets(location ?? undefined), getHomeHuntDex(location)]);
       const book = buildBook(legacy, dex);
-      storeBook(legacy, dex, book);
+      storeBook(playerId, legacy, dex, book);
       const slug = initialSlug(book.sets, null);
       if (slug && !cache?.details[slug]) {
-        const [raw, page] = await Promise.all([getPrepItemSet(slug), getHomeHuntDexSet(slug)]);
-        storeDetail(slug, raw, page);
+        const [raw, page] = await Promise.all([getPrepItemSet(slug, location ?? undefined), getHomeHuntDexSet(slug, location)]);
+        storeDetail(playerId, slug, raw, page);
       }
       return cache;
     } catch {

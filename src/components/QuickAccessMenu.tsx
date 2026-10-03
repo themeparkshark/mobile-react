@@ -9,7 +9,7 @@
  */
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -18,7 +18,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import * as RootNavigation from '../RootNavigation';
-import { cachedBook, invalidateBook, prefetchBook, rewardWaitingFrom } from '../screens/SetCollection/dexCache';
+import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
+import type { LocationType } from '../models/location-type';
+import { cachedBook, clearBook, invalidateBook, prefetchBook, rewardWaitingFrom } from '../screens/SetCollection/dexCache';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
@@ -53,19 +56,39 @@ export const MENU_ITEMS: readonly MenuItem[] = [
   { id: 'settings', label: 'Settings', icon: 'settings', round: 'slate', screen: 'Settings' },
 ];
 
+// Whether the menu is open, for the home map to hide its find card while the menu covers it (useQuickMenuOpen).
+let menuOpen = false;
+const menuListeners = new Set<(open: boolean) => void>();
+function setMenuOpenFlag(open: boolean) {
+  if (menuOpen === open) return;
+  menuOpen = open;
+  menuListeners.forEach(listener => listener(open));
+}
+/** True while the home map menu is open. The home map hides its focus card with it. */
+export function useQuickMenuOpen(): boolean {
+  const [open, setOpen] = useState(menuOpen);
+  useEffect(() => {
+    menuListeners.add(setOpen);
+    return () => { menuListeners.delete(setOpen); };
+  }, []);
+  return open;
+}
+
 /** Open: top row first, 50 ms apart. Close: bottom row first, 30 ms apart. */
 export function menuDelay(index: number, count: number, opening: boolean): number {
   return opening ? index * 50 : (count - 1 - index) * 30;
 }
 
 // "Is a set reward waiting": from the shared book cache (one request set, reused by the book itself).
-function useRewardWaiting(open: boolean): boolean {
-  const [waiting, setWaiting] = useState(() => rewardWaitingFrom(cachedBook()));
+function useRewardWaiting(open: boolean, playerId: number | null | undefined, location: LocationType | null): boolean {
+  const [waiting, setWaiting] = useState(() => rewardWaitingFrom(cachedBook(playerId)));
+  const locationRef = useRef(location);
+  locationRef.current = location;
   useEffect(() => {
     let live = true;
-    void prefetchBook().then(entry => { if (live) setWaiting(rewardWaitingFrom(entry)); });
+    void prefetchBook(playerId, locationRef.current).then(entry => { if (live) setWaiting(rewardWaitingFrom(entry)); });
     return () => { live = false; };
-  }, [open]);
+  }, [open, playerId]);
   return waiting;
 }
 
@@ -83,14 +106,22 @@ export default function QuickAccessMenu(_props: Props) {
   const [mounted, setMounted] = useState(false);
   const reduced = useUiReducedMotion();
   const insets = useSafeAreaInsets();
-  const rewardWaiting = useRewardWaiting(open);
+  const { player } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
+  const rewardWaiting = useRewardWaiting(open, player?.id, location ?? null);
+  // Signed out or switched accounts: the old player's book copy is dropped (cachedBook also refuses a mismatched player).
+  const lastPlayer = useRef(player?.id ?? null);
+  useEffect(() => {
+    if (lastPlayer.current !== (player?.id ?? null)) clearBook();
+    lastPlayer.current = player?.id ?? null;
+  }, [player?.id]);
   const scrim = useSharedValue(0);
   const fabSpin = useSharedValue(0);
   const [popIndex, setPopIndex] = useState<number | null>(null);
   const busy = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
-  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; setMenuOpenFlag(false); }, []);
   // The open menu lives in a Modal so nothing from the map (the focus card) can draw above its scrim.
   // The Modal's close button sits exactly where the inline button is.
   const fabRef = useRef<View>(null);
@@ -107,9 +138,10 @@ export default function QuickAccessMenu(_props: Props) {
   const openMenu = () => {
     if (busy.current) return;
     fabRef.current?.measureInWindow((x, y) => setFabAt({ x, y }));
-    void prefetchBook(); // the book opens instantly from this copy
+    void prefetchBook(player?.id, location); // the book opens instantly from this copy
     setMounted(true);
     setOpen(true);
+    setMenuOpenFlag(true);
     playSfx('fx.whoosh', 0.45);
     if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPopIndex(null);
@@ -120,6 +152,7 @@ export default function QuickAccessMenu(_props: Props) {
     if (busy.current) return;
     busy.current = true;
     setOpen(false);
+    setMenuOpenFlag(false);
     playSfx('fx.whoosh', 0.25);
     animateTo(false, () => {
       busy.current = false;
@@ -171,7 +204,7 @@ export default function QuickAccessMenu(_props: Props) {
       <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => closeMenu()}>
         <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
           <AnimatedBlur animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} />
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.74)' }, scrimStyle]} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.86)' }, scrimStyle]} />
           <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
         </View>
         {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}

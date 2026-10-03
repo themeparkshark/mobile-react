@@ -117,7 +117,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
             <BluePanel style={styles.body}>
               <ScrollView style={{ maxHeight: height * 0.78 }} contentContainerStyle={styles.bodyInner} showsVerticalScrollIndicator={false} bounces={false}>
               <View style={[styles.hero, { height: Math.min(photo ? 262 : 230, Math.round(height * (photo ? 0.31 : 0.27))) },
-                photo && styles.heroPhoto, item.goldenHour && styles.heroGolden]}>
+                photo && styles.heroPhoto, item.goldenHour && !photo && styles.heroGolden]}>
                 {!item.found && <Animated.View style={[styles.halo, { backgroundColor: look.frame }, glowStyle]} />}
                 {item.found && !photo && <View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />}
                 {/* The burst sits behind the art, never over it. */}
