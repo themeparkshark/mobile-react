@@ -79,7 +79,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <GameIcon name={scoreIcon} size={22} />
           <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>
-            {score.toLocaleString()}
+            {(Number(score) || 0).toLocaleString()}
           </Text>
         </View>
       </Pressable>

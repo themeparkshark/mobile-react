@@ -2,8 +2,8 @@ import type { PlayerType } from '../models/player-type';
 
 export default function currencyBalance(player: PlayerType, name: string): number {
   switch (name.toLowerCase()) {
-    case 'coins': return player.coins;
-    case 'keys': return player.keys;
+    case 'coins': return player.coins ?? 0;
+    case 'keys': return player.keys ?? 0;
     case 'tickets': return player.tickets ?? 0;
     case 'energy': return player.energy ?? 0;
     case 'park coins': return player.park_coins_count;

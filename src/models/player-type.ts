@@ -4,14 +4,16 @@ import { MascotType } from './mascot-type';
 
 export interface PlayerType {
   readonly avatar_url: string;
-  readonly coins: number;
+  /** Null on a non-friend's profile (kid-safety: balances are private). */
+  readonly coins: number | null;
   readonly completed_tasks_count: number;
   readonly created_at: string;
   readonly current_park_id: number;
   readonly email: string;
   readonly enabled_music: boolean;
   readonly enabled_sound_effects: boolean;
-  readonly experience: number;
+  /** Null on a non-friend's profile. */
+  readonly experience: number | null;
   readonly experience_level: ExperienceLevelType;
   readonly friends_count: number;
   readonly has_friend_request_from: boolean;
@@ -20,7 +22,7 @@ export interface PlayerType {
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
   readonly is_subscribed: boolean;
-  readonly keys: number;
+  readonly keys: number | null;
   readonly last_read_notifications_at: string;
   readonly mascot: MascotType;
   readonly name: string;

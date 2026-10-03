@@ -258,3 +258,73 @@ test('Stamp Book dot cache is per player and cleared on logout', () => {
   assert.equal(m.readStampDotCache(11, 2000), null);
   assert.match(read('src/screens/ProfileScreen.tsx'), /if \(!player\) \{\n\s+clearStampDotCache\(\);/, 'cleared when the player signs out');
 });
+
+// Kid-safety hotfix: /players/{id} sends keys, coins and experience as null to non-friends.
+const { runtime } = require('./helpers/reward-hook-runtime.cjs');
+const stranger = {
+  id: 42, screen_name: 'P42', keys: null, coins: null, experience: null, total_experience: 3040,
+  park_coins_count: 4, visited_parks_count: 2, completed_tasks_count: 7, experience_level: { level: 6, experience: 9400 },
+};
+function texts(node, out = []) {
+  if (node == null || typeof node === 'boolean') return out;
+  if (typeof node === 'string' || typeof node === 'number') { out.push(String(node)); return out; }
+  if (Array.isArray(node)) { node.forEach((c) => texts(c, out)); return out; }
+  texts(node.props?.children, out);
+  return out;
+}
+const statsImports = {
+  './ProfileStatIcon': { default: 'ProfileStatIcon' },
+  '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: () => {} } } },
+  '../hooks/useReducedGameMotion': { default: () => false },
+  '../config': { default: { primary: '#09268f' } },
+};
+
+test("a stranger's stats render without null balances: Keys and Shark Coins tiles hide, no tile gets null", () => {
+  const app = runtime('src/components/Stats.tsx', statsImports, { player: stranger });
+  const tiles = [];
+  (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk);
+    if (typeof n.type === 'function') tiles.push(n.props); walk(n.props?.children); })(app.tree);
+  assert.deepEqual(tiles.map((t) => t.label), ['Park Coins', 'Parks', 'Ride Wins', 'Total XP']);
+  assert.ok(tiles.every((t) => typeof t.value === 'number'), 'every tile gets a number');
+  // AnimatedStat uses Animated.multiply, which the shared runtime stub lacks: extend its react-native.
+  const rn = { ...app.native, Animated: { ...app.native.Animated, multiply: (a) => a } };
+  for (const t of tiles) {
+    const tile = runtime('src/components/Stats.tsx', { ...statsImports, 'react-native': rn }, t,
+      { setInterval: () => 0, clearInterval: () => {} }, { exportName: 'AnimatedStat' });
+    assert.match(tile.find((n) => n.type === 'Pressable').props.accessibilityLabel, new RegExp(`^${t.label}: `));
+  }
+  // The signed-in player still sees all six.
+  const own = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 } });
+  let n = 0; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
+    if (typeof x.type === 'function') n++; walk(x.props?.children); })(own.tree);
+  assert.equal(n, 6);
+});
+
+test("a stranger's level card shows the level only, never 0 / N XP", () => {
+  const imports = {
+    '../constants/levelUnlocks': loadTs('src/constants/levelUnlocks.ts'),
+    '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: () => {} } } },
+    '../helpers/hapticPatterns': { default: { levelUp: () => {} } },
+    '../hooks/useCrumbs': { default: () => ({ labels: {} }) },
+    '../hooks/useReducedGameMotion': { useReduceMotionPreference: () => false },
+    '../services/progression/progressionFlags': { useProgressionFlags: () => ({ rideBoss: false }) },
+    './XpPotion': { default: 'XpPotion' },
+    'sprintf-js': { vsprintf: (f, a) => f.replace('%s', a[0]) },
+  };
+  const card = runtime('src/components/Experience.tsx', imports, { player: stranger, own: false });
+  const words = texts(card.tree).join(' ');
+  assert.match(words, /Level 6/);
+  assert.doesNotMatch(words, /XP|to Level/);
+  assert.equal(card.find((n) => n.props?.accessibilityRole === 'summary').props.accessibilityLabel, 'Level 6.');
+});
+
+test('the burst drops launch in groups one potion redraw apart, and stars wait two redraws', () => {
+  const potion = read('src/components/XpPotion.tsx');
+  const lag = Number(/DROP_GROUP_LAG = ([\d.]+)/.exec(potion)[1]);
+  const spark = Number(/SPARK_LAG = ([\d.]+)/.exec(potion)[1]);
+  // Out-quad over 1150 ms: progress after one 33 ms redraw is 1 - (1 - 33/1150)^2.
+  const oneRedraw = 1 - (1 - 33 / 1150) ** 2;
+  assert.ok(lag >= oneRedraw, `group lag ${lag} >= ${oneRedraw.toFixed(3)}`);
+  assert.ok(spark >= 2 * oneRedraw - 0.01);
+  assert.match(potion, /const lag = \(i % 3\) \* DROP_GROUP_LAG;/);
+});
