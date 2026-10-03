@@ -22,7 +22,7 @@ export default function NightShowPill({ show, phase, onSee }: {
       accessibilityLabel={`${text}. Show it on the map.`}>
       <LinearGradient colors={live ? ['#3a2b8f', '#1b2f7a'] : ['#24407f', '#16306b']} style={styles.pill}>
         <View style={[styles.star, live && styles.starLive]}><GameIcon name="sparkle" size={18} /></View>
-        <Text style={[styles.title, live && styles.titleLive]} numberOfLines={1}>{text}</Text>
+        <Text style={[styles.title, live && styles.titleLive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{text}</Text>
         <Text style={styles.go}>{live ? 'SEE' : 'WHERE'}</Text>
         <GameIcon name="arrow" size={16} />
       </LinearGradient>
