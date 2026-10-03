@@ -184,7 +184,7 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   assert.doesNotMatch(board, /onClose=\{\(\) => \{ setResults\(false\)/);
   assert.match(board, /const hideYou = !climbing && /);
   assert.match(board, /onClimbDone=\{\(\) => setClimbing\(false\)\}/);
-  assert.match(board, /top: -18, left: 6/, '"Up N!" sits over the rank, clear of the goal pips');
+  assert.match(board, /top: -26, left: 4/, '"Up N!" sits over the rank, clear of the goal pips');
   assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
   assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /scaleX: -1/);
   assert.match(read('src/api/endpoints/me/task-attempts.ts'), /winNote\(/);
