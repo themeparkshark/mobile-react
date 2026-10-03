@@ -547,3 +547,11 @@ test('round 7b: a wearable pick claim shows the build-up inside the sheet (one i
   const sheet = read('src/screens/SetCollection/SetHuntSections.tsx');
   assert.match(sheet, /\{overlay\}\s*<\/Modal>/);
 });
+
+test('round 7b: the first land always applies the claim offset, and the seeded offset is read once at mount', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /const \[seededOffset\] = useState\(\(\) => \(seed \? landOffset\(player\?\.id, seedSlug\) : null\)\)/);
+  const land = screen.slice(screen.indexOf('if (firstLand.current) {'), screen.indexOf('showList();', screen.indexOf('if (firstLand.current) {')));
+  assert.match(land, /listRef\.current\?\.scrollToOffset\(\{ offset, animated: false \}\)/);
+  assert.doesNotMatch(land, /Math\.abs\(seededOffset/);
+});
