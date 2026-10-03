@@ -13,7 +13,8 @@ import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import HomeLive from '../../components/home/HomeLive';
 import HomeFindMarker from './HomeFindMarker';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
-import QuickAccessMenu, * as QuickMenu from '../../components/QuickAccessMenu';
+import QuickAccessMenu from '../../components/QuickAccessMenu';
+import { useMenuCardFade } from './menuCardFade';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { shouldThrottleHomeRequest } from './homeRefresh';
 import HomeMapStatusCard from './HomeMapStatusCard';
@@ -152,15 +153,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const catchRef = useRef<HomeCatchHandle>(null);
   const snapshotter = useRef<(() => Promise<string | null>) | null>(null);
   const catchOpen = useCatchOpen();
-  // The floating card fades out (150 ms) while the quick menu is open (the menu agent's useQuickMenuOpen;
-  // a no-op until that hook is merged in), and back when it closes. Reduce Motion: instant.
-  const menuOpen = useMenuOpen();
-  const reducedMotion = useReducedGameMotion();
-  const cardShown = useSharedValue(1);
-  useEffect(() => {
-    cardShown.value = withTiming(menuOpen ? 0 : 1, { duration: reducedMotion ? 0 : 150 });
-  }, [menuOpen, reducedMotion, cardShown]);
-  const cardFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) * cardShown.value }));
+  // Floating cards leave (opacity 0, no touches) while the quick menu is open, and on a catch's tap frame.
+  const cardFade = useMenuCardFade();
   // Menus, edge arrows and chips leave on the tap frame (UI thread), never showing through the viewfinder's fade.
   const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
@@ -588,7 +582,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} />
       </Animated.View>
 
-      {bottom && <Animated.View style={[styles.bottomSlot, cardFade]} pointerEvents={menuOpen ? 'none' : 'box-none'}>{bottom}</Animated.View>}
+      {bottom && <Animated.View style={[styles.bottomSlot, cardFade.style]} pointerEvents={cardFade.pointerEvents}>{bottom}</Animated.View>}
 
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
       <HomeLive top={TOP} onBarChange={setLiveBar} />
@@ -613,10 +607,6 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     </View>
   );
 }
-
-const NEVER_OPEN = () => false;
-/** The quick menu's open state (QuickAccessMenu.useQuickMenuOpen, from the menu agent's branch), when present. */
-const useMenuOpen: () => boolean = (QuickMenu as { useQuickMenuOpen?: () => boolean }).useQuickMenuOpen ?? NEVER_OPEN;
 
 const styles = StyleSheet.create({
   container: {

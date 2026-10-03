@@ -527,3 +527,13 @@ test('round 5: kid clarity: hand points down at the disc, miss chip shows the ri
   assert.match(src, /VEHICLE_ICON\[stage\.kind\]/);
   assert.match(src, /setPlateLeft\(/, 'the plate sits opposite the vehicle');
 });
+
+test('round 5: floating cards leave while the quick menu is open (opacity 0, no touches)', () => {
+  const fade = read('src/screens/ExploreScreen/menuCardFade.ts');
+  assert.match(fade, /useQuickMenuOpen/);
+  assert.match(fade, /withTiming\(menuOpen \? 0 : 1, \{ duration: reduced \? 0 : 150 \}\)/);
+  assert.match(fade, /menuOpen \? 'none' : 'box-none'/);
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
+  const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
+  assert.match(preview, /cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
+});

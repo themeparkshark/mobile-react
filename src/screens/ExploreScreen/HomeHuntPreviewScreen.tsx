@@ -19,6 +19,9 @@ import HomeMapStatusCard from './HomeMapStatusCard';
 import PrepItemMarker from './PrepItem';
 import TripGoalCard from './TripGoalCard';
 import HomeFocusCard from './HomeFocusCard';
+import QuickAccessMenu from '../../components/QuickAccessMenu';
+import Animated from 'react-native-reanimated';
+import { useMenuCardFade } from './menuCardFade';
 import ParkProjectWidget from './ParkProjectWidget';
 import TeacherShark from '../../components/Tutorial/TeacherShark';
 import SpotlightOverlay from '../../components/Tutorial/SpotlightOverlay';
@@ -76,6 +79,7 @@ export default function HomeHuntPreviewScreen() {
   const tutorialPreview = __DEV__ && process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW === '1';
   const cleanPreview = __DEV__ && process.env.EXPO_PUBLIC_HOME_HUNT_CLEAN_PREVIEW === '1';
   const [tutorialIndex, setTutorialIndex] = useState(0);
+  const cardFade = useMenuCardFade();
   const tutorialSteps = getStepsForSequence('onboarding');
   const tutorialStep = tutorialPreview ? tutorialSteps[tutorialIndex] : null;
   const [distance, setDistance] = useState(112);
@@ -142,6 +146,8 @@ export default function HomeHuntPreviewScreen() {
       </Pressable>
       </View>}
     </View>}
+    {/* Floating cards leave while the quick menu is open (opacity 0, no touches), as on the home map */}
+    <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
     <HomeFocusCard set={{ slug: 'churro_collection', name: 'Churro Collection',
       theme: 'classic', available_now: true, collected_count: 19, total_items: 40 }} onPress={() => {}}
       topOffset={125 + Constants.statusBarHeight} />
@@ -155,6 +161,9 @@ export default function HomeHuntPreviewScreen() {
       </View>}
     <TripGoalCard refreshVersion={0} loadGoal={loadGoal} saveGoal={saveGoal}
       removeGoal={loadGoal} loadCollections={loadCollections} />
+    </Animated.View>
+    {/* The home map's hamburger, so the menu can be checked over the cards */}
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none"><QuickAccessMenu position="left" /></View>
     <PrepItemRedeemModal visible={pickupOpen} prepItem={previewItem} pivotId={previewItem.pivot_id!}
       redeemItem={redeemPreview} onClose={() => setPickupOpen(false)}
       onViewSet={(slug) => RootNavigation.navigate('SetCollectionPreview', { slug })}
