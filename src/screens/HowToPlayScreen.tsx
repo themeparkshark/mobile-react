@@ -5,16 +5,16 @@
  * button reads each card aloud. "Learn more" (a pill) opens the full help;
  * a "?" sheet that links a topic opens it directly.
  */
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faVolumeHigh } from '@fortawesome/free-solid-svg-icons/faVolumeHigh';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  interpolate, interpolateColor, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence,
+  interpolate, interpolateColor, runOnJS, withDelay, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence,
   withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -93,18 +93,28 @@ export default function HowToPlayScreen() {
   useEffect(() => stopVoice, [stopVoice]);
 
   // First visit: read the first card aloud on its own, so a kid who can't read finds the speaker.
+  // Never while a screen reader is on: VoiceOver already reads the card, and two voices at once help nobody.
+  const firstVisitChecked = useRef(false);
   useEffect(() => {
-    if (more || !soundOn) return;
+    if (firstVisitChecked.current || more || !soundOn) return;
+    firstVisitChecked.current = true;
     let live = true;
-    void AsyncStorage.getItem(READ_ALOUD_SEEN).then(seen => {
-      if (!live || seen) return;
-      void AsyncStorage.setItem(READ_ALOUD_SEEN, '1').catch(() => undefined);
-      setReadAloud(true);
-      void speak(HOW_TO_CARDS[0]);
-    }).catch(() => undefined);
+    void (async () => {
+      try {
+        if (await AsyncStorage.getItem(READ_ALOUD_SEEN)) return;
+        void AsyncStorage.setItem(READ_ALOUD_SEEN, '1').catch(() => undefined);
+        if (await AccessibilityInfo.isScreenReaderEnabled()) return;
+        if (!live) return;
+        setReadAloud(true);
+        void speak(HOW_TO_CARDS[0]);
+      } catch { /* The speaker button still works. */ }
+    })();
     return () => { live = false; };
-    // Only on first mount.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [more, soundOn, speak]);
+
+  // Leaving the screen (another screen on top, or back): stop the voice. The demos pause via `screenFocused`.
+  const screenFocused = useIsFocused();
+  useEffect(() => { if (!screenFocused) stopVoice(); }, [screenFocused, stopVoice]);
 
   const onPage = useCallback((next: number) => {
     if (next === pageRef.current) return;
@@ -114,8 +124,8 @@ export default function HowToPlayScreen() {
     void Haptics.selectionAsync().catch(() => undefined);
     if (readAloud) void speak(HOW_TO_CARDS[next]);
     if (next === HOW_TO_CARDS.length - 1) {
-      // The last card is a small finish: a puff of stars and a cheer.
-      setCheer(value => value + 1);
+      // The last card is a small finish, once: a puff of stars, a hop and one LET'S PLAY! pulse.
+      setCheer(value => (value === 0 ? 1 : value));
       playSfx('fx.reveal', 0.6);
     }
   }, [readAloud, speak]);
@@ -151,7 +161,8 @@ export default function HowToPlayScreen() {
     stopVoice();
     playSfx('fx.whoosh', 0.5);
     if (navigation.canGoBack()) navigation.goBack();
-    RootNavigation.navigate('Explore');
+    // The home map highlights the nearest find when it supports `highlightNearestFind` (home map agent).
+    RootNavigation.navigate('Explore', { highlightNearestFind: Date.now() });
   };
 
   return (
@@ -173,7 +184,7 @@ export default function HowToPlayScreen() {
             onScroll={onScroll} scrollEventThrottle={16} style={{ flex: 1 }}>
             {HOW_TO_CARDS.map((card, index) => (
               <CardPage key={card.id} card={card} index={index} width={cardWidth} interval={interval} scrollX={scrollX}
-                active={index === page} reduced={reduced} cheer={index === HOW_TO_CARDS.length - 1 ? cheer : 0}
+                active={index === page && screenFocused} reduced={reduced} cheer={index === HOW_TO_CARDS.length - 1 ? cheer : 0}
                 readAloud={readAloud} onSpeak={toggleRead} />
             ))}
           </Animated.ScrollView>
@@ -208,7 +219,7 @@ function PulseOnCheer({ cheer, reduced, children }: { readonly cheer: number; re
   const scale = useSharedValue(1);
   useEffect(() => {
     if (!cheer || reduced) return;
-    scale.value = withSequence(withTiming(1.08, { duration: 160 }), withSpring(1, { damping: 7, stiffness: 220 }));
+    scale.value = withDelay(250, withSequence(withTiming(1.14, { duration: 170 }), withSpring(1, { damping: 6, stiffness: 220 })));
   }, [cheer, reduced, scale]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return <Animated.View style={style}>{children}</Animated.View>;
@@ -230,7 +241,7 @@ function CardPage({ card, index, width, interval, scrollX, active, reduced, chee
     const progress = (scrollX.value - index * interval) / Math.max(1, interval);
     return { transform: [{ translateX: interpolate(progress, [-1, 0, 1], [width * 0.3, 0, -width * 0.3], 'clamp') }] };
   });
-  const demo = Math.min(width - 24, 300);
+  const demo = Math.min(width - 56, 280);
   // Finish beat on the last card: the art hops and tilts once (a wave stand-in, no redraw).
   const hop = useSharedValue(0);
   useEffect(() => {
@@ -249,16 +260,15 @@ function CardPage({ card, index, width, interval, scrollX, active, reduced, chee
         </Animated.View>
         {cheer > 0 && !reduced && <StarBurst key={cheer} size={demo} />}
       </Animated.View>
-      <View style={styles.copyRow}>
-        <View style={styles.copy} accessible accessibilityRole="header" accessibilityLabel={`${card.title}. ${card.line}`}>
-          <Text style={styles.title}>{card.title}</Text>
-          <Text style={styles.line}>{card.line}</Text>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={readAloud ? 'Stop reading aloud' : 'Read aloud'}
-          onPress={onSpeak} hitSlop={10} style={[styles.speaker, readAloud && styles.speakerOn]}>
-          <FontAwesomeIcon icon={faVolumeHigh} size={22} color={BRAND.navy} />
-        </Pressable>
+      <View style={styles.copy} accessible accessibilityRole="header" accessibilityLabel={`${card.title}. ${card.line}`}>
+        <Text style={styles.title}>{card.title}</Text>
+        <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{card.line}</Text>
       </View>
+      {/* Top-right safe zone (56 pt): the demo art is inset below it, so they never touch. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={readAloud ? 'Stop reading aloud' : 'Read aloud'}
+        onPress={onSpeak} hitSlop={10} style={[styles.speaker, readAloud && styles.speakerOn]}>
+        <FontAwesomeIcon icon={faVolumeHigh} size={22} color={BRAND.navy} />
+      </Pressable>
     </Animated.View>
   );
 }
@@ -292,14 +302,13 @@ const styles = StyleSheet.create({
   halo: {
     position: 'absolute', width: '84%', aspectRatio: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  copyRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 12 },
   speaker: {
-    width: 48, height: 48, borderRadius: 23, alignItems: 'center',
+    position: 'absolute', top: 10, right: 10, width: 46, height: 46, borderRadius: 23, alignItems: 'center',
     justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 3, borderColor: BRAND.white,
   },
   speakerOn: { backgroundColor: BRAND.gold },
-  artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 22 },
-  copy: { flex: 1, paddingLeft: 16, paddingRight: 4, paddingBottom: 22, alignItems: 'center' },
+  artWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 56 },
+  copy: { paddingHorizontal: 16, paddingBottom: 22, alignItems: 'center' },
   title: {
     fontFamily: 'Shark', fontSize: 38, color: BRAND.white, textAlign: 'center',
     textShadowColor: 'rgba(5,52,110,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,

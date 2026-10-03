@@ -39,7 +39,7 @@ import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import type { ItemType } from '../models/item-type';
 import * as RootNavigation from '../RootNavigation';
-import { BRAND, GameButton, GameIcon, SharkLoader } from '../ui';
+import { BRAND, GameButton, GameIcon } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { showToast } from '../utils/toast';
 import GiftPrepVariantPanel from './GiftPrepVariantPanel';
@@ -48,6 +48,7 @@ import {
 } from './SetCollection/DexParts';
 import { ItemCard } from './SetCollection/DexItemCard';
 import { RewardReveal } from './SetCollection/DexReveal';
+import { cachedBook, storeBook, storeDetail } from './SetCollection/dexCache';
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
@@ -92,13 +93,22 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   locationRef.current = location;
   const preview = previewSets != null;
 
-  const [book, setBook] = useState<DexBook>({ sets: [], found: 0, total: 0, dailyRare: null });
+  // Opens instantly from the session copy the menu prefetched; the reads below refresh it in place.
+  const seed = previewSets ? null : cachedBook();
+  const seedSlug = seed ? initialSlug(seed.book.sets, linkedSlug) : null;
+  const seedDetail = seed && seedSlug ? seed.details[seedSlug] : undefined;
+  const [book, setBook] = useState<DexBook>(() => seed?.book ?? { sets: [], found: 0, total: 0, dailyRare: null });
   const sets = book.sets;
   const bookKey = useRef('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!seed);
   const [listError, setListError] = useState(false);
-  const [slug, setSlug] = useState<string | null>(linkedSlug);
-  const [detail, setDetail] = useState<{ slug: string; raw: Detail; items: DexItem[]; spares: number } | null>(null);
+  const [slug, setSlug] = useState<string | null>(seedSlug ?? linkedSlug);
+  const [detail, setDetail] = useState<{ slug: string; raw: Detail; items: DexItem[]; spares: number } | null>(() => {
+    if (!seedSlug || !seedDetail) return null;
+    const page = seedDetail.dex as { items?: unknown; exchange?: { spares?: unknown } } | null;
+    const spares = typeof page?.exchange?.spares === 'number' ? page.exchange.spares : Math.max(0, seedDetail.raw.progress.spare_count ?? 0);
+    return { slug: seedSlug, raw: seedDetail.raw, items: buildItems(seedDetail.raw, page?.items), spares };
+  });
   const [detailError, setDetailError] = useState(false);
   const [selectedItem, setSelectedItem] = useState<DexItem | null>(null);
   const [giftItem, setGiftItem] = useState<DexItem | null>(null);
@@ -117,8 +127,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
   // The legacy payloads carry claim routes and wearable picks; they change only on actions. A timer
   // tick with v3 live re-reads just the v3 dex (2 requests per tick, not 4) over the last legacy copy.
-  const legacyList = useRef<PrepItemSetListItem[] | null>(null);
-  const legacyDetail = useRef<Record<string, Detail>>({});
+  const legacyList = useRef<PrepItemSetListItem[] | null>(seed?.legacy ?? null);
+  const legacyDetail = useRef<Record<string, Detail>>(
+    Object.fromEntries(Object.entries(seed?.details ?? {}).map(([key, entry]) => [key, entry.raw])));
 
   const loadSets = useCallback(async (light = false): Promise<DexSet[]> => {
     try {
@@ -127,6 +138,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       const legacy = previewSets ?? (reuse ? legacyList.current! : await getPrepItemSets(locationRef.current ?? undefined));
       legacyList.current = legacy;
       const next = buildBook(legacy, dex);
+      if (!previewSets) storeBook(legacy, dex, next);
       // Same data, same render: skip the state update entirely.
       const key = JSON.stringify(next);
       if (key !== bookKey.current) {
@@ -150,6 +162,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       const cached = light && dex != null ? legacyDetail.current[target] : undefined;
       const raw = previewDetails?.[target] ?? cached ?? await getPrepItemSet(target, locationRef.current ?? undefined);
       legacyDetail.current[target] = raw;
+      if (!preview) storeDetail(target, raw, dex);
       const payload = dex as { items?: unknown; exchange?: { spares?: unknown } } | null;
       const fresh = buildItems(raw, payload?.items);
       const spares = typeof payload?.exchange?.spares === 'number' ? payload.exchange.spares : Math.max(0, raw.progress.spare_count ?? 0);
@@ -390,11 +403,17 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const trackBottom = useRef(0);
   const revealedFor = useRef<string | null>(null);
   const claimReady = !!set && (set.reward.status === 'claimable' || set.steps.some(step => step.status === 'claimable'));
+  const pickerBottom = useRef(0);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
   const revealClaim = () => {
     if (!set || !claimReady || revealedFor.current === set.slug || !viewportH.current || !trackBottom.current) return;
     revealedFor.current = set.slug;
     const overflow = trackBottom.current - (viewportH.current - CTA_CLEARANCE + 24);
-    if (overflow > 0) setTimeout(() => listRef.current?.scrollToOffset({ offset: overflow, animated: !reduced }), 350);
+    if (overflow <= 0) return;
+    // Never stop with the set cards cut in half: scroll them fully off (the ribbon header leads) when we must move.
+    const offset = Math.max(overflow, pickerBottom.current);
+    revealTimer.current = setTimeout(() => listRef.current?.scrollToOffset({ offset, animated: !reduced }), 350);
   };
   const goal = swapGoal(items ?? [], spares, detail?.raw.progress.exchange_cost ?? 4);
   const cell = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
@@ -406,6 +425,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     <View>
       <BookStrip found={book.found} total={book.total} dailyRare={daily} onDaily={goToMap} />
       <ScrollView ref={pickerRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.picker}
+        onLayout={event => { pickerBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height; }}
         style={styles.pickerBleed} onContentSizeChange={() => centerPicker(false)}>
         {sets.map(entry => <SetTab key={entry.slug} set={entry} selected={entry.slug === slug} onPress={chooseSet} />)}
       </ScrollView>
@@ -459,7 +479,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
         <View style={[StyleSheet.absoluteFill, styles.dim]} />
         {loading ? (
-          <View style={styles.center}><SharkLoader state="loading" /></View>
+          <BookSkeleton cell={cell} />
         ) : listError ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>Your book did not load</Text>
@@ -532,7 +552,23 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   );
 }
 
-/** One picture: two spare copies swap for a missing find. */
+/** First open with nothing cached: the real layout in placeholder panels (never a blank page or a spinner). */
+function BookSkeleton({ cell }: { readonly cell: number }) {
+  return (
+    <View style={{ paddingHorizontal: SIDE }} accessibilityLabel="Loading your book" accessible>
+      <View style={[styles.skel, { height: 56, marginTop: 12 }]} />
+      <View style={{ flexDirection: 'row', gap: SET_TAB_GAP, marginTop: 16 }}>
+        {[0, 1, 2].map(index => <View key={index} style={[styles.skel, { width: SET_TAB_WIDTH, height: 148, borderRadius: 22 }]} />)}
+      </View>
+      <View style={[styles.skel, { height: 58, marginTop: 16, borderRadius: 29 }]} />
+      <View style={[styles.skel, { height: 150, marginTop: 14 }]} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: CELL_GAP, marginTop: 14 }}>
+        {Array.from({ length: 8 }, (_, index) => <View key={index} style={[styles.skel, { width: cell, height: cell, borderRadius: 16 }]} />)}
+      </View>
+    </View>
+  );
+}
+
 /** One picture with the real price: N spare copies (one stack, "xN") swap for one new find. */
 function SparesSheet({ visible, items, cost, onClose }: {
   readonly visible: boolean; readonly items: readonly DexItem[]; readonly cost: number; readonly onClose: () => void;
@@ -581,6 +617,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy, marginHorizontal: SIDE, marginTop: 10, padding: 10, borderRadius: 12,
     backgroundColor: BRAND.white, overflow: 'hidden',
   },
+  skel: { borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.28)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.35)' },
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.86)', alignItems: 'center', justifyContent: 'center', padding: 18 },
   giftCard: { width: '100%', maxWidth: 400, padding: 16, borderRadius: 24, backgroundColor: '#E9F7FF', borderWidth: 3, borderColor: BRAND.white },
   sparesCard: {

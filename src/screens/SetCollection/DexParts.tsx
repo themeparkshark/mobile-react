@@ -12,6 +12,8 @@ import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
+import { playSfx } from '../../gamekit/SFX';
+import * as Haptics from '../../helpers/haptics';
 import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -117,7 +119,7 @@ export const SetTab = memo(function SetTab({ set, selected, onPress }: {
       style={{ marginRight: SET_TAB_GAP }}>
       <Animated.View style={liftStyle}>
         <View style={[styles.tabGlow, selected && styles.tabGlowOn]}>
-          <View style={[styles.tabFace, { backgroundColor: set.color }]}>
+          <View style={[styles.tabFace, { backgroundColor: set.color }, (set.reward.status === 'claimed' || set.reward.status === 'pending') && styles.tabFaceGold]}>
             <View style={[styles.tabLower, { backgroundColor: 'rgba(5,52,110,0.18)' }]} />
             <LinearGradient colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
             <ProgressRing progress={progressFraction(set)} size={74} stroke={7} color={set.isComplete ? BRAND.gold : BRAND.white}>
@@ -213,15 +215,20 @@ export function SetHeader({ set, onFocus, focusBusy, onOdds, stamp }: {
 }
 
 function TitleStamp({ text, reduced }: { readonly text: string; readonly reduced: boolean }) {
-  const t = useSharedValue(reduced ? 1 : 0);
+  const t = useSharedValue(reduced ? 1 : 1.6);
   useEffect(() => {
-    if (reduced) return;
-    t.value = withSequence(withTiming(1.35, { duration: 140 }), withSpring(1, { damping: 7, stiffness: 240 }));
+    // Slams from 1.6 to 1 with a thud and a heavy haptic.
+    const timer = setTimeout(() => {
+      playSfx('fx.hit', 0.8);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+    }, reduced ? 0 : 170);
+    if (!reduced) t.value = withSequence(withTiming(1, { duration: 170, easing: Easing.in(Easing.quad) }), withSequence(withTiming(1.06, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 300 })));
+    return () => clearTimeout(timer);
   }, [reduced, t]);
-  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, t.value * 2), transform: [{ scale: t.value }, { rotate: '-7deg' }] }));
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: t.value }, { rotate: '-7deg' }] }));
   return (
     <Animated.View style={[styles.titleStamp, style]} accessible accessibilityLabel={`New title: ${text}`}>
-      <GameIcon name="crown" size={18} />
+      <GameIcon name="crown" size={22} />
       <Text style={styles.titleStampText} numberOfLines={1}>{text}</Text>
     </Animated.View>
   );
@@ -266,7 +273,8 @@ export function SparesMeter({ spares, cost, ready, extra, anyMissing, onPress }:
           ))}
         </View>
       )}
-      <Text style={[styles.meterCount, ready && styles.meterCountReady]} maxFontSizeMultiplier={1.2}>{ready ? (extra > 0 ? `+${extra}` : '') : `${have}/${cost}`}</Text>
+      {/* Ready: the button already shows the price, so no bare "+N" here. */}
+      {!ready && <Text style={styles.meterCount} maxFontSizeMultiplier={1.2}>{`${have}/${cost}`}</Text>}
     </SpringPress>
   );
 }
@@ -324,7 +332,7 @@ export function RewardTrack({ set, busyId, onClaim, titleWorn, titleBusy, onTitl
       <LinearGradient colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.blueGloss} pointerEvents="none" />
       <View style={styles.trackLine}>
         <View style={styles.trackBar}>
-          <Animated.View style={[styles.trackFill, { backgroundColor: finished ? BRAND.gold : set.color }, fillStyle]} />
+          <Animated.View style={[styles.trackFill, { backgroundColor: finished ? BRAND.navy : set.color }, fillStyle]} />
         </View>
         {nodes.map(node => (
           <TrackNodeView key={node.reward.id} node={node} busy={busyId === node.reward.id} reduced={reduced} onClaim={onClaim} />
@@ -338,8 +346,12 @@ export function RewardTrack({ set, busyId, onClaim, titleWorn, titleBusy, onTitl
       )}
       {set.reward.status === 'pending' && <Text style={styles.trackNote}>Your shark item is on the way.</Text>}
       {finished && onTitle && set.reward.title && (
-        <GameButton label={titleWorn ? 'Take off title' : 'Wear title'} icon="crown"
-          variant="secondary" loading={titleBusy} onPress={onTitle} style={{ marginTop: 10 }} />
+        // A white plaque, so it reads as a button on the gold done panel (a gold button there looked like panel art).
+        <SpringPress onPress={onTitle} disabled={titleBusy} accessibilityLabel={titleWorn ? 'Take off title' : `Wear title: ${set.reward.title}`}
+          style={[styles.titleButton, titleBusy && { opacity: 0.6 }]}>
+          <GameIcon name="crown" size={28} />
+          <Text style={styles.titleButtonText} maxFontSizeMultiplier={1.2}>{titleWorn ? 'Take off title' : 'Wear title'}</Text>
+        </SpringPress>
       )}
       </View>
     </Animated.View>
@@ -372,22 +384,29 @@ function TrackNodeView({ node, busy, reduced, onClaim }: {
 }
 
 /** A small burst of stars. Mount with a new key to fire. Skipped with Reduce Motion. */
-export function StarBurst({ color = BRAND.gold, size = 160 }: { readonly color?: string; readonly size?: number }) {
+export function StarBurst({ color = BRAND.gold, size = 160, solid = false }: {
+  readonly color?: string; readonly size?: number;
+  /** Opaque two-tone sparks (gold and pale gold, outlined) that pop out instead of fading: they never go khaki on navy. */
+  readonly solid?: boolean;
+}) {
   const reduced = useUiReducedMotion();
   const parts = useMemo(() => Array.from({ length: 10 }, (_, index) => (index / 10) * Math.PI * 2), []);
   if (reduced) return null;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
-      {parts.map((angle, index) => <Spark key={index} angle={angle} distance={size / 2} color={index % 2 ? BRAND.white : color} delay={index * 12} />)}
+      {parts.map((angle, index) => (
+        <Spark key={index} angle={angle} distance={size / 2} delay={index * 12} solid={solid}
+          color={solid ? (index % 2 ? BRAND.goldLight : color) : index % 2 ? BRAND.white : color} />
+      ))}
     </View>
   );
 }
 
-function Spark({ angle, distance, color, delay }: { angle: number; distance: number; color: string; delay: number }) {
+function Spark({ angle, distance, color, delay, solid }: { angle: number; distance: number; color: string; delay: number; solid: boolean }) {
   const t = useSharedValue(0);
   useEffect(() => { t.value = withDelay(delay, withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) })); }, [t, delay]);
   const style = useAnimatedStyle(() => ({
-    opacity: 1 - t.value,
+    opacity: solid ? (t.value < 0.8 ? 1 : (1 - t.value) * 5) : 1 - t.value,
     transform: [
       { translateX: Math.cos(angle) * distance * t.value },
       { translateY: Math.sin(angle) * distance * t.value },
@@ -395,7 +414,7 @@ function Spark({ angle, distance, color, delay }: { angle: number; distance: num
       { rotate: '45deg' },
     ],
   }));
-  return <Animated.View style={[styles.spark, { backgroundColor: color }, style]} />;
+  return <Animated.View style={[styles.spark, solid && styles.sparkSolid, { backgroundColor: color }, style]} />;
 }
 
 /** The Alex-style blue popup body: flat blue, darker lip, one gloss band. */
@@ -424,6 +443,7 @@ const styles = StyleSheet.create({
     width: SET_TAB_WIDTH, height: 148, borderRadius: 22, alignItems: 'center', paddingTop: 12, overflow: 'hidden',
     borderWidth: 3, borderColor: 'rgba(5,52,110,0.55)', borderBottomWidth: 6,
   },
+  tabFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
   tabLower: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '30%' },
   gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },
   tabBadgeWell: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.94)', alignItems: 'center', justifyContent: 'center' },
@@ -467,10 +487,11 @@ const styles = StyleSheet.create({
   ribbonWrap: { flex: 1, height: 58, marginLeft: -16, justifyContent: 'center', paddingLeft: 26, paddingRight: 16 },
   ribbonText: { fontFamily: 'Shark', fontSize: 23, color: '#7a3d00', marginTop: -6 },
   titleStamp: {
-    position: 'absolute', right: 6, bottom: -14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8,
-    height: 28, borderRadius: 8, backgroundColor: '#c0392b', borderWidth: 2, borderColor: '#ffe07a', maxWidth: 170,
+    position: 'absolute', right: 4, bottom: -18, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10,
+    height: 34, borderRadius: 9, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: '#7a3d00', borderBottomWidth: 5,
+    maxWidth: 190,
   },
-  titleStampText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, flexShrink: 1 },
+  titleStampText: { fontFamily: 'Shark', fontSize: 16, color: '#7a3d00', flexShrink: 1 },
   countWell: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
   countBig: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   countSmall: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft },
@@ -493,7 +514,6 @@ const styles = StyleSheet.create({
   meterSockets: { flexDirection: 'row', gap: 3 },
   meterSocket: { width: 12, height: 16, borderRadius: 4, backgroundColor: '#0b5aa0', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
   meterSocketOn: { backgroundColor: BRAND.goldLight, borderColor: BRAND.white },
-  meterCountReady: { color: '#7a3d00', textShadowColor: 'transparent' },
   meterReadyText: { fontFamily: 'Shark', fontSize: 17, color: '#7a3d00' },
   meterCount: {
     fontFamily: 'Shark', fontSize: 16, color: BRAND.white,
@@ -520,6 +540,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingTop: 26, paddingBottom: 12, borderRadius: 20, backgroundColor: '#1a8fe3', overflow: 'hidden',
     borderWidth: 4, borderColor: BRAND.white, borderBottomWidth: 8, borderBottomColor: '#0b5aa0',
   },
+  titleButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'center', marginTop: 12,
+    minHeight: 50, paddingHorizontal: 22, borderRadius: 25, backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.navy,
+    borderBottomWidth: 6,
+  },
+  titleButtonText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   trackPanelDone: { backgroundColor: '#e8a700', borderBottomColor: '#a87700' },
   trackTitle: { fontFamily: 'Shark', fontSize: 19, color: '#7a3d00' },
   trackLine: { height: 50, justifyContent: 'center', marginTop: 2, marginHorizontal: 18 },
@@ -535,6 +561,7 @@ const styles = StyleSheet.create({
   nodeDone: { borderColor: BRAND.green, backgroundColor: '#eafbef' },
   nodeLabel: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: -2 },
   spark: { position: 'absolute', width: 14, height: 14, borderRadius: 3 },
+  sparkSolid: { width: 16, height: 16, borderWidth: 2, borderColor: '#7a3d00' },
   bluePanel: {
     backgroundColor: '#1a8fe3', borderRadius: 22, borderWidth: 4, borderColor: BRAND.white, borderBottomWidth: 8,
     borderBottomColor: '#0b5aa0', overflow: 'hidden',

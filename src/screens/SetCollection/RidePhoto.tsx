@@ -4,7 +4,7 @@
  * coaster car in two halves) with the find in the front seat and Alex's real
  * shark beside it. Framed by the best grade:
  *   Good: a plain white frame
- *   Great: a white frame on a blue mat with two star stickers
+ *   Great: a silver-blue frame (no stars, no mat)
  *   Frame It!: a glossy gold frame with a plaque
  * The grade is a tilted rubber stamp, not a button. A server-rendered photo
  * replaces the drawn scene when one is sent.
@@ -33,7 +33,7 @@ export const RIDE_SHARE_HEIGHT = 640;
 /** Frame look per grade. Pure data so tests can check the three tiers differ. */
 export const PHOTO_FRAMES: Readonly<Record<PhotoGrade, { outer: string; lip: string; border: number; mat: string | null; stars: boolean; plaque: boolean }>> = {
   good: { outer: '#ffffff', lip: '#d5e2ee', border: 7, mat: null, stars: false, plaque: false },
-  great: { outer: '#cfe2f3', lip: '#8fa9c4', border: 10, mat: null, stars: true, plaque: false },
+  great: { outer: '#9fb8d4', lip: '#5f7d9c', border: 10, mat: null, stars: false, plaque: false },
   frame_it: { outer: '#f5b400', lip: '#b77f00', border: 12, mat: null, stars: true, plaque: true },
 };
 

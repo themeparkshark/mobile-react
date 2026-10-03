@@ -14,7 +14,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, StatusBar, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -30,15 +30,16 @@ export const REVEAL_TAP_GUARD_MS = 1200;
 const RAYS = require('../../../assets/images/reveal/rays.webp');
 const SCRIM = require('../../../assets/images/reveal/scrim.webp');
 const GLOW = require('../../../assets/images/reveal/glow.webp');
-const MEDAL = require('../../../assets/images/alex-ui/round-gold.webp');
+const MEDAL = require('../../../assets/images/alex-ui/medal-gold.webp');
 const BEAT = { slam: 0, ribbon: 380, prizes: 650, step: 120, plaque: 160, cta: 400 } as const;
 
 type HudKey = 'energy' | 'ticket' | 'xp' | 'coins';
 const HUD: readonly HudKey[] = ['energy', 'ticket', 'xp', 'coins'];
 
-export function revealTimeline(prizeCount: number, hasTitle: boolean): { readonly ctaAt: number; readonly plaqueAt: number } {
+/** When the wide plaques (title or wearable) stamp in, and when the button rises (always last). */
+export function revealTimeline(prizeCount: number, hasPlaque: boolean): { readonly ctaAt: number; readonly plaqueAt: number } {
   const plaqueAt = BEAT.prizes + prizeCount * BEAT.step + BEAT.plaque;
-  return { plaqueAt, ctaAt: plaqueAt + (hasTitle ? 200 : 0) + BEAT.cta };
+  return { plaqueAt, ctaAt: plaqueAt + (hasPlaque ? 200 : 0) + BEAT.cta };
 }
 
 export function RewardReveal({ reveal, onClose }: {
@@ -55,7 +56,11 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
   const { player } = useContext(AuthContext);
   // Number prizes ride the plaques; the title and a wearable get their own wide plaques (never cut off).
   const prizes = useMemo(() => prizeChips(reward).filter(prize => prize.icon !== 'crown' && prize.icon !== 'shark'), [reward]);
-  const { ctaAt, plaqueAt } = revealTimeline(prizes.length, !!reward.title);
+  const hasPlaque = !!reward.title || !!reward.wearableName;
+  const { ctaAt, plaqueAt } = revealTimeline(prizes.length, hasPlaque);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
+  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
   const openedAt = useRef(Date.now());
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
@@ -67,33 +72,33 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
 
   useEffect(() => {
     if (reduced) return;
-    const timers: ReturnType<typeof setTimeout>[] = [];
     slam.value = withSequence(withTiming(1.22, { duration: 200, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 180 }));
-    timers.push(setTimeout(() => {
+    later(() => {
       playSfx('fx.hit', 0.9);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
-    }, 190));
+    }, 190);
     spin.value = withRepeat(withTiming(1, { duration: 10_000, easing: Easing.linear }), -1, false); // 6 rpm
     ribbon.value = withDelay(BEAT.ribbon, withSpring(1, { damping: 10, stiffness: 160 }));
-    prizes.forEach((_, index) => timers.push(setTimeout(() => {
+    prizes.forEach((_, index) => later(() => {
       playSfx('fx.coinTick', 0.9);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    }, BEAT.prizes + index * BEAT.step)));
-    if (reward.title) {
+    }, BEAT.prizes + index * BEAT.step));
+    // Title OR wearable: the wide plaques stamp in (a wearable-only reward was invisible before).
+    if (hasPlaque) {
       plaque.value = withDelay(plaqueAt, withSequence(withTiming(1.25, { duration: 120 }), withSpring(1, { damping: 6, stiffness: 240 })));
-      timers.push(setTimeout(() => playSfx('ui.confirm', 0.8), plaqueAt + 60));
+      later(() => playSfx('ui.confirm', 0.8), plaqueAt + 60);
     }
     cta.value = withDelay(ctaAt, withSpring(1, { damping: 11, stiffness: 170 }));
-    return () => { timers.forEach(clearTimeout); cancelAnimation(spin); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => cancelAnimation(spin);
+  }, [reduced, hasPlaque, plaqueAt, ctaAt, prizes, slam, spin, ribbon, plaque, cta]);
 
   const dismiss = () => {
     if (paying) return;
     if (reduced) { onClose(); return; }
     setPaying(true);
     playSfx('fx.coin', 0.8);
-    setTimeout(() => setPaid(true), 650);
-    setTimeout(closeWithFade, 1450);
+    later(() => setPaid(true), 650);
+    later(closeWithFade, 1450);
   };
   const backdrop = () => {
     if (Date.now() - openedAt.current < REVEAL_TAP_GUARD_MS) return;
@@ -128,6 +133,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={backdrop} statusBarTranslucent>
+      <StatusBar barStyle="light-content" animated />
       <Animated.View style={[StyleSheet.absoluteFill, styles.scrimBase, fadeStyle]}>
         <Image source={SCRIM} style={StyleSheet.absoluteFill} contentFit="fill" />
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={backdrop} style={StyleSheet.absoluteFill} />
@@ -157,7 +163,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
                 </Animated.View>
               </View>
             </View>
-            <StarBurst size={340} />
+            <StarBurst size={340} color={BRAND.gold} solid />
           </Animated.View>
           <Animated.View style={[styles.ribbon, ribbonStyle]}>
             <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
@@ -186,7 +192,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
             <Animated.View style={plaqueStyle}>
               <View style={styles.plaque}>
                 <GameIcon name="crown" size={30} />
-                <Text style={styles.plaqueText} numberOfLines={1} adjustsFontSizeToFit>New title: {reward.title}</Text>
+                <Text style={styles.plaqueText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>New title: {reward.title}</Text>
               </View>
             </Animated.View>
           )}
@@ -201,7 +207,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
   function closeWithFade() {
     if (reduced) { onClose(); return; }
     fade.value = withTiming(0, { duration: 320 });
-    setTimeout(onClose, 330);
+    later(onClose, 330);
   }
 }
 
@@ -330,7 +336,7 @@ const styles = StyleSheet.create({
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
   },
   plaque: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, paddingHorizontal: 18, height: 50, borderRadius: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, paddingHorizontal: 18, minHeight: 50, maxWidth: 320, borderRadius: 14,
     backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: BRAND.goldLip,
   },
   plaqueText: { fontFamily: 'Shark', fontSize: 18, color: '#7a3d00' },

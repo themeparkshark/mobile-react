@@ -70,7 +70,10 @@ test('How to Play shark is Alex\'s real PNG (ART_RULES rule 1), never a generate
   assert.match(py, /sharks\/CLASSIC UPDATE 2023 WITH EYES\.png/);
   assert.match(py, /\('shark', load_shark\('CLASSIC UPDATE 2023 WITH EYES\.png'\)\), \('shark-happy', happy\)/, 'two expressions, both Alex PNGs');
   assert.match(py, /def keyline/, 'unify pass: matched outline weight');
-  assert.match(demos, /styles\.shadow/, 'contact shadow under the shark');
+  assert.match(demos, /<GroundShadow/, 'soft ground shadow under the shark');
+  assert.match(demos, /ground-shadow\.webp/);
+  assert.match(demos, /<Shark size=\{s \* 0\.56\} happy flip \/>/, 'the catching shark faces the drumstick');
+  assert.match(demos, /-s \* 0\.07/, 'the glove touches the drumstick on the tap frame');
   assert.match(demos, /happy \? SHARK_HAPPY : SHARK/);
   assert.match(demos, /POINTER/, 'a glove pointer, not a hand next to the shark');
 });
@@ -94,6 +97,10 @@ test('How to Play screen: looping demos, next card peeks, read aloud, springy do
   assert.match(screen, /'Read aloud'/);
   assert.match(screen, /if \(ticket !== voiceTicket\.current\) \{ void sound\.unloadAsync/, 'a stale clip never plays over a newer one');
   assert.match(screen, /READ_ALOUD_SEEN/, 'first visit reads card 1 aloud');
+  assert.match(screen, /if \(await AccessibilityInfo\.isScreenReaderEnabled\(\)\) return;/, 'never over VoiceOver');
+  assert.match(screen, /active=\{index === page && screenFocused\}/, 'demos pause under another screen');
+  assert.match(screen, /if \(!screenFocused\) stopVoice\(\)/);
+  assert.match(screen, /highlightNearestFind/);
   assert.doesNotMatch(screen, /styles\.card, \{ width \}, cardStyle\]\} accessible/, 'the card never groups its speaker away from VoiceOver');
   assert.match(screen, /playSfx\('ui\.select'/);
   assert.match(screen, /interpolateColor\(distance/, 'dots follow the finger without a spring per frame');

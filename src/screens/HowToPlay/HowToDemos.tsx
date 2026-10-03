@@ -25,6 +25,7 @@ const MAP = require('../../../assets/images/howto/map.webp');
 const PIN = require('../../../assets/images/howto/pin.webp');
 const QUEUE = require('../../../assets/images/howto/queue.webp');
 const POINTER = require('../../../assets/images/howto/pointer.webp');
+const SHADOW = require('../../../assets/images/howto/ground-shadow.webp');
 const SCENE = require('../../../assets/images/ride-photo/scene-far.webp');
 const COIN = require('../../../assets/images/coingold.png');
 const ITEM = {
@@ -78,13 +79,31 @@ function Layer({ x, y, w, h, children, style }: {
 }
 
 /** Alex's real shark (two expressions: eyes open, or happy closed eyes), with a contact shadow so it stands on the card. */
+/** Alex's real shark (two expressions: eyes open, or happy closed eyes). Faces left; `flip` faces it right. */
 function Shark({ size, flip, happy, tilt = 0 }: { readonly size: number; readonly flip?: boolean; readonly happy?: boolean; readonly tilt?: number }) {
   return (
-    <View style={{ width: size * 0.9, height: size }}>
-      <View style={[styles.shadow, { width: size * 0.6, height: size * 0.09, left: size * 0.15, bottom: -size * 0.02 }]} />
-      <Image source={happy ? SHARK_HAPPY : SHARK} contentFit="contain"
-        style={{ width: size * 0.9, height: size, transform: [...(flip ? [{ scaleX: -1 }] : []), { rotate: `${tilt}deg` }] }} />
-    </View>
+    <Image source={happy ? SHARK_HAPPY : SHARK} contentFit="contain"
+      style={{ width: size * 0.9, height: size, transform: [...(flip ? [{ scaleX: -1 }] : []), { rotate: `${tilt}deg` }] }} />
+  );
+}
+
+/**
+ * A soft blurred ground shadow (25% navy, about 60% of the shark's width), drawn on the ground under the
+ * belly and tail contact point. It stays put while the shark hops, so the hop reads as leaving the ground.
+ */
+function GroundShadow({ cx, y, w, t, hopFrom, hopTo }: {
+  readonly cx: number; readonly y: number; readonly w: number;
+  readonly t?: SharedValue<number>; readonly hopFrom?: number; readonly hopTo?: number;
+}) {
+  const style = useAnimatedStyle(() => {
+    if (!t || hopFrom == null || hopTo == null) return {};
+    const lift = Math.max(0, Math.sin(interpolate(t.value, [hopFrom, hopTo], [0, Math.PI], 'clamp')));
+    return { transform: [{ scaleX: 1 - 0.25 * lift }], opacity: 1 - 0.4 * lift };
+  });
+  return (
+    <Layer x={cx - w / 2} y={y - w * 0.125} w={w} h={w * 0.25} style={style}>
+      <Image source={SHADOW} style={{ width: '100%', height: '100%' }} contentFit="fill" />
+    </Layer>
   );
 }
 
@@ -113,8 +132,10 @@ function FindDemo({ t, s }: DemoProps) {
       <DropPin t={t} at={0.08} x={s * 0.1} y={s * 0.14} w={s * 0.2} item={ITEM.pretzel} />
       <DropPin t={t} at={0.28} x={s * 0.42} y={s * 0.08} w={s * 0.2} item={ITEM.popcorn} />
       <DropPin t={t} at={0.48} x={s * 0.22} y={s * 0.46} w={s * 0.2} item={ITEM.cotton} />
-      <Layer x={s * 0.52} y={s * 0.42} w={s * 0.48} h={s * 0.56}>
-        <Shark size={s * 0.56} flip tilt={-4} />
+      <GroundShadow cx={s * 0.72} y={s * 0.95} w={s * 0.3} />
+      {/* The snout stays 8 pt or more inside the card edge. */}
+      <Layer x={s * 0.47} y={s * 0.44} w={s * 0.46} h={s * 0.53}>
+        <Shark size={s * 0.53} flip tilt={-4} />
       </Layer>
     </>
   );
@@ -130,7 +151,8 @@ function CatchDemo({ t, s }: DemoProps) {
   });
   const hand = useAnimatedStyle(() => {
     const p = t.value;
-    const reach = interpolate(p, [0, 0.3, 0.42, 0.47, 0.62], [s * 0.3, s * 0.06, s * 0.03, s * 0.06, s * 0.34], 'clamp');
+    // Rests 30 pt or more below the drumstick; on the tap frame the fingertip touches it, then retreats.
+    const reach = interpolate(p, [0, 0.3, 0.42, 0.47, 0.62], [s * 0.3, s * 0.06, -s * 0.07, s * 0.06, s * 0.34], 'clamp');
     const press = interpolate(p, [0.38, 0.44, 0.5], [1, 0.88, 1], 'clamp');
     const fade = interpolate(p, [0, 0.08, 0.55, 0.65], [0, 1, 1, 0], 'clamp');
     return { opacity: p >= 0.999 ? 0 : fade, transform: [{ translateY: reach }, { scale: press }] };
@@ -166,8 +188,10 @@ function CatchDemo({ t, s }: DemoProps) {
       <Layer x={s * 0.62} y={s * 0.5} w={s * 0.2} h={s * 0.32} style={hand}>
         <Image source={POINTER} style={{ width: '100%', height: '100%' }} contentFit="contain" />
       </Layer>
-      <Layer x={s * 0.02} y={s * 0.4} w={s * 0.5} h={s * 0.58} style={hop}>
-        <Shark size={s * 0.56} happy />
+      <GroundShadow cx={s * 0.24} y={s * 0.95} w={s * 0.3} t={t} hopFrom={0.55} hopTo={0.85} />
+      {/* Faces the drumstick it is catching. */}
+      <Layer x={s * 0.0} y={s * 0.4} w={s * 0.5} h={s * 0.58} style={hop}>
+        <Shark size={s * 0.56} happy flip />
       </Layer>
     </>
   );
@@ -244,8 +268,10 @@ function ParkDemo({ t, s }: DemoProps) {
       <Layer x={s * 0.36} y={s * 0.14} w={s * 0.28} h={s * 0.28} style={coin}>
         <Image source={COIN} style={{ width: '100%', height: '100%' }} contentFit="contain" />
       </Layer>
-      <Layer x={s * 0.25} y={s * 0.36} w={s * 0.5} h={s * 0.6} style={hop}>
-        <Shark size={s * 0.6} happy />
+      {/* Inside the photo: the shadow sits on the grass, the shark never crosses the frame. */}
+      <GroundShadow cx={s * 0.5} y={s * 0.85} w={s * 0.28} t={t} hopFrom={0.5} hopTo={0.8} />
+      <Layer x={s * 0.3} y={s * 0.36} w={s * 0.42} h={s * 0.5} style={hop}>
+        <Shark size={s * 0.5} happy />
       </Layer>
     </>
   );
@@ -266,11 +292,15 @@ function LineDemo({ t, s }: DemoProps) {
   });
   return (
     <>
-      <Layer x={s * 0.04} y={s * 0.62} w={s * 0.92} h={s * 0.36} style={step}>
+      {/* Grounded behind the rope line: shadow on the floor, ropes in front. */}
+      <Animated.View style={[StyleSheet.absoluteFill, step]}>
+        <GroundShadow cx={s * 0.42} y={s * 0.9} w={s * 0.3} />
+        <Layer x={s * 0.2} y={s * 0.36} w={s * 0.42} h={s * 0.54}>
+          <Shark size={s * 0.52} flip tilt={6} />
+        </Layer>
+      </Animated.View>
+      <Layer x={s * 0.04} y={s * 0.6} w={s * 0.92} h={s * 0.36} style={step}>
         <Image source={QUEUE} style={{ width: '100%', height: '100%' }} contentFit="contain" />
-      </Layer>
-      <Layer x={s * 0.22} y={s * 0.22} w={s * 0.42} h={s * 0.52} style={step}>
-        <Shark size={s * 0.5} flip tilt={6} />
       </Layer>
       <Layer x={s * 0.64} y={s * 0.1} w={s * 0.26} h={s * 0.26} style={timer}>
         <View style={styles.timerBadge}>
@@ -294,7 +324,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 8, borderBottomColor: '#073f73',
   },
   scene: { position: 'absolute', borderRadius: 22, overflow: 'hidden', borderWidth: 4, borderColor: BRAND.white },
-  shadow: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.28)' },
   timerBadge: {
     flex: 1, borderRadius: 999, backgroundColor: BRAND.white, borderWidth: 4, borderColor: BRAND.navy, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',

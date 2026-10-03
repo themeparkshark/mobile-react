@@ -27,7 +27,7 @@ export const HOW_TO_CARDS: readonly HowToCard[] = [
   { id: 'book', art: 'book', title: 'Fill your book', topic: 'collections',
     line: 'Every catch fills your book.', colors: ['#3cc77a', '#14915a'] },
   { id: 'park', art: 'park', title: 'Park day!', topic: 'park',
-    line: 'Beat ride games at the park.', colors: ['#ff6f61', '#d93a52'] },
+    line: 'Win ride games at the park!', colors: ['#ff6f61', '#d93a52'] },
   { id: 'line', art: 'line', title: 'Line time pays', topic: 'lineplay',
     line: 'Waiting in line fills a prize!', colors: ['#5a7cf0', '#2f4cc4'] },
 ];

@@ -196,7 +196,8 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   const src = read('src/screens/SetCollection/RidePhoto.tsx');
   const frames = src.slice(src.indexOf('export const PHOTO_FRAMES'), src.indexOf('};', src.indexOf('export const PHOTO_FRAMES')));
   assert.match(frames, /good: \{ outer: '#ffffff'[^}]*mat: null, stars: false, plaque: false/);
-  assert.match(frames, /great: \{ outer: '#cfe2f3'[^}]*mat: null, stars: true, plaque: false/, 'Great is one silver-blue frame, no tinted mat');
+  assert.match(frames, /great: \{ outer: '#9fb8d4'[^}]*mat: null, stars: false, plaque: false/, 'Great is one silver-blue frame: no stars, no mat');
+  assert.match(frames, /frame_it: \{[^}]*stars: true/, 'only Frame It! has stars');
   assert.match(frames, /frame_it: \{ outer: '#f5b400'[^}]*mat: null[^}]*plaque: true/);
   // The find sits up front, left of the lap bar (never skewered by it), bigger than before.
   assert.match(src, /left: carW \* 0\.29, bottom: carH \* 0\.34, width: carW \* 0\.36/);
@@ -304,10 +305,18 @@ test('the set-complete reveal: beats in order with the button last, sprite rays,
   const beat = reveal.match(/const BEAT = \{ ([^}]+) \}/)[1];
   const at = Object.fromEntries(beat.split(',').map(part => part.trim().split(': ')).map(([k, v]) => [k, Number(v)]));
   assert.ok(at.slam < at.ribbon && at.ribbon < at.prizes, 'medal, ribbon, prizes');
-  assert.match(reveal, /plaqueAt \+ \(hasTitle \? 200 : 0\) \+ BEAT\.cta/, 'button rises last');
+  assert.match(reveal, /plaqueAt \+ \(hasPlaque \? 200 : 0\) \+ BEAT\.cta/, 'button rises last');
+  // A wearable with no title still stamps its plaque in (it was invisible in round 3).
+  assert.match(reveal, /const hasPlaque = !!reward\.title \|\| !!reward\.wearableName;/);
+  assert.match(reveal, /if \(hasPlaque\) \{\s*plaque\.value = withDelay\(plaqueAt/);
+  assert.match(reveal, /barStyle="light-content"/, 'light status bar through the reveal');
+  assert.match(reveal, /minimumFontScale=\{0\.8\}/, 'long titles stay at 14 pt or more');
+  assert.match(reveal, /solid \/>/, 'opaque gold slam sparkles');
   assert.doesNotMatch(reveal, /react-native-svg/, 'no full-screen SVG layers (tens of MB of bitmap)');
   assert.match(reveal, /reveal\/rays\.webp/);
-  assert.match(reveal, /alex-ui\/round-gold\.webp/, 'Alex gold medal');
+  assert.match(reveal, /alex-ui\/medal-gold\.webp/, 'Alex gold medal');
+  const medal = path.join(root, 'assets/images/alex-ui/medal-gold.webp');
+  assert.ok(fs.existsSync(medal));
   assert.match(reveal, /styles\.glint/);
   assert.match(reveal, /styles\.socket/, 'sockets stay after the fly-to');
   assert.match(reveal, /label="Collect!"/);
@@ -393,4 +402,43 @@ test('each set card says when it spawns and marks the focused set (moved from th
   assert.match(parts, /set\.focused && <View style=\{styles\.tabHunt\}>/);
   assert.match(parts, /your hunt/);
   assert.match(parts, /tabStatus\(set\)/);
+});
+
+test('round 4: instant book, menu above the map, swap slot, grades, shimmer, title stamp', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  const card = read('src/screens/SetCollection/DexItemCard.tsx');
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const cache = read('src/screens/SetCollection/dexCache.ts');
+  // The book opens from the menu-prefetched copy, or a skeleton in the real layout. Never a spinner.
+  assert.match(screen, /const seed = previewSets \? null : cachedBook\(\);/);
+  assert.match(screen, /<BookSkeleton/);
+  assert.doesNotMatch(screen, /SharkLoader/);
+  assert.match(menu, /void prefetchBook\(\);/);
+  assert.match(cache, /has_claimable/);
+  // The open menu is a Modal: nothing from the map draws above its scrim.
+  assert.match(menu, /<Modal visible=\{mounted\}/);
+  assert.match(menu, /rgba\(5,52,110,0\.6\)/);
+  assert.match(menu, /intensity: 32 \* scrim\.value/);
+  assert.doesNotMatch(menu, /isRight|row-reverse/, 'the unused right-side layout is gone');
+  // The swap slot keeps its height; the burst draws behind the art.
+  assert.match(card, /swappedSlot/);
+  assert.match(card, /height: 58/);
+  assert.ok(card.indexOf('<StarBurst') < card.indexOf('{photo ? ('), 'burst behind the art');
+  // Done panel: a white title plaque, a navy track.
+  assert.match(parts, /styles\.titleButton/);
+  assert.match(parts, /finished \? BRAND\.navy : set\.color/);
+  assert.match(parts, /tabFaceGold/);
+  assert.match(parts, /const t = useSharedValue\(reduced \? 1 : 1\.6\)/, 'the title stamp slams from 1.6');
+  // No bare "+N" once a swap is ready.
+  assert.doesNotMatch(parts, /`\+\$\{extra\}`/);
+  // Shimmer reads; recycled panels never flash.
+  assert.match(tile, /styles\.rim/);
+  assert.match(tile, /<TilePanel key=\{item\.id\}/);
+  // Timers are cleared.
+  assert.match(screen, /clearTimeout\(revealTimer\.current\)/);
+  assert.match(menu, /timers\.current\.forEach\(clearTimeout\)/);
+  assert.match(read('src/screens/SetCollection/RidePhoto.tsx'), /great: \{ outer: '#9fb8d4'/);
+  assert.match(card, /position: 'absolute', top: 10, left: 10/, 'Golden Hour tag in the photo corner, away from the grade');
 });

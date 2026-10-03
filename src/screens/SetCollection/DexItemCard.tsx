@@ -120,6 +120,8 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 photo && styles.heroPhoto, item.goldenHour && styles.heroGolden]}>
                 {!item.found && <Animated.View style={[styles.halo, { backgroundColor: look.frame }, glowStyle]} />}
                 {item.found && !photo && <View style={[styles.halo, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />}
+                {/* The burst sits behind the art, never over it. */}
+                {item.found && item.isNew && <StarBurst key={`${item.id}-${swappedKey}`} color={look.frame} />}
                 {photo ? (
                   <RidePhoto grade={photo} art={itemArt(item)} photoUrl={item.photoUrl} width={Math.min(300, width - 110)} />
                 ) : (
@@ -133,7 +135,6 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                     )}
                   </Animated.View>
                 )}
-                {item.found && item.isNew && <StarBurst key={`${item.id}-${swappedKey}`} color={look.frame} />}
                 {swappedKey > 0 && item.found && <View style={styles.swappedStamp}><Text style={styles.swappedText}>Swapped!</Text></View>}
                 {item.goldenHour && <View style={styles.goldenTag}><GameIcon name="sparkle" size={18} /><Text style={styles.goldenText}>Golden Hour</Text></View>}
               </View>
@@ -144,7 +145,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 </View>
                 <View style={[styles.caughtChip, item.found ? styles.caughtYes : null]}>
                   <GameIcon name={item.found ? 'check' : 'search'} size={20} />
-                  <Text style={styles.caughtText}>{caughtLine(item)}</Text>
+                  <Text style={styles.caughtText}>{item.found && item.foundInWorld === false ? 'Swapped in' : caughtLine(item)}</Text>
                 </View>
               </View>
               {!!item.flavor && <Text style={styles.flavor}>{item.flavor}</Text>}
@@ -155,6 +156,13 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 <GameIcon name="arrow" size={24} />
               </Pressable>
 
+              {/* One fixed slot: after a swap the button cross-fades into a chip of the same height, so nothing reflows. */}
+              {item.found && swappedKey > 0 && (
+                <View style={styles.swappedSlot} accessible accessibilityLabel="Swapped in. Catch one on the map too!">
+                  <GameIcon name="check" size={28} />
+                  <Text style={styles.swappedSlotText}>Catch one on the map too!</Text>
+                </View>
+              )}
               {!item.found && onExchange && (
                 swap.ready ? (
                   <SwapReady cost={swap.need} busy={exchanging} reduced={reduced} onPress={onExchange} />
@@ -176,7 +184,7 @@ export function ItemCard({ item, set, spares, onClose, onExchange, exchanging, o
                 <GameButton label={sharing ? 'Making your card...' : 'Share my Ride Photo'} icon="camera" loading={sharing}
                   onPress={() => { playSfx('ui.tap', 0.6); setSharing(true); setShareMount(true); }} fullWidth style={{ marginTop: 10 }} />
               )}
-              {item.found && onShare && item.spares > 0 && (
+              {item.found && swappedKey === 0 && onShare && item.spares > 0 && (
                 <GameButton label="Share a spare" icon="heart" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
               )}
               {!!error && <Text style={styles.error}>{error}</Text>}
@@ -206,7 +214,7 @@ function SwapReady({ cost, busy, reduced, onPress }: { readonly cost: number; re
   }, [reduced, pulse]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   return (
-    <Animated.View style={[{ marginTop: 10 }, style]}>
+    <Animated.View style={[{ marginTop: 10, height: 58, justifyContent: 'center' }, style]}>
       <GameButton label={`Swap! (${cost} spares)`} icon="swap" loading={busy} onPress={onPress} fullWidth
         accessibilityLabel={`Swap ${cost} spares for this item`} />
     </Animated.View>
@@ -230,11 +238,16 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 12, right: 10, paddingHorizontal: 12, height: 34, justifyContent: 'center', borderRadius: 8,
     backgroundColor: BRAND.green, borderWidth: 3, borderColor: BRAND.white, transform: [{ rotate: '8deg' }],
   },
+  swappedSlot: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, height: 58, borderRadius: 16,
+    backgroundColor: '#eafbef', borderWidth: 3, borderColor: BRAND.green,
+  },
+  swappedSlotText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   swappedText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, textTransform: 'uppercase' },
   halo: { position: 'absolute', width: 210, height: 210, borderRadius: 105 },
   goldenTag: {
-    position: 'absolute', bottom: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
-    height: 28, borderRadius: 14, backgroundColor: '#7a3d00',
+    position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10,
+    height: 28, borderRadius: 14, backgroundColor: '#7a3d00', zIndex: 3,
   },
   goldenText: { fontFamily: 'Shark', fontSize: 14, color: '#ffe07a' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 12 },
@@ -256,7 +269,7 @@ const styles = StyleSheet.create({
   },
   whereText: { flex: 1, fontFamily: 'Shark', fontSize: 16, lineHeight: 19, color: BRAND.navy },
   locked: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, minHeight: 58, paddingHorizontal: 12, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, height: 58, paddingHorizontal: 12, borderRadius: 16,
     backgroundColor: '#c9d3de', borderWidth: 3, borderColor: '#9aa9b9',
   },
   lockedText: { fontFamily: 'Shark', fontSize: 15, color: '#2e3f53' },

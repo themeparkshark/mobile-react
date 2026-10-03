@@ -78,7 +78,8 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   // Legendary shimmer every ~3.5 s while the tile is mounted (the list unmounts off-screen tiles).
   useEffect(() => {
     if (item.rarity < 5 || !item.found || reduced) { cancelAnimation(shine); shine.value = -1; return; }
-    shine.value = withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(2600, withTiming(1, { duration: 900 }))), -1, false);
+    // Every 3 s: a wide bright sweep, and the gold rim pulses with it.
+    shine.value = withRepeat(withSequence(withTiming(-1, { duration: 0 }), withDelay(2100, withTiming(1, { duration: 900 }))), -1, false);
     return () => cancelAnimation(shine);
   }, [item.rarity, item.found, reduced, shine]);
 
@@ -88,6 +89,7 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   const colorStyle = useAnimatedStyle(() => ({ opacity: flipping ? (turn.value >= 0.5 ? 1 : 0) : 1 }));
   const shadowStyle = useAnimatedStyle(() => ({ opacity: flipping && turn.value < 0.5 ? 1 : 0 }));
   const shineStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shine.value * width * 1.4 }, { rotate: '20deg' }] }));
+  const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (!swapReady || reduced) { pulse.value = 1; return; }
@@ -103,7 +105,7 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   return (
     <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width, marginBottom: 10 }}>
       <Animated.View style={flipStyle}>
-        <TilePanel rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
+        <TilePanel key={item.id} rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
             <Image source={art} contentFit="contain" recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
               tintColor={item.found ? undefined : SILHOUETTE}
@@ -117,10 +119,11 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
           {item.rarity >= 5 && item.found && (
             <Animated.View style={[styles.shine, { height: width * 1.6, top: -width * 0.3 }, shineStyle]} pointerEvents="none">
               <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
+                colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} />
             </Animated.View>
           )}
-          <RarityGems rarity={item.rarity} size={8} style={styles.gems} />
+          {item.rarity >= 5 && item.found && <Animated.View style={[styles.rim, rimStyle]} pointerEvents="none" />}
+          <RarityGems rarity={item.rarity} size={10} style={styles.gems} />
           {item.caught > 1 && (
             <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>x{item.caught}</Text></View>
           )}
@@ -148,7 +151,8 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 4, right: 4, width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
-  shine: { position: 'absolute', width: 34, left: '40%' },
+  shine: { position: 'absolute', width: 60, left: '35%' },
+  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 13, borderWidth: 4, borderColor: '#ffe07a' },
   name: {
     fontFamily: 'Shark', fontSize: 14, lineHeight: 15, color: BRAND.navy, textAlign: 'center', marginTop: 4,
     backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 8, overflow: 'hidden', paddingHorizontal: 3, paddingVertical: 2,

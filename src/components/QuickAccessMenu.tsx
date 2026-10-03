@@ -10,16 +10,15 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import getPrepItemSets from '../api/endpoints/me/prep-item-sets';
 import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import * as RootNavigation from '../RootNavigation';
-import { buildBook, hasClaimable } from '../screens/SetCollection/dexModel';
+import { cachedBook, invalidateBook, prefetchBook, rewardWaitingFrom } from '../screens/SetCollection/dexCache';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
@@ -35,6 +34,7 @@ const CLOSE = require('../../assets/images/alex-ui/close-red.webp');
 const LABEL_BAR = require('../../assets/images/alex-ui/label-bar.webp');
 const RIBBON = require('../../assets/images/ribbon.png');
 const AnimatedBlur = Animated.createAnimatedComponent(BlurView);
+const FAB_SIZE = 68;
 
 export interface MenuItem {
   readonly id: string;
@@ -58,22 +58,12 @@ export function menuDelay(index: number, count: number, opening: boolean): numbe
   return opening ? index * 50 : (count - 1 - index) * 30;
 }
 
-// One read of "is a set reward waiting", shared by every menu mount for 2 minutes.
-let rewardCache: { at: number; value: boolean } | null = null;
-const REWARD_TTL_MS = 2 * 60 * 1000;
-
+// "Is a set reward waiting": from the shared book cache (one request set, reused by the book itself).
 function useRewardWaiting(open: boolean): boolean {
-  const [waiting, setWaiting] = useState(rewardCache?.value ?? false);
+  const [waiting, setWaiting] = useState(() => rewardWaitingFrom(cachedBook()));
   useEffect(() => {
-    if (rewardCache && Date.now() - rewardCache.at < REWARD_TTL_MS) { setWaiting(rewardCache.value); return; }
     let live = true;
-    getPrepItemSets()
-      .then(list => {
-        const value = buildBook(list).sets.some(hasClaimable);
-        rewardCache = { at: Date.now(), value };
-        if (live) setWaiting(value);
-      })
-      .catch(() => undefined);
+    void prefetchBook().then(entry => { if (live) setWaiting(rewardWaitingFrom(entry)); });
     return () => { live = false; };
   }, [open]);
   return waiting;
@@ -81,14 +71,14 @@ function useRewardWaiting(open: boolean): boolean {
 
 /** Collections calls this after a claim so the badge clears at once. */
 export function invalidateMenuRewardBadge(): void {
-  rewardCache = null;
+  invalidateBook();
 }
 
-interface Props {
-  readonly position?: 'left' | 'right';
-}
+/** `position` is accepted for the existing home map call; the menu only ships bottom-left. */
+interface Props { readonly position?: 'left' }
 
-export default function QuickAccessMenu({ position = 'right' }: Props) {
+/** The home map menu, bottom-left (the only place it ships). */
+export default function QuickAccessMenu(_props: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const reduced = useUiReducedMotion();
@@ -98,18 +88,26 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
   const fabSpin = useSharedValue(0);
   const [popIndex, setPopIndex] = useState<number | null>(null);
   const busy = useRef(false);
-  const isRight = position === 'right';
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
+  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  // The open menu lives in a Modal so nothing from the map (the focus card) can draw above its scrim.
+  // The Modal's close button sits exactly where the inline button is.
+  const fabRef = useRef<View>(null);
+  const [fabAt, setFabAt] = useState<{ x: number; y: number } | null>(null);
 
   // Rows animate themselves from `open`; this drives the scrim and button and waits out the close.
   const animateTo = useCallback((next: boolean, then?: () => void) => {
     scrim.value = withTiming(next ? 1 : 0, { duration: next ? 200 : 180 });
     fabSpin.value = reduced ? withTiming(next ? 1 : 0, { duration: 150 }) : withSpring(next ? 1 : 0, { damping: 12, stiffness: 220 });
     const total = next ? 0 : (reduced ? 150 : menuDelay(0, MENU_ITEMS.length, false) + 140);
-    setTimeout(() => then?.(), total);
+    timers.current.push(setTimeout(() => then?.(), total));
   }, [reduced, scrim, fabSpin]);
 
   const openMenu = () => {
     if (busy.current) return;
+    fabRef.current?.measureInWindow((x, y) => setFabAt({ x, y }));
+    void prefetchBook(); // the book opens instantly from this copy
     setMounted(true);
     setOpen(true);
     playSfx('fx.whoosh', 0.45);
@@ -135,7 +133,7 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
     playSfx('ui.tap', 0.6);
     if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPopIndex(index);
-    setTimeout(() => closeMenu(() => RootNavigation.navigate(item.screen, item.params)), reduced ? 0 : 140);
+    later(() => closeMenu(() => RootNavigation.navigate(item.screen, item.params)), reduced ? 0 : 140);
   };
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
@@ -144,59 +142,62 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
     transform: [{ translateY: (1 - scrim.value) * 16 }],
   }));
   // The blur stays at full layer opacity (iOS drops the effect under a fading parent); its strength animates instead.
-  const blurProps = useAnimatedProps(() => ({ intensity: 18 * scrim.value }));
+  const blurProps = useAnimatedProps(() => ({ intensity: 32 * scrim.value }));
   const barsStyle = useAnimatedStyle(() => ({ opacity: 1 - fabSpin.value, transform: [{ scale: 1 - 0.3 * fabSpin.value }] }));
   const closeStyle = useAnimatedStyle(() => ({ opacity: fabSpin.value, transform: [{ scale: 0.6 + 0.4 * fabSpin.value }] }));
   const bottom = Math.max(insets.bottom, 12) + 66;
+  const windowH = useWindowDimensions().height;
+
+  const fab = (inModal: boolean) => (
+    <Pressable ref={inModal ? undefined : fabRef} accessibilityRole="button" accessibilityLabel={open ? 'Close menu' : 'Open menu'}
+      accessibilityHint={!open && rewardWaiting ? 'A collection reward is waiting' : undefined}
+      onPress={() => (open ? closeMenu() : openMenu())} hitSlop={8} style={styles.fab}>
+      <Image source={FAB} style={StyleSheet.absoluteFill} contentFit="contain" />
+      <Animated.View style={[styles.bars, barsStyle]}>
+        {[0, 1, 2].map(line => <View key={line} style={styles.bar} />)}
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, closeStyle]}>
+        <Image source={CLOSE} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </Animated.View>
+      {!open && rewardWaiting && <View style={styles.fabBadge}><GameIcon name="gift" size={22} /></View>}
+    </Pressable>
+  );
 
   return (
     <>
-      {mounted && (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 98 }]} pointerEvents={open ? 'auto' : 'none'}>
+      <View pointerEvents="box-none" style={[styles.stack, { bottom, left: 14 }]}>
+        {fab(false)}
+      </View>
+      <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => closeMenu()}>
+        <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
           <AnimatedBlur animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} />
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.42)' }, scrimStyle]} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.6)' }, scrimStyle]} />
           <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
         </View>
-      )}
-
-      {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}
-      <View pointerEvents="box-none" accessibilityViewIsModal={open} onAccessibilityEscape={() => { if (open) closeMenu(); }}
-        style={[styles.stack, { bottom, [isRight ? 'right' : 'left']: 14, alignItems: isRight ? 'flex-end' : 'flex-start' }]}>
-        {mounted && (
-          <View accessibilityElementsHidden={!open}
-            importantForAccessibility={open ? 'auto' : 'no-hide-descendants'} pointerEvents={open ? 'box-none' : 'none'}
-            style={{ alignItems: isRight ? 'flex-end' : 'flex-start' }}>
+        {/* One modal scope for VoiceOver: the rows AND the close button, with the escape gesture closing the menu. */}
+        <View pointerEvents="box-none" accessibilityViewIsModal={open} onAccessibilityEscape={() => { if (open) closeMenu(); }}
+          style={[styles.stack, fabAt ? { top: undefined, left: fabAt.x, bottom: windowH - fabAt.y - FAB_SIZE } : { bottom, left: 14 }]}>
+          <View accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+            pointerEvents={open ? 'box-none' : 'none'} style={{ alignItems: 'flex-start' }}>
             <Animated.View style={[styles.header, headerStyle]}>
               <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
-              <Text style={styles.headerText} accessibilityRole="header">Menu</Text>
+              <Text style={styles.headerText} accessibilityRole="header" maxFontSizeMultiplier={1.2}>Menu</Text>
             </Animated.View>
             {MENU_ITEMS.map((item, index) => (
-              <MenuRow key={item.id} item={item} index={index} open={open} reduced={reduced} popped={popIndex === index} isRight={isRight}
+              <MenuRow key={item.id} item={item} index={index} open={open} reduced={reduced} popped={popIndex === index}
                 badge={item.id === 'sets' && rewardWaiting} onPress={() => choose(item, index)} />
             ))}
           </View>
-        )}
-
-        <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Close menu' : 'Open menu'}
-          accessibilityHint={!open && rewardWaiting ? 'A collection reward is waiting' : undefined}
-          onPress={() => (open ? closeMenu() : openMenu())} hitSlop={8} style={styles.fab}>
-          <Image source={FAB} style={StyleSheet.absoluteFill} contentFit="contain" />
-          <Animated.View style={[styles.bars, barsStyle]}>
-            {[0, 1, 2].map(line => <View key={line} style={styles.bar} />)}
-          </Animated.View>
-          <Animated.View style={[StyleSheet.absoluteFill, closeStyle]}>
-            <Image source={CLOSE} style={StyleSheet.absoluteFill} contentFit="contain" />
-          </Animated.View>
-          {!open && rewardWaiting && <View style={styles.fabBadge}><GameIcon name="gift" size={22} /></View>}
-        </Pressable>
-      </View>
+          {fab(true)}
+        </View>
+      </Modal>
     </>
   );
 }
 
-function MenuRow({ item, index, open, reduced, popped, isRight, badge, onPress }: {
+function MenuRow({ item, index, open, reduced, popped, badge, onPress }: {
   readonly item: MenuItem; readonly index: number; readonly open: boolean; readonly reduced: boolean; readonly popped: boolean;
-  readonly isRight: boolean; readonly badge: boolean; readonly onPress: () => void;
+  readonly badge: boolean; readonly onPress: () => void;
 }) {
   const t = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -232,7 +233,7 @@ function MenuRow({ item, index, open, reduced, popped, isRight, badge, onPress }
   const label = (
     <View style={styles.label}>
       <Image source={LABEL_BAR} style={StyleSheet.absoluteFill} contentFit="fill" />
-      <Text style={styles.labelText} numberOfLines={1}>{item.label}</Text>
+      <Text style={styles.labelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.15}>{item.label}</Text>
     </View>
   );
   return (
@@ -241,7 +242,7 @@ function MenuRow({ item, index, open, reduced, popped, isRight, badge, onPress }
         onPress={onPress}
         onPressIn={() => { press.value = withSpring(0.94, { damping: 15, stiffness: 420 }); }}
         onPressOut={() => { press.value = withSpring(1, { damping: 8, stiffness: 260 }); }}>
-        <Animated.View style={[styles.row, { flexDirection: isRight ? 'row-reverse' : 'row' }, pressStyle]}>
+        <Animated.View style={[styles.row, pressStyle]}>
           {round}
           {label}
         </Animated.View>
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark', fontSize: 19, color: BRAND.white,
     textShadowColor: 'rgba(5,52,110,0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
   },
-  fab: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
+  fab: { width: FAB_SIZE, height: FAB_SIZE, alignItems: 'center', justifyContent: 'center' },
   bars: { alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: -6 },
   bar: { width: 28, height: 6, borderRadius: 3, backgroundColor: BRAND.white, borderWidth: 1.5, borderColor: '#0b3f78' },
   fabBadge: {
