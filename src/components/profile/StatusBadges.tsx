@@ -53,7 +53,9 @@ function Chip({ icon, title, caption, fill, lip, ink, sub, label, hint, onPress 
     >
       <Animated.View style={[styles.chip, { backgroundColor: fill, borderBottomColor: lip, transform: [{ scale }] }]}>
         <View style={styles.gloss} />
-        <Image source={icon} style={styles.icon} contentFit="contain" />
+        <View style={styles.iconDisc}>
+          <Image source={icon} style={styles.icon} contentFit="contain" />
+        </View>
         <View style={{ flexShrink: 1 }}>
           <Text style={[styles.title, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {title}
@@ -150,12 +152,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 10,
     right: 10,
-    top: 4,
-    height: 9,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.32)',
+    top: 3,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
-  icon: { width: 34, height: 34 },
+  iconDisc: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', alignItems: 'center',
+    justifyContent: 'center' },
+  icon: { width: 32, height: 32 },
   title: { fontFamily: 'Shark', fontSize: 17, textTransform: 'uppercase' },
   caption: { fontFamily: 'Knockout', fontSize: 14, marginTop: 1 },
   scrim: { flex: 1, backgroundColor: 'rgba(5,20,40,0.55)', alignItems: 'center', justifyContent: 'center', padding: 32 },

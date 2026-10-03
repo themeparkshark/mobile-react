@@ -70,7 +70,7 @@ export default function Experience({
       <XpPotion
         progress={progress}
         level={level}
-        size={60}
+        size={70}
         paused={paused}
         initialProgress={before?.progress}
         initialLevel={before?.level}

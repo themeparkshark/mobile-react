@@ -46,7 +46,7 @@ import {
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 const INK = '#1d3550';
-const GLASS = 'rgba(214, 240, 255, 0.62)';
+const GLASS = 'rgba(190, 228, 255, 0.78)';
 const LIQUID = '#3fd14a';
 const LIQUID_DEEP = '#22a834';
 const LIQUID_TOP = '#9cf58f';
@@ -75,21 +75,23 @@ const BUBBLES = [
   { x: 63, speed: 12, r: 2.8, phase: 66 },
 ];
 const DROPS = [
-  { vx: -1.0, vy: 1.0, r: 4.2 },
-  { vx: -0.55, vy: 1.35, r: 3.4 },
-  { vx: -0.15, vy: 1.55, r: 4.6 },
-  { vx: 0.25, vy: 1.5, r: 3.2 },
-  { vx: 0.6, vy: 1.3, r: 4.0 },
-  { vx: 1.0, vy: 0.95, r: 3.0 },
-  { vx: -0.8, vy: 0.7, r: 2.6 },
-  { vx: 0.85, vy: 0.65, r: 2.8 },
+  { vx: -1.05, vy: 1.0, r: 6.2 },
+  { vx: -0.6, vy: 1.4, r: 5.0 },
+  { vx: -0.2, vy: 1.65, r: 6.8 },
+  { vx: 0.2, vy: 1.55, r: 4.8 },
+  { vx: 0.6, vy: 1.35, r: 6.0 },
+  { vx: 1.05, vy: 0.95, r: 4.6 },
+  { vx: -0.85, vy: 0.65, r: 4.0 },
+  { vx: 0.9, vy: 0.6, r: 4.2 },
+  { vx: -0.35, vy: 1.2, r: 3.4 },
+  { vx: 0.4, vy: 1.1, r: 3.6 },
 ];
 
 function flaskPath(): SkPath {
   const body = Skia.Path.Make();
   body.addCircle(BODY_CX, BODY_CY, BODY_R);
   const neck = Skia.Path.Make();
-  neck.addRRect(Skia.RRectXY(Skia.XYWHRect(36, 16, 28, 40), 4, 4));
+  neck.addRRect(Skia.RRectXY(Skia.XYWHRect(33, 16, 34, 40), 5, 5));
   return Skia.Path.MakeFromOp(body, neck, PathOp.Union) ?? body;
 }
 
@@ -160,11 +162,12 @@ function XpPotion({
       // Fill, overflow and burst, then refill from empty for the new level.
       fill.value = withSequence(
         withTiming(1.04, { duration: 520, easing: Easing.in(Easing.quad) }),
-        withTiming(0, { duration: 0 }),
-        withDelay(380, withSpring(target, { damping: 14, stiffness: 70 })),
+        // Stay brimming while the drops fly, then drain and refill for the new level.
+        withDelay(380, withTiming(0, { duration: 280, easing: Easing.in(Easing.quad) })),
+        withDelay(160, withSpring(target, { damping: 14, stiffness: 70 })),
       );
       burst.value = 0;
-      burst.value = withDelay(520, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }, (done) => {
+      burst.value = withDelay(520, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }, (done) => {
         if (done) burst.value = 0;
       }));
       flash.value = withDelay(500, withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 600 })));
@@ -272,15 +275,15 @@ function XpPotion({
       const d = DROPS[i];
       const x = 50 + d.vx * q * 46;
       const y = 14 - d.vy * q * 58 + q * q * 70;
-      const r = d.r * (1 - q * 0.55);
+      const r = d.r * (1 - q * 0.45);
       p.addCircle(x, y, r);
     }
     return p;
   });
-  const dropsOpacity = useDerivedValue(() => (burst.value > 0 ? 1 - burst.value * burst.value : 0));
+  const dropsOpacity = useDerivedValue(() => (burst.value > 0 ? 1 - burst.value * burst.value * burst.value : 0));
 
-  const glowOpacity = useDerivedValue(() => 0.42 + Math.sin(time.value * 1.6) * 0.1 + flash.value * 0.45);
-  const glowRadius = useDerivedValue(() => BODY_R + 6 + flash.value * 10);
+  const glowOpacity = useDerivedValue(() => 0.62 + Math.sin(time.value * 1.6) * 0.12 + flash.value * 0.35);
+  const glowRadius = useDerivedValue(() => BODY_R + 9 + flash.value * 10);
 
   const canvasW = DESIGN_W * scale;
   const canvasH = DESIGN_H * scale;
@@ -304,10 +307,10 @@ function XpPotion({
         <Group transform={[{ scale }, { translateX: PAD_X }, { translateY: PAD_TOP }]}>
           {/* Glow */}
           <Circle cx={BODY_CX} cy={BODY_CY} r={glowRadius} color={GLOW} opacity={glowOpacity}>
-            <BlurMask blur={11} style="normal" />
+            <BlurMask blur={12} style="normal" />
           </Circle>
           {/* White sticker edge, then the glass */}
-          <Path path={flask} style="stroke" strokeWidth={11} color="#ffffff" strokeJoin="round" />
+          <Path path={flask} style="stroke" strokeWidth={12} color="#ffffff" strokeJoin="round" />
           <Path path={flask} color={GLASS} />
           {/* Liquid, clipped to the flask */}
           <Group clip={flask}>
@@ -329,26 +332,27 @@ function XpPotion({
             color="rgba(255,255,255,0.9)"
           />
           <Circle cx={27} cy={78} r={2.8} color="rgba(255,255,255,0.9)" />
-          <Path path="M 44 22 L 44 40" style="stroke" strokeWidth={3} strokeCap="round" color="rgba(255,255,255,0.75)" />
+          <Path path="M 41 24 L 41 42" style="stroke" strokeWidth={3.4} strokeCap="round" color="rgba(255,255,255,0.8)" />
           {/* Ink outline */}
-          <Path path={flask} style="stroke" strokeWidth={4.2} color={INK} strokeJoin="round" />
+          <Path path={flask} style="stroke" strokeWidth={5.2} color={INK} strokeJoin="round" />
           {/* Lip */}
-          <RoundedRect x={31} y={10} width={38} height={11} r={5} color="#e6f6ff" />
-          <RoundedRect x={31} y={10} width={38} height={11} r={5} style="stroke" strokeWidth={4} color={INK} />
-          <RoundedRect x={35} y={12.5} width={18} height={3} r={1.5} color="rgba(255,255,255,0.95)" />
+          <RoundedRect x={27} y={9} width={46} height={13} r={6} color="#e6f6ff" />
+          <RoundedRect x={27} y={9} width={46} height={13} r={6} style="stroke" strokeWidth={4.6} color={INK} />
+          <RoundedRect x={32} y={12} width={22} height={3.5} r={1.75} color="rgba(255,255,255,0.95)" />
           {/* Ooze over the lip, like Alex's potion */}
-          <Path path="M 31 15 Q 24 17 25 28 Q 26 35 30 33 Q 33 31 32 24 Q 33 19 37 18 Z" color={LIQUID} />
+          <Path path="M 30 13 Q 21 15 22 29 Q 23 39 29 37 Q 34 35 33 26 Q 34 20 40 19 Z" color={LIQUID} />
+          <Circle cx={26} cy={27} r={1.8} color="rgba(255,255,255,0.8)" />
           <Path
-            path="M 31 15 Q 24 17 25 28 Q 26 35 30 33 Q 33 31 32 24 Q 33 19 37 18"
+            path="M 30 13 Q 21 15 22 29 Q 23 39 29 37 Q 34 35 33 26 Q 34 20 40 19"
             style="stroke"
-            strokeWidth={2.6}
+            strokeWidth={3.2}
             strokeJoin="round"
             color={INK}
           />
           {/* Level-up burst */}
           <Group opacity={dropsOpacity}>
             <Path path={drops} color={LIQUID} />
-            <Path path={drops} style="stroke" strokeWidth={2} color={INK} />
+            <Path path={drops} style="stroke" strokeWidth={2.4} color={INK} />
           </Group>
         </Group>
       </Canvas>

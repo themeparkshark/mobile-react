@@ -52,7 +52,7 @@ export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { player } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const [friendsUnavailable, setFriendsUnavailable] = useState(false);
   const [parksUnavailable, setParksUnavailable] = useState(false);
@@ -96,10 +96,12 @@ export default function ProfileScreen() {
     setRefreshing(true);
     try {
       if (player) {
+        // Pull to refresh also refreshes the player, so level, XP and title catch up.
         const [parkResult, storeResult, friendResult] = await Promise.allSettled([
           getParks(player.id),
           getStores(),
           getFriends(1, 3),
+          refreshPlayer(),
         ]);
         if (parkResult.status === 'fulfilled') setParks(parkResult.value);
         if (storeResult.status === 'fulfilled') setStores(storeResult.value);
@@ -113,7 +115,7 @@ export default function ProfileScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [player, refreshNotificationCount, isProfilePreview]);
+  }, [player, refreshNotificationCount, isProfilePreview, refreshPlayer]);
 
   useFocusEffect(
     useCallback(() => {
@@ -273,6 +275,7 @@ export default function ProfileScreen() {
           style={{
             flex: 1,
             marginTop: -8,
+            backgroundColor: '#dff4ff',
           }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={config.primary} />
@@ -468,7 +471,7 @@ export default function ProfileScreen() {
                     })} />
                 </View>
               )}
-              <View style={{ paddingTop: 20 }}>
+              <View style={{ paddingTop: player.featured_ride_coin ? 2 : 16 }}>
               <View
                 style={{
                   paddingLeft: 16,
