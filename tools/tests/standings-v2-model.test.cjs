@@ -153,8 +153,39 @@ test('wiring: kid-safe taps, per-player cache reset on sign-out, win marks stand
   const auth = read('src/context/AuthProvider.tsx');
   assert.equal((auth.match(/endStandingsSession\(\)/g) || []).length, 2, 'sign-out and account switch both clear the boards');
   assert.match(read('src/screens/LeaderboardsScreen/standingsV2Store.ts'), /const keyOf = \(meId/);
-  assert.match(read('src/api/endpoints/me/task-attempts.ts'), /status === 'won'\) markStandingsStale\(\)/);
+  assert.match(read('src/api/endpoints/me/task-attempts.ts'), /status === 'won'\) \{\s+markStandingsStale\(\)/);
   assert.match(read('src/screens/LeaderboardScreen.tsx'), /if \(!player \|\| v2Missing\) return <LegacyStandings \/>/);
   assert.match(read('src/screens/LeaderboardsScreen/standingsDemo.ts'), /__DEV__ &&/);
   assert.match(read('src/Root.tsx'), /__DEV__ && process\.env\.EXPO_PUBLIC_STANDINGS_PREVIEW/);
+});
+
+test('round 3: rides under review, one number to join, and the weekly goal moment after a win', () => {
+  const review = model.boardModel(dto({ review: { checking: true, rides: 6, flagged: 1, benched: true } }), 'week', 5);
+  assert.deepEqual(plain(review.review), { rides: 6, benched: true });
+  const line = model.youLine(review);
+  assert.deepEqual(plain(line), { state: 'review', text: 'Your rides are being checked', sub: '6 rides this week' });
+  assert.equal(model.chaseChip(review, line.state), null, 'no target while rides are checked');
+  assert.equal(model.boardModel(dto({ review: null }), 'week', 5).review, null);
+
+  const join = model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5);
+  assert.equal(model.chaseChip(join, model.youLine(join).state), '+1', 'a new player sees one number: +1');
+  const chasing = model.boardModel(dto(), 'week', 5);
+  assert.equal(model.chaseChip(chasing, model.youLine(chasing).state), '+2');
+
+  assert.deepEqual(plain(model.winNote({ counted: true, week_rides: 8, goals_reached: [{ goal: 8, xp: 25 }] })), { text: 'Weekly goal: 8 rides! +25 XP', big: true });
+  assert.deepEqual(plain(model.winNote({ counted: true, week_rides: 4, goals_reached: [] })), { text: '+1 ride this week (4)', big: false });
+  assert.equal(model.winNote({ counted: false, week_rides: 4 }), null, 'a replay today or a checked win says nothing');
+  assert.equal(model.winNote(null), null);
+});
+
+test('round 3 wiring: the Monday card always releases the queued climb, the climb plays where you can see it', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.equal((board.match(/onClose=\{closeResults\}/g) || []).length, 2, 'both results-card paths go through closeResults');
+  assert.doesNotMatch(board, /onClose=\{\(\) => \{ setResults\(false\)/);
+  assert.match(board, /const hideYou = !climbing && /);
+  assert.match(board, /onClimbDone=\{\(\) => setClimbing\(false\)\}/);
+  assert.match(board, /top: -18, left: 6/, '"Up N!" sits over the rank, clear of the goal pips');
+  assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
+  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /scaleX: -1/);
+  assert.match(read('src/api/endpoints/me/task-attempts.ts'), /winNote\(/);
 });

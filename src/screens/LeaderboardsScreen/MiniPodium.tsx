@@ -1,6 +1,6 @@
 /**
  * The Standings v2 podium: 236 pt, so the race below shows on the first
- * screen. Alex's barrel art (top third, coin rims showing) with the top three
+ * screen. Alex's barrel art (top third, flipped so silver has the taller base) with the top three
  * standing on it, 2nd left, 1st centre, 3rd right, each with its medal.
  *
  * Motion: the rise (3rd, 2nd, 1st) plays only when the top three changed since
@@ -26,7 +26,8 @@ const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 const revealSound = require('../../../assets/sounds/reveal.mp3');
 
 export const MINI_PODIUM_HEIGHT = 236;
-const BARREL_SHOWN = 92;
+// Barrel tops only (the painted digits sit lower and stay hidden).
+const BARREL_SHOWN = 100;
 const CONFETTI = [BRAND.gold, BRAND.goldLight, BRAND.white, BRAND.skyDeep, '#ff8a3d'];
 
 /** The board's unit icon: the ride cart for rides won this week, Alex's ride coin for All-Time. */
@@ -130,7 +131,9 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress }: {
     <View style={{ height: MINI_PODIUM_HEIGHT, width }}>
       {/* The top of Alex's barrels: coin rims and lids, the spots stand on them. */}
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: BARREL_SHOWN, overflow: 'hidden' }}>
-        <Image source={BARREL} style={{ width, height: width * 683 / 1079 }} contentFit="cover" />
+        {/* Alex's art, flipped: the taller barrel sits under silver (left), the shorter under bronze,
+            so the bases read 1 > 2 > 3. Crop and flip only (ART_RULES). */}
+        <Image source={BARREL} style={{ width, height: width * 683 / 1079, transform: [{ scaleX: -1 }] }} contentFit="cover" />
       </View>
       <View pointerEvents="box-none" style={{
         position: 'absolute', left: 0, right: 0, bottom: BARREL_SHOWN - 30, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',

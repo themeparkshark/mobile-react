@@ -4,9 +4,8 @@
  * Alex's eight real shark colors, picked by player id, so the podium and the
  * list read as different players at a glance (ART_RULES 1: real art only).
  */
-import { Image } from 'expo-image';
 import { memo, useContext } from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 import Avatar from '../../components/Avatar';
 import { AuthContext } from '../../context/AuthProvider';
 import { liveOutfitFor, outfitLayerUrls } from '../../helpers/wardrobe';
@@ -48,7 +47,9 @@ function StandingsShark({ avatar, size, muted = false, ring }: {
 }) {
   const { player: signedIn } = useContext(AuthContext);
   const player = avatar as unknown as PlayerType;
-  const dressed = !!avatar.avatar_url || wearsOwnLook(liveOutfitFor(player, signedIn) ?? null);
+  // You always see your own shark (the Classic you see on Profile), never a color.
+  const isMe = !!signedIn && signedIn.id === avatar.id;
+  const dressed = isMe || !!avatar.avatar_url || wearsOwnLook(liveOutfitFor(player, signedIn) ?? null);
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: BRAND.sky,
@@ -60,8 +61,9 @@ function StandingsShark({ avatar, size, muted = false, ring }: {
           <Avatar player={player} size="sm" />
         </View>
       ) : (
+        // RN Image: bundled art decodes from the in-memory cache, so a tab switch never paints a blank face.
         <Image source={SHARK_ART[sharkVariant(avatar.id)]} style={{ width: size * 1.12, height: size * 1.12, marginTop: size * 0.12 }}
-          contentFit="contain" accessibilityIgnoresInvertColors />
+          resizeMode="contain" fadeDuration={0} accessibilityIgnoresInvertColors />
       )}
     </View>
   );

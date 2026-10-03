@@ -106,6 +106,8 @@ export interface StandingsBoardModel {
   readonly chase: StandingsChase | null;
   readonly goals: readonly WeekGoal[];
   readonly lastWeek: LastWeekResult | null;
+  /** A flagged win this week: the kid sees "Your rides are being checked" with their real count. */
+  readonly review: { readonly rides: number; readonly benched: boolean } | null;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -147,9 +149,12 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
     ? { weekStart: String(lw.week_start ?? ''), rank: num(lw.rank), score: num(lw.score), playersCount: num(lw.players_count),
       title: typeof lw.title === 'string' && lw.title ? lw.title : null, tickets: num(lw.tickets), seen: lw.seen === true }
     : null;
+  const rv = (dto as { review?: { checking?: boolean; rides?: unknown; benched?: boolean } | null } | null | undefined)?.review;
+  const review = rv && rv.checking === true ? { rides: num(rv.rides), benched: rv.benched === true } : null;
   return {
     board,
     metric,
+    review,
     parkId: dto?.park_id == null ? null : num(dto.park_id),
     available: dto?.available == null ? null : num(dto.available),
     playersCount: num(dto?.players_count, rows.filter(r => r.score > 0).length),
@@ -208,17 +213,22 @@ export function podiumRows(model: Pick<StandingsBoardModel, 'rows'>): readonly [
   return splitPodium(model.rows.filter(row => row.score > 0)).podium;
 }
 
-export type YouState = 'leader' | 'chasing' | 'tied' | 'join';
+export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
 
 /**
- * The You card's line. Short words, no jargon, no em dashes:
- *   join     "Win 1 ride to join!"
+ * The You card's line. One number per state, short words, no em dashes:
+ *   review   "Your rides are being checked"  (+ their real count)
+ *   join     "Win 1 ride to join!"            (chip "+1", a Go ride button)
  *   chasing  "2 more rides to pass gr8scott"
  *   tied     "Tied! zmaize got there first."  (+ "1 more ride passes them")
  *   leader   "You're #1! Hold the top spot."
  */
-export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'>): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
+export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review'] }): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
   const score = model.me?.score ?? 0;
+  if (model.review && model.board !== 'all_time') {
+    const n = model.review.rides;
+    return { state: 'review', text: 'Your rides are being checked', sub: `${n} ${unitWord('ride_wins', n)} this week` };
+  }
   if (score <= 0 || model.me?.rank == null) {
     const what = model.metric === 'ride_coins' ? 'ride coin' : 'ride';
     return { state: 'join', text: `Win 1 ${what} to join!`, sub: model.board === 'friends' ? 'Race your friends this week' : null };
@@ -231,6 +241,13 @@ export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'm
     return { state: 'chasing', text: `${n} more ${unitWord(model.metric, n)} to pass ${model.chase.name}`, sub: null };
   }
   return { state: 'leader', text: model.board === 'all_time' ? "You're #1! Top collector." : "You're #1! Hold the top spot.", sub: null };
+}
+
+/** The number on the chase chip: "+1" to join, "+N" to pass, nothing for leaders or rides under review. */
+export function chaseChip(model: Pick<StandingsBoardModel, 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review'] }, state: YouState): string | null {
+  if (state === 'join') return '+1';
+  if (state === 'chasing' || state === 'tied') return model.chase ? `+${model.chase.toPass}` : null;
+  return null;
 }
 
 /** 0..1 fill for the chase bar: how close you are to passing the next player. */
@@ -343,4 +360,21 @@ export function lastWeekCopy(result: LastWeekResult): { readonly headline: strin
   const line = `${result.score} ${unitWord('ride_wins', result.score)} out of ${result.playersCount} ${result.playersCount === 1 ? 'player' : 'players'}`;
   const reward = result.title ? `${result.title}${result.tickets > 0 ? ` + ${result.tickets} Tickets` : ''}` : null;
   return { headline, line, reward };
+}
+
+/**
+ * The note a ride win leaves for Standings (rewards.standings from the resolve
+ * answer): a reached weekly goal is the big one, otherwise a quiet "+1 ride
+ * this week". Null when the ride did not count (a replay today, or a check).
+ */
+export function winNote(standings: unknown): { readonly text: string; readonly big: boolean } | null {
+  const s = standings as { counted?: boolean; week_rides?: unknown; goals_reached?: { goal?: unknown; xp?: unknown }[] } | null | undefined;
+  if (!s || s.counted !== true) return null;
+  const goals = Array.isArray(s.goals_reached) ? s.goals_reached.filter(g => Number(g?.goal) > 0) : [];
+  if (goals.length) {
+    const best = goals[goals.length - 1];
+    return { text: `Weekly goal: ${num(best.goal)} rides! +${goals.reduce((sum, g) => sum + num(g.xp), 0)} XP`, big: true };
+  }
+  const week = num(s.week_rides);
+  return { text: week > 0 ? `+1 ride this week (${week})` : '+1 ride this week', big: false };
 }
