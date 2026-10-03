@@ -314,11 +314,15 @@ test('the coin level-up Share button matches the reveal rule (level 5+), and mod
   assert.match(sheet, /<ShareStudioHost portal \/>/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8'), /<ShareStudioHost portal \/>/);
   const index = fs.readFileSync(pathMod.join(repo, 'src/share/index.ts'), 'utf8');
-  assert.match(index, /SHARE_IN_MODALS: boolean = __DEV__ && process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS === '1'/);
-  const { SHARE_IN_MODALS } = loadTs('src/share/index.ts', {
+  assert.match(index, /SHARE_IN_MODALS: boolean = shareInModalsFor\(__DEV__, process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS, Updates\.channel\)/);
+  const load = channel => loadTs('src/share/index.ts', {
+    'expo-updates': { channel }, './modalGate': loadTs('src/share/modalGate.ts'),
     './store': {}, './FlexShareButton': {}, './ShareStudioHost': {}, './FlexCard': {}, './copy': {}, '../api/endpoints/me/share': {}, './types': {},
-  });
-  assert.equal(SHARE_IN_MODALS, false, 'release builds (__DEV__ false) keep the modal buttons hidden');
+  }).SHARE_IN_MODALS;
+  const SHARE_IN_MODALS = load('production');
+  assert.equal(load('testflight'), true, 'the internal TestFlight channel shows the buttons for real-finger tests');
+  for (const channel of ['internal-tunnel', 'preview', 'main', null, undefined]) assert.equal(load(channel), false, String(channel));
+  assert.equal(SHARE_IN_MODALS, false, "the 'production' channel keeps the modal buttons hidden");
 });
 
 test('the newest mounted host shows requests; unmounting a modal hands them back to Root', () => {
@@ -448,4 +452,14 @@ test('the reveal flash follows Dim Flashing Lights; dev auto-press only drives a
   const release = loadTs('src/share/devDrive.ts', { react: { useEffect() {}, useRef: v => ({ current: v }) } }, { __DEV__: false });
   assert.equal(release.isDevStub(release.markDevStub(async () => true)), false);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/screens/ParkDayRecapCard.tsx'), 'utf8'), /useEffect\(\(\) => \{ warmFlex\('park_day'\); \}, \[\]\)/);
+});
+
+test('modal Share buttons: on for the testflight channel and opted-in dev, never production', () => {
+  const { shareInModalsFor } = loadTs('src/share/modalGate.ts');
+  assert.equal(shareInModalsFor(false, undefined, 'production'), false);
+  assert.equal(shareInModalsFor(false, '1', 'production'), false, 'the dev flag means nothing in a release build');
+  assert.equal(shareInModalsFor(true, undefined, 'production'), false);
+  assert.equal(shareInModalsFor(false, undefined, 'testflight'), true);
+  assert.equal(shareInModalsFor(true, '1', null), true);
+  assert.equal(shareInModalsFor(false, undefined, null), false);
 });
