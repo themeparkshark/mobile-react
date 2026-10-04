@@ -43,13 +43,15 @@ const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
 
-export default function SetCompleteReveal({ reward, set, still, onDone, onShown }: {
+export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
   readonly reward: ShopSetReward | null;
   readonly set: ShopSetSummary | null;
   readonly still: boolean;
   readonly onDone: () => void;
   /** The reveal is on screen (the shelf drops its hand-off cover). */
   readonly onShown?: () => void;
+  /** Coming straight from the buy over a navy cover: show at once, no fade. */
+  readonly bridged?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -141,7 +143,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onDone} onShow={onShown} statusBarTranslucent>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
-      <Animated.View entering={still ? undefined : FadeIn.duration(260)} style={styles.fill}>
+      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
@@ -158,6 +160,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown 
               </Animated.View>
             )}
           </View>
+          {/* Inside the content and before the plate: it bursts from behind the title, never over it. */}
+          {burst && !still && <Confetti color={color} originY={insets.top + 20 + 90 + STAGE + 40} />}
           <View style={styles.plateWrap}>
             {reward.title && (
               <Animated.View style={stampStyle} accessible accessibilityLabel={`New title: ${reward.title}`}>
@@ -200,8 +204,6 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown 
             </Pressable>
           </View>
         </View>
-        {/* Above everything (never clipped by the stage), bursting from the title plate. */}
-        {burst && !still && <Confetti color={color} originY={insets.top + 20 + 90 + STAGE + 40} />}
       </Animated.View>
     </Modal>
   );

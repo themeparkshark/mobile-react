@@ -23,6 +23,7 @@ import { ShopToday } from '../models/shop-today';
 import ShopShelves from './StoreScreen/ShopShelves';
 import { WishHeart } from './StoreScreen/shopUi';
 import WishlistSheet from './StoreScreen/WishlistSheet';
+import { REVEAL_NAVY } from './StoreScreen/shopUi';
 import { useWishCount } from './StoreScreen/wishStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
@@ -331,6 +332,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const [focusRequest, setFocusRequest] = useState<{ id: number; nonce: number } | null>(
     () => (focusItem ? { id: focusItem, nonce: 1 } : null));
   const shopStill = useReducedGameMotion();
+  const [shopHandoff, setShopHandoff] = useState(false);
   // The title bar folds into the tab row after 40pt of shop scroll.
   const scrollY = useSharedValue(0);
   const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
@@ -563,7 +565,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusRequest={focusRequest} scrollY={scrollY} />
+                focusRequest={focusRequest} scrollY={scrollY} onHandoff={setShopHandoff} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (
@@ -616,6 +618,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
         </ImageBackground>
       )}
       </Reanimated.View>
+      {/* Buy hand-off into the Set Complete reveal: navy over everything, header included. */}
+      {shopHandoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY, zIndex: 50 }]} />}
       </View>
     </>
   );

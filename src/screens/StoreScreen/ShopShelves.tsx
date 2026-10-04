@@ -36,7 +36,7 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  activeShelf, dailyPill, dropReveal, emptyShelvesCopy, eventDropPill, eventEndPill, eventKicker, fallbackPollMs, featuredPill, formatCoins, HERO, heroItem, heroLayout,
+  activeShelf, dailyPill, dropReveal, emptyShelvesCopy, eventChips, fallbackBannerCopy, eventDropPill, eventEndPill, eventKicker, fallbackPollMs, featuredPill, formatCoins, HERO, heroItem, heroLayout,
   heroChips, heroPriceRow, inkOn, newCountLabel, pieceState, queueReveal, readySummary, restockBackoffMs, rewardPendingFor, sectionAccent, setA11y, setProgressText,
   settleClaims, shortDate, stableOrder, startFallbackPoll, wishSavedCopy,
 } from '../../helpers/shopShelves';
@@ -244,19 +244,32 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
 });
 
 /** One chip per shelf: icons, not words (a 7-year-old jumps without reading). */
-type ShelfChip = { key: string; icon: GameIconName; label: string; color?: string | null };
+type ShelfChip = { key: string; icon: GameIconName; label: string; fill?: string | null; ring?: string | null };
 
-const JumpBar = memo(function JumpBar({ chips, active, onJump }: { chips: ShelfChip[]; active: number; onJump: (i: number) => void }) {
+/**
+ * The jump bar owns the highlight: it follows the scroll on the UI thread and re-renders only
+ * itself, never the shelves. Every chip keeps a fixed 50pt box; the active one only scales, so the
+ * row never shifts.
+ */
+const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump }: {
+  chips: ShelfChip[]; tops: SharedValue<number[]>; scrollY: SharedValue<number>; maxY: SharedValue<number>; onJump: (i: number) => void;
+}) {
+  const [active, setActive] = useState(0);
+  useAnimatedReaction(() => activeShelf(tops.value, scrollY.value, 24, maxY.value), (next, prev) => {
+    if (next !== prev) runOnJS(setActive)(next);
+  });
   if (chips.length < 2) return null;
   return (
     <View style={styles.jumpBar} accessibilityRole="tablist">
       {chips.map((chip, i) => {
         const on = i === active;
         return (
-          <Pressable key={chip.key} onPress={() => onJump(i)} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: on }}
-            accessibilityLabel={`Jump to ${chip.label}`}
-            style={[styles.jumpChip, chip.color ? { backgroundColor: chip.color } : null, on && styles.jumpChipOn]}>
-            <GameIcon name={chip.icon} size={on ? 28 : 24} />
+          <Pressable key={chip.key} onPress={() => { setActive(i); onJump(i); }} hitSlop={4} accessibilityRole="tab"
+            accessibilityState={{ selected: on }} accessibilityLabel={`Jump to ${chip.label}`} style={styles.jumpSlot}>
+            <View style={[styles.jumpChip, chip.fill ? { backgroundColor: chip.fill } : null, chip.ring ? { borderColor: chip.ring } : null,
+              on && styles.jumpChipOn]}>
+              <GameIcon name={chip.icon} size={24} />
+            </View>
           </Pressable>
         );
       })}
@@ -293,7 +306,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
         accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
-          <ShopStage rim={glow} backdropUrl={stage?.backdrop} tone="night" still={still}>
+          <ShopStage rim={glow} backdropUrl={stage?.backdrop} tone="night" sky={false} still={still}>
             {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
@@ -345,7 +358,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   );
 });
 
-export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY }: {
+export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff }: {
   readonly today: ShopToday;
   readonly setToday: Dispatch<SetStateAction<ShopToday | null>>;
   readonly onRefresh: () => Promise<boolean>;
@@ -355,6 +368,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   readonly focusRequest?: { id: number; nonce: number } | null;
   /** The screen collapses its header from this. */
   readonly scrollY?: SharedValue<number>;
+  /** The buy hand-off into a Set Complete reveal: the screen covers everything (header too) in navy. */
+  readonly onHandoff?: (on: boolean) => void;
 }) {
   const { player } = useContext(AuthContext);
   const { playSound: playSoundNow } = useContext(SoundEffectContext);
@@ -524,14 +539,29 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   revealsRef.current = reveals;
   const openRef = useRef(open);
   openRef.current = open;
+  const handoffRef = useRef(onHandoff);
+  handoffRef.current = onHandoff;
+  // The screen's cover and ours flip in the same tick (no frame with the header showing).
+  const coverHandoff = useCallback((on: boolean) => { setHandoff(on); handoffRef.current?.(on); }, []);
   const leavingTryOn = useCallback(() => {
     if (!rewardPendingFor(revealsRef.current, openRef.current?.item.shop?.set?.slug)) return;
-    setHandoff(true);
-    setTimeout(() => setHandoff(false), 1500);
-  }, []);
+    coverHandoff(true);
+    setTimeout(() => coverHandoff(false), 1500);
+  }, [coverHandoff]);
   const closeTryOn = useCallback(() => {
     setOpen(null);
   }, []);
+  // iOS can drop a modal presented while another is still leaving: if the reveal hasn't shown
+  // within 1.2 s of mounting, remount it once the gate reopens (the reward is never lost).
+  const shownRef = useRef<string | null>(null);
+  const revealShown = useCallback(() => { shownRef.current = revealsRef.current[0]?.reward.slug ?? null; coverHandoff(false); }, [coverHandoff]);
+  const revealSlug = reveals[0]?.reward.slug ?? null;
+  const revealMounted = !!revealSlug && !open && revealGate;
+  useEffect(() => {
+    if (!revealMounted || shownRef.current === revealSlug) return;
+    const t = setTimeout(() => { if (shownRef.current !== revealSlug) holdReveal(); }, 1200);
+    return () => clearTimeout(t);
+  }, [revealMounted, revealSlug]);
   const finishReveal = useCallback(() => {
     holdReveal();
     setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
@@ -576,12 +606,12 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   useEffect(() => {
     if (!today.fallback || !awake || pollStopped) return;
     return startFallbackPoll({
-      refresh: async () => {
+      refresh: async alive => {
         try {
           // null is the 404 (kill switch, or no engine): stop for good.
           const fresh = await getShopToday(today.store_id);
           if (!fresh) return 'gone';
-          setToday(fresh);
+          if (alive()) setToday(fresh);
           return fresh.fallback ? 'miss' : 'ok';
         } catch {
           return 'miss';
@@ -599,18 +629,16 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const tops = useSharedValue<number[]>([]);
   const topsRef = useRef<Record<string, number>>({});
   const wrapY = useRef(0);
-  const [activeChip, setActiveChip] = useState(0);
   const scrollHandler = useAnimatedScrollHandler(e => {
     shelfY.value = e.contentOffset.y;
     maxY.value = e.contentSize.height - e.layoutMeasurement.height;
     if (scrollY) scrollY.value = e.contentOffset.y;
   });
-  useAnimatedReaction(() => activeShelf(tops.value, shelfY.value, 24, maxY.value), (next, prev) => {
-    if (next !== prev) runOnJS(setActiveChip)(next);
-  });
 
   const refresh = async () => {
     setRefreshing(true);
+    // A pull is the kid asking again: a stopped fallback poll starts over.
+    setPollStopped(false);
     try { await onRefresh(); } finally { setRefreshing(false); }
   };
 
@@ -629,12 +657,18 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   // A fallback day (or a tease with no name) shows no "NEXT WEEK ???" placeholder.
   const heroTease = !today.fallback && (today.next_featured?.title || today.next_featured?.set_name) ? today.next_featured : null;
 
-  const chips: ShelfChip[] = [
-    ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: "this week's star" }] : []),
-    ...events.map(e => ({ key: e.key, icon: 'gift' as const, label: e.title, color: sectionAccent(e) })),
-    ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: 'Featured' }] : []),
-    ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: 'Daily' }] : []),
-  ];
+  const chipSig = [featured && hero ? 'hero' : '', ...events.map(e => `${e.key}:${e.title}:${e.art_url ?? ''}:${e.color ?? ''}`),
+    featured && featuredRest.length ? 'featured' : '', daily ? 'daily' : ''].join('|');
+  // Stable between renders (same shelves, same array), so the memoized jump bar never re-renders for nothing.
+  const chips: ShelfChip[] = useMemo(() => {
+    const looks = eventChips(events);
+    return [
+      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: "this week's star" }] : []),
+      ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, fill: looks[i].fill, ring: looks[i].ring })),
+      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: 'Featured' }] : []),
+      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: 'Daily' }] : []),
+    ];
+  }, [chipSig]);
   const chipKeys = chips.map(c => c.key).join('|');
   const syncTops = () => { tops.value = chips.map(c => (topsRef.current[c.key] ?? 0) + wrapY.current); };
   const measure = (key: string) => (e: { nativeEvent: { layout: { y: number } } }) => {
@@ -647,21 +681,20 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     if (!key) return;
     playSound(require('../../../assets/sounds/tap.mp3'));
     void Haptics.selectionAsync().catch(() => undefined);
-    setActiveChip(i);
     scrollRef.current?.scrollTo({ y: Math.max(0, (topsRef.current[key] ?? 0) + wrapY.current - 8), animated: !still });
   }, [chipKeys, still]);
 
   return (
     <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        <JumpBar chips={chips} active={activeChip} onJump={jump} />
+        <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />
         <View style={{ flex: 1 }}>
         <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
           {today.fallback && (
             <View style={styles.fallback}><GameIcon name="timer" size={18} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>Today’s shop is opening. Back in a moment!</Text></View>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>{fallbackBannerCopy(pollStopped)}</Text></View>
           )}
           {empty && (
             <View style={[styles.panel, styles.emptyPanel]} accessible accessibilityLabel={`${empty.title}. ${empty.body}`}>
@@ -738,7 +771,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
-        onDone={finishReveal} onShown={() => setHandoff(false)} />}
+        bridged={handoff} onDone={finishReveal} onShown={revealShown} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
@@ -783,9 +816,11 @@ const styles = StyleSheet.create({
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: S.panel, ...SHADOW.card },
   jumpBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, height: JUMP_H, paddingHorizontal: 12, backgroundColor: BRAND.blue },
+  jumpSlot: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
   jumpChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
-  jumpChipOn: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: BRAND.gold, ...SHADOW.card },
+  // Same box as every chip; the active one scales (no layout change, the row never shifts).
+  jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }] },
   heroStage: { position: 'absolute', left: HERO_L.stage.left, top: HERO_L.stage.top, height: HERO_L.stage.height, width: HERO_L.stage.width },
   heroKickerRow: { position: 'absolute', left: 0, right: 0, top: 0, height: HERO.kickerH, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },

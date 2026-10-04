@@ -639,7 +639,7 @@ test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss 
   assert.match(close, /setOpen\(null\);/);
   // The sheet hides its modal, then reports closed from onDismiss (with a guard and the Android path).
   assert.match(sheet, /<Modal visible=\{!leaving\}[^>]*onDismiss=\{finishClose\}/);
-  assert.match(sheet, /Platform\.OS === 'ios' \? 500 : 0/);
+  assert.match(sheet, /Platform\.OS === 'ios' \? 200 : 0/);
   assert.equal(/runOnJS\(onClose\)/.test(sheet), false, 'every slide-out goes through leave()');
 });
 
@@ -735,11 +735,12 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
   // Alex-style icons from the UI kit only, one chip per shelf, sticky above the scroll.
   const names = require('node:fs').readFileSync(path.join(root, 'src/ui/iconNames.ts'), 'utf8');
-  for (const icon of ['star', 'gift', 'crown', 'timer']) {
+  for (const icon of ['star', 'crown', 'timer']) {
     assert.match(code, new RegExp(`icon: '${icon}' as const`));
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
-  assert.match(code, /<JumpBar chips=\{chips\} active=\{activeChip\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
+  assert.match(code, /<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
   assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
   for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
 });
@@ -773,11 +774,12 @@ test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle sh
   assert.match(sheet, /if \(rewardPendingRef\.current\) dusk\.value = withTiming\(1/);
   assert.match(sheet, /backgroundColor: REVEAL_NAVY \}, duskStyle\]/);
   assert.match(shelvesCode, /\{handoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY \}\]\} \/>\}/);
-  assert.match(shelvesCode, /onShown=\{\(\) => setHandoff\(false\)\}/);
+  assert.match(shelvesCode, /onShown=\{revealShown\}/);
+  assert.match(shelvesCode, /const revealShown = useCallback\(\(\) => \{[^}]*coverHandoff\(false\);/);
   // The cover goes up as the sheet starts to hide (not after it is gone).
   assert.match(sheet, /onLeavingRef\.current\?\.\(\);\s*setLeaving\(true\);/);
   assert.match(shelvesCode, /onLeaving=\{leavingTryOn\}/);
-  assert.match(shelvesCode, /setTimeout\(\(\) => setHandoff\(false\), 1500\)/, 'the cover can never stick');
+  assert.match(shelvesCode, /setTimeout\(\(\) => coverHandoff\(false\), 1500\)/, 'the cover can never stick');
   assert.match(reveal, /onShow=\{onShown\}/);
   assert.match(reveal, /backgroundColor: REVEAL_NAVY/);
 });
@@ -786,7 +788,88 @@ test('Reduce Motion: shop modals mount with no entering animation (a skipped one
   for (const file of ['src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/WishlistSheet.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx']) {
     const code = src(file);
     for (const m of code.matchAll(/entering=\{([^}]*)\}/g)) {
-      assert.match(m[1], /^still \? undefined :|^undefined$/, `${file}: ${m[1]}`);
+      assert.match(m[1], /^still( \|\| \w+)? \? undefined :|^undefined$/, `${file}: ${m[1]}`);
     }
   }
+});
+
+// ---- Final-check polish ----
+
+test('polish 1: event chips get distinct themed icons and their banner tint', () => {
+  const two = shelves.eventChips([
+    { key: 'event:halloween', event_key: 'halloween', art_url: 'http://x/shop-events/halloween.webp', color: '#ff7a00' },
+    { key: 'event:park_birthday_october', event_key: 'park_birthday_october', art_url: 'http://x/shop-events/park_birthday.webp', color: '#1565c0' },
+  ]);
+  assert.equal(two[0].icon, 'streak');
+  assert.equal(two[1].icon, 'gift');
+  assert.notEqual(two[0].icon, two[1].icon);
+  assert.equal(two[1].fill, shelves.EVENT_ART_TINT.park_birthday, 'the Park Birthday chip is pink like its art, not the blue accent');
+  assert.equal(two[1].ring, '#1565c0');
+  // Two events that would share an icon get different ones; no art falls back to the event colour.
+  const same = shelves.eventChips([{ key: 'event:new_year', event_key: 'new_year', color: '#7c4dff' }, { key: 'event:july_4th', event_key: 'july_4th', color: '#d32f2f' }]);
+  assert.notEqual(same[0].icon, same[1].icon);
+  assert.equal(same[0].fill, '#7c4dff');
+  // Every art tint is a real banner file.
+  assert.equal(Object.keys(shelves.EVENT_ART_TINT).length, 15);
+});
+
+test('polish 2: the hero stage paints no sky of its own (no seam)', () => {
+  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /tone="night" sky=\{false\}/);
+  assert.match(src('src/screens/StoreScreen/shopUi.tsx'), /\) : paintSky \? \(/);
+});
+
+test('polish 3: the hand-off covers the whole screen, the reveal shows at once, and a dropped reveal remounts', () => {
+  const screen = src('src/screens/StoreScreen.tsx');
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  const reveal = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.match(screen, /onHandoff=\{setShopHandoff\}/);
+  assert.match(screen, /\{shopHandoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY, zIndex: 50 \}\]\} \/>\}/);
+  assert.match(code, /bridged=\{handoff\}/);
+  assert.match(code, /const coverHandoff = useCallback\(\(on: boolean\) => \{ setHandoff\(on\); handoffRef\.current\?\.\(on\); \}/, 'both covers flip in one tick');
+  assert.match(reveal, /entering=\{still \|\| bridged \? undefined : FadeIn\.duration\(260\)\}/);
+  assert.match(code, /if \(shownRef\.current !== revealSlug\) holdReveal\(\); \}, 1200\)/, 'watchdog remounts a reveal iOS dropped');
+});
+
+test('polish 4: the active chip scales in a fixed box (the row never shifts)', () => {
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(code, /jumpSlot: \{ width: 50, height: 50/);
+  const on = /jumpChipOn: \{([^}]*\}[^}]*)\}/.exec(code)[1];
+  assert.equal(/width|height/.test(on), false, 'no size change on the active chip');
+  assert.match(on, /scale: 1\.14/);
+});
+
+test('polish 5: after polling stops the banner says pull down; buying stays paused; a pull restarts it', async () => {
+  assert.match(shelves.fallbackBannerCopy(true), /Pull down to try again/);
+  assert.match(shelves.fallbackBannerCopy(false), /Back in a moment/);
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(code, /fallbackBannerCopy\(pollStopped\)/);
+  assert.match(code, /buyPaused=\{!!today\.fallback\}/);
+  assert.match(code, /setPollStopped\(false\);\s*try \{ await onRefresh\(\); \}/);
+  // A late answer after cancel is ignored (alive() is false).
+  const clock = fakeClock();
+  let resolve; let aliveSeen = null;
+  const stop = shelves.startFallbackPoll({ refresh: alive => new Promise(r => { resolve = () => { aliveSeen = alive(); r('ok'); }; }),
+    delayMs: () => 1000, setTimer: clock.set, clearTimer: clock.clear });
+  await clock.advance(1000);
+  stop();
+  resolve();
+  await clock.advance(0);
+  assert.equal(aliveSeen, false);
+  assert.match(code, /if \(alive\(\)\) setToday\(fresh\);/);
+});
+
+test('polish 6: a chip change re-renders the jump bar only', () => {
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.equal(/activeChip/.test(code), false, 'no highlight state in the shelves');
+  assert.match(code, /const JumpBar = memo\(function JumpBar[\s\S]{0,400}const \[active, setActive\] = useState\(0\);/);
+  assert.match(code, /const chips: ShelfChip\[\] = useMemo\(/);
+});
+
+test('polish 7: confetti bursts from behind the reward title', () => {
+  const reveal = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  const confetti = reveal.indexOf('<Confetti color');
+  const plate = reveal.indexOf('<View style={styles.plateWrap}>');
+  const contentEnd = reveal.indexOf('{/* Inside the content');
+  assert.ok(contentEnd > 0 && confetti > contentEnd && confetti < plate, 'confetti renders before (under) the plate, inside the content');
+  assert.equal((reveal.match(/<Confetti color/g) ?? []).length, 1);
 });
