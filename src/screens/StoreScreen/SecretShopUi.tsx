@@ -174,7 +174,8 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
     const k = burst.value;
     const s = 0.6 + 0.65 * k;
     return {
-      opacity: k <= 0 ? 0 : s <= 0.95 ? 1 : Math.max(0, (1.1 - s) / 0.15),
+      // A half-alpha gold on the dim reads brown, so the fade is one quick blink (about 60 ms).
+      opacity: k <= 0 ? 0 : s <= 1.02 ? 1 : Math.max(0, (1.1 - s) / 0.08),
       transform: [{ scale: s }, { rotate: `${k * 24}deg` }],
     };
   });
