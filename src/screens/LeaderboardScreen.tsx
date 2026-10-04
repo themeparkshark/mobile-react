@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
-import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import InformationModal from '../components/InformationModal';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import Topbar from '../components/Topbar';
@@ -31,15 +31,6 @@ const whooshSound = require('../../assets/sounds/whoosh.mp3');
  * Three tabs on a blue rail (four when the Home Hunt board is on); a white
  * pill springs under the chosen one. A dot on Home Hunt means unclaimed results.
  */
-function TabLabel({ label, index, pillX, fontSize }: {
-  readonly label: string; readonly index: number; readonly pillX: SharedValue<number>; readonly fontSize: number;
-}) {
-  const style = useAnimatedStyle(() => ({
-    color: interpolateColor(Math.min(1, Math.abs(pillX.value - index)), [0, 1], [BRAND.navy, BRAND.white]),
-  }));
-  return <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={[{ fontFamily: 'Shark', fontSize }, style]}>{label}</Animated.Text>;
-}
-
 function StandingsTabs({ tabs, active, onChange, dot }: {
   readonly tabs: readonly (StandingsTabSpec | StandingsV2Tab)[]; readonly active: number; readonly onChange: (index: number) => void; readonly dot: boolean;
 }) {
@@ -57,6 +48,19 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
     width: Math.max(0, segment - 8),
     transform: [{ translateX: pillX.value * segment }],
   }), [segment]);
+  // Two-layer labels: white labels on the rail, and a navy copy of the same row
+  // clipped to the pill. The navy follows the pill's edge exactly, with no grey
+  // midpoint frame.
+  const inner = useAnimatedStyle(() => ({ transform: [{ translateX: -pillX.value * segment }] }), [segment]);
+  const contentWidth = Math.max(0, width - 12);
+  const tabContent = (tab: StandingsTabSpec | StandingsV2Tab, color: string, icon: boolean) => (
+    <>
+      {icon ? <GameIcon name={tab.icon} size={size.icon} /> : <View style={{ width: size.icon, height: size.icon }} />}
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: 'Shark', fontSize: size.font, color }}>{tab.label}</Text>
+    </>
+  );
+  const tabStyle = { flex: 1, paddingVertical: 9, alignItems: 'center' as const, justifyContent: 'center' as const,
+    flexDirection: (size.stacked ? 'column' : 'row') as 'column' | 'row', gap: size.stacked ? 0 : 6 };
   return (
     <View onLayout={event => setWidth(event.nativeEvent.layout.width)} style={{
       flexDirection: 'row', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 4, borderRadius: 18,
@@ -71,15 +75,22 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
         return (
           <Pressable key={tab.key} accessibilityRole="tab" accessibilityState={{ selected }}
             onPress={() => { if (!selected) void Haptics.selectionAsync().catch(() => undefined); onChange(index); }}
-            style={{ flex: 1, paddingVertical: 9, alignItems: 'center', justifyContent: 'center', flexDirection: size.stacked ? 'column' : 'row', gap: size.stacked ? 0 : 6 }}>
-            <GameIcon name={tab.icon} size={size.icon} />
-            <TabLabel label={tab.label} index={index} pillX={pillX} fontSize={size.font} />
+            style={tabStyle}>
+            {tabContent(tab, BRAND.white, true)}
             {tab.key === 'hunt' && dot && !selected && (
               <View accessibilityLabel="Unclaimed results" style={{ position: 'absolute', top: 4, right: 10, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white }} />
             )}
           </Pressable>
         );
       })}
+      {width > 0 && (
+        <Animated.View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+          style={[{ position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 14, overflow: 'hidden' }, pill]}>
+          <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: contentWidth, flexDirection: 'row' }, inner]}>
+            {tabs.map(tab => <View key={tab.key} style={tabStyle}>{tabContent(tab, BRAND.navy, false)}</View>)}
+          </Animated.View>
+        </Animated.View>
+      )}
     </View>
   );
 }

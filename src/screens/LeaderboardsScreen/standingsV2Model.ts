@@ -359,11 +359,12 @@ export function emptyCopy(board: StandingsBoardKey, friendsCount: number | null)
  * is small, and winner words appear only for a paid top-three result.
  */
 export function lastWeekCopy(result: LastWeekResult): { readonly headline: string; readonly line: string; readonly reward: string | null } {
-  const headline = `${result.score} ${unitWord('ride_wins', result.score)} last week!`;
+  // The card's header already says LAST WEEK: the lines never repeat it.
+  const headline = `${result.score} ${unitWord('ride_wins', result.score)}!`;
   const paid = result.tickets > 0 && !!result.title;
   // A top-three place that was not paid (a late, reviewed row) never shows a rank.
-  const line = paid ? `${result.title}! #${result.rank} last week`
-    : result.rank <= 3 ? 'Great riding last week!' : `You finished #${result.rank}`;
+  const line = paid ? `${result.title}! #${result.rank}`
+    : result.rank <= 3 ? 'Great riding!' : `You finished #${result.rank}`;
   const reward = paid ? `+${result.tickets} Tickets` : null;
   return { headline, line, reward };
 }

@@ -171,6 +171,8 @@ export default function Stats({ player, hideBalances = false }: {
   /** Another player who is not your friend: balances and park history are private (the kid-safety backend sends 0 or null). */
   readonly hideBalances?: boolean;
 }) {
+  // Standings v2: a stranger's limited profile (server profile_limited) also hides where a kid has been.
+  const limited = (player as PlayerType & { profile_limited?: boolean }).profile_limited === true;
   const all = [
     {
       label: 'Keys',
@@ -184,7 +186,7 @@ export default function Stats({ player, hideBalances = false }: {
     },
     {
       label: 'Parks',
-      value: hideBalances ? null : visibleCount(player.visited_parks_count),
+      value: hideBalances || limited ? null : visibleCount(player.visited_parks_count),
       iconIndex: 2,
     },
     {

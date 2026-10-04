@@ -133,11 +133,14 @@ test('only a server without v2 falls back; an expired session or a gone park nev
 
 test('copy: the Monday card, empty boards and spoken rows', () => {
   assert.deepEqual(plain(model.lastWeekCopy({ rank: 1, score: 14, playersCount: 28, title: 'Ride Champ', tickets: 5 })),
-    { headline: '14 rides last week!', line: 'Ride Champ! #1 last week', reward: '+5 Tickets' });
+    { headline: '14 rides!', line: 'Ride Champ! #1', reward: '+5 Tickets' });
   const low = model.lastWeekCopy({ rank: 20, score: 6, playersCount: 25, title: null, tickets: 0 });
-  assert.deepEqual(plain(low), { headline: '6 rides last week!', line: 'You finished #20', reward: null }, 'leads with rides, no "of 25"');
+  assert.deepEqual(plain(low), { headline: '6 rides!', line: 'You finished #20', reward: null }, 'leads with rides, no "of 25"');
   const unpaid = model.lastWeekCopy({ rank: 1, score: 9, playersCount: 3, title: null, tickets: 0 });
-  assert.deepEqual(plain(unpaid), { headline: '9 rides last week!', line: 'Great riding last week!', reward: null });
+  assert.deepEqual(plain(unpaid), { headline: '9 rides!', line: 'Great riding!', reward: null });
+  for (const copy of [low, unpaid, model.lastWeekCopy({ rank: 1, score: 14, playersCount: 28, title: 'Ride Champ', tickets: 5 })]) {
+    assert.doesNotMatch(`${copy.headline} ${copy.line}`, /last week/i, 'the card header says LAST WEEK once; the lines never repeat it');
+  }
   assert.doesNotMatch(`${unpaid.headline} ${unpaid.line}`, /won|Champ|#\d/, 'no winner words and no rank for an unpaid podium place');
   assert.equal(model.emptyCopy('week', null).title, 'The crown is up for grabs!');
   assert.equal(model.emptyCopy('friends', 0).target, 'Friends');
@@ -224,8 +227,15 @@ test('round 5: your row visibility from geometry, the goal note held while the w
   assert.match(board, /list\.current\?\.recordInteraction\(\);/, 'an activated board wakes its list');
   assert.match(board, /windowSize=\{active \? 9 : 3\}/);
   const screen = read('src/screens/LeaderboardScreen.tsx');
-  assert.match(screen, /interpolateColor\(Math\.min\(1, Math\.abs\(pillX\.value - index\)\)/, 'labels follow the pill');
+  assert.match(screen, /translateX: -pillX\.value \* segment/, 'a navy label row is clipped to the pill and follows its edge');
+  assert.match(screen, /overflow: 'hidden' \}, pill\]/);
+  assert.match(board, /if \(becameActive\) setSnapId/, 'the You card snaps only on the hidden-to-active edge; refreshes spring');
+  const stats = read('src/components/Stats.tsx');
+  // RC: Stats is profile-v2's (hideBalances, visibleCount) plus standings' profile_limited rule.
+  assert.match(stats, /hideBalances \|\| limited \? null : visibleCount\(player\.visited_parks_count\)/, 'a stranger profile hides Parks');
+  assert.match(stats, /Number\.isFinite\(n\) \? n : null/, 'no number can crash toLocaleString (a hidden value drops its tile)');
   const modal = read('src/components/PostWinRewardsModal.tsx');
-  assert.ok(modal.indexOf('{goalNote && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');
+  assert.ok(modal.indexOf('{(noteSlot || goalNote) && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');
+  assert.match(modal, /setNoteSlot\(visible && hasWinNote\(\)\)/, 'its slot is reserved before it lands, so the list never shrinks');
   assert.match(read('src/components/OfflineBanner.tsx'), /ROUTE_EXTRA_TOP[^\n]*Leaderboard: 66/);
 });
