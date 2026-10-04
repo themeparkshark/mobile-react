@@ -65,8 +65,8 @@ function Spot({ rank, row, metric, progress, onPress }: {
             marginTop: -8, flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: first ? 130 : 110, paddingHorizontal: 8, height: 24,
             borderRadius: RADIUS.pill, backgroundColor: row.isMe ? BRAND.gold : BRAND.navy, borderWidth: 2, borderColor: row.isMe ? BRAND.goldLip : BRAND.white,
           }}>
-            <GameIcon name={`medal${rank}` as 'medal1'} size={16} />
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
+            {/* One award language: the crown says the place (r2 art: no medal in the pill too). */}
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
               style={{ fontFamily: 'Shark', fontSize: 13, color: row.isMe ? BRAND.navy : BRAND.white, textTransform: 'uppercase', flexShrink: 1 }}>
               {row.isMe ? 'You' : row.name.slice(0, 12)}
             </Text>
@@ -74,7 +74,7 @@ function Spot({ rank, row, metric, progress, onPress }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 8, height: 24,
             borderRadius: RADIUS.pill, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.gold }}>
             <ScoreIcon metric={metric} size={16} />
-            <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{row.score}</Text>
+            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{row.score}</Text>
           </View>
         </Pressable>
       ) : (
@@ -83,7 +83,7 @@ function Spot({ rank, row, metric, progress, onPress }: {
             borderColor: 'rgba(255,255,255,0.85)', backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', marginTop: first ? 28 : 20 }}>
             <GameIcon name={`medal${rank}` as 'medal1'} size={first ? 34 : 28} />
           </View>
-          <Text style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.white, marginTop: 4, textShadowColor: BRAND.navy, textShadowRadius: 2 }}>OPEN</Text>
+          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.white, marginTop: 4, textShadowColor: BRAND.navy, textShadowRadius: 2 }}>OPEN</Text>
         </View>
       )}
     </Animated.View>

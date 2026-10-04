@@ -23,7 +23,7 @@ import { boardModel, mergePage, mergeRefresh, podiumRows, podiumSignature, seenR
 const FRESH_MS = 45_000;
 const boards = new Map<string, { model: StandingsBoardModel; at: number }>();
 const inFlight = new Map<string, Promise<StandingsBoardModel>>();
-const pagesInFlight = new Map<string, Promise<StandingsBoardModel>>();
+const pagesInFlight = new Map<string, Promise<StandingsBoardModel | null>>();
 let generation = standingsGeneration();
 let owner: number | null = null;
 let session = standingsSession();
@@ -72,31 +72,38 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
 }
 
 /**
- * Infinite scroll: fetch the page after the rows this board has and merge it
- * into the cached board, so a tab switch keeps the place. One request per
- * board at a time. Resolves to the board unchanged when there is nothing more.
+ * Infinite scroll: fetch the page after the rows this board has, reading the
+ * same build as the first page. The merged board is returned, not cached:
+ * the screen commits it (commitBoard) only when it actually shows it, so a
+ * page held while the kid is in Your spot can never land later from the cache
+ * above what they are looking at. One request per board at a time.
  */
-export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined): Promise<StandingsBoardModel | null> {
+export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, from: StandingsBoardModel): Promise<StandingsBoardModel | null> {
   sync(meId);
   const key = keyOf(meId, board, parkId);
-  const current = boards.get(key);
-  if (!current || current.model.nextOffset == null) return Promise.resolve(current?.model ?? null);
+  if (from.nextOffset == null) return Promise.resolve(null);
   const running = pagesInFlight.get(key);
   if (running) return running;
-  const offset = current.model.nextOffset;
-  const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset)
+  const offset = from.nextOffset;
+  const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset, from.build)
     .then(page => {
-      const latest = boards.get(key);
-      // The board was refreshed, reset or signed out meanwhile: drop this page.
-      if (!latest || owner !== meId || latest.model.nextOffset !== offset) return latest?.model ?? current.model;
-      const model = mergePage(latest.model, page, meId);
-      boards.set(key, { model, at: latest.at });
-      prefetchFaces(model.rows.slice(-(page.rows?.length ?? 0)));
-      return model;
+      if (owner !== meId) return null;
+      const incoming = Array.isArray(page?.rows) ? page.rows : [];
+      // Exactly the new rows' faces, the first 20, so a landing page never floods the decoder.
+      prefetchFaces(incoming.slice(0, 20).map(row => boardModel({ rows: [row] }, board, meId).rows[0]).filter(Boolean));
+      return mergePage(from, page, meId);
     })
     .finally(() => { pagesInFlight.delete(key); });
   pagesInFlight.set(key, request);
   return request;
+}
+
+/** The screen showed this board: it becomes the cached one (tab switches keep the place). */
+export function commitBoard(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, model: StandingsBoardModel): void {
+  sync(meId);
+  const key = keyOf(meId, board, parkId);
+  const at = boards.get(key)?.at ?? Date.now();
+  if (owner === meId) boards.set(key, { model, at });
 }
 
 /** Faces for rows about to scroll in, decoded at row size, so a face is ready before its row shows. */

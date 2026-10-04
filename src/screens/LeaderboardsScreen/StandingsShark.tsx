@@ -91,11 +91,15 @@ const Face = memo(function Face({ id, photo, inventory, size }: {
   // Same rule as <Avatar>: a worn outfit wins over a photo.
   const usePhoto = !!photo && !hasDressedShark(inventory);
   const sources = useMemo(() => (usePhoto ? [{ uri: photo as string }] : faceLayerSources(inventory)), [usePhoto, photo, inventory]);
+  const layerKeys = useMemo(() => sources.map(src => (typeof src === 'number' ? `#${src}` : src.uri)), [sources]);
   const layers = useFaceLayers(sources, faceBucket(facePoints(size)));
   return (
     <View style={{ width: s, height: s, borderWidth: 1, borderColor: config.lightBlue, overflow: 'hidden', borderRadius: s / 2, backgroundColor: BRAND.sky }}>
-      {layers == null || (!usePhoto && !layers.length) ? (
-        // Loading (or the art failed): the player's color shark stands in.
+      {layers == null ? (
+        // Still decoding: the plain sky disc (r2 art: never a different-colored shark that then changes identity).
+        null
+      ) : !usePhoto && layers.length < 2 ? (
+        // The art failed: the player's color shark, never a floating outfit.
         <Image source={SHARK_ART[sharkVariant(id)]} style={{ width: s * 1.12, height: s * 1.12, marginTop: s * 0.12, alignSelf: 'center' }}
           resizeMode="contain" fadeDuration={0} />
       ) : usePhoto && !layers.length ? (
@@ -104,7 +108,9 @@ const Face = memo(function Face({ id, photo, inventory, size }: {
       ) : (
         <View style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}>
           {layers.map((ref, index) => (
-            <ExpoImage key={index} source={ref} recyclingKey={`${id}:${index}`} transition={0}
+            // Keyed by player and layer: a recycled cell never reuses an image
+            // view across players (r1: a reused view kept the last frame size).
+            <ExpoImage key={`${id}:${layerKeys[index]}`} source={ref} transition={0}
               contentFit="contain" style={{ width: '100%', height: '100%', position: 'absolute' }} />
           ))}
         </View>

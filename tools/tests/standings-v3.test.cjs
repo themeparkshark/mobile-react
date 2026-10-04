@@ -97,22 +97,42 @@ test('a background refresh keeps the pages already scrolled (no jump back to 50 
   assert.equal(model.mergeRefresh(fresh, otherPark), fresh, 'a different board never leaks rows');
 });
 
-test('the one line: the top 10 when it is 3 rides or fewer away, else pass the next player', () => {
+test('the one next step: top 10 if 3 or fewer away, a weekly goal if 2 or fewer, else the jump past a whole tie block', () => {
   const base = { board: 'week', metric: 'ride_wins' };
-  const at11 = { ...base, me: { rank: 11, score: 10 }, chase: { name: 'p1010', toPass: 1, tied: false }, rows: [{ rank: 10, score: 10 }] };
-  assert.equal(model.topTenGap(at11), 1, 'ties go to whoever got there first, so one more');
-  assert.equal(model.youLine(at11).text, '1 more ride to make the top 10');
-  const leap = { ...base, me: { rank: 30, score: 5 }, chase: { name: 'p1029', toPass: 1, tied: false }, rows: [{ rank: 10, score: 7 }] };
-  assert.equal(model.youLine(leap).text, '3 more rides to make the top 10', 'a short hop over many players reads as the top 10');
-  const far = { ...base, me: { rank: 14, score: 16 }, chase: { name: 'p1013', toPass: 2, tied: false }, rows: [{ rank: 10, score: 20 }] };
-  assert.equal(model.youLine(far).text, '2 more rides to pass p1013', '5 rides from the top 10: pass the next player instead');
-  const notLoaded = { ...base, me: { rank: 140, score: 2 }, chase: { name: 'p1139', toPass: 1, tied: false }, rows: [] };
-  assert.equal(model.youLine(notLoaded).text, '1 more ride to pass p1139');
-  assert.equal(model.topTenGap({ me: { rank: 4, score: 30 }, rows: [{ rank: 10, score: 3 }] }), null, 'already in the top 10');
-  const tied = { ...base, me: { rank: 11, score: 10 }, chase: { name: 'p1010', toPass: 1, tied: true }, rows: [{ rank: 10, score: 10 }] };
-  assert.equal(model.youLine(tied).state, 'tied', 'a tie keeps its own line');
-  const board = model.boardModel(firstPage(), 'week', 5);
-  assert.match(model.youLine(board).text, /^2 more rides to pass p1119$/, 'the screen passes rows, so the line sees #10');
+  const chase = (over = {}) => ({ name: 'p1010', toPass: 1, tied: false, passes: 1, targetRank: 10, rank: 10, ...over });
+  const at11 = { ...base, me: { rank: 11, score: 10 }, chase: chase(), rows: [{ rank: 10, score: 10 }] };
+  assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', text: '1 more ride to make the top 10!' });
+  const leap = { ...base, me: { rank: 30, score: 5 }, chase: chase({ name: 'p1029', passes: 1, targetRank: 29 }), rows: [{ rank: 10, score: 7 }] };
+  assert.equal(model.nextStep(leap).kind, 'jump', 'one ride passes someone; the top 10 is 3 away');
+  const block = { ...base, me: { rank: 130, score: 21 }, chase: chase({ name: 'dinoking', tied: true, passes: 23, targetRank: 107 }), rows: [{ rank: 10, score: 37 }] };
+  const tie = model.nextStep(block);
+  assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', text: '1 more ride jumps you past 23 players!' });
+  assert.doesNotMatch(tie.text, /dinoking|got there first/, 'never names who beat you');
+  const two = model.nextStep({ ...block, chase: chase({ toPass: 2, passes: 5, targetRank: 125 }) });
+  assert.equal(two.text, '2 more rides jump you past 5 players!');
+  const goal = model.nextStep({ ...block, me: { rank: 130, score: 7 }, chase: chase({ toPass: 3, passes: 40, targetRank: 90 }),
+    goals: [{ at: 3, xp: 10, reached: true }, { at: 8, xp: 25, reached: false }, { at: 15, xp: 50, reached: false }] });
+  assert.deepEqual(plain(goal), { kind: 'goal', plus: 1, target: '+25 XP', text: '1 more ride: weekly goal! +25 XP' });
+  const leader = model.nextStep({ ...base, me: { rank: 1, score: 50 }, chase: null });
+  assert.equal(leader.kind, 'leader');
+  const home = model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, false);
+  assert.deepEqual(plain(home), { kind: 'join', canRide: false, text: 'Next park day: win 1 ride!' });
+  assert.equal(model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, true).canRide, true);
+  const parsed = model.boardModel(firstPage({ chase: { id: 1119, screen_name: 'p1119', rank: 119, score: 381, to_pass: 1, tied: true, passes: 12, target_rank: 108 } }), 'week', 5);
+  assert.deepEqual(plain([parsed.chase.passes, parsed.chase.targetRank]), [12, 108]);
+  const old = model.boardModel(firstPage(), 'week', 5);
+  assert.deepEqual(plain([old.chase.passes, old.chase.targetRank]), [1, 119], 'older servers: one player, their rank');
+});
+
+test('the tab it opens on: friends racing, else your week, else your collection', () => {
+  const friends = (n) => ({ rows: [{ isMe: true, score: 0 }, ...Array.from({ length: n }, () => ({ isMe: false, score: 2 }))] });
+  assert.equal(model.defaultStandingsTab({ me: { score: 0 } }, friends(2)), 'friends');
+  assert.equal(model.defaultStandingsTab({ me: { score: 4 } }, friends(1)), 'week');
+  assert.equal(model.defaultStandingsTab({ me: { score: 0 } }, friends(1)), 'all_time');
+  assert.equal(model.defaultStandingsTab(null, friends(3)), null, 'unknown until both boards are in');
+  const screen = read('src/screens/LeaderboardScreen.tsx');
+  assert.match(screen, /const pick = tabParam \? null : defaultStandingsTab\(/, 'a deep link still wins');
+  assert.match(screen, /if \(live && pick && !touched\.current\) setActiveTab/, 'never yanks a tab the kid chose');
 });
 
 test('the board: one pill, plain rows, a slim pinned row, no ribbon, goals behind a tap', () => {
@@ -132,26 +152,34 @@ test('the board: one pill, plain rows, a slim pinned row, no ribbon, goals behin
 test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces, perf probe off by default', () => {
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /createAnimatedComponent\(FlashList<ListItem>\)/);
-  assert.match(board, /getItemType=\{\(item: ListItem\) => item\.type\}/, 'rows, dividers and placeholders recycle separately');
+  assert.match(board, /getItemType=\{typeOfItem\}/, 'rows, dividers and placeholders recycle separately');
+  assert.match(board, /const typeOfItem = \(item: ListItem\) => item\.type;/, 'list props are module constants');
   assert.match(board, /estimatedItemSize=\{ROW_HEIGHT\}/);
   assert.match(board, /shouldPrefetch\(lastVisible\.current, itemsRef\.current, firstVisible\.current\)\) moreRef\.current\('scroll'\)/);
   assert.match(board, /onEndReached=/, 'a fling past the prefetch point still loads');
   assert.match(board, /InteractionManager\.runAfterInteractions\(\(\) => moreRef\.current\('idle'\)\)/, 'page 2 is fetched while the kid looks at the podium');
   assert.match(board, /\}, \[active, firstPageOnly\]\);/, 'also for a board served from the warm cache');
-  assert.match(board, /item\.type === 'skeleton'\) return <SkeletonRow \/>/);
+  assert.match(board, /item\.type === 'skeleton'\) return <SkeletonRow first=\{item\.key === 'skeleton-0'\} \/>/);
+  assert.match(board, /accessibilityLabel=\{first \? 'Loading more players' : undefined\}/, 'VoiceOver hears the list is loading');
+  assert.match(board, /item\.type === 'retry'\) return <RetryRow onPress=\{\(\) => moreRef\.current\('tap'\)\} \/>/, 'after 3 failures: tap to load more');
+  assert.match(board, /retryAt\.current = Date\.now\(\) \+ Math\.min\(8000, 1000 \* 2 \*\* \(failures\.current - 1\)\);/, 'failed pages back off');
   const shark = read('src/screens/LeaderboardsScreen/StandingsShark.tsx');
   const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
-  assert.match(shark, /recyclingKey=/, 'a recycled row never flashes the last face');
+  assert.match(shark, /key=\{`\$\{id\}:\$\{layerKeys\[index\]\}`\}/, 'r2: layer views keyed by player and art, never reused across players');
+  assert.match(shark, /!usePhoto && layers\.length < 2 \? \(/, 'no skin decoded: the color shark, never a floating outfit');
   assert.match(shark, /useFaceLayers\(sources, faceBucket\(facePoints\(size\)\)\)/, 'layers drawn from bitmaps decoded at the drawn size');
   const layers = read('src/screens/LeaderboardsScreen/faceLayers.ts');
   assert.match(layers, /ExpoImage\.loadAsync\(\{ uri \}, \{ maxWidth: px \}\)/);
-  assert.match(layers, /const MAX_REFS = \d+;/, 'a bounded cache');
+  assert.match(layers, /const MAX_BYTES = 24 \* 1024 \* 1024;/, 'a cache bounded in bytes');
+  assert.match(layers, /const MAX_RUNNING = 4;/, 'at most 4 decodes at once');
   assert.match(store, /prefetchLayers\(faceLayerSources\(inv\), facePoints\(40\)\)/, 'the next page decodes its faces before its rows show');
+  assert.match(store, /prefetchFaces\(incoming\.slice\(0, 20\)/, 'exactly the new rows, the first 20 (r2: an empty page decodes nothing)');
   assert.doesNotMatch(shark, /<Avatar /, 'rows skip the badge-heavy Avatar');
   assert.match(store, /export function loadMore\(/);
   assert.match(store, /pagesInFlight/, 'one page request per board at a time');
   assert.match(store, /mergeRefresh\(boardModel\(dto, board, meId\), boards\.get\(key\)\?\.model\)/);
-  assert.match(store, /latest\.model\.nextOffset !== offset\) return/, 'a page that lands after a refresh or sign-out is dropped');
+  assert.match(store, /if \(owner !== meId\) return null;/, 'a page that lands after a sign-out is dropped');
+  assert.match(store, /getStandingsPage\(board, board === 'all_time' \? parkId \?\? null : null, offset, from\.build\)/, 'later pages read the first page\'s build');
   const perf = read('src/screens/LeaderboardsScreen/standingsPerf.tsx');
   assert.match(perf, /process\.env\.EXPO_PUBLIC_STANDINGS_PERF === '1'/, 'bundle-time constant, off unless set');
   assert.match(board, /\{STANDINGS_PERF_ON && active && <StandingsPerfLog/);
@@ -172,9 +200,13 @@ test('a page never lands above what the kid is looking at', () => {
   assert.equal(model.shouldPrefetch(gap - 5, items, gap - 12), true);
   assert.equal(model.safeToInsert(999, model.listItems(model.boardModel(firstPage({ next_offset: null }), 'week', 5))), true);
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(board, /if \(canInsert\(\)\) setModel\(next\);\s+else \{ heldPage\.current = next;/);
+  assert.match(board, /if \(canInsert\(\)\) \{\s+apply\(next\);/);
+  assert.match(board, /heldPage\.current = next;/);
+  assert.match(board, /\/\/ A new board, park or refresh: a page held for the old one must never land on it\.\s+heldPage\.current = null;/, 'r2: a held page never lands on another board');
+  const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
+  assert.doesNotMatch(store.slice(store.indexOf('export function loadMore'), store.indexOf('export function commitBoard')), /boards\.set\(/, 'a page is cached only once the screen shows it');
   assert.match(board, /if \(heldPage\.current && canInsertRef\.current\(\)\)/, 'a held page lands when the kid scrolls back up');
-  assert.match(board, /onEndReached=\{\(\) => \{ if \(activeRef\.current && canInsert\(\)\)/);
+  assert.match(board, /const onEndReached = useCallback\(\(\) => \{ if \(activeRef\.current && canInsert\(\)\) moreRef\.current\('end'\); \}/);
   assert.match(board, /Date\.now\(\) >= jumpingUntil\.current && safeToInsert\(/, 'nothing lands while show-my-row is animating');
   assert.match(board, /jumpingUntil\.current = Date\.now\(\) \+ 1200;\s+if \(myIndex >= 0\) list\.current\?\.scrollToIndex/);
   assert.doesNotMatch(board, /pendingAnchor|anchorShift/);
@@ -189,5 +221,5 @@ test('face bitmaps come in a few pixel sizes, never the 1353 px art', () => {
   assert.equal(fl.faceBucket(52.8, 3), 192, 'your pinned row shares that decode');
   assert.equal(fl.faceBucket(86.4, 3), 288, 'podium');
   assert.equal(fl.faceBucket(144, 3), 480, 'the shark card');
-  assert.equal(fl.faceBucket(1000, 3), 576, 'capped');
+  assert.equal(fl.faceBucket(1000, 3), 768, 'capped at the card portrait size');
 });

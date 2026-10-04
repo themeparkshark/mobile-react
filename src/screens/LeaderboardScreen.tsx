@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -20,9 +20,9 @@ import { AuthContext } from '../context/AuthProvider';
 import { usePresentationBadges } from '../hooks/usePresentationQueue';
 import { BRAND, GameIcon } from '../ui';
 import StandingsBoardV2 from './LeaderboardsScreen/StandingsBoardV2';
-import { prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
+import { cachedBoard, loadBoard, prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
 import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standingsDemo';
-import { initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
+import { defaultStandingsTab, initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
@@ -136,11 +136,24 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
   const tabParam = (route.params as { tab?: string } | undefined)?.tab;
   const [huntOn, setHuntOn] = useState(() => homeHuntEnabled(cachedHomeHuntWeek()));
   const tabs = standingsV2Tabs(huntOn);
-  const [activeTab, setActiveTab] = useState(() => initialStandingsV2Tab(tabParam, tabs));
+  // Open on the board where your spot means something (defaultStandingsTab), unless a link chose one.
+  const smartTab = () => {
+    const pick = tabParam ? null : defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null);
+    return pick ? Math.max(0, tabs.findIndex(tab => tab.key === pick)) : initialStandingsV2Tab(tabParam, tabs);
+  };
+  const [activeTab, setActiveTab] = useState(smartTab);
+  const touched = useRef(!!tabParam);
   const { playSound } = useContext(SoundEffectContext);
   const resultsWaiting = usePresentationBadges('standings').length > 0;
   useEffect(() => {
     let live = true;
+    // Nothing cached yet: pick the board once both weekly boards arrive, if the kid has not chosen one.
+    if (!touched.current && !defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null)) {
+      void Promise.all([loadBoard(meId, 'week', null), loadBoard(meId, 'friends', null)]).then(([week, friends]) => {
+        const pick = defaultStandingsTab(week, friends);
+        if (live && pick && !touched.current) setActiveTab(Math.max(0, standingsV2Tabs(false).findIndex(tab => tab.key === pick)));
+      }).catch(() => undefined);
+    }
     void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
     // The other boards load in the background so the first switch is instant.
     prefetchBoards(meId, [{ board: 'week' }, { board: 'friends' }, { board: 'all_time' }]);
@@ -161,6 +174,7 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
   return (
     <StandingsShell>
       <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
+        touched.current = true;
         if (activeTab !== index) playSound(whooshSound);
         setActiveTab(index);
       }} />

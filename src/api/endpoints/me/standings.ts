@@ -64,11 +64,13 @@ export interface StandingsPageDto {
   readonly next_offset: number | null;
   readonly players_count: number;
   readonly rows: readonly StandingsRowDto[];
+  /** The board build this page read (the one asked for, or the newest when that one expired). */
+  readonly build?: string | null;
 }
 
-export async function getStandingsPage(board: StandingsBoardKey, parkId: number | null | undefined, offset: number): Promise<StandingsPageDto> {
+export async function getStandingsPage(board: StandingsBoardKey, parkId: number | null | undefined, offset: number, build?: string | null): Promise<StandingsPageDto> {
   const { data } = await client.get<StandingsPageDto>('/me/standings', {
-    params: { board, offset, ...(board === 'all_time' && parkId ? { park: parkId } : {}) },
+    params: { board, offset, ...(build ? { build } : {}), ...(board === 'all_time' && parkId ? { park: parkId } : {}) },
   });
   return data;
 }

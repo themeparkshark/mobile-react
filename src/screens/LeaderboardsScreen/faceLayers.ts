@@ -14,14 +14,47 @@ import { Image, PixelRatio } from 'react-native';
 
 export type LayerSource = { readonly uri: string } | number;
 
-const MAX_REFS = 240;
+/** Decoded bytes kept (about 24 MB: ~140 layers at the 192 px row size). */
+const MAX_BYTES = 24 * 1024 * 1024;
+/** Decodes running at once; the rest wait their turn, so a landing page never floods the JS thread. */
+const MAX_RUNNING = 4;
 const refs = new Map<string, ImageRef>();
+const sizes = new Map<string, number>();
+let bytes = 0;
 const pending = new Map<string, Promise<ImageRef | null>>();
+let running = 0;
+const waiting: (() => void)[] = [];
+
+function turn(): Promise<void> {
+  if (running < MAX_RUNNING) { running += 1; return Promise.resolve(); }
+  return new Promise(resolve => waiting.push(() => { running += 1; resolve(); }));
+}
+
+function done(): void {
+  running = Math.max(0, running - 1);
+  waiting.shift()?.();
+}
+
+function remember(key: string, ref: ImageRef, px: number): void {
+  const size = Math.round(px * px * 1.13 * 4);
+  refs.set(key, ref);
+  sizes.set(key, size);
+  bytes += size;
+  while (bytes > MAX_BYTES && refs.size > 1) {
+    const oldest = refs.keys().next().value as string;
+    refs.delete(oldest);
+    bytes -= sizes.get(oldest) ?? 0;
+    sizes.delete(oldest);
+    // No explicit release(): a face still on screen may hold this bitmap, and
+    // releasing it would blank that face. Hermes GC frees it once unused.
+  }
+}
 
 /** Pixel width for a face drawn `points` wide, in 96 px buckets so a few sizes share one decode. */
 export function faceBucket(points: number, scale = PixelRatio.get()): number {
   const px = Math.max(1, Math.ceil(points * scale));
-  return Math.min(576, Math.ceil(px / 96) * 96);
+  // 768 covers the 120 pt card portrait at 3x (the hero face stays sharp).
+  return Math.min(768, Math.ceil(px / 96) * 96);
 }
 
 function uriOf(source: LayerSource): string | null {
@@ -54,16 +87,9 @@ export function loadLayer(source: LayerSource, px: number): Promise<ImageRef | n
   if (hit) return Promise.resolve(hit);
   const running = pending.get(key);
   if (running) return running;
-  const request = ExpoImage.loadAsync({ uri }, { maxWidth: px })
-    .then(ref => {
-      refs.set(key, ref);
-      while (refs.size > MAX_REFS) {
-        const oldest = refs.keys().next().value;
-        if (oldest === undefined) break;
-        refs.delete(oldest);
-      }
-      return ref;
-    })
+  const request = turn()
+    .then(() => ExpoImage.loadAsync({ uri }, { maxWidth: px }).finally(done))
+    .then(ref => { remember(key, ref, px); return ref; })
     .catch(() => null)
     .finally(() => { pending.delete(key); });
   pending.set(key, request);
@@ -79,5 +105,7 @@ export function prefetchLayers(sources: readonly LayerSource[], points: number):
 /** Tests and sign-out. */
 export function resetFaceLayers(): void {
   refs.clear();
+  sizes.clear();
+  bytes = 0;
   pending.clear();
 }
