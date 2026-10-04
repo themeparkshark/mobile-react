@@ -1,4 +1,4 @@
-import type { FrightTonight } from '../../../api/endpoints/fright/types';
+import type { FrightShopStall, FrightTonight } from '../../../api/endpoints/fright/types';
 
 /**
  * What the map needs to run the Fin-ister Nights takeover. ExploreScreen builds
@@ -35,6 +35,8 @@ export interface FrightMapInput {
   readonly onHauntPress?: (spotKey: string) => void;
   /** The live encounter's critter was tapped (encounter.key). */
   readonly onEncounterPress?: (encounterKey: string) => void;
+  /** The Halloween Shop stall was tapped (opens the shop, or the "Only at Fin-ister Nights" teaser). */
+  readonly onShopPress?: (stall: FrightShopStall) => void;
   /**
    * Screen rects (points) of HUD the haunt chips keep clear of, beyond the map's
    * own right rail (which Map measures): a joystick, the energy meter.

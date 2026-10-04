@@ -19,7 +19,9 @@ type ModalState =
   | { type: 'poor'; item: ItemType; shortfall: number }
   | { type: 'confirm'; item: ItemType; text: string }
   | { type: 'success'; item: ItemType; setReward?: ShopSetReward | null }
-  | { type: 'failed'; item: ItemType };
+  | { type: 'failed'; item: ItemType }
+  /** The server refused: Halloween Shop gear sells only at a Fin-ister event (403 only_at_event). */
+  | { type: 'away'; item: ItemType };
 
 /** Player-facing currency names (docs/economy-glossary.md). */
 export function currencyLabel(name: string, amount = 2): string {
@@ -121,8 +123,10 @@ export default function usePurchaseItem(options: PurchaseOptions = {}) {
     } catch (error: unknown) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       // The server says exactly how short the player is; otherwise nothing was charged.
-      const data = (error as { response?: { data?: { code?: string; shortfall?: number } } })?.response?.data;
-      if (data?.code === 'not_enough_currency') {
+      const data = (error as { response?: { data?: { code?: string; shortfall?: number; only_at_event?: boolean } } })?.response?.data;
+      if (data?.only_at_event) {
+        setModal({ type: 'away', item });
+      } else if (data?.code === 'not_enough_currency') {
         void refreshPlayer();
         setModal({ type: 'poor', item, shortfall: Math.max(1, Number(data.shortfall) || 1) });
       } else {
@@ -223,6 +227,11 @@ function dialogFor(modal: ModalState, actions: {
       return { title: 'It’s yours!', message: `${modal.item.name} is in your closet.`,
         buttons: [{ text: 'Go to my closet', onPress: () => RootNavigation.navigate('Inventory') }, { text: 'Keep shopping', style: 'cancel' }], body: <ItemArt item={modal.item} />, haptic: 'success' };
     }
+    case 'away':
+      return {
+        title: 'Halloween Shop', message: 'Only at Fin-ister Nights. Come to the event during event hours to shop. You weren’t charged.',
+        buttons: [{ text: 'Got it' }], body: <ItemArt item={modal.item} />, haptic: 'warning',
+      };
     case 'failed':
       return {
         title: 'That didn’t work', message: `You still have all your ${currencyLabel(modal.item.currency.name)}. Check your internet and try again.`,

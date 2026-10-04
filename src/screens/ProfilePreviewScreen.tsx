@@ -36,6 +36,7 @@ export const previewPlayer: PlayerType = {
   username: 'themeparkshark',
   verified_at: '',
   visited_parks_count: 1,
+  title: 'Churro Collection Scout',
 };
 
 export default function ProfilePreviewScreen() {

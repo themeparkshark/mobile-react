@@ -31,6 +31,7 @@ import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import TitleSheet from '../components/profile/TitleSheet';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
 import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar from '../components/Topbar';
@@ -59,6 +60,8 @@ export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
+  // Dev captures only (constant-folded out of release): open the title sheet on launch.
+  const [titleSheet, setTitleSheet] = useState(() => __DEV__ && !!process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET);
   const [loading, setLoading] = useState<boolean>(true);
   const { player, refreshPlayer } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
@@ -269,6 +272,8 @@ export default function ProfileScreen() {
 
   return (
     <Wrapper>
+      <TitleSheet visible={titleSheet} title={player.title} onClose={() => setTitleSheet(false)}
+        onChanged={() => refreshPlayer()} />
       <Topbar>
         <TopbarColumn stretch={false}>
           <Button
@@ -500,7 +505,7 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ marginTop: 12 }}>
-                <TitlePill title={player.title} trophy={<ProfileEventChip />} />
+                <TitlePill title={player.title} trophy={<ProfileEventChip />} onPress={() => setTitleSheet(true)} />
               </View>
               <View style={{ paddingTop: 10 }}>
               <View

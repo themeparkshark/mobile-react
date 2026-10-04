@@ -108,6 +108,8 @@ import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSp
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText, gameAlert } from '../ui';
+import type { FrightShopStall } from '../api/endpoints/fright/types';
+import { AWAY_LINE, HALLOWEEN_SHOP_NAME, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
 import HelpButton from '../components/help/HelpButton';
@@ -569,6 +571,10 @@ function ExploreScreen() {
     const timer = setInterval(() => { off = !off; setStressOff(off); }, off ? 15_000 : 30_000);
     return () => clearInterval(timer);
   }, []);
+  const openHalloweenShop = useCallback((stall: FrightShopStall) => {
+    if (stallAction(stall) === 'open') RootNavigation.navigate('Store', { store: stall.store_id });
+    else gameAlert(HALLOWEEN_SHOP_NAME, `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason)}`, [{ text: 'Got it' }]);
+  }, []);
   const frightMap = useMemo<FrightMapInput | null>(() => !stressOff && frightNight.tonight /* mounted for the whole event-park session: markers never churn (MapLibre insert crash); active/phase fade them */
     && frightNight.eventPark ? {
       tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,
@@ -577,8 +583,10 @@ function ExploreScreen() {
       onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
       // Chaos Hour: tapping the encounter sprite tries the catch (the engine checks range, side and quiet).
       onEncounterPress: () => { void frightEngine.catchEncounter(); },
+      // The Halloween Shop stall: only players at the event during event hours get in; everyone else gets the teaser.
+      onShopPress: openHalloweenShop,
       tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
-    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightEngine.catchEncounter, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+    } : null, [stressOff, openHalloweenShop, frightEngine.openSheetAt, frightEngine.ambient, frightEngine.catchEncounter, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');

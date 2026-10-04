@@ -6,16 +6,20 @@
  * too). Two coin shops side by side ("Store" and "Shark Shop") confuse kids,
  * so when the Shark Shop exists the legacy "Store" is left off the row. The
  * Secret Store (VIP) and any other global store still show, after the Shark
- * Shop.
+ * Shop. The event-only Halloween Shop never shows here (its stall on the
+ * Fin-ister event map is the only way in), even if an older server lists it.
  */
+import { isEventShop } from '../fright/halloweenShop';
+
 export const SHARK_SHOP_NAME = 'Shark Shop';
 export const LEGACY_STORE_NAME = 'Store';
 
-type StoreLike = { readonly id: string | number; readonly name: string; readonly is_secret_store: boolean };
+type StoreLike = { readonly id: string | number; readonly name: string; readonly is_secret_store: boolean; readonly slug?: string | null };
 
 export function profileStores<T extends StoreLike>(stores: readonly T[]): { sharkShop: T | null; others: T[] } {
   const sharkShop = stores.find((s) => s.name === SHARK_SHOP_NAME) ?? null;
-  const others = stores.filter((s) => s !== sharkShop && !(sharkShop && !s.is_secret_store && s.name === LEGACY_STORE_NAME));
+  const others = stores.filter((s) => s !== sharkShop && !isEventShop(s)
+    && !(sharkShop && !s.is_secret_store && s.name === LEGACY_STORE_NAME));
   // Secret (VIP) stores last, so the free shops come first.
   others.sort((a, b) => Number(a.is_secret_store) - Number(b.is_secret_store));
   return { sharkShop, others };
