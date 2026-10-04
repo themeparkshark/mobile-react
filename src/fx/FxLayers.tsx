@@ -137,6 +137,8 @@ export function useFxCuePlayer() {
   ref.current = playSound;
   return useCallback((cue: Cue | undefined) => {
     if (!cue) return;
+    // Dev builds log every cue with a timestamp, so captures can prove sound and haptic sync.
+    if (__DEV__) console.log(`[fx-cue] ${Date.now()} rate=${cue.rate} haptic=${cue.haptic ?? 'none'}`);
     ref.current?.(cue.file, { rate: cue.rate, volume: cue.volume });
     haptic(cue.haptic);
   }, []);
