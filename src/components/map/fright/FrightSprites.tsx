@@ -754,8 +754,11 @@ export const EncounterCritter = memo(function EncounterCritter({ asset, chaos, c
         <BlurMask blur={10} style="normal" />
       </Circle>
       <Group transform={[{ translateX: inset }, { translateY: inset }, { scale }]}>
-        <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} opacity={sheet && animated ? 1 : 0} />
-        <SkImage image={still} x={0} y={0} width={fw / 2} height={fh / 2} fit="contain" opacity={!(sheet && animated) && still ? 1 : 0} />
+        {/* Feathered like the reef cast: a frame's fog never ends in a hard band at its edge. */}
+        <SoftEllipse x={0} y={0} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
+          <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} opacity={sheet && animated ? 1 : 0} />
+          <SkImage image={still} x={0} y={0} width={fw / 2} height={fh / 2} fit="contain" opacity={!(sheet && animated) && still ? 1 : 0} />
+        </SoftEllipse>
       </Group>
     </FrightCanvas>
   );

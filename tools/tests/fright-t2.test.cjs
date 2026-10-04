@@ -168,3 +168,11 @@ test('Case File title sits on the art\'s blank nameplate (measured band, cover-f
   assert.equal(Math.round(dh * (a.b - a.t)), 63);
   assert.equal(Math.round(x0 + dw * a.l), 29);
 });
+
+test('Lantern card Case File thumbnails: title on the art nameplate (same measured band as the reveal), art-shaped tile', () => {
+  const src = read('src/components/fright/FrightCardScreen.tsx');
+  assert.match(src, /import \{ CASE_FILE_ART, caseFilePlate \} from '\.\/CaseFileReveal';/);
+  assert.match(src, /const THUMB_PLATE = caseFilePlate\(THUMB_W, THUMB_H\);/);
+  assert.match(src, /filePlate: \{ position: 'absolute', top: THUMB_PLATE\.top, height: THUMB_PLATE\.height,/);
+  assert.match(src, /filePlateTitle: \{ fontFamily: 'Shark', fontSize: 13, color: NIGHT\.ink/);
+});

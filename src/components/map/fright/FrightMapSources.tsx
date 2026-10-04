@@ -22,7 +22,7 @@ import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
 import {
-  allocate, boundsCenter, cameraCenter, canvasProps, chipKeys, hauntChipLabel, hauntChipParts, onScreen, screenX, screenY, SHOW_WINDOW_MS, stableMarkerSpots, type HudRect, boundsFromVisible, critterLod, critterWant, movingProps, nearView, rankSpots, spotProps,
+  allocate, boundsCenter, cameraCenter, canvasProps, chipKeys, hauntChipLabel, hauntChipParts, onScreen, screenX, screenY, SHOW_WINDOW_MS, stableMarkerSpots, type HudRect, boundsFromVisible, critterLod, reefSlots, movingProps, nearView, rankSpots, spotProps,
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
@@ -164,7 +164,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     return layers && Number.isFinite(n) && n > 0 ? Math.min(8, Math.round(n)) : windowWant(h.fx);
   };
   const windowAlloc = allocate(haunts.map(h => [h.key, windowsOf(h)] as const), animate ? caps.frightWindows : 0);
-  const critterAlloc = allocate(reefs.map(r => [r.key, critterWant(r.fx)] as const), animate ? caps.frightCritters : 0);
+  const critterAlloc = allocate(reefs.map(r => [r.key, reefSlots(r.fx)] as const), animate ? caps.frightCritters : 0);
   const propSpots = ranked.map(k => byKey.get(k)!).filter(s => canvasProps(spotProps(s.fx)).length > 0);
   const batAlloc = allocate(propSpots.filter(s => spotProps(s.fx).includes('bats')).map(s => [s.key, 2] as const), animate ? caps.frightBats : 0);
   const propAlloc = allocate(propSpots.map(s => [s.key, movingProps(spotProps(s.fx)).length] as const), animate ? caps.frightProps : 0);
@@ -334,7 +334,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const wander = Math.max(18, Math.min(REEF_MAX_WANDER, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
         const glyph = lod === 'glyph' || st.tier === 'calm';
-        const slots = critterWant(reef.fx);
+        const slots = reefSlots(reef.fx);
         const hot = warm(reef.key);
         const sheets = cast.map(slug => (hot ? scareactorAsset(assets, slug) : null));
         return (

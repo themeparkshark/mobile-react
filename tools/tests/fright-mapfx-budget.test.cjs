@@ -213,3 +213,15 @@ test('Map re-applies a focus request made before the map first drew', () => {
   assert.match(map, /focusCoordinate\?\.requestId, reducedMotion, covered\]\)/,
     'a mount-time focus (previews, deep links) is dropped by the native camera until the map has drawn');
 });
+
+test('reef slots: the whole cast up to 4 (a 4-performer reef shows its 4th), fixed per payload', () => {
+  assert.equal(fb.REEF_MAX_SLOTS, 4);
+  assert.equal(fb.reefSlots({ critters: 3, scareactors: ['a', 'b', 'c', 'd'] }), 4);
+  assert.equal(fb.reefSlots({ critters: 3, scareactors: ['a', 'b', 'c'] }), 3);
+  assert.equal(fb.reefSlots({ critters: 2, scareactors: ['a', 'b', 'c', 'd', 'e'] }), 4);
+  assert.equal(fb.reefSlots({ critters: 3 }), 3);
+  assert.equal(fb.reefSlots(null), 2);
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/map/fright/FrightMapSources.tsx'), 'utf8');
+  assert.match(src, /const slots = reefSlots\(reef\.fx\);/);
+  assert.match(src, /allocate\(reefs\.map\(r => \[r\.key, reefSlots\(r\.fx\)\] as const\)/);
+});

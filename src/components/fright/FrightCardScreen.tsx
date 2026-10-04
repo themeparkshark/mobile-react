@@ -25,6 +25,7 @@ import { formatMinutes, nightDateLabel } from '../../services/fright/dates';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
 import ArtImage from './ArtImage';
+import { CASE_FILE_ART, caseFilePlate } from './CaseFileReveal';
 import { MarqueeBody } from './MarqueeRecap';
 
 export interface FrightCardParams {
@@ -260,11 +261,10 @@ export default function FrightCardScreen() {
                 accessibilityLabel={`Case File ${file.number}. ${file.title}. ${file.body}`}>
                 {file.image ? (
                   <>
-                    {/* Card front art; its title plate is blank, so the title is overlaid. */}
+                    {/* Card front art; its nameplate is blank, so the title sits on it (the year is on the art's medallion). */}
                     <ArtImage uri={file.image} fit="cover" style={StyleSheet.absoluteFill} />
                     <View style={styles.filePlate}>
-                      <Text style={styles.fileTitle} numberOfLines={2}>{file.title}</Text>
-                      <Text style={styles.fileYear}>{file.year_label}</Text>
+                      <Text style={styles.filePlateTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{file.title}</Text>
                     </View>
                   </>
                 ) : (
@@ -315,6 +315,11 @@ export default function FrightCardScreen() {
   );
 }
 
+/** Case File art tiles: 160 pt wide (156 inside the border), the art's 480 x 719 shape. */
+const THUMB_W = 156;
+const THUMB_H = Math.round(THUMB_W * CASE_FILE_ART.h / CASE_FILE_ART.w);
+const THUMB_PLATE = caseFilePlate(THUMB_W, THUMB_H);
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: NIGHT.midnight },
   sticky: { backgroundColor: NIGHT.midnight, paddingHorizontal: 16, paddingBottom: 6, zIndex: 2,
@@ -357,8 +362,11 @@ const styles = StyleSheet.create({
   headerTitle: { textAlign: 'center' },
   frame: { position: 'absolute', top: -18, width: RING + 36, height: RING + 36 },
   ringFramed: { borderColor: 'transparent' },
-  filePlate: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4 },
-  fileArt: { minHeight: 220, justifyContent: 'flex-end', overflow: 'hidden' },
+  // The art tile is the card's own shape; the title sits on the art's measured nameplate.
+  filePlate: { position: 'absolute', top: THUMB_PLATE.top, height: THUMB_PLATE.height, left: THUMB_PLATE.left, right: THUMB_PLATE.right,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  filePlateTitle: { fontFamily: 'Shark', fontSize: 13, color: NIGHT.ink, textAlign: 'center' },
+  fileArt: { height: THUMB_H + 4, minHeight: undefined, padding: 0, overflow: 'hidden' },
   slotRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.2)' },
   slotName: { fontFamily: 'Shark', fontSize: 15, color: NIGHT.white },
   pins: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

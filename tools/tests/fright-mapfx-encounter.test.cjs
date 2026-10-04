@@ -115,3 +115,11 @@ test('always-mounted encounter: the appear row plays when a new encounter shows,
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /spawnKey=\{encounterOnScreen && encounter \? encounter\.key : null\}/);
 });
+
+test('the encounter sprite is feathered like the reef cast (no hard fog band at the frame edge)', () => {
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  const start = sprites.indexOf('export const EncounterCritter');
+  const body = sprites.slice(start, sprites.indexOf('\n});', start));
+  assert.match(body, /<SoftEllipse x=\{0\} y=\{0\} w=\{fw \/ 2\} h=\{fh \/ 2 \+ 2\} inner=\{0\.7\}>/);
+  assert.ok(body.indexOf('<SoftEllipse') < body.indexOf('<SheetFrame'), 'the sheet draws inside the feather');
+});
