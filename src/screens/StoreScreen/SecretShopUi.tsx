@@ -153,21 +153,53 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
     flare.value = withDelay(300, withSequence(withTiming(1, { duration: 160 }), withDelay(260, withTiming(0, { duration: 520 }))));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
+  const burst = useSharedValue(0);
+  useEffect(() => {
+    if (!trigger || still) return;
+    burst.value = 0;
+    burst.value = withDelay(300, withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   const flareStyle = useAnimatedStyle(() => ({ opacity: flare.value, transform: [{ scale: 1 + 0.02 * flare.value }] }));
+  // The drawn gold starburst (pipeline art, charcoal outline) pops at full strength and scales out.
+  const burstStyle = useAnimatedStyle(() => ({
+    opacity: burst.value <= 0 ? 0 : burst.value < 0.6 ? 1 : (1 - burst.value) / 0.4,
+    transform: [{ scale: 0.3 + 1.1 * burst.value }, { rotate: `${burst.value * 30}deg` }],
+  }));
   return (
     <>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0830' }, dimStyle]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Animated.Image source={BURST} style={[{ width: 240, height: 236 }, burstStyle]} />
+        {UNLOCK_SPARKS.map(i => <UnlockSpark key={i} i={i} burst={burst} />)}
+      </View>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
     </>
   );
+}
+
+const BURST = require('../../../assets/fx/burst-gold.webp');
+const UNLOCK_SPARKS = [0, 1, 2, 3, 4, 5, 6];
+
+/** Drawn spark stars thrown outward with the unlock burst. */
+function UnlockSpark({ i, burst }: { i: number; burst: { value: number } }) {
+  const a = (i / UNLOCK_SPARKS.length) * Math.PI * 2 + 0.3;
+  const style = useAnimatedStyle(() => {
+    const k = burst.value;
+    return {
+      opacity: k <= 0 ? 0 : k < 0.7 ? 1 : (1 - k) / 0.3,
+      transform: [{ translateX: Math.cos(a) * 150 * k }, { translateY: Math.sin(a) * 120 * k }, { scale: 0.6 + 0.6 * (1 - k) }, { rotate: `${k * 200}deg` }],
+    };
+  });
+  return <Animated.Image source={STAR} style={[{ position: 'absolute', width: 26, height: 26 }, style]} />;
 }
 
 /** Fixed star spots (fractions of the box) so every render and capture match. */
 /** Stars stay out of the title and button column (the left half), and off the pills (top right). */
 const MOTES = [
   [0.6, 0.2, 3], [0.7, 0.33, 2], [0.95, 0.3, 2.5], [0.56, 0.42, 2], [0.86, 0.46, 3], [0.64, 0.58, 2],
-  [0.93, 0.6, 2.5], [0.58, 0.72, 2], [0.04, 0.95, 2], [0.95, 0.8, 2.5], [0.76, 0.24, 1.5], [0.82, 0.66, 1.5],
+  [0.93, 0.6, 2.5], [0.58, 0.72, 2], [0.7, 0.88, 2], [0.95, 0.8, 2.5], [0.76, 0.24, 1.5], [0.82, 0.66, 1.5],
 ] as const;
 
 function Mote({ i, still }: { i: number; still: boolean }) {

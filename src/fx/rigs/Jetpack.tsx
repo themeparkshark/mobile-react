@@ -114,7 +114,7 @@ function GroundPool({ t, kick, box }: RigProps) {
   const style = useAnimatedStyle(() => {
     const b = Math.max(0, boostAt(t.value, kick.value));
     return {
-      opacity: 0.32 + 0.06 * Math.sin(t.value / 57) + 0.4 * b,
+      opacity: 0.5 + 0.06 * Math.sin(t.value / 57) + 0.45 * b,
       // Counter the float, so the light stays on the floor.
       transform: [{ translateY: -jetpackFloat(t.value, kick.value, box.h) }, { scaleX: 1 + 0.25 * b }],
     };

@@ -192,13 +192,15 @@ export function momentAt(t: number, kick: number, period: number, length: number
   const lengthMs = length * period;
   const sinceKick = t - kick;
   if (sinceKick >= 0 && sinceKick < lengthMs) return { p: sinceKick / lengthMs, cycle: -1 };
-  const local = t - firstAt;
+  // A tap re-phases the timer: the next automatic moment is a full period after the tap's moment
+  // ends, so the piece never does its trick twice in a row (game feel round 4).
+  const origin = sinceKick >= 0 ? Math.max(firstAt, kick + lengthMs + period) : firstAt;
+  const local = t - origin;
   if (local < 0) return { p: -1, cycle: 0 };
   const cycle = Math.floor(local / period);
   const start = cycle === 0 ? 0 : hash01(cycle) * jitter * period;
   const d = local - cycle * period - start;
-  // A timer moment right after a tap moment is skipped (no double play).
-  if (d < 0 || d >= lengthMs || (sinceKick >= 0 && sinceKick < lengthMs + 600)) return { p: -1, cycle };
+  if (d < 0 || d >= lengthMs) return { p: -1, cycle };
   return { p: d / lengthMs, cycle };
 }
 

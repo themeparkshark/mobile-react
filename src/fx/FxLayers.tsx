@@ -7,7 +7,7 @@ import { FxBox, RigProps } from './FxStage';
 import { FxKey, FxLod, WornFx, coverBox, containBox, wornFx } from './registry';
 import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
 import { JetpackFront, jetpackFloat } from './rigs/Jetpack';
-import { MidwayFireworksScene } from './rigs/MidwayFireworks';
+import { MidwayFireworksScene, SceneFlashOnShark } from './rigs/MidwayFireworks';
 import { PlasmaBladeFront, bladeLean } from './rigs/PlasmaBlade';
 import { ReefHaloBack, ReefHaloFront } from './rigs/ReefHalo';
 import { SaucerFront } from './rigs/Saucer';
@@ -57,6 +57,12 @@ export function FxScene({ fx, ...shared }: Shared & { fx: WornFx }) {
       <FxBox>{({ width, height }) => <Scene {...shared} box={coverBox(width, height)} />}</FxBox>
     </View>
   );
+}
+
+/** A worn scene's light on the shark (in front of it): the fireworks flash. */
+export function FxSceneLight({ fx, ...shared }: Shared & { fx: WornFx }) {
+  if (fx.scene !== 'midway_fireworks') return null;
+  return <FxBox>{({ width, height }) => <SceneFlashOnShark {...shared} box={containBox(width, height)} />}</FxBox>;
 }
 
 /**

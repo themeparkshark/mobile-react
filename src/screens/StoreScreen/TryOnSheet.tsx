@@ -66,7 +66,7 @@ const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
 const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
-const SHEET_SETTLE_MS = 450;
+const SHEET_SETTLE_MS = 300;
 
 type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
@@ -217,9 +217,11 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     const byId = new Map<number, Wearable>(pieces.map(p => [p.id, asWearable(p)]));
     byId.set(item.id, { id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
       no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null });
-    // While the bought piece falls in, its slot is empty (never a flash of the old hat).
-    const wearing = ids.filter(id => !(dropping && id === item.id)).map(id => byId.get(id)).filter((w): w is Wearable => !!w);
-    return previewLook(player?.inventory, wearing, 'player', dropping && itemSlot ? [itemSlot] : []);
+    // While the bought piece falls in, its slot is empty (never a flash of the old hat). A Secret piece
+    // was already on the shark in the try-on: it stays on through the buy (art panel round 4).
+    const empties = dropping && !secret;
+    const wearing = ids.filter(id => !(empties && id === item.id)).map(id => byId.get(id)).filter((w): w is Wearable => !!w);
+    return previewLook(player?.inventory, wearing, 'player', empties && itemSlot ? [itemSlot] : []);
   }, [player?.inventory, ids.join(','), item?.id, dropping]);
 
   // Stage reactions: a wiggle when a piece goes on, a hop with an absorb pop when coins land, a hop on wear.
@@ -450,7 +452,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone={secret ? 'night' : 'sky'} still={still}
                     backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} play={scenePlay} startDelay={SHEET_SETTLE_MS} /> : undefined}
                     sky={secret ? SECRET_THEME.sky : undefined} plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}>
-                    <LandFlash color={glow} still={still} trigger={landed} />
+                    {!secret && <LandFlash color={glow} still={still} trigger={landed} />}
                     {secret && <UnlockBeat trigger={landed} still={still} />}
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (

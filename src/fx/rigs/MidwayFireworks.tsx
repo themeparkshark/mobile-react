@@ -62,7 +62,7 @@ function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
     const fall = Math.max(0, b - 0.3);
     return {
       // Gone by alpha while it is still bright and blooming outward: never a dim grey copy (art panel round 3).
-      opacity: b < 0.4 ? 1 : Math.max(0, 1 - (b - 0.4) / 0.18),
+      opacity: b < 0.36 ? 1 : Math.max(0, 1 - (b - 0.36) / 0.12),
       transform: [{ translateY: fall * fall * box.h * 0.09 }, { scale: 0.15 + 0.85 * grow }, { scaleY: 1 + 0.18 * fall }, { rotate: `${b * 10}deg` }],
     };
   });
@@ -93,6 +93,25 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
         width: flashSize, height: flashSize, tintColor: s.flash }, flash]} />
     </>
   );
+}
+
+/**
+ * The fireworks light the shark: each bloom washes the near side in its colour
+ * for a beat (light cast, game feel round 4). Drawn in front of the shark.
+ */
+export function SceneFlashOnShark({ t, kick, box, lod }: RigProps) {
+  const size = box.w * 0.9;
+  const style = useAnimatedStyle(() => {
+    if (lod !== 'full') return { opacity: 0 };
+    let f = 0;
+    for (let i = 0; i < SHELLS.length; i++) {
+      const b = shellAt(t.value, kick.value, SHELLS[i]).burst;
+      if (b >= 0) f = Math.max(f, Math.max(0, 1 - b * 3.5));
+    }
+    return { opacity: 0.22 * f };
+  });
+  return <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + box.w * 0.52 - size / 2, top: box.y + box.h * 0.12,
+    width: size, height: size, tintColor: '#ffe6b8' }, style]} />;
 }
 
 /**

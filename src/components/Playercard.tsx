@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FxFloat, FxRigLayers, FxScene, FxShadow, useFxEquipSound, useFxMomentCue, wornFx } from '../fx/FxLayers';
+import { FxFloat, FxRigLayers, FxScene, FxSceneLight, FxShadow, useFxMomentCue, wornFx } from '../fx/FxLayers';
 import { useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
 import { FX_MOMENT, FxLod } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -148,7 +148,6 @@ export default function Playercard({
   const fxKick = useFxKick();
   const [stageH, setStageH] = useState(0);
   const sounds = fxSound ?? popLayers;
-  useFxEquipSound(fx, sounds, fxAnnounce);
   const { cue: fxCue, touch: fxTouch, play: fxPlayCue } = useFxMomentCue(sounds);
   // A tap replays the worn pieces' moments with their cues (taps during the first 60% of a
   // moment are ignored, so spam-taps never freeze a pose). A buy replays them as a Secret
@@ -175,7 +174,24 @@ export default function Playercard({
   const unlockTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => unlockTimers.current.forEach(clearTimeout), []);
   const lookKey = [fx.scene, ...fx.rigs.map(r => r.key)].join(',');
-  useEffect(() => { fxTouch(); wakeFx(); }, [lookKey]);
+  // Equipping a Secret piece plays its moment once, 400 ms after it goes on, with the moment's cue as
+  // the only sound and one haptic (game feel round 4: no separate equip whoosh stacked on top).
+  // A piece that left and came back within 3 s (the shop's buy drop) is not a new equip.
+  const prevKeys = useRef<Set<string> | null>(null);
+  const goneAt = useRef(new Map<string, number>());
+  useEffect(() => {
+    fxTouch(); wakeFx();
+    const now = new Set(lookKey ? lookKey.split(',').filter(Boolean) : []);
+    const at = Date.now();
+    if (prevKeys.current) for (const k of prevKeys.current) if (!now.has(k)) goneAt.current.set(k, at);
+    const fresh = prevKeys.current && [...now].find(k => !prevKeys.current!.has(k) && at - (goneAt.current.get(k) ?? -1e9) > 3000);
+    prevKeys.current = now;
+    if (!fresh || !fxRunning) return;
+    fxKick.value = fxClock.value + 400;
+    const timer = setTimeout(() => fxPlayCue(FX_MOMENT[fresh as keyof typeof FX_MOMENT].cue, true), 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookKey]);
   useEffect(() => { if (fxPlay) playFx('unlock'); }, [fxPlay]);
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;
@@ -386,6 +402,7 @@ export default function Playercard({
               ) : null;
             })}
             {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="front" t={fxClock} kick={fxKick} cue={fxCue} lod={lod} />}
+            {grounded && fx.scene && showBackground && <FxSceneLight fx={fx} t={fxClock} kick={fxKick} lod={lod} />}
             {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
             {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
               <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
@@ -395,6 +412,7 @@ export default function Playercard({
             {(onItemTap || (fxTapToPlay && (fx.any || !!onFxPlay))) && (
               <Pressable
                 onPress={handleSharkTap}
+                onPressIn={() => { if (__DEV__) console.log(`[fx-tap] ${Date.now()} press-in`); }}
                 accessibilityLabel={onItemTap ? undefined : 'Your shark. Tap to see your Secret pieces move.'}
                 style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
               />

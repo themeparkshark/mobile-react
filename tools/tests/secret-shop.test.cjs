@@ -116,6 +116,9 @@ test('moments fire 350 ms after a piece appears, replay on a tap, and vary per c
   // A tap at 3000 ms plays it again right away, and the timer moment that follows soon after is skipped.
   assert.ok(Math.abs(fx.momentAt(3600, 3000, 6000, 0.2).p - 0.5) < 1e-9);
   assert.equal(fx.momentAt(3600, 3000, 6000, 0.2).cycle, -1);
+  // After a tap the timer re-phases: no automatic moment until a full period after the tap's moment ends.
+  for (let t = 4200; t < 3000 + 1200 + 6000; t += 50) assert.equal(fx.momentAt(t, 3000, 6000, 0.2).p, -1, `no repeat at ${t}`);
+  assert.ok(fx.momentAt(3000 + 1200 + 6000 + 10, 3000, 6000, 0.2).p >= 0);
   // Later cycles shift by a seeded jitter (same every run), never by Math.random.
   const starts = [1, 2, 3, 4].map(c => { for (let t = 350 + c * 6000; t < 350 + (c + 1) * 6000; t += 10) if (fx.momentAt(t, NO, 6000, 0.2).p >= 0) return t; return null; });
   assert.ok(starts.every(t => t !== null));
@@ -224,7 +227,7 @@ test('equip cues use Chris\'s existing SFX only (no new AI audio without Dustin\
   const files = [...layers.matchAll(/require\('\.\.\/\.\.\/assets\/sounds\/([^']+)'\)/g)].map(m => m[1]);
   assert.ok(files.length >= 6);
   for (const file of files) assert.ok(fs.existsSync(path.join(root, 'assets/sounds', file)), file);
-  assert.match(layers, /const seen = useRef<Set<string> \| null>\(onOpen \? new Set\(\) : null\);/, 'opening a screen is silent unless it is the try-on');
+  assert.match(src('src/components/Playercard.tsx'), /fxKick\.value = fxClock\.value \+ 400;/, 'equipping plays the moment once, 400 ms later, as the only cue');
   assert.doesNotMatch(src('src/fx/rigs/GhostLantern.tsx') + src('src/fx/rigs/Saucer.tsx') + src('src/fx/rigs/MidwayFireworks.tsx')
     + src('src/fx/rigs/PlasmaBlade.tsx') + src('src/fx/rigs/Jetpack.tsx'), /shadow(Radius|Opacity|Color)/, 'no shadow on any animated view');
   assert.doesNotMatch(src('src/fx/rigs/PlasmaBlade.tsx') + src('src/fx/rigs/Jetpack.tsx') + src('src/fx/rigs/MidwayFireworks.tsx'), /blur=\{/,
@@ -288,7 +291,7 @@ test('no Animated style ever passes an undefined transformOrigin (RN Animated tu
 });
 
 test('Reduce Motion is read inside the shark stage and every tile, so no screen can forget it', () => {
-  assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);[\s\S]{0,900}const lod: FxLod = still \|\| reduced \? 'still'/);
+  assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);[\s\S]{0,2000}const lod: FxLod = still \|\| reduced \? 'still'/);
   const solo = src('src/fx/FxSolo.tsx');
   assert.equal((solo.match(/const reduced = useReducedGameMotion\(\);/g) || []).length, 2);
   // A look with nothing to draw runs no clock.

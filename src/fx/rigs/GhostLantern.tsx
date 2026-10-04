@@ -42,7 +42,8 @@ export function flickerAt(t: number): number {
 export function ghostPose(p: number, cycle: number): { x: number; y: number; s: number; o: number; front: boolean } {
   'worklet';
   if (p < 0) return { x: 0, y: 0, s: 0.2, o: 0, front: true };
-  if (p < 0.18) { const k = p / 0.18; return { x: 0, y: -0.25 * k, s: 0.3 + 0.7 * k, o: Math.min(1, k * 2.5), front: true }; }
+  // Pops out already visible (a tap answers on its first frame, game feel round 4).
+  if (p < 0.18) { const k = p / 0.18; return { x: 0, y: -0.25 * k, s: 0.55 + 0.45 * k, o: 0.7 + 0.3 * k, front: true }; }
   if (p < 0.82) {
     const k = (p - 0.18) / 0.64;
     const th = k * Math.PI * 2;
@@ -72,6 +73,8 @@ function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean | 'b
     const m = still ? { p: STILL_P, cycle: 0 } : momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350);
     // In a tile the loop always goes right, into the open space (never over the corner tag).
     const g = ghostPose(m.p, front === 'both' ? 1 : m.cycle);
+    // In a tile it rises and rests to the right of the lantern, clear of the corner tag.
+    if (front === 'both') g.x = Math.max(g.x, 0.45);
     return { opacity: front === 'both' || g.front === front ? g.o : 0, transform: [{ translateX: g.x * l.width }, { translateY: g.y * l.height }, { scale: g.s }] };
   });
   return (
