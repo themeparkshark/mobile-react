@@ -31,8 +31,8 @@ import { MarqueeBody } from './MarqueeRecap';
 export interface FrightCardParams {
   readonly eventSlug: string;
   readonly playerId?: number | null;
-  /** 'pins': scroll to the pins section (reward reveal pins line). */
-  readonly section?: 'pins' | null;
+  /** 'pins': scroll to the pins section (reward reveal pins line); 'files': to the Case Files. */
+  readonly section?: 'pins' | 'files' | null;
   /** A night to feature with its own Share row at the top (Marquee "Share from your Lantern"). */
   readonly nightOn?: string | null;
 }
@@ -69,15 +69,17 @@ export default function FrightCardScreen() {
   const glow = useRef(new Animated.Value(0.6)).current;
   const scroll = useRef<ScrollView>(null);
   const [pinsY, setPinsY] = useState<number | null>(null);
+  const [filesY, setFilesY] = useState<number | null>(null);
   const scrolledToPins = useRef(false);
 
-  // Fright pins open here (never PinCollections): scroll once to the pins section.
+  // Fright pins open here (never PinCollections): scroll once to the pins (or Case Files) section.
   useEffect(() => {
-    if (params.section !== 'pins' || pinsY == null || scrolledToPins.current) return;
+    const y = params.section === 'pins' ? pinsY : params.section === 'files' ? filesY : null;
+    if (y == null || scrolledToPins.current) return;
     scrolledToPins.current = true;
-    const timer = setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, pinsY - 8), animated: true }), 250);
+    const timer = setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }), 250);
     return () => clearTimeout(timer);
-  }, [params.section, pinsY]);
+  }, [params.section, pinsY, filesY]);
 
   useEffect(() => {
     if (!params.eventSlug) { setFailed(true); return; }
@@ -253,7 +255,7 @@ export default function FrightCardScreen() {
           ))}
         </View>
 
-        <Text style={styles.section}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</Text>
+        <Text style={styles.section} onLayout={event => setFilesY(event.nativeEvent.layout.y)}>{`Case Files ${card.case_files_found} of ${card.case_files_total}`}</Text>
         {files.found.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
             {files.found.map(file => (

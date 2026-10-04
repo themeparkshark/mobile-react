@@ -191,7 +191,7 @@ test('SHIP-9 fright pins open the Deep Lantern pins section (FrightCard), never 
   assert.equal(JSON.stringify(open.deepLanternParams('usf-2026', { section: 'pins' })), '{"eventSlug":"usf-2026","section":"pins"}');
   const screen = read('src/components/fright/FrightCardScreen.tsx');
   assert.match(screen, /onLayout=\{event => setPinsY\(event\.nativeEvent\.layout\.y\)\}/);
-  assert.match(screen, /params\.section !== 'pins'/);
+  assert.match(screen, /params\.section === 'pins' \? pinsY : params\.section === 'files' \? filesY : null/);
   // No fright surface outside the dev capture flow links PinCollections.
   const dir = path.join(root, 'src/components/fright');
   for (const file of fs.readdirSync(dir).filter(name => /\.tsx?$/.test(name))) {

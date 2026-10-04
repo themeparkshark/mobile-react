@@ -540,6 +540,7 @@ function ExploreScreen() {
     const timer = setTimeout(() => {
       const slug = frightNight.tonight?.event?.slug;
       if (target === 'card' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug });
+      if (target === 'card-files' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug, section: 'files' });
       if (target === 'profile') (navigation as any).navigate('Profile');
       if (target === 'collection') (navigation as any).navigate('SetCollection');
     }, 25_000);

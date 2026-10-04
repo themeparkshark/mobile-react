@@ -6,7 +6,7 @@
 import * as RootNavigation from '../../RootNavigation';
 import type { FrightCardParams } from './FrightCardScreen';
 
-export function deepLanternParams(eventSlug: string, extra: { readonly section?: 'pins' | null; readonly nightOn?: string | null } = {}): FrightCardParams {
+export function deepLanternParams(eventSlug: string, extra: { readonly section?: 'pins' | 'files' | null; readonly nightOn?: string | null } = {}): FrightCardParams {
   return {
     eventSlug,
     ...(extra.section ? { section: extra.section } : {}),
@@ -14,6 +14,6 @@ export function deepLanternParams(eventSlug: string, extra: { readonly section?:
   };
 }
 
-export function openDeepLantern(eventSlug: string, extra: { readonly section?: 'pins' | null; readonly nightOn?: string | null } = {}): void {
+export function openDeepLantern(eventSlug: string, extra: { readonly section?: 'pins' | 'files' | null; readonly nightOn?: string | null } = {}): void {
   RootNavigation.navigate('FrightCard', deepLanternParams(eventSlug, extra));
 }
