@@ -80,6 +80,50 @@ export function isChaosHour(startsAt: string, endsAt: string): boolean {
   return a <= b ? a <= chaos && chaos < b : a <= chaos || chaos < b;
 }
 
+/** Chaos Hour from the server's flag when sent, else from the window's park times. */
+export function encounterChaos(enc: { readonly chaos_hour?: boolean | null; readonly starts_at: string; readonly ends_at: string }): boolean {
+  return typeof enc.chaos_hour === 'boolean' ? enc.chaos_hour : isChaosHour(enc.starts_at, enc.ends_at);
+}
+
+/** Seconds the chaos loop plays after any spawn (MAP_FX_SPEC). */
+export const CHAOS_SPAWN_S = 20;
+
+/**
+ * The encounter's frame (UI thread). `rows` = [idle, appear, chaos] row
+ * indexes (-1 when missing). On spawn `appear` plays once; then `chaos`
+ * during Chaos Hour and for the first 20 s (full only), else `idle`.
+ */
+export function encounterPose(t: number, age: number, rows: readonly number[], frames: number, fps: number,
+  chaos: boolean, full: boolean): { row: number; frame: number } {
+  'worklet';
+  const idle = rows[0] >= 0 ? rows[0] : 0;
+  const loop = Math.floor(Math.max(0, t) * fps) % frames;
+  if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.min(frames - 1, Math.floor(age * fps)) };
+  if (full && rows[2] >= 0 && (chaos || (age >= 0 && age < 20))) return { row: rows[2], frame: loop };
+  return { row: idle, frame: loop };
+}
+
+/** Skid-fin sparks: 8 frames at 16 fps, sliding 80 pt/s for 1.5 s across the encounter (MAP_FX_SPEC). */
+export const SPARK_RUN_S = 1.5;
+export const SPARK_SPEED_PT = 80;
+
+/** Where a spark pass is at `age` seconds: offset from its start along its heading, frame, opacity. */
+export function sparkPass(age: number, frames: number, fps: number): { d: number; frame: number; opacity: number } {
+  'worklet';
+  if (age < 0 || age >= SPARK_RUN_S) return { d: 0, frame: 0, opacity: 0 };
+  const fade = Math.min(1, age / 0.15, (SPARK_RUN_S - age) / 0.25);
+  return { d: age * SPARK_SPEED_PT, frame: Math.floor(age * fps) % Math.max(1, frames), opacity: fade };
+}
+
+/** Lagoon Glow-Down: the start (ms) of the show performance running now, or null. */
+export function activeShowStart(times: readonly string[] | null | undefined, serverNowMs: number, windowMs: number): number | null {
+  for (const iso of times ?? []) {
+    const start = Date.parse(iso);
+    if (Number.isFinite(start) && serverNowMs >= start && serverNowMs < start + windowMs) return start;
+  }
+  return null;
+}
+
 /* ── Window flicker timelines (MAP_FX_SPEC section 2, Haunts) ─────────── */
 
 /** Seconds a timeline covers before it repeats. */

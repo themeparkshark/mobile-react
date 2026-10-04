@@ -32,7 +32,7 @@ test('FrightMapSources never mounts or unmounts a Marker: no early return, no co
   assert.doesNotMatch(body, /&& <Marker/, 'no conditional Marker');
   assert.doesNotMatch(body, /\.map\([^)]*\) => \{[^}]*return null;/s, 'no Marker dropped inside a map()');
   assert.match(body, /stable\.reefs\.map/);
-  assert.match(body, /stable\.props\.map/);
+  assert.match(body, /stable\.props(\.filter\([^\n]*\))?\.map/, 'prop markers come from the fixed list');
   assert.match(body, /stable\.haunts\.map/);
   assert.match(body, /<Marker key="fe"/, 'one encounter Marker, always mounted');
   // Opacity-only: no stand-in swap either. Every spot keeps its real sprite tree; hidden = ShowWhen opacity 0.

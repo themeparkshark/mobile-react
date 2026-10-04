@@ -71,6 +71,18 @@ export const TUTORIAL_CARDS: readonly { readonly key: string; readonly title: st
   { key: 'lantern', title: 'The Deep Lantern', line: 'Your whole season on one card.' },
 ];
 
+/** Card 4 when Chaos Hour (the encounter) is switched on server-side. */
+export const CHAOS_CARD = { key: 'chaos', title: 'Chaos Hour', line: 'Watch for Chuckles at 11:11 PM.' } as const;
+
+/**
+ * The 5 cards for tonight: card 4 becomes Chaos Hour ONLY when
+ * config.encounters_enabled is true (never promise an encounter that is off).
+ */
+export function tutorialCards(encountersEnabled: boolean | null | undefined): readonly { readonly key: string; readonly title: string; readonly line: string }[] {
+  if (!encountersEnabled) return TUTORIAL_CARDS;
+  return TUTORIAL_CARDS.map(card => card.key === 'marquee' ? CHAOS_CARD : card);
+}
+
 /**
  * Where card copy goes on the tutorial hero (720x1080): the clear sky band
  * between the moon and stars above and the shark's head below, as fractions

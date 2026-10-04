@@ -345,7 +345,7 @@ export function windowWant(fx: FrightSpot['fx']): number {
   return Number.isFinite(n) ? Math.max(2, Math.min(6, Math.round(n))) : 3;
 }
 
-export const KNOWN_PROPS = ['bats', 'eyes', 'pumpkin', 'skid-fins', 'lantern', 'fog-thick'] as const;
+export const KNOWN_PROPS = ['bats', 'eyes', 'pumpkin', 'skid-fins', 'lantern', 'fog-thick', 'lagoon-glow'] as const;
 export type FrightProp = typeof KNOWN_PROPS[number];
 
 /** A spot's props, known kinds only, in a stable order, no duplicates. */
@@ -356,7 +356,12 @@ export function spotProps(fx: FrightSpot['fx']): FrightProp[] {
 
 /** Props that move and cost budget (fog-thick is a still mist). */
 export function movingProps(props: readonly FrightProp[]): FrightProp[] {
-  return props.filter(p => p !== 'fog-thick' && p !== 'bats');
+  return props.filter(p => p !== 'fog-thick' && p !== 'bats' && p !== 'lagoon-glow');
+}
+
+/** Props drawn by the spot props canvas (the lagoon glow has its own marker, at showtimes only). */
+export function canvasProps(props: readonly FrightProp[]): FrightProp[] {
+  return props.filter(p => p !== 'lagoon-glow');
 }
 
 /* ── Night show yield ─────────────────────────────────────────────────── */

@@ -11,6 +11,8 @@ import { overlayTop } from '../../services/fright/layout';
 import FrightSheet from './FrightSheet';
 import CaseFileReveal from './CaseFileReveal';
 import { FrightCoachMark, FrightExitCard, FrightToast } from './FrightOverlays';
+import RewardReveal from './RewardReveal';
+import SidePicker from './SidePicker';
 import MarqueeRecap from './MarqueeRecap';
 import RankCard from './RankCard';
 import FrightTutorial from './tutorial/FrightTutorial';
@@ -33,15 +35,20 @@ export default function FrightLayer({ night, engine, top = 132 }: {
         {!engine.toast && <FrightCoachMark coach={engine.coach} onClose={engine.dismissCoach} top={lineTop} />}
       </View>
       {night.modeOn && <FrightSheet night={night} engine={engine} />}
-      <RankCard prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
+      {/* One modal at a time (engine.modal): rank, Case File, rewards, team pick. */}
+      <RankCard key={engine.modal?.kind === 'rank' ? engine.modal.id : 'rank'} prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
       <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} eventSlug={night.tonight?.event?.slug ?? null} />
-      <FrightExitCard visible={!!engine.recapOffer}
+      <RewardReveal rewards={engine.modal?.kind === 'rewards' ? engine.modal.rewards : null} onClose={engine.closeModal} />
+      <SidePicker name={engine.modal?.kind === 'side' ? engine.modal.name : null} onClose={engine.closeModal}
+        onPick={side => { void engine.pickSide(side); }} />
+      <FrightExitCard visible={!!engine.recapOffer && !engine.modal}
         onOpen={() => engine.recapOffer && engine.openMarquee(engine.recapOffer.slug, engine.recapOffer.nightOn)}
         onClose={engine.dismissRecapOffer} />
       <MarqueeRecap target={engine.marquee} onClose={engine.closeMarquee} />
       {engine.tutorial && night.modeOn && (
         <FrightTutorial mode={engine.tutorial} title={night.title} whatsNew={night.tonight?.event?.whats_new}
-          spooky={engine.spooky} hero={engine.art.tutorial} onDone={engine.finishTutorial} />
+          spooky={engine.spooky} hero={engine.art.tutorial} onDone={engine.finishTutorial}
+          encountersEnabled={night.tonight?.config?.encounters_enabled === true} />
       )}
     </>
   );

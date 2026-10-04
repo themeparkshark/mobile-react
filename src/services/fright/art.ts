@@ -66,7 +66,8 @@ export function frameFor(card: { readonly ten_in_one: boolean; readonly complete
 export function pinImage(slot: { readonly earned: boolean; readonly pin_art?: { image: string | null; locked: string | null } | null;
   readonly pin?: { image: string | null; earned_on: string | null } | null }): { uri: string | null; earned: boolean } {
   const earned = slot.earned || !!slot.pin?.earned_on;
-  const uri = earned ? url(slot.pin_art?.image) ?? url(slot.pin?.image) : url(slot.pin_art?.locked);
+  // Real pin items (slot.pin.image) win once earned; pin_art is the fallback and the locked silhouette.
+  const uri = earned ? url(slot.pin?.image) ?? url(slot.pin_art?.image) : url(slot.pin_art?.locked);
   return { uri, earned };
 }
 

@@ -88,7 +88,9 @@ export function ambientSpriteBudget(caps: AliveCaps): number {
   // night term counts the bigger of the two, never both.
   const fright = frightSpriteBudget(caps);
   const day = caps.clouds * 3 + caps.birds * 2 + caps.waterGlints + fright;
-  const night = caps.fireflies + Math.max(caps.skyShowBursts * caps.sparksPerBurst, fright);
+  // The Lagoon Glow-Down (one sprite) is the only fright sprite that plays with the show.
+  const lagoonGlow = caps.frightCritters > 0 ? 1 : 0;
+  const night = caps.fireflies + Math.max(caps.skyShowBursts * caps.sparksPerBurst + lagoonGlow, fright);
   return Math.max(day, night) + caps.pulsingRides + caps.idleCoins * 3 + caps.limitedShimmer * 3 +
     caps.sleepyRides * 3 + caps.trail + (caps.hz ? caps.ghosts : 0);
 }

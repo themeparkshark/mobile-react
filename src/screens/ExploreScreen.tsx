@@ -527,8 +527,10 @@ function ExploreScreen() {
       player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
       cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
       onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
+      // Chaos Hour: tapping the encounter sprite tries the catch (the engine checks range, side and quiet).
+      onEncounterPress: () => { void frightEngine.catchEncounter(); },
       tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
-    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightEngine.catchEncounter, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
