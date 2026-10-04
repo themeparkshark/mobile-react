@@ -189,3 +189,12 @@ test('the player shark is one always-mounted Marker: parked (hidden, no touch) w
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
   assert.match(marker, /hidden = false/);
 });
+
+test('Marker re-sends its anchor after layout (iOS drops an anchor that arrives on a zero frame)', () => {
+  const marker = read('src/components/map/Marker.tsx');
+  assert.match(marker, /anchor=\{laidOut \? a : \{ x: a\.x, y: a\.y \+ ANCHOR_NUDGE \}\}/);
+  assert.match(marker, /<Pressable onLayout=\{onLayout\}/);
+  assert.match(marker, /<View onLayout=\{onLayout\}/);
+  // Hooks run before the invalid-coordinate early return.
+  assert.ok(marker.indexOf('useState(false)') < marker.indexOf('return null'));
+});
