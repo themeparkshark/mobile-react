@@ -29,7 +29,7 @@ import { getLook, putLook } from '../../api/endpoints/me/look';
 import { ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
+import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
 import { wearItem } from './inventoryQueue';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -43,11 +43,13 @@ const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
 
-export default function SetCompleteReveal({ reward, set, still, onDone }: {
+export default function SetCompleteReveal({ reward, set, still, onDone, onShown }: {
   readonly reward: ShopSetReward | null;
   readonly set: ShopSetSummary | null;
   readonly still: boolean;
   readonly onDone: () => void;
+  /** The reveal is on screen (the shelf drops its hand-off cover). */
+  readonly onShown?: () => void;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -137,10 +139,10 @@ export default function SetCompleteReveal({ reward, set, still, onDone }: {
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onDone} statusBarTranslucent>
+    <Modal visible transparent animationType="none" onRequestClose={onDone} onShow={onShown} statusBarTranslucent>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={FadeIn.duration(still ? 120 : 260)} style={styles.fill}>
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a2350' }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>

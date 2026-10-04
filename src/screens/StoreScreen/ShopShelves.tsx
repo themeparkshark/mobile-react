@@ -47,7 +47,7 @@ import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW, type GameIconNam
 import SetCompleteReveal from './SetCompleteReveal';
 import ShopTile, { TileArt } from './ShopTile';
 import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, PieceChip, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
+import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
 
 function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
   const still = useReducedGameMotion();
@@ -289,7 +289,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   return (
     <View style={[styles.hero, { height: HERO_H + (tease ? 44 : 0), borderColor: glow }]}>
       {/* House blue like the panels: the lit plinth on a night stage is the one bright object. */}
-      <LinearGradient colors={[SHOP_SURFACE.card, SHOP_SURFACE.panel]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
         accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
@@ -517,8 +517,21 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     setTimeout(() => setRevealGate(true), 450);
   }, []);
   // The try-on is a modal too: it reports closed from iOS onDismiss (fully gone), so the reveal
-  // presents at once with no idle shelf between the landing and the payoff.
-  const closeTryOn = useCallback(() => { setOpen(null); }, []);
+  // presents at once. With a reveal waiting, a navy cover holds the shelf (the try-on's scrim has
+  // already deepened to it) until the reveal is on screen: no idle shelf between payoff beats.
+  const [handoff, setHandoff] = useState(false);
+  const revealsRef = useRef(reveals);
+  revealsRef.current = reveals;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const leavingTryOn = useCallback(() => {
+    if (!rewardPendingFor(revealsRef.current, openRef.current?.item.shop?.set?.slug)) return;
+    setHandoff(true);
+    setTimeout(() => setHandoff(false), 1500);
+  }, []);
+  const closeTryOn = useCallback(() => {
+    setOpen(null);
+  }, []);
   const finishReveal = useCallback(() => {
     holdReveal();
     setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
@@ -582,15 +595,17 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   // Shelf jump bar: each shelf's top in the scroll content, the active one follows the scroll.
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const shelfY = useSharedValue(0);
+  const maxY = useSharedValue(Number.POSITIVE_INFINITY);
   const tops = useSharedValue<number[]>([]);
   const topsRef = useRef<Record<string, number>>({});
   const wrapY = useRef(0);
   const [activeChip, setActiveChip] = useState(0);
   const scrollHandler = useAnimatedScrollHandler(e => {
     shelfY.value = e.contentOffset.y;
+    maxY.value = e.contentSize.height - e.layoutMeasurement.height;
     if (scrollY) scrollY.value = e.contentOffset.y;
   });
-  useAnimatedReaction(() => activeShelf(tops.value, shelfY.value), (next, prev) => {
+  useAnimatedReaction(() => activeShelf(tops.value, shelfY.value, 24, maxY.value), (next, prev) => {
     if (next !== prev) runOnJS(setActiveChip)(next);
   });
 
@@ -713,15 +728,17 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
         </View>
         <ShopToast message={toast} still={still} />
+        {handoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />}
       </View>
 
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
-          onClose={closeTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
+          onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} />
       )}
-      {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
+      {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
+        onDone={finishReveal} onShown={() => setHandoff(false)} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
@@ -781,7 +798,7 @@ const styles = StyleSheet.create({
   heroRarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
   heroSet: { fontFamily: FONT.display, fontSize: 14, lineHeight: HERO.setLine, color: S.inkSoft },
   heroPieces: { flexDirection: 'row', gap: 6, marginTop: HERO.piecesTop },
-  heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: S.card, borderWidth: 2, borderColor: S.border, alignItems: 'center', justifyContent: 'center' },
   heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, height: HERO.priceRow },
   heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },

@@ -516,9 +516,13 @@ export function startFallbackPoll(o: {
   return () => { cancelled = true; if (timer != null) clearT(timer); timer = null; };
 }
 
-/** The shelf the jump bar highlights: the last one whose top has passed under the bar. */
-export function activeShelf(tops: number[], scrollY: number, lead = 24): number {
+/**
+ * The shelf the jump bar highlights: the last one whose top has passed under the bar. At the end
+ * of the scroll the last shelf wins (a short last shelf can never reach the top).
+ */
+export function activeShelf(tops: number[], scrollY: number, lead = 24, maxScrollY = Infinity): number {
   'worklet';
+  if (tops.length && scrollY >= maxScrollY - 4) return tops.length - 1;
   let active = 0;
   for (let i = 0; i < tops.length; i++) if (tops[i] - lead <= scrollY) active = i;
   return active;

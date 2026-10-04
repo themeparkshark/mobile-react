@@ -39,7 +39,7 @@ import { InventoryType } from '../../models/inventory-type';
 import { ShopItem, ShopSetPiece, ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
-import { CoinArc, LandFlash, MAX_FONT, PieceChip, SHOP_SURFACE, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
+import { CoinArc, LandFlash, MAX_FONT, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
 import { wearItem } from './inventoryQueue';
 import { TileArt } from './ShopTile';
 import { useWished, wishStore } from './wishStore';
@@ -127,7 +127,7 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
-  onClose, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
+  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -138,6 +138,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   /** Opened from an owned hero: the item is already yours ("Wear it now"). */
   readonly startBought?: boolean;
   readonly onClose: () => void;
+  /** The sheet has slid away and its modal is about to hide (onClose follows once it is gone). */
+  readonly onLeaving?: () => void;
   readonly onWish: (item: ShopItem) => void;
   /**
    * Called the moment the server confirms the buy, with the set reward (the shelf owns the reveal).
@@ -214,20 +216,31 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // can present the Set Complete reveal at once instead of waiting on a fixed timer.
   const drag = useSharedValue(0);
   const [leaving, setLeaving] = useState(false);
+  const rewardPendingRef = useRef(rewardPending);
+  rewardPendingRef.current = rewardPending;
   const closedRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const onLeavingRef = useRef(onLeaving);
+  onLeavingRef.current = onLeaving;
   const finishClose = useCallback(() => {
     if (closedRef.current) return;
     closedRef.current = true;
     onCloseRef.current();
   }, []);
   const leave = useCallback(() => {
+    // Tell the shelf first, so its cover is up before this modal hides.
+    onLeavingRef.current?.();
     setLeaving(true);
     // Android has no onDismiss; on iOS this is only a guard in case it never fires.
     setTimeout(finishClose, Platform.OS === 'ios' ? 500 : 0);
   }, [finishClose]);
+  // With a Set Complete reveal waiting, the scrim deepens to the reveal's navy as the sheet slides
+  // away, so the kid goes from the landing straight into the payoff (no idle shelf).
+  const dusk = useSharedValue(0);
+  const duskStyle = useAnimatedStyle(() => ({ opacity: dusk.value }));
   const closeAnimated = useCallback(() => {
+    if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
     if (still) { leave(); return; }
     drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(leave)(); });
   }, [still, leave]);
@@ -370,6 +383,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View entering={FadeIn.duration(still ? 120 : 160)} style={styles.scrim}>
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
           <Animated.View entering={still ? FadeIn.duration(120) : SlideInDown.springify().damping(18).stiffness(180)}
             style={[styles.sheet, { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>

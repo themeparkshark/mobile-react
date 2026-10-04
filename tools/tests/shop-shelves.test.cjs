@@ -633,7 +633,10 @@ test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss 
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(code, /onClose=\{closeTryOn\}/);
   assert.match(code, /reveal && !open && revealGate/);
-  assert.match(code, /closeTryOn = useCallback\(\(\) => \{ setOpen\(null\); \}/, 'no fixed hold after the try-on');
+  const close = /const closeTryOn = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[\]\);/.exec(code)[1];
+  assert.ok(close.length < 40, 'closeTryOn only clears the sheet');
+  assert.equal(/holdReveal/.test(close), false, 'no fixed hold after the try-on');
+  assert.match(close, /setOpen\(null\);/);
   // The sheet hides its modal, then reports closed from onDismiss (with a guard and the Android path).
   assert.match(sheet, /<Modal visible=\{!leaving\}[^>]*onDismiss=\{finishClose\}/);
   assert.match(sheet, /Platform\.OS === 'ios' \? 500 : 0/);
@@ -726,6 +729,9 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
   assert.equal(shelves.activeShelf(tops, 1200), 2);
   assert.equal(shelves.activeShelf(tops, 9000), 3);
   assert.equal(shelves.activeShelf([], 300), 0);
+  // At the end of the scroll the last (short) shelf is highlighted even if its top can't reach the bar.
+  assert.equal(shelves.activeShelf(tops, 1500, 24, 1500), 3);
+  assert.equal(shelves.activeShelf(tops, 1200, 24, 1500), 2);
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
   // Alex-style icons from the UI kit only, one chip per shelf, sticky above the scroll.
   const names = require('node:fs').readFileSync(path.join(root, 'src/ui/iconNames.ts'), 'utf8');
@@ -740,7 +746,12 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
 
 test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the next-week placeholder', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /colors=\{\[SHOP_SURFACE\.card, SHOP_SURFACE\.panel\]\}/);
+  assert.match(code, /colors=\{\[\.\.\.NIGHT_SKY\]\}/, 'the card is the night stage blue, so the stage has no seam');
+  const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
+  const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {
+    assert.ok((lum(ink) + 0.05) / (lum(bg) + 0.05) >= 4.5, `${ink} on ${bg}`);
+  }
   assert.match(code, /tone="night"/);
   assert.equal(/'#dff3ff', '#9fd6f8'/.test(code), false, 'no pale hero gradient');
   assert.match(code, /heroName: \{[^}]*color: S\.ink \}/);
@@ -753,4 +764,20 @@ test('pre-launch 6: Checking uses the muted face', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
   assert.match(sheet, /disabled=\{wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+});
+
+test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle shelf)', () => {
+  const shelvesCode = src('src/screens/StoreScreen/ShopShelves.tsx');
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  const reveal = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  assert.match(sheet, /if \(rewardPendingRef\.current\) dusk\.value = withTiming\(1/);
+  assert.match(sheet, /backgroundColor: REVEAL_NAVY \}, duskStyle\]/);
+  assert.match(shelvesCode, /\{handoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY \}\]\} \/>\}/);
+  assert.match(shelvesCode, /onShown=\{\(\) => setHandoff\(false\)\}/);
+  // The cover goes up as the sheet starts to hide (not after it is gone).
+  assert.match(sheet, /onLeavingRef\.current\?\.\(\);\s*setLeaving\(true\);/);
+  assert.match(shelvesCode, /onLeaving=\{leavingTryOn\}/);
+  assert.match(shelvesCode, /setTimeout\(\(\) => setHandoff\(false\), 1500\)/, 'the cover can never stick');
+  assert.match(reveal, /onShow=\{onShown\}/);
+  assert.match(reveal, /backgroundColor: REVEAL_NAVY/);
 });

@@ -41,6 +41,12 @@ export const SHOP_SURFACE = {
   alert: '#b3261b',
 } as const;
 
+/** The Set Complete reveal's backdrop; the buy hand-off bridges into it. */
+export const REVEAL_NAVY = '#0a2350';
+
+/** The night stage sky (reveal, hero). The hero card uses it too, so its stage has no seam. */
+export const NIGHT_SKY = ['#123f80', '#0a2a5c'] as const;
+
 /** A per-instance SVG id, so two stages on one screen never share a gradient. */
 let svgIds = 0;
 export function useSvgId(prefix: string): string {
@@ -247,7 +253,7 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
 export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', rays = false, still, children }: {
   rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night'; rays?: boolean; still: boolean; children?: ReactNode;
 }) {
-  const sky = tone === 'night' ? ['#123f80', '#0a2a5c'] as const : ['#e3f4ff', '#a4d8f8'] as const;
+  const sky = tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'] as const;
   const lightId = useSvgId('stage-light');
   return (
     <View style={StyleSheet.absoluteFill}>
