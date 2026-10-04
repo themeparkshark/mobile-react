@@ -6,7 +6,8 @@
  * sheets); the Skia placeholders only draw while art loads or if it fails.
  * `animated: false` draws a still frame.
  */
-import { BlurMask, Canvas, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { BlurMask, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { FrightCanvas } from './frightRepaint';
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -173,7 +174,7 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
   const mistW = W * 0.96;
   const mistH = Math.min(H * 0.6, MIST_H * (mistW / MIST_W) * 1.6);
   return (
-    <Canvas style={{ width: W, height: H }} pointerEvents="none">
+    <FrightCanvas style={{ width: W, height: H }} pointerEvents="none">
       {<FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
       {/* Fixed at `slots` (the reef's most): the budget only shows or hides slots, never mounts them. */}
       {Array.from({ length: slots }, (_, i) => {
@@ -184,7 +185,7 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
             cx={cx} cy={cy} animated={animated && i < Math.min(count, slots)} lite={lite} on={i < Math.min(count, slots)} />
         );
       })}
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -195,13 +196,13 @@ export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }:
   const look = useMemo(() => critterLook(slug, 0), [slug]);
   const still = useRemoteImage(staticUrl);
   return (
-    <Canvas style={{ width: 52, height: 52 }} pointerEvents="none">
+    <FrightCanvas style={{ width: 52, height: 52 }} pointerEvents="none">
       <Oval x={4} y={36} width={44} height={12} color={NIGHT.fog} opacity={0.45 * Math.max(0.4, intensity)} />
       <Group opacity={still ? 1 : 0}>
         <SoftEllipse x={6} y={2} w={40} h={41} inner={0.7}><SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" /></SoftEllipse>
       </Group>
       <Group opacity={still ? 0 : 1}><Group transform={[{ translateX: 26 }, { translateY: 42 }, { scale: 0.9 }]}><CritterBody look={look} /></Group></Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -403,7 +404,7 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
     ? chipShiftClear(chipX, chipY ?? Number.NaN, chipSize.w, chipSize.h, screenW, huds) : 0;
   return (
     <View style={styles.lantern}>
-      <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
+      <FrightCanvas style={{ width: LW, height: LH }} pointerEvents="none">
         <Group opacity={lit}>
           <Circle cx={LW / 2} cy={LH - 18} r={36} opacity={glow}>
             <RadialGradient c={vec(LW / 2, LH - 18)} r={36} colors={[glowColor, `${glowColor}00`]} />
@@ -419,7 +420,7 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
               clock={clock} animated={animated && !base && !showIcon} dim={dim} done={done} />
           </Group>
         </Group>
-      </Canvas>
+      </FrightCanvas>
       {/* Opacity-only inside the Marker: icon, survived badge and chip are always mounted. */}
       <Image source={iconUrl ? { uri: iconUrl } : null} style={[styles.icon, dim && styles.iconDim, !showIcon && styles.gone]}
         contentFit="contain" cachePolicy="memory-disk" transition={0} />
@@ -618,7 +619,7 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
   const batFrame = batAsset?.frame ?? [BAT_FRAME, BAT_FRAME];
   const batFrames = batAsset?.rows?.[0] ?? BAT_FRAMES;
   return (
-    <Canvas style={{ width: PW, height: PH }} pointerEvents="none">
+    <FrightCanvas style={{ width: PW, height: PH }} pointerEvents="none">
       {/* Fixed Skia trees: every prop node is mounted; the spot's props, budget, tier and motion only
           show or hide them (RN Skia unmount race under a moving map). */}
       <Group opacity={props.includes('fog-thick') ? 1 : 0}>
@@ -638,7 +639,7 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
         <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames}
           animated={props.includes('bats') && animated && !lite && k < bats} on={props.includes('bats') && animated && !lite && k < bats} />
       ))}
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -689,14 +690,14 @@ export const EncounterRing = memo(function EncounterRing({ ringPts, clock, anima
   const sparkOpacity = useDerivedValue(() => pass.value.opacity);
   const row = useSharedValue(0);
   return (
-    <Canvas style={{ width: S, height: S }} pointerEvents="none">
+    <FrightCanvas style={{ width: S, height: S }} pointerEvents="none">
       <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} opacity={0.08} />
       <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
       {/* Always mounted: no sheet or paused = opacity 0. */}
       <Group transform={sparkTransform} opacity={animated && sheet ? 1 : 0}>
         <SheetFrame image={sheet} fw={fw} fh={fh} frame={sparkFrame} row={row} x={-fw / 2} y={-fh / 4} opacity={sparkOpacity} />
       </Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -740,7 +741,7 @@ export const EncounterCritter = memo(function EncounterCritter({ critter, asset,
   const row = useDerivedValue(() => pose.value.row);
   const scale = B / (fw / 2);
   return (
-    <Canvas style={{ width: B, height: B }} pointerEvents="none">
+    <FrightCanvas style={{ width: B, height: B }} pointerEvents="none">
       <Group transform={[{ scale }]}>
         {/* Every look stays mounted; only one is opaque (sheet while animated, else still, else placeholder). */}
         <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} opacity={sheet && animated ? 1 : 0} />
@@ -752,7 +753,7 @@ export const EncounterCritter = memo(function EncounterCritter({ critter, asset,
           </Group>
         ))}
       </Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -779,12 +780,12 @@ export const LagoonGlow = memo(function LagoonGlow({ asset, widthPts, clock, fps
   const frame = useDerivedValue(() => (fps > 0 ? Math.floor(clock.value * fps) % frames : 0));
   const row = useSharedValue(0);
   return (
-    <Canvas style={{ width: W, height: H }} pointerEvents="none">
+    <FrightCanvas style={{ width: W, height: H }} pointerEvents="none">
       {/* Fixed tree: the frame is mounted before the sheet loads (opacity 0 until then). */}
       <Group transform={[{ scale }]} opacity={image ? Math.max(0.4, intensity) : 0}>
         <SheetFrame image={image} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} />
       </Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 

@@ -81,3 +81,25 @@ test('ExploreScreen keeps the fright input for the whole event-park session (mod
   assert.doesNotMatch(explore, /frightNight\.tonight && \(frightNight\.modeOn \|\| frightNight\.phase === 'after'\)/);
   assert.match(explore, /active: frightNight\.modeOn/);
 });
+
+test('GPS jump or resume: markers re-lay out and Skia canvases repaint on reveal, by props only', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(src, /export const RELAYOUT_JUMP_M = 200;/);
+  assert.match(src, /distanceMeters\(prev, player\) > RELAYOUT_JUMP_M\) kick\.current\(\)/);
+  assert.match(src, /AppState\.addEventListener\('change', state => \{ if \(state === 'active'\) kick\.current\(\); \}\)/);
+  // Every fright Marker coordinate goes through the nudge (a prop change, never a remount).
+  const markers = src.match(/<Marker key=[^>]*coordinate=\{[^}]*\}?/g) || [];
+  assert.ok(markers.length >= 6);
+  for (const m of markers) assert.match(m, /coordinate=\{pin\(/, m);
+  assert.match(src, /export const BOUNDS_POLL_MS = 1500;/);
+  assert.match(src, /\[on, zoom, mapRef, relayout\]/, 'a jump reads bounds at once');
+  assert.match(src, /<RepaintContext\.Provider value=\{token\}>/);
+  const repaint = read('src/components/map/fright/frightRepaint.tsx');
+  assert.match(repaint, /<Canvas \{\.\.\.props\} style=\{\[style, \{ width \}\]\}>/);
+  assert.match(repaint, /<Group opacity=\{repaintOpacity\(token\)\}>\{children\}<\/Group>/);
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.doesNotMatch(sprites, /<Canvas[\s>]/, 'sprites draw through FrightCanvas');
+  const m = loadTs('src/components/map/fright/frightRepaint.tsx', { '@shopify/react-native-skia': {}, react: { createContext: () => ({}), useContext: () => 0 }, 'react-native': { StyleSheet: { flatten: x => x } }, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null } });
+  assert.equal(m.repaintWidth(52, 1), 52.5);
+  assert.equal(m.repaintWidth(52, 2), 52);
+});

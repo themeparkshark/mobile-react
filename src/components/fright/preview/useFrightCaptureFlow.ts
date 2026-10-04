@@ -16,6 +16,8 @@ import type { FrightNight } from '../../../hooks/useFrightNight';
 type Point = { readonly latitude: number; readonly longitude: number };
 
 export const CAPTURE_FLOW = __DEV__ && process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_NAV === 'flow';
+/** Dev-only GPS jump repro (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=jump): start far away, jump onto the encounter. */
+const CAPTURE_JUMP = __DEV__ && process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_NAV === 'jump';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -30,6 +32,19 @@ export function useFrightCaptureFlow({ night, engine, location, moveDevLocation,
   live.current = { night, engine, location };
   const started = useRef(false);
   const ready = !!night.tonight?.night && night.modeOn;
+
+  useEffect(() => {
+    if (!CAPTURE_JUMP || !ready || started.current) return;
+    started.current = true;
+    void (async () => {
+      await sleep(20000);
+      const enc = live.current.night.tonight?.encounter
+        ?? live.current.night.tonight?.spots.find(s => s.key === 'usf26-tidepool-carnival-gate') ?? null;
+      const from = live.current.location;
+      if (enc && from) moveDevLocation(enc.longitude - from.longitude, enc.latitude - from.latitude, 1);
+      console.log(`[fright-capture] jump ${new Date().toISOString()}`);
+    })();
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!CAPTURE_FLOW || !ready || started.current) return;
