@@ -357,3 +357,25 @@ def subject(setkey, item):
             return f"{POSE[setkey]}: {R4[slug]}, main body colour {COLOURS[item[1].split()[0]]}; {TIER_GEAR[item[2]]}; {NOT[setkey]}"
         return f"{POSE[setkey]}: {R4[slug]}; {TIER[item[2]]}; {NOT[setkey]}"
     return _subject_v3(setkey, item)
+
+
+# ---- Round 5: last legendary crown, chunkier props on three commons.
+R5 = {
+    'churro_01': "golden churro rolled in cinnamon sugar with visible sugar crystals, two thick chunky cinnamon sticks tied together leaning against the cup and a small puff of cinnamon dust",
+    'churro_02': "churro buried in thick snowy white powdered sugar, a big fluffy white sugar cloud puffing off the top as wide as the churro, and a chunky sugar sifter with a thick rim beside the cup",
+    'churro_06': "churro with a thick line of white vanilla cream piped along it flecked with vanilla seeds, a thick chunky dark vanilla pod and a big white vanilla orchid flower beside the cup",
+}
+LEGEND_R5 = {
+    'churro_40': ("twisted spiral churro with bold saturated rainbow glaze bands in red, orange, yellow, green, blue and purple, tiny star "
+                  "sprinkles, a small jewelled gold crown on its tip, an iridescent sleeve, four crisp four-point sparkles around it, extra thick dark outline"),
+}
+_subject_v4 = subject
+
+
+def subject(setkey, item):
+    slug = item[0]
+    if slug in LEGEND_R5:
+        return f"{POSE[setkey]}: {LEGEND_R5[slug]}; {NOT[setkey]}"
+    if slug in R5:
+        return f"{POSE[setkey]}: {R5[slug]}; {TIER[item[2]]}; {NOT[setkey]}"
+    return _subject_v4(setkey, item)
