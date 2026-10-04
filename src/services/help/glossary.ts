@@ -88,7 +88,7 @@ const TERMS: readonly GlossaryTerm[] = [
     earn: 'Tap the Adventure card at the top of the park map.' },
   { key: 'park_goal', label: 'Park goal', icon: 'map', topic: 'home',
     what: 'The ride coin you plan to catch next. It waits on your map when you get to the park.',
-    earn: 'Tap Next Park Trip on the home map and pick a ride.' },
+    earn: 'Open a park\'s coin shelf and tap Set Goal on the ride you want next.' },
   { key: 'stamps', label: 'Stamps', icon: 'medal1', topic: 'collections',
     what: 'Badges for milestones, like your first ride coin or a 7-day streak.',
     earn: 'See them all in your Stamp Book, from the menu or your profile.' },

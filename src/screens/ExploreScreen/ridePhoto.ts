@@ -38,6 +38,23 @@ const SPECS: Readonly<Record<1 | 2 | 3 | 4 | 5, RideSpec>> = {
   5: { style: 'ride_photo', track: 'launch', passMs: 1900, frameHalf: 0.12, litMs: null, photosNeeded: 1, maxRides: 3, developBeats: 3, returnMs: 400 },
 };
 
+/**
+ * Release gate. Ride Photo ships OFF: the catch is a chomp for every rarity until the server says otherwise
+ * (`player_stats.ride_photo_enabled === true` on GET /me/prep-items, set when HOME_HUNT_RIDE_PHOTO_ENABLED is on).
+ * An older backend never sends the field, so production stays chomp-only.
+ */
+let ridePhotoServerEnabled = false;
+export function setRidePhotoServerEnabled(value: unknown): void {
+  ridePhotoServerEnabled = value === true;
+}
+export function ridePhotoEnabled(): boolean {
+  return ridePhotoServerEnabled;
+}
+/** The catch this find uses right now: its rarity's style, or a chomp while Ride Photo is off. */
+export function catchStyleFor(rarity: number | null | undefined): CatchStyle {
+  return ridePhotoServerEnabled ? rideSpec(rarity).style : 'chomp';
+}
+
 export function rideSpec(rarity: number | null | undefined): RideSpec {
   'worklet';
   const tier = Math.round(Number(rarity));

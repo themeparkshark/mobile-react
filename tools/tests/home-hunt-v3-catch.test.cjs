@@ -161,7 +161,7 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
   assert.match(home, /catchRef\.current\?\.primeRide\(prepItem/);
   assert.match(home, /onPrepItemNearby\(prepItem, prepItem\.pivot_id, 'tap'\)/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  assert.match(moment, /rideSpec\(item\.rarity\)\.style === 'ride_photo'/);
+  assert.match(moment, /catchStyleFor\(item\.rarity\) === 'ride_photo'/, 'gated: Ride Photo only when the server enables it');
   assert.match(moment, /pointerEvents="box-none"/);
   const ridePhoto = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(ridePhoto, /shotOffsetMs\(t\.value \* passMs, arrivalMs\)/);

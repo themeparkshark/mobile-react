@@ -22,13 +22,16 @@ interface Props {
   latitude: number;
   longitude: number;
   onPress: () => void;
+  /** Mounted but hidden and still (the map_gym_swords flag is off). */
+  hidden?: boolean;
 }
 
-export default function GymMarker({ leader, latitude, longitude, onPress }: Props) {
+export default function GymMarker({ leader, latitude, longitude, onPress, hidden = false }: Props) {
   const pulseScale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.3);
   // The breathing pauses with the living map (off screen, background, calm tier).
-  const { running } = useMapAlive();
+  const { running: alive } = useMapAlive();
+  const running = alive && !hidden;
 
   // Smooth breathing animation
   useEffect(() => {
@@ -74,6 +77,7 @@ export default function GymMarker({ leader, latitude, longitude, onPress }: Prop
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={onPress}
+      hidden={hidden}
       anchor={{ x: 0.5, y: 0.8 }}
     >
       <View style={styles.container}>

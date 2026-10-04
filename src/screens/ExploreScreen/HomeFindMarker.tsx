@@ -2,12 +2,12 @@ import { memo, useCallback, useMemo } from 'react';
 import { Marker } from '../../components/map/Marker';
 import type { PrepItemType } from '../../models/prep-item-type';
 import PrepItemMarker, { PREP_MARKER_ANCHOR, type FingerSide } from './PrepItem';
-import { rideSpec } from './ridePhoto';
+import { catchStyleFor } from './ridePhoto';
 
 /** "Mac and Cheese Cone, Rare, ride photo, in range" or "Nachos, Uncommon, 65 meters away". */
 export function findLabel(item: PrepItemType, distance: number | null, inRange: boolean): string {
   const rarity = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][Math.max(1, Math.min(5, Math.round(item.rarity || 1))) - 1];
-  const photo = rideSpec(item.rarity).style === 'ride_photo' ? ', ride photo' : '';
+  const photo = catchStyleFor(item.rarity) === 'ride_photo' ? ', ride photo' : '';
   if (inRange) return `${item.name}, ${rarity}${photo}, in range. Tap to catch.`;
   return `${item.name}, ${rarity}${photo}, ${distance == null ? 'distance unknown' : `${Math.round(distance)} meters away`}`;
 }

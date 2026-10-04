@@ -18,10 +18,10 @@ test('R2-4 Deep Lantern entry points: profile + player chip and the collection b
   assert.match(chip, /return <FrightCardChip playerId=\{playerId\} \/>/);
   assert.match(read('src/screens/ProfileScreen.tsx'), /<ProfileEventChip \/>/);
   assert.match(read('src/screens/PlayerScreen.tsx'), /<ProfileEventChip playerId=\{currentPlayer\.id\} \/>/);
-  // Production's legacy book renders <FrightEventShelf />; the RC's dex book (hh3-menu-dex) draws the same
-  // Events cards from the same eventCards.ts. Either way the Deep Lantern is reachable all season.
+  // Ship merge: the book shows Events as set cards in its own picker (menu-dex EventTab, CONTRACT 6), not the shelf tile.
   const book = read('src/screens/SetCollectionScreen.tsx');
-  assert.ok(/<FrightEventShelf \/>/.test(book) || (/getEventShelf/.test(book) && /navigate\('FrightCard'/.test(book)), 'the book shows the Events cards');
+  assert.match(book, /<EventTab key=\{`event-\$\{card\.eventSlug\}`\}/);
+  assert.match(book, /RootNavigation\.navigate\('FrightCard', \{ eventSlug: card\.eventSlug \}\)/);
   const shelf = read('src/components/fright/FrightEventShelf.tsx');
   assert.match(shelf, /getEventShelf/);
   assert.match(shelf, /navigate\('FrightCard'/);

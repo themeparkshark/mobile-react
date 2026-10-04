@@ -8,6 +8,7 @@ import { appVersionHeaders } from '../../platform';
 export type FeatureFlagName =
   | 'adventure_ticket'
   | 'game_proof'
+  | 'map_gym_swords'
   | 'park_projects'
   | 'progression_v2'
   | 'queue_tickets'

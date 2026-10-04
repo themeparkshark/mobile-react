@@ -23,7 +23,7 @@ import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip
 import HomeHudChips, { type ParkStoryChip } from './HomeHudChips';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
-import { rideSpec } from './ridePhoto';
+import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -37,7 +37,10 @@ import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-r
 import * as RootNavigation from '../../RootNavigation';
 import { showToast } from '../../utils/toast';
 import { homeHuntEnabled, loadHomeHuntWeek } from '../LeaderboardsScreen/homeHuntWeekCache';
-import { SAFETY_LINE, huntRankLine, shouldShowSafetyLine } from './homeHuntMap';
+import { REPORT_REASONS, SAFETY_LINE, huntRankLine, shouldShowSafetyLine } from './homeHuntMap';
+import { reportHomeSpot, type HuntReportReason } from '../../api/endpoints/me/homeHunt';
+import { HOME_HUNT_COPY } from '../../constants/homeHuntCopy';
+import { gameAlert } from '../../ui';
 import { getHomeHuntRankLine, setHomeHuntRankLine, subscribeHomeHuntRankLine } from './homeHuntRankStore';
 
 // ── Layout ───────────────────────────────────────────────────────────
@@ -441,12 +444,28 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     return point && origin ? { x: point.x - origin.x, y: point.y - origin.y } : null;
   }, [mapSettled]);
 
+  // "Report this spot" lives on the tapped find's peek (the long-press went with the old find card).
+  const reportSpot = useCallback((pivotId: number) => {
+    const submit = (reason: HuntReportReason) => {
+      reportHomeSpot(pivotId, reason)
+        .then(() => showToast(HOME_HUNT_COPY.reportThanks, 'success'))
+        .catch(() => showToast(HOME_HUNT_COPY.reportFailed, 'error'));
+    };
+    setChip(null);
+    gameAlert(HOME_HUNT_COPY.reportTitle, 'What is wrong with this spot?', [
+      ...REPORT_REASONS.map(option => ({ text: option.label, onPress: () => submit(option.reason) })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, []);
+
   // Out of range: a tiny nudge with an arrow toward the find, gone on its own.
   // Reads GPS through a ref, so it (and every marker's tap handler) stays stable across fixes.
   const nudge = useCallback(async (item: PrepItemType, distance: number | null) => {
     queueHaptic('tapLight', 1);
     const key = `far-${item.pivot_id ?? item.id}-${Date.now()}`;
-    setChip({ key, text: peekLine(item.name, distance), ttlMs: PEEK_TTL_MS });
+    const pivot = item.pivot_id;
+    setChip({ key, text: peekLine(item.name, distance), ttlMs: PEEK_TTL_MS,
+      action: pivot != null ? { label: 'Report', hint: HOME_HUNT_COPY.reportTitle, onPress: () => reportSpot(pivot) } : undefined });
     const here = fixRef.current.location;
     if (here?.latitude == null || here?.longitude == null || item.latitude == null || item.longitude == null) return;
     const [shark, find] = await Promise.all([toLocal(here.latitude, here.longitude), toLocal(item.latitude, item.longitude)]);
@@ -478,10 +497,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 3).map(entry => entry.item.pivot_id)
     .concat(placed.filter(entry => entry.inRange).map(entry => entry.item.pivot_id))), [placed]);
   // The nearest Ride Photo find in range has its viewfinder mounted and warm before the tap.
-  const stageItem = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
+  const stageItem = useMemo(() => placed.filter(entry => entry.inRange && catchStyleFor(entry.item.rarity) === 'ride_photo')
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item ?? null, [placed]);
   // Every in-range Ride Photo find has its ride built in idle time, so no tap pays for it.
-  const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && rideSpec(entry.item.rarity).style === 'ride_photo')
+  const warmFinds = useMemo(() => placed.filter(entry => entry.inRange && catchStyleFor(entry.item.rarity) === 'ride_photo')
     .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)).slice(0, 3).map(entry => ({ item: entry.item })), [placed]);
   // While the reward banner is up, finds whose spot sits under it (banner, grade chip, rides row) drop their tags.
   const underBanner = (pivot: number | null | undefined) => {
@@ -494,7 +513,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
-  const ridePhotoArt = placed.filter(entry => rideSpec(entry.item.rarity).style === 'ride_photo')
+  const ridePhotoArt = placed.filter(entry => catchStyleFor(entry.item.rarity) === 'ride_photo')
     .map(entry => entry.item.icon_url).filter((url): url is string => !!url).join('|');
   useEffect(() => {
     if (ridePhotoArt) void preloadRidePhoto(ridePhotoArt.split('|'));

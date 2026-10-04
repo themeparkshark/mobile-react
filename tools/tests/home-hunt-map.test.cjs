@@ -63,10 +63,12 @@ test('Report this spot offers Unsafe, Private property and Other, sent as unsafe
   ]);
   assert.equal(copy.HOME_HUNT_COPY.reportTitle, 'Report this spot');
   assert.match(read('src/components/map/Marker.tsx'), /onLongPress=\{onLongPress\}/);
-  // Home Hunt v3 (kids UX, Oct 2): a long-press on a find is a tap; the report dialog no longer opens from the map.
+  // Home Hunt v3 (kids UX, Oct 2): a long-press on a find is a tap. The report opens from the tapped find's peek
+  // ("Report" link), never from a press on the map itself.
   const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(read('src/screens/ExploreScreen/HomeFindMarker.tsx'), /onPress=\{press\} onLongPress=\{press\}/);
-  assert.doesNotMatch(explore, /reportSpot/);
+  assert.match(explore, /onPress: \(\) => reportSpot\(pivot\)/);
+  assert.doesNotMatch(explore, /onLongPress=\{[^}]*reportSpot/);
   const api = read('src/api/endpoints/me/homeHunt.ts');
   assert.match(api, /\/me\/prep-items\/\$\{pivotId\}\/report/);
 });

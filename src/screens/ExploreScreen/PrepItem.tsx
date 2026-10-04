@@ -6,7 +6,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PrepItemType } from '../../models/prep-item-type';
 import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameIcon } from '../../ui';
-import { rideSpec } from './ridePhoto';
+import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
 import { findImageOrder, findLook, rarityColor } from './findPresentation';
@@ -193,7 +193,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const color = rarityColor(prepItem.rarity);
   const look = findLook(prepItem.rarity, inRange);
   const tier = Math.max(1, Math.min(5, Math.round(prepItem.rarity || 1)));
-  const ridePhoto = rideSpec(prepItem.rarity).style === 'ride_photo';
+  const ridePhoto = catchStyleFor(prepItem.rarity) === 'ride_photo';
   const moving = animated && active;
   // Each find bobs on its own beat so a cluster never moves in lockstep.
   const phase = ((prepItem.pivot_id ?? prepItem.id) % 7) / 7;
