@@ -2,6 +2,8 @@ import { MarkerView } from '@maplibre/maplibre-react-native';
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
+const HIDDEN = { opacity: 0 } as const;
+
 type LatLng = { readonly latitude: number | string; readonly longitude: number | string };
 
 /**
@@ -10,7 +12,7 @@ type LatLng = { readonly latitude: number | string; readonly longitude: number |
  * coordinate. Legacy-only props (tracksViewChanges, flat, stopPropagation,
  * tappable, zIndex) are accepted and ignored.
  */
-export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel }: {
+export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel, hidden = false }: {
   readonly coordinate: LatLng;
   readonly anchor?: { x: number; y: number };
   readonly onPress?: () => void;
@@ -23,6 +25,8 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   readonly tappable?: boolean;
   readonly zIndex?: number;
   readonly accessibilityLabel?: string;
+  /** Mounted but invisible and untouchable (a feature flag is off): the marker list never mounts or unmounts. */
+  readonly hidden?: boolean;
 }) {
   const lng = Number(coordinate.longitude);
   const lat = Number(coordinate.latitude);
@@ -30,8 +34,10 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   return (
     <MarkerView coordinate={[lng, lat]} anchor={anchor ?? { x: 0.5, y: 0.5 }} allowOverlap>
       {onPress
-        ? <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>{children}</Pressable>
-        : <View pointerEvents="none">{children}</View>}
+        ? <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+          pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+          style={hidden ? HIDDEN : undefined}>{children}</Pressable>
+        : <View pointerEvents="none" style={hidden ? HIDDEN : undefined}>{children}</View>}
     </MarkerView>
   );
 }

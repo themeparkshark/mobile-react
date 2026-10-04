@@ -18,16 +18,20 @@ interface Props {
   longitude: number;
   expiresAt: string;
   onPress: () => void;
+  /** Mounted but hidden and still (the map_gym_swords flag is off). */
+  hidden?: boolean;
 }
 
-export default function SwordMarker({ id, latitude, longitude, expiresAt, onPress }: Props) {
+export default function SwordMarker({ id, latitude, longitude, expiresAt, onPress, hidden = false }: Props) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const bounceY = useSharedValue(0);
   const glowOpacity = useSharedValue(0.4);
   const glowScale = useSharedValue(1);
   // The countdown ticks while the map is on screen; the bounce is ambience and
   // also rests in the calm tier.
-  const { active, running } = useMapAlive();
+  const alive = useMapAlive();
+  // Hidden (flag off): no countdown, no bounce, no GIF.
+  const active = alive.active && !hidden, running = alive.running && !hidden;
 
   // Calculate time remaining
   useEffect(() => {
@@ -108,6 +112,7 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={onPress}
+      hidden={hidden}
       anchor={{ x: 0.5, y: 1 }}
     >
       <View style={styles.container}>

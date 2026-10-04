@@ -98,6 +98,7 @@ import CommunityCenterModal from '../components/CommunityCenterModal';
 import getCommunityCenter, { CommunityCenter } from '../api/endpoints/community-center/getCommunityCenter';
 // Gym Battle imports
 import { GymMarker, SwordMarker } from '../components/GymBattle';
+import { useMapFlags } from '../services/mapFlags';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
@@ -215,6 +216,8 @@ function ExploreScreen() {
   // Gym Battle state
   const [gymData, setGymData] = useState<GymData | null>(null);
   const [swords, setSwords] = useState<SwordSpawn[]>([]);
+  // Gym and Sword markers are an unfinished feature: hidden (still mounted) until the server turns map_gym_swords on.
+  const mapFlags = useMapFlags();
   const [playerTeam, setPlayerTeam] = useState<TeamInfo | null>(null);
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
@@ -1070,8 +1073,8 @@ function ExploreScreen() {
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
                 onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
-              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
-                onPress={() => explain('swords', { count: playerSwordCount })} />
+              {mapFlags.gymSwords && <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
+                onPress={() => explain('swords', { count: playerSwordCount })} />}
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -1363,6 +1366,7 @@ function ExploreScreen() {
           {/* Gym Marker - show even without team so players can discover it */}
           {gymData && (
             <GymMarker
+              hidden={!mapFlags.gymSwords}
               leader={gymData.leader}
               latitude={gymData.gym.latitude}
               longitude={gymData.gym.longitude}
@@ -1373,6 +1377,7 @@ function ExploreScreen() {
           {swords.map((sword) => (
             <SwordMarker
               key={sword.id}
+              hidden={!mapFlags.gymSwords}
               id={sword.id}
               latitude={sword.latitude}
               longitude={sword.longitude}
