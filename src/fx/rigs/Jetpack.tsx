@@ -126,7 +126,7 @@ function GroundPool({ t, kick, box }: RigProps) {
 /** In front of the shark: the far flame, the pack, the near flame, glow, sparks and puffs. */
 export function JetpackFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
-  useMomentCue(() => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
   const f = partLayout(box, G.flame, G.flame.aspect);
   const glowSize = f.width * 3.2;
   const glow = useAnimatedStyle(() => {

@@ -86,8 +86,12 @@ export function useFxKick(): SharedValue<number> {
  * when idle) enters a moment. Used for moment sounds and haptics, so they land
  * on the frame the motion starts; nothing crosses threads in between.
  */
-export function useMomentCue(progress: () => number, onStart: (() => void) | undefined) {
-  useAnimatedReaction(() => progress() >= 0, (on, was) => {
+export function useMomentCue(t: SharedValue<number>, kick: SharedValue<number>, progress: () => number, onStart: (() => void) | undefined) {
+  useAnimatedReaction(() => {
+    // Read the clock here: Reanimated only re-runs a reaction for shared values its own closure reads.
+    const now = t.value + kick.value * 0;
+    return now === now && progress() >= 0;
+  }, (on, was) => {
     if (on && was === false && onStart) runOnJS(onStart)();
   });
 }

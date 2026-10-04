@@ -54,7 +54,7 @@ function Light({ t, i, size }: { t: SharedValue<number>; i: number; size: number
 export function SaucerFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
   const still = lod === 'still';
-  useMomentCue(() => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, BEAM_PERIOD, BEAM_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('beam') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, BEAM_PERIOD, BEAM_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('beam') : undefined);
   const l = partLayout(box, G, G.aspect);
   const drift = useAnimatedStyle(() => {
     const p = still ? 0 : phaseOf(t.value, 4200) * Math.PI * 2;

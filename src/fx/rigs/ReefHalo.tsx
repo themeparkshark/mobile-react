@@ -131,7 +131,7 @@ export function ReefHaloBack(props: RigProps) {
 /** In front: the near half of the ring, the near fish and the bubble splash. */
 export function ReefHaloFront(props: RigProps) {
   const { t, kick, lod, cue } = props;
-  useMomentCue(() => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('flip') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('flip') : undefined);
   return (
     <>
       <Ring box={props.box} half="front" />

@@ -260,8 +260,13 @@ test('rig performance budget: at most 24 animated views at full LOD per rig', ()
 test('every moment-cue progress function is a worklet (a plain function crashes on the UI thread)', () => {
   for (const file of fs.readdirSync(path.join(root, 'src/fx/rigs'))) {
     const code = src(`src/fx/rigs/${file}`);
-    const calls = [...code.matchAll(/useMomentCue\(([^,]*?)=>\s*(\{\s*'worklet'|\()/g)];
-    for (const call of calls) assert.ok(call[2].includes("'worklet'"), `${file}: useMomentCue progress must start with 'worklet'`);
+    const calls = [...code.matchAll(/useMomentCue\(t, kick, \(\) =>\s*(\{\s*'worklet'|\()/g)];
+    assert.equal(calls.length, (code.match(/useMomentCue\(/g) || []).length, `${file}: every useMomentCue passes the clock (t, kick) first`);
+    for (const call of calls) assert.ok(call[1].includes("'worklet'"), `${file}: useMomentCue progress must start with 'worklet'`);
+  }
+  // The reaction reads the clock itself (Reanimated re-runs a reaction only for shared values its closure reads).
+  assert.match(src('src/fx/FxStage.tsx'), /const now = t\.value \+ kick\.value \* 0;/);
+  for (const file of []) {
   }
 });
 

@@ -117,7 +117,7 @@ function BladeLight({ t, kick, box }: RigProps) {
 export function PlasmaBladeFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
   const still = lod === 'still';
-  useMomentCue(() => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('swing') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('swing') : undefined);
   const glow = useAnimatedStyle(() => {
     const v = still ? STILL_T : t.value;
     const s = swingAt(v, kick.value);

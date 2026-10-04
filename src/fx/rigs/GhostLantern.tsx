@@ -100,7 +100,7 @@ export function GhostLanternBack(props: RigProps) {
 export function GhostLanternFront(props: RigProps) {
   const { t, kick, cue } = props;
   const { l, sway, still } = useLanternFrame(props);
-  useMomentCue(() => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('peek') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('peek') : undefined);
   const glowSize = l.width * 1.9;
   const glow = useAnimatedStyle(() => {
     const f = still ? 1 : flickerAt(t.value);

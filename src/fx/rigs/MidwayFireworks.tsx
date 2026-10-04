@@ -102,7 +102,7 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
  */
 export function MidwayFireworksScene(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
-  useMomentCue(() => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FINALE_PERIOD, FINALE_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('finale') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FINALE_PERIOD, FINALE_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('finale') : undefined);
   const shells = lod === 'full' ? SHELLS.map((_, i) => i) : lod === 'lite' ? [0, 1, 2, 3] : [0, 1];
   return (
     <>
