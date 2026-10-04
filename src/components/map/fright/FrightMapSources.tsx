@@ -486,14 +486,22 @@ const LAGOON_PARKED: FrightAmbientAsset = { file: null };
  * The night tint over the tiles. Map.tsx keeps it mounted at all times (opacity
  * 0 without an input), so turning the mode on never inserts a source mid-list.
  */
+/**
+ * One stable component in one MapView slot: always the same TintSource, whatever `input`
+ * is. (It used to swap ActiveTint for a bare TintSource when fright went null and back,
+ * a different component type, which remounts the ShapeSource mid-list: the MapLibre
+ * insertReactSubview crash class.) A null input reads as the mode switched off: opacity 0.
+ */
 export const FrightNightTint = memo(function FrightNightTint({ input }: { readonly input: FrightMapInput | null }) {
-  return input ? <ActiveTint input={input} /> : <TintSource opacity={0} intro={false} />;
+  const st = useFrightState(input ?? TINT_OFF_INPUT);
+  return <TintSource opacity={input ? NIGHT_TINT_MAX * Math.max(0, st.visible) : 0} intro={input?.cinematic === 'intro'} />;
 });
 
-function ActiveTint({ input }: { readonly input: FrightMapInput }) {
-  const st = useFrightState(input);
-  return <TintSource opacity={NIGHT_TINT_MAX * Math.max(0, st.visible)} intro={input.cinematic === 'intro'} />;
-}
+/** The mode switched off (no event tonight, or not in an event park): visibility 0. */
+const TINT_OFF_INPUT = {
+  tonight: { enabled: false, phase: 'off', night: null, spots: [] },
+  active: false, nowOffsetMs: 0, player: null, spooky: false, doneKeys: [],
+} as unknown as FrightMapInput;
 
 function TintSource({ opacity, intro }: { readonly opacity: number; readonly intro: boolean }) {
   return (
