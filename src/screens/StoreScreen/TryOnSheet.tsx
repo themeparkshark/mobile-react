@@ -233,7 +233,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     onLeavingRef.current?.();
     setLeaving(true);
     // Android has no onDismiss; on iOS this is only a guard in case it never fires.
-    setTimeout(finishClose, Platform.OS === 'ios' ? 500 : 0);
+    setTimeout(finishClose, Platform.OS === 'ios' ? 300 : 0);
   }, [finishClose]);
   // With a Set Complete reveal waiting, the scrim deepens to the reveal's navy as the sheet slides
   // away, so the kid goes from the landing straight into the payoff (no idle shelf).

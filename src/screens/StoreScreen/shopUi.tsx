@@ -250,8 +250,10 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
  * - a cel-shaded round plinth with a top-left highlight band and a gloss tick
  * Children (the Playercard, which draws its own bobbing contact shadow) sit on top.
  */
-export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', rays = false, still, children }: {
-  rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night'; rays?: boolean; still: boolean; children?: ReactNode;
+export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', sky: paintSky = true, rays = false, still, children }: {
+  rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night';
+  /** false: no sky of its own (the hero card is already the night sky), so there is no seam. */
+  sky?: boolean; rays?: boolean; still: boolean; children?: ReactNode;
 }) {
   const sky = tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'] as const;
   const lightId = useSvgId('stage-light');
@@ -259,9 +261,9 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky
     <View style={StyleSheet.absoluteFill}>
       {backdropUrl ? (
         <Image source={backdropUrl} style={StyleSheet.absoluteFill} contentFit="cover" />
-      ) : (
+      ) : paintSky ? (
         <LinearGradient colors={[...sky]} style={StyleSheet.absoluteFill} />
-      )}
+      ) : null}
       {rays && <Rays still={still} />}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>

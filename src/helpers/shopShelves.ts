@@ -485,7 +485,8 @@ export function createSerialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
  * server says the shop is gone (404, the kill switch). Timers are injectable for tests.
  */
 export function startFallbackPoll(o: {
-  refresh: () => Promise<'ok' | 'miss' | 'gone'>;
+  /** alive() turns false once the poll is cancelled: an answer that lands after that is ignored. */
+  refresh: (alive: () => boolean) => Promise<'ok' | 'miss' | 'gone'>;
   delayMs: () => number;
   maxMisses?: number;
   onStop?: (why: 'gone' | 'misses') => void;
@@ -503,7 +504,7 @@ export function startFallbackPoll(o: {
     timer = setT(() => {
       timer = null;
       if (cancelled) return;
-      o.refresh().catch(() => 'miss' as const).then(result => {
+      o.refresh(() => !cancelled).catch(() => 'miss' as const).then(result => {
         if (cancelled) return;
         if (result === 'gone') { o.onStop?.('gone'); return; }
         misses = result === 'ok' ? 0 : misses + 1;
@@ -514,6 +515,40 @@ export function startFallbackPoll(o: {
   };
   arm();
   return () => { cancelled = true; if (timer != null) clearT(timer); timer = null; };
+}
+
+/** The fallback banner: "back in a moment" while polling, "pull down" once polling has stopped. */
+export function fallbackBannerCopy(pollStopped: boolean): string {
+  return pollStopped ? 'Today’s shop is still opening. Pull down to try again.' : 'Today’s shop is opening. Back in a moment!';
+}
+
+/**
+ * Event jump chips: a themed UI kit icon per event (never two the same), filled with the banner
+ * art's own tint and ringed in the event colour, so each chip looks like its banner.
+ */
+const EVENT_ICON: [RegExp, string][] = [
+  [/^halloween/, 'streak'], [/birthday/, 'gift'], [/^(new_year|july_4th)/, 'sparkle'], [/^valentines/, 'heart'],
+  [/^summer/, 'ride'], [/^holiday/, 'gift'], [/^(winter|spring|harvest|st_patricks|lunar_new_year|mardi_gras)/, 'sparkle'],
+];
+const ICON_FALLBACKS = ['sparkle', 'medal1', 'ride', 'star', 'dice'];
+/** Measured from each banner's art (its most saturated mid tone). */
+export const EVENT_ART_TINT: Record<string, string> = {
+  epic_universe_birthday: '#4e50bd', halloween: '#58359e', halloween_finale: '#5a3b97', harvest: '#b16923', holiday: '#1d6ab7',
+  july_4th: '#1564b0', lunar_new_year: '#b46c5d', mardi_gras: '#673bad', new_year: '#3535c6', park_birthday: '#be7eb4',
+  spring: '#5f8f8b', st_patricks: '#39b581', summer: '#07a5de', valentines: '#e97ea8', winter: '#5abcf0',
+};
+export function eventChips(events: { key: string; event_key?: string | null; art_url?: string | null; color?: string | null }[]):
+  { icon: string; fill: string; ring: string }[] {
+  const used = new Set<string>();
+  return events.map(e => {
+    const key = e.event_key ?? e.key.replace(/^event:/, '');
+    let icon = EVENT_ICON.find(([re]) => re.test(key))?.[1] ?? 'sparkle';
+    if (used.has(icon)) icon = ICON_FALLBACKS.find(f => !used.has(f)) ?? icon;
+    used.add(icon);
+    const art = /\/([a-z0-9_]+)\.(?:webp|png)(?:\?|$)/.exec(e.art_url ?? '')?.[1];
+    const ring = e.color ?? '#7cc6f5';
+    return { icon, fill: (art && EVENT_ART_TINT[art]) || ring, ring };
+  });
 }
 
 /**
