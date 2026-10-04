@@ -75,7 +75,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
         <TopbarColumn><TopbarText>Friends</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
-      <CleanScreenBackground>
+      <CleanScreenBackground underTopbar>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
         {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}
