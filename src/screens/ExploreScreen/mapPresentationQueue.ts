@@ -1,3 +1,4 @@
+import { HUD_BOTTOM } from '../../components/map/statusStack';
 /**
  * One overlay at a time on the map (WS2). Priority: boss > selected ride >
  * adventure > project, and the daily chest always last: never alongside a find,
@@ -24,17 +25,18 @@ export function chestMayPresent(state: MapOverlayState): boolean {
 
 /**
  * Where the suggestion slots sit. The map starts under his header (70 + status bar,
- * minus the map's 8pt tuck), Ride Control rides at the top of the map, and the Live
- * Events pill adds a row under it. Every slot, including the Park Project pill that
- * renders outside the map, lines up on the same row so nothing overlaps.
+ * minus the map's 8pt tuck) and carries exactly one HUD row at its top (Ride
+ * Control, Live Events, the night show and Fin-ister share it as a stack). Every
+ * slot, including the Park Project pill that renders outside the map, lines up on
+ * the row under it so nothing overlaps, whatever the HUD is showing.
  */
 export const MAP_TOP_INSET = 62;
-export function suggestionSlotTop(hasLiveEvents: boolean): number {
-  return hasLiveEvents ? 124 : 64;
+export function suggestionSlotTop(): number {
+  return HUD_BOTTOM;
 }
 /** Screen-space top for a slot drawn outside the map container. */
-export function suggestionSlotScreenTop(statusBarHeight: number, hasLiveEvents: boolean): number {
-  return statusBarHeight + MAP_TOP_INSET + suggestionSlotTop(hasLiveEvents);
+export function suggestionSlotScreenTop(statusBarHeight: number): number {
+  return statusBarHeight + MAP_TOP_INSET + suggestionSlotTop();
 }
 
 export type MapSuggestion = 'boss' | 'ride' | 'dwell' | 'adventure' | 'goal' | 'project' | null;

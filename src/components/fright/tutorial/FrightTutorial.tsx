@@ -18,37 +18,43 @@
  * Reduce Motion: no drift, flash or thunder; static fades. Audio only when
  * Spooky effects are on. Every step has a VoiceOver label.
  */
-import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia';
+import { Blur, Canvas, Circle, Oval, RadialGradient, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { FRIGHT_SOUNDS, playFrightSfx } from '../../map/fright/frightAudio';
 import { NIGHT } from '../../../services/fright/theme';
-import { cardLayout, HERO_COPY_BAND, TUTORIAL_CARDS } from '../../../services/fright/tutorial';
-import ArtImage from '../ArtImage';
+import { cardLayout, HERO_COPY_BAND, tutorialCards } from '../../../services/fright/tutorial';
+import { casePlateRect, cinematicGlow } from '../../../services/fright/introArt';
 import { NightButton } from '../ui';
+import { CARD_ART_WAIT_MS, preloadFrightTutorialArt, TUTORIAL_HERO, TUTORIAL_LANTERN, TUTORIAL_SKY } from './preloadTutorialArt';
 
 const FOG_FAR = require('../../map/fright/art/fog-far.webp');
 const FOG_NEAR = require('../../map/fright/art/fog-near.webp');
-const LANTERN = require('../art/lantern.webp');
-const HERO = require('../art/tutorial-hero.webp');
-const SKY = require('../art/card-sky.webp');
+// Shared with the preloader so the card's source hits the warmed memory copy.
+const LANTERN = TUTORIAL_LANTERN;
+const HERO = TUTORIAL_HERO;
+const SKY = TUTORIAL_SKY;
 
 /**
  * Each card has its own subject on the shared night scene (same sky band for
  * the copy): the shark and the Shusher, haunt pins, a Case File, the
  * "I survived" pin, and the Deep Lantern itself.
  */
-type CardSubject = { readonly kind: 'hero' } | { readonly kind: 'images'; readonly images: readonly number[]; readonly scale: number };
+type CardSubject = { readonly kind: 'hero' }
+  | { readonly kind: 'images'; readonly images: readonly number[]; readonly scale: number; readonly plate?: string };
 const CARD_SUBJECTS: Readonly<Record<string, CardSubject>> = {
   haunts: { kind: 'hero' },
   rank: { kind: 'images', images: [require('../art/pin-a.webp'), require('../art/pin-b.webp'), require('../art/pin-c.webp')], scale: 0.3 },
-  reefs: { kind: 'images', images: [require('../art/card-case-file.webp')], scale: 0.42 },
+  // The Case File prop's nameplate is blank in the art: a parody title is overlaid (PlateTitle).
+  reefs: { kind: 'images', images: [require('../art/card-case-file.webp')], scale: 0.42, plate: 'Tug of the Tides' },
   marquee: { kind: 'images', images: [require('../art/pin-survived.webp')], scale: 0.5 },
   lantern: { kind: 'images', images: [LANTERN], scale: 0.56 },
+  // Chaos Hour (only when encounters are on): the lantern until a Chuckles static exists.
+  chaos: { kind: 'images', images: [LANTERN], scale: 0.5 },
 };
 /** The subject area on the card (fractions of the card height): below the copy band, above the cloud base. */
 export const SUBJECT_BAND = { top: 0.5, bottom: 0.84 } as const;
@@ -56,8 +62,11 @@ export const SUBJECT_BAND = { top: 0.5, bottom: 0.84 } as const;
 export type FrightTutorialMode = 'intro' | 'welcome_back' | 'replay';
 export type FrightTutorialStep = 'cinematic' | 'lantern' | 'cards' | 'welcome';
 
-export default function FrightTutorial({ mode, title, whatsNew, spooky = true, hero = null, onDone, initialStep, initialPage = 0 }: {
+export default function FrightTutorial({ mode, title, whatsNew, spooky = true, hero = null, onDone, initialStep, initialPage = 0,
+  encountersEnabled = false }: {
   readonly mode: FrightTutorialMode;
+  /** config.encounters_enabled: card 4 becomes Chaos Hour only when true. */
+  readonly encountersEnabled?: boolean;
   /** Server tutorial hero (720x1080, sky band empty for copy); the bundled copy is the fallback. */
   readonly hero?: string | null;
   readonly title: string;
@@ -75,6 +84,9 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, h
   const fog = useRef(new Animated.Value(initialStep && initialStep !== 'cinematic' ? 1 : 0)).current;
   const glow = useRef(new Animated.Value(initialStep && initialStep !== 'cinematic' ? 1 : 0)).current;
   const flash = useRef(new Animated.Value(0)).current;
+
+  // Warm card 1's hero and the card sky now (the cinematic gives them seconds; a replay still gets the card hold below).
+  useEffect(() => { void preloadFrightTutorialArt(); }, []);
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: reduced ? 200 : 600, useNativeDriver: true }).start();
@@ -120,7 +132,8 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, h
           <Cinematic step={step} title={title} glow={glow}
             onAdvance={() => setStep(step === 'cinematic' ? 'lantern' : 'cards')} />
         )}
-        {step === 'cards' && <Cards title={title} hero={hero} onDone={onDone} initialPage={initialPage} />}
+        {step === 'cards' && <Cards title={title} hero={hero} onDone={onDone} initialPage={initialPage} encountersEnabled={encountersEnabled}
+          reduced={reduced} />}
         {step === 'welcome' && <Welcome title={title} whatsNew={whatsNew} onDone={onDone} />}
         <TopBar title={step === 'cards' ? title : null} onSkip={onDone} />
       </Animated.View>
@@ -148,10 +161,7 @@ function NightSky({ reduced, fog }: { readonly reduced: boolean; readonly fog: A
         <View style={{ position: 'absolute', left: moon * 0.16, top: moon * 0.16, width: moon * 0.3, height: moon * 0.3,
           borderRadius: moon * 0.15, backgroundColor: NIGHT.moon }} />
       </View>
-      {SKY_STARS.map(([x, y, r], i) => (
-        <View key={i} style={{ position: 'absolute', left: x * width, top: insets.top + y * height * 0.12, width: r, height: r,
-          borderRadius: r / 2, backgroundColor: NIGHT.moon, opacity: 0.7 }} />
-      ))}
+      {/* No loose star dots up here: they sat by the kicker and read as dirt (panel r2, #14). */}
       <Animated.View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: height * 0.42,
         opacity: fog.interpolate({ inputRange: [0, 1], outputRange: [0, 0.9] }),
         transform: [{ translateX: drift.interpolate({ inputRange: [0, 1], outputRange: [0, -width * 0.5] }) }] }}>
@@ -165,11 +175,6 @@ function NightSky({ reduced, fog }: { readonly reduced: boolean; readonly fog: A
     </View>
   );
 }
-
-/** Tiny still stars in the top band only (never behind text). [x fraction, y fraction of the band, size]. */
-const SKY_STARS: readonly (readonly [number, number, number])[] = [
-  [0.52, 0.2, 3], [0.62, 0.7, 2], [0.78, 0.35, 3], [0.88, 0.85, 2], [0.4, 0.9, 2],
-];
 
 function TopBar({ title, onSkip }: { readonly title: string | null; readonly onSkip: () => void }) {
   const insets = useSafeAreaInsets();
@@ -188,14 +193,16 @@ function Cinematic({ step, title, glow, onAdvance }: {
 }) {
   const { width } = useWindowDimensions();
   const size = Math.min(width * 0.56, 240);
+  // The glow leans toward the lantern but never runs off the screen (SE).
+  const halo = cinematicGlow(width, size * 1.5, size * 1.5, size * 0.33);
   return (
     <Pressable style={styles.center} onPress={onAdvance} accessibilityRole="button"
       accessibilityLabel={`${title} is on. The fog is rolling in. Tap to continue.`}>
       <View style={{ width: size * 1.5, height: size * 1.5, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View pointerEvents="none" style={{ position: 'absolute', width: size * 1.5, height: size * 1.5,
-          left: size * 0.33, top: -size * 0.06,
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', width: halo.size, height: halo.size,
+          left: halo.left, top: -size * 0.06,
           opacity: glow, transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }}>
-          <Glow size={size * 1.5} color={NIGHT.lantern} strength={0.6} />
+          <Glow size={halo.size} color={NIGHT.lantern} strength={0.6} />
         </Animated.View>
         <Animated.View style={{ opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
           transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }}>
@@ -215,15 +222,17 @@ function Cinematic({ step, title, glow, onAdvance }: {
   );
 }
 
-function Cards({ title, hero, onDone, initialPage }: {
+function Cards({ title, hero, onDone, initialPage, encountersEnabled, reduced }: {
   readonly title: string; readonly hero: string | null; readonly onDone: () => void; readonly initialPage: number;
+  readonly encountersEnabled: boolean; readonly reduced: boolean;
 }) {
+  const CARDS = tutorialCards(encountersEnabled);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const layout = cardLayout({ width, height, insetTop: insets.top, insetBottom: insets.bottom });
   const [page, setPage] = useState(initialPage);
   const scroll = useRef<ScrollView>(null);
-  const last = page >= TUTORIAL_CARDS.length - 1;
+  const last = page >= CARDS.length - 1;
   const go = (next: number) => {
     scroll.current?.scrollTo({ x: next * width, animated: true });
     setPage(next);
@@ -233,11 +242,12 @@ function Cards({ title, hero, onDone, initialPage }: {
       <ScrollView ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}
         contentOffset={{ x: initialPage * width, y: 0 }}
         onMomentumScrollEnd={event => setPage(Math.round(event.nativeEvent.contentOffset.x / width))}>
-        {TUTORIAL_CARDS.map((card, index) => (
+        {CARDS.map((card, index) => (
           <View key={card.key} style={{ width, alignItems: 'center' }}>
-            <View style={[styles.card, { width: layout.cardWidth, height: layout.cardHeight }]} accessible
-              accessibilityLabel={`Card ${index + 1} of ${TUTORIAL_CARDS.length}. ${card.title}. ${card.line}`}>
-              <CardArt cardKey={card.key} hero={hero} width={layout.cardWidth} height={layout.cardHeight} />
+            <ArtHold reduced={reduced} style={[styles.card, { width: layout.cardWidth, height: layout.cardHeight }]}
+              accessibilityLabel={`Card ${index + 1} of ${CARDS.length}. ${card.title}. ${card.line}`}>
+              {onLoad => <>
+              <CardArt cardKey={card.key} hero={hero} width={layout.cardWidth} height={layout.cardHeight} onLoad={onLoad} />
               <View style={[styles.copy, {
                 top: layout.cardHeight * HERO_COPY_BAND.top, height: layout.cardHeight * (HERO_COPY_BAND.bottom - HERO_COPY_BAND.top),
                 paddingHorizontal: layout.cardWidth * 0.08 }]}>
@@ -245,13 +255,14 @@ function Cards({ title, hero, onDone, initialPage }: {
                 <Text style={[styles.cardLine, { fontSize: layout.lineSize, lineHeight: layout.lineSize * 1.2 }]}
                   numberOfLines={2} adjustsFontSizeToFit>{card.line}</Text>
               </View>
-            </View>
+              </>}
+            </ArtHold>
           </View>
         ))}
       </ScrollView>
       <View style={[styles.bottomBand, { paddingBottom: insets.bottom + 14 }]}>
-        <View style={styles.dots} accessibilityLabel={`Card ${page + 1} of ${TUTORIAL_CARDS.length}`}>
-          {TUTORIAL_CARDS.map((card, index) => (
+        <View style={styles.dots} accessibilityLabel={`Card ${page + 1} of ${CARDS.length}`}>
+          {CARDS.map((card, index) => (
             <View key={card.key} style={[styles.dot, { backgroundColor: index === page ? NIGHT.candy : NIGHT.dusk }]} />
           ))}
         </View>
@@ -262,27 +273,89 @@ function Cards({ title, hero, onDone, initialPage }: {
   );
 }
 
-function CardArt({ cardKey, hero, width, height }: { readonly cardKey: string; readonly hero: string | null; readonly width: number; readonly height: number }) {
+/**
+ * Holds a card at opacity 0 until its art reports onLoad (or CARD_ART_WAIT_MS
+ * passes), then fades it in: never an empty purple card while the art decodes.
+ */
+function ArtHold({ reduced, style, accessibilityLabel, children }: {
+  readonly reduced: boolean;
+  readonly style: StyleProp<ViewStyle>;
+  readonly accessibilityLabel: string;
+  readonly children: (onLoad: () => void) => ReactNode;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const shown = useRef(false);
+  const show = useRef(() => {
+    if (shown.current) return;
+    shown.current = true;
+    Animated.timing(opacity, { toValue: 1, duration: reduced ? 0 : 180, useNativeDriver: true }).start();
+  }).current;
+  useEffect(() => {
+    const timer = setTimeout(show, CARD_ART_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [show]);
+  return (
+    <Animated.View style={[style, { opacity }]} accessible accessibilityLabel={accessibilityLabel}>
+      {children(show)}
+    </Animated.View>
+  );
+}
+
+function CardArt({ cardKey, hero, width, height, onLoad }: {
+  readonly cardKey: string; readonly hero: string | null; readonly width: number; readonly height: number;
+  /** The card's backdrop art finished loading (ArtHold fades the card in). */
+  readonly onLoad?: () => void;
+}) {
   const subject = CARD_SUBJECTS[cardKey] ?? { kind: 'hero' };
   if (subject.kind === 'hero') {
-    return <ArtImage uri={hero} fit="cover" style={StyleSheet.absoluteFill}
-      fallback={<Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} />} />;
+    // The bundled hero is the cleaned art (no smudge disc or ring behind the lantern), so card 1 always uses it.
+    void hero;
+    return <Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} onLoad={onLoad} onError={onLoad} />;
   }
   const band = (SUBJECT_BAND.bottom - SUBJECT_BAND.top) * height;
   const many = subject.images.length > 1;
   const item = Math.min(width * subject.scale * (many ? 1 : 1.6), band);
   return (
     <>
-      <Image source={SKY} contentFit="cover" style={StyleSheet.absoluteFill} />
+      <Image source={SKY} contentFit="cover" style={StyleSheet.absoluteFill} onLoad={onLoad} onError={onLoad} />
       <View style={{ position: 'absolute', left: 0, right: 0, top: SUBJECT_BAND.top * height, height: band,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
         {subject.images.map((source, i) => (
-          <Image key={i} source={source} contentFit="contain" style={{ width: item, height: item,
-            marginHorizontal: many ? -item * 0.08 : 0,
-            transform: many ? [{ rotate: `${(i - 1) * 9}deg` }, { translateY: i === 1 ? -item * 0.12 : 0 }] : [] }} />
+          <View key={i} style={{ width: item, height: item, marginHorizontal: many ? -item * 0.08 : 0,
+            transform: many ? [{ rotate: `${(i - 1) * 9}deg` }, { translateY: i === 1 ? -item * 0.12 : 0 }] : [] }}>
+            {/* Soft contact shadow so the prop sits on the scene instead of floating like a sticker. */}
+            <ContactShadow width={item} />
+            <Image source={source} contentFit="contain" style={{ width: item, height: item }} />
+            {subject.plate && <PlateTitle box={item} title={subject.plate} />}
+          </View>
         ))}
       </View>
     </>
+  );
+}
+
+/** A soft dark ellipse under a prop (blurred, never a hard disc). */
+function ContactShadow({ width }: { readonly width: number }) {
+  const w = width * 0.62;
+  const h = width * 0.12;
+  return (
+    <Canvas style={{ position: 'absolute', left: (width - w * 1.4) / 2, top: width * 0.86 - h * 0.7, width: w * 1.4, height: h * 2.4 }}
+      pointerEvents="none">
+      <Oval x={w * 0.2} y={h * 0.7} width={w} height={h} color="rgba(20,14,40,0.45)">
+        <Blur blur={h * 0.35} />
+      </Oval>
+    </Canvas>
+  );
+}
+
+/** The parody title on the Case File prop's blank nameplate. */
+function PlateTitle({ box, title }: { readonly box: number; readonly title: string }) {
+  const plate = casePlateRect(box);
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', ...plate, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}
+        style={{ fontFamily: 'Shark', fontSize: Math.max(10, plate.height * 0.55), color: NIGHT.haunt }}>{title}</Text>
+    </View>
   );
 }
 

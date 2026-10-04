@@ -1,89 +1,13 @@
 /**
- * Scare-critters at the Fright Reefs. Pure, unit tested; the pose function
- * runs on the UI thread every ambient clock step.
- *
- * Each critter loops idle (wandering inside the reef), lurk (sinks low so only
- * its eyes peek) and a little jump. Within 60 m of the player it stops,
- * turns toward them and watches. Stepping into the reef makes one critter
- * pop (a bigger jump, a light haptic and a small sound), at most once per reef
- * every 10 minutes. Spooky-silly: the pop ends in a wiggle, never a lunge.
+ * Fright Reef reactions to the player: who watches (within 60 m) and the
+ * reef-entry pop (one scareactor jumps, a light haptic and a small sound),
+ * at most once per reef every 10 minutes. Pure, unit tested. The scareactor
+ * sheets, rows and facing rules live in scareactors.ts.
  */
-import { hash01 } from '../alive/ambientBudget';
 import { distanceMeters, type LatLng } from './geo';
 
 export const WATCH_RADIUS_M = 60;
 export const POP_COOLDOWN_MS = 10 * 60_000;
-/** Seconds a pop jump lasts on screen. */
-export const POP_S = 1.1;
-
-export type CritterMood = 0 | 1 | 2; // idle, lurk, jump
-export const MOOD_IDLE = 0;
-export const MOOD_LURK = 1;
-export const MOOD_JUMP = 2;
-
-export interface CritterPose {
-  /** Offset from the reef center in points (east right, south down). */
-  readonly x: number;
-  readonly y: number;
-  readonly mood: CritterMood;
-  /** 0..1 progress inside the current mood. */
-  readonly p: number;
-  /** Vertical hop in points (negative is up). */
-  readonly hop: number;
-  /** Squash: 1 is normal, under 1 is low (lurking or landing). */
-  readonly squash: number;
-  /** Facing: 1 right, -1 left. */
-  readonly face: number;
-}
-
-/**
- * Where a critter is at ambient time t (seconds). `seed` makes each critter
- * unique; `wander` is the reef radius in points; `watch` is 0 (no player
- * near) or +1/-1 (the side the player is on); `popAge` is seconds since the
- * reef popped (negative when no pop is playing).
- */
-export function critterPose(seed: number, t: number, wander: number, watch: number, popAge: number): CritterPose {
-  'worklet';
-  const r = Math.max(0, wander) * (0.35 + 0.45 * hash01(seed * 3 + 1));
-  const w = 0.05 + 0.06 * hash01(seed * 3 + 2); // slow orbit, radians per second
-  const phase = hash01(seed * 3 + 3) * 6.283;
-  const tt = watch !== 0 ? 0 : t; // a watching critter holds still
-  const ang = tt * w + phase;
-  const radial = 0.6 + 0.4 * Math.sin(tt * w * 1.7 + phase * 2);
-  const x = Math.cos(ang) * r * radial;
-  const y = Math.sin(ang) * r * radial * 0.7; // a flatter ellipse reads as ground
-  const dx = -Math.sin(ang) * w; // heading along the orbit
-  const face = watch !== 0 ? watch : (dx >= 0 ? 1 : -1);
-
-  if (popAge >= 0 && popAge < POP_S) {
-    const p = popAge / POP_S;
-    const up = Math.sin(Math.min(1, p / 0.7) * Math.PI);
-    const wiggle = p > 0.7 ? Math.sin((p - 0.7) * 30) * (1 - p) * 0.3 : 0;
-    return { x, y, mood: MOOD_JUMP, p, hop: -34 * up, squash: 1.15 + wiggle, face };
-  }
-
-  // Mood cycle: 18 to 30 s, idle most of it, a lurk, then a hop.
-  const period = 18 + 12 * hash01(seed * 5 + 4);
-  const c = ((t + hash01(seed * 5 + 5) * period) % period) / period;
-  if (watch !== 0) {
-    // Watching: a slow curious bob, no hiding.
-    return { x, y, mood: MOOD_IDLE, p: c, hop: -2 * Math.abs(Math.sin(t * 2.2 + phase)), squash: 1, face };
-  }
-  if (c < 0.62) {
-    const p = c / 0.62;
-    return { x, y, mood: MOOD_IDLE, p, hop: -2.5 * Math.abs(Math.sin(t * 3 + phase)), squash: 1, face };
-  }
-  if (c < 0.86) {
-    const p = (c - 0.62) / 0.24;
-    const sink = Math.sin(p * Math.PI); // down and back up
-    return { x, y, mood: MOOD_LURK, p, hop: 4 * sink, squash: 1 - 0.45 * sink, face };
-  }
-  if (c < 0.93) {
-    const p = (c - 0.86) / 0.07;
-    return { x, y, mood: MOOD_JUMP, p, hop: -16 * Math.sin(p * Math.PI), squash: p < 0.15 ? 0.85 : 1.08, face };
-  }
-  return { x, y, mood: MOOD_IDLE, p: (c - 0.93) / 0.07, hop: 0, squash: 1, face };
-}
 
 /** How a reef reacts to the player at a distance from its center. */
 export type ReefReaction = 'ignore' | 'watch' | 'inside';
@@ -139,36 +63,4 @@ export function stepPops(state: PopState, reefs: readonly ReefCircle[], player: 
     pops.push(reef.key);
   }
   return { state: { inside, lastPop }, pops };
-}
-
-/* ── Sheet frames (server art) ────────────────────────────────────────── */
-
-export interface SheetPose {
-  /** Row: 0 idle, 1 lurk, 2 jump (the manifest's row order). */
-  readonly row: number;
-  readonly frame: number;
-}
-
-/**
- * Which frame of a critter sheet plays at time t (MAP_FX_SPEC, Fright Reefs):
- * idle by default; every 6 to 14 s a lurk for 1 or 2 loops (not in lite);
- * a jump plays its row once from `jumpAge` 0, then cuts back to idle.
- * `rows` are the row indexes [idle, lurk, jump] (-1 when a sheet lacks one).
- */
-export function sheetPose(seed: number, t: number, frames: number, fps: number, rows: readonly number[],
-  lurks: boolean, jumpAge: number): SheetPose {
-  'worklet';
-  const idle = rows[0] >= 0 ? rows[0] : 0;
-  const loop = frames / fps;
-  if (rows[2] >= 0 && jumpAge >= 0 && jumpAge < loop) {
-    return { row: rows[2], frame: Math.min(frames - 1, Math.floor(jumpAge * fps)) };
-  }
-  const frame = Math.floor(t * fps + hash01(seed * 7 + 2) * frames) % frames;
-  if (lurks && rows[1] >= 0) {
-    const loops = hash01(seed * 7 + 3) < 0.5 ? 1 : 2;
-    const period = 6 + 8 * hash01(seed * 7 + 4) + loops * loop;
-    const c = (t + hash01(seed * 7 + 5) * period) % period;
-    if (c >= period - loops * loop) return { row: rows[1], frame };
-  }
-  return { row: idle, frame };
 }

@@ -10,7 +10,7 @@ import { Canvas, Circle, Group, LinearGradient, Oval, Path, RadialGradient, Rect
 import { memo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { hash01 } from './ambientBudget';
+import { ALIVE_CAPS, hash01 } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
 
 /* ── Cloud shadows ─────────────────────────────────────────────────────── */
@@ -132,24 +132,32 @@ function Firefly({ clock, k, width, height, strength }: {
 
 export const MapSkyOverlay = memo(function MapSkyOverlay({ width, height }: { readonly width: number; readonly height: number }) {
   const { clock, caps, light, running } = useMapAlive();
-  const clouds = light.clouds > 0.02 ? caps.clouds : 0;
-  const birds = light.birds > 0.02 ? caps.birds : 0;
-  const fireflies = light.fireflies > 0.02 ? caps.fireflies : 0;
-  if (!running || width <= 0 || height <= 0 || (!clouds && !birds && !fireflies)) return null;
+  // One fixed Skia tree: the most clouds, gulls and fireflies any tier draws, always
+  // mounted. Tier, light and pause only change each one's strength. Mounting and
+  // unmounting Skia nodes that the ambient clock still animates (the frame governor
+  // re-tiers under load, which the map declutter's extra work made more frequent)
+  // crashed RN Skia in JsiDomDeclarationNode::invalidateContext while panning.
+  const clouds = running && light.clouds > 0.02 ? caps.clouds : 0;
+  const birds = running && light.birds > 0.02 ? caps.birds : 0;
+  const fireflies = running && light.fireflies > 0.02 ? caps.fireflies : 0;
+  if (width <= 0 || height <= 0) return null;
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      {Array.from({ length: clouds }, (_, i) => (
-        <Cloud key={`c${i}`} clock={clock} i={i} width={width} height={height} strength={light.clouds} />
+      {Array.from({ length: SKY_MAX.clouds }, (_, i) => (
+        <Cloud key={`c${i}`} clock={clock} i={i} width={width} height={height} strength={i < clouds ? light.clouds : 0} />
       ))}
-      {Array.from({ length: birds }, (_, j) => (
-        <Gull key={`g${j}`} clock={clock} j={j} width={width} height={height} strength={light.birds} />
+      {Array.from({ length: SKY_MAX.birds }, (_, j) => (
+        <Gull key={`g${j}`} clock={clock} j={j} width={width} height={height} strength={j < birds ? light.birds : 0} />
       ))}
-      {Array.from({ length: fireflies }, (_, k) => (
-        <Firefly key={`f${k}`} clock={clock} k={k} width={width} height={height} strength={light.fireflies} />
+      {Array.from({ length: SKY_MAX.fireflies }, (_, k) => (
+        <Firefly key={`f${k}`} clock={clock} k={k} width={width} height={height} strength={k < fireflies ? light.fireflies : 0} />
       ))}
     </Canvas>
   );
 });
+
+/** The most of each the sky ever draws (the full tier). */
+export const SKY_MAX = { clouds: ALIVE_CAPS.full.clouds, birds: ALIVE_CAPS.full.birds, fireflies: ALIVE_CAPS.full.fireflies } as const;
 
 /**
  * Static time-of-day light over the map (drawn once per change, no clock):

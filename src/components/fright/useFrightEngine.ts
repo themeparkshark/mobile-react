@@ -11,12 +11,16 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   enterFrightSpot, findFrightSpot, getFrightCards, finishFrightSpot, markFrightRecapSeen, markFrightSeen, scoreFrightSpot,
-  type FrightActionResult, type FrightCaseFileDrop, type FrightReaction, type FrightRun, type FrightSpot,
+  type FrightActionResult, type FrightCaseFileDrop, type FrightReaction, type FrightRun, type FrightSide, type FrightSpot,
 } from '../../api/endpoints/fright';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { artFromAssets, artFromCard, frightArt, rememberFrightArt, type FrightArtSet } from '../../services/fright/art';
 import { COPY } from '../../services/fright/copy';
-import { encounterLive, reefStep, toWireFix, type ReefHold } from '../../services/fright/finds';
+import { encounterInRange, encounterLive, encounterMinutesLeft, needsSidePick, reefStep, toWireFix, type ReefHold }
+  from '../../services/fright/finds';
+import { dropModal, pushModal, visibleModal, type FrightModal } from '../../services/fright/modalQueue';
+import { critterName } from '../../services/fright/critters';
+import { rewardReveal } from '../../services/fright/rewards';
 import type { FrightFixSample } from '../../services/fright/geo';
 import { isOnPhase } from '../../services/fright/phase';
 import {
@@ -26,7 +30,7 @@ import { nightRecordFrom, parseNightRecord, recapTrigger, type NightRecord } fro
 import { canEnter, exitStep, finishDecision, localRun, minDoneAt, runStage, type ExitHold, type FinishMethod } from '../../services/fright/run';
 import { FRIGHT_KEYS, readJson, readKey, writeJson, writeKey } from '../../services/fright/storage';
 import {
-  coachDismiss, coachEnqueue, coachTick, coachWaitMs, EMPTY_COACH, introPlan, isChaosHour, markSeenLocal, mergeSeen,
+  COACH_LINES, coachDismiss, coachEnqueue, coachTick, coachWaitMs, EMPTY_COACH, introPlan, isChaosHour, markSeenLocal, mergeSeen,
   parseSeenStore, type CoachState, type FrightCoachKey, type FrightSeenKey, type IntroPlan, type SeenStore,
 } from '../../services/fright/tutorial';
 
@@ -38,6 +42,10 @@ export interface RankPrompt {
   readonly reSwim: boolean;
   /** The player's last score for this haunt (re-swim card asks "Still a four?"). */
   readonly lastScore: number | null;
+  /** XP the finish granted (shown on the rank stamp: "4 FINS · +25 XP"). */
+  readonly xp?: number | null;
+  /** The rank_first coach line, shown ON the first rank card of the season (not after it). */
+  readonly hint?: string | null;
 }
 
 export interface FrightEngine {
@@ -66,6 +74,15 @@ export interface FrightEngine {
   readonly enter: (spot: FrightSpot) => Promise<void>;
   readonly survived: () => Promise<void>;
   readonly enterCheck: (spot: FrightSpot) => ReturnType<typeof canEnter>;
+  /** The one modal allowed right now (rank, Case File, rewards, team pick), or null. */
+  readonly modal: FrightModal | null;
+  readonly closeModal: () => void;
+  /** Chaos Hour: the live encounter (only when config.encounters_enabled). */
+  readonly encounter: { readonly key: string; readonly name: string; readonly line: string; readonly minutesLeft: number;
+    readonly inRange: boolean; readonly caught: boolean } | null;
+  readonly catchEncounter: () => Promise<void>;
+  /** The first catch of the night: Team Chaos or Team Control. */
+  readonly pickSide: (side: FrightSide) => Promise<void>;
   readonly rank: RankPrompt | null;
   readonly submitRank: (score: number, reaction: FrightReaction | null) => Promise<{ fanRank: number | null; myRank: number | null } | null>;
   readonly closeRank: () => void;
@@ -153,8 +170,9 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const [record, setRecord] = useState<NightRecord | null>(null);
   const [seenStore, setSeenStore] = useState<SeenStore | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [rank, setRank] = useState<RankPrompt | null>(null);
-  const [caseFile, setCaseFile] = useState<FrightCaseFileDrop | null>(null);
+  const [modals, setModals] = useState<FrightModal[]>([]);
+  const showingModal = useRef<string | null>(null);
+  const queueModal = useCallback((modal: FrightModal) => setModals(current => pushModal(current, modal, showingModal.current)), []);
   const [toast, setToast] = useState<string | null>(null);
   const [tutorial, setTutorial] = useState<IntroPlan | 'replay'>(null);
   const [coach, setCoach] = useState<CoachState>(EMPTY_COACH);
@@ -302,17 +320,27 @@ export default function useFrightEngine(night: FrightNight, opts: {
     applyResult(key, result);
     setLocalRun(null);
     const lastScore = result.run?.score ?? me?.runs.find(run => run.key === key)?.score ?? lastScores.current[key] ?? null;
-    setRank({ key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim, lastScore });
-    enqueueCoach('rank_first');
-  }, [spotByKey, applyResult, setLocalRun, enqueueCoach, me?.runs]);
+    setSheetOpen(false);
+    const stamp = `${key}:${result.server_now ?? Date.now()}`;
+    const xp = (result.rewards ?? []).filter(reward => reward.kind === 'xp').reduce((sum, reward) => sum + (reward.amount ?? 0), 0);
+    // rank_first is a line on the first rank card itself (coach timing, panel r2 #9): marked seen as it shows.
+    const hint = seen.rank_first ? null : COACH_LINES.rank_first.line;
+    if (hint) markSeen('rank_first');
+    queueModal({ id: `rank:${stamp}`, kind: 'rank', prompt: { key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim, lastScore, xp: xp || null, hint } });
+    if (rewardReveal(result.rewards)) queueModal({ id: `rewards:${stamp}`, kind: 'rewards', rewards: result.rewards ?? [] });
+  }, [spotByKey, applyResult, setLocalRun, me?.runs, queueModal, setSheetOpen, seen, markSeen]);
 
-  const afterFound = useCallback((key: string, result: FrightActionResult) => {
-    applyResult(key, result, { found: true, side: null });
+  const afterFound = useCallback((key: string, result: FrightActionResult, side: FrightSide | null = null, critter: string | null = null) => {
+    applyResult(key, result, { found: true, side });
+    const stamp = `${key}:${result.server_now ?? Date.now()}`;
     if (result.case_file) {
-      setCaseFile(result.case_file);
+      queueModal({ id: `file:${result.case_file.key}`, kind: 'case_file', file: result.case_file });
       enqueueCoach('case_file_first');
     }
-  }, [applyResult, enqueueCoach]);
+    // A catch names its critter in the reveal ("You caught Ringmaster Riptide!"): the catch result first, then the live encounter.
+    const caught = critterName(result) ?? critter;
+    if (rewardReveal(result.rewards, caught)) queueModal({ id: `rewards:${stamp}`, kind: 'rewards', rewards: result.rewards ?? [], critter: caught });
+  }, [applyResult, enqueueCoach, queueModal]);
 
   const enter = useCallback(async (spot: FrightSpot) => {
     if (!nightOn || busyKey) return;
@@ -538,15 +566,80 @@ export default function useFrightEngine(night: FrightNight, opts: {
   }, [tutorial, markSeen]);
   const replayTutorial = useCallback(() => { setSheetOpen(false); setTutorial('replay'); }, []);
 
-  // Chaos Hour coach mark.
-  const encounter = tonight?.encounter ?? null;
-  useEffect(() => {
-    if (modeOn && encounter && encounterLive(encounter, now()) && isChaosHour(encounter.starts_at, encounter.ends_at)) {
-      enqueueCoach('chaos_hour');
-    }
-  }, [modeOn, encounter?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* ---------- Chaos Hour: the Lantern Star encounter (F3) ---------- */
 
-  const canCoach = modeOn && focused && foreground && !quiet && !opts.blocked && !sheetOpen && !tutorial && !rank && !caseFile && !recapOffer && !marquee;
+  const encountersOn = tonight?.config?.encounters_enabled === true;
+  const rawEncounter = encountersOn ? tonight?.encounter ?? null : null;
+  const encounterNow = rawEncounter && encounterLive(rawEncounter, now()) ? rawEncounter : null;
+  const announced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!modeOn || !encounterNow || announced.current === encounterNow.key) return;
+    announced.current = encounterNow.key;
+    // The server's line ("Chuckles the Chum Jester is loose! 7 minutes.") as a toast; never inside a quiet window.
+    if (encounterNow.line) setToast(encounterNow.line);
+    if (isChaosHour(encounterNow.starts_at, encounterNow.ends_at)) enqueueCoach('chaos_hour');
+  }, [modeOn, encounterNow?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const catching = useRef(false);
+  const sendCatch = useCallback(async (side: FrightSide | null) => {
+    if (!encounterNow || catching.current) return;
+    catching.current = true;
+    setBusyKey(encounterNow.key);
+    try {
+      const sample = await freshFix(10_000);
+      if (!sample || !encounterInRange(encounterNow, sample, now())) {
+        setToast(COPY.tooFar);
+        return;
+      }
+      const result = await findFrightSpot(encounterNow.key, [toWireFix(sample)], side);
+      if (result.needs_side) {
+        queueModal({ id: `side:${encounterNow.key}`, kind: 'side', encounterKey: encounterNow.key, name: encounterNow.name });
+      } else if (result.ok) {
+        afterFound(encounterNow.key, result, side ?? me?.side ?? null, critterName(encounterNow));
+      } else {
+        setToast(ERROR_COPY[result.error ?? ''] ?? COPY.offline);
+      }
+    } finally {
+      catching.current = false;
+      setBusyKey(null);
+    }
+  }, [encounterNow, freshFix, now, queueModal, afterFound, me?.side]);
+
+  const catchEncounter = useCallback(async () => {
+    if (!encounterNow) return;
+    // The first catch of the night asks for a side before anything is sent.
+    if (needsSidePick(me)) {
+      queueModal({ id: `side:${encounterNow.key}`, kind: 'side', encounterKey: encounterNow.key, name: encounterNow.name });
+      return;
+    }
+    await sendCatch(null);
+  }, [encounterNow, me, queueModal, sendCatch]);
+
+  const pickSide = useCallback(async (side: FrightSide) => {
+    setModals(current => current.filter(item => item.kind !== 'side'));
+    await sendCatch(side);
+  }, [sendCatch]);
+
+  const sampleNow = fix();
+  const encounterView = encounterNow ? {
+    key: encounterNow.key, name: encounterNow.name, line: encounterNow.line, minutesLeft: encounterMinutesLeft(encounterNow, now()),
+    inRange: encounterInRange(encounterNow, sampleNow, now()), caught: encounterNow.caught,
+  } : null;
+
+  /* ---------- One modal at a time ---------- */
+
+  const modal = visibleModal(modals, { quiet, inLine: !!openRun, focused, foreground, blocked: !!opts.blocked || sheetOpen || !!tutorial });
+  showingModal.current = modal?.id ?? null;
+  const closeModal = useCallback(() => {
+    setModals(current => {
+      const shown = visibleModal(current, { quiet: false, focused: true, foreground: true, blocked: false });
+      return shown ? dropModal(current, shown.id) : current;
+    });
+  }, []);
+  const rank = modal?.kind === 'rank' ? modal.prompt : null;
+  const caseFile = modal?.kind === 'case_file' ? modal.file : null;
+
+  const canCoach = modeOn && focused && foreground && !quiet && !opts.blocked && !sheetOpen && !tutorial && !modal && !recapOffer && !marquee;
   useEffect(() => {
     setCoach(state => coachTick(state, Date.now(), canCoach, seen));
   }, [canCoach, coach.queue.length, coach.visible, seen]);
@@ -607,8 +700,9 @@ export default function useFrightEngine(night: FrightNight, opts: {
       return check.reason === 'not_accepting' || check.reason === 'too_far' || check.reason === 'no_fix' ? check
         : { ok: true, distance: check.distance };
     },
-    rank: quiet ? null : rank, submitRank, closeRank: () => setRank(null),
-    caseFile: quiet ? null : caseFile, closeCaseFile: () => setCaseFile(null),
+    modal, closeModal, encounter: encounterView, catchEncounter, pickSide,
+    rank, submitRank, closeRank: closeModal,
+    caseFile, closeCaseFile: closeModal,
     toast: visibleToast, clearToast: () => setToast(null),
     tutorial: quiet || opts.blocked ? null : tutorial, finishTutorial, replayTutorial,
     introPending: frightIntroPending({ modeOn, hasEvent: !!event, loaded, tutorial, plan: event ? introPlan({ seen, returning: me?.returning }) : null }),

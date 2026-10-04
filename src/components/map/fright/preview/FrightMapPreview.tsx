@@ -6,7 +6,7 @@ import { usfFrightFixture } from './usfFixture';
 /**
  * Development-only visual QA for the Fin-ister Nights map (captures): the
  * real map with the USF fixture. EXPO_PUBLIC_FRIGHT_SCENE pins one scene
- * (intro, live, early, calm, done); otherwise it plays the intro, then live.
+ * (intro, live, early, calm, done, show); otherwise it plays the intro, then live.
  * Set the simulator location to USF (28.4767, -81.4687). Not routed by
  * default: register it next to MapAlivePreviewScreen to use it.
  */
@@ -16,7 +16,7 @@ export default function FrightMapPreview() {
   const [cinematic, setCinematic] = useState<'intro' | null>(scene === 'intro' ? 'intro' : null);
   useEffect(() => { console.log(`FRIGHT_SCENE ${scene}`); }, [scene]);
   const fright = useMemo<FrightMapInput>(() => ({
-    tonight: usfFrightFixture(now, scene === 'early' ? 'early' : 'live'),
+    tonight: usfFrightFixture(now, scene === 'early' ? 'early' : 'live', scene === 'show'),
     active: true,
     nowOffsetMs: 0,
     player: { latitude: 28.4756, longitude: -81.4679 },

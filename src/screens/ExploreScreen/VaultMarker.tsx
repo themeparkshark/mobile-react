@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { Marker } from '../../components/map/Marker';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
+import { Placed, usePlacement } from '../../components/map/declutter/Placed';
 
 /**
  * VaultMarker — 100% STATIC children inside <Marker>.
@@ -14,6 +15,7 @@ export default function VaultMarker({
 }) {
   // The GIF stops decoding frames while the map is off screen or calm.
   const { running } = useMapAlive();
+  const placement = usePlacement(`vault:${vault.id}`);
   return (
     <Marker
       coordinate={{
@@ -25,7 +27,7 @@ export default function VaultMarker({
       tracksViewChanges={false}
       anchor={{ x: 0.5, y: 0.5 }}
     >
-      <View pointerEvents="none" style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+      <Placed placement={placement} style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
         {/* Static golden glow behind vault */}
         <View style={{
           position: 'absolute',
@@ -38,11 +40,11 @@ export default function VaultMarker({
 
         <Image
           source={require('../../../assets/images/screens/explore/vault_animation.gif')}
-          autoplay={running}
+          autoplay={running && placement.visible}
           style={{ width: 70, height: 70 }}
           contentFit="contain"
         />
-      </View>
+      </Placed>
     </Marker>
   );
 }

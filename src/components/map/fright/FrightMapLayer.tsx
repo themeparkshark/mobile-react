@@ -18,7 +18,7 @@ import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
 import { CLOUDS_H, CLOUDS_W, FOG_TILE, FRIGHT_ART, NIGHT } from './frightArt';
 import { frightEvents } from './events';
-import { useFrightImage, useRemoteImage } from './useFrightImage';
+import { frightImagesHeld, useFrightImage, useRemoteImage } from './useFrightImage';
 import { FRIGHT_SOUNDS, playFrightSfx, useFrightSoundBed } from './frightAudio';
 import { ambienceOn, frameStats } from './frightBudget';
 import { distanceMeters, pointsPerMeter, validPoint } from './geo';
@@ -168,56 +168,60 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
   }, [input.cinematic]);
   useEffect(() => () => { frightIntro.value = 1; }, []);
 
-  if (visible <= 0 || width <= 0 || height <= 0) return null;
+  // Mounted for as long as the fright input exists: fading out is opacity, never an unmount
+  // (RN Skia unmount race under a moving map). Only a zero-size view draws nothing.
+  if (width <= 0 || height <= 0) return null;
   const fogLayers = (
     <Group>
-      {fogFar && (
+      <Group opacity={fogFar ? 1 : 0}>
         <Rect x={0} y={0} width={width} height={height} opacity={farOpacity}>
           <ImageShader image={fogFar} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={farTransform} />
         </Rect>
-      )}
-      {fogNear && full && (
+      </Group>
+      {/* Tier changes only show or hide (opacity): mounting or unmounting Skia nodes that the
+          ambient clock still animates crashed RN Skia (invalidateContext) under a moving map. */}
+      <Group opacity={full && fogNear ? 1 : 0}>
         <Rect x={0} y={0} width={width} height={height} opacity={nearOpacity}>
           <ImageShader image={fogNear} tx="repeat" ty="repeat" fit="none" rect={{ x: 0, y: 0, width: FOG_TILE, height: FOG_TILE }} transform={nearTransform} />
         </Rect>
-      )}
+      </Group>
     </Group>
   );
   return (
     <>
       <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Group opacity={visible > 0 ? 1 : 0}>
         {/* Moon and its cloud strip. */}
         <Group opacity={0.85 * visible}>
           <Circle cx={moonX} cy={moonY} r={40} opacity={0.35}>
             <RadialGradient c={vec(moonX, moonY)} r={40} colors={[NIGHT.moon, `${NIGHT.moon}00`]} />
           </Circle>
-          {moon ? <SkImage image={moon} x={moonX - 24} y={moonY - 24} width={48} height={48} fit="contain" /> : (
-            <Group>
-              <Circle cx={moonX} cy={moonY} r={18} color={NIGHT.moon} />
-              <Circle cx={moonX - 5} cy={moonY - 4} r={3.5} color="#F1DC92" />
-              <Circle cx={moonX + 6} cy={moonY + 5} r={2.5} color="#F1DC92" />
-            </Group>
-          )}
-          {clouds && full && (
-            <Group transform={[{ translateY: moonY - CLOUDS_H * 0.45 }]}>
-              <SkImage image={clouds} x={cloudX} y={0} width={CLOUDS_W} height={CLOUDS_H} fit="fill" opacity={0.85} />
-            </Group>
-          )}
+          <SkImage image={moon} x={moonX - 24} y={moonY - 24} width={48} height={48} fit="contain" />
+          <Group opacity={moon ? 0 : 1}>
+            <Circle cx={moonX} cy={moonY} r={18} color={NIGHT.moon} />
+            <Circle cx={moonX - 5} cy={moonY - 4} r={3.5} color="#F1DC92" />
+            <Circle cx={moonX + 6} cy={moonY + 5} r={2.5} color="#F1DC92" />
+          </Group>
+          <Group transform={[{ translateY: moonY - CLOUDS_H * 0.45 }]} opacity={full && clouds ? 1 : 0}>
+            <SkImage image={clouds} x={cloudX} y={0} width={CLOUDS_W} height={CLOUDS_H} fit="fill" opacity={0.85} />
+          </Group>
         </Group>
         {fogLayers}
         {/* Lightning: a soft violet-white flash and a small bolt by the moon. */}
-        {caps.frightBolts > 0 && (
-          <Group>
+        {(
+          <Group opacity={caps.frightBolts > 0 ? 1 : 0}>
             <Rect x={0} y={0} width={width} height={height} color={NIGHT.fogLight} opacity={flash} />
-            {boltSheet && boltAsset?.frame
-              ? <BoltSprite image={boltSheet} fw={boltAsset.frame[0]} fh={boltAsset.frame[1]} frame={boltFrame} row={boltRow} x={boltX} shown={boltShown} />
-              : (
-                <Group transform={[{ translateX: moonX + 46 }, { translateY: moonY + 8 }]} opacity={bolt}>
-                  <Path path={BOLT} color={NIGHT.moon}><BlurMask blur={2} style="solid" /></Path>
-                </Group>
-              )}
+            <Group opacity={boltSheet && boltAsset?.frame ? 1 : 0}>
+              <BoltSprite image={boltSheet} fw={boltAsset?.frame?.[0] ?? 120} fh={boltAsset?.frame?.[1] ?? 240} frame={boltFrame} row={boltRow} x={boltX} shown={boltShown} />
+            </Group>
+            <Group opacity={boltSheet && boltAsset?.frame ? 0 : 1}>
+              <Group transform={[{ translateX: moonX + 46 }, { translateY: moonY + 8 }]} opacity={bolt}>
+                <Path path={BOLT} color={NIGHT.moon}><BlurMask blur={2} style="solid" /></Path>
+              </Group>
+            </Group>
           </Group>
         )}
+        </Group>
       </Canvas>
       {__DEV__ && process.env.EXPO_PUBLIC_FRIGHT_PROFILE === '1' && <FrightPerfProbe tier={st.tier} />}
     </>
@@ -226,7 +230,7 @@ export const FrightMapLayer = memo(function FrightMapLayer({ input, width, heigh
 
 /** The lightning sprite at its strike x in the top third (drawn at half pixel size). */
 function BoltSprite({ image, fw, fh, frame, row, x, shown }: {
-  image: SkImageType; fw: number; fh: number; frame: SharedValue<number>; row: SharedValue<number>; x: SharedValue<number>; shown: SharedValue<number>;
+  image: SkImageType | null; fw: number; fh: number; frame: SharedValue<number>; row: SharedValue<number>; x: SharedValue<number>; shown: SharedValue<number>;
 }) {
   const w = fw / 2;
   const h = fh / 2;
@@ -234,7 +238,7 @@ function BoltSprite({ image, fw, fh, frame, row, x, shown }: {
   const slide = useDerivedValue(() => [{ translateX: x.value - w / 2 - frame.value * w }, { translateY: 8 - row.value * h }]);
   return (
     <Group clip={clip} opacity={shown}>
-      <Group transform={slide}><SkImage image={image} x={0} y={0} width={image.width() / 2} height={image.height() / 2} fit="fill" /></Group>
+      <Group transform={slide}><SkImage image={image} x={0} y={0} width={(image?.width() ?? 0) / 2} height={(image?.height() ?? 0) / 2} fit="fill" /></Group>
     </Group>
   );
 }
@@ -247,7 +251,7 @@ function FrightPerfProbe({ tier }: { readonly tier: string }) {
   const samples = useSharedValue<number[]>([]);
   const log = (values: number[]) => {
     const s = frameStats(values);
-    console.log(`[fright-perf] tier=${tier} frames=${s.n} avg=${s.avg.toFixed(2)}ms p95=${s.p95.toFixed(2)}ms`);
+    console.log(`[fright-perf] tier=${tier} frames=${s.n} avg=${s.avg.toFixed(2)}ms p95=${s.p95.toFixed(2)}ms images=${frightImagesHeld()}`);
   };
   useFrameCallback(info => {
     'worklet';

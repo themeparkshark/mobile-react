@@ -9,55 +9,55 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 
 const fa = loadTs('src/components/map/fright/frightAssets.ts');
 const ev = loadTs('src/components/map/fright/events.ts');
-const critters = loadTs('src/components/map/fright/critters.ts');
+const sa = loadTs('src/components/map/fright/scareactors.ts');
 const root = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
-const sheet = { sheet: 'https://cdn/x.webp', static: 'https://cdn/x-static.webp', frame: [128, 128], rows: ['idle', 'lurk', 'jump'], frames_per_row: 10, fps: 10 };
+const sheet = { sheet: 'https://cdn/x.webp', static: 'https://cdn/x-static.webp', frame: [128, 128], rows: ['idle', 'lurk', 'scare', 'slide'], frames_per_row: 10, fps: 10, slide_ok: true };
 const assets = {
-  critters: { 'barker-crab': sheet, broken: { sheet: null, static: null, frame: [128, 128], rows: [] } },
-  icons: { chuckles: { ...sheet, frame: [160, 160], rows: ['idle loop', 'appear one-shot', 'chaos-hour loop'] } },
+  scareactors: { 'sa-jester': sheet, broken: { sheet: null, static: null, frame: [128, 128], rows: [] } },
+  icons: { shusher: { ...sheet, frame: [160, 160], rows: ['idle loop', 'shh one-shot'] } },
   haunts: { 'h01-x': { layers: { frame: [160, 160], base: 'https://cdn/b.webp', windows: 'https://cdn/w.webp', window_count: 3 } },
     'h02-nobase': { layers: { frame: [160, 160], base: null } } },
   ambient: { moon: { file: 'https://cdn/moon.webp' } },
 };
 
 test('lookups go by slug and fall back to null (placeholder) when art is missing', () => {
-  assert.equal(fa.critterAsset(assets, 'barker-crab').sheet, 'https://cdn/x.webp');
-  assert.equal(fa.critterAsset(assets, 'nope'), null);
-  assert.equal(fa.critterAsset(assets, 'broken'), null);
-  assert.equal(fa.critterAsset(null, 'barker-crab'), null);
+  assert.equal(sa.scareactorAsset(assets, 'sa-jester').sheet, 'https://cdn/x.webp');
+  assert.equal(sa.scareactorAsset(assets, 'nope'), null);
+  assert.equal(sa.scareactorAsset(assets, 'broken'), null);
+  assert.equal(sa.scareactorAsset(null, 'sa-jester'), null);
   assert.equal(fa.hauntLayers(assets, { fx: { art: 'h01-x' } }).window_count, 3);
   assert.equal(fa.hauntLayers(assets, { fx: { art: 'h02-nobase' } }), null);
   assert.equal(fa.hauntLayers(assets, { fx: null }), null);
-  assert.equal(fa.iconAsset(assets, 'chuckles').frame[0], 160);
+  assert.equal(fa.iconAsset(assets, 'shusher').frame[0], 160);
   assert.equal(fa.ambientUrl(assets, 'moon'), 'https://cdn/moon.webp');
   assert.equal(fa.ambientUrl(assets, 'crow'), null);
 });
 
 test('sheet geometry: rows by name, timing capped at 10 fps, @2x to points', () => {
-  assert.equal(fa.rowIndex(sheet, 'jump'), 2);
-  assert.equal(fa.rowIndex(assets.icons.chuckles, 'appear'), 1);
-  assert.equal(fa.rowIndex(assets.icons.chuckles, 'chaos-hour'), 2);
+  assert.equal(fa.rowIndex(sheet, 'scare'), 2);
+  assert.equal(fa.rowIndex(assets.icons.shusher, 'idle'), 0);
+  assert.equal(fa.rowIndex(assets.icons.shusher, 'shh'), 1);
   assert.equal(fa.rowIndex(sheet, 'dance'), -1);
   assert.deepEqual({ ...fa.sheetTiming({ frames_per_row: 10, fps: 24 }) }, { frames: 10, fps: 10 });
   assert.deepEqual({ ...fa.sheetTiming({}) }, { frames: 10, fps: 10 });
   assert.deepEqual({ ...fa.pointSize([128, 128]) }, { w: 64, h: 64 });
 });
 
-test('critter sheet frames: idle by default, lurk loops (not in lite), a jump plays its row once', () => {
-  const rows = [0, 1, 2];
+test('scareactor sheet frames: idle by default, lurk loops (not in lite), a jump plays the scare row once', () => {
+  const rows = [0, 1, 2, -1];
   const seen = new Set();
   for (let t = 0; t < 120; t += 0.1) {
-    const p = critters.sheetPose(4, t, 10, 10, rows, true, -1);
+    const p = sa.scareactorPose(4, t, 10, 10, rows, true, -1);
     assert.ok(p.frame >= 0 && p.frame < 10);
     seen.add(p.row);
   }
   assert.deepEqual([...seen].sort(), [0, 1], 'idle and lurk, no jump on its own');
-  for (let t = 0; t < 120; t += 0.1) assert.equal(critters.sheetPose(4, t, 10, 10, rows, false, -1).row, 0, 'lite: idle only');
-  assert.deepEqual({ ...critters.sheetPose(4, 5, 10, 10, rows, true, 0.35) }, { row: 2, frame: 3 });
-  assert.equal(critters.sheetPose(4, 5, 10, 10, rows, true, 1.0).row !== 2, true, 'cuts back after one row');
-  assert.equal(critters.sheetPose(4, 5, 10, 10, [0, -1, -1], true, 0.3).row, 0, 'a sheet without a jump row stays idle');
+  for (let t = 0; t < 120; t += 0.1) assert.equal(sa.scareactorPose(4, t, 10, 10, rows, false, -1).row, 0, 'lite: idle only');
+  assert.deepEqual({ ...sa.scareactorPose(4, 5, 10, 10, rows, true, 0.35) }, { row: 2, frame: 3 });
+  assert.equal(sa.scareactorPose(4, 5, 10, 10, rows, true, 1.0).row !== 2, true, 'cuts back after one row');
+  assert.equal(sa.scareactorPose(4, 5, 10, 10, [0, -1, -1, -1], true, 0.3).row, 0, 'a sheet without a scare row stays idle');
 });
 
 test('window flicker timelines: in spec ranges, never all dark, deterministic', () => {
@@ -155,9 +155,9 @@ test('ambient events: spaced by their gaps, a third due waits 2 to 5 s, never ov
 test('wiring: sprites read server art by slug, through the shared cache, with bundled fallbacks', () => {
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.match(sprites, /useRemoteImage\(asset\?\.sheet\)/);
-  assert.match(sprites, /image\.width\(\) \/ 2/, '@2x sheets draw at half size');
+  assert.match(sprites, /image\?\.width\(\) \?\? 0\) \/ 2/, '@2x sheets draw at half size');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(sources, /critterAsset\(assets, slug\)/);
+  assert.match(sources, /scareactorAsset\(assets, slug\)/);
   assert.match(sources, /hauntLayers\(assets, h\)/);
   assert.match(sources, /frightEvents\.tryStart\(`jump:\$\{key\}`/);
   const layer = read('src/components/map/fright/FrightMapLayer.tsx');
@@ -165,8 +165,8 @@ test('wiring: sprites read server art by slug, through the shared cache, with bu
   assert.match(layer, /frightEvents\.tryStart\('bolt'/);
   const hook = read('src/components/map/fright/useFrightImage.ts');
   assert.match(hook, /createImageCache/);
-  // No hard-coded critter or haunt slugs outside the fallback looks and the dev fixture.
-  for (const file of ['FrightSprites.tsx', 'FrightMapSources.tsx', 'FrightMapLayer.tsx', 'frightAssets.ts']) {
-    assert.doesNotMatch(read(`src/components/map/fright/${file}`), /barker-crab|h0\d-|juggler-octopus/, file);
+  // No hard-coded scareactor, critter or haunt slugs outside the dev fixture.
+  for (const file of ['FrightSprites.tsx', 'FrightMapSources.tsx', 'FrightMapLayer.tsx', 'frightAssets.ts', 'scareactors.ts']) {
+    assert.doesNotMatch(read(`src/components/map/fright/${file}`), /barker-crab|h0\d-|juggler-octopus|sa-[a-z]/, file);
   }
 });

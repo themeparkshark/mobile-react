@@ -43,7 +43,9 @@ test('the intro is a full-screen opaque modal with Skip in the safe top-right co
   assert.match(src, /LinearGradient colors=\{\[NIGHT\.ink, NIGHT\.midnight, NIGHT\.haunt\]\}/, 'opaque night sky, not a dim scrim');
   assert.doesNotMatch(src, /rgba\(30,24,70,0\.9\)/, 'the old see-through scrim is gone');
   assert.doesNotMatch(src, /GameIcon/, 'no generic sparkle badge: the Deep Lantern art lights up');
-  assert.match(src, /require\('\.\.\/art\/lantern\.webp'\)/);
+  // The lantern art is required once in the preloader (shared so the prefetch warms the same source).
+  assert.match(src, /const LANTERN = TUTORIAL_LANTERN;/);
+  assert.match(read('src/components/fright/tutorial/preloadTutorialArt.ts'), /require\('\.\.\/art\/lantern\.webp'\)/);
 });
 
 test('the app park tip waits while the Fin-ister intro is up', () => {

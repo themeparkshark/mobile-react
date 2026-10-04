@@ -47,7 +47,7 @@ function RushBolt({ size = 26 }: { readonly size?: number }) {
  * otherwise the nearest Rush does. After a boss falls it becomes the receipt of
  * the map moment. Nothing rotates under your finger.
  */
-export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAttack, receiptNeedsCheck, mapMoment, mapFlag, onMapMoment, onDismissMoment }: {
+export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAttack, receiptNeedsCheck, mapMoment, mapFlag, onMapMoment, onDismissMoment, inline = false }: {
   readonly raid: BossRaid | null;
   readonly rushes: readonly RushPick[];
   readonly onBoss: () => void;
@@ -58,6 +58,8 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   readonly mapFlag?: RideControlClaim | null;
   readonly onMapMoment?: () => void;
   readonly onDismissMoment?: () => void;
+  /** Inside the map's status row: no outer margin. */
+  readonly inline?: boolean;
 }) {
   const [now, setNow] = useState(Date.now());
   // The countdowns tick once a second only while one is on screen.
@@ -76,7 +78,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
     const shown = !!mapFlag && (mapMoment.phase === 'flag' || mapMoment.phase === 'settled');
     const held = shown && !mapFlag!.flipped;
     const title = !shown ? 'YOU HELPED CLEAR THE BOSS!' : held ? 'RIDE HELD!' : 'FLAG RAISED!';
-    return <View style={[styles.pill, styles.victoryPill]}>
+    return <View style={[styles.pill, styles.victoryPill, inline && styles.inline]}>
       <Pressable accessibilityRole="button" onPress={onMapMoment} style={styles.victoryAction}
         accessibilityLabel={`Boss cleared at ${mapMoment.impact.rideName}. Your ${mapMoment.impact.yourDamage} damage helped.${shown
           ? ` ${teamName(mapFlag!.team)} ${held ? 'held the ride' : 'raised its flag'}.` : ''} Show ride.`}>
@@ -96,7 +98,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   }
   if (pendingAttack || receiptNeedsCheck) return <Pressable accessibilityRole="button" onPress={onBoss}
     accessibilityLabel="Your boss brawl receipt needs confirmation. Open saved round."
-    style={styles.pillShadow}>
+    style={[styles.pillShadow, inline && styles.inline]}>
     <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.pill, styles.bossPill]}>
       {pendingAttack && <Image source={BOSS_ART[pendingAttack.boss]} style={styles.bossIcon} contentFit="contain" />}
       <View style={{ flex: 1 }}>
@@ -112,7 +114,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   if (boss) {
     const pct = Math.round((boss.hp_left / Math.max(1, boss.hp_max)) * 100);
     return (
-      <Pressable accessibilityRole="button" onPress={onBoss} style={styles.pillShadow}
+      <Pressable accessibilityRole="button" onPress={onBoss} style={[styles.pillShadow, inline && styles.inline]}
         accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${clock(boss.ends_at, now)} left. Open.`}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.pill, styles.bossPill]}>
           <Image source={BOSS_ART[boss.boss]} style={styles.bossIcon} contentFit="contain" />
@@ -136,7 +138,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   }
   const { task, rush, wait } = liveRushes[0];
   return (
-    <Pressable accessibilityRole="button" onPress={() => onRush(task)} style={[styles.pill, styles.rushPill]}
+    <Pressable accessibilityRole="button" onPress={() => onRush(task)} style={[styles.pill, styles.rushPill, inline && styles.inline]}
       accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. ${clock(rush.ends_at, now)} left. Show on map.`}>
       <RushBolt />
       <View style={{ flex: 1 }}>
@@ -153,6 +155,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
 }
 
 const styles = StyleSheet.create({
+  inline: { marginHorizontal: 0, marginTop: 0 },
   pillShadow: { marginHorizontal: 12, marginTop: 8, borderRadius: 16, shadowColor: BRAND.shadow, shadowOpacity: 0.25,
     shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   pill: { marginHorizontal: 12, marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16,

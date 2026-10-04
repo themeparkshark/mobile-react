@@ -70,7 +70,7 @@ test('legibility: the tint never darkens the tiles past the cap', () => {
 
 test('the map tints tiles under the pins and lights lamps only after sunset', () => {
   const map = fs.readFileSync(path.join(__dirname, '../../src/components/Map.tsx'), 'utf8');
-  const tint = map.indexOf('<FillLayer id="tps-sky-tint"');
+  const tint = map.indexOf('<BackgroundLayer id="tps-sky-tint"');
   const children = map.indexOf('{children}</MapQueryContext.Provider>');
   assert.ok(tint > 0 && tint < children, 'tint is a GL layer; pins (marker views) draw above it');
   // Always mounted (empty by day): no source mounts mid-list (MapLibre insertReactSubview crash).

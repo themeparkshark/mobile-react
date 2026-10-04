@@ -37,8 +37,8 @@ test('screen projection follows the map heading; the camera center is the player
   assert.deepEqual({ ...fb.cameraCenter({ latitude: 28.49, longitude: -81.4685 }, bounds) }, mid, 'panned away: the view center');
   assert.equal(fb.cameraCenter(null, null), null);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(sources, /chipX=\{chipCenter && chips\.has\(haunt\.key\) \? screenX\(at, chipCenter, zoom, heading, screenW\) : null\}/);
-  assert.match(sprites(), /chipShift\(chipX, chipW, screenW\)/, 'clamped with the measured chip width');
+  assert.match(sources, /chipX=\{chipCenter && chip \? screenX\(at, chipCenter, zoom, heading, screenW\) : null\}/);
+  assert.match(sprites(), /chipShiftClear\(chipX, chipY \?\? Number\.NaN, chipSize\.w, chipSize\.h, screenW, huds\)/, 'clamped with the measured chip size');
   assert.match(sprites(), /transform: \[\{ translateX: shift \}\]/);
 });
 
@@ -65,7 +65,7 @@ test('survived haunts: pin and check badge, no "1" bead, no posted wait', () => 
   assert.match(src, /styles\.check/);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /survivedPin=\{assets\?\.event_pins\?\.\['ev-survived'\]\?\.\['256'\] \?\? null\}/);
-  assert.match(sources, /hauntChipLabel\(haunt, beads\[haunt\.key\] !== undefined\)/);
+  assert.match(sources, /hauntChipParts\(haunt, beads\[haunt\.key\] !== undefined\)/);
 });
 
 test('arrival beat: the haunts light over 1.5 s after the intro, and the map adds no second thunder', () => {
@@ -89,6 +89,6 @@ test('off-screen spots draw the hidden stand-in (MapLibre iOS parks off-screen M
     'north of center is up');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /return !at \|\| onScreen\(at, chipCenter, zoom, heading, screenW, screenH, ON_SCREEN_SLACK\);/);
-  assert.match(sources, /\{encounterOnScreen && encounter/);
-  assert.match(sources, /setInterval\(read, 600\)/);
+  assert.match(sources, /<ShowWhen box=\{(RING|CRITTER)_BOX\} on=\{encounterOnScreen && !!encounter\}>/);
+  assert.match(sources, /setInterval\(read, BOUNDS_POLL_MS\)/); // 1.5 s, plus an immediate read on a GPS jump or resume
 });

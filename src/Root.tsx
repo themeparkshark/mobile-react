@@ -1,4 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useContext, useCallback, useEffect, useState } from 'react';
@@ -98,6 +99,8 @@ export default function App() {
 
   return (
     <View style={{ flex: 1 }} onTouchStart={onAnyTouch}>
+    {/* A render error anywhere shows a reload card instead of closing the app. */}
+    <AppErrorBoundary>
     {/* Keep ride detection alive as the guest moves between map, queue, and profile,
         but only at a park: away from one, background GPS is battery drain and an
         unexplained location indicator. Park presence is sticky, so this never flaps.
@@ -322,6 +325,7 @@ export default function App() {
     {!isStandalonePreview && <FeedbackHost />}
     {cleanRecording ? null : (__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
     {FPS_OVERLAY && <FpsOverlayHost />}
+    </AppErrorBoundary>
     </View>
   );
 }

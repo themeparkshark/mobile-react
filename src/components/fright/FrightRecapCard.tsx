@@ -32,7 +32,8 @@ const FrightRecapCard = forwardRef<View, {
     m.topHaunt ? `Your #1 tonight: ${m.topHaunt}` : null,
     m.timeInLine,
     m.caseFiles ? `${m.caseFiles} Case File${m.caseFiles === 1 ? '' : 's'}` : null,
-    m.encounter ? `Spotted ${m.encounter}` : null,
+    // One name per critter: "Caught Ringmaster Riptide", or neutral when the recap has no critter name.
+    m.caught,
   ].filter((line): line is string => !!line);
   return (
     <View ref={ref} collapsable={false} style={styles.card} accessible
@@ -48,7 +49,8 @@ const FrightRecapCard = forwardRef<View, {
         {m.tenInOne && (
           <View style={styles.stamp}><GameIcon name="trophy" size={22} /><Text style={styles.stampText}>TEN-IN-ONE</Text></View>
         )}
-        <Text style={styles.foot}>{`${recap.park_name} · Night ${m.nightNumber} · Theme Park Shark`}</Text>
+        {/* On its own scrim so it never sits on the house and tree silhouettes of the background art. */}
+        <View style={styles.footPlate}><Text style={styles.foot}>{`${recap.park_name} · Night ${m.nightNumber} · Theme Park Shark`}</Text></View>
       </View>
       <BulbRow />
     </View>
@@ -72,5 +74,6 @@ const styles = StyleSheet.create({
   stamp: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, borderWidth: 3, borderColor: NIGHT.candy,
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, transform: [{ rotate: '-4deg' }] },
   stampText: { fontFamily: 'Shark', fontSize: 16, color: NIGHT.candy },
-  foot: { fontFamily: 'Knockout', fontSize: 12, color: NIGHT.fog, marginTop: 12 },
+  footPlate: { marginTop: 12, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: 'rgba(30,24,56,0.78)' },
+  foot: { fontFamily: 'Knockout', fontSize: 13, color: NIGHT.fogLight },
 });

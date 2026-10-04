@@ -111,7 +111,8 @@ test('map markers: the limited badge sits under rush, adventure and goal', () =>
   assert.equal(m.markerBadge({ rush: false, adventure: false, goal: false, owned: false }), 'new');
   const marker = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');
   assert.match(marker, /task\.limited\?\.active \? limitedLabel\(task\.limited\)/);
-  assert.match(marker, /badge === 'limited' && limited/);
+  // One chip per island (the declutter places it): rush, adventure and goal outrank the leave date.
+  assert.match(marker, /tagKind === 'limited' && limited/);
 });
 
 test('a limited coin out of rotation explains itself and cannot be played', () => {

@@ -33,7 +33,8 @@ test('map_gym_swords off: Gym and Sword markers stay mounted but hidden, still a
   // The Community Center marker is untouched.
   assert.match(explore, /\{communityCenter && \(\s*<CommunityCenterMarker/);
   const marker = read('src/components/map/Marker.tsx');
-  assert.match(marker, /pointerEvents=\{hidden \? 'none' : 'auto'\}/);
+  // Hidden always takes no touches (the Fin-ister touchEnabled gate is folded into the same expression).
+  assert.match(marker, /pointerEvents=\{(?:hidden \? 'none' : 'auto'|touchEnabled && !hidden \? 'auto' : 'none')\}/);
   assert.match(marker, /style=\{hidden \? HIDDEN : undefined\}/);
   assert.match(read('src/components/GymBattle/GymMarker.tsx'), /const running = alive && !hidden;/);
   assert.match(read('src/components/GymBattle/SwordMarker.tsx'), /const active = alive\.active && !hidden, running = alive\.running && !hidden;/);

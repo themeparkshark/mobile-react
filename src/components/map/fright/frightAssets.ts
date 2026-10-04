@@ -2,8 +2,9 @@
  * Server-hosted art for the fright map (GET /parks/{id}/fright `assets`):
  * slug lookups, sheet geometry, window flicker timelines per MAP_FX_SPEC,
  * the encounter's Chaos Hour and an image cache that loads each URL once.
- * Pure, unit tested. Nothing here hard-codes a critter or haunt slug: spots
- * name their art (`fx.critter`, `fx.art`) and the manifest says what exists.
+ * Pure, unit tested. Nothing here hard-codes a scareactor or haunt slug: spots
+ * name their art (`fx.scareactors`, `fx.art`) and the manifest says what
+ * exists. Scareactor lookups and rows live in scareactors.ts.
  */
 import type { FrightAssets, FrightHauntLayers, FrightSheetAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { randAt } from './random';
@@ -15,12 +16,6 @@ export function hauntLayers(assets: FrightAssets | null | undefined, spot: Pick<
   const slug = spot.fx?.art;
   const layers = slug ? assets?.haunts?.[slug]?.layers : null;
   return layers && layers.base && validFrame(layers.frame) ? layers : null;
-}
-
-/** A critter's sheet by slug (null: unknown slug, draw the placeholder). */
-export function critterAsset(assets: FrightAssets | null | undefined, slug: string | null | undefined): FrightSheetAsset | null {
-  const a = slug ? assets?.critters?.[slug] : null;
-  return a && (a.sheet || a.static) && validFrame(a.frame) ? a : null;
 }
 
 export function iconAsset(assets: FrightAssets | null | undefined, slug: string): FrightSheetAsset | null {
@@ -36,7 +31,7 @@ function validFrame(frame: readonly number[] | null | undefined): boolean {
   return !!frame && frame.length === 2 && frame[0] > 0 && frame[1] > 0;
 }
 
-/** Row index for a row name ("idle", "jump", "appear"...): rows may carry suffixes ("idle loop"). -1 when absent. */
+/** Row index for a row name ("idle", "scare", "shh"...): rows may carry suffixes ("idle loop"). -1 when absent. */
 export function rowIndex(asset: Pick<FrightSheetAsset, 'rows'>, name: string): number {
   return asset.rows.findIndex(row => row === name || row.startsWith(`${name} `));
 }
@@ -69,6 +64,50 @@ export function isChaosHour(startsAt: string, endsAt: string): boolean {
   const chaos = 23 * 60 + 11;
   if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
   return a <= b ? a <= chaos && chaos < b : a <= chaos || chaos < b;
+}
+
+/** Chaos Hour from the server's flag when sent, else from the window's park times. */
+export function encounterChaos(enc: { readonly chaos_hour?: boolean | null; readonly starts_at: string; readonly ends_at: string }): boolean {
+  return typeof enc.chaos_hour === 'boolean' ? enc.chaos_hour : isChaosHour(enc.starts_at, enc.ends_at);
+}
+
+/** Seconds the chaos loop plays after any spawn (MAP_FX_SPEC). */
+export const CHAOS_SPAWN_S = 20;
+
+/**
+ * The encounter's frame (UI thread). `rows` = [idle, appear, chaos] row
+ * indexes (-1 when missing). On spawn `appear` plays once; then `chaos`
+ * during Chaos Hour and for the first 20 s (full only), else `idle`.
+ */
+export function encounterPose(t: number, age: number, rows: readonly number[], frames: number, fps: number,
+  chaos: boolean, full: boolean): { row: number; frame: number } {
+  'worklet';
+  const idle = rows[0] >= 0 ? rows[0] : 0;
+  const loop = Math.floor(Math.max(0, t) * fps) % frames;
+  if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.min(frames - 1, Math.floor(age * fps)) };
+  if (full && rows[2] >= 0 && (chaos || (age >= 0 && age < 20))) return { row: rows[2], frame: loop };
+  return { row: idle, frame: loop };
+}
+
+/** Skid-fin sparks: 8 frames at 16 fps, sliding 80 pt/s for 1.5 s across the encounter (MAP_FX_SPEC). */
+export const SPARK_RUN_S = 1.5;
+export const SPARK_SPEED_PT = 80;
+
+/** Where a spark pass is at `age` seconds: offset from its start along its heading, frame, opacity. */
+export function sparkPass(age: number, frames: number, fps: number): { d: number; frame: number; opacity: number } {
+  'worklet';
+  if (age < 0 || age >= SPARK_RUN_S) return { d: 0, frame: 0, opacity: 0 };
+  const fade = Math.min(1, age / 0.15, (SPARK_RUN_S - age) / 0.25);
+  return { d: age * SPARK_SPEED_PT, frame: Math.floor(age * fps) % Math.max(1, frames), opacity: fade };
+}
+
+/** Lagoon Glow-Down: the start (ms) of the show performance running now, or null. */
+export function activeShowStart(times: readonly string[] | null | undefined, serverNowMs: number, windowMs: number): number | null {
+  for (const iso of times ?? []) {
+    const start = Date.parse(iso);
+    if (Number.isFinite(start) && serverNowMs >= start && serverNowMs < start + windowMs) return start;
+  }
+  return null;
 }
 
 /* ── Window flicker timelines (MAP_FX_SPEC section 2, Haunts) ─────────── */
@@ -156,24 +195,40 @@ export interface ImageCache<T> {
   get(url: string): T | null;
   /** The loaded image without starting a load. */
   peek(url: string): T | null;
+  /** A component starts using the URL (keeps its decoded image alive). */
+  retain(url: string): void;
+  /** A component stops using it; unused images are released after IMAGE_IDLE_MS. */
+  release(url: string): void;
+  /** Drop decoded images nobody has used for IMAGE_IDLE_MS. Returns how many were dropped. */
+  sweep(): number;
   subscribe(listener: () => void): () => void;
   /** Loads started so far (tests). */
   loads(): number;
+  /** Decoded images held right now (tests, the perf probe). */
+  size(): number;
 }
+
+/** A decoded image nobody draws is released after this long (memory on a long night). */
+export const IMAGE_IDLE_MS = 60_000;
 
 /**
  * One loader per URL for the whole app: every marker asking for the same
  * sheet shares one fetch and one decoded image. A failure is retried at most
- * once a minute (no fetch storm on a bad connection).
+ * once a minute (no fetch storm on a bad connection). Images are reference
+ * counted: once no marker uses one for a minute (mode off, off screen, calm)
+ * it is disposed, so a long night never piles up decoded sheets.
  */
-export function createImageCache<T>(load: (url: string) => Promise<T | null>, now: () => number = Date.now): ImageCache<T> {
+export function createImageCache<T>(load: (url: string) => Promise<T | null>, now: () => number = Date.now,
+  dispose: (image: T) => void = () => undefined): ImageCache<T> {
   const images = new Map<string, T>();
   const pending = new Set<string>();
   const failedAt = new Map<string, number>();
+  const refs = new Map<string, number>();
+  const idleSince = new Map<string, number>();
   const listeners = new Set<() => void>();
   let started = 0;
   const notify = () => listeners.forEach(fn => fn());
-  return {
+  const cache: ImageCache<T> = {
     get(url) {
       const hit = images.get(url);
       if (hit) return hit;
@@ -184,7 +239,11 @@ export function createImageCache<T>(load: (url: string) => Promise<T | null>, no
       started++;
       load(url).then(image => {
         pending.delete(url);
-        if (image) { images.set(url, image); failedAt.delete(url); } else failedAt.set(url, now());
+        if (image) {
+          images.set(url, image);
+          failedAt.delete(url);
+          if (!refs.get(url)) idleSince.set(url, now());
+        } else failedAt.set(url, now());
         notify();
       }, () => {
         pending.delete(url);
@@ -196,10 +255,37 @@ export function createImageCache<T>(load: (url: string) => Promise<T | null>, no
     peek(url) {
       return images.get(url) ?? null;
     },
+    retain(url) {
+      refs.set(url, (refs.get(url) ?? 0) + 1);
+      idleSince.delete(url);
+    },
+    release(url) {
+      const n = Math.max(0, (refs.get(url) ?? 0) - 1);
+      if (n > 0) { refs.set(url, n); return; }
+      refs.delete(url);
+      idleSince.set(url, now());
+    },
+    sweep() {
+      let dropped = 0;
+      const at = now();
+      for (const [url, since] of idleSince) {
+        if (refs.get(url) || at - since < IMAGE_IDLE_MS) continue;
+        idleSince.delete(url);
+        const image = images.get(url);
+        if (!image) continue;
+        images.delete(url);
+        try { dispose(image); } catch { /* already gone */ }
+        dropped++;
+      }
+      if (dropped) notify();
+      return dropped;
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
     loads: () => started,
+    size: () => images.size,
   };
+  return cache;
 }
