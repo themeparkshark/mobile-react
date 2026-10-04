@@ -6,8 +6,9 @@
  * between buildings, under a ride's roof) and now and then one that is far off.
  * Feeding those straight to the map made the shark jump around. Like Pokemon GO:
  *  - Outliers are dropped: fixes worse than POOR_ACCURACY_M once a good fix is
- *    known, and fixes that imply an impossible speed. A run of rejections (or a
- *    long silence) means the phone really moved, so the filter re-seats there.
+ *    known, and fixes that imply an impossible speed. Far-off fixes that keep
+ *    agreeing (or the first fix after a long silence) mean the phone really
+ *    moved, so the filter re-seats there; scattered glitches never do.
  *  - The rest go through a small Kalman filter (one variance, metres) that
  *    trusts each fix by its reported accuracy.
  *  - A dead zone keeps the shark still while you stand still: the published
@@ -42,15 +43,17 @@ export const POOR_ACCURACY_M = 40;
 export const UNKNOWN_ACCURACY_M = 25;
 /** Faster than any guest (a car on a park road included): the fix is a glitch. */
 export const MAX_SPEED_MPS = 45;
-/** This many rejections in a row: the phone really is somewhere else now. */
+/** This many far-off fixes in a row, all in one place: the phone really is somewhere else now. */
 export const RESEAT_AFTER_REJECTS = 3;
-/** No accepted fix for this long: take the next one, whatever it says. */
+/** How far apart (beyond their accuracy radii) those far-off fixes may be and still agree. */
+export const AGREE_SLACK_M = 25;
+/** No fix at all for this long (the background): take the next one, whatever it says. */
 export const RESEAT_AFTER_MS = 20_000;
 /** How fast the true position may drift between fixes (Kalman process noise, m/s). */
 export const PROCESS_SPEED_MPS = 2.5;
 /** Dead zone bounds, metres. */
 export const DEAD_ZONE_MIN_M = 1;
-export const DEAD_ZONE_MAX_M = 8;
+export const DEAD_ZONE_MAX_M = 5;
 /** The OS says you are walking at least this fast (m/s): use the small dead zone. */
 export const MOVING_SPEED_MPS = 0.6;
 
@@ -77,7 +80,12 @@ export class PositionFilter {
   private variance = -1;
   private lastTimestamp = 0;
   private lastAcceptedAt = 0;
-  private rejectStreak = 0;
+  /** Any fix at all, accepted or not: a real silence (background) versus a run of rejections. */
+  private lastSeenAt = 0;
+  /** Vague fixes skipped in a row. */
+  private vagueStreak = 0;
+  /** Far-off fixes skipped in a row (latest last), to tell a real move from scattered glitches. */
+  private far: { latitude: number; longitude: number; accuracy: number }[] = [];
   private published: FilteredPosition | null = null;
 
   /** The last position handed to the map, if any. */
@@ -89,7 +97,9 @@ export class PositionFilter {
     this.variance = -1;
     this.lastTimestamp = 0;
     this.lastAcceptedAt = 0;
-    this.rejectStreak = 0;
+    this.lastSeenAt = 0;
+    this.vagueStreak = 0;
+    this.far = [];
     this.published = null;
   }
 
@@ -105,7 +115,10 @@ export class PositionFilter {
     if (this.variance < 0) return this.seat(fix, accuracy, now);
     if (now < this.lastTimestamp) return { kind: 'reject', reason: 'stale' };
 
-    const silent = now - this.lastAcceptedAt >= RESEAT_AFTER_MS;
+    // Back after a real silence (the app was in the background): trust the new fix.
+    const silent = now - this.lastSeenAt >= RESEAT_AFTER_MS;
+    this.lastSeenAt = now;
+    if (silent) return this.seat(fix, accuracy, now);
     const estimate = { latitude: this.lat, longitude: this.lng };
     const jump = metersBetween(estimate, fix);
     const dt = Math.max(0.001, (now - this.lastTimestamp) / 1000);
@@ -119,19 +132,23 @@ export class PositionFilter {
     const impliedSpeed = Math.max(0, jump - accuracy - spread) / dt;
 
     if (impliedSpeed > MAX_SPEED_MPS) {
-      // A glitch, unless it keeps happening: then the phone really is over there.
-      this.rejectStreak += 1;
-      if (silent || this.rejectStreak >= RESEAT_AFTER_REJECTS) return this.seat(fix, accuracy, now);
+      // A glitch, unless it keeps happening in one place: then the phone really
+      // is over there (out of the car). Scattered glitches never agree, so they
+      // never move the shark.
+      this.far = [...this.far.slice(1 - RESEAT_AFTER_REJECTS), { latitude: fix.latitude, longitude: fix.longitude, accuracy }];
+      if (this.far.length >= RESEAT_AFTER_REJECTS && this.far.every(f =>
+        metersBetween(f, fix) <= f.accuracy + accuracy + AGREE_SLACK_M)) {
+        return this.seat(fix, accuracy, now);
+      }
       return { kind: 'reject', reason: 'speed' };
     }
-    if (accuracy > POOR_ACCURACY_M && accuracy > spread && !silent &&
-        this.rejectStreak < RESEAT_AFTER_REJECTS - 1) {
+    if (accuracy > POOR_ACCURACY_M && accuracy > spread && this.vagueStreak < RESEAT_AFTER_REJECTS - 1 &&
+        now - this.lastAcceptedAt < RESEAT_AFTER_MS) {
       // Vaguer than what we already know: skip it. A run of them (indoors) is
       // taken after all, lightly, by the Kalman gain below.
-      this.rejectStreak += 1;
+      this.vagueStreak += 1;
       return { kind: 'reject', reason: 'inaccurate' };
     }
-    if (silent && jump > accuracy + spread) return this.seat(fix, accuracy, now);
 
     // Kalman step: take the fix in proportion to how much more certain it is.
     this.variance = predicted;
@@ -141,7 +158,8 @@ export class PositionFilter {
     this.variance *= 1 - gain;
     this.lastTimestamp = now;
     this.lastAcceptedAt = now;
-    this.rejectStreak = 0;
+    this.vagueStreak = 0;
+    this.far = [];
 
     const next = { latitude: this.lat, longitude: this.lng };
     const moving = speed >= MOVING_SPEED_MPS;
@@ -159,7 +177,9 @@ export class PositionFilter {
     this.variance = accuracy * accuracy;
     this.lastTimestamp = now;
     this.lastAcceptedAt = now;
-    this.rejectStreak = 0;
+    this.lastSeenAt = now;
+    this.vagueStreak = 0;
+    this.far = [];
     const position = { latitude: fix.latitude, longitude: fix.longitude };
     this.published = position;
     return { kind: 'publish', position, reseated: true };

@@ -291,17 +291,23 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const requestLocation = async () => {
-    const newLocation = await getCurrentLocation();
-    if (!newLocation) return;
-
     // The joystick position is exact; a real fix goes through the same filter as the stream.
     if (devMode && simulationAllowed) {
+      const newLocation = devLocationRef.current;
       if (location && newLocation.longitude === location.longitude && newLocation.latitude === location.latitude) return;
       lastLocationRef.current = newLocation;
       debouncedSetLocation(newLocation);
       return;
     }
-    const verdict = positionFilter().push({ ...newLocation, timestamp: Date.now() });
+    // Same clock and accuracy as the stream (the OS fix time), so the two paths never disagree.
+    let fix: Location.LocationObject;
+    try {
+      fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    } catch {
+      return;
+    }
+    const verdict = positionFilter().push({ latitude: fix.coords.latitude, longitude: fix.coords.longitude,
+      accuracy: fix.coords.accuracy, speed: fix.coords.speed, timestamp: fix.timestamp });
     if (verdict.kind !== 'publish') return;
     lastLocationRef.current = verdict.position;
     debouncedSetLocation(verdict.position);

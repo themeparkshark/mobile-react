@@ -17,17 +17,28 @@ export function glideMeters(a: GlidePoint, b: GlidePoint): number {
   return Math.hypot(dx, dy);
 }
 
-/** How long to ease from a to b: 600 ms for a step, up to 1 s for a stride; 0 means jump. */
-export function glideDurationMs(a: GlidePoint, b: GlidePoint): number {
+/**
+ * How long to ease from a to b: 600 ms for a step, up to 1 s for a stride; 0
+ * means jump. With `sinceLastMs` (time since the previous fix) a walk's glide
+ * stretches to fill the gap between fixes (still at most 1 s), so the shark
+ * keeps moving instead of waiting for the next fix.
+ */
+export function glideDurationMs(a: GlidePoint, b: GlidePoint, sinceLastMs?: number): number {
   const d = glideMeters(a, b);
   if (!Number.isFinite(d) || d < GLIDE_MIN_M || d > GLIDE_MAX_M) return 0;
-  return Math.round(Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, d * 80)));
+  const byDistance = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, d * 80));
+  const byCadence = sinceLastMs !== undefined && Number.isFinite(sinceLastMs) ? Math.min(GLIDE_MAX_MS, sinceLastMs) : 0;
+  return Math.round(Math.max(byDistance, byCadence));
 }
 
-/** Ease-out cubic: quick to leave, soft to land. */
+/**
+ * Half linear, half ease-out: leaves at 1.5x the average speed and lands at
+ * half of it, so a steady walk (a fix every second) reads as one continuous
+ * stride instead of a surge and a stop on every fix.
+ */
 export function glideEase(t: number): number {
   const c = Math.min(1, Math.max(0, t));
-  return 1 - (1 - c) ** 3;
+  return 0.5 * c + 0.5 * (1 - (1 - c) ** 2);
 }
 
 export function glidePoint(a: GlidePoint, b: GlidePoint, t: number): GlidePoint {
