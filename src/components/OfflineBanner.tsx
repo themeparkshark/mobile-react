@@ -33,8 +33,9 @@ const MAP_CHIP_TOP = 0.43;
 // card would cover them, so the banner is only the small chip, docked on the
 // right edge of the map under the recenter button like the other map controls.
 export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore']);
-// Development only: the map declutter preview mirrors Explore, so its captures show the real docked chip.
-const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(__DEV__ ? ['MapDeclutterPreview'] : []);
+// The map declutter preview mirrors Explore, so its captures show the real docked chip, in internal
+// Release builds too (the route only exists when the preview is registered; store builds never have it).
+const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['MapDeclutterPreview']);
 
 function currentRouteName(): string | undefined {
   try {

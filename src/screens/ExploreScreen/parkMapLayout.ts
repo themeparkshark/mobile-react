@@ -225,7 +225,7 @@ export function buildParkLayout(input: ParkLayoutInput): LayoutItem[] {
     items.push({
       id: hauntLayoutId(haunt.key), latitude: haunt.latitude, longitude: haunt.longitude,
       priority: haunt.closed ? PRIORITY.hauntClosed : nightMode ? PRIORITY.hauntOpen : PRIORITY.ride + 10,
-      body: HAUNT_BODY, extras: [HAUNT_CHIP], group: 'haunt', recedeScale: HAUNT_RECEDE,
+      body: HAUNT_BODY, extras: [HAUNT_CHIP], group: 'haunt', recedeScale: HAUNT_RECEDE, recedeUnderPlayer: true,
       forceRecede: haunt.closed ? true : undefined,
     });
   }

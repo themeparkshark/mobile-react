@@ -58,6 +58,8 @@ export interface LayoutItem {
   readonly tagObstacleOnly?: boolean;
   /** May shrink to this scale (around the anchor) before it hides. */
   readonly recedeScale?: number;
+  /** Recedes (never hides) where the player's shark stands on it, so the shark is not drawn over full-size art. */
+  readonly recedeUnderPlayer?: boolean;
   /** Always drawn at its recede scale (a closed ride while a night mode leads). */
   readonly forceRecede?: boolean;
   /** Hidden below this zoom unless pinned. */
@@ -123,6 +125,9 @@ export const VISIBLE: Placement = Object.freeze({ visible: true, scale: 1, folde
 /** Zoom change that triggers a full priority re-solve (smaller moves keep what is shown). */
 export const ZOOM_RESOLVE = 0.15;
 /** A ride hidden by other art counts in the "+N" of a shown ride this close (points). */
+/** Share of the player's shark over a haunt that recedes it, and the share that keeps it receded. */
+export const PLAYER_RECEDE = 0.2;
+export const PLAYER_RECEDE_KEEP = 0.1;
 export const FOLD_REACH = 220;
 const DEFAULT_SHARE = 0.35;
 
@@ -278,6 +283,11 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
   };
 
   const bodies = new Map<string, Rect>(sorted.map(item => [item.id, item.bodyFor ? item.bodyFor(frame.zoom) : item.body]));
+  // The player's body, for art that recedes under the shark (tag obstacles are collected again below).
+  const playerRects = sorted.filter(item => item.tagObstacleOnly).map(item => {
+    const p = project(item.latitude, item.longitude, frame);
+    return at(bodies.get(item.id)!, p.x, p.y);
+  });
   for (const item of sorted) {
     const itemBody = bodies.get(item.id)!;
     const p = project(item.latitude, item.longitude, frame);
@@ -328,6 +338,20 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
         if (!shrunkBlockers.length) { rect = shrunk; blockers = shrunkBlockers; scale = item.recedeScale; }
       }
       if (blockers.length) { hidden.set(item.id, 'collision'); continue; }
+    }
+    // Under the player's shark: shrink to the recede scale when that fits (never hide for it).
+    // A fifth of the shark on the art starts it; it stays receded down to a tenth (no flicker on a walk).
+    const underPlayer = before?.visible && before.scale === item.recedeScale ? PLAYER_RECEDE_KEEP : PLAYER_RECEDE;
+    if (item.recedeUnderPlayer && item.recedeScale) {
+      const full = scale === 1 ? rect : at(itemBody, p.x, p.y, 1);
+      const under = playerRects.some(r => overlapShare(full, r) > underPlayer);
+      if (under && scale === 1) {
+        const shrunk = at(itemBody, p.x, p.y, item.recedeScale);
+        if (!blockersAt(shrunk, item.recedeScale).length) { rect = shrunk; scale = item.recedeScale; }
+      } else if (!under && anchored && scale === item.recedeScale && !item.forceRecede && !blockersAt(full, 1).length) {
+        // The shark walked off: grow back once the full-size art is clear.
+        rect = full; scale = 1;
+      }
     }
     scales.set(item.id, scale);
     place({ item, rect, order: placed.length, p, folded: 0 });

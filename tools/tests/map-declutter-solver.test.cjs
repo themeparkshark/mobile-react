@@ -298,3 +298,21 @@ test('ride chips: one chip per island, badge first, sized to its text', () => {
   assert.equal(L.rideTagKind({ badge: 'level', showTimer: false }), null);
   assert.ok(L.rideTagSize('limited', 'LIMITED · LEAVES OCT 31').w >= 150);
 });
+
+test('the player shark standing on a haunt recedes it (never hides it); it grows back once the shark walks off', () => {
+  const player = (dx, dy) => ({ id: 'player', ...at(dx, dy), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } });
+  const haunt = hauntAt('barn', 0, 0, { recedeUnderPlayer: true });
+  const on = s.solveLayout([haunt, player(-30, -20)], frame());
+  assert.equal(on.get('haunt:barn').visible, true);
+  assert.equal(on.get('haunt:barn').scale, L.HAUNT_RECEDE, 'the haunt yields to the shark');
+  // A small step keeps it receded (no flicker); walking well off grows it back at the same zoom.
+  const near = s.solveLayout([haunt, player(-52, -20)], frame(), { previous: on, previousZoom: 17.6 });
+  assert.equal(near.get('haunt:barn').scale, L.HAUNT_RECEDE);
+  const off = s.solveLayout([haunt, player(-160, -20)], frame(), { previous: near, previousZoom: 17.6 });
+  assert.equal(off.get('haunt:barn').scale, 1);
+  // Rides do not opt in: the shark may stand on an island.
+  const ride = s.solveLayout([rideAt('a', 0, 0), player(-10, -20)], frame());
+  assert.equal(ride.get('ride:a').scale, 1);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/parkMapLayout.ts'), 'utf8'),
+    /group: 'haunt', recedeScale: HAUNT_RECEDE, recedeUnderPlayer: true/, 'haunts opt in');
+});
