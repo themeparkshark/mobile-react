@@ -609,7 +609,9 @@ const S = SHOP_SURFACE;
  * (0 to 1.15 to 1), never fading up grey under the dim (art panel round 5).
  */
 const NEW_POP = new Keyframe({
-  0: { opacity: 0, transform: [{ scale: 0 }] },
+  // Full colour within ~50 ms (it grows, it never fades up grey), then the overshoot.
+  0: { opacity: 0, transform: [{ scale: 0.3 }] },
+  20: { opacity: 1, transform: [{ scale: 0.75 }] },
   60: { opacity: 1, transform: [{ scale: 1.15 }] },
   100: { opacity: 1, transform: [{ scale: 1 }] },
 }).duration(260).delay(300);
