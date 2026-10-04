@@ -44,6 +44,7 @@ test('home finds cache never serves one player another player’s nearby progres
     } } },
     '../../../../utils/apiCache': cache,
     '../../../../screens/ExploreScreen/ridePhoto': { setRidePhotoServerEnabled() {} },
+    'expo-updates': { channel: 'production' },
     '../../../../helpers/deviceTimeZone': { __esModule: true,
       default: () => 'America/Los_Angeles' },
   });

@@ -518,6 +518,14 @@ test('ship gate: Ride Photo stays off unless the server sends player_stats.ride_
   assert.equal(ride.catchStyleFor(1), 'chomp');
   ride.setRidePhotoServerEnabled(undefined);
   assert.equal(ride.catchStyleFor(5), 'chomp');
+  // Dustin's preview build: the internal testflight channel turns it on without the server flag.
+  ride.setRidePhotoServerEnabled(undefined, 'testflight');
+  assert.equal(ride.catchStyleFor(3), 'ride_photo');
+  for (const channel of ['production', 'internal-tunnel', 'preview', null, undefined]) {
+    ride.setRidePhotoServerEnabled(undefined, channel);
+    assert.equal(ride.catchStyleFor(3), 'chomp', String(channel));
+  }
+  assert.match(read('src/api/endpoints/me/prep-items/index.ts'), /ride_photo_enabled, Updates\.channel\)/);
   assert.match(read('src/api/endpoints/me/prep-items/index.ts'), /setRidePhotoServerEnabled\(/);
   for (const file of ['src/screens/ExploreScreen/PrepItem.tsx', 'src/screens/ExploreScreen/HomeExplore.tsx',
     'src/screens/ExploreScreen/HomeCatchMoment.tsx', 'src/screens/ExploreScreen/HomeFindMarker.tsx']) {

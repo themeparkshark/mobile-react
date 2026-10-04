@@ -44,8 +44,15 @@ const SPECS: Readonly<Record<1 | 2 | 3 | 4 | 5, RideSpec>> = {
  * An older backend never sends the field, so production stays chomp-only.
  */
 let ridePhotoServerEnabled = false;
-export function setRidePhotoServerEnabled(value: unknown): void {
-  ridePhotoServerEnabled = value === true;
+/**
+ * Whether Ride Photo is on: an explicit server true, or the internal 'testflight' channel (Dustin's
+ * preview build, real-finger testing). Never on for 'production' or any other channel without the flag.
+ */
+export function ridePhotoOnFor(serverFlag: unknown, channel?: string | null): boolean {
+  return serverFlag === true || channel === 'testflight';
+}
+export function setRidePhotoServerEnabled(value: unknown, channel?: string | null): void {
+  ridePhotoServerEnabled = ridePhotoOnFor(value, channel);
 }
 export function ridePhotoEnabled(): boolean {
   return ridePhotoServerEnabled;

@@ -2,6 +2,7 @@ import { PrepItemsResponseType } from '../../../../models/prep-items-response-ty
 import client from '../../../client';
 import { getCached, setCache } from '../../../../utils/apiCache';
 import deviceTimeZone from '../../../../helpers/deviceTimeZone';
+import * as Updates from 'expo-updates';
 import { setRidePhotoServerEnabled } from '../../../../screens/ExploreScreen/ridePhoto';
 
 const PREP_ITEMS_URL = '/me/prep-items';
@@ -28,8 +29,8 @@ export default async function getPrepItems(
     timeout: 10_000,
   });
 
-  // Ride Photo release gate (see ridePhoto.ts): only an explicit server flag turns it on.
-  setRidePhotoServerEnabled((data?.player_stats as { ride_photo_enabled?: unknown } | undefined)?.ride_photo_enabled);
+  // Ride Photo release gate (see ridePhoto.ts): an explicit server flag, or the testflight channel.
+  setRidePhotoServerEnabled((data?.player_stats as { ride_photo_enabled?: unknown } | undefined)?.ride_photo_enabled, Updates.channel);
 
   // Cache on success (non-blocking)
   setCache(PREP_ITEMS_URL, cacheParams, data).catch(() => {});
