@@ -268,7 +268,7 @@ export default function Playercard({
             {sharkBaseLayers(inventory).map((source, index) => (
               <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain" />
             ))}
-            {/* Item layers — purely visual, no individual Pressables */}
+            {/* Item layers: purely visual, no individual Pressables */}
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
               const worn = inventory?.[slot];
               return worn?.paper_url ? (
