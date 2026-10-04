@@ -117,7 +117,7 @@ export interface SolveOptions {
   /** Tags keep this far from the screen edge. */
   readonly edge?: number;
   /** Fill `rects` with each placed body and tag (development overlay). */
-  readonly rects?: Map<string, { body: Rect; tag: Rect | null }>;
+  readonly rects?: Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>;
 }
 
 export const VISIBLE: Placement = Object.freeze({ visible: true, scale: 1, folded: 0, foldedInto: null, reason: null });
@@ -434,7 +434,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     });
     if (options.rects && entry) {
       const tag = tags.get(item.id);
-      options.rects.set(item.id, { body: entry.rect,
+      options.rects.set(item.id, { body: entry.rect, point: entry.p,
         tag: tag && item.tag ? { x: entry.p.x + tag.x, y: entry.p.y + tag.y, w: item.tag.w, h: item.tag.h } : null });
     }
   }

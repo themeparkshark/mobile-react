@@ -1,6 +1,6 @@
 import { MarkerView } from '@maplibre/maplibre-react-native';
-import { useRef, type ReactNode } from 'react';
-import { Pressable } from 'react-native';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { Pressable, type LayoutChangeEvent } from 'react-native';
 
 type LatLng = { readonly latitude: number | string; readonly longitude: number | string };
 
@@ -44,9 +44,18 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   if (valid) last.current = [lng, lat];
   const off = hidden || !valid;
   const tappable = !off && !!onPress && touchEnabled;
+  // iOS applies the anchor (MLRNPointAnnotation centerOffset) only when the anchor prop arrives
+  // after the view has a size. Under the new architecture's interop the anchor arrives first, on a
+  // zero frame, and is dropped: the art draws centred on its point (islands sat ~38 pt low). So the
+  // first anchor is nudged by a hair and the real one is sent once the view is laid out.
+  const [laidOut, setLaidOut] = useState(false);
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    if (e.nativeEvent.layout.width > 0 && e.nativeEvent.layout.height > 0) setLaidOut(true);
+  }, []);
+  const a = anchor ?? CENTER;
   return (
-    <MarkerView coordinate={last.current} anchor={anchor ?? { x: 0.5, y: 0.5 }} allowOverlap>
-      <Pressable disabled={!tappable} onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6}
+    <MarkerView coordinate={last.current} anchor={laidOut ? a : { x: a.x, y: a.y + ANCHOR_NUDGE }} allowOverlap>
+      <Pressable onLayout={onLayout} disabled={!tappable} onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6}
         pointerEvents={tappable ? 'auto' : 'none'} style={off ? HIDDEN : undefined}
         accessibilityRole={tappable ? 'button' : undefined} accessibilityLabel={tappable ? accessibilityLabel : undefined}
         accessibilityElementsHidden={off} importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>
@@ -57,6 +66,9 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
 }
 
 const HIDDEN = { opacity: 0 } as const;
+const CENTER = { x: 0.5, y: 0.5 } as const;
+/** A thousandth of a point on a 96 pt marker: invisible, but a different prop value. */
+const ANCHOR_NUDGE = 1e-5;
 
 /** Where a parked marker waits (it draws nothing). */
 export const PARKED = { latitude: 0, longitude: 0 } as const;

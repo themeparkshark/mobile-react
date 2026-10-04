@@ -407,7 +407,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return out;
   }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, hasExtraControls, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
-  const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null }> | null>(null);
+  const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
   const feedDeclutter = useMapDeclutter(declutter, viewSize, declutterPlayer, declutterControls, debugOn ? setDebugRects : undefined);
   // iOS draws a marker view whose point is off screen at the top-left corner: the
@@ -686,7 +686,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {fright && viewSize && <FrightMapLayer input={fright} width={viewSize.width} height={viewSize.height} zoom={cameraZoom} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {debugOn && debugRects && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {[...debugRects.entries()].map(([id, { body, tag }]) => <View key={id}>
+        {[...debugRects.entries()].map(([id, { body, tag, point }]) => <View key={id}>
+          {point && <View style={[styles.debugPoint, { left: point.x - 3, top: point.y - 3 }]} />}
           <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]}>
             <Text style={styles.debugLabel} numberOfLines={2}>{id}</Text>
           </View>
@@ -751,6 +752,7 @@ function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonl
 const styles = StyleSheet.create({
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
+  debugPoint: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#00e5ff' },
   debugLabel: { fontSize: 8, lineHeight: 9, color: '#ffffff', backgroundColor: 'rgba(160,0,150,0.8)', alignSelf: 'flex-start', paddingHorizontal: 1 },
   guideArrow: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, zIndex: 9 },
   recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',

@@ -79,7 +79,7 @@ test('projection: the camera centre is the view centre; bearing turns the map un
 });
 
 test('footprints are the drawn art with its glow: islands 72 x 88, coins and keys 48, the haunt facade 96 x 100 plus its name chip', () => {
-  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -74, w: 72, h: 88 }, 'down to the island base');
+  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -84, w: 72, h: 88 }, 'down to the island base');
   assert.equal(L.COIN_BODY.w, 48);
   assert.equal(L.COIN_BODY.h, 48);
   assert.deepEqual(plain(L.HAUNT_BODY), { x: -48, y: -82, w: 96, h: 100 });
@@ -315,4 +315,38 @@ test('the player shark standing on a haunt recedes it (never hides it); it grows
   assert.equal(ride.get('ride:a').scale, 1);
   assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/parkMapLayout.ts'), 'utf8'),
     /group: 'haunt', recedeScale: HAUNT_RECEDE, recedeUnderPlayer: true/, 'haunts opt in');
+});
+
+test('z15.8: island footprints line up with the art, and an island base clears the energy pill by the 6 pt gap', () => {
+  // TaskMarker: a 72 x 96 box, art bottom at 86 (paddingBottom 10), anchored at 86.4. The body reaches the base.
+  assert.equal(L.RIDE_BOX.anchor.y, 86.4);
+  const base = 86 - L.RIDE_BOX.anchor.y;
+  assert.ok(L.RIDE_BODY.y + L.RIDE_BODY.h >= base && L.RIDE_BODY.y + L.RIDE_BODY.h <= base + 6, 'body bottom sits on the island base');
+  assert.ok(L.RIDE_BODY.y <= -L.RIDE_BOX.anchor.y + 4, 'body top covers the landmark and coin headroom');
+  const f = frame({ zoom: 15.8 });
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  assert.ok(pill, 'the bottom-right column (energy, swords, avatar) is a hard inset');
+  const rideScreen = (y, x = pill.x + 40) => {
+    const k = mpp(15.8);
+    return { id: 'ride:rocket', latitude: USF.latitude - ((y - 350) * k) / 111320,
+      longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+      priority: 300, body: L.RIDE_BODY, group: 'ride' };
+  };
+  // The inset already carries the 6 pt gap: a base 2 pt above it would put art within 4 pt of the pill.
+  assert.equal(s.solveLayout([rideScreen(pill.y - 2)], f, { insets: INSETS }).get('ride:rocket').visible, false);
+  const clear = s.solveLayout([rideScreen(pill.y - 6)], f, { insets: INSETS });
+  assert.equal(clear.get('ride:rocket').visible, true, 'base 6 pt above the gap line: shown, 12 pt from the pill');
+});
+
+test('marker art is anchored where the solver thinks: the anchor is re-sent after layout, scale origins are numbers', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const marker = fs.readFileSync(path.join(__dirname, '../../src/components/map/Marker.tsx'), 'utf8');
+  // MLRNPointAnnotation drops an anchor that arrives before the view has a size (new-arch interop):
+  // islands drew centred on their point, about 38 pt low.
+  assert.match(marker, /anchor=\{laidOut \? a : \{ x: a\.x, y: a\.y \+ ANCHOR_NUDGE \}\}/);
+  assert.match(marker, /onLayout=\{onLayout\}/);
+  const placed = fs.readFileSync(path.join(__dirname, '../../src/components/map/declutter/Placed.tsx'), 'utf8');
+  // RN parses transform-origin strings with an integer-only regex ("86.4px" read as 4 px).
+  assert.match(placed, /transformOrigin: anchor \? \[anchor\.x, anchor\.y, 0\] : 'center'/);
+  assert.doesNotMatch(placed, /transformOrigin: [^\n]*px/);
 });

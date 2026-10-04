@@ -22,8 +22,8 @@ import { markerBadge } from './mapMarkerPresentation';
 
 /** TaskMarker: 72x96 box anchored at (0.5, 0.9). */
 export const RIDE_BOX = { width: 72, height: 96, anchor: { x: 36, y: 86.4 } } as const;
-/** The landmark (64) down to its island base and ground ring, with the floating coin's headroom: 72 x 88. */
-export const RIDE_BODY: Rect = { x: -36, y: -74, w: 72, h: 88 };
+/** The landmark (64) down to its island base and ground ring, with the floating coin's headroom: 72 x 88, base on the anchor. */
+export const RIDE_BODY: Rect = { x: -36, y: -84, w: 72, h: 88 };
 /** Coin, key and redeemable finds: a square box anchored at its centre. */
 export const FIND_BOX = { width: 80, height: 80, anchor: { x: 40, y: 40 } } as const;
 /** The find's root view: the art centred on the anchor, the timer chip placed around it. */

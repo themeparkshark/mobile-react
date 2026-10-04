@@ -69,7 +69,9 @@ export const Placed = memo(function Placed({ placement, anchor, style, overlay, 
   }, [placement.visible, placement.reason, placement.scale, opacity, scale, pop, reduced]);
   const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const art = useAnimatedStyle(() => ({ transform: [{ scale: scale.value * pop.value }] }));
-  const origin = { transformOrigin: anchor ? `${anchor.x}px ${anchor.y}px 0px` : 'center' } as ViewStyle;
+  // Numbers, never a "px" string: RN parses transform-origin strings with an integer-only regex, so
+  // "86.4px" read as 4 px and receded islands shrank toward their top, floating above their spot.
+  const origin = { transformOrigin: anchor ? [anchor.x, anchor.y, 0] : 'center' } as ViewStyle;
   return (
     <Animated.View pointerEvents={placement.visible ? 'box-none' : 'none'} style={fade}>
       <Animated.View style={[style, origin, art]}>{children}</Animated.View>

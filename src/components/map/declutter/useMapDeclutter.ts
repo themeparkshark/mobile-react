@@ -25,7 +25,7 @@ type Camera = { latitude: number; longitude: number; zoom: number; bearing: numb
 
 export default function useMapDeclutter(input: MapDeclutterInput | null | undefined, view: { width: number; height: number } | null,
   extra: readonly LayoutItem[], extraInsets: readonly InsetRect[],
-  debug?: (rects: Map<string, { body: Rect; tag: Rect | null }>) => void) {
+  debug?: (rects: Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>) => void) {
   const frame = useRef<Camera | null>(null);
   const holding = useRef(false);
   const lastZoom = useRef<number | null>(null);
@@ -42,7 +42,7 @@ export default function useMapDeclutter(input: MapDeclutterInput | null | undefi
     const full: CameraFrame = { ...frame.current, width: size.width, height: size.height };
     const insets = [...resolveInsets(current.insets, size.width, size.height), ...moreInsets];
     const items = more.length ? [...current.items, ...more] : current.items;
-    const rects = onRects ? new Map<string, { body: Rect; tag: Rect | null }>() : undefined;
+    const rects = onRects ? new Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>() : undefined;
     current.store.publish(solveLayout(items, full, {
       insets, previous: current.store.snapshot(), previousZoom: lastZoom.current, hold: holding.current, rects,
     }));
