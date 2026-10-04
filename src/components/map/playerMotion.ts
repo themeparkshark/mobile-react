@@ -44,3 +44,28 @@ export function wakeTurn(course: number, bearingDeg: number): number {
   'worklet';
   return ((course - bearingDeg) * Math.PI) / 180;
 }
+
+/**
+ * Where a too-long glide starts: `maxM` metres short of the target, on the line
+ * from the shark's drawn position (so it still glides in from the right side).
+ * A step already within `maxM` starts where the shark is.
+ */
+export function catchUpStart(tE: number, tN: number, fromE: number, fromN: number, maxM: number): [number, number] {
+  const dE = tE - fromE, dN = tN - fromN;
+  const d = Math.hypot(dE, dN);
+  if (!(d > maxM) || !(maxM > 0)) return [fromE, fromN];
+  return [tE - (dE / d) * maxM, tN - (dN / d) * maxM];
+}
+
+/**
+ * Which way the shark faces for a travel course on a map turned to `bearingDeg`:
+ * -1 when the walk heads right on screen (the art is flipped), 1 when it heads
+ * left. Nearly straight up or down the screen keeps the previous facing.
+ */
+export function facingFor(course: number, bearingDeg: number, previous: number): number {
+  'worklet';
+  const x = Math.sin(((course - bearingDeg) * Math.PI) / 180);
+  if (x > 0.25) return -1;
+  if (x < -0.25) return 1;
+  return previous;
+}

@@ -89,6 +89,7 @@ const styles = StyleSheet.create({
   dot: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#fff6cf' },
   wake: { position: 'absolute', bottom: 10, width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   wakeSparkle: { position: 'absolute', width: 17, height: 17, marginLeft: -8.5, marginTop: -8.5 },
+  wakeSparkleDay: { width: 22, height: 22, marginLeft: -11, marginTop: -11, tintColor: '#e08a00' },
 });
 
 /**
@@ -99,21 +100,28 @@ const styles = StyleSheet.create({
  * a shark standing still has no wake. `trail` (radians, from the map) turns the
  * wake to stream opposite the direction of travel; 0 streams down the screen.
  */
-export const SharkWake = memo(function SharkWake({ moving, trail }: {
+export const SharkWake = memo(function SharkWake({ moving, trail, live }: {
   readonly moving: SharedValue<number>;
   readonly trail?: SharedValue<number>;
+  /** 1 while this drawn copy of the shark is on screen; 0 holds the wake still. */
+  readonly live?: SharedValue<number>;
 }) {
-  const { clock, caps, running } = useMapAlive();
+  const { clock, caps, running, light } = useMapAlive();
   // Hooks before the early return (rules of hooks).
-  const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${trail ? trail.value : 0}rad` }] }), [trail]);
+  const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${trail && (!live || live.value > 0) ? trail.value : 0}rad` }] }), [trail, live]);
   if (!running || caps.trail <= 0) return null;
+  // By day gold on pale tiles barely reads: a deeper amber, a little larger.
+  const day = light.lamps < 0.05;
   return <Animated.View pointerEvents="none" style={[styles.wake, turn]}>
-    {Array.from({ length: Math.min(6, caps.trail) }, (_, k) => <WakeSparkle key={k} k={k} n={Math.min(6, caps.trail)} clock={clock} moving={moving} />)}
+    {Array.from({ length: Math.min(6, caps.trail) }, (_, k) => <WakeSparkle key={k} k={k} n={Math.min(6, caps.trail)} clock={clock} moving={moving} live={live} day={day} />)}
   </Animated.View>;
 });
 
-function WakeSparkle({ k, n, clock, moving }: { k: number; n: number; clock: SharedValue<number>; moving: SharedValue<number> }) {
+function WakeSparkle({ k, n, clock, moving, live, day }: { k: number; n: number; clock: SharedValue<number>; moving: SharedValue<number>;
+  live?: SharedValue<number>; day: boolean }) {
   const style = useAnimatedStyle(() => {
+    // Standing still, or a copy nobody sees: nothing to draw and no per-frame work.
+    if (moving.value === 0 || (live && live.value === 0)) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }, { rotate: '0deg' }] };
     const cycle = clock.value / 1.3 + k / n;
     const p = cycle - Math.floor(cycle);
     const lane = hash01(Math.floor(cycle) * 7 + k) - 0.5;
@@ -122,5 +130,5 @@ function WakeSparkle({ k, n, clock, moving }: { k: number; n: number; clock: Sha
       transform: [{ translateX: lane * 34 }, { translateY: p * 34 }, { scale: 0.9 - p * 0.5 }, { rotate: `${p * 140}deg` }],
     };
   });
-  return <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.wakeSparkle, style]} />;
+  return <Animated.Image source={SPARKLE} resizeMode="contain" style={[styles.wakeSparkle, day && styles.wakeSparkleDay, style]} />;
 }
