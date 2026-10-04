@@ -194,7 +194,7 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '80d41a0185c1ebe3e6bb202e17830150891f00f6136ad6fdf60a24a7bd7f464c');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '2aa3a51e653c545a9b36ad3696bf908de7b0a8351d35ec6b0e34c6885f13fe4f');
   assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '1b67fef46c5d8c6c6c3e757ffd82bc6513544e05ddc51e514c97ea0a99ccd7eb');
 });
 
@@ -476,7 +476,12 @@ test('R12: no refusal is silent (the app sends it to the server), gentle line, p
   assert.equal(model.blocksSend('too_long'), true);
   assert.match(model.DRAFT_LINES.personal_info, /If something is wrong or you feel unsafe, tell a grown-up you trust\.$/);
   assert.match(model.DRAFT_LINES.grooming, /If something is wrong or you feel unsafe, tell a grown-up you trust\.$/);
-  assert.doesNotMatch(model.DRAFT_LINES.link, /grown-up/);
+  assert.match(model.DRAFT_LINES.link, /If something is wrong or you feel unsafe, tell a grown-up you trust\.$/);
+  // final4: playful hyperbole is a quiet care check, never the crisis or Childhelp line.
+  assert.equal(model.isDisclosure('my sister hit me with a churro sword, best fight ever'), false);
+  assert.equal(model.isDistress('Tower of Terror made me feel like I was going to die lol'), false);
+  assert.equal(model.isCareCheck('Tower of Terror made me feel like I was going to die lol'), true);
+  assert.equal(model.isDistress('i want to die lol'), true);
   assert.equal(model.SAFE_LINE, 'If something is wrong or you feel unsafe, tell a grown-up you trust.');
   for (const t of ['my brother kicks me under the table every time i order a churro lol', 'my dad hit me with a pool noodle at the resort pool and i fell in laughing',
     "my grandma beat me at Toy Story Mania again, she's a legend"]) assert.equal(model.isDisclosure(t), false, t);
