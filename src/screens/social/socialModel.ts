@@ -127,23 +127,24 @@ export function actorOf(item: InboxItem): number | null {
 }
 
 export interface KindLook {
-  readonly icon: GameIconName;
   /** Badge fill behind the art. */
   readonly color: string;
-  /** Darker lip under the badge. */
+  /** Darker shade of the colour (unread stripe, sticker ring). */
   readonly lip: string;
+  /** Soft fill of the round badge behind the art. */
+  readonly tint: string;
   /** Short tag read by VoiceOver before the message. */
   readonly spoken: string;
 }
 
 export const KIND_LOOK: Readonly<Record<NotificationKind, KindLook>> = {
-  friend_request: { icon: 'shark', color: '#8A5CF6', lip: '#5B35B8', spoken: 'Friend request' },
-  friend_accepted: { icon: 'check', color: '#3CB85C', lip: '#237A3B', spoken: 'New friend' },
-  compliment: { icon: 'heart', color: '#FF8A3D', lip: '#C25A12', spoken: 'Compliment' },
-  reply: { icon: 'info', color: '#1E9BF0', lip: '#0B5FA0', spoken: 'Reply' },
-  park_coins: { icon: 'coin', color: '#F2B21B', lip: '#B57F00', spoken: 'Park coins' },
-  prize: { icon: 'gift', color: '#EF4A3C', lip: '#B3261B', spoken: 'Prize' },
-  news: { icon: 'bell', color: '#0879CA', lip: '#05468F', spoken: 'News' },
+  friend_request: { color: '#8A5CF6', lip: '#5B35B8', tint: '#EFE6FF', spoken: 'Friend request' },
+  friend_accepted: { color: '#3CB85C', lip: '#237A3B', tint: '#E3F7E1', spoken: 'New friend' },
+  compliment: { color: '#FF8A3D', lip: '#C25A12', tint: '#FFEBDD', spoken: 'Compliment' },
+  reply: { color: '#1E9BF0', lip: '#0B5FA0', tint: '#DDF1FF', spoken: 'Reply' },
+  park_coins: { color: '#F2B21B', lip: '#B57F00', tint: '#FFF3CF', spoken: 'Park coins' },
+  prize: { color: '#EF4A3C', lip: '#B3261B', tint: '#FFE4E1', spoken: 'Prize' },
+  news: { color: '#0879CA', lip: '#05468F', tint: '#DDEBFA', spoken: 'News' },
 };
 
 /** True while a friend-request row can still be answered right in the bell. */
@@ -169,29 +170,37 @@ export type InboxRow<T> =
   | { readonly type: 'item'; readonly key: string; readonly item: T };
 
 /**
- * Time buckets a kid can trust: Today, This week, Earlier. Each strictly newest
- * first. Unread is shown on the row itself (glow and stripe), and the first
- * header carries how many are still unread.
+ * Time buckets a kid can trust: Today, This week, Earlier (this year), then one
+ * header per older year ("2025"), so a June row under a March row never looks
+ * out of order. Each bucket is strictly newest first by created_at. Unread is
+ * shown on the row itself, and each header carries how many are still unread.
  */
 export function sectionize<T extends InboxItem>(items: readonly T[], readIds: ReadonlySet<string>, now: number = Date.now()): InboxRow<T>[] {
   const day = new Date(now);
   day.setHours(0, 0, 0, 0);
   const today = day.getTime();
   const week = today - 6 * 86_400_000;
-  const buckets: { key: string; label: string; items: T[] }[] = [
-    { key: 'h-today', label: 'Today', items: [] },
-    { key: 'h-week', label: 'This week', items: [] },
-    { key: 'h-earlier', label: 'Earlier', items: [] },
-  ];
+  const thisYear = day.getFullYear();
   const sorted = [...items].sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
+  const buckets = new Map<string, { label: string; items: T[] }>();
   for (const item of sorted) {
     const at = Date.parse(item.created_at) || 0;
-    buckets[at >= today ? 0 : at >= week ? 1 : 2].items.push(item);
+    const year = new Date(at).getFullYear();
+    // A missing or bad date can't be placed in a year: it goes to Earlier, never a "1970" section.
+    const [key, label] = at === 0 ? ['h-earlier', 'Earlier']
+      : at >= today ? ['h-today', 'Today']
+      : at >= week ? ['h-week', 'This week']
+      : year >= thisYear ? ['h-earlier', 'Earlier']
+      : [`h-${year}`, String(year)];
+    const bucket = buckets.get(key) ?? { label, items: [] };
+    bucket.items.push(item);
+    buckets.set(key, bucket);
   }
+  // Today, This week, Earlier, then years newest first (a bad-date row can open Earlier after a year bucket).
+  const rank = (key: string) => (key === 'h-today' ? 3e4 : key === 'h-week' ? 2e4 : key === 'h-earlier' ? 1e4 : Number(key.slice(2)));
   const rows: InboxRow<T>[] = [];
-  for (const bucket of buckets) {
-    if (!bucket.items.length) continue;
-    rows.push({ type: 'header', key: bucket.key, label: bucket.label, count: bucket.items.filter(item => isUnread(item, readIds)).length });
+  for (const [key, bucket] of [...buckets].sort((a, b) => rank(b[0]) - rank(a[0]))) {
+    rows.push({ type: 'header', key, label: bucket.label, count: bucket.items.filter(item => isUnread(item, readIds)).length });
     for (const item of bucket.items) rows.push({ type: 'item', key: item.id, item });
   }
   return rows;
@@ -201,7 +210,7 @@ export function isUnread(item: InboxItem, readIds: ReadonlySet<string>): boolean
   return !item.read_at && !readIds.has(item.id);
 }
 
-/** Short, kid-readable age: "now", "5m", "2h", "3d", "2w", then "Sep 4". */
+/** Short, kid-readable age: "now", "5m", "2h", "3d", "2w", then "Sep 4", and "Jun 1, 2025" for another year. */
 export function shortAgo(iso: string | null | undefined, now: number = Date.now()): string {
   const at = iso ? Date.parse(iso) : NaN;
   if (!Number.isFinite(at)) return '';
@@ -216,7 +225,27 @@ export function shortAgo(iso: string | null | undefined, now: number = Date.now(
   if (d < 35) return `${Math.floor(d / 7)}w`;
   const date = new Date(at);
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  const label = `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  return date.getFullYear() === new Date(now).getFullYear() ? label : `${label}, ${date.getFullYear()}`;
+}
+
+/** Coins a row gave, read from the stored copy ("... sent you 5 Coins!"), for the +5 chip. 0 when none. */
+export function rewardCoins(message: string): number {
+  const match = /sent you (\d+) coins?\b/i.exec(message);
+  const coins = match ? Number(match[1]) : 0;
+  return Number.isFinite(coins) && coins > 0 && coins < 100_000 ? coins : 0;
+}
+
+/**
+ * The player name a row starts with, split off so it can be set bolder:
+ * "finn replied to your thread." -> { lead: "finn", rest: " replied to your thread." }.
+ * Only for rows about another player; "You ..." and system rows stay whole.
+ */
+export function leadName(message: string, kind: NotificationKind): { readonly lead: string; readonly rest: string } {
+  const actorKinds: readonly NotificationKind[] = ['friend_request', 'friend_accepted', 'compliment', 'reply'];
+  const match = /^(\S+)(\s[\s\S]*)$/.exec(message);
+  if (!actorKinds.includes(kind) || !match || /^you$/i.test(match[1]) || match[1].includes('[')) return { lead: '', rest: message };
+  return { lead: match[1], rest: match[2] };
 }
 
 /** Spoken age for VoiceOver. */
