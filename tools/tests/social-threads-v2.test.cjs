@@ -194,7 +194,7 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), 'b997bada93fb9948616f7d184a41444b51f5598c69c09043ae3adda4413a27f7');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '36906b00f42582feb3d69e4f3fe5da8dfbe0e40b1ac9a1ec530579c86a9aae3b');
   assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '5645eaea3d0ba189cb711f3d8773f6f3a999942bd602fd1cbed4c30e4c91f52f');
 });
 
@@ -228,8 +228,9 @@ test('R3: blocked drafts are reported by category only, once per text, and a pau
   assert.match(await model.reportBlockedDraft('grooming', 'u alone rn?', last, send), /taking a break/);
   assert.equal(await model.reportBlockedDraft('mean', 'x', last, send), null);
   assert.deepEqual(plain(sent), ['grooming', 'personal_info', 'grooming']);
-  assert.match(read('src/screens/threads/Composer.tsx'), /reportBlockedDraft\(problem, text, reportedDraft, reportFilterHit\)/);
-  assert.match(read('src/screens/ThreadScreen.tsx'), /reportBlockedDraft\(problem, words, reportedDraft, reportFilterHit\)/);
+  // R12: the screens no longer block or report a draft themselves; the server refuses and records it.
+  assert.doesNotMatch(read('src/screens/threads/Composer.tsx'), /reportBlockedDraft/);
+  assert.doesNotMatch(read('src/screens/ThreadScreen.tsx'), /reportBlockedDraft/);
 });
 
 test('R3: invisible characters, keycaps and foreign digits cannot hide anything; times and prices pass', () => {
@@ -302,10 +303,12 @@ test('R5: the keystroke path runs only the cheap check; the full filter is debou
   const composer = read('src/screens/threads/Composer.tsx');
   assert.doesNotMatch(composer, /useMemo\(\(\) => checkDraft\(text,/);
   assert.match(composer, /const quick = quickDraftProblem\(text, POST_MAX\)/);
-  assert.match(composer, /const problem = safeMode \? \(safeText === null \? 'empty' : null\) : checkDraft\(text, POST_MAX\)/);
+  // R12: send stops only on empty or too long; the server refuses and records the rest.
+  assert.match(composer, /const problem = safeMode \? \(safeText === null \? 'empty' : null\) : quickDraftProblem\(text, POST_MAX\)/);
+  assert.match(composer, /safeMode \? safeText !== null : !quick\);/);
   const screen = read('src/screens/ThreadScreen.tsx');
   assert.doesNotMatch(screen, /useMemo\(\(\) => checkDraft\(text,/);
-  assert.match(screen, /const problem = safe \? null : checkDraft\(words, REPLY_MAX\)/);
+  assert.match(screen, /const problem = safe \? null : quickDraftProblem\(words, REPLY_MAX\)/);
   const long = 'Rode Tron and it was so fun, the wait was long but worth it. '.repeat(8).slice(0, 500);
   const t = process.hrtime.bigint();
   for (let i = 0; i < 100; i++) model.quickDraftProblem(long);
@@ -453,7 +456,6 @@ test('R11: disclosures reach the server (never blocked here) with the Childhelp 
 
 test('Clean Social: shared clean background, no topic chips, badges or picker, More sheet runs actions after it hides', () => {
   const bg = read('src/components/CleanScreenBackground.tsx');
-  // RC: the shared page is notif-polish's CLEAN_SCREEN_BG (#EAF3FB, coordinator decision); CLEAN.bg points at it.
   assert.match(bg, /CLEAN_SCREEN_BG = '#EAF3FB'/);
   assert.match(bg, /bg: CLEAN_SCREEN_BG/);
   const social = read('src/screens/SocialScreen.tsx');
@@ -466,4 +468,20 @@ test('Clean Social: shared clean background, no topic chips, badges or picker, M
   const composer = read('src/screens/threads/Composer.tsx');
   assert.doesNotMatch(composer, /What's it about\?|TOPICS\.map|topicArt|WATER/);
   assert.match(read('src/screens/threads/socialLook.tsx'), /borderColor: '#dbe4ee'/);
+});
+
+test('R12: no refusal is silent (the app sends it to the server), gentle line, playful lines are not disclosures', () => {
+  for (const problem of ['personal_info', 'grooming', 'link']) assert.equal(model.blocksSend(problem), false, problem);
+  assert.equal(model.blocksSend('empty'), true);
+  assert.equal(model.blocksSend('too_long'), true);
+  assert.match(model.DRAFT_LINES.personal_info, /If something is wrong or you feel unsafe, tell a grown-up you trust\.$/);
+  assert.match(model.DRAFT_LINES.grooming, /If something is wrong or you feel unsafe, tell a grown-up you trust\.$/);
+  assert.doesNotMatch(model.DRAFT_LINES.link, /grown-up/);
+  assert.equal(model.SAFE_LINE, 'If something is wrong or you feel unsafe, tell a grown-up you trust.');
+  for (const t of ['my brother kicks me under the table every time i order a churro lol', 'my dad hit me with a pool noodle at the resort pool and i fell in laughing',
+    "my grandma beat me at Toy Story Mania again, she's a legend"]) assert.equal(model.isDisclosure(t), false, t);
+  assert.equal(model.isDisclosure('my stepdad touches me and says its our secret lol'), true);
+  for (const composerFile of ['src/screens/threads/Composer.tsx', 'src/screens/ThreadScreen.tsx']) {
+    assert.doesNotMatch(read(composerFile), /reportFilterHit/);
+  }
 });

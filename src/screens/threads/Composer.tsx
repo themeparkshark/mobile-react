@@ -38,7 +38,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { postThread, editThread, fetchPostingStatus, reportFilterHit } from '../../api/endpoints/social';
+import { postThread, editThread, fetchPostingStatus } from '../../api/endpoints/social';
 import Avatar from '../../components/Avatar';
 import RewardBurst from '../../components/RewardBurst';
 import { AuthContext } from '../../context/AuthProvider';
@@ -72,7 +72,6 @@ import {
   quickDraftProblem,
   reviewLine,
   pauseLine,
-  reportBlockedDraft,
   errorLine,
 } from './socialModel';
 
@@ -197,10 +196,9 @@ export default function Composer({
     setMode(editing ? 'free' : 'safe');
     setPick(null);
   }, [visible, editing]);
-  const reportedDraft = useRef<string | null>(null);
   const showProblem = hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null;
   const line = serverLine ?? pausedLine ?? showProblem ?? (disclosure ? DISCLOSURE_LINE : care ? CARE_LINE : null);
-  const canPost = phase === 'write' && !pausedLine && (safeMode ? safeText !== null : !quick && !hintProblem);
+  const canPost = phase === 'write' && !pausedLine && (safeMode ? safeText !== null : !quick);
   const left = POST_MAX - text.trim().length;
 
   const close = async () => {
@@ -213,7 +211,9 @@ export default function Composer({
   const submit = async () => {
     setTouched(true);
     if (phase !== 'write') return;
-    const problem = safeMode ? (safeText === null ? 'empty' : null) : checkDraft(text, POST_MAX);
+    // Only empty or too long stops here. Anything else goes to the server, which refuses it
+    // with the same friendly line and records it for a grown-up: no refusal is ever silent.
+    const problem = safeMode ? (safeText === null ? 'empty' : null) : quickDraftProblem(text, POST_MAX);
     if (problem || pausedLine) {
       // An empty or unsafe post never just sits there: the card wiggles, a soft "nope", and the cursor is ready.
       playSound(NOPE, { volume: 0.5 });
@@ -225,8 +225,6 @@ export default function Composer({
         );
       }
       inputRef.current?.focus();
-      // The server never sees a blocked draft, so it is told the category (not the words).
-      if (!safeMode) void reportBlockedDraft(problem, text, reportedDraft, reportFilterHit).then((line) => { if (line) setServerLine(line); });
       return;
     }
     Keyboard.dismiss();

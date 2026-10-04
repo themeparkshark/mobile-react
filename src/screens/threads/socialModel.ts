@@ -118,11 +118,14 @@ export function pickerReactions<T extends { name: string }>(types: readonly T[])
 
 export type DraftProblem = 'empty' | 'too_long' | 'personal_info' | 'grooming' | 'link';
 
+/** Added to contact and grooming lines (same as SafeText::SAFE_LINE). */
+export const SAFE_LINE = 'If something is wrong or you feel unsafe, tell a grown-up you trust.';
+
 export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
   empty: 'Write something first!',
   too_long: 'That is a lot of words! Try a shorter post.',
-  personal_info: "Stay safe! Don't share phone numbers, addresses, emails or other apps.",
-  grooming: "Let's keep it about parks. Don't ask people their age, school, or where they are.",
+  personal_info: `Stay safe! Don't share phone numbers, addresses, emails or other apps. ${SAFE_LINE}`,
+  grooming: `Let's keep it about parks. Don't ask people their age, school, or where they are. ${SAFE_LINE}`,
   link: "Links can't be posted here.",
 };
 
@@ -441,8 +444,14 @@ export function isCareCheck(text: string): boolean {
 
 /** Same as SafeText::isDisclosure: a kid telling us someone hurts them or makes them keep a secret. */
 const DISCLOSURE = compile(RULES.disclosure);
+const DISCLOSURE_PLAYFUL = compile(RULES.disclosure_playful);
+const DISCLOSURE_STRONG = compile(RULES.disclosure_strong);
 export function isDisclosure(text: string): boolean {
-  return text.trim() !== '' && matchesAny(DISCLOSURE, forms(text));
+  if (text.trim() === '') return false;
+  const all = forms(text);
+  if (!matchesAny(DISCLOSURE, all)) return false;
+  // Playful context ("lol", "with a pool noodle") is not a disclosure unless a strong cue is there too.
+  return !matchesAny(DISCLOSURE_PLAYFUL, all) || matchesAny(DISCLOSURE_STRONG, all);
 }
 
 /** What a kid sees after telling us about abuse or a secret: warm, with Childhelp and 911. Same as the server. */
@@ -521,6 +530,15 @@ export function pauseLine(until: string | null, now = Date.now()): string {
 }
 
 /**
+ * Only empty or too-long text stops in the app. Everything else goes to the server, which
+ * refuses it with the same line and records it for a grown-up (no refusal is ever silent).
+ */
+export function blocksSend(problem: DraftProblem | null): boolean {
+  return problem === 'empty' || problem === 'too_long';
+}
+
+/**
+ * Old path, unused by the screens since R12 (the server records every refusal itself).
  * Report a blocked draft once per distinct text (tapping POST again on the same
  * words is not a new attempt). Returns the pause line when posting is now paused.
  */

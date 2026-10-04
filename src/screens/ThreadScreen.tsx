@@ -17,7 +17,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { Modal, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchComments, fetchPostingStatus, fetchReplies, fetchThread, postComment, reportFilterHit } from '../api/endpoints/social';
+import { fetchComments, fetchPostingStatus, fetchReplies, fetchThread, postComment } from '../api/endpoints/social';
 import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
 import RichText from '../components/RichText';
@@ -39,7 +39,7 @@ import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
 import { CLEAN } from '../components/CleanScreenBackground';
 import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './threads/socialLook';
-import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -283,7 +283,6 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const [sheetPick, setSheetPick] = useState<SafeChatPick | null>(null);
   const places = useSafeChatPlaces();
   const sheetText = composeSafeChat(sheetPick, places);
-  const reportedDraft = useRef<string | null>(null);
 
   const shownLine = line ?? pausedLine ?? (hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null) ?? (disclosure ? DISCLOSURE_LINE : care ? CARE_LINE : null);
   const sendOff = Boolean(pausedLine) || sending || quickProblem === 'empty';
@@ -296,10 +295,11 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
       return;
     }
     const words = text.trim();
-    const problem = safe ? null : checkDraft(words, REPLY_MAX);
+    // Only empty or too long stops here. The server refuses anything else with the same line
+    // and records it for a grown-up: no refusal is ever silent.
+    const problem = safe ? null : quickDraftProblem(words, REPLY_MAX);
     if (problem) {
       setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
-      void reportBlockedDraft(problem, words, reportedDraft, reportFilterHit).then((pause) => { if (pause) setLine(pause); });
       playSound(NOPE, { volume: 0.5 });
       void Haptics.notificationAsync('warning');
       if (problem === 'empty') inputRef.current?.focus();
