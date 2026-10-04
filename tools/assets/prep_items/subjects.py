@@ -278,3 +278,48 @@ def subject(setkey, item):
         tier = TIER[rarity] if setkey in FOOD else TIER_GEAR[rarity]
         return f"{POSE[setkey]}: {R2[slug]}{colour}; {tier}; {NOT[setkey]}"
     return _subject_v1(setkey, item)
+
+
+# ---- Round 3 (panel fixes): one hero cue per item, sized like the Biscoff biscuit.
+R3 = {
+    'churro_02': "churro buried in a thick fluffy coat of snowy white powdered sugar, with a little white sugar cloud puffing off the top and a small sugar sifter beside it",
+    'churro_03': "churro dripping with glossy amber honey, with a big wooden honey dipper resting against it and a little honeycomb hexagon",
+    'churro_05': "churro twisted into a spiral corkscrew with maple syrup swirled down it and one big red-orange maple leaf as big as the churro is wide",
+    'churro_07': "churro with bold zigzag golden caramel drizzle and a big glossy caramel puddle pooling at the cup rim",
+    'churro_08': "churro with a bitten top showing creamy tan dulce de leche filling, beside a small glass jar of dulce de leche with a cloth lid tied with string, no label text",
+    'churro_15': "churro with caramel drizzle and four huge white pyramid-shaped sea salt crystals on top, each crystal big and easy to see",
+    'churro_16': "churro rolled in toffee bits with one big jagged golden toffee shard sticking out of the top like a sail",
+    'churro_17': "churro with praline glaze and one big whole pecan half, as big as the churro is wide, sitting on the tip",
+    'churro_18': "churro in cinnamon sugar with one big flat round crackly cinnamon-sugar snickerdoodle cookie leaning against it, as wide as the cup",
+    'pretzel_01': "pretzel with big chunky white salt pieces all over it, classic ballpark style",
+    'pretzel_08': "glossy buttered pretzel with green herb flecks and a big square butter pat with a parsley sprig on top, the butter pat as big as one pretzel loop",
+    'pretzel_09': "pretzel topped with toasted onion flakes and one big golden crispy onion ring leaning against it",
+    'pretzel_11': "completely plain bare golden-brown pretzel with absolutely no salt and no toppings, smooth and shiny",
+    'pretzel_13': "shiny pretzel glistening with olive oil next to a big green olive on a little olive branch with leaves, the olive as big as one pretzel loop",
+}
+for n in range(31, 36):
+    R3[f'flashlight_{n}'] = ("classic handheld flashlight body with a round lens, decorated like old Hollywood: a film strip band wrapped around the "
+                             "body, one small film reel badge on the side, and a gold star on the switch, NOT a stage spotlight, NOT a projector")
+for n in range(21, 26):
+    R3[f'umbrella_{n}'] = ("umbrella with one big bold compass rose star printed across the whole canopy in white and gold, four big "
+                           "pointed rays reaching the canopy edge, and a compass-needle shaped tip")
+LEGEND_R3 = {
+    'churro_39': ("churro coated all over in shiny gold sugar that gleams like gold, in a white paper cup with a wide gold band, a tiny gold "
+                  "crown on its tip, a soft gold rim highlight and four crisp four-point sparkles around it, still clearly a tasty churro"),
+    'umbrella_40': ("gold umbrella with a gold canopy, a thin rainbow band along the edge, a big jewelled gold crown on top as the tip, a small "
+                    "golden halo ring floating above the crown, a ruby on the handle, and three crisp four-point sparkles"),
+}
+_subject_v2 = subject
+
+
+def subject(setkey, item):
+    slug, name, rarity, subj = item
+    if slug in LEGEND_R3:
+        return f"{POSE[setkey]}: {LEGEND_R3[slug]}; {NOT[setkey]}"
+    if slug in R3:
+        colour = ''
+        if setkey not in FOOD:
+            colour = ', main ' + ('canopy' if setkey == 'umbrellas' else 'body') + ' colour ' + COLOURS[name.split()[0]]
+        tier = TIER[rarity] if setkey in FOOD else TIER_GEAR[rarity]
+        return f"{POSE[setkey]}: {R3[slug]}{colour}; {tier}; {NOT[setkey]}"
+    return _subject_v2(setkey, item)

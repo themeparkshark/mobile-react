@@ -81,3 +81,10 @@ test('prep items are real variations, not palette swaps of one sprite', () => {
     }
   }
 });
+
+test('collection grid decodes prep art at tile size, never at full 384px', () => {
+  const tile = fs.readFileSync(path.join(root, 'src/screens/SetCollection/DexTile.tsx'), 'utf8');
+  const images = tile.match(/<Image source=\{art\}[^>]*>/g) || [];
+  assert.ok(images.length >= 2, 'grid art images found');
+  for (const tag of images) assert.match(tag, /\ballowDownscaling\b/);
+});

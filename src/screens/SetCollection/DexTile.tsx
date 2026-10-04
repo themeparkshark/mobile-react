@@ -101,13 +101,13 @@ export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
       <Animated.View style={flipStyle}>
         <TilePanel key={item.id} rarity={item.rarity} found={item.found} style={{ width, height: width, justifyContent: 'center' }}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.center, colorStyle]}>
-            <Image source={art} contentFit="contain" recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
+            <Image source={art} contentFit="contain" allowDownscaling recyclingKey={String(item.id)} onError={() => setArtFailed(true)}
               tintColor={item.found ? undefined : SILHOUETTE}
               style={{ width: artSize, height: artSize, opacity: item.found ? 1 : 0.85 }} />
           </Animated.View>
           {flipping && (
             <Animated.View style={[StyleSheet.absoluteFill, styles.center, shadowStyle]}>
-              <Image source={art} contentFit="contain" tintColor={SILHOUETTE} style={{ width: artSize, height: artSize }} />
+              <Image source={art} contentFit="contain" allowDownscaling tintColor={SILHOUETTE} style={{ width: artSize, height: artSize }} />
             </Animated.View>
           )}
           {item.rarity >= 5 && item.found && (
