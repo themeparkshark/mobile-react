@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { BackgroundLayer, Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -17,7 +17,6 @@ import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
-import { NIGHT_TINT, NIGHT_TINT_MAX } from './map/fright/FrightMapSources';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
@@ -44,20 +43,6 @@ export const MapQueryContext = createContext<{
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
-/** The style's land colour (tpsMapStyle 'bg'). */
-const STYLE_BACKGROUND = '#c4e39a';
-/** b mixed into a at alpha t (hex or rgb() colours). */
-function mixHex(a: string, b: string, t: number): string {
-  const parse = (c: string): [number, number, number] => {
-    const rgb = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c);
-    if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
-    const h = c.replace('#', '');
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  };
-  const [x, y] = [parse(a), parse(b)];
-  const k = Math.max(0, Math.min(1, t));
-  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join('')}`;
-}
 
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
@@ -130,8 +115,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const pinnedSun = sunOverride ?? (Number.isFinite(devSun) ? devSun : undefined);
   const sun = pinnedSun ?? (skyLat === null || skyLng === null ? 45 : Math.round(sunElevation(skyNow, skyLat, skyLng) * 2) / 2);
   const light = useMemo(() => lightForElevation(sun), [sun]);
-  const nightBackground = useMemo(() => mixHex(mixHex(STYLE_BACKGROUND, light.tint.color, light.tint.opacity), NIGHT_TINT, NIGHT_TINT_MAX),
-    [light.tint.color, light.tint.opacity]);
   const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, frozen: ambientFrozen, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
@@ -621,10 +604,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             have not drawn yet, so a camera jump never shows an untinted strip. */}
         <BackgroundLayer id="tps-sky-tint" style={{ backgroundColor: light.tint.color, backgroundOpacity: light.tint.opacity,
           backgroundColorTransition: { duration: 4000, delay: 0 }, backgroundOpacityTransition: { duration: 4000, delay: 0 } }} />
-        {/* Where tiles have not drawn yet (a camera jump), the style background showed as a flash of day
-            map at night. While the night tint is on, the background wears the tinted colour. Always mounted. */}
-        <BackgroundLayer id="tps-night-bg" aboveLayerID="bg" style={{ backgroundColor: nightBackground,
-          backgroundOpacity: fright?.active ? 1 : 0 }} />
         {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
         <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}

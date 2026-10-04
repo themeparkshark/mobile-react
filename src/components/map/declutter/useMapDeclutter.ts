@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { resolveInsets, solveLayout, type CameraFrame, type EdgeInset, type InsetRect, type LayoutItem, type Rect } from './solver';
 import type { DeclutterStore } from './store';
+import { soakLog, SOAK_TRACE } from './soakLog';
 
 export interface MapDeclutterInput {
   readonly store: DeclutterStore;
@@ -47,10 +48,12 @@ export default function useMapDeclutter(input: MapDeclutterInput | null | undefi
     const rects = onRects ? new Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>() : undefined;
     // Zooming out mid-gesture (a pinch or a long camera ease): fold as it goes, so islands never
     // pile up for the length of the ease and then jump at the settle.
+    const t0 = SOAK_TRACE ? performance.now() : 0;
     const fold = holding.current && lastZoom.current !== null && full.zoom < lastZoom.current - FOLD_DURING_ZOOM;
     current.store.publish(solveLayout(items, full, {
       insets, previous: current.store.snapshot(), previousZoom: lastZoom.current, hold: holding.current, fold, rects,
     }));
+    if (SOAK_TRACE && !holding.current) soakLog(`settle solve_ms=${(performance.now() - t0).toFixed(2)} items=${items.length}`);
     // A held pass keeps the zoom it started from, so the settle after a pinch re-solves by priority.
     if (!holding.current) lastZoom.current = full.zoom;
     if (rects && onRects) onRects(rects);

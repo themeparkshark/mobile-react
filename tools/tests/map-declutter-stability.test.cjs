@@ -143,3 +143,19 @@ test('the pointer line and the +N badge are always mounted and animate in (no po
   assert.match(task, /<FoldBadge count=\{folded\} style=\{styles\.clusterBadge\} \/>/);
   assert.doesNotMatch(task, /folded > 0 && <View/);
 });
+
+test('fixed map art (gym, swords, community centre, boss, encounter) fades under a button and takes no taps there', () => {
+  const cases = [['src/components/GymBattle/GymMarker.tsx', "useUnderButton('gym')"],
+    ['src/components/GymBattle/SwordMarker.tsx', 'useUnderButton(`sword:${id}`)'],
+    ['src/components/CommunityCenterMarker.tsx', "useUnderButton('community')"],
+    ['src/components/boss/BossMarker.tsx', "useUnderButton('boss')"]];
+  for (const [file, hook] of cases) {
+    const src = read(file);
+    assert.ok(src.includes(hook), `${file} reads its placement`);
+    assert.match(src, /touchEnabled=\{!underButton\}/, `${file} takes no taps under a button`);
+    assert.match(src, /<ButtonFade hidden=\{underButton\}>/, `${file} fades (one always-mounted view)`);
+  }
+  const fright = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(fright, /const encounterUnderButton = useUnderButton\('encounter'\);/);
+  assert.match(fright, /encounterShown && !!encounter && !encounterUnderButton/);
+});

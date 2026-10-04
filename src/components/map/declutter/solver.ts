@@ -136,6 +136,15 @@ export const PLAYER_RECEDE = 0.2;
 export const PLAYER_RECEDE_KEEP = 0.1;
 export const FOLD_REACH = 220;
 const DEFAULT_SHARE = 0.35;
+/** Share of a marker's body that must be on screen to show it, and to keep it shown. */
+export const OFFSCREEN_SHOW = 0.5;
+export const OFFSCREEN_KEEP = 0.4;
+
+function visibleShare(r: Rect, frame: CameraFrame): number {
+  const w = Math.max(0, Math.min(r.x + r.w, frame.width) - Math.max(r.x, 0));
+  const h = Math.max(0, Math.min(r.y + r.h, frame.height) - Math.max(r.y, 0));
+  return r.w * r.h > 0 ? (w * h) / (r.w * r.h) : 0;
+}
 
 const RAD = Math.PI / 180;
 
@@ -301,8 +310,15 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     points.set(item.id, p);
     if (item.tagObstacleOnly) { tagObstacles.push(at(itemBody, p.x, p.y)); continue; }
     if (item.fixed || item.pinned) {
+      const rect = at(itemBody, p.x, p.y);
+      // Fixed art (gym, boss, the encounter and its reef) beats other art, never a button: under a
+      // hard (share 0) inset it fades out instead of drawing beneath it. The selected ride still wins.
+      if (item.fixed && !item.pinned && insets.some(inset => (inset.share ?? DEFAULT_SHARE) === 0 && overlapArea(rect, inset) > 0)) {
+        hidden.set(item.id, 'inset');
+        continue;
+      }
       scales.set(item.id, 1);
-      place({ item, rect: at(itemBody, p.x, p.y), order: placed.length, p, folded: 0 });
+      place({ item, rect, order: placed.length, p, folded: 0 });
       continue;
     }
     if (item.minZoom !== undefined && frame.zoom < item.minZoom) { hidden.set(item.id, 'zoom'); continue; }
@@ -310,8 +326,11 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     const anchored = shownBefore(item);
     const startScale = anchored && before ? before.scale : item.forceRecede && item.recedeScale ? item.recedeScale : 1;
     let rect = at(itemBody, p.x, p.y, startScale);
-    // Wholly off screen: hidden (iOS draws an off-screen marker view at the top-left corner).
-    if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > frame.width || rect.y > frame.height) { hidden.set(item.id, 'offscreen'); continue; }
+    // Mostly off screen: hidden. Wholly off, iOS draws the marker view at the top-left corner; half
+    // off, a clipped facade leaves its name chip floating alone. Half in shows it; a shown marker
+    // stays until 60 % is off, so an edge pan does not flicker.
+    const inView = visibleShare(rect, frame);
+    if (inView <= 0 || inView < (before?.visible ? OFFSCREEN_KEEP : OFFSCREEN_SHOW)) { hidden.set(item.id, 'offscreen'); continue; }
     // The body and its extras (a haunt's name chip) each hide under an inset by the inset's share.
     const underInset = (r: Rect) => r.w * r.h > 0 && insets.some(inset => overlapArea(r, inset) / (r.w * r.h) > (inset.share ?? DEFAULT_SHARE));
     if (underInset(rect) || (item.extras ?? []).some(extra => underInset(at(extra, p.x, p.y, startScale)))) { hidden.set(item.id, 'inset'); continue; }

@@ -14,7 +14,7 @@ import { queueHaptic } from '../../../gamekit/Haptics';
 import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
 import type { FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
-import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
+import { FoldBadge, Placed, usePlacement, useUnderButton } from '../declutter/Placed';
 import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
 import { critterSlugs } from './frightArt';
 import { critterAsset, hauntLayers, iconAsset, isChaosHour } from './frightAssets';
@@ -230,7 +230,10 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   const shownRef = useRef(shown);
   shownRef.current = shown;
   const encounterShown = encounterLive && !!encounter && visible > 0 && nearView(encounter, bounds, 1);
-  const encounterOnScreen = encounterShown && !!encounter && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  // Fixed art fades where it would sit under a button (declutter reason "inset").
+  const encounterUnderButton = useUnderButton('encounter');
+  const encounterOnScreen = encounterShown && !!encounter && !encounterUnderButton
+    && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
   // One encounter Marker, always mounted; it parks on the first spot when no encounter is live.
   const encounterAt = encounter && validPoint(encounter) ? encounter : stable.all[0] ?? PARKED;
   return (

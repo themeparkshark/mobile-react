@@ -114,7 +114,7 @@ test('USF and the 154-marker stress set at z15.8, 16.4, 17.6, 18.8 and 19.4: zer
         }
         // Buttons are hard insets: no art at all under the bottom columns (6 pt gap included).
         for (const a of art) {
-          if (a.item.fixed) continue;
+          if (a.item.pinned) continue;
           for (const inset of INSETS.filter(inset => inset.share === 0)) {
             assert.equal(s.overlapArea(a.rect, inset), 0, `${name} z${zoom}: ${a.id} under a button`);
           }
@@ -125,8 +125,8 @@ test('USF and the 154-marker stress set at z15.8, 16.4, 17.6, 18.8 and 19.4: zer
           if (!placement.visible) assert.ok(['collision', 'folded', 'inset', 'zoom', 'offscreen'].includes(placement.reason));
           if (placement.reason === 'folded') assert.equal(out.get(placement.foldedInto).visible, true);
         }
-        // The Fin-ister encounter is fixed art: always drawn.
-        assert.equal(out.get('encounter').visible, true);
+        // The Fin-ister encounter is fixed art: drawn unless it would sit under a button or off screen.
+        assert.ok(out.get('encounter').visible || ['inset', 'offscreen'].includes(out.get('encounter').reason));
       }
     }
   }
@@ -188,10 +188,19 @@ test('insets: the HUD row hides art that barely reaches under it (10 %), the but
   assert.equal(INSETS[0].share, 0.1);
 });
 
-test('off screen: art wholly outside the view hides (iOS parks it at the top-left); art reaching in stays', () => {
-  const out = s.solveLayout([rideAt(1, 0, 500), rideAt(2, -225, 0), rideAt(3, 0, 0)], frame());
+test('off screen: art more than half outside the view hides (no clipped facade, no lone chip); half in stays; shown art keeps to 60 % off', () => {
+  // ride:2 body x = 196.5 - 225 - 36: 10 % in view. ride:4 is 75 % in.
+  const out = s.solveLayout([rideAt(1, 0, 500), rideAt(2, -225, 0), rideAt(3, 0, 0), rideAt(4, -178.5, 0)], frame());
   assert.equal(out.get('ride:1').reason, 'offscreen');
-  assert.equal(out.get('ride:2').visible, true);
+  assert.equal(out.get('ride:2').reason, 'offscreen');
+  assert.equal(out.get('ride:4').visible, true);
+  // 45 % in view: a fresh marker waits, a shown one stays (hysteresis).
+  const edge = [rideAt(5, -200.1, 0)];
+  assert.equal(s.solveLayout(edge, frame()).get('ride:5').visible, false);
+  const shown = new Map([['ride:5', { visible: true, scale: 1, folded: 0, foldedInto: null, reason: null }]]);
+  assert.equal(s.solveLayout(edge, frame(), { previous: shown, previousZoom: 17.6 }).get('ride:5').visible, true);
+  // The z17.6 capture: a haunt more than half off the left edge hides with its name chip.
+  assert.equal(s.solveLayout([hauntAt('robot', -230, 0, { extras: [L.HAUNT_CHIP] })], frame()).get('haunt:robot').reason, 'offscreen');
 });
 
 test('no popping: during a gesture shown markers never change; a small settle keeps them; a zoom change re-solves by priority', () => {
@@ -369,4 +378,27 @@ test('zooming out mid-gesture folds what now collides (fade only, no scale or ch
   assert.ok(foldedTag === null || (foldedTag.x === settledTag.x && foldedTag.y === settledTag.y), 'the chip never moves mid-gesture');
   const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/map/declutter/useMapDeclutter.ts'), 'utf8');
   assert.match(hook, /const fold = holding\.current && lastZoom\.current !== null && full\.zoom < lastZoom\.current - FOLD_DURING_ZOOM;/);
+});
+
+test('fixed art (encounter, gym, boss, the reef under the encounter) fades under a button instead of drawing beneath it (z15.8)', () => {
+  const f = frame({ zoom: 15.8 });
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  const k = mpp(15.8);
+  const fixedAt = (id, y, x, extra = {}) => ({ id, latitude: USF.latitude - ((y - 350) * k) / 111320,
+    longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+    priority: L.PRIORITY.fixed, fixed: true, ...extra });
+  const enc = (y) => { const bodyFor = L.encounterBody(40, USF.latitude); return fixedAt('encounter', y, pill.x + 60, { body: bodyFor(15.8), bodyFor }); };
+  const half = L.encounterBody(40, USF.latitude)(15.8).h / 2;
+  // Centre 20 pt above the energy pill: its body reaches the button, so it fades (reason inset).
+  const near = s.solveLayout([enc(pill.y + 6 - 20)], f, { insets: INSETS }).get('encounter');
+  assert.equal(near.visible, false);
+  assert.equal(near.reason, 'inset');
+  // Centre 140 pt above: clear of the button, drawn.
+  assert.ok(140 > half + 6, 'the body clears the 6 pt gap at 140 pt');
+  assert.equal(s.solveLayout([enc(pill.y + 6 - 140)], f, { insets: INSETS }).get('encounter').visible, true);
+  // The HUD row (share 0.1) is not a button: fixed art still draws under it; the selected ride always draws.
+  assert.equal(s.solveLayout([fixedAt('gym', 40, 196.5, { body: L.GYM_BODY ?? { x: -40, y: -40, w: 80, h: 80 } })], f, { insets: INSETS }).get('gym').visible, true);
+  const selected = { ...rideAt('sel', 0, 0), pinned: true };
+  const pinnedUnder = { ...selected, latitude: enc(pill.y + 20).latitude, longitude: enc(pill.y + 20).longitude };
+  assert.equal(s.solveLayout([pinnedUnder], f, { insets: INSETS }).get('ride:sel').visible, true);
 });

@@ -37,7 +37,7 @@ test('map_gym_swords off: Gym and Sword markers stay mounted but hidden, still a
   const marker = read('src/components/map/Marker.tsx');
   assert.match(marker, /pointerEvents=\{tappable \? 'auto' : 'none'\}/);
   assert.match(marker, /style=\{off \? HIDDEN : undefined\}/);
-  assert.match(read('src/components/GymBattle/GymMarker.tsx'), /const running = alive && !hidden;/);
-  assert.match(read('src/components/GymBattle/SwordMarker.tsx'), /const active = alive\.active && !hidden, running = alive\.running && !hidden;/);
+  assert.match(read('src/components/GymBattle/GymMarker.tsx'), /const running = alive && !hidden( && !underButton)?;/);
+  assert.match(read('src/components/GymBattle/SwordMarker.tsx'), /const active = alive\.active && !hidden( && !underButton)?, running = alive\.running && !hidden( && !underButton)?;/);
   assert.match(read('src/api/endpoints/platform/feature-flags.ts'), /\| 'map_gym_swords'/);
 });

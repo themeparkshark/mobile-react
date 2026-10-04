@@ -117,6 +117,23 @@ export function TagSlot({ tag, anchor, width, height, fallback, children }: {
   );
 }
 
+/**
+ * Fixed art (gym, swords, community centre, boss, the encounter) is never folded or shrunk, but it
+ * fades out where it would sit under a button (solver reason "inset"). True while it is hidden there.
+ */
+export function useUnderButton(id: string): boolean {
+  const placement = usePlacement(id);
+  return !placement.visible && placement.reason === 'inset';
+}
+
+/** Opacity-only fade for fixed art under a button: always the same view, so nothing remounts. */
+export function ButtonFade({ hidden, children }: { readonly hidden: boolean; readonly children: ReactNode }) {
+  const o = useSharedValue(hidden ? 0 : 1);
+  useEffect(() => { o.value = withTiming(hidden ? 0 : 1, { duration: FADE_MS }); }, [hidden, o]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value }));
+  return <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={style}>{children}</Animated.View>;
+}
+
 type LeaderLine = { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number };
 
 /**

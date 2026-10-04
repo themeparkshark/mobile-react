@@ -1,5 +1,6 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Marker, PARKED } from './map/Marker';
+import { ButtonFade, useUnderButton } from './map/declutter/Placed';
 import { GameIcon } from '../ui';
 
 const CommunityCenterIcon = require('../assets/community-center.png');
@@ -18,6 +19,7 @@ interface Props {
 
 export default function CommunityCenterMarker({ center, onPress }: Props) {
   const hasGifts = (center?.available_gifts ?? 0) > 0;
+  const underButton = useUnderButton('community');
 
   // NOTE: All animations REMOVED. react-native-maps Marker children must have
   // a completely static layout — any Animated transform (translateY, scale, rotate)
@@ -29,10 +31,12 @@ export default function CommunityCenterMarker({ center, onPress }: Props) {
     <Marker
       coordinate={center ?? PARKED}
       hidden={!center}
+      touchEnabled={!underButton}
       onPress={onPress}
       tracksViewChanges={false}
       anchor={{ x: 0.5, y: 0.5 }}
     >
+      <ButtonFade hidden={underButton}>
       <View style={styles.container}>
         {/* Gift count badge */}
         {hasGifts && (
@@ -67,6 +71,7 @@ export default function CommunityCenterMarker({ center, onPress }: Props) {
           />
         </View>
       </View>
+      </ButtonFade>
     </Marker>
   );
 }

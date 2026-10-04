@@ -6,6 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { BossRaid } from '../../api/endpoints/parks/raid';
 import { Marker, PARKED } from '../map/Marker';
+import { ButtonFade, useUnderButton } from '../map/declutter/Placed';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { bossDisplayCoordinate } from '../../services/boss/mapImpact';
 import { BOSS_ART } from './bossArt';
@@ -24,6 +25,7 @@ export default function BossMarker({ raid, onPress, animate = true }: {
   const land = useSharedValue(1);
   const splash = useSharedValue(0);
   const reduced = useReducedGameMotion();
+  const underButton = useUnderButton('boss');
   useEffect(() => {
     if (reduced || !raid) { land.value = 1; splash.value = 0; return; }
     // Drop in from above, squash on landing, splash rings out.
@@ -48,13 +50,15 @@ export default function BossMarker({ raid, onPress, animate = true }: {
   const splashStyle = useAnimatedStyle(() => ({ opacity: splash.value > 0 ? 0.9 * (1 - splash.value) : 0,
     transform: [{ scaleX: 0.4 + 1.6 * splash.value }, { scaleY: 0.4 + 1.2 * splash.value }] }));
   if (!raid || raid.latitude === null || raid.longitude === null) {
-    return <Marker hidden coordinate={PARKED} anchor={{ x: 0.5, y: 0.9 }}><View style={styles.wrap} /></Marker>;
+    return <Marker hidden coordinate={PARKED} anchor={{ x: 0.5, y: 0.9 }}><ButtonFade hidden><View style={styles.wrap} /></ButtonFade></Marker>;
   }
   const hp = Math.min(1, Math.max(0, raid.hp_left / Math.max(1, raid.hp_max)));
   return (
     // Anchored so the boss hovers beside its ride's landmark instead of covering it.
     <Marker coordinate={bossDisplayCoordinate({ latitude: raid.latitude, longitude: raid.longitude })} anchor={{ x: 0.5, y: 0.9 }} onPress={onPress}
+      touchEnabled={!underButton}
       accessibilityLabel={`Boss raid at ${raid.ride_name ?? 'this ride'}, ${Math.round(hp * 100)} percent health. Open.`}>
+      <ButtonFade hidden={underButton}>
       <View style={styles.wrap}>
         <Animated.View style={[styles.ring, reduced || !animate ? { opacity: 0.4 } : ring]} />
         {!reduced && <Animated.View style={[styles.splash, splashStyle]} />}
@@ -63,6 +67,7 @@ export default function BossMarker({ raid, onPress, animate = true }: {
           <Image source={BOSS_ART[raid.boss]} style={styles.boss} contentFit="contain" />
         </Animated.View>
       </View>
+      </ButtonFade>
     </Marker>
   );
 }

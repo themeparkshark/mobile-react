@@ -34,6 +34,7 @@ import { SLOTS, useMarkerSlots } from '../../markerSlots';
 import { PARKED } from '../../Marker';
 import type { TaskType } from '../../../../models/task-type';
 import type { LiveRide } from '../../../../api/endpoints/parks/live';
+import { soakLog, startSoakPerf } from '../soakLog';
 import { USF_RIDES } from './usfRides';
 
 const noop = () => undefined;
@@ -89,6 +90,7 @@ export default function MapDeclutterPreview() {
   // input leaves entirely, as when you walk out of the event park), on, mode off (fades), on again.
   // Markers and tints must fade, never unmount or swap.
   const [frightState, setFrightState] = useState<'on' | 'off' | 'null'>('on');
+  useEffect(() => startSoakPerf(), []);
   useEffect(() => {
     if (CAM !== 'soak') return;
     const start = Date.now();
@@ -96,7 +98,7 @@ export default function MapDeclutterPreview() {
       const t = ((Date.now() - start) / 1000) % 45;
       const next = t < 10 ? 'null' : t < 25 ? 'on' : t < 35 ? 'off' : 'on';
       setFrightState(prev => {
-        if (prev !== next) console.log(`[declutter-soak] fright ${next} at ${((Date.now() - start) / 1000).toFixed(1)}s`);
+        if (prev !== next) soakLog(`[declutter-soak] fright ${next} at ${((Date.now() - start) / 1000).toFixed(1)}s`);
         return next;
       });
     }, 500);
