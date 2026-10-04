@@ -7,6 +7,7 @@
  * Rendered inside the screen (not a native Modal), so GameDialog prompts and
  * the trade-complete moment layer above it.
  */
+import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, ReduceMotion, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,16 +53,21 @@ export default function TradeSheet(props: TradeSheetProps) {
   const sheetWidth = Math.min(width, 520);
   const inner = sheetWidth - SPACE.lg * 2 - OUTLINE.heavy * 2;
   const cell = Math.floor((inner - SPACE.sm * (COLUMNS - 1)) / COLUMNS);
-  const slotSize = Math.min(112, Math.round(inner * 0.3));
+  // Short phones (SE, 667 pt): smaller slots, one picker row (it scrolls), tighter gaps.
+  const [room, setRoom] = useState(0);
+  const compact = height < 740;
+  const slotSize = Math.min(compact ? 68 : 112, Math.round(inner * 0.3));
+  const pickerRows = compact ? 1.25 : 2;
   const ended = phase === 'expired' || phase === 'failed';
   const sending = phase === 'sending';
   const confirming = phase === 'confirming' || sending;
 
-  const showPicker = !ended;
+  // Short phones: the second step hides the picker so both choices fit ("Wait, go back" returns to it).
+  const showPicker = !ended && !(compact && confirming);
   const noPins = !pinsLoading && !pinsError && pins.length === 0;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={e => setRoom(e.nativeEvent.layout.height)}>
       <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.Never)} exiting={FadeOut.duration(150).reduceMotion(ReduceMotion.Never)} style={[StyleSheet.absoluteFill, styles.scrim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={sending ? undefined : props.onClose}
           accessibilityRole="button" accessibilityLabel={COPY.notNow} />
@@ -70,7 +76,7 @@ export default function TradeSheet(props: TradeSheetProps) {
         entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
         exiting={still || props.handedOff ? FadeOut.duration(150).reduceMotion(ReduceMotion.Never) : SlideOutDown.duration(200).reduceMotion(ReduceMotion.Never)}
         accessibilityViewIsModal
-        style={[styles.sheet, { width: sheetWidth, maxHeight: height * 0.9, paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}
+        style={[styles.sheet, { width: sheetWidth, maxHeight: room ? room - SPACE.md : height * 0.85, paddingBottom: Math.max(insets.bottom, compact ? SPACE.sm : SPACE.lg) }, compact && { gap: SPACE.sm }]}
       >
         <View style={styles.grabber} />
         <View style={styles.topRow}>
@@ -121,7 +127,7 @@ export default function TradeSheet(props: TradeSheetProps) {
                 data={pins as ItemType[]}
                 keyExtractor={item => String(item.id)}
                 numColumns={COLUMNS}
-                style={{ maxHeight: cell * 2 + SPACE.sm * 2 + SPACE.md }}
+                style={{ maxHeight: cell * pickerRows + SPACE.sm * 2 + SPACE.md }}
                 contentContainerStyle={{ gap: SPACE.sm, paddingTop: SPACE.sm, paddingBottom: SPACE.xs }}
                 columnWrapperStyle={{ gap: SPACE.sm }}
                 showsVerticalScrollIndicator={pins.length > COLUMNS * 2}
@@ -153,7 +159,7 @@ export default function TradeSheet(props: TradeSheetProps) {
                 <GameButton label={props.tradeLabel} icon="swap" onPress={props.onTrade} />
               </Animated.View>
             ) : (
-              <View key="hint" style={[styles.actionSlot, styles.pickHint]} accessible accessibilityLabel={COPY.pickFirst}>
+              <View key="hint" style={[styles.actionSlot, styles.pickHint, compact && { minHeight: 56 }]} accessible accessibilityLabel={COPY.pickFirst}>
                 <GameIcon name="arrow" size={26} style={{ transform: [{ rotate: '-90deg' }] }} />
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pickHintText}>{COPY.pickFirst}</Text>
               </View>
