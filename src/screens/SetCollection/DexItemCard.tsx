@@ -116,7 +116,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                 </View>
                 <View style={[styles.caughtChip, item.found && item.foundInWorld !== false ? styles.caughtYes : null]}
                   accessible accessibilityLabel={caughtLine(item)}>
-                  <GameIcon name={item.found && item.foundInWorld !== false ? 'check' : 'search'} size={20} />
+                  <GameIcon name={item.found ? 'check' : 'search'} size={20} />
                   <Text style={styles.caughtText}>{item.found && item.foundInWorld === false ? 'Swapped in' : caughtLine(item)}</Text>
                 </View>
               </View>
@@ -127,10 +127,10 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                 <Text style={styles.whereText}>{item.spawnHint}</Text>
                 <GameIcon name="arrow" size={24} />
               </Pressable>
-              {/* A missing find is earned on the map: one big, obvious way there. */}
-              {!item.found && (
-                <GameButton label="Find it on the map" icon="map" onPress={onFind} fullWidth style={{ marginTop: 10 }}
-                  accessibilityLabel={`Find ${item.name} on the map`} />
+              {/* A missing find is earned on the map: one big, obvious way there. A swapped-in one points there too. */}
+              {(!item.found || item.foundInWorld === false) && (
+                <GameButton label={item.found ? 'Catch one on the map' : 'Find it on the map'} icon="map" onPress={onFind} fullWidth
+                  style={{ marginTop: 10 }} accessibilityLabel={`${item.found ? 'Catch' : 'Find'} ${item.name} on the map`} />
               )}
 
               {photo && (
@@ -138,7 +138,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
                   onPress={() => { playSfx('ui.tap', 0.6); setSharing(true); setShareMount(true); }} fullWidth style={{ marginTop: 10 }} />
               )}
               {item.found && onShare && item.spares > 0 && (
-                <GameButton label="Share a spare" icon="heart" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
+                <GameButton label="Share a spare" icon="gift" variant="secondary" onPress={onShare} fullWidth style={{ marginTop: 8 }} />
               )}
               {!!error && <Text style={styles.error}>{error}</Text>}
               </ScrollView>
