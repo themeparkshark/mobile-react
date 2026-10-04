@@ -377,7 +377,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     introSeen, introEligible]);
 
   // Filter to only show active items
+  // Legendaries that rode off this session leave the map at once (the server is told; a refresh confirms).
+  const [rodeOff, setRodeOff] = useState<ReadonlySet<number>>(() => new Set());
   const activePrepItems = prepItems.filter((item) => {
+    if (item.pivot_id != null && rodeOff.has(item.pivot_id)) return false;
     if (!item.active_from || !item.active_to) return true;
     return dayjs().isBetween(dayjs(item.active_from), dayjs(item.active_to));
   });
@@ -552,6 +555,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
         callbacks.current.onPrepItemNearby(failed.item, failed.pivotId, 'tap');
       } : undefined });
   }, []);
+  const onRodeOffStable = useCallback((pivotId: number) => {
+    setRodeOff(current => new Set(current).add(pivotId));
+    callbacks.current.onCatchUnavailable?.();
+  }, []);
   const onDoneStable = useCallback((caught: boolean) => {
     setCatchRequest(null);
     callbacks.current.onCatchDone?.(caught);
@@ -656,7 +663,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
-        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onFailed={onFailedStable} onDone={onDoneStable}
+        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable}
         warm={warmFinds} onCascade={setCascadeOn} />
 
 

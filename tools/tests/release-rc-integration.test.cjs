@@ -87,3 +87,13 @@ test('the How to Play highlight is a one-shot: param cleared, stale requests dro
   assert.equal(isStaleHighlight(1000, 11_001), true);
   assert.equal(isStaleHighlight(Number.NaN, 0), true);
 });
+
+test('a Legendary that rides off is reported to the server and stops being tappable', () => {
+  assert.match(read('src/api/endpoints/me/prep-items/ride-off.ts'), /client\.post\(`\/me\/prep-items\/\$\{pivotId\}\/ride-off`\)/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /void reportRideOff\(pivotId\)/);
+  assert.match(moment, /latest\.current\.onRodeOff\?\.\(pivotId\)/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /rodeOff\.has\(item\.pivot_id\)\) return false/);
+  assert.match(home, /onRodeOff=\{onRodeOffStable\}/);
+});

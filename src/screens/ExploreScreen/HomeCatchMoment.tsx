@@ -35,6 +35,7 @@ import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmSta
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
+import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
 
@@ -109,6 +110,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly mapStill?: string | null;
   readonly onCollected: (data: RedeemPrepItemResponseType['data']) => void;
   readonly onUnavailable: () => void;
+  /** A Legendary rode off: the find leaves the map for this session (the server is told too). */
+  readonly onRodeOff?: (pivotId: number) => void;
   /** The moment is over; `caught` is false after a failure or a close (the find shows again). */
   readonly onDone: (caught: boolean) => void;
   /** A plain line for the slim chip; `retryable` when tapping again could work. */
@@ -126,7 +129,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, refreshAfterCatch = true }, ref) {
   const systemReduced = useReducedGameMotion();
   // Development recordings can show one catch with Reduce Motion on.
   const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
@@ -174,8 +177,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromY = useSharedValue(0);
   const rideIn = useSharedValue(0);
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onDone, onFailed, redeem, reducedMotion, onCascade };
+  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request });
+  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
@@ -443,6 +446,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const token = aliveRef.current;
     catchHaptic('warning', 3);
     closeRide(false);
+    // The server records the ride-off (gone today, back as a daily rare); the find stops being tappable now.
+    const pivotId = latest.current.request?.pivotId;
+    if (pivotId != null) {
+      void reportRideOff(pivotId);
+      latest.current.onRodeOff?.(pivotId);
+    }
     latest.current.onFailed('It rode off. Might be back tomorrow.', false);
     setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
