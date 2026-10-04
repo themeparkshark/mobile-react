@@ -628,7 +628,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
 
   /* ---------- One modal at a time ---------- */
 
-  const modal = visibleModal(modals, { quiet, focused, foreground, blocked: !!opts.blocked || sheetOpen || !!tutorial });
+  const modal = visibleModal(modals, { quiet, inLine: !!openRun, focused, foreground, blocked: !!opts.blocked || sheetOpen || !!tutorial });
   showingModal.current = modal?.id ?? null;
   const closeModal = useCallback(() => {
     setModals(current => {

@@ -74,6 +74,12 @@ test('T2 rank card first: a Case File found in line waits behind it; the finish 
   shown = modals.pushModal(shown, rank, 'file:y');
   assert.equal(shown.map(m => m.id).join(','), 'file:y,rank:h:1,rewards:found:y');
   assert.match(read('src/components/fright/useFrightEngine.ts'), /pushModal\(current, modal, showingModal\.current\)/);
+  // In line past the quiet window: the Case File waits; only a team pick (a catch tap) shows.
+  const waiting = modals.pushModal([], { id: 'file:z', kind: 'case_file', file: { key: 'z' } });
+  assert.equal(modals.visibleModal(waiting, { ...gate, inLine: true }), null);
+  assert.equal(modals.visibleModal(modals.pushModal(waiting, { id: 'side:e', kind: 'side', encounterKey: 'e', name: 'C' }), { ...gate, inLine: true }).kind, 'side');
+  assert.equal(modals.visibleModal(waiting, gate).id, 'file:z');
+  assert.match(read('src/components/fright/useFrightEngine.ts'), /visibleModal\(modals, \{ quiet, inLine: !!openRun,/);
 });
 
 test('T2 Case File reveal: flip from the silhouette to the front art, NEW stamp, year badge, title overlay; Reduce Motion fades', () => {

@@ -26,6 +26,8 @@ export type FrightModal =
 
 export interface ModalGate {
   readonly quiet: boolean;
+  /** Still in a haunt's line (the run is open, even past the quiet window): only the team pick shows. */
+  readonly inLine?: boolean;
   readonly focused: boolean;
   readonly foreground: boolean;
   readonly blocked: boolean;
@@ -56,7 +58,10 @@ export function pushModal(queue: readonly FrightModal[], modal: FrightModal, sho
 /** The team pick jumps the line (a catch is waiting on it); everything else keeps queue order. */
 export function visibleModal(queue: readonly FrightModal[], gate: ModalGate): FrightModal | null {
   if (gate.quiet || !gate.focused || !gate.foreground || gate.blocked) return null;
-  return queue.find(item => item.kind === 'side') ?? queue[0] ?? null;
+  const side = queue.find(item => item.kind === 'side');
+  // A Case File found in line waits for the rank card the finish brings (panel: rank first).
+  if (gate.inLine) return side ?? null;
+  return side ?? queue[0] ?? null;
 }
 
 export function dropModal(queue: readonly FrightModal[], id: string): FrightModal[] {

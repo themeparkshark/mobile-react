@@ -33,7 +33,7 @@ test('CONTRACT 5-6 exports and the L6 photo hook', () => {
 
 test('H6 phones-down: the engine hides prompts during the quiet window', () => {
   const engine = read('src/components/fright/useFrightEngine.ts');
-  assert.match(engine, /visibleModal\(modals, \{ quiet, focused, foreground,/, 'rank, Case File, rewards and team pick wait out the quiet window');
+  assert.match(engine, /visibleModal\(modals, \{ quiet, inLine: !!openRun, focused, foreground,/, 'rank, Case File, rewards and team pick wait out the quiet window');
   assert.match(engine, /tutorial: quiet \|\| opts\.blocked \? null : tutorial/);
   assert.match(engine, /!quiet && !opts\.blocked && !sheetOpen/);
 });
