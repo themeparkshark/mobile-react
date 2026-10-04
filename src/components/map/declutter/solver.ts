@@ -140,6 +140,13 @@ const DEFAULT_SHARE = 0.35;
 export const OFFSCREEN_SHOW = 0.5;
 export const OFFSCREEN_KEEP = 0.4;
 
+/** The central part of fixed art that must stay clear of buttons: at most FIXED_CORE square. */
+export const FIXED_CORE = 120;
+function coreOf(r: Rect): Rect {
+  const w = Math.min(r.w, FIXED_CORE), h = Math.min(r.h, FIXED_CORE);
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
 function visibleShare(r: Rect, frame: CameraFrame): number {
   const w = Math.max(0, Math.min(r.x + r.w, frame.width) - Math.max(r.x, 0));
   const h = Math.max(0, Math.min(r.y + r.h, frame.height) - Math.max(r.y, 0));
@@ -311,9 +318,11 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     if (item.tagObstacleOnly) { tagObstacles.push(at(itemBody, p.x, p.y)); continue; }
     if (item.fixed || item.pinned) {
       const rect = at(itemBody, p.x, p.y);
-      // Fixed art (gym, boss, the encounter and its reef) beats other art, never a button: under a
+      // Fixed art (gym, boss, the encounter and its reef) beats other art, never a button: when its
+      // core (the central 120 pt, the critter rather than its wide ring or mist) reaches under a
       // hard (share 0) inset it fades out instead of drawing beneath it. The selected ride still wins.
-      if (item.fixed && !item.pinned && insets.some(inset => (inset.share ?? DEFAULT_SHARE) === 0 && overlapArea(rect, inset) > 0)) {
+      const core = coreOf(rect);
+      if (item.fixed && !item.pinned && insets.some(inset => (inset.share ?? DEFAULT_SHARE) === 0 && overlapArea(core, inset) > 0)) {
         hidden.set(item.id, 'inset');
         continue;
       }

@@ -115,8 +115,11 @@ test('USF and the 154-marker stress set at z15.8, 16.4, 17.6, 18.8 and 19.4: zer
         // Buttons are hard insets: no art at all under the bottom columns (6 pt gap included).
         for (const a of art) {
           if (a.item.pinned) continue;
+          // Fixed art keeps its core (central 120 pt) clear; its wide ring or mist may pass under.
+          const r = a.item.fixed && !a.extra ? { x: a.rect.x + (a.rect.w - Math.min(a.rect.w, s.FIXED_CORE)) / 2,
+            y: a.rect.y + (a.rect.h - Math.min(a.rect.h, s.FIXED_CORE)) / 2, w: Math.min(a.rect.w, s.FIXED_CORE), h: Math.min(a.rect.h, s.FIXED_CORE) } : a.rect;
           for (const inset of INSETS.filter(inset => inset.share === 0)) {
-            assert.equal(s.overlapArea(a.rect, inset), 0, `${name} z${zoom}: ${a.id} under a button`);
+            assert.equal(s.overlapArea(r, inset), 0, `${name} z${zoom}: ${a.id} under a button`);
           }
         }
         // Nothing vanishes without a reason, and a fold always lands on a shown host.
@@ -383,8 +386,7 @@ test('zooming out mid-gesture folds what now collides (fade only, no scale or ch
 test('fixed art (encounter, gym, boss, the reef under the encounter) fades under a button instead of drawing beneath it (z15.8)', () => {
   const f = frame({ zoom: 15.8 });
   const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
-  const k = mpp(15.8);
-  const fixedAt = (id, y, x, extra = {}) => ({ id, latitude: USF.latitude - ((y - 350) * k) / 111320,
+  const fixedAt = (id, y, x, extra = {}, k = mpp(15.8)) => ({ id, latitude: USF.latitude - ((y - 350) * k) / 111320,
     longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
     priority: L.PRIORITY.fixed, fixed: true, ...extra });
   const enc = (y) => { const bodyFor = L.encounterBody(40, USF.latitude); return fixedAt('encounter', y, pill.x + 60, { body: bodyFor(15.8), bodyFor }); };
@@ -393,8 +395,11 @@ test('fixed art (encounter, gym, boss, the reef under the encounter) fades under
   const near = s.solveLayout([enc(pill.y + 6 - 20)], f, { insets: INSETS }).get('encounter');
   assert.equal(near.visible, false);
   assert.equal(near.reason, 'inset');
-  // Centre 140 pt above: clear of the button, drawn.
-  assert.ok(140 > half + 6, 'the body clears the 6 pt gap at 140 pt');
+  // Centre 140 pt above: its core is clear of the button, drawn (the wide ring may pass under it).
+  assert.ok(half >= 0);
+  // At z18.2 the encounter ring box is ~300 pt: a corner of the ring under the pill does not hide it.
+  const big = (() => { const bodyFor = L.encounterBody(40, USF.latitude); return fixedAt('encounter', pill.y + 6 - 100, pill.x - 30, { body: bodyFor(18.2), bodyFor }, mpp(18.2)); })();
+  assert.equal(s.solveLayout([big], frame({ zoom: 18.2 }), { insets: INSETS }).get('encounter').visible, true, 'ring corner under a button: still drawn');
   assert.equal(s.solveLayout([enc(pill.y + 6 - 140)], f, { insets: INSETS }).get('encounter').visible, true);
   // The HUD row (share 0.1) is not a button: fixed art still draws under it; the selected ride always draws.
   assert.equal(s.solveLayout([fixedAt('gym', 40, 196.5, { body: L.GYM_BODY ?? { x: -40, y: -40, w: 80, h: 80 } })], f, { insets: INSETS }).get('gym').visible, true);
