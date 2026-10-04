@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, runOnUI, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Marker } from './Marker';
-import { glideDurationMs, glideEaseWorklet, GLIDE_MIN_MS, nextFixGap, type GlidePoint } from './glide';
+import { glideDurationMs, glideEaseWorklet, GLIDE_MIN_MS, noteFixCadence, type FixCadence, type GlidePoint } from './glide';
 import { catchUpStart, metersEastNorth, screenOffset, SWAP_SETTLE_MS } from './playerMotion';
 
 /** Room around the 100 x 110 shark box for its glide offset, wake and weak-signal ring (points). */
@@ -36,7 +36,7 @@ type Pending = { slot: number; e: number; n: number; mode: 'glide' | 'jump' | 'c
  * `renderArt(slot)` draws a copy; the parent freezes the hidden copy's
  * animations with the same `activeSlot` and `shown` values.
  */
-export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg, groundX, groundY, activeSlot, shown, renderArt }: {
+export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg, groundX, groundY, activeSlot, shown, renderArt, cadence }: {
   /** The filtered location; null parks the shark hidden. */
   readonly target: GlidePoint | null;
   /** Shown (panned away and on screen). */
@@ -55,14 +55,14 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
   /** 1 while the marker shark is shown at all. */
   readonly shown: SharedValue<number>;
   readonly renderArt: (slot: number) => ReactNode;
+  /** The map's shared fix-cadence estimate, so this glide always matches the camera's. */
+  readonly cadence: FixCadence;
 }) {
   // Every hook runs on every render; this component never returns early.
   const origin = useRef<GlidePoint | null>(null);
   const [anchors, setAnchors] = useState<[GlidePoint | null, GlidePoint | null]>([target, target]);
   const activeRef = useRef(0);
   const pendingRef = useRef<Pending | null>(null);
-  const lastTargetAt = useRef(0);
-  const fixGap = useRef(0);
   const lastTarget = useRef<GlidePoint | null>(target);
   // The shark's drawn position and each copy's point, in metres east/north of `origin`.
   const visE = useSharedValue(0), visN = useSharedValue(0);
@@ -79,8 +79,6 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
     const prev = lastTarget.current;
     lastTarget.current = target;
     const now = Date.now();
-    const since = now - lastTargetAt.current;
-    lastTargetAt.current = now;
     const [tE, tN] = metersEastNorth(origin.current, target);
     const hidden = 1 - activeRef.current;
     setAnchors(current => {
@@ -88,8 +86,8 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
       next[hidden] = { latitude: target.latitude, longitude: target.longitude };
       return next;
     });
-    if (prev) fixGap.current = nextFixGap(fixGap.current, since);
-    const ms = prev ? glideDurationMs(prev, target, fixGap.current) : 0;
+    const expectedGap = noteFixCadence(cadence, `${target.latitude},${target.longitude}`, now);
+    const ms = prev ? glideDurationMs(prev, target, expectedGap) : 0;
     const ppm = zoomPpm.value > 0 ? zoomPpm.value : 3;
     const maxM = PLAYER_MAX_GLIDE_PT / ppm;
     // How far the visible copy would have to draw the shark from its own point. Measured from that

@@ -4,7 +4,7 @@ import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapVie
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
 import { courseDeg, facingFor, strideHalfMs, wakeTurn } from './map/playerMotion';
-import { glideDurationMs, glideMeters, nextFixGap } from './map/glide';
+import { glideDurationMs, glideMeters, newFixCadence, noteFixCadence } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
@@ -196,7 +196,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
   const lastFixAtRef = useRef(0);
-  const fixGapRef = useRef(0);
+  // One fix-cadence estimate for the camera and the shark marker (their glides always match).
+  const cadenceRef = useRef(newFixCadence());
   const locationRef = useRef(location);
   locationRef.current = location;
   const headingRef = useRef(heading);
@@ -231,8 +232,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const distMeters = glideMeters(prev, location);
     const arrived = Date.now();
     const previousFixAt = lastFixAtRef.current;
-    if (previousFixAt > 0) fixGapRef.current = nextFixGap(fixGapRef.current, arrived - previousFixAt);
-    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, fixGapRef.current);
+    const expectedGap = noteFixCadence(cadenceRef.current, `${location.latitude},${location.longitude}`, arrived);
+    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, expectedGap);
     lastFixAtRef.current = arrived;
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
@@ -655,7 +656,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Moves on the UI thread at the display rate and never changes layout (PlayerSharkMarker). */}
         <PlayerSharkMarker target={location ?? null} visible={!focusedOnPlayer} glide={!reducedMotion}
           zoomPpm={zoomPpm} bearingDeg={mapBearing} groundX={SHARK_GROUND.x} groundY={SHARK_GROUND.y}
-          activeSlot={slotActive} shown={slotShown}
+          activeSlot={slotActive} shown={slotShown} cadence={cadenceRef.current}
           renderArt={slot => (slot === 0 ? sharkArt(slot0Styles, slot0Live, !focusedOnPlayer) : sharkArt(slot1Styles, slot1Live, !focusedOnPlayer))} />
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
@@ -822,7 +823,8 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
     const f = m.facing.value;
     const mid = 1 - Math.abs(f);
     const sx = m.mirrorOk.value > 0 ? (f >= 0 ? 1 : -1) * Math.max(0.35, Math.abs(f)) : 1;
-    const lean = (m.mirrorOk.value > 0 ? 7 * mid : 8 * (1 - f) / 2) * (f >= 0 ? -1 : 1);
+    // A lettered outfit cannot mirror: it holds still facing left (leaning toward the walk read as a moonwalk).
+    const lean = m.mirrorOk.value > 0 ? 7 * mid * (f >= 0 ? -1 : 1) : 0;
     return {
       transform: [{ translateY: -8 * m.idle.value - 5 * step }, { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value + lean}deg` },
         { scale: 1 + 0.04 * m.idle.value }, { scaleX: sx }, { scaleY: 1 - 0.06 * mid }],

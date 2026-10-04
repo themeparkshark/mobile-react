@@ -241,6 +241,12 @@ test('real fix rates (2.5 s on a map, 7 s in a park): the shark keeps moving thr
   assert.equal(glide.nextFixGap(2500, 60_000), 0.6 * 2500 + 0.4 * 8000, 'a silence never stretches the estimate past 8 s');
   const map = read('src/components/Map.tsx');
   assert.match(map, /const hold = Math\.max\(WAKE_MIN_HOLD_MS, glideDuration \+ 200\);/, 'wake and stride stop when the shark stops');
-  assert.match(map, /fixGapRef\.current = nextFixGap\(fixGapRef\.current, arrived - previousFixAt\)/);
-  assert.match(read('src/components/map/PlayerSharkMarker.tsx'), /glideDurationMs\(prev, target, fixGap\.current\)/);
+  // One cadence estimate: the camera and the marker get the same gap for the same fix, whichever asks first.
+  const c = glide.newFixCadence();
+  assert.equal(glide.noteFixCadence(c, 'a', 1000), 0);
+  assert.equal(glide.noteFixCadence(c, 'b', 3500), 2500);
+  assert.equal(glide.noteFixCadence(c, 'b', 3600), 2500, 'the second caller for the same fix sees the same gap');
+  assert.match(map, /noteFixCadence\(cadenceRef\.current, `\$\{location\.latitude\},\$\{location\.longitude\}`, arrived\)/);
+  assert.match(map, /cadence=\{cadenceRef\.current\}/);
+  assert.match(read('src/components/map/PlayerSharkMarker.tsx'), /noteFixCadence\(cadence, `\$\{target\.latitude\},\$\{target\.longitude\}`, now\)/);
 });
