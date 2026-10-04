@@ -155,3 +155,16 @@ test('T5 Deep Lantern pins: the real pin item image when earned, else pin_art; l
   assert.equal(art.pinImage({ earned: false, pin_art: pinArt, pin: { image: 'https://cdn.test/item.webp', earned_on: null } }).uri,
     'https://cdn.test/locked.webp');
 });
+
+test('Case File title sits on the art\'s blank nameplate (measured band, cover-fit math), in dark ink', () => {
+  const src = read('src/components/fright/CaseFileReveal.tsx');
+  assert.match(src, /CASE_FILE_ART = \{ w: 480, h: 719, plateTop: 0\.659, plateBottom: 0\.821, plateLeft: 0\.11, plateRight: 0\.9 \}/);
+  assert.match(src, /plate: \{ position: 'absolute', top: PLATE\.top, height: PLATE\.height, left: PLATE\.left, right: PLATE\.right,/);
+  assert.match(src, /title: \{ fontFamily: 'Shark', fontSize: 20, color: NIGHT\.ink,/);
+  // 260 x 360 card: the plate is 242 to 305 pt down, 29 pt in from the left, 26 from the right.
+  const W = 260, H = 360, a = { w: 480, h: 719, t: 0.659, b: 0.821, l: 0.11, r: 0.9 };
+  const s = Math.max(W / a.w, H / a.h), dh = a.h * s, dw = a.w * s, y0 = (H - dh) / 2, x0 = (W - dw) / 2;
+  assert.equal(Math.round(y0 + dh * a.t), 242);
+  assert.equal(Math.round(dh * (a.b - a.t)), 63);
+  assert.equal(Math.round(x0 + dw * a.l), 29);
+});

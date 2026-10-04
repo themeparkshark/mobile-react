@@ -85,7 +85,7 @@ test('ExploreScreen keeps the fright input for the whole event-park session (mod
 
 test('GPS jump or resume: markers re-lay out and Skia canvases repaint on reveal, by props only', () => {
   const src = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(src, /export const RELAYOUT_JUMP_M = 200;/);
+  assert.match(src, /export const RELAYOUT_JUMP_M = 80;/);
   assert.match(src, /distanceMeters\(prev, player\) > RELAYOUT_JUMP_M\) kick\.current\(\)/);
   assert.match(src, /AppState\.addEventListener\('change', state => \{ if \(state === 'active'\) kick\.current\(\); \}\)/);
   // Every fright Marker coordinate goes through the nudge (a prop change, never a remount).

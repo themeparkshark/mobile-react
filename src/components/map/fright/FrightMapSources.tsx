@@ -48,6 +48,8 @@ function sameBounds(a: Bounds | null, b: Bounds): boolean {
 export const BOUNDS_POLL_MS = 1500;
 /** A spot keeps its decoded art this long after it leaves the screen. */
 export const WARM_ART_MS = 60_000;
+/** When a revealed spot repaints its Skia (frightRepaint.tsx). */
+export const REPAINT_TICKS_MS = [0, 400, 1200, 2500, 4000] as const;
 
 function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: number, relayout: number): Bounds | null {
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -68,8 +70,8 @@ function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: 
   return bounds;
 }
 
-/** A jump this far (a GPS jump, a teleport, the first fix after a resume) re-lays out the markers. */
-export const RELAYOUT_JUMP_M = 200;
+/** A jump this far in one fix (a GPS jump, a teleport, the first fix after a resume; never a walk) re-lays out the markers. */
+export const RELAYOUT_JUMP_M = 80;
 /**
  * MapLibre iOS parks an off-screen MarkerView in a corner and, after a big camera jump, can
  * leave it there even once its point is on screen again (the encounter ring and reef critters
@@ -461,13 +463,14 @@ function PlacedSpot({ id, anchor, fold = false, children }: {
  * hidden is opacity 0 and takes no touches.
  */
 function ShowWhen({ on, children }: { readonly on: boolean; readonly children: ReactNode }) {
-  // A reveal (and a relayout after a GPS jump or resume) repaints the Skia inside: once now,
-  // then after the camera settles (frightRepaint.tsx).
+  // A reveal (and a relayout after a GPS jump or resume) repaints the Skia inside: now, then
+  // as the camera settles and the art arrives (frightRepaint.tsx).
   const relayout = useContext(RelayoutContext);
   const [token, setToken] = useState(0);
   useEffect(() => {
     if (!on) return;
-    const timers = [0, 400, 1200].map(ms => setTimeout(() => setToken(t => t + 1), ms));
+    // Through 4 s: the camera may still be gliding, and a cold spot's art decodes after it shows.
+    const timers = REPAINT_TICKS_MS.map(ms => setTimeout(() => setToken(t => t + 1), ms));
     return () => { for (const t of timers) clearTimeout(t); };
   }, [on, relayout]);
   return (
