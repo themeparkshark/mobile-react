@@ -140,9 +140,9 @@ test('the app classifies the panel probe set like the server: personal info and 
       // self_harm and personal_question are server holds, never app blocks.
       const blocked = model.checkDraft(text, 100000);
       const got = want === 'self_harm' ? (model.isDistress(text) ? 'self_harm' : 'missed')
-        : (blocked ?? (model.needsReview(text) ? 'personal_question' : 'ok'));
+        : (blocked ?? (model.isCareCheck(text) ? 'care_check' : model.needsReview(text) ? 'personal_question' : 'ok'));
       // Mean words are the server's job; the composer only explains safety rules early.
-      const expected = want === 'mean' ? (model.needsReview(text) ? 'personal_question' : 'ok') : want;
+      const expected = want === 'mean' ? (model.isCareCheck(text) ? 'care_check' : model.needsReview(text) ? 'personal_question' : 'ok') : want;
       if (got !== expected) wrong.push(`${text} => ${got} (want ${expected})`);
     }
   }
@@ -191,8 +191,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), 'fc67769cf5f9d018a2ac54bb8d1ec6bdfac7e2bc6746d804f342c9de38c18472');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '3e9fd4d802e36d07ecb0a56a4faa061cf4cd2b55114b340b0f9439ffafcab859');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'f10c59b4b3b5d9a8a0143fbabf2b1b0228107970d251391648a2e16a9115c656');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'ab0d4dd2d1ebe112bbd0bf6b18420fd5481c6d45cfd066d516b6eaa2c02d4b5d');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -383,7 +383,7 @@ test('R7: Safe Chat is the default way to post and reply, built only from our ph
 
 test('R7: the shared Safe Chat phrases match the server copy', () => {
   const hash = (file) => require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safeChatPhrases.json'), 'f40b6f1cd4da2a1ffa5e980f0c7f312595b3c55090e4a8b6395fa20d0289c7b1');
+  assert.equal(hash('src/screens/threads/safeChatPhrases.json'), '059ed6a4c4d66c7ab8cac6d6b05265a5e8323cd366312fb1afe73de43bbf5560');
 });
 
 test('R7: the care net and the exemption fix match the server', () => {
@@ -391,4 +391,24 @@ test('R7: the care net and the exemption fix match the server', () => {
   for (const t of ['I died laughing on Haunted Mansion', 'my phone died at the park', 'I would die for a churro rn']) assert.equal(model.isDistress(t), false, t);
   assert.equal(model.needsReview('your house decorated? come show me alone'), true);
   assert.equal(model.needsReview('Is your room decorated for Halloween? Mine has bats'), false);
+});
+
+test('R8: outfits and collections phrases, warm and answer replies, Pin Swap wording, ride search, wide care check matches the server', () => {
+  assert.equal(model.categoryForTopic('outfits'), 'outfits');
+  assert.equal(model.categoryForTopic('collections'), 'collections');
+  const keys = model.SAFE_CHAT_CATEGORIES.map((c) => c.key);
+  for (const k of ['outfits', 'collections']) assert.ok(keys.includes(k), k);
+  const replies = model.SAFE_CHAT_CATEGORIES.find((c) => c.key === 'replies').phrases.map((p) => p.text);
+  for (const t of ['Yes!', 'Not really', 'Same!', 'You did it!', 'So proud of you!', 'Trade in Pin Swap?']) assert.ok(replies.includes(t), t);
+  assert.ok(!replies.includes('Trade?'));
+  assert.ok(model.QUICK_REPLIES.includes('Trade in Pin Swap?'));
+  for (const p of model.SAFE_CHAT_CATEGORIES.flatMap((c) => c.phrases)) assert.doesNotMatch(p.text, /\b(see you|meet|come|find me|i'?m at|tonight|tomorrow|today at)\b/i, p.id);
+  const picker = read('src/screens/threads/SafeChatPicker.tsx');
+  assert.match(picker, /testID="safechat-search"/);
+  assert.match(picker, /the typed letters are never posted/);
+  for (const t of ['im not gonna be here next week', 'i want the pain to stop forever']) assert.equal(model.isDistress(t) || model.isCareCheck(t), true, t);
+  for (const t of ["I'm dying to ride Tron", 'My battery is dying help', 'That churro is to die for']) {
+    assert.equal(model.isCareCheck(t), false, t);
+    assert.equal(model.isDistress(t), false, t);
+  }
 });

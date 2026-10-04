@@ -41,7 +41,7 @@ export const POST_MAX = 500;
  * One-tap replies (like quick chat in kids' games): kind, fixed, easy to
  * read, nothing to type or filter.
  */
-export const QUICK_REPLIES = ['So cool!', 'Same!', 'I want to go!', 'Love it!', 'Congrats!', 'Trade?'] as const;
+export const QUICK_REPLIES = ['So cool!', 'Same!', 'You did it!', 'I want to go!', 'Love it!', 'Congrats!', 'Trade in Pin Swap?'] as const;
 
 // ── Safe Chat (the Club Penguin way) ──
 // Posts and replies built from curated phrases (safeChatPhrases.json, a copy of the server's
@@ -94,7 +94,8 @@ export function composeSafeChat(pick: SafeChatPick | null, places: readonly Safe
 
 /** Picking a topic opens the matching Safe Chat category. */
 export function categoryForTopic(topic: TopicKey | null): string {
-  return ({ park_day: 'parks', rides: 'rides', snacks: 'food', ask: 'questions' } as Partial<Record<TopicKey, string>>)[topic ?? 'outfits'] ?? 'cheers';
+  if (!topic) return 'cheers';
+  return ({ park_day: 'parks', rides: 'rides', snacks: 'food', outfits: 'outfits', collections: 'collections', ask: 'questions' } as Record<TopicKey, string>)[topic] ?? 'cheers';
 }
 
 /** The line next to free text while AI review is off: honest about the wait. */
@@ -166,6 +167,12 @@ const CARE_NEAR = compile([
   `${RULES.care_words}(?:\\s+\\S+){0,${RULES.care_window - 1}}?\\s+${RULES.care_me}`,
 ]);
 const CARE_EXEMPT = compile(RULES.care_exempt).map((re) => new RegExp(re.source, 'giu'));
+const CARE_WIDE = compile([
+  `${RULES.care_wide_me}(?:\\s+\\S+){0,${RULES.care_wide_window - 1}}?\\s+${RULES.care_wide_words}`,
+  `${RULES.care_wide_words}(?:\\s+\\S+){0,${RULES.care_wide_window - 1}}?\\s+${RULES.care_wide_me}`,
+  ...RULES.care_wide_extra,
+]);
+const CARE_WIDE_EXEMPT = compile(RULES.care_wide_exempt).map((re) => new RegExp(re.source, 'giu'));
 const TENS: Record<string, string> = RULES.tens;
 const TEENS: Record<string, string> = RULES.teens;
 const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
@@ -422,6 +429,13 @@ export function isDistress(text: string): boolean {
   // The broad care net: "i" / "me" / "my" within a few words of a death or self-harm word.
   const words = [wordForm(text, false), wordForm(text)].map((w) => CARE_EXEMPT.reduce((acc, re) => acc.replace(re, ' '), w));
   return matchesAny(CARE_NEAR, words);
+}
+
+/** Same as SafeText::isCareCheck: the wide care check. Dustin-facing only (the post is held anyway), never shown to the kid. */
+export function isCareCheck(text: string): boolean {
+  if (text.trim() === '') return false;
+  const words = [wordForm(text, false), wordForm(text)].map((w) => [...CARE_EXEMPT, ...CARE_WIDE_EXEMPT].reduce((acc, re) => acc.replace(re, ' '), w));
+  return matchesAny(CARE_WIDE, words);
 }
 
 export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher. If you feel unsafe right now, call or text 988.";
