@@ -399,7 +399,7 @@ export default function Composer({
               <View style={styles.doneGlow} />
             <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
               <View style={styles.doneRibbon}>
-                <Text style={styles.doneText}>{held === 'care' ? 'We hear you' : held ? 'Quick look!' : editing ? 'Saved!' : 'Posted!'}</Text>
+                <Text style={styles.doneText}>{held === 'care' ? 'We hear you' : held === 'person' ? 'Grown-up check' : held ? 'Quick look!' : editing ? 'Saved!' : 'Posted!'}</Text>
               </View>
               {held && <Text style={styles.doneSub}>{reviewLine(held)}</Text>}
             </Animated.View>
