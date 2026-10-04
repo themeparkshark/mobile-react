@@ -699,10 +699,14 @@ function SparesSheet({ visible, items, onClose, onShare }: {
             <GameIcon name="map" size={30} />
             <Text style={styles.sparesMapText}>New finds only come from the map</Text>
           </View>
-          {spare && onShare && (
-            <GameButton label="Share a spare" icon="heart" variant="secondary" onPress={() => onShare(spare)} fullWidth style={{ marginTop: 14 }} />
+          {spare && onShare ? (
+            <>
+              <GameButton label="Share a spare" icon="gift" onPress={() => onShare(spare)} fullWidth style={{ marginTop: 14 }} />
+              <GameButton label="Got it" variant="ghost" onPress={onClose} style={{ marginTop: 10 }} />
+            </>
+          ) : (
+            <GameButton label="Got it" icon="check" onPress={onClose} style={{ marginTop: 14 }} />
           )}
-          <GameButton label="Got it" icon="check" onPress={onClose} style={{ marginTop: 12 }} />
         </View>
       </View>
     </Modal>
