@@ -4,7 +4,8 @@ const fs = require('node:fs'), path = require('node:path');
 test('the panned-away player shark draws after the ride islands so it is never hidden under one', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/Map.tsx'), 'utf8');
   const children = src.indexOf('{children}</MapQueryContext.Provider>');
-  const shark = src.indexOf('<Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>');
+  // Always mounted (hidden until the first fix): no MapView child mounts mid-list.
+  const shark = src.indexOf('<GlidingMarker coordinate={location ?? FALLBACK_CENTER} hidden={!location}');
   assert.ok(children > 0 && shark > 0);
   assert.ok(shark > children, 'shark marker is rendered after the map children');
 });

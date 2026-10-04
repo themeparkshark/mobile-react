@@ -87,3 +87,20 @@ test('map GL sources are always mounted (lamps, crowd haze, guide line): off mea
   assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
   assert.doesNotMatch(map, /(lampPoints|crowdHaze|pathShown)[^\n]*&&\s*\(\s*\n\s*<ShapeSource/);
 });
+
+test('the player shark is one always-mounted Marker: parked hidden without a location, never mounted mid-list', () => {
+  const map = read('src/components/Map.tsx');
+  assert.doesNotMatch(map, /\{location && \(\s*<(Gliding)?Marker/);
+  assert.match(map, /<GlidingMarker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/);
+  const marker = read('src/components/map/Marker.tsx');
+  assert.match(marker, /hidden = false/);
+});
+
+test('Marker re-sends its anchor after layout (iOS drops an anchor that arrives on a zero frame)', () => {
+  const marker = read('src/components/map/Marker.tsx');
+  assert.match(marker, /anchor=\{laidOut \? a : \{ x: a\.x, y: a\.y \+ ANCHOR_NUDGE \}\}/);
+  assert.match(marker, /<Pressable onLayout=\{onLayout\}/);
+  assert.match(marker, /<View onLayout=\{onLayout\}/);
+  // Hooks run before the invalid-coordinate early return.
+  assert.ok(marker.indexOf('useState(false)') < marker.indexOf('return null'));
+});
