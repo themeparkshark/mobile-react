@@ -8,7 +8,7 @@
  * while it lives, a new one takes a free slot, and an empty slot stays mounted
  * as a hidden, parked marker. Only what a slot draws changes.
  */
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { soakLog, SOAK_TRACE } from './declutter/soakLog';
 
 /** Slots per kind: more than a park ever shows at once. */
@@ -31,9 +31,10 @@ export const SLOT_COOL_MS = 400;
  * slots in the order given; ids past the pool size wait for a free slot.
  *
  * A slot vacated in this pass, or listed in `cooling` (vacated moments ago), is
- * taken only when no other slot is free. Reusing it at once moves one native
- * marker view to a new coordinate in the same frame its content swaps, and iOS
- * can show one frame of the old art at the new spot (the soak's 1-frame blip).
+ * never taken: the new id waits for a rested slot (the hook re-renders when one
+ * rests). Reusing it at once moves one native marker view to a new coordinate in
+ * the same frame its content swaps, and iOS can show one frame of the old art at
+ * the new spot (the soak's 1-frame blip, traced to direct reuse in a full pool).
  */
 export function assignSlots(previous: readonly (string | null)[], ids: readonly string[], size: number,
   cooling: ReadonlySet<number> = new Set()): (string | null)[] {
@@ -46,13 +47,8 @@ export function assignSlots(previous: readonly (string | null)[], ids: readonly 
   });
   const placed = new Set(slots.filter((id): id is string => id !== null));
   const freeSlot = () => {
-    let fallback = -1;
-    for (let i = 0; i < size; i++) {
-      if (slots[i] !== null) continue;
-      if (!resting.has(i)) return i;
-      if (fallback < 0) fallback = i;
-    }
-    return fallback;
+    for (let i = 0; i < size; i++) if (slots[i] === null && !resting.has(i)) return i;
+    return -1;
   };
   for (const id of ids) {
     if (placed.has(id)) continue;
@@ -80,5 +76,13 @@ export function useMarkerSlots<T>(items: readonly T[], keyOf: (item: T) => strin
     if (SOAK_TRACE) soakLog(`${label} slot ${i}: ${was ?? '-'} -> ${is ?? '-'}${was !== null && is !== null ? ' (direct reuse)' : ''}`);
   }
   previous.current = slots;
+  // An id waiting on a resting slot: render again once the slot has rested.
+  const [, wake] = useState(0);
+  const waiting = byKey.size > slots.filter(id => id !== null).length && slots.some(id => id === null);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => wake(n => n + 1), SLOT_COOL_MS + 16);
+    return () => clearTimeout(timer);
+  });
   return slots.map(id => (id === null ? null : byKey.get(id) ?? null));
 }
