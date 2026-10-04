@@ -385,13 +385,8 @@ const LOD_GLYPH = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, 
 /** Where the hidden encounter Marker waits when a payload has no spots at all. */
 const PARKED = { latitude: 0, longitude: 0 } as const;
 
-
-/**
- * The night tint over the tiles. Map.tsx keeps it mounted at all times (opacity
- * 0 without an input), so turning the mode on never inserts a source mid-list.
- */
 /** The hook's input while the mode is off: one stable shape, so the tint never swaps components. */
-const FRIGHT_OFF: FrightMapInput = {
+const TINT_OFF_INPUT: FrightMapInput = {
   tonight: { enabled: false, server_now: '', phase: 'off', event: null, night: null, spots: [], encounter: null, me: null, config: null },
   active: false, nowOffsetMs: 0, player: null, spooky: false, doneKeys: [],
 };
@@ -404,7 +399,7 @@ const FRIGHT_OFF: FrightMapInput = {
  * too: no untinted day strip at night.
  */
 export const FrightNightTint = memo(function FrightNightTint({ input }: { readonly input: FrightMapInput | null }) {
-  const st = useFrightState(input ?? FRIGHT_OFF);
+  const st = useFrightState(input ?? TINT_OFF_INPUT);
   const opacity = input ? NIGHT_TINT_MAX * Math.max(0, st.visible) : 0;
   const intro = input?.cinematic === 'intro';
   return (

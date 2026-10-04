@@ -74,7 +74,7 @@ test('the map tints tiles under the pins and lights lamps only after sunset', ()
   const children = map.indexOf('{children}</MapQueryContext.Provider>');
   assert.ok(tint > 0 && tint < children, 'tint is a GL layer; pins (marker views) draw above it');
   // Always mounted (empty by day): no source mounts mid-list (MapLibre insertReactSubview crash).
-  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : EMPTY\}>/);
+  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : NO_FEATURES\}>/);
   assert.match(map, /const light = useMemo\(\(\) => lightForElevation\(sun\), \[sun\]\)/);
 });
 

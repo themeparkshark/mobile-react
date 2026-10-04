@@ -65,7 +65,7 @@ test('FrightNightTint is one component with one stable background layer: null fr
   assert.match(body, /<BackgroundLayer id="fright-night-tint" aboveLayerID="tps-sky-tint"/);
   assert.doesNotMatch(body, /(\?|:|&&)\s*\(?\s*</, 'no ternary or && picks what renders');
   assert.doesNotMatch(body, /return null/);
-  assert.match(body, /useFrightState\(input \?\? FRIGHT_OFF\)/, 'the hook runs every render, null or not');
+  assert.match(body, /useFrightState\(input \?\? TINT_OFF_INPUT\)/, 'the hook runs every render, null or not');
   assert.doesNotMatch(src, /function (ActiveTint|TintSource)\b/, 'no second tint component to swap to');
   assert.doesNotMatch(src, /<FillLayer id="fright-night-tint"/, 'not a GeoJSON fill (it lags undrawn tiles)');
 });
@@ -107,4 +107,48 @@ test('ExploreScreen keeps the fright input for the whole event-park session (mod
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.doesNotMatch(explore, /frightNight\.tonight && \(frightNight\.modeOn \|\| frightNight\.phase === 'after'\)/);
   assert.match(explore, /active: frightNight\.modeOn/);
+});
+
+test('night tint: one stable component in its MapView slot whether fright is null or set (no component swap mid-list)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/map/fright/FrightMapSources.tsx'), 'utf8');
+  const start = src.indexOf('export const FrightNightTint');
+  assert.ok(start >= 0, 'FrightNightTint exists');
+  const body = src.slice(start, src.indexOf('});', start));
+  // Exactly one element is returned, always the one background layer; nothing picks a component by input.
+  assert.equal((body.match(/return /g) || []).length, 1, 'one return');
+  assert.match(body, /return \(\s*<BackgroundLayer id="fright-night-tint"/);
+  assert.doesNotMatch(body, /\?\s*<|:\s*<[A-Z]|&&\s*<|ActiveTint/, 'no ternary or && between components');
+  assert.match(body, /useFrightState\(input \?\? TINT_OFF_INPUT\)/, 'hook runs the same way for null input');
+  assert.doesNotMatch(src, /function ActiveTint/, 'the swapped-in component is gone');
+  // Map.tsx renders the tint unconditionally.
+  const map = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/Map.tsx'), 'utf8');
+  assert.match(map, /\n\s*<FrightNightTint input=\{fright\} \/>/);
+  assert.doesNotMatch(map, /fright\s*&&\s*<FrightNightTint/);
+});
+
+test('map GL sources are always mounted (lamps, crowd haze, guide line): off means empty data, never a conditional mount mid-list', () => {
+  const map = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/Map.tsx'), 'utf8');
+  for (const id of ['tps-lamps', 'tps-crowd-haze', 'tps-guide']) {
+    const at = map.indexOf(`<ShapeSource id="${id}"`);
+    assert.ok(at > 0, `${id} source exists`);
+    // The JSX just before the source must not be a condition (`x && (` or `x ? (`).
+    const before = map.slice(Math.max(0, at - 120), at);
+    assert.doesNotMatch(before, /&&\s*\(\s*$|\?\s*\(\s*$/, `${id} must not mount conditionally`);
+    assert.equal((map.match(new RegExp(`<ShapeSource id="${id}"`, 'g')) || []).length, 1, `${id} has one source`);
+  }
+  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : NO_FEATURES\}>/);
+  assert.match(map, /<ShapeSource id="tps-crowd-haze" shape=\{crowdHaze \?\? NO_FEATURES\}>/);
+  assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
+  assert.doesNotMatch(map, /(lampPoints|crowdHaze|pathShown)[^\n]*&&\s*\(\s*\n\s*<ShapeSource/);
+});
+
+test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {
+  const map = read('src/components/Map.tsx');
+  const marker = read('src/components/map/Marker.tsx');
+  assert.equal((map.match(/<Marker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
+  assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<Marker/, 'no `{location && <Marker>}`');
+  assert.doesNotMatch(map, /\{location \? \(\s*\n?\s*<Marker/);
+  // Marker's hidden state: opacity 0 and not tappable.
+  assert.match(marker, /const off = hidden \|\| !valid;/);
+  assert.match(marker, /const tappable = !off &&/);
 });
