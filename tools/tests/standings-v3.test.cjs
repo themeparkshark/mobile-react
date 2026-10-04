@@ -168,8 +168,10 @@ test('a page never lands above what the kid is looking at', () => {
   assert.equal(model.shouldPrefetch(gap - 5, items, gap - 12), true);
   assert.equal(model.safeToInsert(999, model.listItems(model.boardModel(firstPage({ next_offset: null }), 'week', 5))), true);
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(board, /if \(safeToInsert\(firstVisible\.current, itemsRef\.current\)\) setModel\(next\);\s+else \{ heldPage\.current = next;/);
-  assert.match(board, /if \(heldPage\.current && safeToInsert\(firstVisible\.current, itemsRef\.current\)\)/, 'a held page lands when the kid scrolls back up');
-  assert.match(board, /onEndReached=\{\(\) => \{ if \(activeRef\.current && safeToInsert\(/);
+  assert.match(board, /if \(canInsert\(\)\) setModel\(next\);\s+else \{ heldPage\.current = next;/);
+  assert.match(board, /if \(heldPage\.current && canInsertRef\.current\(\)\)/, 'a held page lands when the kid scrolls back up');
+  assert.match(board, /onEndReached=\{\(\) => \{ if \(activeRef\.current && canInsert\(\)\)/);
+  assert.match(board, /Date\.now\(\) >= jumpingUntil\.current && safeToInsert\(/, 'nothing lands while show-my-row is animating');
+  assert.match(board, /jumpingUntil\.current = Date\.now\(\) \+ 1200;\s+if \(myIndex >= 0\) list\.current\?\.scrollToIndex/);
   assert.doesNotMatch(board, /pendingAnchor|anchorShift/);
 });

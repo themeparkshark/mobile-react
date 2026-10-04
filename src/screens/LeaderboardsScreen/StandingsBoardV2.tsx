@@ -506,6 +506,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // A page that lands while the kid is down in the Your spot block would push
   // it down: it waits here until they scroll back up to the grey rows.
   const heldPage = useRef<StandingsBoardModel | null>(null);
+  // While "show my row" is animating, nothing lands and nothing is fetched:
+  // the jump's target is a pixel offset, and a page landing mid-flight would move it.
+  const jumpingUntil = useRef(0);
+  const canInsert = useCallback(() => Date.now() >= jumpingUntil.current && safeToInsert(firstVisible.current, itemsRef.current), []);
   const more = useCallback((why: 'idle' | 'scroll' | 'end') => {
     if (fetchingMore.current || !model || model.nextOffset == null) return;
     fetchingMore.current = true;
@@ -516,7 +520,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     loadMore(meId, board, parkId).then(next => {
       if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${next?.rows.length ?? 0} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
       if (next && id === request.current) {
-        if (safeToInsert(firstVisible.current, itemsRef.current)) setModel(next);
+        if (canInsert()) setModel(next);
         else { heldPage.current = next; if (STANDINGS_PERF_ON) perfMark(`page-held ${board}`); }
       }
     }).catch(() => { if (STANDINGS_PERF_ON) perfMark(`page-failed ${board} ${Date.now() - started}ms`); }).finally(() => { fetchingMore.current = false; });
@@ -524,6 +528,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const moreRef = useRef(more);
   moreRef.current = more;
   const setModelRef = useRef(setModel);
+  const canInsertRef = useRef(canInsert);
   // Page 2 is fetched while the kid looks at the podium (from the network or
   // the warm cache alike), so the first fling never waits on the network.
   const firstPageOnly = !!model && onlyFirstPage(model);
@@ -556,6 +561,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const scrollToMe = useCallback(() => {
     playSound(tapSound);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    jumpingUntil.current = Date.now() + 1200;
     if (myIndex >= 0) list.current?.scrollToIndex({ index: myIndex, viewPosition: 0.35, animated: !reduced });
     else list.current?.scrollToOffset({ offset: 0, animated: !reduced });
   }, [myIndex, playSound, reduced]);
@@ -599,13 +605,13 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
     firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
     // Back up at the grey rows: a held page lands now.
-    if (heldPage.current && safeToInsert(firstVisible.current, itemsRef.current)) {
+    if (heldPage.current && canInsertRef.current()) {
       const held = heldPage.current;
       heldPage.current = null;
       setModelRef.current(held);
     }
     // About two and a half screens before the grey rows: fetch, so the page lands before the kid gets there.
-    if (activeRef.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
+    if (activeRef.current && Date.now() >= jumpingUntil.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
   }).current;
   // Becoming the active tab: wake the list and work out from geometry whether your
   // row is on screen, so the You card never duplicates a visible row.
@@ -731,7 +737,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           viewabilityConfig={viewability}
           onViewableItemsChanged={onViewable}
           // Backstop for a fling past the prefetch point.
-          onEndReached={() => { if (activeRef.current && safeToInsert(firstVisible.current, itemsRef.current)) moreRef.current('end'); }}
+          onEndReached={() => { if (activeRef.current && canInsert()) moreRef.current('end'); }}
           onEndReachedThreshold={2}
           refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 48 }} />}
