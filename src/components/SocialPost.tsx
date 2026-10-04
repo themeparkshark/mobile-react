@@ -20,11 +20,14 @@ function SocialPost({
   socialPost,
   watched,
   featured = false,
+  newest = true,
   onPress,
 }: {
   readonly socialPost: SocialPostType;
   readonly watched: boolean;
   readonly featured?: boolean;
+  /** The hero is the newest video, or the newest one still worth coins. */
+  readonly newest?: boolean;
   readonly onPress: (post: SocialPostType) => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -57,10 +60,13 @@ function SocialPost({
           />
           {watched && <View style={styles.watchedTint} />}
 
-          {/* Play sits in a corner so the thumbnail's own title art stays readable. */}
-          <View style={[styles.play, featured && styles.playHero]} pointerEvents="none">
-            <GameIcon name="play" size={featured ? 50 : 30} />
-          </View>
+          {/* Grid: play sits in a corner so the thumbnail's own title art stays
+              readable. The hero has its Watch button instead. */}
+          {!featured && (
+            <View style={styles.play} pointerEvents="none">
+              <GameIcon name="play" size={30} />
+            </View>
+          )}
 
           {isNew && (
             <View style={[styles.newBadge, featured && styles.newBadgeHero]}>
@@ -91,7 +97,7 @@ function SocialPost({
 
         <View style={[styles.body, featured && styles.heroBody]}>
           {featured && (
-            <Text style={styles.kicker}>{isNew ? 'Brand new' : 'Newest video'}{ago ? ` · ${ago}` : ''}</Text>
+            <Text style={styles.kicker}>{isNew ? 'Brand new' : newest ? 'Newest video' : 'Next to watch'}{ago ? ` · ${ago}` : ''}</Text>
           )}
           <Text numberOfLines={featured ? 3 : 2} style={featured ? styles.heroTitle : styles.title}>
             {socialPost.title}
@@ -132,7 +138,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 3,
   },
-  playHero: { top: undefined, bottom: 10, right: 10 },
   newBadge: {
     position: 'absolute',
     top: 7,
