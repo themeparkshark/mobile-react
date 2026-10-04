@@ -115,7 +115,8 @@ test('T4 Share Studio: fright payloads carry no dates, parks or usernames; Marqu
   assert.match(marquee, /\(!inModal \|\| SHARE_IN_MODALS\)/);
   assert.match(marquee, /nightOn=\{target\.nightOn\} inModal/);
   assert.doesNotMatch(marquee, /captureRef/);
-  assert.match(read('src/share/index.ts'), /SHARE_IN_MODALS = false/, 'flag untouched');
+  // Off in every release build (only a dev build with EXPO_PUBLIC_SHARE_IN_MODALS=1 turns it on).
+  assert.match(read('src/share/index.ts'), /SHARE_IN_MODALS(?:: boolean)? = (?:false|__DEV__ && process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS === '1');/, 'flag off in release');
   const cardScreen = read('src/components/fright/FrightCardScreen.tsx');
   for (const kind of ['fright_lifetime', 'fright_badge', 'fright_night']) assert.match(cardScreen, new RegExp(`kind="${kind}"`));
 });
