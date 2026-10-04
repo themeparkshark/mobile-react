@@ -58,7 +58,7 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   const tabContent = (tab: StandingsTabSpec | StandingsV2Tab, color: string, icon: boolean) => (
     <>
       {icon ? <GameIcon name={tab.icon} size={size.icon} /> : <View style={{ width: size.icon, height: size.icon }} />}
-      <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: 'Shark', fontSize: size.font, color }}>{tab.label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: size.font, color }}>{tab.label}</Text>
     </>
   );
   const tabStyle = { flex: 1, paddingVertical: 9, alignItems: 'center' as const, justifyContent: 'center' as const,
