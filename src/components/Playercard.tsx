@@ -334,7 +334,8 @@ export default function Playercard({
             position: 'absolute',
             width: '100%',
             height: '100%',
-            transformOrigin: grounded ? '55% 92%' : undefined,
+            // Only set when grounded: RN Animated turns an undefined transformOrigin into null and crashes on re-render.
+            ...(grounded ? { transformOrigin: '55% 92%' } : null),
             transform: [
               {
                 translateY: translate,

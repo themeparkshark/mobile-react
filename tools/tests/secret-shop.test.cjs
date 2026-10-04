@@ -281,6 +281,12 @@ test('every worklet helper is declared above its first use (the Reanimated plugi
   }
 });
 
+test('no Animated style ever passes an undefined transformOrigin (RN Animated turns it into null and crashes)', () => {
+  for (const file of ['src/components/Playercard.tsx', 'src/fx/FxLayers.tsx', 'src/fx/FxStage.tsx']) {
+    assert.doesNotMatch(src(file), /transformOrigin: [^,}]*\? [^,}]* : undefined/, file);
+  }
+});
+
 test('Reduce Motion is read inside the shark stage and every tile, so no screen can forget it', () => {
   assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);[\s\S]{0,900}const lod: FxLod = still \|\| reduced \? 'still'/);
   const solo = src('src/fx/FxSolo.tsx');
