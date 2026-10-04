@@ -84,7 +84,9 @@ export default function WatchScreen() {
   const dialogOpen = useRef(false);
   const bank = useRef<RewardBank>(EMPTY_BANK);
   const deliverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (deliverTimer.current) clearTimeout(deliverTimer.current); }, []);
   const retrying = useRef(false);
+  const wantLoud = useRef(false);
   // Saves still in flight; while any are, or a dialog is due, the hero and
   // meter hold still so they move after the reward, where the kid sees it.
   const savesInFlight = useRef(0);
@@ -124,6 +126,9 @@ export default function WatchScreen() {
     if (deliverTimer.current) clearTimeout(deliverTimer.current);
     deliverTimer.current = setTimeout(() => {
       deliverTimer.current = null;
+      if (!mounted.current) return; // left the page: no sound or dialog elsewhere
+      // A save still landing joins this reward; its completion delivers again.
+      if (savesInFlight.current > 0 && !playerOpen.current && !dialogOpen.current) return;
       const next = nextBankDialog(bank.current, playerOpen.current || dialogOpen.current);
       if (next === null && !playerOpen.current && !dialogOpen.current && savesInFlight.current === 0) {
         setSettling(false);
@@ -197,7 +202,9 @@ export default function WatchScreen() {
 
   /** Retries every unsaved view once at a time; results go through the bank. */
   const retryUnsaved = useCallback(async (quiet: boolean) => {
-    if (retrying.current || unsaved.length === 0) return;
+    if (!quiet) wantLoud.current = true; // a Try again during a quiet retry still gets an answer
+    if (retrying.current) return;
+    if (unsaved.length === 0) { wantLoud.current = false; deliverSoon(); return; }
     retrying.current = true;
     savesInFlight.current += 1;
     setSettling(true);
@@ -205,11 +212,12 @@ export default function WatchScreen() {
       const results = await Promise.all(unsaved.map(post => record(post)));
       for (const result of results) {
         // A quiet retry that fails again stays quiet; the card still offers +25.
-        if (result !== null || !quiet) bank.current = bankResult(bank.current, result);
+        if (result !== null || wantLoud.current) bank.current = bankResult(bank.current, result);
       }
     } finally {
       savesInFlight.current -= 1;
       retrying.current = false;
+      wantLoud.current = false;
       deliverSoon();
     }
   }, [unsaved]);
@@ -231,6 +239,17 @@ export default function WatchScreen() {
     return () => clearTimeout(id);
   }, [calm, localWatched, heroWatched]);
   const featuredVideo = videos.find(v => !v.has_watched && !heroWatched.has(v.id)) ?? videos[0] ?? null;
+  // A new hero pops in, so the change reads as "here's your next one".
+  const heroPop = useRef(new Animated.Value(1)).current;
+  const heroId = useRef<number | null>(null);
+  useEffect(() => {
+    const id = featuredVideo?.id ?? null;
+    if (heroId.current !== null && id !== null && id !== heroId.current) {
+      heroPop.setValue(0.92);
+      Animated.spring(heroPop, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }).start();
+    }
+    heroId.current = id;
+  }, [featuredVideo?.id, heroPop]);
   const gridVideos = featuredVideo ? videos.filter(v => v.id !== featuredVideo.id) : [];
   const upNext = useMemo(
     () => (playing ? upNextFor(playing, videos, isWatched) : []),
@@ -284,7 +303,11 @@ export default function WatchScreen() {
                   </View>
                 )}
 
-                {featuredVideo && <SocialPost socialPost={featuredVideo} featured newest={featuredVideo.id === videos[0]?.id} watched={isWatched(featuredVideo)} onPress={openVideo} />}
+                {featuredVideo && (
+                  <Animated.View style={{ transform: [{ scale: heroPop }] }}>
+                    <SocialPost socialPost={featuredVideo} featured newest={featuredVideo.id === videos[0]?.id} watched={isWatched(featuredVideo)} onPress={openVideo} />
+                  </Animated.View>
+                )}
 
                 {gridVideos.length > 0 && (
                   <View style={styles.sectionRow}>
@@ -343,6 +366,7 @@ export default function WatchScreen() {
           dialogOpen.current = false;
           setShowUnsaved(false);
           if (index === 1) void retryUnsaved(false);
+          else deliverSoon(); // 'Later' releases the hero and meter too
         }}
       />
     </Wrapper>
