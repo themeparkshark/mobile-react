@@ -19,21 +19,20 @@ export interface HomeIntroStep {
 export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
   {
     title: 'Finds pop up near you',
-    body: 'Finds appear on the map around you, even at home. Each one leaves after a while, so watch its timer.',
+    body: 'Snacks and souvenirs appear on the map around you, even at home. Each one leaves after a while.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
-    badge: 'leaves in 21 min',
   },
   {
     title: 'Walk close, then tap',
-    body: 'Your shark has a grab zone. A find inside it bounces and says TAP TO GRAB. Farther finds show how far to walk.',
+    body: 'A find close to you hops and glows. Tap it to catch it. Small, faded finds are farther away.',
     art: require('../../../assets/images/screens/pin-collections/shark.png'),
-    badge: 'TAP TO GRAB',
+    badge: 'TAP!',
   },
   {
     title: 'Fill sets for rewards',
-    body: 'Every find goes into a set, like the Churro Collection. Finds and finished sets earn Energy and Tickets for your next park day.',
+    body: 'Every find goes into a set, like Snack Stand. Finds and finished sets earn Energy and Tickets for your next park day.',
     art: require('../../../assets/images/screens/profile/pin_collections.png'),
-    badge: 'Churro Collection: 3/40',
+    badge: 'Snack Stand 3/12',
   },
 ];
 

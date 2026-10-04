@@ -20,6 +20,7 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import config from '../config';
+import { colors } from '../design-system';
 import { BRAND } from '../ui';
 import HapticPatterns from '../helpers/hapticPatterns';
 import prepItemImage from '../helpers/prepItemImages';
@@ -65,6 +66,18 @@ interface Props {
 /** Every find reward says what it is, like the ride challenge tiles. */
 const FIND_REWARD_LABEL = { fontFamily: 'Knockout', fontSize: 13, color: '#fff', textAlign: 'center' as const, marginTop: 4,
   textTransform: 'uppercase' as const };
+
+/** The app-wide rarity palette (design-system), Common to Legendary. */
+const RARITY_MAIN: Readonly<Record<1 | 2 | 3 | 4 | 5, string>> = {
+  1: colors.rarity.common.main, 2: colors.rarity.uncommon.main, 3: colors.rarity.rare.main,
+  4: colors.rarity.epic.main, 5: colors.rarity.legendary.main,
+};
+/** Mix two #rrggbb colours (k = share of `b`). */
+function mixHex(a: string, b: string, k: number): string {
+  const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  const c = (i: number) => Math.round(p(a, i) * (1 - k) + p(b, i) * k).toString(16).padStart(2, '0');
+  return `#${c(0)}${c(1)}${c(2)}`;
+}
 
 export default function PrepItemRedeemModal({
   visible,
@@ -290,41 +303,22 @@ export default function PrepItemRedeemModal({
 
   if (!prepItem) return null;
 
-  // Outer modal colors (solid, like task modal's #0788e4)
-  const outerColors = {
-    1: '#0788e4',   // Common - task blue
-    2: '#e8a000',   // Uncommon - gold
-    3: '#0a9a78',   // Rare - lagoon green (never purple)
-    4: '#E91E63',   // Epic - pink
-    5: '#FF6F00',   // Legendary - orange
-  };
-
-  // Inner box colors (like Box component's backgrounds)
-  const innerColors = {
-    1: '#4cdcff',   // Common - cyan (matches task)
-    2: '#ffe7a2',   // Uncommon - light gold (matches coin)
-    3: '#c8f3e3',   // Rare - light lagoon
-    4: '#ffccdd',   // Epic - light pink
-    5: '#fff4cc',   // Legendary - light gold
-  };
-
-  // Border colors for inner box
-  const borderColors = {
-    1: '#0d3249',   // Common
-    2: '#3d4a24',   // Uncommon
-    3: '#0d4d3d',   // Rare
-    4: '#6a2a3a',   // Epic
-    5: '#5a4a1a',   // Legendary
-  };
+  // The catch reveal uses the app-wide rarity palette (design-system colors.rarity): Common green,
+  // Uncommon blue, Rare purple, Epic orange, Legendary gold. Inner box is a light tint, the border a dark shade.
+  const tier = (Math.max(1, Math.min(5, Math.round(prepItem.rarity || 1))) as 1 | 2 | 3 | 4 | 5);
+  const main = RARITY_MAIN[tier];
+  const outerColors = { [tier]: main };
+  const innerColors = { [tier]: mixHex(main, '#ffffff', 0.78) };
+  const borderColors = { [tier]: mixHex(main, '#000000', 0.55) };
 
   const displayName = findDisplayName(prepItem.name, prepItem.set_name);
   const rarityConfig = {
     label: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][prepItem.rarity - 1] || 'Common',
-    color: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
-    glowColor: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
-    outerBg: outerColors[prepItem.rarity as keyof typeof outerColors] || '#0788e4',
-    innerBg: innerColors[prepItem.rarity as keyof typeof innerColors] || '#4cdcff',
-    borderColor: borderColors[prepItem.rarity as keyof typeof borderColors] || '#0d3249',
+    color: main,
+    glowColor: main,
+    outerBg: outerColors[tier],
+    innerBg: innerColors[tier],
+    borderColor: borderColors[tier],
   };
   
   // Get local churro image if available
@@ -633,8 +627,8 @@ export default function PrepItemRedeemModal({
                       style={{
                         fontFamily: 'Shark',
                         fontSize: 28,
-                        // Gold text vanished on the gold uncommon and legendary cards.
-                        color: prepItem.rarity === 2 || prepItem.rarity === 5 ? BRAND.white : config.tertiary,
+                        // Gold text would vanish on the gold Legendary card.
+                        color: prepItem.rarity === 5 ? BRAND.white : config.tertiary,
                         textAlign: 'center',
                         textTransform: 'uppercase',
                         textShadowColor: '#05346e',

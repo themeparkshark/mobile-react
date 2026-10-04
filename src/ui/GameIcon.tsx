@@ -67,6 +67,7 @@ export const ICON_SOURCES: Record<GameIconName, number> = {
   play: require('../../assets/icons/game/play.png'),
   retry: require('../../assets/icons/game/retry.png'),
   arrow: require('../../assets/icons/game/arrow.png'),
+  swap: require('../../assets/icons/game/swap.png'),
 };
 
 export { GAME_ICON_NAMES, isGameIconName };

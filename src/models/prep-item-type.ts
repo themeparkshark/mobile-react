@@ -12,6 +12,17 @@ export interface PrepItemType {
   readonly is_new_variant?: boolean;
   readonly set_name?: string | null;
   readonly set_slug?: string | null;
+  // Home Hunt v3 (CONTRACT.md 3.3; optional, older servers omit them)
+  readonly rarity_key?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | string | null;
+  readonly rarity_label?: string | null;
+  /** Hex colour of the item's set. */
+  readonly set_color?: string | null;
+  readonly set_badge_url?: string | null;
+  /** One-line flavor text. */
+  readonly flavor?: string | null;
+  readonly is_daily_rare?: boolean;
+  /** App request: the server's shiny-style Golden Hour flag, decided at spawn. */
+  readonly golden_hour?: boolean;
   // Pivot data (when spawned for player)
   readonly latitude?: number;
   readonly longitude?: number;

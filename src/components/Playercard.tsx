@@ -3,19 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Animated, GestureResponderEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
-import { sharkBaseLayers } from '../helpers/wardrobe';
-
-// Tap zone map — Y percentage ranges on the shark for each slot
-// Checked top-to-bottom; first match wins
-// Hands use X position (far left/right sides) at mid-body height
-const SLOT_ZONES: { slot: string; yMin: number; yMax: number; xMin?: number; xMax?: number }[] = [
-  { slot: 'head_item',  yMin: 0,    yMax: 0.28, xMin: 0.42, xMax: 0.82 },
-  { slot: 'face_item',  yMin: 0.10, yMax: 0.40, xMin: 0.18, xMax: 0.60 },
-  { slot: 'hand_item',  yMin: 0.40, yMax: 0.68, xMin: 0, xMax: 0.38 },   // left fin
-  { slot: 'hand_item',  yMin: 0.40, yMax: 0.68, xMin: 0.68, xMax: 1.0 }, // right fin
-  { slot: 'neck_item',  yMin: 0.38, yMax: 0.63, xMin: 0.38, xMax: 0.70 }, // overlaps body, checked first
-  { slot: 'body_item',  yMin: 0.50, yMax: 0.66, xMin: 0.36, xMax: 0.68 },
-];
+import { sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
 
 /**
  * Where each worn layer lands, normalized on the 1353x1530 paper art
@@ -132,16 +120,10 @@ export default function Playercard({
     const yPct = locationY / height;
     const xPct = locationX / width;
 
-    for (const zone of SLOT_ZONES) {
-      if (yPct < zone.yMin || yPct > zone.yMax) continue;
-      if (zone.xMin !== undefined && (xPct < zone.xMin || xPct > zone.xMax!)) continue;
-
-      const slotKey = zone.slot as keyof InventoryType;
-      const item = inventory?.[slotKey];
-      if (item && typeof item === 'object' && 'id' in item) {
-        onItemTap(item as ItemType, zone.slot);
-        return;
-      }
+    const slot = slotAtPoint(xPct, yPct, inventory);
+    if (slot) {
+      onItemTap(inventory![slot] as ItemType, slot);
+      return;
     }
 
     if (isNaked) {

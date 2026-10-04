@@ -22,7 +22,7 @@ interface Props {
   latitude: number;
   longitude: number;
   onPress: () => void;
-  /** Mounted but parked and not drawn (no gym in this park yet). */
+  /** Mounted but parked and still: an empty pool slot, no gym here yet, or the map_gym_swords flag is off. */
   hidden?: boolean;
 }
 
@@ -30,7 +30,8 @@ export default function GymMarker({ leader, latitude, longitude, onPress, hidden
   const pulseScale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.3);
   // The breathing pauses with the living map (off screen, background, calm tier).
-  const { running } = useMapAlive();
+  const { running: alive } = useMapAlive();
+  const running = alive && !hidden;
 
   // Smooth breathing animation
   useEffect(() => {

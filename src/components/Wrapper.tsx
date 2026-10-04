@@ -1,12 +1,21 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
+
+/**
+ * How far the center compass button rises above the bottom bar into the
+ * screen content (its `top: -45` plus breathing room). Scroll content should
+ * end at least this far above the bar.
+ */
+export const BOTTOM_BAR_OVERHANG = 56;
 
 export default function Wrapper({
   children,
@@ -25,6 +34,8 @@ export default function Wrapper({
     : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
+  // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
+  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
 
   const items = [
     {
@@ -65,7 +76,8 @@ export default function Wrapper({
   ];
 
   return (
-    <View style={{ flex: 1 }}>
+    // The tab bar's own blue behind it: when it slides back after a catch it never uncovers grey.
+    <View style={{ flex: 1, backgroundColor: '#0e7fd9' }}>
       <View style={{ flex: 1 }}>
         <View
           style={{
@@ -75,10 +87,10 @@ export default function Wrapper({
           {children}
         </View>
       </View>
-      <View
-        style={{
+      <Animated.View
+        style={[{
           width: Dimensions.get('window').width,
-        }}
+        }, barSlide]}
       >
         <ImageBackground
           source={bottomBarSource}
@@ -114,6 +126,7 @@ export default function Wrapper({
                           : true
                       }
                       onPress={() => {
+                        if (isCatchShown()) return;
                         if (item.permission !== undefined) {
                           if (checkPermission(item.permission)) {
                             if (onNavigate) onNavigate(item.screen);
@@ -158,7 +171,7 @@ export default function Wrapper({
             })}
           </View>
         </ImageBackground>
-      </View>
+      </Animated.View>
     </View>
   );
 }

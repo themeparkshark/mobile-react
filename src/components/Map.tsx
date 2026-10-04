@@ -20,13 +20,13 @@ import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput,
 import { NIGHT_TINT, NIGHT_TINT_MAX } from './map/fright/FrightMapSources';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
 import { useFocusEffect } from '@react-navigation/native';
 import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
+import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -67,19 +67,13 @@ const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
-/** The GRAB ZONE tag's slot inside the grab-zone box (a 2r square), centred on its spot on the circle. */
-function grabTagSlotPosition(radius: number, angleDeg: number) {
-  const c = grabTagCenter(radius, angleDeg);
-  return { left: radius + c.x - GRAB_TAG_SIZE.width / 2, top: radius + c.y - GRAB_TAG_SIZE.height / 2 };
-}
-
 /** Map points per metre at this zoom and latitude (MapLibre: 512-point world tiles). */
 export function pointsPerMeter(zoom: number, latitude: number): number {
   const metersPerPoint = 40075016.686 * Math.cos(latitude * Math.PI / 180) / (512 * 2 ** zoom);
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -91,29 +85,26 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
   /** A full-screen flow covers the map: hold every ambient loop still (battery). */
   readonly ambientPaused?: boolean;
+  /** Stop the ambient clock without re-rendering or unmounting anything (a short cover, like a catch). */
+  readonly ambientFrozen?: boolean;
   /** Park pulse: busy rides as weighted points; a soft warm haze gathers over them. */
   readonly crowdHaze?: GeoJSON.FeatureCollection | null;
   /** Development previews: pin the sun at this elevation (degrees) instead of the real sky. */
   readonly sunOverride?: number;
   /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
   readonly projector?: MutableRefObject<MapProjector | null>;
-  /**
-   * Home map: a dashed "grab zone" circle around the shark at the real pickup
-   * radius, gold while a find is inside it. Replaces the shark's blue ground
-   * pill, which read like a mystery button.
-   */
-  readonly pickupRange?: {
-    readonly meters: number;
-    readonly findInside: boolean;
-    /** Where the GRAB ZONE tag sits, degrees clockwise from the top, clear of every find. */
-    readonly tagAngle?: number;
-  } | null;
+  /** Filled with a function that grabs a still of the map (a file URI), for a moment that blurs the map once instead of live. */
+  readonly snapshotter?: MutableRefObject<(() => Promise<string | null>) | null>;
   /** More round buttons under the recenter button (the daily chest). */
   readonly extraControls?: ReactNode;
   /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
   readonly fright?: FrightMapInput | null;
   /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
   readonly declutter?: MapDeclutterInput | null;
+  /** A full-screen moment owns the screen: hide the map buttons and the data credit (shown again after). */
+  readonly chromeHidden?: boolean;
+  /** A finger started moving the map. */
+  readonly onUserPan?: () => void;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -143,20 +134,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const light = useMemo(() => lightForElevation(sun), [sun]);
   const nightBackground = useMemo(() => mixHex(mixHex(STYLE_BACKGROUND, light.tint.color, light.tint.opacity), NIGHT_TINT, NIGHT_TINT_MAX),
     [light.tint.color, light.tint.opacity]);
-  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light });
+  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, frozen: ambientFrozen, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
-  // thread. Loops stop on unmount; reduced motion holds the shark still.
+  // thread. Loops stop on unmount; reduced motion, and a frozen map (a catch on top, a still capture), hold it still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
   const wake = useSharedValue(0);
   useEffect(() => {
-    if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    if (reducedMotion || !screenFocused || ambientFrozen) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
     idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
     sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
-  }, [reducedMotion, screenFocused, idle, sway, glow]);
+  }, [reducedMotion, screenFocused, ambientFrozen, idle, sway, glow]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -8 * idle.value }, { rotate: `${3 * sway.value}deg` }, { scale: 1 + 0.04 * idle.value }],
   }));
@@ -251,6 +242,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     };
     return () => { projector.current = null; };
   }, [projector]);
+  useEffect(() => {
+    if (!snapshotter) return;
+    snapshotter.current = async () => {
+      try { return (await mapViewRef.current?.takeSnap(false)) ?? null; } catch { return null; }
+    };
+    return () => { snapshotter.current = null; };
+  }, [snapshotter]);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
@@ -435,31 +433,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     feedDeclutter({ latitude: location.latitude, longitude: location.longitude, zoom: FOLLOW_ZOOM, bearing: 0 });
   }, [declutter, location, feedDeclutter]);
 
-  const rangeRadius = pickupRange && location
-    ? Math.max(24, Math.min(600, pickupRange.meters * pointsPerMeter(cameraZoom, location.latitude))) : 0;
   const playerShark = (
       <View style={styles.sharkMarkerContainer}>
-        {pickupRange ? (
-          // Grab zone: centred on the shark's ground point (50, 71.5 in this box).
-          <View pointerEvents="none" style={[styles.grabZone, pickupRange.findInside && styles.grabZoneReady, {
-            width: rangeRadius * 2, height: rangeRadius * 2, borderRadius: rangeRadius,
-            left: 50 - rangeRadius, top: 71.5 - rangeRadius }]}>
-            <View style={[styles.grabZoneTagSlot, grabTagSlotPosition(rangeRadius, pickupRange.tagAngle ?? 0)]}>
-              <View style={[styles.grabZoneTag, pickupRange.findInside && styles.grabZoneTagReady]}>
-                <Text style={[styles.grabZoneText, pickupRange.findInside && styles.grabZoneTextReady]}>GRAB ZONE</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <>
-            {/* A soft pool of light breathes under the shark, over a soft round ground shadow (one radial texture each). */}
-            <Reanimated.View style={[styles.outerGlowRing, glowStyle]}>
-              {/* By day the light pool is half as strong (the navy core carries the shadow). */}
-              <Image source={GROUND_GLOW} tintColor="#7cc6f5" style={[StyleSheet.absoluteFill, { opacity: light.lamps >= 0.05 ? 1 : 0.5 }]} contentFit="fill" />
-            </Reanimated.View>
-            <Image source={GROUND_GLOW} tintColor="#05143c" style={styles.groundRing} contentFit="fill" />
-          </>
-        )}
+        {/* A soft pool of light breathes under the shark, over a soft round ground shadow (one radial texture each). */}
+        <Reanimated.View style={[styles.outerGlowRing, glowStyle]}>
+          {/* By day the light pool is half as strong (the navy core carries the shadow). */}
+          <Image source={GROUND_GLOW} tintColor="#7cc6f5" style={[StyleSheet.absoluteFill, { opacity: light.lamps >= 0.05 ? 1 : 0.5 }]} contentFit="fill" />
+        </Reanimated.View>
+        <Image source={GROUND_GLOW} tintColor="#05143c" style={styles.groundRing} contentFit="fill" />
         {/* Wake: sparkles spill from under the shark while it walks. */}
         <SharkWake moving={wake} />
         {/* Contact shadow: tightens as the shark bobs up */}
@@ -467,7 +448,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Image source={GROUND_GLOW} tintColor="#05143c" style={StyleSheet.absoluteFill} contentFit="fill" />
         </Reanimated.View>
         {/* Directional indicator — only visible in heading mode */}
-        {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
+        {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
         <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
           {hasDressedShark(player?.inventory) ? (
@@ -477,6 +458,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
                 <Image
                   key={`base-${index}`}
                   source={source}
+                  // The eyes layer is an animated blink: pause it off-screen and
+                  // under Reduce Motion, like the undressed shark_player.gif.
+                  autoplay={screenFocused && !reducedMotion}
                   style={{ width: 60, height: 60, position: 'absolute' }}
                   cachePolicy="memory-disk" transition={0}
                   contentFit="contain"
@@ -499,6 +483,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       </View>
   );
 
+  const chromeOff = chromeHidden ? 1 : 0;
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
+
   return (
     <MapAliveProvider value={alive}>
     <View
@@ -513,15 +500,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         rootRef.current?.measureInWindow((_x, y) => { if (Number.isFinite(y)) setViewTop(y); });
       }}
     >
-      {/* Map controls */}
-      <View
-        style={{
+      {/* Map controls: hidden on the tap frame of a catch (UI thread), never over the viewfinder */}
+      <Reanimated.View
+        pointerEvents={chromeHidden ? 'none' : 'box-none'}
+        style={[{
           position: 'absolute',
           top: controlsTop,
           right: 16,
           zIndex: 10,
           gap: 8,
-        }}
+        }, chromeStyle]}
         onLayout={event => {
           const { x, y, width, height } = event.nativeEvent.layout;
           setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
@@ -530,7 +518,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
         <Pressable
-          onPress={() => { haptic('tapLight'); recenterOnPlayer(); }}
+          onPress={() => { if (isCatchShown()) return; haptic('tapLight'); recenterOnPlayer(); }}
           accessibilityRole="button"
           accessibilityLabel={focusedOnPlayer ? 'Following your shark' : 'Center the map on your shark'}
           hitSlop={6}
@@ -539,7 +527,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <RecenterIcon away={!focusedOnPlayer} reducedMotion={reducedMotion} />
         </Pressable>
         {extraControls}
-      </View>
+      </Reanimated.View>
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
       <DeclutterContext.Provider value={declutter?.store ?? null}>
@@ -555,6 +543,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
           if (!feature.properties?.isUserInteraction) return;
+          onUserPan?.();
           // The moment a finger moves the map, stop following: the shark becomes a
           // map marker at its real spot (it is at screen center right now, so the
           // swap is invisible) and slides with the map. Waiting for the gesture to
@@ -705,11 +694,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         </View>)}
       </View>}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
-      <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
-        onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
-        hitSlop={8} style={styles.attribution}>
-        <Text style={styles.attributionText}>© OpenStreetMap</Text>
-      </Pressable>
+      {/* Kept mounted; it fades with the controls on the catch's shared value and ignores taps under a catch. */}
+      <Reanimated.View pointerEvents={chromeHidden ? 'none' : 'box-none'} style={[styles.attribution, chromeStyle]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
+          onPress={() => { if (isCatchShown()) return; void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
+          hitSlop={8}>
+          <Text style={styles.attributionText}>© OpenStreetMap</Text>
+        </Pressable>
+      </Reanimated.View>
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
@@ -783,20 +775,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 3,
   },
-  grabZone: { position: 'absolute', alignItems: 'center', borderWidth: 2.5, borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.95)', backgroundColor: 'rgba(124,198,245,0.10)' },
-  grabZoneReady: { borderColor: BRAND.gold, borderStyle: 'solid', borderWidth: 3, backgroundColor: 'rgba(255,207,59,0.12)' },
-  // A fixed box centred on the tag's spot on the circle; the tag centres inside it.
-  grabZoneTagSlot: { position: 'absolute', width: GRAB_TAG_SIZE.width, height: GRAB_TAG_SIZE.height,
-    alignItems: 'center', justifyContent: 'center' },
-  grabZoneTag: { paddingHorizontal: 7, paddingVertical: 1, borderRadius: 9,
-    backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.blueBright },
-  grabZoneTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
-  grabZoneText: { fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.5, color: BRAND.blue },
-  grabZoneTextReady: { color: BRAND.navy },
-  // Player shark on the park map: a soft round shadow on the ground, not a
-  // hard bar. A faint light pool breathes under it (the glow loop), the core
-  // shadow is a feathered ellipse (the blur is the view's own shadow).
   // Player shark on the park map: a soft round shadow on the ground, not a
   // hard bar (each is the radial glow texture, tinted).
   outerGlowRing: {

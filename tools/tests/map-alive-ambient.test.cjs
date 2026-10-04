@@ -113,12 +113,12 @@ test('water glints sit only on water, nearest the middle of the view, capped and
 
 test('the map shares one ambient clock and pauses it with the screen, the app and covering flows', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /useMapAliveEngine\(\{ focused: screenFocused, paused: ambientPaused/);
+  assert.match(map, /useMapAliveEngine\(\{ focused: screenFocused, paused: ambientPaused, frozen: ambientFrozen/);
   assert.match(map, /<MapAliveProvider value=\{alive\}>/);
   const engine = read('src/components/map/alive/MapAliveContext.tsx');
   assert.match(engine, /AppState\.addEventListener/);
   assert.match(engine, /const active = focused && appActive;\s*const running = active && !paused && caps\.hz > 0/);
-  assert.match(engine, /frame\.setActive\(running\)/);
+  assert.match(engine, /frame\.setActive\(running && !frozen\)/, 'a frozen map only stops the clock');
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /ambientPaused=\{redeemFlowOpen \|\| bossOccluded \|\| adventureOccluded \|\| dailyGiftOccluded\}/);
   assert.match(explore, /aliveRank=\{clampAliveRank\(aliveRanks\.get\(task\.id\)\)\}/);

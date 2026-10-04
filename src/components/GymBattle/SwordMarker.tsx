@@ -18,7 +18,7 @@ interface Props {
   longitude: number;
   expiresAt: string;
   onPress: () => void;
-  /** Mounted but parked and not drawn (an empty pool slot). */
+  /** Mounted but parked and still: an empty pool slot, no gym here yet, or the map_gym_swords flag is off. */
   hidden?: boolean;
 }
 
@@ -29,7 +29,9 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
   const glowScale = useSharedValue(1);
   // The countdown ticks while the map is on screen; the bounce is ambience and
   // also rests in the calm tier.
-  const { active, running } = useMapAlive();
+  const alive = useMapAlive();
+  // Hidden (flag off): no countdown, no bounce, no GIF.
+  const active = alive.active && !hidden, running = alive.running && !hidden;
 
   // Calculate time remaining
   useEffect(() => {

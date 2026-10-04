@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
-import { Text, View, Pressable } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
@@ -20,7 +20,6 @@ import { CoinCollectFlight } from '../components/map/alive/CoinCollectFlight';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import RedeemModal from '../components/RedeemModal';
-import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
@@ -48,6 +47,7 @@ import HomeExplore from './ExploreScreen/HomeExplore';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './ExploreScreen/homePickupRange';
 import { rideFocusForPark, type ParkRideMapFocus } from './ExploreScreen/parkRideMapFocus';
 import ParkProjectWidget from './ExploreScreen/ParkProjectWidget';
+import { useMenuCardFade } from './ExploreScreen/menuCardFade';
 import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
@@ -102,6 +102,7 @@ import CommunityCenterModal from '../components/CommunityCenterModal';
 import getCommunityCenter, { CommunityCenter } from '../api/endpoints/community-center/getCommunityCenter';
 // Gym Battle imports
 import { GymMarker, SwordMarker } from '../components/GymBattle';
+import { useMapFlags } from '../services/mapFlags';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
@@ -120,7 +121,7 @@ import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
 import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
-import { BOTTOM_RIGHT_COLUMN, bottomLeftColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
+import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
@@ -155,7 +156,9 @@ function ExploreScreen() {
   // Idle (no touch, no walking for 2 min): the map's live polls slow down.
   const mapIdle = useUserIdle();
   const route = useRoute();
+  const cardFade = useMenuCardFade();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
+  const highlightNearestFind = (route.params as { highlightNearestFind?: number } | undefined)?.highlightNearestFind ?? null;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
@@ -220,6 +223,7 @@ function ExploreScreen() {
   const [tripGoalVersion, setTripGoalVersion] = useState(0);
   const [activeParkProject, setActiveParkProject] = useState<ParkProject | null>(null);
   const [projectOpenRequestVersion, setProjectOpenRequestVersion] = useState(0);
+  const openParkStory = useCallback(() => setProjectOpenRequestVersion(version => version + 1), []);
   
   // Community Center state
   const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
@@ -233,6 +237,8 @@ function ExploreScreen() {
   // Gym Battle state
   const [gymData, setGymData] = useState<GymData | null>(null);
   const [swords, setSwords] = useState<SwordSpawn[]>([]);
+  // Gym and Sword markers are an unfinished feature: hidden (still mounted) until the server turns map_gym_swords on.
+  const mapFlags = useMapFlags();
   const [playerTeam, setPlayerTeam] = useState<TeamInfo | null>(null);
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
@@ -364,9 +370,11 @@ function ExploreScreen() {
   }, [pendingCollect, redeemFlowOpen]);
 
   // Handler for when user taps a prep item in home mode — enforce proximity
-  const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
+  // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
+  const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {
     if (!homeLocationConfirmed || !parkLoaded) return;
     if (isActive) { setPendingFind({ item: prepItem, pivotId }); return; }
+    if (source === 'auto') return;
     setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
     setTooFarIsHomeItem(true);
     // Check distance before allowing collection
@@ -406,6 +414,26 @@ function ExploreScreen() {
     }, 350);
     return () => clearTimeout(timer);
   }, [isActive, pendingFind, handlePrepItemNearby, hasCompleted]);
+
+  // Home Hunt v3: the catch plays on the map itself (HomeCatchMoment), never in a modal.
+  const homeCatch = useMemo(() => (showPrepItemModal && homeLocationConfirmed && !isActive && activePrepItem &&
+    activePrepItemPivotId ? { item: activePrepItem, pivotId: activePrepItemPivotId } : null),
+  [showPrepItemModal, homeLocationConfirmed, isActive, activePrepItem, activePrepItemPivotId]);
+  const onHomeCatchCollected = useCallback(() => {
+    collectedOnce.current = true;
+    setCaughtThisSession(true);
+    setHomeCollectionVersion((version) => version + 1);
+  }, []);
+  const onHomeCatchUnavailable = useCallback(() => setHomeCollectionVersion((version) => version + 1), []);
+  const onHomeCatchDone = useCallback(() => {
+    setShowPrepItemModal(false);
+    setActivePrepItem(null);
+    setActivePrepItemPivotId(null);
+    // After the very first catch, Finn says why it matters (once).
+    if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
+      setTimeout(() => startTutorial('home_first_find'), 500);
+    }
+  }, [hasCompleted, startTutorial]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
@@ -982,8 +1010,9 @@ function ExploreScreen() {
     left: suggestionSlots.left ? { top: slotTop, stub: suggestionSlots.leftStub } : null,
     right: suggestionSlots.right === 'ride' || projectPillShown ? { top: slotTop, stub: suggestionSlots.rightStub } : null,
     bottomLeft: bottomLeftColumnHeight(park?.stores.length ?? 0),
-    bottomRight: BOTTOM_RIGHT_COLUMN,
-  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length]);
+    // With the gym and swords off, the hidden swords pill frees its space.
+    bottomRight: bottomRightColumnHeight(mapFlags.gymSwords),
+  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords]);
   const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
     [park, declutterStore, declutterItems, declutterInsets]);
 
@@ -1088,11 +1117,15 @@ function ExploreScreen() {
           </TopbarColumn>
         )}
       </Topbar>
-      {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
+      {/* The floating park card leaves (opacity 0, no touches) while the quick menu is open */}
+      {player && <Animated.View style={[StyleSheet.absoluteFill, cardFade.style]} pointerEvents={cardFade.pointerEvents}>
+        <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
-        pillHidden={!!park && suggestionSlots.right !== 'project'}
+        // At home the story rides in the map's top HUD row as a small chip (HomeExplore), never a card.
+        pillHidden={!park || suggestionSlots.right !== 'project'}
         pillCollapsed={!!park && suggestionSlots.rightStub}
-        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0) : undefined} />}
+        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0) : undefined} />
+      </Animated.View>}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
@@ -1111,35 +1144,17 @@ function ExploreScreen() {
           was cleared without a finished lookup. */}
       {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
+          catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
+          onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} />
+          onIntroOpenChange={setHomeIntroOpen} chestButton={chestButton} highlightNearestFind={highlightNearestFind}
+          parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
+            goal: activeParkProject.goal_points, onPress: openParkStory } : null} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}
       
-      {/* Prep Item Redeem Modal (Home Mode) */}
-      <PrepItemRedeemModal
-        visible={showPrepItemModal && homeLocationConfirmed && !isActive}
-        prepItem={activePrepItem}
-        pivotId={activePrepItemPivotId}
-        onClose={() => {
-          setShowPrepItemModal(false);
-          setActivePrepItem(null);
-          setActivePrepItemPivotId(null);
-          // After the very first catch, Finn says why it matters (once).
-          if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
-            setTimeout(() => startTutorial('home_first_find'), 500);
-          }
-        }}
-        onCollected={() => {
-          collectedOnce.current = true;
-          setCaughtThisSession(true);
-          setHomeCollectionVersion((version) => version + 1);
-        }}
-        onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}
-        onViewSet={(slug) => RootNavigation.navigate('SetCollection', { slug })}
-      />
       {park && redeemables && (
         <>
           <View
@@ -1277,8 +1292,8 @@ function ExploreScreen() {
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
                 onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
-              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
-                onPress={() => explain('swords', { count: playerSwordCount })} />
+              {mapFlags.gymSwords && <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
+                onPress={() => explain('swords', { count: playerSwordCount })} />}
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -1478,10 +1493,10 @@ function ExploreScreen() {
           ))}
           <CommunityCenterMarker center={communityCenter} onPress={handleCommunityCenterPress} />
           {/* Gym Marker - show even without team so players can discover it */}
-          <GymMarker hidden={!gymData} leader={gymData?.leader} latitude={gymData?.gym.latitude ?? PARKED.latitude}
+          <GymMarker hidden={!gymData || !mapFlags.gymSwords} leader={gymData?.leader} latitude={gymData?.gym.latitude ?? PARKED.latitude}
             longitude={gymData?.gym.longitude ?? PARKED.longitude} onPress={handleGymPress} />
           {swordSlots.map((sword, slot) => (
-            <SwordMarker key={`sword-${slot}`} hidden={!sword} id={sword?.id ?? -1}
+            <SwordMarker key={`sword-${slot}`} hidden={!sword || !mapFlags.gymSwords} id={sword?.id ?? -1}
               latitude={sword?.latitude ?? PARKED.latitude} longitude={sword?.longitude ?? PARKED.longitude}
               expiresAt={sword?.expires_at ?? PARKED_TIME} onPress={() => { if (sword) void handleSwordClaim(sword.id); }} />
           ))}

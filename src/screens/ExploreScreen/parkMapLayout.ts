@@ -281,5 +281,9 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
 export function bottomLeftColumnHeight(stores: number): number {
   return 32 + 54 + 80 + Math.max(0, stores) * 83;
 }
-/** Bottom-right column: 32 pt margin, energy and swords pills (~88), the avatar (~96). */
-export const BOTTOM_RIGHT_COLUMN = 32 + 88 + 96;
+/** Bottom-right column: 32 pt margin, the energy pill (44) and the swords pill (44) when the gym and swords are on, the avatar (~96). */
+export function bottomRightColumnHeight(swords: boolean): number {
+  return 32 + (swords ? 88 : 44) + 96;
+}
+/** With both pills (previews and tests). */
+export const BOTTOM_RIGHT_COLUMN = bottomRightColumnHeight(true);
