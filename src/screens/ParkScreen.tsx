@@ -19,7 +19,7 @@ import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import * as RootNavigation from '../RootNavigation';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -44,7 +44,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
   const { park, player, earnedCoin, openMastery, focusCoin } = route.params as {
@@ -296,6 +296,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
 
   // One slot size for earned coins and empty sockets, so the shelf reads as one row.
   const coinSize = Math.min(60, shelfCoinSize);
+  // The last shelf must scroll clear of the compass, which rises above the tab bar, plus the
+  // 1% the Wrapper content overlaps the bar, so the bottom row never ends under it.
+  const shelfEndClearance = BOTTOM_BAR_OVERHANG + Math.ceil(height * 0.01) + 24;
   const shelfPanel = { backgroundColor: '#0768b9', borderWidth: 3, borderColor: '#fff', borderRadius: 20,
     paddingTop: 34, paddingHorizontal: 10, paddingBottom: 12, shadowColor: '#05346e', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 } as const;
@@ -455,7 +458,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 </View>
                 <View
                   onLayout={event => { checklistOffset.current = event.nativeEvent.layout.y; }}
-                  style={{ paddingHorizontal: 16, paddingBottom: 32 }}
+                  style={{ paddingHorizontal: 16, paddingBottom: shelfEndClearance }}
                 >
                   {tasks.length > 0 && (
                     <View style={{ marginBottom: 16 }}>

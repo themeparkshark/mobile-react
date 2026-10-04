@@ -10,7 +10,7 @@
  */
 import CoinStand from '../coin/CoinStand';
 import { Image } from 'expo-image';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -29,6 +29,25 @@ import { coinTier } from '../../constants/coinTiers';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND } from '../../ui/tokens';
 import GameIcon from '../../ui/GameIcon';
+
+/**
+ * Every production ride coin is Alex's 3/4-view template (517x484): a round face whose diameter is
+ * the image height, flush left (centre at x = 0.50h), plus the coin's edge as a crescent on the
+ * right. "contain" left the face 6% short of the ring and pushed off centre, so an earned coin never
+ * filled its slot. Instead the art is drawn at the slot's height, pinned left, so its face IS the
+ * slot and the round ring clips the edge crescent. The real aspect comes from the loaded image, so
+ * square art simply fills the slot.
+ */
+export const COIN_ART_ASPECT = 517 / 484;
+
+/** The loaded art's aspect, keeping `prev` (no re-render) when it already matches. */
+export function loadedArtAspect(source: { readonly width: number; readonly height: number }, prev: number): number {
+  if (!(source.width > 0 && source.height > 0)) return prev;
+  const aspect = source.width / source.height;
+  // Only the left-flush template (or square art) fills correctly; flag anything else in dev.
+  if (__DEV__ && (aspect < 0.99 || aspect > 1.1)) console.warn(`ShelfCoin: coin art aspect ${aspect.toFixed(3)} is not the coin template`);
+  return Math.abs(aspect - prev) < 0.01 ? prev : aspect;
+}
 
 /** One clock for every shelf shimmer. 0 -> 1 every SHIMMER_MS. */
 const SHIMMER_MS = 3600;
@@ -66,6 +85,8 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
   const tier = coinTier(level);
   const border = Math.max(2, Math.round(tier.ringWidth * size / 60));
   const keyline = Math.max(1.5, Math.round(size / 36));
+  const face = size - (keyline + border) * 2;
+  const [artAspect, setArtAspect] = useState(COIN_ART_ASPECT);
   const shimmers = tier.shimmer && !reduced && !dimmed;
   useShelfClock(shimmers);
 
@@ -113,16 +134,24 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
         borderRadius: size }]} />
       <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: size }, pulseStyle,
         { borderWidth: Math.max(3, border), borderColor: tier.ring }]} />
-      <Animated.View style={[{ width: size, height: size }, coinStyle]}>
-        {/* A navy keyline outside every earned ring so even a Classic coin reads as earned against the faded sockets. */}
-        <View style={[styles.keyline, { left: -keyline, top: -keyline, width: size + keyline * 2, height: size + keyline * 2,
-          borderRadius: size, borderWidth: keyline, opacity: dimmed ? 0.4 : 1 }]} />
-        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: border,
-          borderColor: tier.ring, borderBottomColor: tier.ringDeep, backgroundColor: tier.halo,
-          overflow: 'hidden', alignItems: 'center', justifyContent: 'center', opacity: dimmed ? 0.55 : 1 }}>
-          {!!coinUrl && <Image source={coinUrl} contentFit="contain" transition={120}
-            style={{ width: size - border * 2, height: size - border * 2 }} />}
-          <Animated.View style={[styles.shimmer, { width: size * 0.22, height: size * 1.6, top: -size * 0.3 }, shimmerStyle]} />
+      <Animated.View style={[!dimmed && styles.lift, { width: size, height: size, borderRadius: size / 2,
+        backgroundColor: dimmed ? 'transparent' : BRAND.navy }, coinStyle]}>
+        {/* Exactly the socket's diameter and centre, like a coin pressed into an album slot: a navy
+            keyline as the outer edge, the tier ring inside it, then the coin face filling the rest. */}
+        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: keyline,
+          borderColor: BRAND.navy, overflow: 'hidden', opacity: dimmed ? 0.55 : 1 }}>
+          <View style={{ flex: 1, borderRadius: size / 2, borderWidth: border,
+            borderColor: tier.ring, borderBottomColor: tier.ringDeep, backgroundColor: tier.halo,
+            overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+            {/* Its own round clip: iOS clips a bordered view at its outer edge, so without it the
+                edge crescent would paint over the right side of the tier ring. */}
+            {!!coinUrl && <View style={{ width: face, height: face, borderRadius: face / 2, overflow: 'hidden' }}>
+              <Image source={coinUrl} transition={120} contentFit={artAspect >= 1 ? 'fill' : 'contain'}
+                onLoad={event => setArtAspect(prev => loadedArtAspect(event.source, prev))}
+                style={{ height: face, width: face * Math.max(1, artAspect) }} />
+            </View>}
+            <Animated.View style={[styles.shimmer, { width: size * 0.22, height: size * 1.6, top: -size * 0.3 }, shimmerStyle]} />
+          </View>
         </View>
       </Animated.View>
       <CoinStand level={tier.level} size={size} layer="crown" />
@@ -149,7 +178,8 @@ function SparkleBit({ progress, dx, dy, size, left, top }: {
 
 const styles = StyleSheet.create({
   contact: { position: 'absolute', backgroundColor: BRAND.navy, opacity: 0.32 },
-  keyline: { position: 'absolute', borderColor: BRAND.navy },
+  // Lifts an earned coin off the panel so it pops against the flat, faded sockets.
+  lift: { shadowColor: '#021f3f', shadowOpacity: 0.6, shadowRadius: 4, shadowOffset: { width: 0, height: 3 } },
   shimmer: { position: 'absolute', left: 0, backgroundColor: '#ffffff' },
   sparkle: { position: 'absolute' },
 });
