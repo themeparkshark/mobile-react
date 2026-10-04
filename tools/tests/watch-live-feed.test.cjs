@@ -193,9 +193,21 @@ test('round 5: one reward bank survives a reopened player, shows the reward firs
   assert.equal(feed.nextBankDialog(feed.EMPTY_BANK, false), null);
   const screen = read('src/screens/WatchScreen.tsx');
   assert.match(screen, /nextBankDialog\(bank\.current, playerOpen\.current \|\| dialogOpen\.current\)/);
-  assert.match(screen, /if \(retrying\.current \|\| unsaved\.length === 0\) return;/);
+  assert.match(screen, /if \(retrying\.current\) return;/);
   assert.match(screen, /LayoutAnimation\.configureNext/);
   assert.match(screen, /!showUnsaved && !settling/);
   // Legacy rows go through the same bank, so a failed save is never silent.
   assert.match(screen, /if \(!post\.has_watched\) save\(post\);/);
+});
+
+test('round 6: Later releases the held hero and meter, Try again during a quiet retry answers, no delivery after leaving', () => {
+  const screen = read('src/screens/WatchScreen.tsx');
+  assert.match(screen, /else deliverSoon\(\); \/\/ 'Later' releases the hero and meter too/);
+  assert.match(screen, /if \(!quiet\) wantLoud\.current = true;/);
+  assert.match(screen, /if \(result !== null \|\| wantLoud\.current\) bank\.current = bankResult/);
+  assert.match(screen, /if \(!mounted\.current\) return; \/\/ left the page/);
+  assert.match(screen, /useEffect\(\(\) => \(\) => \{ if \(deliverTimer\.current\) clearTimeout\(deliverTimer\.current\); \}, \[\]\);/);
+  assert.match(screen, /heroPop\.setValue\(0\.92\)/);
+  // Saves that land together are shown as one reward.
+  assert.match(screen, /if \(savesInFlight\.current > 0 && !playerOpen\.current && !dialogOpen\.current\) return;/);
 });
