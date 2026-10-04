@@ -223,3 +223,58 @@ def all_items():
     for k, items in SETS.items():
         for it in items:
             yield k, it
+
+
+# ---- Round 2 (panel fixes): stronger single cues that read at 40-64px.
+R2 = {
+    'churro_09': "churro with its whole top half dunked in a thick glossy golden-yellow butterscotch coating, and three big round amber butterscotch candies in clear twist wrappers stuck on it",
+    'churro_12': "churro coated in cinnamon sugar with five big square golden cinnamon cereal squares stuck all along it and a little splash of milk drops",
+    'churro_13': "extra dark golden-brown super crispy churro with big crunchy blistered bubbles, a crisp curled-up tip, and three crunchy crumb flakes flying off",
+    'churro_19': "churro with a smooth brown spiced cookie butter dip on the top half and one big plain rectangular caramel-brown spiced biscuit with wavy edges and no lettering leaning against it, as big as the churro is wide",
+    'churro_20': "churro with a thick tan cookie butter swirl piped down the whole length like frosting, a big glossy cookie butter drip, and two round tan cookies stuck on top",
+    'pretzel_04': "pretzel thickly coated all over in big cream sesame seeds, with a small round wooden dish heaped with sesame seeds beside it",
+    'pretzel_05': "pretzel coated in chunky mixed everything topping: big black and white seeds, orange dried onion bits and golden garlic chips, a small bowl of the colorful seed mix beside it",
+    'pretzel_06': "pretzel so densely covered in tiny black poppy seeds it looks speckled grey-black, with one bright red poppy flower beside it",
+    'pretzel_07': "pretzel with five huge white flaky pyramid sea salt crystals on top and a small pink scallop seashell beside it",
+    'pretzel_12': "pretzel with big chunky white salt cubes and a small round white salt shaker with silver cap beside it",
+    'pretzel_14': "pretzel speckled with black pepper with a small heap of whole round black peppercorns beside it",
+    'pretzel_20': "pile of six bite-sized golden pretzel nuggets with salt, stacked in a small pyramid, no box, no container",
+    'pretzel_37': "pretzel with fiery red chili glaze shaped like a firecracker with a short lit fuse sticking out of the top giving off a few crisp yellow star sparks, no chili peppers",
+    'camera_11': "instant photo camera with a big sunset stripe band of yellow, orange and pink across the front, and a photo sliding out of the slot that shows a simple orange sunset over a wave",
+    'camera_12': "instant photo camera with a big sunset stripe band of yellow, orange and pink across the front, and a photo sliding out of the slot that shows a simple orange sunset over a wave",
+    'camera_13': "instant photo camera with a big sunset stripe band of yellow, orange and pink across the front, and a photo sliding out of the slot that shows a simple orange sunset over a wave",
+    'camera_14': "instant photo camera with a big sunset stripe band of yellow, orange and pink across the front, and a photo sliding out of the slot that shows a simple orange sunset over a wave",
+    'camera_15': "instant photo camera with a big sunset stripe band of yellow, orange and pink across the front, and a photo sliding out of the slot that shows a simple orange sunset over a wave",
+}
+for n in range(36, 40):
+    R2[f'camera_{n}'] = ("premium camera with a big blank golden admission ticket, half as tall as the camera, tucked behind it and "
+                         "sticking up diagonally, scalloped ticket edges, no writing on the ticket")
+for n in range(36, 40):
+    R2[f'umbrella_{n}'] = ("umbrella whose canopy is mostly one solid colour with a thin rainbow stripe band along the bottom edge only "
+                           "and a tiny rainbow arc charm on the tip")
+LEGEND_R2 = {
+    'flashlight_40': ("ornate royal lantern flashlight in shining gold with a big jewelled crown on the tail end, a large red ruby button, "
+                      "curly filigree, a tiny golden halo ring floating above it, and three crisp four-point sparkles"),
+    'camera_40': ("solid gold royal camera with a small jewelled crown on top, a ruby shutter button, a big golden ticket fanned out "
+                  "behind it with no writing, and three crisp four-point sparkles"),
+    'umbrella_40': ("gold umbrella with a gold canopy, a thin rainbow band along the edge, gold ribs, a big jewelled crown tip on top, "
+                    "a ruby on the handle, and three crisp four-point sparkles"),
+    'churro_39': ("churro covered in shiny gold sugar in a white paper sleeve with a gold trim band, a tiny gold crown on its tip, "
+                  "and crisp sparkles, still clearly a tasty churro, not a trophy"),
+}
+_subject_v1 = subject
+
+
+def subject(setkey, item):
+    slug, name, rarity, subj = item
+    if slug == 'pretzel_20':
+        return f"{R2[slug]}, each nugget a soft golden pretzel bite; simple and clean, one tasty topping detail; NOT popcorn, NOT chicken nuggets"
+    if slug in LEGEND_R2:
+        return f"{POSE[setkey]}: {LEGEND_R2[slug]}; {NOT[setkey]}"
+    if slug in R2:
+        colour = ''
+        if setkey not in FOOD:
+            colour = ', main ' + ('canopy' if setkey == 'umbrellas' else 'body') + ' colour ' + COLOURS[name.split()[0]]
+        tier = TIER[rarity] if setkey in FOOD else TIER_GEAR[rarity]
+        return f"{POSE[setkey]}: {R2[slug]}{colour}; {tier}; {NOT[setkey]}"
+    return _subject_v1(setkey, item)

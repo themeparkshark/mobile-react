@@ -15,7 +15,8 @@ OUT = os.environ.get('ITEM_ART_OUT', os.path.expanduser('~/apps/tps-prime-time-a
 REPO = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 ASSETS = os.path.join(REPO, 'assets', 'images', 'prep-items')
 OLD = os.path.join(OUT, 'old-art')  # snapshot of the pre-v2 PNGs for the contact sheet
-RCOL = {'common': (154, 164, 178), 'uncommon': (59, 196, 106), 'rare': (47, 139, 255), 'epic': (165, 75, 255), 'legendary': (255, 184, 0)}
+# Same rarity frame colours as the app (src/design-system.ts colors.rarity).
+RCOL = {'common': (76, 175, 80), 'uncommon': (0, 165, 245), 'rare': (156, 39, 176), 'epic': (255, 107, 0), 'legendary': (255, 215, 0)}
 
 
 def picks():
@@ -31,7 +32,7 @@ def write():
                 continue
             dst = os.path.join(ASSETS, setkey, f'{slug}.png')
             clean(os.path.join(OUT, P[slug]), 384).save(dst)
-            subprocess.run(['pngquant', '--force', '--skip-if-larger', '--quality', '75-95', '--ext', '.png', dst], check=False)
+            subprocess.run(['pngquant', '--force', '--quality', '70-95', '--ext', '.png', dst], check=False)
             n += 1
     print('wrote', n)
 
