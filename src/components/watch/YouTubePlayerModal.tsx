@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StatusBar, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { GameIcon } from '../../ui';
 import { allowPlayerNavigation, EMBED_BASE_URL, embedHtml } from './watchFeed';
@@ -20,6 +20,7 @@ export default function YouTubePlayerModal({
   readonly onClose: () => void;
 }) {
   const [ready, setReady] = useState(false);
+  useEffect(() => { setReady(false); }, [videoId]);
   const source = useMemo(
     () => (videoId ? { html: embedHtml(videoId), baseUrl: EMBED_BASE_URL } : null),
     [videoId],
@@ -32,9 +33,10 @@ export default function YouTubePlayerModal({
       presentationStyle="fullScreen"
       supportedOrientations={['portrait', 'landscape']}
       onRequestClose={onClose}
-      onShow={() => setReady(false)}
     >
       <StatusBar barStyle="light-content" />
+      {/* A Modal is a separate native root: it needs its own provider for insets. */}
+      <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#05080f' }} edges={['top', 'bottom', 'left', 'right']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 10 }}>
           <Pressable
@@ -90,6 +92,7 @@ export default function YouTubePlayerModal({
           </View>
         </View>
       </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
