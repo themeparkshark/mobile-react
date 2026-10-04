@@ -48,7 +48,8 @@ import * as Haptics from '../../helpers/haptics';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { GoldPill, PressScale, WATER, card, topicArt } from './socialLook';
+import { GoldPill, PressScale, card } from './socialLook';
+import { CLEAN } from '../../components/CleanScreenBackground';
 import useKeyboardInset from './useKeyboardInset';
 import {
   DEFAULT_PROMPT,
@@ -212,7 +213,6 @@ export default function Composer({
   return (
     <Modal visible={visible} animationType={reduced ? 'fade' : 'slide'} presentationStyle="fullScreen" onRequestClose={close}>
       <View style={styles.root}>
-        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
         {/* Full-screen modal: the keyboard's own height is the exact bottom padding. */}
         <View style={{ flex: 1, paddingBottom: keyboard }}>
           {/* Header: never moves, never hides. */}
@@ -236,37 +236,6 @@ export default function Composer({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-            {!editing && (
-              <>
-                <Text style={styles.step}>What's it about?</Text>
-                <View style={styles.topics} accessibilityRole="radiogroup">
-                  {TOPICS.map((item, i) => {
-                    const on = topic === item.key;
-                    return (
-                      <Animated.View key={item.key} entering={reduced ? undefined : FadeInDown.delay(40 * i).springify().damping(15)} style={styles.topicCell}>
-                        <PressScale
-                          onPress={() => pickTopic(item.key)}
-                          scaleTo={0.92}
-                          accessibilityRole="button"
-                          accessibilityLabel={item.label}
-                          accessibilityState={{ selected: on }}
-                          style={[styles.topicTile, { borderColor: on ? item.color : '#0a4f9c', backgroundColor: on ? item.chip : BRAND.white }, on && styles.topicTileOn]}
-                        >
-                          <Image source={topicArt(item.key)} style={styles.topicArt} contentFit="contain" />
-                          <Text style={styles.topicLabel} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
-                          {on && (
-                            <Animated.View entering={reduced ? undefined : ZoomIn.springify()} style={styles.tick}>
-                              <GameIcon name="check" size={30} />
-                            </Animated.View>
-                          )}
-                        </PressScale>
-                      </Animated.View>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-
             {team && !editing && (
               <View style={styles.who}>
                 <Text style={styles.whoLabel}>Who sees it?</Text>
@@ -289,26 +258,20 @@ export default function Composer({
                 <Avatar player={player as ThreadType['player']} size="sm" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.previewName} numberOfLines={1}>{player?.screen_name ?? 'You'}</Text>
-                  {def && (
-                    <View style={[styles.badge, { backgroundColor: def.chip, borderColor: def.color }]}>
-                      <Image source={topicArt(def.key)} style={{ width: 18, height: 18 }} contentFit="contain" />
-                      <Text style={styles.badgeText}>{def.label}</Text>
-                    </View>
-                  )}
                 </View>
               </View>
               <TextInput
                 ref={inputRef}
                 value={text}
                 onChangeText={(value) => { setText(value); setServerLine(null); }}
-                placeholder={def?.prompt ?? DEFAULT_PROMPT}
+                placeholder={DEFAULT_PROMPT}
                 placeholderTextColor="#7d95b5"
                 multiline
                 maxLength={POST_MAX + 50}
                 style={styles.input}
                 onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: !reduced }), 280)}
                 accessibilityLabel="Your post"
-                accessibilityHint={def?.prompt ?? DEFAULT_PROMPT}
+                accessibilityHint={DEFAULT_PROMPT}
                 textAlignVertical="top"
                 autoCapitalize="sentences"
               />
@@ -349,14 +312,14 @@ export default function Composer({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BRAND.blue },
+  root: { flex: 1, backgroundColor: CLEAN.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingBottom: 10,
-    backgroundColor: 'rgba(5,52,110,0.35)',
+    backgroundColor: BRAND.blue,
   },
   title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white, marginTop: 4, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   scroll: { padding: 14, gap: 12 },
@@ -377,11 +340,11 @@ const styles = StyleSheet.create({
   topicLabel: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 4, paddingHorizontal: 4 },
   tick: { position: 'absolute', top: -10, right: -8 },
   who: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  whoLabel: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  seg: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(5,52,110,0.45)', borderRadius: 999, padding: 4, gap: 4 },
+  whoLabel: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
+  seg: { flex: 1, flexDirection: 'row', backgroundColor: CLEAN.well, borderRadius: 999, padding: 4, gap: 4 },
   segBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 999, minHeight: 44, paddingHorizontal: 8 },
-  segOn: { backgroundColor: BRAND.white },
-  segText: { fontFamily: 'Shark', fontSize: 15, color: '#cfe6ff', marginTop: 3 },
+  segOn: { backgroundColor: BRAND.white, borderWidth: 1.5, borderColor: CLEAN.line },
+  segText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft, marginTop: 3 },
   segTextOn: { color: BRAND.navy },
   preview: { padding: 14, gap: 8 },
   previewHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },

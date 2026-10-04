@@ -14,7 +14,7 @@ import { isTeam, TEAMS } from '../../constants/teams';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
+import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './socialLook';
 import { timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
 import useReactions from './useReactions';
 import { postText } from './prodCompat';
@@ -25,7 +25,6 @@ function ThreadCard({
   fresh,
   onOpen,
   onMenu,
-  onTopic,
 }: {
   readonly thread: ThreadType;
   readonly index: number;
@@ -33,7 +32,6 @@ function ThreadCard({
   readonly fresh?: boolean;
   readonly onOpen: (thread: ThreadType) => void;
   readonly onMenu: (thread: ThreadType) => void;
-  readonly onTopic?: (topic: TopicKey) => void;
 }) {
   const { player } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
@@ -81,7 +79,6 @@ function ThreadCard({
               {official ? <OfficialName /> : <Text style={styles.name} numberOfLines={1}>{name}</Text>}
               <View style={styles.meta}>
                 <Text style={styles.time}>{timeAgo(thread.created_at)}</Text>
-                <TopicBadge topic={thread.topic} onPress={onTopic && thread.topic ? () => onTopic(thread.topic as TopicKey) : undefined} />
               </View>
             </View>
           </View>
