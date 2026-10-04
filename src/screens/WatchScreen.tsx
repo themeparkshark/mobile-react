@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Animated, LayoutAnimation, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import view from '../api/endpoints/social-posts/view';
 import YouTubePlayerModal, { type PlayerResult } from '../components/watch/YouTubePlayerModal';
@@ -11,7 +11,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext, type SoundEffectContextType } from '../context/SoundEffectProvider';
 import CleanScreenBackground, { CLEAN, CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import youtube from '../api/endpoints/social-posts/youtube';
-import { earnedView, sortNewestFirst, upNextFor, videoIdOf, viewFailureKind } from '../components/watch/watchFeed';
+import { bankResult, earnedView, EMPTY_BANK, nextBankDialog, type RewardBank, sortNewestFirst, upNextFor, videoIdOf, viewFailureKind } from '../components/watch/watchFeed';
 import SocialPost, { COIN_ART, COIN_REWARD } from '../components/SocialPost';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -81,8 +81,10 @@ export default function WatchScreen() {
   const [unsaved, setUnsaved] = useState<readonly SocialPostType[]>([]);
   const [showUnsaved, setShowUnsaved] = useState(false);
   const playerOpen = useRef(false);
-  // Saves started while the player is open; the reward waits for all of them.
-  const inFlightSaves = useRef<Promise<number | null>[]>([]);
+  const dialogOpen = useRef(false);
+  const bank = useRef<RewardBank>(EMPTY_BANK);
+  const deliverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retrying = useRef(false);
   const isWatched = useCallback(
     (post: SocialPostType) => post.has_watched || localWatched.has(post.id),
     [localWatched],
@@ -102,41 +104,65 @@ export default function WatchScreen() {
       if (viewFailureKind(error) === 'already-paid') {
         markWatched(post);
         setUnsaved(prev => prev.filter(p => p.id !== post.id));
-      } else {
-        setUnsaved(prev => (prev.some(p => p.id === post.id) ? prev : [...prev, post]));
-        return null;
+        return 0;
       }
-      return 0;
+      setUnsaved(prev => (prev.some(p => p.id === post.id) ? prev : [...prev, post]));
+      return null;
     }
   };
 
-  const showReward = (coins: number) => {
-    if (coins <= 0) return;
-    setRewardTotal(coins);
-    playSound(require('../../assets/sounds/reward.mp3'));
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    refreshPlayer().catch(() => undefined); // header coin count catches up
+  /**
+   * Shows whatever the bank holds once nothing else is on screen. The wait
+   * lets a closing player sheet finish (iOS drops a modal presented during
+   * another one's dismissal); a reopened player keeps the bank for later.
+   */
+  const deliverSoon = () => {
+    if (deliverTimer.current) clearTimeout(deliverTimer.current);
+    deliverTimer.current = setTimeout(() => {
+      deliverTimer.current = null;
+      const next = nextBankDialog(bank.current, playerOpen.current || dialogOpen.current);
+      if (next === 'reward') {
+        const coins = bank.current.coins;
+        bank.current = { ...bank.current, coins: 0 };
+        dialogOpen.current = true;
+        setRewardTotal(coins);
+        playSound(require('../../assets/sounds/reward.mp3'));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        refreshPlayer().catch(() => undefined); // header coin count catches up
+      } else if (next === 'unsaved') {
+        bank.current = { ...bank.current, unsaved: false };
+        dialogOpen.current = true;
+        setShowUnsaved(true);
+      }
+    }, 450);
   };
 
-  /** Starts saving the video that was playing; the reward is shown when the player closes. */
+  const save = (post: SocialPostType) => {
+    void record(post).then(result => {
+      bank.current = bankResult(bank.current, result);
+      deliverSoon();
+    });
+  };
+
+  /** Saves the video that was playing if it was really watched. */
   const settle = (post: SocialPostType, result: PlayerResult) => {
     if (isWatched(post) || !earnedView(result.playedMs, result.ended, post.is_short)) return;
-    inFlightSaves.current.push(record(post));
+    save(post);
   };
 
   const openVideo = useCallback((post: SocialPostType) => {
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (videoIdOf(post)) {
-      inFlightSaves.current = [];
       playerOpen.current = true;
       setPlaying(post);
       return;
     }
     // Very old rows without a YouTube id: open the link, then pay as before.
-    void WebBrowser.openBrowserAsync(post.permalink).then(async () => {
-      if (!post.has_watched) showReward((await record(post)) ?? 0);
+    void WebBrowser.openBrowserAsync(post.permalink).then(() => {
+      if (!post.has_watched) save(post);
     });
+  // save, record and deliverSoon only touch refs, setters and context.
   }, [playSound]);
 
   const switchVideo = (next: SocialPostType, result: PlayerResult) => {
@@ -150,43 +176,55 @@ export default function WatchScreen() {
     setPlaying(null);
     playerOpen.current = false;
     if (current) settle(current, result);
-    const saves = inFlightSaves.current;
-    inFlightSaves.current = [];
-    void (async () => {
-      const results = await Promise.all(saves);
-      const total = results.reduce<number>((sum, coins) => sum + (coins ?? 0), 0);
-      const anyUnsaved = results.some(coins => coins === null);
-      // Dialogs wait for the player sheet to finish sliding away (iOS drops a
-      // modal presented during another one's dismissal).
-      setTimeout(() => {
-        if (total > 0) showReward(total);
-        else if (anyUnsaved) setShowUnsaved(true);
-      }, 450);
-    })();
+    deliverSoon(); // anything banked while the player was open
   };
 
-  /** Retries every unsaved view; one dialog for whatever lands. */
+  const onRewardClosed = () => {
+    dialogOpen.current = false;
+    setRewardTotal(null);
+    deliverSoon(); // a "not saved" note waiting behind the reward
+  };
+
+  /** Retries every unsaved view once at a time; results go through the bank. */
   const retryUnsaved = useCallback(async (quiet: boolean) => {
-    if (unsaved.length === 0) return;
-    const results = await Promise.all(unsaved.map(post => record(post)));
-    const total = results.reduce<number>((sum, c) => sum + (c ?? 0), 0);
-    if (playerOpen.current) return;
-    if (total > 0) showReward(total);
-    else if (!quiet && results.some(c => c === null)) setShowUnsaved(true);
-  // record and showReward only use stable setters, context and refs.
+    if (retrying.current || unsaved.length === 0) return;
+    retrying.current = true;
+    try {
+      const results = await Promise.all(unsaved.map(post => record(post)));
+      for (const result of results) {
+        // A quiet retry that fails again stays quiet; the card still offers +25.
+        if (result !== null || !quiet) bank.current = bankResult(bank.current, result);
+      }
+      deliverSoon();
+    } finally {
+      retrying.current = false;
+    }
   }, [unsaved]);
 
   retryRef.current = quiet => { void retryUnsaved(quiet); };
 
   // The hero is the newest video still worth coins (the newest overall once
   // everything is watched); the rest sit in a two-column grid, newest first.
-  const featuredVideo = videos.find(v => !isWatched(v)) ?? videos[0] ?? null;
+  // It moves only when nothing is on top of the page, with a short animation,
+  // so the kid sees the watched video slide into the grid.
+  const [heroWatched, setHeroWatched] = useState<ReadonlySet<number>>(localWatched);
+  const calm = playing === null && rewardTotal === null && !showUnsaved;
+  useEffect(() => {
+    if (!calm || heroWatched === localWatched) return;
+    const id = setTimeout(() => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setHeroWatched(localWatched);
+    }, 250);
+    return () => clearTimeout(id);
+  }, [calm, localWatched, heroWatched]);
+  const featuredVideo = videos.find(v => !v.has_watched && !heroWatched.has(v.id)) ?? videos[0] ?? null;
   const gridVideos = featuredVideo ? videos.filter(v => v.id !== featuredVideo.id) : [];
   const upNext = useMemo(
     () => (playing ? upNextFor(playing, videos, isWatched) : []),
     [playing, videos, isWatched],
   );
-  const watchedCount = videos.filter(isWatched).length;
+  // The meter, like the hero, moves when the page is calm so the kid sees it fill.
+  const watchedCount = videos.filter(v => v.has_watched || heroWatched.has(v.id)).length;
   const toEarn = videos.length - watchedCount;
 
   return (
@@ -277,7 +315,7 @@ export default function WatchScreen() {
         title="Coins added!"
         buttons={[{ text: 'Awesome!' }]}
         haptic="none"
-        onAnswer={() => setRewardTotal(null)}
+        onAnswer={onRewardClosed}
       >
         {rewardTotal !== null && <CoinCountUp total={rewardTotal} />}
       </GameDialog>
@@ -288,7 +326,11 @@ export default function WatchScreen() {
         message="Check your connection, then try again. Your watch still counts."
         icon="retry"
         buttons={[{ text: 'Later', style: 'cancel' }, { text: 'Try again' }]}
-        onAnswer={index => { setShowUnsaved(false); if (index === 1) void retryUnsaved(false); }}
+        onAnswer={index => {
+          dialogOpen.current = false;
+          setShowUnsaved(false);
+          if (index === 1) void retryUnsaved(false);
+        }}
       />
     </Wrapper>
   );

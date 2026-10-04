@@ -79,7 +79,8 @@ function SocialPost({
               <GameIcon name="check" size={featured ? 18 : 14} />
               <Text style={[styles.chipText, { color: BRAND.white }, featured && styles.chipTextHero]}>Watched</Text>
             </View>
-          ) : (
+          ) : featured ? null : (
+            // The hero says +25 on its Watch button; grid cards carry the chip.
             <View style={[styles.chip, styles.coinChip]}>
               <Image source={COIN_ART} style={featured ? styles.coinHero : styles.coinSmall} contentFit="contain" />
               <Text style={[styles.chipText, featured && styles.chipTextHero]}>
