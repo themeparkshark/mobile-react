@@ -175,11 +175,22 @@ test('every map marker pins its overflow extents (envelope), so iOS never re-pla
   const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(task, /<View style=\{styles\.waterBox\}>/);
   assert.match(task, /waterBox: \{ width: 110, height: 70 \}/);
-  // Every chip and selected card fits inside the envelope (tag candidates reach at most ~210 pt out).
-  const { ENVELOPE } = { ENVELOPE: 320 };
+  // Every chip, the selected card and the arrival burst fit inside the envelope (read from the source).
+  const ENVELOPE = Number(/export const ENVELOPE = (\d+);/.exec(marker)[1]);
   const L = require('./helpers/ts-module.cjs').loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
   const s = require('./helpers/ts-module.cjs').loadTs('src/components/map/declutter/solver.ts');
-  for (const c of s.tagCandidates(L.RIDE_BODY, 200, 100)) {
-    assert.ok(c.x > -ENVELOPE && c.y > -ENVELOPE && c.x + 200 < ENVELOPE && c.y + 100 < ENVELOPE, c.side);
+  const inside = (x, y, w, h, what) => assert.ok(x > -ENVELOPE && y > -ENVELOPE && x + w < ENVELOPE && y + h < ENVELOPE, what);
+  for (const [w, h] of [[56, 22], [140, 30], [L.SELECTED_TAG?.w ?? 200, L.SELECTED_TAG?.h ?? 100]]) {
+    for (const c of s.tagCandidates(L.RIDE_BODY, w, h)) inside(c.x, c.y, w, h, `${w}x${h} ${c.side}`);
   }
+  // ArrivalBurst: a ring scaled to 2.6x of a ~70 pt base and sparks thrown 64 pt up, around the ground point.
+  inside(-100, -150, 200, 200, 'arrival burst');
+  for (const [w, h] of [[168, 136], [270, 246], [280, 280], [360, 180]]) inside(-w / 2, -h / 2, w, h, `fright box ${w}x${h}`);
+});
+
+test('fixed art fades for any solver hide (inset, half off screen, zoom); a reef\'s props share the reef\'s placement', () => {
+  const placed = read('src/components/map/declutter/Placed.tsx');
+  assert.match(placed, /export function useUnderButton\(id: string\): boolean \{\n  return !usePlacement\(id\)\.visible;\n\}/);
+  const fright = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(fright, /<PlacedSpot id=\{spot\.kind === 'reef' \? `reef:\$\{spot\.key\}` : `prop:\$\{spot\.key\}`\}>/);
 });

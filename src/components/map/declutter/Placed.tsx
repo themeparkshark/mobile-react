@@ -119,11 +119,12 @@ export function TagSlot({ tag, anchor, width, height, fallback, children }: {
 
 /**
  * Fixed art (gym, swords, community centre, boss, the encounter) is never folded or shrunk, but it
- * fades out where it would sit under a button (solver reason "inset"). True while it is hidden there.
+ * fades out where the solver hides it: under any inset (a button, the HUD row, the offline chip),
+ * more than half off screen, or below its zoom. True while it is hidden. Art the solver does not
+ * lay out (no store, or not in the layout) reads as shown.
  */
 export function useUnderButton(id: string): boolean {
-  const placement = usePlacement(id);
-  return !placement.visible && placement.reason === 'inset';
+  return !usePlacement(id).visible;
 }
 
 /** Opacity-only fade for fixed art under a button: always the same view, so nothing remounts. */

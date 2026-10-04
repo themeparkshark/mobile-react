@@ -362,11 +362,15 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const on = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
         return (
           <Marker key={`fp-${spot.key}`} coordinate={pin(spot)}>
-            <ShowWhen box={PROPS_BOX} on={on}>
-              <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
-                animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
-                mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
-            </ShowWhen>
+            {/* A reef's props (fog, eyes, bats) share the reef's declutter placement: they fade with it
+                under a button or off screen instead of drawing on their own. Other spots: always placed. */}
+            <PlacedSpot id={spot.kind === 'reef' ? `reef:${spot.key}` : `prop:${spot.key}`}>
+              <ShowWhen box={PROPS_BOX} on={on}>
+                <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
+                  animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
+                  mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
+              </ShowWhen>
+            </PlacedSpot>
           </Marker>
         );
       })}
