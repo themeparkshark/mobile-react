@@ -10,7 +10,7 @@ export interface MockDexSet {
   readonly reward: { readonly energy: number; readonly tickets: number; readonly xp: number; readonly coins?: number; readonly title: string | null };
   readonly spawn: string;
   readonly badge: string;
-  readonly items: readonly { readonly slug: string; readonly name: string; readonly rarity: number; readonly flavor: string }[];
+  readonly items: readonly { readonly slug: string; readonly name: string; readonly rarity: number; readonly flavor: string; readonly variantSlug?: string }[];
 }
 
 export const MOCK_DEX_SETS: readonly MockDexSet[] = [

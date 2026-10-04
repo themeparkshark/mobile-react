@@ -4,12 +4,16 @@
  * Home Hunt v3 catalog, so one preview covers both servers. Item and badge
  * art load from EXPO_PUBLIC_DEX_PREVIEW_ART (a file:// or http base for the
  * art folder); without it, bundled churro art stands in.
+ * EXPO_PUBLIC_DEX_PREVIEW_LEGACY=1 swaps in the five live prep-item sets with
+ * their real variant slugs, so the bundled per-item art shows as it ships.
  */
 import type { PrepItemSetDetailResponse, PrepItemSetItem, PrepItemSetListItem, StarterMilestone } from '../api/endpoints/me/prep-item-sets';
 import { MOCK_DEX_SETS, type MockDexSet } from '../data/mockDexCatalog';
+import { MOCK_LEGACY_PREP_SETS } from '../data/mockLegacyPrepSets';
 import SetCollectionScreen from './SetCollectionScreen';
 
-const ART = process.env.EXPO_PUBLIC_DEX_PREVIEW_ART ?? '';
+const LEGACY = process.env.EXPO_PUBLIC_DEX_PREVIEW_LEGACY === '1';
+const ART = LEGACY ? '' : process.env.EXPO_PUBLIC_DEX_PREVIEW_ART ?? '';
 const RARITY = ['', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 const HINTS: Record<string, string> = {
   always: 'Pops up near you, any time.',
@@ -35,6 +39,11 @@ const SCENARIOS: Record<string, Scenario> = {
   sweet_treats: { found: 5, starter: 'claimable' },
   souvenirs: { found: 2, starter: 'locked' },
   ride_day_gear: { found: 12, claimed: true, starter: 'claimed' },
+  churro_collection: { found: 40, starter: 'claimed', focused: true },
+  pretzel_collection: { found: 40, starter: 'claimed' },
+  night_lights: { found: 40, starter: 'claimed' },
+  rain_parade: { found: 40, starter: 'claimed' },
+  camera_crew: { found: 40, starter: 'claimed' },
   night_glow: { found: 3, starter: 'locked', status: 'resting', spawning: false },
   parade_day: { found: 0, starter: 'locked' },
   spooky_snacks: { found: 0, status: 'upcoming' },
@@ -62,7 +71,9 @@ function build(set: MockDexSet, setIndex: number) {
       last_collected_at: null,
     };
   });
-  if (!ART) items.forEach((item, index) => { (item as { variant_slug: string }).variant_slug = `churro_${String((index % 40) + 1).padStart(2, '0')}`; });
+  if (!ART) items.forEach((item, index) => {
+    (item as { variant_slug: string }).variant_slug = set.items[index].variantSlug ?? `churro_${String((index % 40) + 1).padStart(2, '0')}`;
+  });
   const found = items.filter(item => item.is_collected).length;
   const complete = found >= total;
   const starter: StarterMilestone | null = scene.starter ? {
@@ -108,7 +119,7 @@ function build(set: MockDexSet, setIndex: number) {
   return { list, detail, dexSet, dexItems };
 }
 
-const BUILT = MOCK_DEX_SETS.map(build);
+const BUILT = (LEGACY ? MOCK_LEGACY_PREP_SETS : MOCK_DEX_SETS).map(build);
 
 export default function SetCollectionPreviewScreen() {
   return (
