@@ -4,7 +4,8 @@
  * pill buttons that squash on press (UI thread springs; instant with reduced
  * motion). Every touch target is at least 44 pt and every label at least 14 pt.
  */
-import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { isOffline, onConnectivityChange } from '../../services/connectivity';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -164,11 +165,14 @@ export const kit = StyleSheet.create({
  * wifi-off sticker, display title with an ink shadow, a gold Try again pill.
  */
 export function SocialError({ title, onRetry }: { readonly title: string; readonly onRetry: () => void }) {
+  const [bannerUp, setBannerUp] = useState(isOffline());
+  useEffect(() => onConnectivityChange(setBannerUp), []);
   return (
     <View style={kitError.wrap} accessibilityLiveRegion="polite">
       <View>
         <Image source={require('../../../assets/images/screens/pin-collections/shark.png')} style={kitError.art} contentFit="contain" />
-        {/* One offline mark: the app's offline banner already shows wifi-off. */}
+        {/* Exactly one offline mark: this sticker only while the app's offline banner is not showing its own. */}
+        {!bannerUp && <Image source={require('../../../assets/images/offline/offline.png')} style={kitError.sticker} contentFit="contain" />}
       </View>
       <Text style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</Text>
       <Text style={kitError.text} maxFontSizeMultiplier={1.3}>Check your connection and try again.</Text>
@@ -180,6 +184,7 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
 const kitError = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 60 },
   art: { width: 150, height: 150 },
+  sticker: { position: 'absolute', right: 0, top: 4, width: 48, height: 48 },
   title: {
     fontFamily: FONT.display, fontSize: 26, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', marginTop: 10,
     textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,

@@ -46,7 +46,11 @@ function Piece({ icon, angle, dist, size, delay, big }: { icon: GameIconName; an
 }
 
 /** Pops once where it is mounted; with Reduce Motion it draws nothing. */
-export const Burst = memo(function Burst({ style, onDone, big = 1 }: { readonly style?: StyleProp<ViewStyle>; readonly onDone?: () => void; readonly big?: number }) {
+export const Burst = memo(function Burst({ style, onDone, big = 1, away = false }: {
+  readonly style?: StyleProp<ViewStyle>; readonly onDone?: () => void; readonly big?: number;
+  /** Pieces fly only up, left and down (never across the words to the right). */
+  readonly away?: boolean;
+}) {
   const reduced = useUiReducedMotion();
   const ring = useSharedValue(0);
   useEffect(() => {
@@ -65,6 +69,7 @@ export const Burst = memo(function Burst({ style, onDone, big = 1 }: { readonly 
         <>
           <Animated.View style={[styles.ring, ringStyle]} />
           {(big > 1 ? [...PIECES, ...PIECES.map(p => ({ ...p, angle: p.angle + 0.3, dist: p.dist * 0.6 }))] : PIECES)
+            .map(p => (away ? { ...p, angle: Math.PI / 2 + ((p.angle % (Math.PI * 2)) / 2) } : p))
             .map((p, i) => <Piece key={i} {...p} big={big} delay={i * 6} />)}
         </>
       )}
