@@ -349,9 +349,11 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climbId]);
 
+  // Clamped: the spring may overshoot, but the dock never rises above its rest
+  // spot (r2 capture: an overshoot let the row underneath peek out below it).
   const dockStyle = useAnimatedStyle(() => ({
-    opacity: shown.value,
-    transform: [{ translateY: (1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
+    opacity: Math.min(1, shown.value),
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
   }));
   const joining = step.kind === 'join';
   const reviewing = step.kind === 'review';
@@ -366,7 +368,8 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
     <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 0, right: 0, bottom: 0 }, dockStyle]}>
       {/* The dock: rows fade out under it (r2: no row peeking above or below the bar). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
-      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: YOU_CARD_BOTTOM }}>
+      {/* The strip bleeds 40 pt past the bottom edge, so nothing ever shows under it. */}
+      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: YOU_CARD_BOTTOM + 40, marginBottom: -40 }}>
         <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens your card' : 'Shows your row'}
           onPress={joining ? onOpenCard : onPress}
           style={({ pressed }) => ({
