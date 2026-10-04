@@ -8,8 +8,9 @@ export function minWatchMs(isShort: boolean | undefined): number {
   return isShort ? 10_000 : 30_000;
 }
 
-export function earnedView(openedAt: number | null, closedAt: number, isShort: boolean | undefined): boolean {
-  return openedAt !== null && closedAt - openedAt >= minWatchMs(isShort);
+/** Coins are earned by time actually playing (ads and pauses excluded), or by finishing. */
+export function earnedView(playedMs: number, ended: boolean, isShort: boolean | undefined): boolean {
+  return ended || playedMs >= minWatchMs(isShort);
 }
 
 /** A video counts as NEW for its first 24 hours on the channel. */
@@ -69,38 +70,120 @@ export function formatDuration(seconds: number | null | undefined): string | nul
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/** Player settings: privacy-enhanced host, rel=0 (end screen only from this channel), no annotations, no keyboard, inline. */
+export const PLAYER_VARS = {
+  autoplay: 1,
+  playsinline: 1,
+  rel: 0,
+  modestbranding: 1,
+  iv_load_policy: 3,
+  fs: 1,
+  disablekb: 1,
+  cc_load_policy: 0,
+  origin: EMBED_BASE_URL,
+} as const;
+
+export const PLAYER_HOST = 'https://www.youtube-nocookie.com';
+
 /**
- * Kid-safe player URL: privacy-enhanced youtube-nocookie host, rel=0 (end
- * screen suggests only this channel), no annotations, no keyboard, inline.
- * Embeds never show comments.
+ * The player page. It drives the official IFrame Player API so the app
+ * hears the real events: "ready" when the player can play (the spinner waits
+ * for this, not for the page), "state" for playing/paused/buffering, "ended",
+ * and "blocked" when an end-screen or card tap tried to switch videos (the
+ * player is put back on the chosen video). Embeds never show comments.
  */
-export function embedUrl(videoId: string): string {
-  const params = [
-    'autoplay=1',
-    'playsinline=1',
-    'rel=0',
-    'modestbranding=1',
-    'iv_load_policy=3',
-    'fs=1',
-    'disablekb=1',
-    `origin=${encodeURIComponent(EMBED_BASE_URL)}`,
-  ].join('&');
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${params}`;
+export function playerHtml(videoId: string): string {
+  if (!VIDEO_ID.test(videoId)) throw new Error('bad video id');
+  const vars = JSON.stringify(PLAYER_VARS);
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{position:absolute;inset:0;width:100%;height:100%}</style>
+</head><body><div id="p"></div><script>
+var VID=${JSON.stringify(videoId)},player=null,readySent=false;
+function post(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}
+window.onerror=function(){post({type:'error',code:'script'});};
+window.onYouTubeIframeAPIReady=function(){
+ player=new YT.Player('p',{host:${JSON.stringify(PLAYER_HOST)},videoId:VID,width:'100%',height:'100%',playerVars:${vars},
+  events:{
+   onReady:function(e){readySent=true;post({type:'ready'});try{e.target.playVideo();}catch(x){}},
+   onStateChange:function(e){
+    var d={};try{d=player.getVideoData()||{};}catch(x){}
+    if(d.video_id&&d.video_id!==VID){try{player.cueVideoById(VID);}catch(x){}post({type:'blocked'});return;}
+    if(e.data===0){post({type:'ended'});return;}
+    post({type:'state',state:e.data});
+   },
+   onError:function(e){post({type:'error',code:e.data});}
+  }});
+};
+window.tpsReplay=function(){try{player.seekTo(0,true);player.playVideo();}catch(x){}};
+window.tpsPause=function(){try{player.pauseVideo();}catch(x){}};
+var t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';t.onerror=function(){post({type:'error',code:'api'});};document.head.appendChild(t);
+setTimeout(function(){if(!readySent)post({type:'error',code:'timeout'});},20000);
+</script></body></html>`;
 }
 
-export function embedHtml(videoId: string): string {
-  if (!VIDEO_ID.test(videoId)) throw new Error('bad video id');
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<style>html,body{margin:0;height:100%;background:#000}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style>
-</head><body><iframe src="${embedUrl(videoId)}" title="Theme Park Shark video" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`;
+export type PlayerMessage =
+  | { type: 'ready' }
+  | { type: 'state'; state: number }
+  | { type: 'ended' }
+  | { type: 'blocked' }
+  | { type: 'error'; code: string | number };
+
+export function parsePlayerMessage(data: string): PlayerMessage | null {
+  try {
+    const msg = JSON.parse(data) as { type?: unknown };
+    if (msg && typeof msg.type === 'string' && ['ready', 'state', 'ended', 'blocked', 'error'].includes(msg.type)) {
+      return msg as PlayerMessage;
+    }
+  } catch { /* not ours */ }
+  return null;
+}
+
+/** YouTube player states. */
+export const PLAYING = 1;
+
+/** Hosts the player's own frames come from. Nothing else may load a frame. */
+const FRAME_HOSTS = ['www.youtube-nocookie.com', 'www.youtube.com'];
+
+function hostOf(url: string): string | null {
+  const m = url.match(/^https:\/\/([^/?#:]+)(?:[/?#]|$)/i);
+  return m ? m[1].toLowerCase() : null;
 }
 
 /**
- * Only the player page itself may load in the top frame. Taps on the YouTube
- * logo, the title or "Watch on YouTube" would open youtube.com (comments,
- * unrelated suggestions), so those are blocked; the iframe's own loads pass.
+ * Navigation allowlist for the player WebView.
+ * - Top frame: only our player page (about:blank or the themeparkshark.com
+ *   base it is served under). The YouTube logo, title, "Watch on YouTube",
+ *   channel avatar and ad click-throughs would all open other pages
+ *   (comments, unrelated suggestions, advertiser sites), so they are blocked.
+ * - Frames: only the YouTube embed itself (youtube-nocookie.com/embed or
+ *   youtube.com/embed) and blank/srcdoc frames. Ad landing pages, sign-in,
+ *   and any other site cannot load even as a frame.
+ * Media and script fetches are not navigations and are unaffected.
  */
 export function allowPlayerNavigation(url: string, isTopFrame: boolean | undefined): boolean {
-  if (isTopFrame === false) return true;
-  return url === 'about:blank' || url === EMBED_BASE_URL || url === `${EMBED_BASE_URL}/` || url.startsWith('https://www.youtube-nocookie.com/embed/');
+  if (url === 'about:blank' || url === 'about:srcdoc') return true;
+  if (isTopFrame !== false) {
+    return url === EMBED_BASE_URL || url === `${EMBED_BASE_URL}/`;
+  }
+  const host = hostOf(url);
+  if (!host || !FRAME_HOSTS.includes(host)) return false;
+  return /^https:\/\/[^/]+\/embed\//i.test(url);
+}
+
+/** Only these origins may be opened by the WebView at all. */
+export const PLAYER_ORIGIN_WHITELIST = ['https://themeparkshark.com', 'https://www.youtube-nocookie.com', 'https://www.youtube.com', 'about:*'];
+
+/** "Today", "Yesterday", "3 days ago", "2 weeks ago" for the hero card. */
+export function postedAgo(video: SocialPostType, now: number = Date.now()): string | null {
+  const ms = publishedMs(video);
+  if (!Number.isFinite(ms)) return null;
+  const hours = Math.max(0, (now - ms) / 3_600_000);
+  if (hours < 1) return 'Just posted';
+  if (hours < 24) return `${Math.floor(hours)} hour${Math.floor(hours) === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 14) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 9) return `${weeks} weeks ago`;
+  return null;
 }

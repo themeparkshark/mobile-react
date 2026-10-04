@@ -33,24 +33,37 @@ test('the video id comes from the API or, for old payloads, the permalink', () =
   assert.equal(feed.videoIdOf(video({ permalink: 'https://example.com/x' })), null);
 });
 
-test('the embed is privacy-enhanced with rel=0 and no way to inject markup', () => {
-  const url = feed.embedUrl('Vdiom632yME');
-  assert.match(url, /^https:\/\/www\.youtube-nocookie\.com\/embed\/Vdiom632yME\?/);
-  assert.match(url, /[?&]rel=0(&|$)/);
-  assert.match(url, /[?&]playsinline=1(&|$)/);
-  assert.match(feed.embedHtml('Vdiom632yME'), /referrerpolicy="strict-origin-when-cross-origin"/);
-  assert.throws(() => feed.embedHtml('"><script>alert(1)</script>'));
+test('the player page uses the IFrame API on youtube-nocookie with rel=0 and no way to inject markup', () => {
+  const html = feed.playerHtml('Vdiom632yME');
+  assert.match(html, /host:"https:\/\/www\.youtube-nocookie\.com"/);
+  assert.match(html, /"rel":0/);
+  assert.match(html, /"playsinline":1/);
+  assert.match(html, /https:\/\/www\.youtube\.com\/iframe_api/);
+  // Ready comes from the player, not the page load; a switched video is put back.
+  assert.match(html, /onReady:function\(e\)\{readySent=true;post\(\{type:'ready'\}\)/);
+  assert.match(html, /d\.video_id!==VID\)\{try\{player\.cueVideoById\(VID\)/);
+  assert.throws(() => feed.playerHtml('"><script>alert(1)</script>'));
+  assert.deepEqual(feed.parsePlayerMessage('{"type":"ready"}'), { type: 'ready' });
+  assert.equal(feed.parsePlayerMessage('{"type":"navigate","url":"x"}'), null);
+  assert.equal(feed.parsePlayerMessage('not json'), null);
 });
 
-test('the player never navigates its top frame to youtube.com or elsewhere', () => {
+test('the player never navigates its top frame away, and frames are only the YouTube embed', () => {
   assert.equal(feed.allowPlayerNavigation('https://themeparkshark.com/', true), true);
   assert.equal(feed.allowPlayerNavigation('about:blank', true), true);
-  assert.equal(feed.allowPlayerNavigation('https://www.youtube-nocookie.com/embed/Vdiom632yME?rel=0', true), true);
   assert.equal(feed.allowPlayerNavigation('https://www.youtube.com/watch?v=Vdiom632yME', true), false);
+  assert.equal(feed.allowPlayerNavigation('https://www.youtube-nocookie.com/embed/Vdiom632yME', true), false);
   assert.equal(feed.allowPlayerNavigation('https://m.youtube.com/', true), false);
   assert.equal(feed.allowPlayerNavigation('https://themeparkshark.com/some-article/', true), false);
-  // The iframe's own loads (player scripts, video) are not top-frame navigations.
-  assert.equal(feed.allowPlayerNavigation('https://www.youtube.com/s/player/x.js', false), true);
+  // Frames
+  assert.equal(feed.allowPlayerNavigation('https://www.youtube-nocookie.com/embed/Vdiom632yME?rel=0', false), true);
+  assert.equal(feed.allowPlayerNavigation('https://www.youtube.com/embed/Vdiom632yME', false), true);
+  assert.equal(feed.allowPlayerNavigation('about:srcdoc', false), true);
+  assert.equal(feed.allowPlayerNavigation('https://www.youtube.com/watch?v=x', false), false);
+  assert.equal(feed.allowPlayerNavigation('https://googleads.g.doubleclick.net/pagead/ads', false), false);
+  assert.equal(feed.allowPlayerNavigation('https://accounts.google.com/ServiceLogin', false), false);
+  assert.equal(feed.allowPlayerNavigation('https://www.youtube-nocookie.com.evil.test/embed/x', false), false);
+  assert.equal(feed.allowPlayerNavigation('http://www.youtube-nocookie.com/embed/x', false), false);
 });
 
 test('durations format like YouTube and grid cards use the 16:9 thumbnail', () => {
@@ -70,7 +83,7 @@ test('the Watch page refetches on focus and the card plays in-app, not in a brow
   assert.match(screen, /RefreshControl/);
   assert.match(screen, /sortNewestFirst\(/);
   const card = read('src/components/SocialPost.tsx');
-  assert.match(card, /<YouTubePlayerModal /);
+  assert.match(card, /<YouTubePlayerModal\b/);
   assert.match(card, /isNewVideo\(/);
   // Recycled cells must not carry another video's watched state.
   assert.doesNotMatch(card, /useState<boolean>\(socialPost\.has_watched\)/);
@@ -79,12 +92,40 @@ test('the Watch page refetches on focus and the card plays in-app, not in a brow
   assert.match(player, /javaScriptCanOpenWindowsAutomatically=\{false\}/);
 });
 
-test('coins need a real watch: 30s for a video, 10s for a Short, never a quick open/close', () => {
-  assert.equal(feed.earnedView(0, 29_999, false), false);
-  assert.equal(feed.earnedView(0, 30_000, false), true);
-  assert.equal(feed.earnedView(0, 10_000, true), true);
-  assert.equal(feed.earnedView(0, 3_000, true), false);
-  assert.equal(feed.earnedView(null, 60_000, false), false);
+test('coins need real playing time: 30s for a video, 10s for a Short, or finishing', () => {
+  assert.equal(feed.earnedView(29_999, false, false), false);
+  assert.equal(feed.earnedView(30_000, false, false), true);
+  assert.equal(feed.earnedView(10_000, false, true), true);
+  assert.equal(feed.earnedView(3_000, false, true), false);
+  assert.equal(feed.earnedView(5_000, true, false), true);
   const card = read('src/components/SocialPost.tsx');
-  assert.match(card, /if \(!earned\) return;/);
+  assert.match(card, /earnedView\(result\.playedMs, result\.ended, socialPost\.is_short\)/);
+});
+
+test('the Watch reward shows once: the server coin banner is suppressed for the view call only', () => {
+  const filter = loadTs('src/api/broadcastFilter.ts');
+  const list = ['You earned 25 Shark Coins!', 'Level up! You reached level 4!'];
+  assert.deepEqual([...filter.visibleBroadcasts(list, true)], ['Level up! You reached level 4!']);
+  assert.deepEqual([...filter.visibleBroadcasts(list, false)], list);
+  assert.match(read('src/api/endpoints/social-posts/view.ts'), /\[QUIET_COIN_BROADCAST\]: true/);
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /visibleBroadcasts<string>\(/);
+});
+
+test('the player keeps no cookies, limits origins and covers the end screen', () => {
+  const player = read('src/components/watch/YouTubePlayerModal.tsx');
+  assert.match(player, /originWhitelist=\{PLAYER_ORIGIN_WHITELIST\}/);
+  assert.match(player, /incognito/);
+  assert.match(player, /sharedCookiesEnabled=\{false\}/);
+  assert.match(player, /That's a wrap!/);
+  assert.match(player, /!ready && !failed/);
+  assert.ok(!feed.PLAYER_ORIGIN_WHITELIST.includes('*'));
+});
+
+test('the Watch page sits on the clean background with a hero and per-video coin chips', () => {
+  const screen = read('src/screens/WatchScreen.tsx');
+  assert.match(screen, /<CleanScreenBackground underTopbar>/);
+  assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured \/>/);
+  const card = read('src/components/SocialPost.tsx');
+  assert.match(card, /styles\.coinChip/);
+  assert.match(card, /styles\.watchedChip/);
 });
