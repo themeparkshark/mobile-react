@@ -484,7 +484,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   haptic="medium"
                   scaleTo={0.88}
                   accessibilityLabel="Send reply"
-                  accessibilityState={{ disabled: sendOff || Boolean(quickProblem || hintProblem) }}
+                  accessibilityState={{ disabled: sendOff }}
                   style={[styles.send, sendOff && styles.sendOff]}
                 >
                   <GameIcon name="arrow" size={30} />

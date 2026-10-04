@@ -101,6 +101,7 @@ const DISTRESS = compile(RULES.distress);
 const REVIEW_YOU = compile([RULES.review_you])[0];
 const REVIEW_TOPICS = compile([RULES.review_topics])[0];
 const REVIEW_PHRASES = compile(RULES.review_phrases);
+const REVIEW_EXEMPT = compile(RULES.review_exempt).map((re) => new RegExp(re.source, 'giu'));
 const TENS: Record<string, string> = RULES.tens;
 const TEENS: Record<string, string> = RULES.teens;
 const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
@@ -355,7 +356,7 @@ export function isDistress(text: string): boolean {
   return text.trim() !== '' && matchesAny(DISTRESS, forms(text));
 }
 
-export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher.";
+export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher. If you feel unsafe right now, call or text 988.";
 
 /** Same as SafeText::needsReview: "u" plus a personal topic. The server holds it; the app does not block. */
 export function needsReview(text: string): boolean {
@@ -363,6 +364,8 @@ export function needsReview(text: string): boolean {
   let lower = text.toLowerCase();
   for (const themed of RULES.themed_streets) lower = lower.split(themed).join(' park ');
   lower = lower.replace(/\b(ur|your)\s+(pics?|photos?|selfies?|videos?|vids?)\b/gu, ' post ');
+  // Park talk that only looks personal: "what age can you ride", "been to the Star Wars hotel".
+  for (const exempt of REVIEW_EXEMPT) lower = lower.replace(exempt, ' park ');
   const all = forms(lower);
   return all.some((f) => REVIEW_YOU.test(f) && REVIEW_TOPICS.test(f)) || matchesAny(REVIEW_PHRASES, all);
 }
@@ -431,8 +434,13 @@ export const REVIEW_LINE = "Posting... we're giving it a quick look.";
 
 /** The line under a held post or reply, for its author. */
 export function reviewLine(review: string | null | undefined): string | null {
-  return review === 'care' ? CARE_LINE : review === 'pending' ? REVIEW_LINE : null;
+  if (review === 'care') return CARE_LINE;
+  if (review === 'person') return PERSON_LINE;
+  return review === 'pending' ? REVIEW_LINE : null;
 }
+
+/** A hold only a person can clear: never "quick look". */
+export const PERSON_LINE = 'A grown-up from Theme Park Shark will check this soon.';
 
 // ── Time ────────────────────────────────────────────────────────────────
 

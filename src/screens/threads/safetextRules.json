@@ -1,5 +1,5 @@
 {
-  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted. R5: distress (self-harm about the author) and review_you + review_topics / review_phrases (hold for a person) are not blocks; see SafeText::isDistress and ::needsReview. tens/teens turn number words like 'fifty five' into digits.",
+  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted. R5: distress (self-harm about the author) and review_you + review_topics / review_phrases (hold for a person) are not blocks; see SafeText::isDistress and ::needsReview. tens/teens turn number words like 'fifty five' into digits. R6: review_exempt phrases are removed before the review check (park talk like 'what age can you ride').",
   "vars": {
     "CHAT": "snap|snp|snapchat|sc|insta|instagram|the gram|gram|kik|discord|disc|telegram|whatsapp|whats app|wa|messenger|wechat|dms|signal|skype|viber|imessage|groupme",
     "APPS": "snap|snp|snapchat|sc|insta|instagram|ig|the gram|kik|discord|telegram|whatsapp|whats app|messenger|tiktok|tik tok|tt|youtube|yt|twitch|roblox|rblx|rbx|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter|steam|pinterest|bereal|threads|bird app|the bird app|x app|signal|skype|viber|line|imessage|zoom|groupme",
@@ -18,7 +18,7 @@
     "\\b(follow|friend|find)\\s+me\\s+on\\b",
     "\\b(my|our)\\s+(last\\s+name|teacher\\s?s?\\s+name|real\\s+name)\\b",
     "\\b(my|our)\\s+school\\s+(is\\s+(called|named)|name\\s+is|s\\s+name|is\\s+[a-z]+\\s+(elementary|middle|high|academy))\\b|\\b(my|our)\\s+school\\s+is\\s+[a-z]+\\s*$",
-    "\\bi\\s+go\\s+to\\s+[a-z ]{0,30}\\s+(school|elementary|middle|academy)\\b",
+    "\\bi\\s+go\\s+to\\s+[a-z ]{0,30}(?<!after)(?<!before)\\s+(school|elementary|middle|academy)\\b",
     "\\b(zip\\s*code|password)\\b",
     "(^|\\s)@[a-z0-9_.]{3,}",
     "\\b(on|in|my|add|follow|dm|find|me\\s+on)\\s+({CHAT})\\b",
@@ -48,7 +48,8 @@
     "\\b(dame|pasame|p[aá]same)\\s+tu\\s+(n[uú]mero|snap|insta|whats|celular|tel[eé]fono)",
     "\\bgot\\s+({APPS})\\s*\\?",
     "\\b(on|in)\\s+({APPS})\\s+my\\s+(name|user|username|tag)\\s+is\\b",
-    "\\b(send|share)\\s+(me\\s+)?(ur|your)\\s+(location|loc|address|addy)\\b"
+    "\\b(send|share)\\s+(me\\s+)?(ur|your)\\s+(location|loc|address|addy)\\b",
+    "\\bmandame\\s+tu\\b"
   ],
   "grooming": [
     "\\bhow\\s+old\\s+(are|r)\\s+(you|u|ya)\\b",
@@ -58,7 +59,7 @@
     "\\b(where|whr|wher|were)\\s+(do|d)\\s+(you|u|ya)\\s+live\\b",
     "\\b(where|whr|wher)\\s+(are|r)\\s+(you|u|ya)\\s+(staying|at)\\b",
     "\\b(where|whr|wher)\\s+(you|u|ya)\\s+at\\b",
-    "\\b(what|which|wat)\\s+(hotel|resort|room|campsite)\\b",
+    "\\b(what|which|wat)\\s+(hotel|resort|room|campsite)(\\s+(r|are|is)\\s+(u|you|ur|your|ya|yall)\\b|\\s+(do|did)\\s+(u|you|ya|yall)\\s+(stay|staying|sleep)|\\s*\\??\\s*$)",
     "\\b(what|which|wat)\\s+(park|line|ride|land|queue|area)\\s+(are|r)\\s+(you|u|ya)\\s+(at|in|on)\\s+(rn|now|right\\s+now|currently)\\b",
     "\\b(what|which|wat|where|whr)\\s+(school|skool|scool|grade)\\b",
     "\\b(do\\s+)?(you|u)\\s+go\\s+to\\s+(school|skool|scool)\\b",
@@ -474,7 +475,9 @@
     "kill\\s+urself",
     "(nobody|no\\s+one)\\s+likes\\s+(u|you)",
     "just\\s+leave\\s+forever",
-    "go\\s+die"
+    "go\\s+die",
+    "\\b(u|you)\\s+should\\s+(just\\s+)?(die|kill\\s+ur?self|kill\\s+yourself)\\b",
+    "\\bgo\\s+jump\\s+off\\b"
   ],
   "self_harm": [
     "unalive",
@@ -486,7 +489,9 @@
     "end\\s+my\\s+life",
     "hurt\\s+myself",
     "cut\\s+myself",
-    "suicide"
+    "suicide",
+    "\\b(u|you)\\s+should\\s+(just\\s+)?(die|kill\\s+ur?self|kill\\s+yourself)\\b",
+    "\\bgo\\s+jump\\s+off\\b"
   ],
   "run_exempt_after": [
     "score",
@@ -526,15 +531,43 @@
     "\\bi\\s+(hate|h8)\\s+my\\s?self\\b",
     "\\b(dont|do\\s+not)\\s+want\\s+to\\s+(live|be\\s+alive|be\\s+here\\s+anymore|exist)\\b",
     "\\bwish\\s+i\\s+(was|were)\\s+(dead|never\\s+born)\\b",
-    "\\bno\\s+reason\\s+to\\s+live\\b"
+    "\\bno\\s+reason\\s+to\\s+live\\b",
+    "\\bkms\\b",
+    "\\bkys\\s*my\\s*self\\b",
+    "\\b(dont|do\\s+not|dnt)\\s+(want|wanna)\\s+(to\\s+)?(live|be\\s+alive|be\\s+here|exist)\\b",
+    "\\b(better|happier)\\b.{0,30}\\bif\\s+i\\s+(was|were|wasnt|werent)\\s+(gone|here|around|alive)\\b",
+    "\\b(miss|care|notice)\\b.{0,20}\\bif\\s+i\\s+(was|were)\\s+gone\\b",
+    "\\b(jump|jumping)\\s+off\\s+(the|a|my)\\s+([a-z]+\\s+){0,2}(roof|bridge|building|garage|balcony|cliff)\\b",
+    "\\b(life|it|living)\\s+(isnt|is\\s+not|aint|not)\\s+worth\\s+(it|living)\\b",
+    "\\bsleep\\s+forever\\b",
+    "\\b(and|to|just)\\s+never\\s+wake\\s+up\\b"
   ],
-  "review_you": "\\b(u|you|ur|your|yours|ya|urself|yourself|youre|tu|tus|eres|estas|tienes|vives)\\b",
-  "review_topics": "\\b(age|ages|born|grade|school|teacher|town|city|state|location|address|house|street|hotel|room|floor|face|parents|alone|mature|edad|anos|escuela|donde|papas)\\b|\\b(any|a|some|more)\\s+(pics?|photos?|selfies?|fotos?)\\b|\\b(pics?|photos?|selfies?|fotos?)\\s+(of|de)\\s+(u|you|ur|urself|yourself|ti)\\b|\\blive\\s+(in|near|by|around|far|close|from)\\b|\\b(tell|from|away\\s+from|without)\\s+(ur|your)\\s+(mom|dad|mum|parents)\\b",
+  "review_you": "\\b(u|you|ur|your|yours|ya|yall|urself|yourself|youre|tu|tus|eres|estas|tienes|vives)\\b",
+  "review_topics": "\\b(age|ages|born|grade|school|teacher|town|city|state|location|address|house|street|hotel|room|floor|face|parents|alone|mature|edad|anos|escuela|donde|papas|bf|gf|boyfriend|girlfriend|body|eyes|older|younger|teen|teens|property|trust|privately|elementary|homeschool\\w*)\\b|\\b(any|a|some|more)\\s+(pics?|photos?|selfies?|fotos?)\\b|\\b(pics?|pictures?|photos?|selfies?|fotos?)\\s+(of|de)\\s+(u|you|ur|urself|yourself|ti)\\b|\\b(turn\\s+on|open|use)\\s+(ur|your)\\s+(camera|cam)\\b|\\bstaying\\s+(on|at|in)\\b|\\blive\\s+(in|near|by|around|far|close|from)\\b|\\b(tell|show|from|away\\s+from|without)\\s+(this\\s+|it\\s+)?(to\\s+)?(ur|your)\\s+(mom|dad|mum|parents|folks|family)\\b",
   "review_phrases": [
     "\\bh\\w{0,2}\\s+old\\s+(is|iz|r|are)\\s+(u|you|ya)\\b",
     "\\b(i\\s?ll|ill|i\\s+will|i\\s+can)\\s+(find|come\\s+to|get)\\s+(u|you)\\b",
     "\\bjust\\s+(u|you)\\b",
-    "\\bwhat\\s+(do\\s+|does\\s+)?(u|you|ya)\\s+look\\s+like\\b"
+    "\\bwhat\\s+(do\\s+|does\\s+)?(u|you|ya)\\s+look\\s+like\\b",
+    "\\bcome\\s+(alone|by\\s+(ur|your)self)\\b",
+    "\\bcome\\s+(sit|hang|chill)\\s+with\\s+me\\b",
+    "\\bbetween\\s+(me|us)\\b",
+    "\\b(talk|chat)\\s+(somewhere\\s+else|privately|in\\s+private)\\b",
+    "\\bwhere\\s+in\\s+the\\s+park\\b",
+    "\\bwhere\\s+(do|r|are)\\s+(u|you|ya)\\s+(stay|staying)\\b",
+    "\\bwhat\\s+part\\s+of\\s+[a-z]+\\s+(r|are)\\s+(u|you|ya)\\s+from\\b",
+    "\\b(u|you)\\s+from\\s+[a-z]+(\\s+[a-z]+)?\\s*\\?",
+    "\\bdelete\\s+this\\b",
+    "\\b(come|meet|go)\\s+(to|in)\\s+the\\s+bathroom\\b",
+    "\\b(first|any)\\s+(kid|kids|person|one)\\s+(who|that|to)\\s+(messages|dms|texts|adds|msgs)\\b",
+    "\\b(u|you)\\s+look\\s+young\\b",
+    "\\bhow\\s+old\\s+will\\b",
+    "\\bpretty\\s+eyes\\b",
+    "\\b(ill|i\\s+will|im\\s+gonna|i\\s+can)\\s+wait\\s+for\\s+(u|you|ya)\\b",
+    "\\b(i\\s+can|ill|i\\s+will)\\s+(buy|get)\\s+(u|you)\\b",
+    "\\bte\\s+quedas\\b",
+    "\\b(vernos|vamos)\\b.*\\bsol[oa]s\\b",
+    "\\bcan\\s+i\\s+see\\s+(a\\s+)?(pic|picture|photo|selfie)\\b"
   ],
   "tens": {
     "twenty": "2",
@@ -558,5 +591,12 @@
     "seventeen": "17",
     "eighteen": "18",
     "nineteen": "19"
-  }
+  },
+  "review_exempt": [
+    "\\b(what|which)\\s+age\\s+(can|do|should)\\s+(u|you|kids)\\s+(ride|go\\s+on)\\b",
+    "\\bbeen\\s+to\\s+the\\s+([a-z]+\\s+){0,4}(hotel|resort)\\b",
+    "\\bhotel\\s+(pool|pools|food|towels?|breakfast|lobby)\\b",
+    "\\b(ur|your)\\s+house\\s+(decorated|decorations|lights)\\b",
+    "\\bparents\\s+let\\s+(u|you)\\s+stay\\s+for\\b"
+  ]
 }

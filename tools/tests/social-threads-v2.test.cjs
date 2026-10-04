@@ -191,8 +191,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '69acedb9a4548cf98c9b3b4f012edb8d4840f5eb4841eed1e24885bcc58c3c05');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '5ff28f7f43de8d5522098e1680294acfff5991774aba5fe3d67dc7df72384c0d');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'ebb6c8cdda3d3d2c7904a65b0491f3600e233e8dab1f39282c9e51bcd99e3cd7');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '8995b287090390c50503363501a9e2f8384a93af0687658a22799aba9d87e640');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -323,4 +323,20 @@ test('R5: phone tricks from the panel are caught', () => {
   for (const ok of ['Mickey pretzel was $8.49 and so worth it', 'the castle show starts at 8:30 and again at 9:45', 'seventy five minutes for Peter Pan!']) {
     assert.equal(model.checkDraft(ok), null, ok);
   }
+});
+
+test('R6: 988 in the care line, person-only holds say a grown-up will check, send state matches its accessibility state', () => {
+  assert.match(model.CARE_LINE, /call or text 988/);
+  assert.equal(model.reviewLine('person'), model.PERSON_LINE);
+  assert.doesNotMatch(model.PERSON_LINE, /quick look/i);
+  for (const text of ['i want to kms', 'i dont wanna be alive anymore', 'life isnt worth it']) assert.equal(model.isDistress(text), true, text);
+  for (const text of ['ill be waiting by the castle, come alone', 'dont show this to ur mom', 'can i see a picture of you', 'where do u stay at']) {
+    assert.equal(model.needsReview(text), true, text);
+  }
+  for (const ok of ['Which hotel pool do you like best?', "I go to the park after school sometimes, it's so close", "What age can you ride Rock n Roller Coaster? I'm 48 inches"]) {
+    assert.equal(model.checkDraft(ok), null, ok);
+    assert.equal(model.needsReview(ok), false, ok);
+  }
+  assert.match(read('src/screens/ThreadScreen.tsx'), /accessibilityState=\{\{ disabled: sendOff \}\}/);
+  assert.match(read('src/screens/threads/Composer.tsx'), /held === 'person' \? 'Grown-up check'/);
 });
