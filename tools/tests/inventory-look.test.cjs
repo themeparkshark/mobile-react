@@ -291,7 +291,7 @@ test('Inventory: same screen, NEW is reported in batches, the deep link pins its
   assert.match(screen, /itemVisiblePercentThreshold: 60, minimumViewTime: 800/);
   assert.match(screen, /markItemsSeen\(ids\)/);
   assert.match(screen, /getItems\(currentItemType\.id, page, pin\)/);
-  assert.match(screen, /setParams\?\.\(\{ highlightItemId: undefined \}\)/);
+  assert.match(screen, /setParams\?\.\(\{ highlightItemId: undefined, focusItemId: undefined \}\)/);
   assert.match(screen, /estimatedItemSize=\{compact \? 116 : 150\}/);
   const items = fs.readFileSync('src/api/endpoints/me/inventory/items.ts', 'utf8');
   assert.match(items, /pin_item_id: pinItemId/);
