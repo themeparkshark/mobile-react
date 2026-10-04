@@ -2,8 +2,9 @@
  * Server-hosted art for the fright map (GET /parks/{id}/fright `assets`):
  * slug lookups, sheet geometry, window flicker timelines per MAP_FX_SPEC,
  * the encounter's Chaos Hour and an image cache that loads each URL once.
- * Pure, unit tested. Nothing here hard-codes a critter or haunt slug: spots
- * name their art (`fx.critter`, `fx.art`) and the manifest says what exists.
+ * Pure, unit tested. Nothing here hard-codes a scareactor or haunt slug: spots
+ * name their art (`fx.scareactors`, `fx.art`) and the manifest says what
+ * exists. Scareactor lookups and rows live in scareactors.ts.
  */
 import type { FrightAssets, FrightHauntLayers, FrightSheetAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { randAt } from './random';
@@ -15,12 +16,6 @@ export function hauntLayers(assets: FrightAssets | null | undefined, spot: Pick<
   const slug = spot.fx?.art;
   const layers = slug ? assets?.haunts?.[slug]?.layers : null;
   return layers && layers.base && validFrame(layers.frame) ? layers : null;
-}
-
-/** A critter's sheet by slug (null: unknown slug, draw the placeholder). */
-export function critterAsset(assets: FrightAssets | null | undefined, slug: string | null | undefined): FrightSheetAsset | null {
-  const a = slug ? assets?.critters?.[slug] : null;
-  return a && (a.sheet || a.static) && validFrame(a.frame) ? a : null;
 }
 
 export function iconAsset(assets: FrightAssets | null | undefined, slug: string): FrightSheetAsset | null {
@@ -36,18 +31,9 @@ function validFrame(frame: readonly number[] | null | undefined): boolean {
   return !!frame && frame.length === 2 && frame[0] > 0 && frame[1] > 0;
 }
 
-/** Row index for a row name ("idle", "jump", "appear"...): rows may carry suffixes ("idle loop"). -1 when absent. */
+/** Row index for a row name ("idle", "scare", "shh"...): rows may carry suffixes ("idle loop"). -1 when absent. */
 export function rowIndex(asset: Pick<FrightSheetAsset, 'rows'>, name: string): number {
   return asset.rows.findIndex(row => row === name || row.startsWith(`${name} `));
-}
-
-/**
- * A critter sheet's [idle, lurk, jump] rows. The scareactor redo names its
- * pop-out row "scare" (rows idle, lurk, scare, slide): it plays as the jump.
- */
-export function critterRows(asset: Pick<FrightSheetAsset, 'rows'>): number[] {
-  const jump = rowIndex(asset, 'jump');
-  return [rowIndex(asset, 'idle'), rowIndex(asset, 'lurk'), jump >= 0 ? jump : rowIndex(asset, 'scare')];
 }
 
 /** Frames per row (manifest value, 10 by default) and the frame rate (10 fps, never above 10). */

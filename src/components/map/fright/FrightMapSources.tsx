@@ -1,7 +1,7 @@
 /**
  * The map-anchored half of Fin-ister Nights, rendered inside the MapView:
  * the night palette (one GL fill over the tiles, above the time-of-day tint,
- * under every pin), haunt lanterns at the real entrances, scare-critters at
+ * under every pin), haunt lanterns at the real entrances, scareactors at
  * the Fright Reefs, ambient props and the encounter. Anything more than one
  * screen off view is unmounted (bounds re-read every 1.5 s), and only the
  * nearest spots spend the tier's sprite budget.
@@ -15,9 +15,9 @@ import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
 import type { FrightAmbientAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
 import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
-import { faceToward, reefReaction, stepPops, POP_START, type PopState } from './critters';
-import { critterSlugs } from './frightArt';
-import { activeShowStart, critterAsset, encounterChaos, hauntLayers, iconAsset } from './frightAssets';
+import { stepPops, POP_START, type PopState } from './critters';
+import { activeShowStart, encounterChaos, hauntLayers } from './frightAssets';
+import { castUrls, encounterScareactor, reefCast, scareactorAsset, watchSide } from './scareactors';
 import { frightEvents, stepAmbient, type AmbientSource } from './events';
 import { randAt } from './random';
 import { FRIGHT_SOUNDS, playFrightSfx } from './frightAudio';
@@ -29,6 +29,7 @@ import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } 
 import { EncounterCritter, EncounterRing, HAUNT_ANCHOR, LagoonGlow, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
 import { RepaintContext } from './frightRepaint';
 import type { FrightMapInput } from './types';
+import { prefetchFrightImages } from './useFrightImage';
 import { useFrightState } from './useFrightState';
 
 const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
@@ -183,6 +184,14 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     for (const key of result.pops) if (!pendingPops.current.includes(key)) pendingPops.current.push(key);
   }, [player?.latitude, player?.longitude, reefCircles, st.effectsOn, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The park's cast (the server sends only this park's sheets) goes to the disk cache once the
+  // mode is on, so a reef or the encounter never waits on the network when it comes into view.
+  const castKey = castUrls(assets).join('|');
+  useEffect(() => {
+    if (!on || !castKey) return;
+    prefetchFrightImages(castKey.split('|'));
+  }, [on, castKey]);
+
   const encounter = input.tonight.encounter;
   const encounterLive = !!encounter && validPoint(encounter) && (() => {
     const start = Date.parse(encounter.starts_at);
@@ -295,27 +304,25 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         // Opacity-only: the reef's whole sprite tree stays mounted for the payload. Off screen,
         // hidden or faded = opacity 0 with motion paused; LOD cross-fades glyph and critters.
         const on = shown(reef.key);
-        const slugs = critterSlugs(reef.fx?.critter);
-        const d = player ? distanceMeters(player, reef) : Infinity;
-        const reaction = reefReaction(d, reef.radius);
-        const watch = !on || reaction === 'ignore' || !player ? 0 : faceToward(bearingDeg(reef, player), heading);
+        const cast = reefCast(reef.fx);
+        const watch = !on || !player ? 0 : watchSide(distanceMeters(player, reef), reef.radius, bearingDeg(reef, player), heading);
         const ppm = pointsPerMeter(zoom, reef.latitude);
         // Capped at 90 pt: a reef canvas is (2 x wander + 90) points square at 3x, and four of them add up.
         const wander = Math.max(18, Math.min(90, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
         const glyph = lod === 'glyph' || st.tier === 'calm';
         const slots = critterWant(reef.fx);
-        const sheets = slugs.map(slug => critterAsset(assets, slug));
+        const sheets = cast.map(slug => scareactorAsset(assets, slug));
         return (
           <Marker key={`fr-${reef.key}`} coordinate={pin(reef)}>
             <PlacedSpot id={`reef:${reef.key}`}>
               <ShowWhen on={on}>
                 <ReefLod glyph={glyph}
-                  critters={<ReefCritters reefKey={reef.key} slugs={slugs} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
-                    wanderPts={wander} clock={alive.clock} animated={on && !glyph && animate && n > 0} lite={lite} watch={watch}
+                  critters={<ReefCritters reefKey={reef.key} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
+                    wanderPts={wander} clock={alive.clock} animated={on && !glyph && animate && n > 0} full={st.tier === 'full'} watch={watch}
                     jumpToken={tokens[`jump:${reef.key}`] ?? 0} jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible}
                     mistUrl={assets?.fog_night?.ground_mist ?? null} />}
-                  glyphArt={<ReefGlyph slug={slugs[0] ?? null} staticUrl={sheets[0]?.static ?? null} intensity={visible} />} />
+                  glyphArt={<ReefGlyph staticUrl={sheets[0]?.static ?? null} intensity={visible} />} />
               </ShowWhen>
             </PlacedSpot>
           </Marker>
@@ -397,7 +404,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         touchEnabled={encounterOnScreen && !!encounter && !!onEncounterPress}
         accessibilityLabel={encounter ? `${encounter.name}, encounter` : 'Encounter'}>
         <ShowWhen on={encounterOnScreen && !!encounter}>
-          <EncounterCritter critter={encounter?.critter ?? 'chuckles'} asset={encounter ? iconAsset(assets, encounter.critter) : null}
+          <EncounterCritter asset={encounter ? scareactorAsset(assets, encounterScareactor(assets, encounter)) : null}
             chaos={encounter ? encounterChaos(encounter) : false} clock={alive.clock}
             animated={encounterOnScreen && !!encounter && animate} full={st.tier === 'full'}
             spawnKey={encounterOnScreen && encounter ? encounter.key : null} />

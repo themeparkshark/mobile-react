@@ -11,9 +11,11 @@ export type FrightReaction = 'giggled' | 'jumped' | 'screamed';
 
 /** Map FX placement for a spot (art/map-fx/MAP_FX_SPEC.md). Unknown keys are ignored. */
 export interface FrightFx {
-  /** Scare-critter sprite family at a reef ("chum-jester", "kelp-keeper"...). */
+  /** Deprecated sea-critter slugs (older servers). Never drawn: the reef cast is `scareactors`. */
   readonly critter?: string | null;
-  /** How many critters lurk in this reef (clamped by the tier budget). */
+  /** The reef's scareactor cast, keys of `assets.scareactors` ("sa-jester"...). */
+  readonly scareactors?: readonly string[] | null;
+  /** How many scareactors stand in this reef (clamped by the tier budget). */
   readonly critters?: number | null;
   /** Haunt lantern window-flicker profile ("candle", "neon", "strobe-soft"). */
   readonly flicker?: string | null;
@@ -59,6 +61,8 @@ export interface FrightSpot {
 export interface FrightEncounter {
   readonly key: string;
   readonly critter: 'chuckles' | 'riptide';
+  /** The human performer drawn on the map, a key of `assets.scareactors` (sa-jester, sa-ringmaster). */
+  readonly scareactor?: string | null;
   readonly name: string;
   readonly line: string;
   readonly latitude: number;
@@ -171,10 +175,12 @@ export interface FrightSheetAsset {
   readonly static?: string | null;
   /** Frame size in pixels [w, h]. */
   readonly frame: readonly [number, number];
-  /** Row names, top to bottom ("idle", "lurk", "jump"; icons: "idle loop", "appear one-shot"...). */
+  /** Row names, top to bottom (scareactors: "idle", "lurk", "scare", "slide"; icons: "idle loop", "shh one-shot"). */
   readonly rows: readonly string[];
   readonly frames_per_row?: number | null;
   readonly fps?: number | null;
+  /** Scareactors: the slide row may play (false for swamp, ghost and stilt characters). */
+  readonly slide_ok?: boolean | null;
 }
 
 export interface FrightAmbientAsset {
@@ -200,7 +206,11 @@ export interface FrightHauntLayers {
 
 export interface FrightAssets {
   readonly version?: number;
-  readonly critters?: Readonly<Record<string, FrightSheetAsset>> | null;
+  /** The current park's scareactor sheets (rows idle, lurk, scare, slide), by slug. */
+  readonly scareactors?: Readonly<Record<string, FrightSheetAsset>> | null;
+  /** Encounter critter ("chuckles", "riptide") to its scareactor slug. */
+  readonly lantern_star?: Readonly<Record<string, string>> | null;
+  /** Mascot icon sheets (the Shusher). */
   readonly icons?: Readonly<Record<string, FrightSheetAsset>> | null;
   /** bat, eyes, clouds, moon, lightning, ground-mist, jack-o-lantern, lantern, bush, crow... */
   readonly ambient?: Readonly<Record<string, FrightAmbientAsset>> | null;

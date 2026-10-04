@@ -56,7 +56,7 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
 
 test('no Skia node swaps anywhere in the fright layer: no `? <Sprite> : <Other>` and no `&& <Sprite>` (opacity gates only)', () => {
   const dir = path.join(root, 'src/components/map/fright');
-  const skia = 'Canvas|Group|Rect|Circle|Oval|Path|Points|Mask|ImageShader|RadialGradient|LinearGradient|BlurMask|SkImage|SheetFrame|SoftEllipse|FeatheredMist|CritterBody|Critter|Bat|Eyes|Pumpkin|HangingLantern|SparksSlot|SkidSparks|SparkDot|LoopProp|BoltSprite|LayerWindow|LayeredFacade|PlaceholderFacade|PlaceholderWindow|TrailDot|HauntLantern|ReefCritters|ReefGlyph|ReefLod|SpotProps|EncounterSprite|HiddenSpot';
+  const skia = 'Canvas|Group|Rect|Circle|Oval|Path|Points|Mask|ImageShader|RadialGradient|LinearGradient|BlurMask|SkImage|SheetFrame|SoftEllipse|FeatheredMist|CritterBody|Critter|Scareactor|Bat|Eyes|Pumpkin|HangingLantern|SparksSlot|SkidSparks|SparkDot|LoopProp|BoltSprite|LayerWindow|LayeredFacade|PlaceholderFacade|PlaceholderWindow|TrailDot|HauntLantern|ReefCritters|ReefGlyph|ReefLod|SpotProps|EncounterSprite|HiddenSpot';
   const swap = new RegExp(`(\\?|:|&&)\\s*\\(?\\s*<(${skia})\\b`);
   for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.tsx'))) {
     const lines = fs.readFileSync(path.join(dir, file), 'utf8').split('\n');

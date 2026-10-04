@@ -1,299 +1,277 @@
 /**
  * Development fixture: the art manifest (art/MANIFEST.json, v1) with every
  * path resolved to a file:// URL on this Mac, the way the server resolves them
- * to CDN URLs. The iOS simulator can read these; tests never load them.
+ * to CDN URLs, cut to what tonight's USF payload carries (the Orlando reef
+ * cast plus the Lantern Star pair, the Shusher icon, no sea critters). The
+ * iOS simulator can read these; tests never load them.
  * Generated from MANIFEST.json; regenerate rather than edit by hand.
  */
 import type { FrightAssets } from '../../../../api/endpoints/fright/types';
 
 export const USF_FIXTURE_ASSETS: FrightAssets = {
   "version": 1,
-  "critters": {
-    "barker-crab": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/barker-crab.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/barker-crab-static.webp",
+  "scareactors": {
+    "sa-barker": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-barker.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-barker-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "juggler-octopus": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/juggler-octopus.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/juggler-octopus-static.webp",
+    "sa-battle-player": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-battle-player.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-battle-player-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "shark-pumpkin": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-pumpkin.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-pumpkin-static.webp",
+    "sa-candy-klown": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-candy-klown.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-candy-klown-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "little-minnow": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/little-minnow.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/little-minnow-static.webp",
+    "sa-hobo-clown": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-hobo-clown.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-hobo-clown-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "windup-fish": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/windup-fish.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/windup-fish-static.webp",
+    "sa-jester": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-jester.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-jester-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "ghost-jelly": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/ghost-jelly.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/ghost-jelly-static.webp",
+    "sa-juggler": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-juggler.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-juggler-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "pumpkin-puffer": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/pumpkin-puffer.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/pumpkin-puffer-static.webp",
+    "sa-masked-usher": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-masked-usher.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-masked-usher-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "shark-scarecrow": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-scarecrow.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-scarecrow-static.webp",
+    "sa-pale-clown": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-pale-clown.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-pale-clown-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "whoopee-blowfish": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/whoopee-blowfish.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/whoopee-blowfish-static.webp",
+    "sa-ringmaster": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-ringmaster.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-ringmaster-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "balloon-jelly": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/balloon-jelly.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/balloon-jelly-static.webp",
+    "sa-sideshow-girl": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-sideshow-girl.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-sideshow-girl-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "shark-prank": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-prank.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/shark-prank-static.webp",
+    "sa-squad-zombie": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-squad-zombie.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-squad-zombie-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "stylist-crab": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/stylist-crab.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/stylist-crab-static.webp",
+    "sa-stilt-carny": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-stilt-carny.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-stilt-carny-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": false
     },
-    "comb-lobster": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/comb-lobster.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/comb-lobster-static.webp",
+    "sa-storm-lurker": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-storm-lurker.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-storm-lurker-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "acrobat-starfish": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/acrobat-starfish.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/acrobat-starfish-static.webp",
+    "sa-storyteller": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-storyteller.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-storyteller-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     },
-    "tightrope-seahorse": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/tightrope-seahorse.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/tightrope-seahorse-static.webp",
+    "sa-tinsel-clown": {
+      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-tinsel-clown.webp",
+      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/scareactors/sa-tinsel-clown-static.webp",
       "frame": [
         128,
         128
       ],
+      "frames_per_row": 10,
+      "fps": 10,
       "rows": [
         "idle",
         "lurk",
-        "jump"
+        "scare",
+        "slide"
       ],
-      "frames_per_row": 10,
-      "fps": 10
-    },
-    "mudskipper": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/mudskipper.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/mudskipper-static.webp",
-      "frame": [
-        128,
-        128
-      ],
-      "rows": [
-        "idle",
-        "lurk",
-        "jump"
-      ],
-      "frames_per_row": 10,
-      "fps": 10
-    },
-    "bog-snail": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/bog-snail.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/critters/bog-snail-static.webp",
-      "frame": [
-        128,
-        128
-      ],
-      "rows": [
-        "idle",
-        "lurk",
-        "jump"
-      ],
-      "frames_per_row": 10,
-      "fps": 10
+      "slide_ok": true
     }
   },
+  "lantern_star": {
+    "chuckles": "sa-jester",
+    "riptide": "sa-ringmaster"
+  },
   "icons": {
-    "chuckles": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/chuckles.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/chuckles-static.webp",
-      "frame": [
-        160,
-        160
-      ],
-      "rows": [
-        "idle loop",
-        "appear one-shot",
-        "chaos-hour loop"
-      ],
-      "fps": 10
-    },
-    "riptide": {
-      "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/riptide.webp",
-      "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/riptide-static.webp",
-      "frame": [
-        160,
-        160
-      ],
-      "rows": [
-        "idle loop",
-        "appear one-shot",
-        "chaos-hour loop"
-      ],
-      "fps": 10
-    },
     "shusher": {
       "sheet": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/shusher.webp",
       "static": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/icons/shusher-static.webp",
@@ -597,7 +575,7 @@ export const USF_FIXTURE_ASSETS: FrightAssets = {
         ],
         "base": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/haunts/h06-rock-legend-encore-base.webp",
         "windows": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/haunts/h06-rock-legend-encore-windows.webp",
-        "window_count": 3,
+        "window_count": 4,
         "ghost": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/haunts/h06-rock-legend-encore-ghost.webp",
         "door": "file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/fright-nights/art/map-fx/haunts/h06-rock-legend-encore-door.webp"
       }

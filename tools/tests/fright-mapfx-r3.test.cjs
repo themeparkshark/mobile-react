@@ -9,6 +9,7 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 
 const fb = loadTs('src/components/map/fright/frightBudget.ts');
 const fa = loadTs('src/components/map/fright/frightAssets.ts');
+const sa = loadTs('src/components/map/fright/scareactors.ts');
 const root = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
@@ -66,12 +67,11 @@ test('Map hides the panned-away player shark while it is off screen (no corner s
   assert.match(map, /<FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} hud=\{rail\} \/>/);
 });
 
-test('scareactor redo sheets (rows idle, lurk, scare, slide) play their scare row as the jump', () => {
-  assert.deepEqual([...fa.critterRows({ rows: ['idle', 'lurk', 'scare', 'slide'] })], [0, 1, 2]);
-  assert.deepEqual([...fa.critterRows({ rows: ['idle', 'lurk', 'jump'] })], [0, 1, 2]);
-  assert.deepEqual([...fa.critterRows({ rows: ['idle'] })], [0, -1, -1]);
-  const pilot = { sheet: 'x', static: 'y', frame: [128, 128], rows: ['idle', 'lurk', 'scare', 'slide'], frames_per_row: 10, fps: 10 };
-  assert.ok(fa.critterAsset({ critters: { 'sa-jester': pilot } }, 'sa-jester'), 'a 4-row sheet parses');
+test('scareactor sheets (rows idle, lurk, scare, slide) play their scare row as the jump', () => {
+  assert.deepEqual([...sa.scareactorRows({ rows: ['idle', 'lurk', 'scare', 'slide'], slide_ok: true })], [0, 1, 2, 3]);
+  assert.deepEqual([...sa.scareactorRows({ rows: ['idle'] })], [0, -1, -1, -1]);
+  const pilot = { sheet: 'x', static: 'y', frame: [128, 128], rows: ['idle', 'lurk', 'scare', 'slide'], frames_per_row: 10, fps: 10, slide_ok: true };
+  assert.ok(sa.scareactorAsset({ scareactors: { 'sa-jester': pilot } }, 'sa-jester'), 'a 4-row sheet parses');
 });
 
 test('image cache: unused decoded images are disposed after a minute; in-use ones never', async () => {

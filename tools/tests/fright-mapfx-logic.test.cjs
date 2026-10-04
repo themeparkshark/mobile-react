@@ -1,11 +1,12 @@
 'use strict';
-// Fin-ister Nights map FX: thunder timing, critters, reef pops, window flicker.
+// Fin-ister Nights map FX: thunder timing, reef scareactors, reef pops, window flicker.
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { loadTs } = require('./helpers/ts-module.cjs');
 
 const thunder = loadTs('src/components/map/fright/thunder.ts');
 const critters = loadTs('src/components/map/fright/critters.ts');
+const sa = loadTs('src/components/map/fright/scareactors.ts');
 const flicker = loadTs('src/components/map/fright/flicker.ts');
 const geo = loadTs('src/components/map/fright/geo.ts');
 
@@ -62,28 +63,16 @@ test('thunder: the flash follows MAP_FX_SPEC (0.35 peak, a second blip, out by 4
   assert.ok(thunder.flashLevel(0.21, 1, true) < 0.1, 'lite has no second blip');
 });
 
-test('critters wander inside the reef, cycle idle/lurk/jump and are deterministic', () => {
-  const moods = new Set();
-  for (let t = 0; t < 120; t += 0.25) {
-    const p = critters.critterPose(3, t, 80, 0, -1);
-    assert.ok(Math.hypot(p.x, p.y) <= 80, 'inside the wander radius');
-    assert.ok(p.hop <= 5 && p.hop >= -40);
-    moods.add(p.mood);
+test('scareactors stand still inside the reef, spread around it, deterministic', () => {
+  for (const slots of [1, 2, 3]) {
+    const spots = Array.from({ length: slots }, (_, i) => sa.scareactorSpot(3 + i * 37, i, slots, 80));
+    for (const p of spots) {
+      assert.ok(Math.hypot(p.x, p.y / 0.6) <= 80.5, 'inside the wander radius');
+      assert.ok(Math.abs(p.y) <= 0.6 * 80 + 0.5, 'a flat ellipse reads as ground');
+    }
+    for (let i = 1; i < spots.length; i++) assert.notDeepEqual({ ...spots[i] }, { ...spots[0] }, 'no two on one spot');
   }
-  assert.deepEqual([...moods].sort(), [0, 1, 2]);
-  assert.deepEqual(critters.critterPose(3, 12.5, 80, 0, -1), critters.critterPose(3, 12.5, 80, 0, -1));
-});
-
-test('critters: a watching critter holds still and faces the player; a pop is a big jump', () => {
-  const a = critters.critterPose(9, 10, 80, -1, -1);
-  const b = critters.critterPose(9, 30, 80, -1, -1);
-  assert.equal(a.x, b.x);
-  assert.equal(a.face, -1);
-  assert.equal(critters.critterPose(9, 10, 80, 1, -1).face, 1);
-  const pop = critters.critterPose(9, 10, 80, 0, 0.4);
-  assert.equal(pop.mood, critters.MOOD_JUMP);
-  assert.ok(pop.hop < -25, 'jumps high');
-  assert.notEqual(critters.critterPose(9, 10, 80, 0, 2).hop, pop.hop, 'pop ends');
+  assert.deepEqual({ ...sa.scareactorSpot(3, 0, 3, 80) }, { ...sa.scareactorSpot(3, 0, 3, 80) });
 });
 
 test('reef reaction: watch within 60 m, inside within the radius', () => {
