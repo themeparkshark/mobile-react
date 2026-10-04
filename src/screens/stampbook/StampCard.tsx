@@ -662,6 +662,7 @@ const styles = StyleSheet.create({
   statusText: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
   preload: { position: 'absolute', opacity: 0, width: 1, height: 1, overflow: 'hidden' },
   levelUpWrap: { position: 'absolute', left: 24, right: 24, top: '30%', zIndex: 30, elevation: 30 },
+  levelUpConfetti: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   levelUpPlate: {
     alignItems: 'center', paddingVertical: 18, paddingHorizontal: 12, borderRadius: 22,
     backgroundColor: LEGENDARY_GOLD, borderWidth: 4, borderColor: '#FFFFFF', overflow: 'hidden',
@@ -676,15 +677,13 @@ const styles = StyleSheet.create({
 function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotion: boolean; onDone: () => void }) {
   // The plate is a static, opaque, full-size view; only its wrapper scales and fades, so the gold
   // fill covers the whole plate from the first frame.
+  // Opaque from its first frame: it pops in by scale only and fades only on the way out.
   const pop = useSharedValue(reducedMotion ? 1 : 0.4);
-  const fade = useSharedValue(reducedMotion ? 1 : 0);
+  const fade = useSharedValue(1);
   useEffect(() => {
     haptic('success');
     playSfx('fx.redeemOpen');
-    if (!reducedMotion) {
-      fade.value = withTiming(1, { duration: 140 });
-      pop.value = withSpring(1, { damping: 9, stiffness: 260 });
-    }
+    if (!reducedMotion) pop.value = withSpring(1, { damping: 9, stiffness: 260 });
     const out = setTimeout(() => { fade.value = withTiming(0, { duration: 260 }); }, 1500);
     const done = setTimeout(onDone, 1800);
     return () => { clearTimeout(out); clearTimeout(done); };
@@ -693,12 +692,13 @@ function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotio
   const style = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ scale: pop.value }] }));
   return (
     <Animated.View pointerEvents="none" style={[styles.levelUpWrap, style]} accessibilityLiveRegion="assertive">
+      {/* Confetti sits behind the plate so it never covers the words or the level number. */}
+      {!reducedMotion && <View style={styles.levelUpConfetti}><Confetti width={300} height={240} seed={level} count={24} /></View>}
       <View style={styles.levelUpPlate}>
         <GameIcon name="xp" size={48} />
         <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>LEVEL UP!</Text>
         <View style={styles.levelUpPill}><Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.2}>Level {level}</Text></View>
       </View>
-      {!reducedMotion && <Confetti width={300} height={240} seed={level} count={24} />}
     </Animated.View>
   );
 }

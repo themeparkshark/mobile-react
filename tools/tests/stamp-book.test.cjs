@@ -367,6 +367,11 @@ test('round 7: opaque level-up plate above everything; the held stamp drives the
   assert.match(card, /levelUpWrap: \{ position: 'absolute', left: 24, right: 24, top: '30%', zIndex: 30, elevation: 30 \}/);
   assert.match(card, /levelUpPlate: \{\n\s+alignItems: 'center',[^}]*backgroundColor: LEGENDARY_GOLD/);
   assert.match(card, /<View style=\{styles\.levelUpPill\}>/);
+  // Confetti renders before (behind) the plate, and the plate never fades in: opaque from its first frame.
+  const lv = card.slice(card.indexOf('function LevelUp('));
+  assert.ok(lv.indexOf('<Confetti') > 0 && lv.indexOf('<Confetti') < lv.indexOf('<View style={styles.levelUpPlate}>'), 'confetti behind the plate');
+  assert.match(lv, /const fade = useSharedValue\(1\);/);
+  assert.doesNotMatch(lv, /fade\.value = withTiming\(1/);
   // Hand-off: overlay on top, never flattened; ribbon, frame and button from the held stamp.
   assert.match(card, /overlay: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: DIALOG_CARD\.backgroundColor, zIndex: 20, elevation: 20 \}/);
   assert.match(card, /<View collapsable=\{false\} style=\{\[styles\.content, overlay && styles\.overlay\]\}/);

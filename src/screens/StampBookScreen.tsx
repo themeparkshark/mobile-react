@@ -139,6 +139,9 @@ export default function StampBookScreen() {
     if (!devHooks || status !== 'ready') return;
     const tab = process.env.EXPO_PUBLIC_STAMP_BOOK_TAB;
     if (tab) setFilter(tab);
+    // Scroll the book down by N points, for capturing tiles below the fold.
+    const scrollY = Number(process.env.EXPO_PUBLIC_STAMP_BOOK_SCROLL ?? 0);
+    if (scrollY > 0) setTimeout(() => scroller.current?.scrollTo({ y: scrollY, animated: false }), 1200);
     const slug = process.env.EXPO_PUBLIC_STAMP_BOOK_OPEN;
     const found = slug ? sections.flatMap(s => s.stamps).find(s => s.slug === slug) : undefined;
     if (found) { const t = setTimeout(() => { setFresh(true); setSelected(found); }, 900); return () => clearTimeout(t); }
