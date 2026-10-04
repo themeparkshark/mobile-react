@@ -19,7 +19,7 @@
  */
 import * as Haptics from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -27,19 +27,20 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import purchase from '../../api/endpoints/me/inventory/purchase-item';
-import updateInventory from '../../api/endpoints/me/inventory/update-inventory';
 import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, setProgressText, shortfall as shortBy, tryOnCta, wearingIds, wishHintCopy,
+  afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
+  shortfall as shortBy, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
 import { ShopItem, ShopSetPiece, ShopSetReward, ShopSetSummary } from '../../models/shop-today';
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
-import { CoinArc, LandFlash, MAX_FONT, PieceChip, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
+import { CoinArc, LandFlash, MAX_FONT, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
+import { wearItem } from './inventoryQueue';
 import { TileArt } from './ShopTile';
 import { useWished, wishStore } from './wishStore';
 
@@ -50,11 +51,14 @@ const STAGE_H = Math.round(Math.min(300, SHEET_H * (SHEET_H < 760 ? 0.34 : 0.38)
 const STAGE_TOP = 52;
 const CTA_ROW = SCREEN_W - 32;
 const PRIMARY_W = Math.min(300, Math.round(CTA_ROW * 0.62));
-// The tail rests on the plinth face (stageCard measures the art and the plinth).
-const CARD = stageCard(SCREEN_W - 28 - 6, STAGE_H - 6);
+// The tail rests on the plinth face (stageCard measures the art and the plinth). The wear hop
+// lifts the shark HOP pt and the absorb pop scales the stage 4% about its centre: the card leaves
+// that much room above the tallest hat, so the head never clips.
+const HOP = 18;
+const CARD = stageCard(SCREEN_W - 28 - 6, STAGE_H - 6, HOP + 0.04 * (STAGE_H / 2) + 4);
 const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
-type Phase = 'idle' | 'confirm' | 'buying' | 'landing' | 'bought' | 'failed' | 'unknown' | 'checking';
+type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
 
 export type Wearable = { id: number; name: string; icon_url: string | null; paper_url: string | null; no_eye_url?: string | null;
@@ -123,7 +127,7 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
-  onClose, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
+  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -134,13 +138,18 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   /** Opened from an owned hero: the item is already yours ("Wear it now"). */
   readonly startBought?: boolean;
   readonly onClose: () => void;
+  /** The sheet has slid away and its modal is about to hide (onClose follows once it is gone). */
+  readonly onLeaving?: () => void;
   readonly onWish: (item: ShopItem) => void;
-  /** Called the moment the server confirms the buy, with the set reward (the shelf owns the reveal). */
-  readonly onPurchased: (item: ShopItem, reward: ShopSetReward | null) => void;
+  /**
+   * Called the moment the server confirms the buy, with the set reward (the shelf owns the reveal).
+   * A buy recovered by the check that finished a set passes 'set_complete' when no reward is known.
+   */
+  readonly onPurchased: (item: ShopItem, reward: ShopSetReward | null, recovered?: 'set_complete') => void;
   /** Called once the player's look is refreshed with the item on (the shelf shows the toast). */
   readonly onWorn: (item: ShopItem) => void;
-  /** Asks the server whether this player now owns the item (refetches the shop). null if unreachable. */
-  readonly checkOwned: (itemId: number) => Promise<boolean | null>;
+  /** Asks the server whether this player now owns the item (refetches the shop), with that item's fresh set. null if unreachable. */
+  readonly checkOwned: (itemId: number) => Promise<{ owns: boolean; set: ShopSetSummary | null } | null>;
   /** Today's shop is still building (fallback): buying waits a moment. */
   readonly buyPaused?: boolean;
   /** A set reward is waiting: close after the landing beat. */
@@ -164,8 +173,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   // A set reward is waiting: let the landing breathe (~1.2 s), then slide away so the reveal can play.
   useEffect(() => {
-    if (!rewardPending || landed === 0) return;
-    const t = setTimeout(() => closeRef.current(), still ? 400 : 1200);
+    const hold = revealHoldMs(rewardPending, landed, still);
+    if (hold == null) return;
+    const t = setTimeout(() => closeRef.current(), hold);
     return () => clearTimeout(t);
   }, [rewardPending, landed]);
 
@@ -194,25 +204,52 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const stageStyle = useAnimatedStyle(() => {
     const k = hop.value;
     return { transform: [
-      { translateY: -26 * Math.sin(Math.PI * Math.min(1, k)) },
-      { rotate: `${Math.sin(k * Math.PI * 4) * 9 * (1 - k)}deg` },
-      { scale: stageScale.value * (1 + 0.06 * Math.sin(Math.PI * Math.min(1, k))) },
+      { translateY: -HOP * Math.sin(Math.PI * Math.min(1, k)) },
+      { rotate: `${Math.sin(k * Math.PI * 4) * 7 * (1 - k)}deg` },
+      { scale: stageScale.value * (1 + 0.04 * Math.sin(Math.PI * Math.min(1, k))) },
     ] };
   });
   const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
 
-  // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe).
+  // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe), then hides the
+  // modal and reports closed only once iOS has finished dismissing it (onDismiss), so the shelf
+  // can present the Set Complete reveal at once instead of waiting on a fixed timer.
   const drag = useSharedValue(0);
+  const [leaving, setLeaving] = useState(false);
+  const rewardPendingRef = useRef(rewardPending);
+  rewardPendingRef.current = rewardPending;
+  const closedRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const onLeavingRef = useRef(onLeaving);
+  onLeavingRef.current = onLeaving;
+  const finishClose = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    onCloseRef.current();
+  }, []);
+  const leave = useCallback(() => {
+    // Tell the shelf first, so its cover is up before this modal hides.
+    onLeavingRef.current?.();
+    setLeaving(true);
+    // Android has no onDismiss; on iOS this is only a guard in case it never fires.
+    setTimeout(finishClose, Platform.OS === 'ios' ? 500 : 0);
+  }, [finishClose]);
+  // With a Set Complete reveal waiting, the scrim deepens to the reveal's navy as the sheet slides
+  // away, so the kid goes from the landing straight into the payoff (no idle shelf).
+  const dusk = useSharedValue(0);
+  const duskStyle = useAnimatedStyle(() => ({ opacity: dusk.value }));
   const closeAnimated = useCallback(() => {
-    if (still) { onClose(); return; }
-    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(onClose)(); });
-  }, [still, onClose]);
+    if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
+    if (still) { leave(); return; }
+    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(leave)(); });
+  }, [still, leave]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
-      if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(onClose)());
+      if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(leave)());
       else drag.value = withSpring(0, { damping: 18 });
     });
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
@@ -227,17 +264,17 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   if (!item) return null;
   const badge = wearableBadge(item);
-  const owned = !!(item.shop?.is_owned ?? item.has_purchased) || phase === 'bought' || startBought || !!pieces.find(p => p.id === item.id)?.owned;
   const vipLocked = !!item.is_member_item && !player?.is_subscribed;
+  // While the piece is in flight the server's "owned" is ignored: the row holds still until it lands.
+  const row = tryOnLayout({ phase, startBought, vipLocked,
+    serverOwned: !!(item.shop?.is_owned ?? item.has_purchased) || !!pieces.find(p => p.id === item.id)?.owned });
+  const owned = row.owned;
   const name = itemDisplayName(item);
   const short = shortBy(balance, item.cost);
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
-  const busyPhase = phase === 'landing' || phase === 'checking';
-  const cta = tryOnCta({ owned, worn, vipLocked, short, phase: busyPhase ? 'buying' : phase === 'confirm' && buyPaused ? 'idle' : phase,
-    wear, finishes, cost: item.cost });
-  const paused = buyPaused && !owned && (cta.action === 'ask' || cta.action === 'buy');
+  const cta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused });
   const boughtNow = landed > 0;
 
   const toggleFull = () => {
@@ -257,7 +294,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   };
 
   const buy = async () => {
-    if (phase === 'buying') return;
+    if (phase !== 'confirm') return;
     setPhase('buying');
     try {
       const result = await purchase(item);
@@ -280,28 +317,38 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       const data = (error as { response?: { data?: { code?: string } } })?.response?.data;
       if (data?.code === 'not_enough_currency') { void refreshPlayer(); setPhase('idle'); return; }
-      await settleUnknown();
+      await settleUnknown('buy');
     }
   };
 
   // Never claim "you weren't charged" without asking the server: owned (from a fresh shop) or coins gone.
-  const settleUnknown = async () => {
-    const [fresh, owns] = await Promise.all([refreshPlayer().catch(() => null), checkOwned(item.id).catch(() => null)]);
-    const outcome = afterBuyError(balance, item.cost, fresh && owns !== null ? { coins: Number(fresh.coins ?? 0), owns } : null);
-    if (outcome === 'bought') { setBalanceAfter(Number(fresh?.coins ?? balance)); onPurchased(item, null); land(); }
-    // Not charged: back to the normal two-tap buy. Still unknown: offer to check again.
-    else setPhase(outcome === 'not_charged' ? 'idle' : 'unknown');
+  // The first error confirmed not charged says so (Try again goes back to confirm); only a
+  // "Check again" that finds nothing returns quietly to the normal two-tap buy.
+  const settleUnknown = async (source: 'buy' | 'recheck') => {
+    setPhase('checking');
+    const [fresh, check] = await Promise.all([refreshPlayer().catch(() => null), checkOwned(item.id).catch(() => null)]);
+    const outcome = afterBuyError(balance, item.cost, fresh && check ? { coins: Number(fresh.coins ?? 0), owns: check.owns } : null);
+    const next = settleBuyError(outcome, source);
+    if (next === 'bought') {
+      setBalanceAfter(Number(fresh?.coins ?? balance));
+      setFullLook(false); setExtras([]);
+      // The reply with the set reward was lost: play the reveal from the fresh set, or at least say so.
+      const set = recoveredSetOutcome(finishes, check?.set);
+      if (set?.kind === 'reveal') onPurchased(item, set.reward);
+      else onPurchased(item, null, set?.kind === 'toast' ? 'set_complete' : undefined);
+      land();
+    } else setPhase(next);
   };
 
   const wearNow = async () => {
     if (worn) { closeAnimated(); return; }
     setWear('busy');
     try {
-      await updateInventory(item);
+      await wearItem(item);
       playSound(require('../../../assets/sounds/whoosh.mp3'));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       setWear('spinning');
-      if (!still) hop.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) });
+      if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) }); }
       // The hero, tiles and toast all read the refreshed look: they agree on the same frame.
       await Promise.all([refreshPlayer().catch(() => undefined), new Promise(r => setTimeout(r, still ? 300 : 900))]);
       onWorn(item);
@@ -316,8 +363,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       case 'wear': void wearNow(); break;
       case 'close': closeAnimated(); break;
       case 'vip': onClose(); RootNavigation.navigate('Membership'); break;
-      case 'retry_buy': void buy(); break;
-      case 'recheck': setPhase('checking'); void settleUnknown(); break;
+      case 'recheck': void settleUnknown('recheck'); break;
+      case 'none': break;
       case 'earn': onClose(); RootNavigation.navigate('Explore'); break;
       case 'buy': void buy(); break;
       case 'ask':
@@ -328,16 +375,17 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     }
   };
 
-  const secondary = owned ? { label: 'Keep shopping', onPress: closeAnimated }
-    : phase === 'confirm' || phase === 'buying' ? { label: 'Not now', onPress: () => setPhase('idle') } : null;
+  const secondary = row.secondary === 'keep_shopping' ? { label: 'Keep shopping', onPress: closeAnimated }
+    : row.secondary === 'not_now' ? { label: 'Not now', onPress: () => setPhase('idle') } : null;
   const confirming = phase === 'confirm' || phase === 'buying';
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={closeAnimated} statusBarTranslucent>
+    <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Animated.View entering={FadeIn.duration(still ? 120 : 160)} style={styles.scrim}>
+        <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
-          <Animated.View entering={still ? FadeIn.duration(120) : SlideInDown.springify().damping(18).stiffness(180)}
+          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
             style={[styles.sheet, { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>
               <View>
@@ -395,7 +443,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   {badge.label && <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
                 </View>
-                {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.leaving, { color: accent ?? BRAND.navy }]}>
+                {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
                   {lastChanceLine(item.shop?.season)}</Text>}
                 {item.shop?.returning && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
 
@@ -428,14 +476,15 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 )}
               </ScrollView>
               {/* Nothing reads half-cut against the buttons. */}
-              <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={styles.bodyFade} />
+              <LinearGradient pointerEvents="none" colors={['rgba(10,79,150,0)', SHOP_SURFACE.panel]} style={styles.bodyFade} />
             </View>
 
             <View style={styles.actions}>
-              {paused && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.note}>Today’s shop is opening in a moment. Buying is back right after.</Text>}
-              {cta.note && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.note, (phase === 'failed' || phase === 'unknown' || wear === 'failed') && { color: BRAND.red }]}>{cta.note}</Text>}
+              {cta.note && (phase === 'failed' || phase === 'unknown' || wear === 'failed' ? (
+                <View style={styles.alert}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{cta.note}</Text></View>
+              ) : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.note}>{cta.note}</Text>)}
               <View style={styles.row}>
-                {!owned && !confirming && !vipLocked && phase !== 'failed' && phase !== 'unknown' && (
+                {row.showWish && (
                   <Pressable onPress={() => onWish(item)} style={[styles.wish, wished && styles.wishOn]} accessibilityRole="button"
                     accessibilityState={{ selected: wished }} accessibilityLabel={wished ? 'Remove from wishlist' : 'Add to wishlist'}>
                     <WishHeart on={wished} size={26} />
@@ -444,11 +493,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
-                    loading={phase === 'buying' || busyPhase || wear === 'busy'} disabled={wear === 'spinning' || paused} />
+                    loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
+                    disabled={wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
                 {secondary && (
-                  <Pressable onPress={secondary.onPress} style={styles.secondary} accessibilityRole="button" hitSlop={6}>
+                  <Pressable onPress={secondary.onPress} disabled={!row.secondaryEnabled} accessibilityState={{ disabled: !row.secondaryEnabled }}
+                    style={[styles.secondary, !row.secondaryEnabled && { opacity: 0.45 }]} accessibilityRole="button" hitSlop={6}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.secondaryText}>{secondary.label}</Text>
                   </Pressable>
                 )}
@@ -472,16 +523,17 @@ function CoinAmount({ n, label }: { n: number; label?: string }) {
   );
 }
 
+const S = SHOP_SURFACE;
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: BRAND.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
-  grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: '#d9cfae', marginTop: 8 },
+  sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    borderWidth: 3, borderColor: S.border, ...SHADOW.card },
+  grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.55)', marginTop: 8 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6 },
-  balance: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 4, borderWidth: 2, borderColor: '#efe3bd' },
-  balanceText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, padding: 0, minWidth: 54 },
-  stage: { marginHorizontal: 14, marginTop: 8, borderRadius: 22, overflow: 'hidden', borderWidth: 3, borderColor: BRAND.white },
+  balance: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: S.well, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 4, borderWidth: 2, borderColor: S.line },
+  balanceText: { fontFamily: FONT.display, fontSize: 17, color: S.ink, padding: 0, minWidth: 54 },
+  stage: { marginHorizontal: 14, marginTop: 8, borderRadius: 22, overflow: 'hidden', borderWidth: 3, borderColor: S.border },
   flatArt: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tag: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(5,52,110,0.82)', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 3, transform: [{ rotate: '-6deg' }] },
@@ -491,41 +543,43 @@ const styles = StyleSheet.create({
   wearTag: { backgroundColor: BRAND.green, borderWidth: 2, borderColor: BRAND.white },
   wearTagText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white, letterSpacing: 1 },
   equation: { marginHorizontal: 14, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, backgroundColor: BRAND.white, borderRadius: 999, paddingVertical: 6, borderWidth: 2, borderColor: '#efe3bd' },
+    gap: 6, backgroundColor: S.well, borderRadius: 999, paddingVertical: 6, borderWidth: 2, borderColor: S.line },
   body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 24 },
   bodyFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 24 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flexShrink: 1, fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
-  rarity: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
+  title: { flexShrink: 1, fontFamily: FONT.display, fontSize: 24, color: S.ink },
+  rarity: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
   rarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
-  leaving: { fontFamily: FONT.display, fontSize: 16 },
-  back: { fontFamily: FONT.display, fontSize: 16, color: '#7c4dff' },
-  setCard: { backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 3, padding: 12, gap: 8 },
+  leaving: { fontFamily: FONT.display, fontSize: 16, color: S.inkGold },
+  back: { fontFamily: FONT.display, fontSize: 16, color: S.inkSoft },
+  setCard: { backgroundColor: S.card, borderRadius: 16, borderWidth: 3, padding: 12, gap: 8 },
   setHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  setName: { flexShrink: 1, fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
-  setCount: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navySoft },
+  setName: { flexShrink: 1, fontFamily: FONT.display, fontSize: 18, color: S.ink },
+  setCount: { fontFamily: FONT.display, fontSize: 16, color: S.inkGold },
   chips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   titleChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   titleChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLight },
-  xpChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef6ff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  xpChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.blue },
+  xpChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  xpChipText: { fontFamily: FONT.display, fontSize: 13, color: S.inkSoft },
   pieces: { gap: 10, paddingVertical: 8, paddingRight: 8 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' },
   track: { width: 54, height: 32, borderRadius: 16, backgroundColor: '#c9d7e6', padding: 3, borderWidth: 2, borderColor: '#aebfd2' },
   trackOn: { backgroundColor: BRAND.green, borderColor: BRAND.greenLip },
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
-  switchText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
-  wishHint: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft },
+  switchText: { fontFamily: FONT.display, fontSize: 15, color: S.ink },
+  wishHint: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
   actions: { paddingHorizontal: 16, paddingTop: 6, gap: 6 },
-  note: { textAlign: 'center', fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft },
+  note: { textAlign: 'center', fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
+  alert: { alignSelf: 'center', backgroundColor: S.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: S.border },
+  alertText: { textAlign: 'center', fontFamily: FONT.display, fontSize: 15, color: S.ink },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 56 },
   wish: { width: 54, height: 54, borderRadius: 27, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#ff9bbf' },
   wishOn: { borderColor: '#ff4f8b', backgroundColor: '#fff0f5' },
   secondary: { minHeight: 48, minWidth: 88, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  secondaryText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, textTransform: 'uppercase' },
-  op: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navySoft },
+  secondaryText: { fontFamily: FONT.display, fontSize: 16, color: S.ink, textTransform: 'uppercase' },
+  op: { fontFamily: FONT.display, fontSize: 22, color: S.inkSoft },
   amount: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  amountText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
-  amountLabel: { fontFamily: FONT.body, fontSize: 14, color: BRAND.navySoft },
+  amountText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
+  amountLabel: { fontFamily: FONT.body, fontSize: 14, color: S.inkSoft },
 });

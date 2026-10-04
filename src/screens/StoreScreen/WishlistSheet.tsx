@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getWishlist, removeFromWishlist, type WishlistItem } from '../../api/endpoints/me/wishlist';
 import { formatCoins } from '../../helpers/shopShelves';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
-import { MAX_FONT, WishHeart } from './shopUi';
+import { MAX_FONT, SHOP_SURFACE, WishHeart } from './shopUi';
 import { wishStore } from './wishStore';
 
 export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
@@ -48,9 +48,9 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
   const alerts = wishStore.alerts();
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View entering={FadeIn.duration(140)} style={styles.scrim}>
+      <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close wishlist" />
-        <Animated.View entering={still ? FadeIn.duration(120) : SlideInDown.springify().damping(18)}
+        <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18)}
           style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
           <View style={styles.head}>
             <WishHeart on size={24} />
@@ -60,8 +60,8 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.note}>
             {alerts ? 'Items come back. We’ll tell you next time one of these is in the shop.' : 'Items come back. Check the shop each day, or turn on Wishlist Alerts in Settings.'}
           </Text>
-          {items === null && !failed && <ActivityIndicator color={BRAND.navy} style={{ marginVertical: 24 }} />}
-          {note && <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.note, { color: BRAND.red }]}>{note}</Text>}
+          {items === null && !failed && <ActivityIndicator color={BRAND.white} style={{ marginVertical: 24 }} />}
+          {note && <View style={styles.alert}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{note}</Text></View>}
           {failed && <Text style={styles.empty}>Couldn’t load your wishlist. Try again in a moment.</Text>}
           {items && items.length === 0 && <Text style={styles.empty}>Heart anything in the shop to save it here.</Text>}
           {items && items.length > 0 && (
@@ -88,17 +88,20 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
   );
 }
 
+const S = SHOP_SURFACE;
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: BRAND.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 3, borderColor: BRAND.white,
+  sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 3, borderColor: S.border,
     paddingHorizontal: 16, paddingTop: 14, gap: 8, ...SHADOW.card },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
-  note: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft },
-  empty: { fontFamily: FONT.body, fontSize: 16, color: BRAND.navySoft, textAlign: 'center', marginVertical: 24 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#efe3bd' },
-  icon: { width: 52, height: 52 },
-  name: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
-  state: { fontFamily: FONT.body, fontSize: 15, color: '#7c93ab' },
-  stateIn: { color: BRAND.greenLip },
+  title: { flex: 1, fontFamily: FONT.display, fontSize: 24, color: S.ink },
+  note: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
+  alert: { alignSelf: 'flex-start', backgroundColor: S.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: S.border },
+  alertText: { fontFamily: FONT.display, fontSize: 15, color: S.ink },
+  empty: { fontFamily: FONT.body, fontSize: 16, color: S.inkSoft, textAlign: 'center', marginVertical: 24 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: S.line },
+  icon: { width: 52, height: 52, borderRadius: 12, backgroundColor: S.card },
+  name: { fontFamily: FONT.display, fontSize: 17, color: S.ink },
+  state: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
+  stateIn: { color: S.inkGold },
 });

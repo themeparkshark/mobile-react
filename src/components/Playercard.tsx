@@ -1,5 +1,8 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef } from 'react';
+
+/** Per-card SVG ids: two cards on one screen never share a gradient. */
+let contactIds = 0;
 import { Animated, GestureResponderEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { InventoryType } from '../models/inventory-type';
@@ -85,6 +88,7 @@ export default function Playercard({
   readonly shadowAt?: { left: string; top: string };
 }) {
   const translate = useRef(new Animated.Value(0)).current;
+  const contactId = useRef(`contact-${++contactIds}`).current;
   // Layers present on the first frame never pop; only ones put on later do.
   const firstFrameDone = useRef(false);
   useEffect(() => { firstFrameDone.current = true; }, []);
@@ -135,7 +139,7 @@ export default function Playercard({
     ]).start();
   };
 
-  // Single tap handler — resolves which equipped item was tapped by zone
+  // Single tap handler: resolves which equipped item was tapped by zone
   const handleSharkTap = useCallback((e: GestureResponderEvent) => {
     if (!onItemTap) return;
 
@@ -222,13 +226,13 @@ export default function Playercard({
             {/* Soft contact shadow: a radial fade, not a flat pill. */}
             <Svg width="100%" height="100%" viewBox="0 0 100 20" preserveAspectRatio="none">
               <Defs>
-                <RadialGradient id="contact" cx="50%" cy="50%" r="50%">
+                <RadialGradient id={contactId} cx="50%" cy="50%" r="50%">
                   <Stop offset="0" stopColor="#05346e" stopOpacity={0.42} />
                   <Stop offset="0.7" stopColor="#05346e" stopOpacity={0.16} />
                   <Stop offset="1" stopColor="#05346e" stopOpacity={0} />
                 </RadialGradient>
               </Defs>
-              <Ellipse cx="50" cy="10" rx="50" ry="10" fill="url(#contact)" />
+              <Ellipse cx="50" cy="10" rx="50" ry="10" fill={`url(#${contactId})`} />
             </Svg>
           </Animated.View>
         )}
@@ -276,7 +280,7 @@ export default function Playercard({
               <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
                 pointerEvents="none" style={styles.chestPin} />
             ) : null}
-            {/* Single tap overlay — uses coordinates to determine which equipped item */}
+            {/* Single tap overlay: uses coordinates to determine which equipped item */}
             {onItemTap && (
               <Pressable
                 onPress={handleSharkTap}

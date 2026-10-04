@@ -5,7 +5,7 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
@@ -19,6 +19,41 @@ import { artButtonFontSize } from '../../ui/artButtonText';
 
 /** Max Dynamic Type growth inside tiles and pills, so a big font never breaks a tile. */
 export const MAX_FONT = 1.3;
+
+/**
+ * Shop surfaces in the house look (UI kit: blue panels, white ink, gold accents), never white
+ * sheets. Every ink here is AA on every surface here (tools/tests checks the pairs).
+ */
+export const SHOP_SURFACE = {
+  /** Shelf panels and the try-on and wishlist sheets. */
+  panel: '#0a4f96',
+  /** Cards raised inside a panel (set callouts, the set card, the ready card). */
+  card: '#1a5c9e',
+  /** Pills on a panel (balance, coin math). */
+  well: '#08427f',
+  ink: '#ffffff',
+  inkSoft: '#e2f6ff',
+  /** Section accents on blue (set counts, titles). */
+  inkGold: '#ffe07a',
+  line: 'rgba(255,255,255,0.22)',
+  border: '#ffffff',
+  /** Error notes: white on the red lip (never red text on blue). */
+  alert: '#b3261b',
+} as const;
+
+/** The Set Complete reveal's backdrop; the buy hand-off bridges into it. */
+export const REVEAL_NAVY = '#0a2350';
+
+/** The night stage sky (reveal, hero). The hero card uses it too, so its stage has no seam. */
+export const NIGHT_SKY = ['#123f80', '#0a2a5c'] as const;
+
+/** A per-instance SVG id, so two stages on one screen never share a gradient. */
+let svgIds = 0;
+export function useSvgId(prefix: string): string {
+  const id = useRef<string | null>(null);
+  if (!id.current) id.current = `${prefix}-${++svgIds}`;
+  return id.current;
+}
 
 /**
  * Server-clock "now" that ticks on the minute boundary. Each pill owns its
@@ -39,8 +74,9 @@ export function useShopNow(offsetMs: number): number {
 
 /** Rarity backplates (top to bottom), Fortnite-style but in Alex's palette. */
 export const RARITY_PLATE: Record<number, [string, string]> = {
-  1: ['#f1f6fb', '#cfdfee'],
-  2: ['#e6f6ff', '#b8e4fb'],
+  // Common is a soft blue, never white on the blue shelves.
+  1: ['#e3eef9', '#bcd3ea'],
+  2: ['#dcf2ff', '#a3dbfa'],
   3: ['#f6e8fb', '#dcb6ec'],
   4: ['#fff1e2', '#ffc58f'],
   5: ['#fff7cf', '#ffd94a'],
@@ -135,8 +171,10 @@ export function Sheen({ still, delay = 300, width = 140 }: { still: boolean; del
  * is never a frame with the face but no label. Width is known up front, so the
  * label size never waits for a layout pass.
  */
-export function ShopCta({ label, icon, width, onPress, loading = false, disabled = false, done = false, still, accessibilityHint }: {
+export function ShopCta({ label, icon, width, onPress, loading = false, disabled = false, done = false, muted = false, still, accessibilityHint }: {
   label: string; icon?: GameIconName; width: number; onPress: () => void; loading?: boolean; disabled?: boolean;
+  /** "Opening soon": a quiet blue face that reads as waiting, not broken. */
+  muted?: boolean;
   /** A green confirmed state with a check (no washed-out disabled look). */
   done?: boolean; still: boolean; accessibilityHint?: string;
 }) {
@@ -151,10 +189,10 @@ export function ShopCta({ label, icon, width, onPress, loading = false, disabled
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const content = (
-    <Animated.View key={`${done ? 'done' : 'go'}:${label}`} entering={still ? undefined : FadeIn.duration(160)} exiting={still ? undefined : FadeOut.duration(120)}
+    <Animated.View key={`${done ? 'done' : muted ? 'muted' : 'go'}:${label}`} entering={still ? undefined : FadeIn.duration(160)} exiting={still ? undefined : FadeOut.duration(120)}
       style={StyleSheet.absoluteFill}>
     <Animated.View style={[StyleSheet.absoluteFill, styles.ctaLabel, labelStyle]}>
-      {(done || icon) && <GameIcon name={done ? 'check' : icon!} size={Math.round(fontSize * 1.2)} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
+      {(done || muted || icon) && <GameIcon name={done ? 'check' : muted ? 'timer' : icon!} size={Math.round(fontSize * 1.2)} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
       <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.2}
         style={[styles.ctaText, { fontSize }]}>{label}</Text>
     </Animated.View>
@@ -168,6 +206,8 @@ export function ShopCta({ label, icon, width, onPress, loading = false, disabled
       <Animated.View style={[{ width, height }, pressStyle]}>
         {done ? (
           <View style={[styles.ctaDone, { borderRadius: height / 2.4 }]}>{content}</View>
+        ) : muted ? (
+          <View style={[styles.ctaMuted, { borderRadius: height / 2.4 }]}>{content}</View>
         ) : (
           <ImageBackground source={BUTTON_ART.yellow} resizeMode="contain" style={{ width, height }}>{content}</ImageBackground>
         )}
@@ -213,7 +253,8 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
 export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', rays = false, still, children }: {
   rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night'; rays?: boolean; still: boolean; children?: ReactNode;
 }) {
-  const sky = tone === 'night' ? ['#123f80', '#0a2a5c'] as const : ['#e3f4ff', '#a4d8f8'] as const;
+  const sky = tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'] as const;
+  const lightId = useSvgId('stage-light');
   return (
     <View style={StyleSheet.absoluteFill}>
       {backdropUrl ? (
@@ -224,13 +265,13 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky
       {rays && <Rays still={still} />}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id="light" cx="50%" cy="44%" r="46%">
+          <RadialGradient id={lightId} cx="50%" cy="44%" r="46%">
             <Stop offset="0" stopColor="#ffffff" stopOpacity={tone === 'night' ? 0.42 : 0.7} />
             <Stop offset="0.7" stopColor="#ffffff" stopOpacity={0.12} />
             <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Ellipse cx="50" cy="44" rx="46" ry="44" fill="url(#light)" />
+        <Ellipse cx="50" cy="44" rx="46" ry="44" fill={`url(#${lightId})`} />
       </Svg>
       <View pointerEvents="none" style={styles.plinthWrap}>
         <Svg width="100%" height="100%" viewBox="0 0 200 64">
@@ -378,6 +419,7 @@ const styles = StyleSheet.create({
   ctaLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingBottom: 4 },
   ctaText: { flexShrink: 1, textAlign: 'center', color: 'white', fontFamily: FONT.display, textTransform: 'uppercase',
     textShadowColor: 'rgba(0, 0, 0, .5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
+  ctaMuted: { flex: 1, backgroundColor: '#3d6f9e', borderWidth: 3, borderColor: '#cfe6fa', borderBottomWidth: 7, borderBottomColor: '#24527d', margin: 2 },
   ctaDone: { flex: 1, backgroundColor: BRAND.green, borderWidth: 3, borderColor: '#14532d', borderBottomWidth: 7, margin: 2 },
   toast: { position: 'absolute', alignSelf: 'center', maxWidth: '92%', minHeight: 40, maxHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(5,52,110,0.94)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white },

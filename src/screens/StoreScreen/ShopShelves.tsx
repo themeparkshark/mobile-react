@@ -23,8 +23,11 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Dimensions, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp, LinearTransition, type SharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import { AppState, Dimensions, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import Animated, {
+  FadeInUp, FadeOutUp, LinearTransition, runOnJS, type SharedValue, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue,
+} from 'react-native-reanimated';
 import { claimShopSet } from '../../api/endpoints/me/shop-sets';
 import getShopToday from '../../api/endpoints/stores/today';
 import updatePlayer from '../../api/endpoints/me/update-player';
@@ -33,17 +36,18 @@ import Playercard from '../../components/Playercard';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
-  dailyPill, dropReveal, eventDropPill, eventEndPill, eventKicker, featuredPill, formatCoins, heroItem, inkOn, newCountLabel, pieceState,
-  queueReveal, readySummary, restockBackoffMs, sectionAccent, stageCard, setA11y, setProgressText, settleClaims, shortDate, stableOrder, wishSavedCopy,
+  activeShelf, dailyPill, dropReveal, emptyShelvesCopy, eventDropPill, eventEndPill, eventKicker, fallbackPollMs, featuredPill, formatCoins, HERO, heroItem, heroLayout,
+  heroChips, heroPriceRow, inkOn, newCountLabel, pieceState, queueReveal, readySummary, restockBackoffMs, rewardPendingFor, sectionAccent, setA11y, setProgressText,
+  settleClaims, shortDate, stableOrder, startFallbackPoll, wishSavedCopy,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopTease, ShopToday } from '../../models/shop-today';
-import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW } from '../../ui';
+import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW, type GameIconName } from '../../ui';
 import SetCompleteReveal from './SetCompleteReveal';
 import ShopTile, { TileArt } from './ShopTile';
 import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, PieceChip, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
+import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
 
 function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
   const still = useReducedGameMotion();
@@ -58,11 +62,15 @@ const GAP = 12;
 const GRID_PAD = 8;
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
-const HERO_H = Math.round(Math.min(320, SCREEN_W * 0.76));
+// The hero card (heroLayout is shared with the layout test): kicker row, then text column and stage.
+const HERO_L = heroLayout(SCREEN_W);
+const HERO_H = HERO.kickerH + HERO_L.bodyH;
 const FIRST_OPEN_KEY = 'shop:first-open-day';
+/** The sticky shelf jump bar above the scroll. */
+const JUMP_H = 58;
 const PENDING_REVEALS_KEY = 'shop:pending-reveals';
-// Hero stage: 62% of the panel's inner width, full hero height; the tail rests on the plinth.
-const HERO_CARD = stageCard(Math.round((SCREEN_W - 28) * 0.62), HERO_H - 8);
+// Hero stage: 62% of the card's inner width, under the kicker row; the tail rests on the plinth.
+const HERO_CARD = HERO_L.card;
 const HERO_CARD_STYLE = { position: 'absolute' as const, ...HERO_CARD.box };
 const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top: 0, bottom: 0 };
 
@@ -235,6 +243,27 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
   );
 });
 
+/** One chip per shelf: icons, not words (a 7-year-old jumps without reading). */
+type ShelfChip = { key: string; icon: GameIconName; label: string; color?: string | null };
+
+const JumpBar = memo(function JumpBar({ chips, active, onJump }: { chips: ShelfChip[]; active: number; onJump: (i: number) => void }) {
+  if (chips.length < 2) return null;
+  return (
+    <View style={styles.jumpBar} accessibilityRole="tablist">
+      {chips.map((chip, i) => {
+        const on = i === active;
+        return (
+          <Pressable key={chip.key} onPress={() => onJump(i)} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            accessibilityLabel={`Jump to ${chip.label}`}
+            style={[styles.jumpChip, chip.color ? { backgroundColor: chip.color } : null, on && styles.jumpChipOn]}>
+            <GameIcon name={chip.icon} size={on ? 28 : 24} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
+
 const Hero = memo(function Hero({ item, set, section, offset, still, todayItems, tease, onOpen }: {
   item: ShopItem; set: ShopSetSummary | null; section: ShopSection; offset: number; still: boolean;
   todayItems: ShopItem[]; tease: ShopTease | null | undefined; onOpen: OpenFn;
@@ -248,8 +277,9 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   // The star alone on your shark's own skin: the brightest thing in the panel.
   const stage = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
     paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type }], 'base'), [player?.inventory?.skin_item?.id, item.id]);
-  // Four 36pt chips fit one row of the text column; more shows three and "+N".
-  const extra = pieces.length > 4 ? pieces.length - 3 : 0;
+  // As many 36pt chips as the measured text column holds; more shows "+N".
+  const chips = heroChips(pieces.length, HERO_L.chips);
+  const priceRow = heroPriceRow(HERO_L.textW, formatCoins(item.cost), badge.label);
 
   const openPiece = (pieceId: number) => {
     const onShelf = todayItems.find(i => i.id === pieceId);
@@ -258,33 +288,43 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
 
   return (
     <View style={[styles.hero, { height: HERO_H + (tease ? 44 : 0), borderColor: glow }]}>
-      <LinearGradient colors={['#dff3ff', '#9fd6f8']} style={StyleSheet.absoluteFill} />
+      {/* House blue like the panels: the lit plinth on a night stage is the one bright object. */}
+      <LinearGradient colors={[...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`This week's star: ${itemDisplayName(item)}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
+        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
-          <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
+          <ShopStage rim={glow} backdropUrl={stage?.backdrop} tone="night" still={still}>
             {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
         </View>
       </Pressable>
+      {/* Kicker row: the label and the timer pill share one line above the stage, never on the hat. */}
+      <View style={styles.heroKickerRow} pointerEvents="none">
+        <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
+        <SectionPills section={section} offset={offset} still={still} />
+      </View>
       <View style={styles.heroText} pointerEvents="box-none">
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroName} numberOfLines={2}>{itemDisplayName(item)}</Text>
-        {badge.label ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View> : null}
         {set && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroSet} numberOfLines={1}>{set.name}: {setProgressText(set)}</Text>}
-        {/* In the text column, so it never sits on the hat. */}
-        <View pointerEvents="none" style={{ alignSelf: 'flex-start' }}><SectionPills section={section} offset={offset} still={still} /></View>
         {pieces.length > 1 && (
           <View style={styles.heroPieces}>
-            {pieces.slice(0, extra ? 3 : 4).map(p => (
-              <PieceChip key={p.id} piece={p} state={pieceState(p, todayItems.map(i => i.id))} size={36} onPress={() => openPiece(p.id)} />
+            {pieces.slice(0, chips.shown).map(p => (
+              <PieceChip key={p.id} piece={p} state={pieceState(p, todayItems.map(i => i.id))} size={HERO.pieces} onPress={() => openPiece(p.id)} />
             ))}
-            {extra > 0 && <View style={styles.heroMore}><Text style={styles.heroMoreText}>+{extra}</Text></View>}
+            {chips.more > 0 && <View style={styles.heroMore}><Text style={styles.heroMoreText}>+{chips.more}</Text></View>}
           </View>
         )}
-        <View style={{ marginTop: 'auto', gap: 4 }}>
+        {/* Price and rarity right under the chips (no dead column); only the button sits at the bottom. */}
+        {!owned && (
+          <View style={styles.heroPrice}><GameIcon name="coins" size={18} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroPriceText}>{formatCoins(item.cost)}</Text>
+            {badge.label ? (priceRow === 'inline' ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View>
+              : <View style={[styles.heroRarityDot, { backgroundColor: badge.labelColor }]} />) : null}
+          </View>
+        )}
+        <View style={{ marginTop: 'auto' }}>
           {owned ? (
             worn ? (
               <View style={styles.wearingChip}><GameIcon name="check" size={18} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.wearingText}>WEARING</Text></View>
@@ -294,13 +334,9 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
               </Pressable>
             )
           ) : (
-            <>
-              <View style={styles.heroPrice}><GameIcon name="coins" size={18} />
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroPriceText}>{formatCoins(item.cost)}</Text></View>
-              <Pressable onPress={() => onOpen(item)} style={styles.heroCta} accessibilityRole="button">
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroCtaText}>TRY IT ON</Text>
-              </Pressable>
-            </>
+            <Pressable onPress={() => onOpen(item)} style={styles.heroCta} accessibilityRole="button">
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroCtaText}>TRY IT ON</Text>
+            </Pressable>
           )}
         </View>
       </View>
@@ -432,24 +468,29 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   }, [setToast]);
 
   // The reward is the shelf's the moment the server grants it: closing the try-on early never loses it.
-  const onPurchased = useCallback((item: ShopItem, reward: ShopSetReward | null) => {
+  const onPurchased = useCallback((item: ShopItem, reward: ShopSetReward | null, recovered?: 'set_complete') => {
     setBought(list => (list.includes(item.id) ? list : [...list, item.id]));
+    // A recovered buy that finished a set, with no reward to replay: at least say so.
+    if (recovered === 'set_complete') setToast('Set complete!');
     // Queued at once (never lost to an early close); it plays when the sheet has slid away.
     if (reward) {
       const entry = { reward, set: setsBySlug.get(reward.slug) ?? null };
       setReveals(list => queueReveal(list.map(x => ({ ...x, slug: x.reward.slug })), { ...entry, slug: reward.slug }).map(({ slug: _s, ...x }) => x));
     }
     void onRefresh();
-  }, [onRefresh, setsBySlug]);
+  }, [onRefresh, setsBySlug, setToast]);
 
   // Has this player bought the item? Asks the server (a fresh shop), for "Check again".
-  const checkOwned = useCallback(async (itemId: number): Promise<boolean | null> => {
+  const checkOwned = useCallback(async (itemId: number): Promise<{ owns: boolean; set: ShopSetSummary | null } | null> => {
     const fresh = await getShopToday(today.store_id).catch(() => null);
     if (!fresh) return null;
     setToday(fresh);
     const onShelf = fresh.sections.some(sec => sec.items.some(i => i.id === itemId && (i.shop?.is_owned ?? i.has_purchased)));
-    const inSet = [...(fresh.sets ?? []), ...(fresh.ready_sets ?? [])].some(set => (set.owned_ids ?? []).includes(itemId));
-    return onShelf || inSet;
+    const allSets = [...(fresh.sets ?? []), ...(fresh.ready_sets ?? [])];
+    const inSet = allSets.some(set => (set.owned_ids ?? []).includes(itemId));
+    // The item's set, fresh: a recovered set-completing buy replays its reveal from this.
+    const set = allSets.find(s => (s.item_ids ?? []).includes(itemId)) ?? null;
+    return { owns: onShelf || inSet, set };
   }, [today.store_id, setToday]);
 
   const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${itemDisplayName(item)}!`), [setToast]);
@@ -471,11 +512,30 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
   // iOS can't present a modal while the last one is still dismissing: hold the next reveal a beat.
   const [revealGate, setRevealGate] = useState(true);
-  const finishReveal = useCallback(() => {
+  const holdReveal = useCallback(() => {
     setRevealGate(false);
     setTimeout(() => setRevealGate(true), 450);
-    setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
   }, []);
+  // The try-on is a modal too: it reports closed from iOS onDismiss (fully gone), so the reveal
+  // presents at once. With a reveal waiting, a navy cover holds the shelf (the try-on's scrim has
+  // already deepened to it) until the reveal is on screen: no idle shelf between payoff beats.
+  const [handoff, setHandoff] = useState(false);
+  const revealsRef = useRef(reveals);
+  revealsRef.current = reveals;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const leavingTryOn = useCallback(() => {
+    if (!rewardPendingFor(revealsRef.current, openRef.current?.item.shop?.set?.slug)) return;
+    setHandoff(true);
+    setTimeout(() => setHandoff(false), 1500);
+  }, []);
+  const closeTryOn = useCallback(() => {
+    setOpen(null);
+  }, []);
+  const finishReveal = useCallback(() => {
+    holdReveal();
+    setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
+  }, [holdReveal]);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
@@ -483,20 +543,71 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     if (target) openItem(target, { fullLook: true });
   }, [allItems, openItem]);
 
-  // At the reset the next day is already built server side: reload, retry with backoff on failure.
+  // Only poll while the kid is looking: the shop screen is focused and the app is in front.
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   useEffect(() => {
+    const sub = AppState.addEventListener('change', state => setAppActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+  const awake = focused && appActive;
+
+  // At the reset the next day is already built server side: reload, retry with backoff on failure
+  // (cancelled on cleanup, at most 8 tries, paused off screen).
+  useEffect(() => {
+    if (!awake) return;
+    let cancelled = false;
     let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const due = Date.parse(today.resets_at) - (Date.now() + offset) + 2_000;
     const run = async () => {
       const ok = await onRefresh().catch(() => false);
-      if (!ok) timer = setTimeout(run, restockBackoffMs(attempt++));
+      if (!ok && !cancelled && attempt < 8) timer = setTimeout(run, restockBackoffMs(attempt++));
     };
     timer = setTimeout(run, Math.max(1_000, due));
-    return () => clearTimeout(timer);
-  }, [today.resets_at, offset]);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [today.resets_at, offset, awake]);
 
-  const scrollHandler = useAnimatedScrollHandler(e => { if (scrollY) scrollY.value = e.contentOffset.y; });
+  // Fallback (today is still building): ask again every 15 to 30 s until the real day is served.
+  // Cancelled on cleanup, paused off screen and in the background, stops after 20 misses in a row,
+  // and stops for good on a 404 (the shop's kill switch).
+  const [pollStopped, setPollStopped] = useState(false);
+  useEffect(() => { setPollStopped(false); }, [today.shop_day]);
+  useEffect(() => {
+    if (!today.fallback || !awake || pollStopped) return;
+    return startFallbackPoll({
+      refresh: async () => {
+        try {
+          // null is the 404 (kill switch, or no engine): stop for good.
+          const fresh = await getShopToday(today.store_id);
+          if (!fresh) return 'gone';
+          setToday(fresh);
+          return fresh.fallback ? 'miss' : 'ok';
+        } catch {
+          return 'miss';
+        }
+      },
+      delayMs: () => fallbackPollMs(Math.random()),
+      onStop: () => setPollStopped(true),
+    });
+  }, [today.fallback, today.shop_day, today.store_id, awake, pollStopped]);
+
+  // Shelf jump bar: each shelf's top in the scroll content, the active one follows the scroll.
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const shelfY = useSharedValue(0);
+  const maxY = useSharedValue(Number.POSITIVE_INFINITY);
+  const tops = useSharedValue<number[]>([]);
+  const topsRef = useRef<Record<string, number>>({});
+  const wrapY = useRef(0);
+  const [activeChip, setActiveChip] = useState(0);
+  const scrollHandler = useAnimatedScrollHandler(e => {
+    shelfY.value = e.contentOffset.y;
+    maxY.value = e.contentSize.height - e.layoutMeasurement.height;
+    if (scrollY) scrollY.value = e.contentOffset.y;
+  });
+  useAnimatedReaction(() => activeShelf(tops.value, shelfY.value, 24, maxY.value), (next, prev) => {
+    if (next !== prev) runOnJS(setActiveChip)(next);
+  });
 
   const refresh = async () => {
     setRefreshing(true);
@@ -514,16 +625,50 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const enter = (i: number) => (still ? undefined : FadeInUp.delay(60 * i).springify().damping(16));
   const reveal = reveals[0] ?? null;
   const dailyNew = newCountLabel(daily?.new_count);
+  const empty = !featured && !daily && events.length === 0 ? emptyShelvesCopy(today.fallback) : null;
+  // A fallback day (or a tease with no name) shows no "NEXT WEEK ???" placeholder.
+  const heroTease = !today.fallback && (today.next_featured?.title || today.next_featured?.set_name) ? today.next_featured : null;
+
+  const chips: ShelfChip[] = [
+    ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: "this week's star" }] : []),
+    ...events.map(e => ({ key: e.key, icon: 'gift' as const, label: e.title, color: sectionAccent(e) })),
+    ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: 'Featured' }] : []),
+    ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: 'Daily' }] : []),
+  ];
+  const chipKeys = chips.map(c => c.key).join('|');
+  const syncTops = () => { tops.value = chips.map(c => (topsRef.current[c.key] ?? 0) + wrapY.current); };
+  const measure = (key: string) => (e: { nativeEvent: { layout: { y: number } } }) => {
+    topsRef.current[key] = e.nativeEvent.layout.y;
+    syncTops();
+  };
+  useEffect(() => { syncTops(); }, [chipKeys]);
+  const jump = useCallback((i: number) => {
+    const key = chips[i]?.key;
+    if (!key) return;
+    playSound(require('../../../assets/sounds/tap.mp3'));
+    void Haptics.selectionAsync().catch(() => undefined);
+    setActiveChip(i);
+    scrollRef.current?.scrollTo({ y: Math.max(0, (topsRef.current[key] ?? 0) + wrapY.current - 8), animated: !still });
+  }, [chipKeys, still]);
 
   return (
     <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        <Animated.ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+        <JumpBar chips={chips} active={activeChip} onJump={jump} />
+        <View style={{ flex: 1 }}>
+        <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
           {today.fallback && (
             <View style={styles.fallback}><GameIcon name="timer" size={18} />
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>Today’s shop is opening. Back in a moment!</Text></View>
+          )}
+          {empty && (
+            <View style={[styles.panel, styles.emptyPanel]} accessible accessibilityLabel={`${empty.title}. ${empty.body}`}>
+              <GameIcon name="timer" size={34} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.emptyTitle}>{empty.title}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.emptyBody}>{empty.body}</Text>
+            </View>
           )}
           {readySets.length > 0 && (
             <Animated.View entering={enter(0)} exiting={still ? undefined : FadeOutUp.duration(220)}>
@@ -531,18 +676,19 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
             </Animated.View>
           )}
 
-          <Animated.View layout={still ? undefined : LinearTransition.duration(220)} style={{ gap: 14 }}>
+          <Animated.View layout={still ? undefined : LinearTransition.duration(220)} style={{ gap: 14 }}
+            onLayout={e => { wrapY.current = e.nativeEvent.layout.y; syncTops(); }}>
             {featured && hero && (
-              <Animated.View entering={enter(0)}>
+              <Animated.View entering={enter(0)} onLayout={measure('hero')}>
                 <ShopProfile id="hero">
                   <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
-                    tease={today.next_featured} onOpen={openItem} />
+                    tease={heroTease} onOpen={openItem} />
                 </ShopProfile>
               </Animated.View>
             )}
 
             {events.map((section, index) => (
-              <Animated.View key={section.key} entering={enter(index + 1)}>
+              <Animated.View key={section.key} entering={enter(index + 1)} onLayout={measure(section.key)}>
                 <ShopProfile id={`banner-${section.key}`}>
                   <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} flipIn={firstOpenToday}
                     todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
@@ -551,7 +697,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
             ))}
 
             {featured && (
-              <Animated.View entering={enter(events.length + 1)} style={styles.panel}>
+              <Animated.View entering={enter(events.length + 1)} style={styles.panel} onLayout={measure('featured')}>
                 <View style={styles.header}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>FEATURED</Text>
                   <SectionPills section={featured} offset={offset} still={still} />
@@ -564,7 +710,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
             )}
 
             {daily && (
-              <Animated.View entering={enter(events.length + 2)} style={styles.panel}>
+              <Animated.View entering={enter(events.length + 2)} style={styles.panel} onLayout={measure('daily')}>
                 <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
                   {firstOpenToday && <Sheen still={still} delay={700} width={SCREEN_W} />}
                   <View style={{ flexShrink: 1, gap: 4 }}>
@@ -580,16 +726,19 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         </Animated.ScrollView>
         {/* Content fades under the tab row instead of a hard cut. */}
         <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
+        </View>
         <ShopToast message={toast} still={still} />
+        {handoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />}
       </View>
 
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
-          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
-          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={reveals.some(r => r.reward.slug === open.item.shop?.set?.slug)} />
+          onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
+          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} />
       )}
-      {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}
+      {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
+        onDone={finishReveal} onShown={() => setHandoff(false)} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
@@ -600,16 +749,21 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   );
 }
 
+const S = SHOP_SURFACE;
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
   fallback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.6)' },
   fallbackText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
-  panel: { marginHorizontal: 10, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.88)', paddingBottom: 14,
-    borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
+  // Shelf panels in the house blue with white ink (never a white panel).
+  panel: { marginHorizontal: 10, borderRadius: 22, backgroundColor: S.panel, paddingBottom: 14,
+    borderWidth: 3, borderColor: S.border, ...SHADOW.card },
+  emptyPanel: { alignItems: 'center', gap: 6, paddingVertical: 28, paddingHorizontal: 20 },
+  emptyTitle: { fontFamily: FONT.display, fontSize: 22, color: S.ink, textAlign: 'center' },
+  emptyBody: { fontFamily: FONT.body, fontSize: 17, color: S.inkSoft, textAlign: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6 },
-  headerTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, letterSpacing: 0.5 },
+  headerTitle: { fontFamily: FONT.display, fontSize: 22, color: S.ink, letterSpacing: 0.5 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: GRID_PAD, paddingTop: 14 },
   event: { marginHorizontal: 10, borderRadius: 22, paddingBottom: 14, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden', ...SHADOW.card },
@@ -627,51 +781,58 @@ const styles = StyleSheet.create({
   teaseShapes: { flexDirection: 'row', gap: 2 },
   teaseShape: { width: 24, height: 24, opacity: 0.85 },
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
-  hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: '#dff3ff', ...SHADOW.card },
-  heroStage: { position: 'absolute', right: 0, top: 0, height: HERO_H - 8, width: '62%' },
+  hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: S.panel, ...SHADOW.card },
+  jumpBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, height: JUMP_H, paddingHorizontal: 12, backgroundColor: BRAND.blue },
+  jumpChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+  jumpChipOn: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: BRAND.gold, ...SHADOW.card },
+  heroStage: { position: 'absolute', left: HERO_L.stage.left, top: HERO_L.stage.top, height: HERO_L.stage.height, width: HERO_L.stage.width },
+  heroKickerRow: { position: 'absolute', left: 0, right: 0, top: 0, height: HERO.kickerH, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroText: { position: 'absolute', left: 14, top: 14, height: HERO_H - 28, width: '46%', gap: 4 },
-  heroKicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLip, letterSpacing: 1 },
-  heroName: { fontFamily: FONT.display, fontSize: 24, lineHeight: 26, color: BRAND.navy },
-  heroRarity: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
+  heroText: { position: 'absolute', left: HERO.pad, top: HERO.kickerH + 4, height: HERO_L.textH, width: HERO_L.textW, gap: HERO.gap },
+  heroKicker: { flexShrink: 1, fontFamily: FONT.display, fontSize: HERO.kickerFont, color: S.inkGold, letterSpacing: HERO.kickerTracking },
+  heroName: { fontFamily: FONT.display, fontSize: HERO_L.nameSize, lineHeight: HERO_L.nameLine, color: S.ink },
+  heroRarityDot: { marginLeft: 4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white },
+  heroRarity: { marginLeft: 4, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
   heroRarityText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
-  heroSet: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft },
-  heroPieces: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  heroSet: { fontFamily: FONT.display, fontSize: 14, lineHeight: HERO.setLine, color: S.inkSoft },
+  heroPieces: { flexDirection: 'row', gap: 6, marginTop: HERO.piecesTop },
+  heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: S.card, borderWidth: 2, borderColor: S.border, alignItems: 'center', justifyContent: 'center' },
   heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
-  heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
-  heroCta: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16,
+  heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, height: HERO.priceRow },
+  heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
+  heroCta: { alignSelf: 'flex-start', minHeight: HERO.cta, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16,
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   heroCtaText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
-  heroGhost: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 18, borderWidth: 3, borderColor: BRAND.navy },
-  heroGhostText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
+  heroGhost: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 18, borderWidth: 3, borderColor: S.ink },
+  heroGhostText: { fontFamily: FONT.display, fontSize: 16, color: S.ink },
   wearingChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: BRAND.green,
     borderRadius: 999, paddingLeft: 6, paddingRight: 14, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white },
   wearingText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   heroTease: { position: 'absolute', left: 10, right: 10, bottom: 6 },
-  setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: '#fffdf4', padding: 10, gap: 8 },
-  readyCard: { borderColor: BRAND.gold, backgroundColor: '#fffaf0' },
-  readyTitle: { flex: 1, fontFamily: FONT.display, fontSize: 19, color: BRAND.navy },
-  readySet: { gap: 6, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#f0e2b6' },
+  setCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 16, borderWidth: 3, backgroundColor: S.card, padding: 10, gap: 8 },
+  readyCard: { borderColor: BRAND.gold, backgroundColor: S.panel },
+  readyTitle: { flex: 1, fontFamily: FONT.display, fontSize: 19, color: S.ink },
+  readySet: { gap: 6, paddingVertical: 4, borderTopWidth: 1, borderTopColor: S.line },
   readyRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  readyMore: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft },
+  readyMore: { fontFamily: FONT.display, fontSize: 14, color: S.inkSoft },
   newChip: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   newChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy },
   readySetName: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft },
   setHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  setTitle: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
-  setCount: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft },
+  setTitle: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: S.ink },
+  setCount: { fontFamily: FONT.display, fontSize: 15, color: S.inkGold },
   segments: { flexDirection: 'row', gap: 4 },
-  segment: { flex: 1, height: 8, borderRadius: 4, backgroundColor: '#e3eaf2' },
+  segment: { flex: 1, height: 8, borderRadius: 4, backgroundColor: S.line },
   setRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   portrait: { width: 78, height: 88, borderRadius: 14, borderWidth: 3, overflow: 'hidden', backgroundColor: '#dff3ff' },
   setPieces: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   titleChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   titleChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.goldLight },
-  xpChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef6ff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  xpChipText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.blue },
-  doneChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#effbf2', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  doneText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.greenLip },
+  xpChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  xpChipText: { fontFamily: FONT.display, fontSize: 13, color: S.inkSoft },
+  doneChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.greenLip, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  doneText: { fontFamily: FONT.display, fontSize: 13, color: S.ink },
 });
