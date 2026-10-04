@@ -49,6 +49,9 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
+/** Stable empty data for always-mounted sources that are off (never a new object per render). */
+const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
 export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
@@ -520,8 +523,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
         <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
-        {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
-          <ShapeSource id="tps-lamps" shape={lampPoints}>
+        {/* Always mounted (empty when off): a source mounting mid-list as lamps come and go
+            crashes MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]). */}
+        {(
+          <ShapeSource id="tps-lamps" shape={light.lamps >= 0.05 ? lampPoints : NO_FEATURES}>
             <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
               circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
               circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
@@ -531,8 +536,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </ShapeSource>
         )}
         {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
-        {crowdHaze && crowdHaze.features.length > 0 && (
-          <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
+        {(
+          <ShapeSource id="tps-crowd-haze" shape={crowdHaze ?? NO_FEATURES}>
             <HeatmapLayer id="tps-crowd-haze" style={{
               heatmapWeight: ['get', 'w'],
               heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.5, 19, 0.9],
@@ -546,8 +551,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             }} />
           </ShapeSource>
         )}
-        {guideTarget && location && pathShown && (
-          <ShapeSource id="tps-guide" shape={guideLine(location, guideTarget)}>
+        {(
+          <ShapeSource id="tps-guide" shape={guideTarget && location && pathShown ? guideLine(location, guideTarget) : NO_FEATURES}>
             <LineLayer id="tps-guide-casing" style={{ lineColor: BRAND.navy, lineWidth: 7, lineCap: 'round', lineOpacity: 0.85 }} />
             <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
           </ShapeSource>

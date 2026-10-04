@@ -71,3 +71,19 @@ test('night tint: one stable component in its MapView slot whether fright is nul
   assert.match(map, /\n\s*<FrightNightTint input=\{fright\} \/>/);
   assert.doesNotMatch(map, /fright\s*&&\s*<FrightNightTint/);
 });
+
+test('map GL sources are always mounted (lamps, crowd haze, guide line): off means empty data, never a conditional mount mid-list', () => {
+  const map = fs.readFileSync(path.join(__dirname, '..', '..', 'src/components/Map.tsx'), 'utf8');
+  for (const id of ['tps-lamps', 'tps-crowd-haze', 'tps-guide']) {
+    const at = map.indexOf(`<ShapeSource id="${id}"`);
+    assert.ok(at > 0, `${id} source exists`);
+    // The JSX just before the source must not be a condition (`x && (` or `x ? (`).
+    const before = map.slice(Math.max(0, at - 120), at);
+    assert.doesNotMatch(before, /&&\s*\(\s*$|\?\s*\(\s*$/, `${id} must not mount conditionally`);
+    assert.equal((map.match(new RegExp(`<ShapeSource id="${id}"`, 'g')) || []).length, 1, `${id} has one source`);
+  }
+  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : NO_FEATURES\}>/);
+  assert.match(map, /<ShapeSource id="tps-crowd-haze" shape=\{crowdHaze \?\? NO_FEATURES\}>/);
+  assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
+  assert.doesNotMatch(map, /(lampPoints|crowdHaze|pathShown)[^\n]*&&\s*\(\s*\n\s*<ShapeSource/);
+});
