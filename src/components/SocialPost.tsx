@@ -1,213 +1,113 @@
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
-import * as Haptics from 'expo-haptics';
-import { useContext, useRef, useState } from 'react';
+import { memo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import view from '../api/endpoints/social-posts/view';
 import { SocialPostType } from '../models/social-post-type';
-import { AuthContext } from '../context/AuthProvider';
-import { BRAND, FONT, GameButton, GameDialog, GameIcon } from '../ui';
-import {
-  SoundEffectContext,
-  SoundEffectContextType,
-} from '../context/SoundEffectProvider';
-import YouTubePlayerModal, { type PlayerResult } from './watch/YouTubePlayerModal';
-import { earnedView, formatDuration, isNewVideo, postedAgo, thumbnailFor, videoIdOf } from './watch/watchFeed';
+import { BRAND, FONT, GameButton, GameIcon } from '../ui';
+import { formatDuration, isNewVideo, postedAgo, thumbnailFor } from './watch/watchFeed';
 
 /** What the Watch page promises per video (live economy.social_post_view_coins). */
 export const COIN_REWARD = 25;
 
-const COIN = require('../../assets/images/coingold.png');
+export const COIN_ART = require('../../assets/images/coingold.png');
 
 /**
- * One Watch page video. `featured` is the newest-video hero at the top;
- * everything else is a grid card. Tapping plays in-app (kid-safe player);
- * the coin thank-you is paid after a real watch, shown once by our own
- * reward card.
+ * One Watch page video card. `featured` is the newest-video hero; the rest
+ * are grid cards. Playing, coins and the reward moment live on WatchScreen
+ * (one player and one dialog for the page), so a recycled grid cell never
+ * carries another video's state.
  */
-export default function SocialPost({
+function SocialPost({
   socialPost,
+  watched,
   featured = false,
+  onPress,
 }: {
   readonly socialPost: SocialPostType;
+  readonly watched: boolean;
   readonly featured?: boolean;
+  readonly onPress: (post: SocialPostType) => void;
 }) {
-  // FlashList recycles this component across videos, so the local "just
-  // watched" mark is tied to the video id instead of seeded once from props.
-  const [watchedId, setWatchedId] = useState<number | null>(null);
-  const hasWatched = socialPost.has_watched || watchedId === socialPost.id;
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const [reward, setReward] = useState<number | null>(null);
-  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
-  const { refreshPlayer } = useContext(AuthContext);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const coinBounce = useRef(new Animated.Value(0)).current;
-
-  const videoId = videoIdOf(socialPost);
+  const scale = useRef(new Animated.Value(1)).current;
   const isNew = isNewVideo(socialPost);
   const duration = socialPost.is_short ? null : formatDuration(socialPost.duration_seconds);
   const ago = featured ? postedAgo(socialPost) : null;
-
   const press = (to: number) =>
-    Animated.spring(scaleAnim, { toValue: to, friction: 5, tension: 300, useNativeDriver: true }).start();
-
-  const showRewardModal = (coins: number) => {
-    setReward(coins);
-    coinBounce.setValue(0);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(coinBounce, { toValue: -12, duration: 300, useNativeDriver: true }),
-        Animated.timing(coinBounce, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]),
-      { iterations: 4 },
-    ).start();
-  };
-
-  const recordView = async () => {
-    if (hasWatched) return;
-    const id = socialPost.id;
-    let paid: number;
-    try {
-      paid = (await view(socialPost)).coins ?? COIN_REWARD;
-    } catch {
-      // Already paid (403) or offline: mark it so the card stops promising coins.
-      setWatchedId(id);
-      return;
-    }
-    setWatchedId(id);
-    if (paid > 0) showRewardModal(paid);
-    // The header coin count catches up; a slow /me never hides the reward.
-    refreshPlayer().catch(() => undefined);
-  };
-
-  const handlePress = async () => {
-    playSound(require('../../assets/sounds/button_press.mp3'));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (videoId) {
-      setPlayingId(videoId);
-      return;
-    }
-    await WebBrowser.openBrowserAsync(socialPost.permalink);
-    await recordView();
-  };
-
-  const closePlayer = (result: PlayerResult) => {
-    setPlayingId(null);
-    if (hasWatched || !earnedView(result.playedMs, result.ended, socialPost.is_short)) return;
-    // Let the player sheet finish sliding away before the reward card opens
-    // (iOS drops a modal presented during another one's dismissal).
-    setTimeout(() => { recordView(); }, 450);
-  };
-
-  const a11y = `${socialPost.title}. ${hasWatched ? 'Watched' : `Earn ${COIN_REWARD} coins`}${isNew ? '. New' : ''}`;
+    Animated.spring(scale, { toValue: to, friction: 5, tension: 300, useNativeDriver: true }).start();
 
   return (
-    <>
-      <Pressable
-        onPress={handlePress}
-        onPressIn={() => press(0.96)}
-        onPressOut={() => press(1)}
-        accessibilityRole="button"
-        accessibilityLabel={a11y}
-        style={featured ? styles.heroOuter : styles.gridOuter}
-      >
-        <Animated.View style={[styles.card, featured && styles.heroCard, { transform: [{ scale: scaleAnim }] }]}>
-          <View style={styles.thumbWrap}>
-            <Image
-              source={thumbnailFor(socialPost, featured)}
-              recyclingKey={String(socialPost.id)}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={180}
-              cachePolicy="memory-disk"
-              priority={featured ? 'high' : 'normal'}
-              accessibilityIgnoresInvertColors
-            />
-            {hasWatched && <View style={styles.watchedTint} />}
+    <Pressable
+      onPress={() => onPress(socialPost)}
+      onPressIn={() => press(0.96)}
+      onPressOut={() => press(1)}
+      accessibilityRole="button"
+      accessibilityLabel={`${socialPost.title}. ${watched ? 'Watched' : `Earn ${COIN_REWARD} coins`}${isNew ? '. New' : ''}`}
+      style={featured ? styles.heroOuter : styles.gridOuter}
+    >
+      <Animated.View style={[styles.card, featured && styles.heroCard, { transform: [{ scale }] }]}>
+        <View style={styles.thumbWrap}>
+          <Image
+            source={thumbnailFor(socialPost, featured)}
+            recyclingKey={String(socialPost.id)}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={180}
+            cachePolicy="memory-disk"
+            priority={featured ? 'high' : 'normal'}
+            accessibilityIgnoresInvertColors
+          />
+          {watched && <View style={styles.watchedTint} />}
 
-            {/* Play */}
-            <View style={styles.center} pointerEvents="none">
-              <View style={[styles.play, featured && styles.playHero, hasWatched && styles.playWatched]}>
-                <GameIcon name="play" size={featured ? 64 : 40} />
-              </View>
+          {/* Play sits in a corner so the thumbnail's own title art stays readable. */}
+          <View style={[styles.play, featured && styles.playHero]} pointerEvents="none">
+            <GameIcon name="play" size={featured ? 50 : 30} />
+          </View>
+
+          {isNew && (
+            <View style={[styles.newBadge, featured && styles.newBadgeHero]}>
+              <Text style={[styles.newText, featured && { fontSize: 15 }]}>NEW</Text>
             </View>
+          )}
 
-            {/* NEW: on the channel less than 24 hours */}
-            {isNew && (
-              <View style={[styles.newBadge, featured && styles.newBadgeHero]}>
-                <Text style={[styles.newText, featured && { fontSize: 15 }]}>NEW</Text>
-              </View>
-            )}
+          {watched ? (
+            <View style={[styles.chip, styles.watchedChip]}>
+              <GameIcon name="check" size={featured ? 18 : 14} />
+              <Text style={[styles.chipText, { color: BRAND.white }, featured && styles.chipTextHero]}>Watched</Text>
+            </View>
+          ) : (
+            <View style={[styles.chip, styles.coinChip]}>
+              <Image source={COIN_ART} style={featured ? styles.coinHero : styles.coinSmall} contentFit="contain" />
+              <Text style={[styles.chipText, featured && styles.chipTextHero]}>
+                +{COIN_REWARD}{featured ? ' coins' : ''}
+              </Text>
+            </View>
+          )}
 
-            {/* Coin reward, or Watched */}
-            {hasWatched ? (
-              <View style={[styles.chip, styles.watchedChip]}>
-                <GameIcon name="check" size={featured ? 18 : 14} />
-                <Text style={[styles.chipText, { color: BRAND.white }, featured && styles.chipTextHero]}>Watched</Text>
-              </View>
-            ) : (
-              <View style={[styles.chip, styles.coinChip]}>
-                <Image source={COIN} style={featured ? styles.coinHero : styles.coinSmall} contentFit="contain" />
-                <Text style={[styles.chipText, featured && styles.chipTextHero]}>
-                  +{COIN_REWARD}{featured ? ' coins' : ''}
-                </Text>
-              </View>
-            )}
+          {(socialPost.is_short || duration) && (
+            <View style={[styles.lengthChip, featured && styles.lengthChipHero]}>
+              <Text style={styles.lengthText}>{socialPost.is_short ? 'SHORT' : duration}</Text>
+            </View>
+          )}
+        </View>
 
-            {/* Short or duration */}
-            {(socialPost.is_short || duration) && (
-              <View style={styles.lengthChip}>
-                <Text style={styles.lengthText}>{socialPost.is_short ? 'SHORT' : duration}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={[styles.body, featured && styles.heroBody]}>
-            {featured && (
-              <Text style={styles.kicker}>{isNew ? 'Brand new' : 'Newest video'}{ago ? ` · ${ago}` : ''}</Text>
-            )}
-            <Text numberOfLines={featured ? 3 : 2} style={featured ? styles.heroTitle : styles.title}>
-              {socialPost.title}
-            </Text>
-            {featured && (
-              <View style={{ marginTop: 10 }} pointerEvents="none">
-                <GameButton
-                  label={hasWatched ? 'Watch again' : `Watch now · +${COIN_REWARD}`}
-                  icon="play"
-                  fullWidth
-                  haptics={false}
-                />
-              </View>
-            )}
-          </View>
-        </Animated.View>
-      </Pressable>
-
-      <YouTubePlayerModal
-        videoId={playingId}
-        title={socialPost.title}
-        subtitle={postedAgo(socialPost)}
-        isShort={socialPost.is_short}
-        rewardCoins={hasWatched ? 0 : COIN_REWARD}
-        onClose={closePlayer}
-      />
-
-      {/* The one reward moment (the server's matching banner is suppressed). */}
-      <GameDialog
-        visible={reward !== null}
-        title={`+${reward ?? COIN_REWARD} Coins!`}
-        message="Thanks for watching! They're in your coin count."
-        buttons={[{ text: 'Awesome!' }]}
-        haptic="success"
-        onAnswer={() => setReward(null)}
-      >
-        <Animated.View style={{ alignItems: 'center', transform: [{ translateY: coinBounce }] }}>
-          <Image source={COIN} style={{ width: 72, height: 72 }} contentFit="contain" />
-        </Animated.View>
-      </GameDialog>
-    </>
+        <View style={[styles.body, featured && styles.heroBody]}>
+          {featured && (
+            <Text style={styles.kicker}>{isNew ? 'Brand new' : 'Newest video'}{ago ? ` · ${ago}` : ''}</Text>
+          )}
+          <Text numberOfLines={featured ? 3 : 2} style={featured ? styles.heroTitle : styles.title}>
+            {socialPost.title}
+          </Text>
+          {featured && (
+            <View style={{ marginTop: 10 }} pointerEvents="none">
+              <GameButton label={watched ? 'Watch again' : `Watch now · +${COIN_REWARD}`} icon="play" fullWidth haptics={false} />
+            </View>
+          )}
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 }
+
+export default memo(SocialPost);
 
 const styles = StyleSheet.create({
   gridOuter: { flex: 1, padding: 6 },
@@ -223,15 +123,16 @@ const styles = StyleSheet.create({
   heroCard: { borderRadius: 22, borderWidth: 4, borderBottomWidth: 7 },
   thumbWrap: { width: '100%', aspectRatio: 16 / 9, backgroundColor: BRAND.sky },
   watchedTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.35)' },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   play: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
     shadowColor: BRAND.shadow,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
-    shadowRadius: 4,
+    shadowRadius: 3,
   },
-  playHero: {},
-  playWatched: { opacity: 0.85 },
+  playHero: { top: undefined, bottom: 10, right: 10 },
   newBadge: {
     position: 'absolute',
     top: 7,
@@ -274,6 +175,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
+  lengthChipHero: { bottom: undefined, top: 10, right: 10 },
   lengthText: { fontFamily: FONT.body, fontSize: 12, color: BRAND.white, letterSpacing: 0.5 },
   body: { paddingHorizontal: 10, paddingVertical: 9, minHeight: 56 },
   heroBody: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14 },

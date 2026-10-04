@@ -111,6 +111,7 @@ test('useAxiosSetup registers once, reads fresh callbacks and has no em dash toa
     '../context/AuthProvider': { AuthContext: { value: { logout: () => toasts.push('stale-logout') } } },
     '../context/BroadcastProvider': { BroadcastContext: { value: { enqueue() {} } } },
     '../utils/toast': { showToast: message => toasts.push(message) },
+    '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
   });
   mod.useAxiosSetup();
   assert.equal(effects.length, 1);
@@ -179,6 +180,7 @@ function realStack(transport) {
     '../context/AuthProvider': { AuthContext: { value: { logout() {} } } },
     '../context/BroadcastProvider': { BroadcastContext: { value: { enqueue: list => broadcasts.push(list) } } },
     '../utils/toast': { showToast: message => toasts.push(message) },
+    '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
   });
   setup.useAxiosSetup();
   return { client, events, captured, broadcasts, toasts, AxiosError: realAxios.AxiosError, SERVER_TROUBLE_TOAST: setup.SERVER_TROUBLE_TOAST };

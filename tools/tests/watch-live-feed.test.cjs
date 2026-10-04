@@ -82,13 +82,16 @@ test('the Watch page refetches on focus and the card plays in-app, not in a brow
   assert.match(screen, /useFocusEffect\(/);
   assert.match(screen, /RefreshControl/);
   assert.match(screen, /sortNewestFirst\(/);
+  // One player and one reward dialog for the page; cards are presentational,
+  // so a recycled cell never carries another video's watched or reward state.
+  assert.match(screen, /<YouTubePlayerModal\b/);
+  assert.match(screen, /extraData=\{localWatched\}/);
   const card = read('src/components/SocialPost.tsx');
-  assert.match(card, /<YouTubePlayerModal\b/);
   assert.match(card, /isNewVideo\(/);
-  // Recycled cells must not carry another video's watched state.
-  assert.doesNotMatch(card, /useState<boolean>\(socialPost\.has_watched\)/);
+  assert.doesNotMatch(card, /useState/);
   const player = read('src/components/watch/YouTubePlayerModal.tsx');
-  assert.match(player, /onShouldStartLoadWithRequest=\{req => allowPlayerNavigation\(/);
+  assert.match(player, /onShouldStartLoadWithRequest=\{shouldStart\}/);
+  assert.match(player, /allowPlayerNavigation\(req\.url, req\.isTopFrame\)/);
   assert.match(player, /javaScriptCanOpenWindowsAutomatically=\{false\}/);
 });
 
@@ -98,8 +101,7 @@ test('coins need real playing time: 30s for a video, 10s for a Short, or finishi
   assert.equal(feed.earnedView(10_000, false, true), true);
   assert.equal(feed.earnedView(3_000, false, true), false);
   assert.equal(feed.earnedView(5_000, true, false), true);
-  const card = read('src/components/SocialPost.tsx');
-  assert.match(card, /earnedView\(result\.playedMs, result\.ended, socialPost\.is_short\)/);
+  assert.match(read('src/screens/WatchScreen.tsx'), /earnedView\(result\.playedMs, result\.ended, post\.is_short\)/);
 });
 
 test('the Watch reward shows once: the server coin banner is suppressed for the view call only', () => {
@@ -126,8 +128,40 @@ test('the player keeps no cookies, limits origins and covers the end screen', ()
 test('the Watch page sits on the clean background with a hero and per-video coin chips', () => {
   const screen = read('src/screens/WatchScreen.tsx');
   assert.match(screen, /<CleanScreenBackground underTopbar>/);
-  assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured \/>/);
+  assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured watched=/);
+  assert.match(screen, /All caught up!/);
   const card = read('src/components/SocialPost.tsx');
   assert.match(card, /styles\.coinChip/);
   assert.match(card, /styles\.watchedChip/);
+});
+
+test('up next is our own feed, unwatched first, never the playing video', () => {
+  const vids = [1, 2, 3, 4].map(id => video({ id, has_watched: id === 2 }));
+  const watchedLocally = new Set([3]);
+  const next = feed.upNextFor(vids[0], vids, v => v.has_watched || watchedLocally.has(v.id));
+  assert.deepEqual([...next.map(v => v.id)], [4, 2, 3]);
+  assert.equal(next.find(v => v.id === 3).has_watched, true);
+});
+
+test('only a 403 counts as already paid; offline and 5xx keep the coins on offer', () => {
+  assert.equal(feed.viewFailureKind({ response: { status: 403 } }), 'already-paid');
+  assert.equal(feed.viewFailureKind({ response: { status: 500 } }), 'retry');
+  assert.equal(feed.viewFailureKind({ code: 'ERR_NETWORK' }), 'retry');
+  assert.equal(feed.viewFailureKind(null), 'retry');
+  assert.match(read('src/screens/WatchScreen.tsx'), /Coins not saved yet/);
+});
+
+test('a stray script error never covers a playing video; only API load, timeout or player errors do', () => {
+  const html = feed.playerHtml('Vdiom632yME');
+  assert.doesNotMatch(html, /window\.onerror/);
+  assert.match(html, /t\.onerror=function\(\)\{post\(\{type:'error',code:'api'\}\)/);
+  assert.match(html, /onError:function\(e\)\{post\(\{type:'error',code:e\.data\}\)/);
+});
+
+test('the coin bar stops ticking at unlock and the WebView is memoized away from it', () => {
+  const player = read('src/components/watch/YouTubePlayerModal.tsx');
+  assert.match(player, /if \(!playing \|\| rewardCoins <= 0 \|\| unlocked\) return;/);
+  assert.match(player, /const PlayerWeb = memo\(/);
+  assert.match(player, /Up next/);
+  assert.match(player, /Next video/);
 });
