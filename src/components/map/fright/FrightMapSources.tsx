@@ -6,7 +6,7 @@
  * screen off view is unmounted (bounds re-read every 2 s), and only the
  * nearest spots spend the tier's sprite budget.
  */
-import { FillLayer, ShapeSource, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { BackgroundLayer, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { useWindowDimensions, View } from 'react-native';
 import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
@@ -30,8 +30,6 @@ import { EncounterSprite, HAUNT_ANCHOR, HauntLantern, ReefCritters, ReefGlyph, S
 import type { FrightMapInput } from './types';
 import { useFrightState } from './useFrightState';
 
-const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
-  geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 /** Deep night over the tiles (night-tint.json overlay, a touch lighter so paths stay legible). */
 export const NIGHT_TINT = '#1E1846';
 export const NIGHT_TINT_MAX = 0.44;
@@ -392,20 +390,26 @@ const PARKED = { latitude: 0, longitude: 0 } as const;
  * The night tint over the tiles. Map.tsx keeps it mounted at all times (opacity
  * 0 without an input), so turning the mode on never inserts a source mid-list.
  */
+/** The hook's input while the mode is off: one stable shape, so the tint never swaps components. */
+const FRIGHT_OFF: FrightMapInput = {
+  tonight: { enabled: false, server_now: '', phase: 'off', event: null, night: null, spots: [], encounter: null, me: null, config: null },
+  active: false, nowOffsetMs: 0, player: null, spooky: false, doneKeys: [],
+};
+
+/**
+ * The night tint: ONE component and ONE background layer for the map's whole life.
+ * Null fright only changes the layer's opacity (never which component renders), so
+ * MapLibre never sees the layer leave or re-insert. A background layer covers the
+ * whole viewport, so tiles that have not drawn yet after a camera jump are tinted
+ * too: no untinted day strip at night.
+ */
 export const FrightNightTint = memo(function FrightNightTint({ input }: { readonly input: FrightMapInput | null }) {
-  return input ? <ActiveTint input={input} /> : <TintSource opacity={0} intro={false} />;
-});
-
-function ActiveTint({ input }: { readonly input: FrightMapInput }) {
-  const st = useFrightState(input);
-  return <TintSource opacity={NIGHT_TINT_MAX * Math.max(0, st.visible)} intro={input.cinematic === 'intro'} />;
-}
-
-function TintSource({ opacity, intro }: { readonly opacity: number; readonly intro: boolean }) {
+  const st = useFrightState(input ?? FRIGHT_OFF);
+  const opacity = input ? NIGHT_TINT_MAX * Math.max(0, st.visible) : 0;
+  const intro = input?.cinematic === 'intro';
   return (
-    <ShapeSource id="fright-night-tint" shape={WORLD}>
-      <FillLayer id="fright-night-tint" aboveLayerID="tps-sky-tint" style={{
-        fillColor: NIGHT_TINT, fillOpacity: opacity, fillOpacityTransition: { duration: intro ? 900 : 4000, delay: 0 } }} />
-    </ShapeSource>
+    <BackgroundLayer id="fright-night-tint" aboveLayerID="tps-sky-tint" style={{
+      backgroundColor: NIGHT_TINT, backgroundOpacity: opacity,
+      backgroundOpacityTransition: { duration: intro ? 900 : 4000, delay: 0 } }} />
   );
-}
+});

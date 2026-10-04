@@ -43,9 +43,6 @@ export const MapQueryContext = createContext<{
 // eases under it (Pokemon GO style); panned away, it becomes a map marker.
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
-// The whole map, for the time-of-day tint layer.
-const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
-  geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 /** The style's land colour (tpsMapStyle 'bg'). */
 const STYLE_BACKGROUND = '#c4e39a';
@@ -619,10 +616,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }} />
         </ShapeSource>
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
-        <ShapeSource id="tps-sky-tint" shape={WORLD}>
-          <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
-            fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
-        </ShapeSource>
+        {/* A background layer, not a GeoJSON fill: it covers the whole viewport, including tiles that
+            have not drawn yet, so a camera jump never shows an untinted strip. */}
+        <BackgroundLayer id="tps-sky-tint" style={{ backgroundColor: light.tint.color, backgroundOpacity: light.tint.opacity,
+          backgroundColorTransition: { duration: 4000, delay: 0 }, backgroundOpacityTransition: { duration: 4000, delay: 0 } }} />
         {/* Where tiles have not drawn yet (a camera jump), the style background showed as a flash of day
             map at night. While the night tint is on, the background wears the tinted colour. Always mounted. */}
         <BackgroundLayer id="tps-night-bg" aboveLayerID="bg" style={{ backgroundColor: nightBackground,

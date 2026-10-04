@@ -85,15 +85,25 @@ export default function MapDeclutterPreview() {
   const [now] = useState(() => Date.now());
   const store = useRef(createDeclutterStore()).current;
   const tonight = useMemo(() => usfFrightFixture(now, 'live'), [now]);
-  // The soak also turns the night mode off for 15 s every 45 s (its markers fade, never unmount).
-  const [modeOff, setModeOff] = useState(false);
+  // Every 45 s the soak runs the night mode through all three states: fright null for 10 s (the
+  // input leaves entirely, as when you walk out of the event park), on, mode off (fades), on again.
+  // Markers and tints must fade, never unmount or swap.
+  const [frightState, setFrightState] = useState<'on' | 'off' | 'null'>('on');
   useEffect(() => {
     if (CAM !== 'soak') return;
-    const timer = setInterval(() => setModeOff(off => !off), 22_500);
+    const start = Date.now();
+    const timer = setInterval(() => {
+      const t = ((Date.now() - start) / 1000) % 45;
+      const next = t < 10 ? 'null' : t < 25 ? 'on' : t < 35 ? 'off' : 'on';
+      setFrightState(prev => {
+        if (prev !== next) console.log(`[declutter-soak] fright ${next} at ${((Date.now() - start) / 1000).toFixed(1)}s`);
+        return next;
+      });
+    }, 500);
     return () => clearInterval(timer);
   }, []);
-  const fright = useMemo<FrightMapInput | null>(() => day ? null : ({ tonight, active: !modeOff, nowOffsetMs: 0,
-    player: PLAYER, spooky: true, quiet: true, doneKeys: [] }), [tonight, day, modeOff]);
+  const fright = useMemo<FrightMapInput | null>(() => day || frightState === 'null' ? null : ({ tonight,
+    active: frightState === 'on', nowOffsetMs: 0, player: PLAYER, spooky: true, quiet: true, doneKeys: [] }), [tonight, day, frightState]);
   const [camFocus, setCamFocus] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   useEffect(() => {
     if (!CAM) return;

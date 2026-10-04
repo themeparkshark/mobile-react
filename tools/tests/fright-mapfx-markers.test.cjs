@@ -49,9 +49,36 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
   assert.match(map, /<FrightNightTint input=\{fright\} \/>/);
   const close = map.indexOf('</MapView>');
   const sources = map.lastIndexOf('<FrightMapSources', close);
-  const shark = map.lastIndexOf('{location && (', close);
+  const shark = map.lastIndexOf('<Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location}', close);
+  assert.ok(shark > 0, 'the player shark is one always-mounted Marker');
   assert.ok(sources > shark && sources < close, 'fright markers come after every other MapView child');
   assert.equal(map.match(/<FrightMapSources/g).length, 1);
+});
+
+test('FrightNightTint is one component with one stable background layer: null fright only changes opacity', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  const start = src.indexOf('export const FrightNightTint');
+  const body = src.slice(start, src.indexOf('\n});', start));
+  assert.ok(start > 0 && body.length > 0);
+  const elements = [...body.matchAll(/<([A-Z]\w*)/g)].map(m => m[1]);
+  assert.deepEqual(elements, ['BackgroundLayer'], 'exactly one element, a background layer (covers undrawn tiles too)');
+  assert.match(body, /<BackgroundLayer id="fright-night-tint" aboveLayerID="tps-sky-tint"/);
+  assert.doesNotMatch(body, /(\?|:|&&)\s*\(?\s*</, 'no ternary or && picks what renders');
+  assert.doesNotMatch(body, /return null/);
+  assert.match(body, /useFrightState\(input \?\? FRIGHT_OFF\)/, 'the hook runs every render, null or not');
+  assert.doesNotMatch(src, /function (ActiveTint|TintSource)\b/, 'no second tint component to swap to');
+  assert.doesNotMatch(src, /<FillLayer id="fright-night-tint"/, 'not a GeoJSON fill (it lags undrawn tiles)');
+});
+
+test('Map.tsx: both tints are background layers and no direct MapView child is mounted by a condition', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /<BackgroundLayer id="tps-sky-tint" style=\{\{ backgroundColor: light\.tint\.color, backgroundOpacity: light\.tint\.opacity/);
+  assert.doesNotMatch(map, /<FillLayer id="tps-sky-tint"/);
+  const open = map.indexOf('<MapView\n');
+  const region = map.slice(open, map.indexOf('</MapView>'));
+  const conditional = region.split('\n').filter(l => /^\s*\{[^{}]*(\?|&&)\s*\(?\s*<[A-Z]/.test(l) || /^\s*\{[^{}]*(\?|&&)\s*\($/.test(l));
+  assert.deepEqual(conditional.map(l => l.trim()), ['{fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}'],
+    'only the fright markers (the LAST child, so nothing shifts) mount on a condition');
 });
 
 test('no Skia node swaps anywhere in the fright layer: no `? <Sprite> : <Other>` and no `&& <Sprite>` (opacity gates only)', () => {
