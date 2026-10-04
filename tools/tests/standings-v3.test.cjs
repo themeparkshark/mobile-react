@@ -132,7 +132,7 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.match(board, /createAnimatedComponent\(FlashList<ListItem>\)/);
   assert.match(board, /getItemType=\{\(item: ListItem\) => item\.type\}/, 'rows, dividers and placeholders recycle separately');
   assert.match(board, /estimatedItemSize=\{ROW_HEIGHT\}/);
-  assert.match(board, /shouldPrefetch\(lastVisible\.current, itemsRef\.current\)\) moreRef\.current\('scroll'\)/);
+  assert.match(board, /shouldPrefetch\(lastVisible\.current, itemsRef\.current, firstVisible\.current\)\) moreRef\.current\('scroll'\)/);
   assert.match(board, /onEndReached=/, 'a fling past the prefetch point still loads');
   assert.match(board, /InteractionManager\.runAfterInteractions\(\(\) => moreRef\.current\('idle'\)\)/, 'page 2 is fetched while the kid looks at the podium');
   assert.match(board, /\}, \[active, firstPageOnly\]\);/, 'also for a board served from the warm cache');
@@ -153,25 +153,21 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.match(api, /params: \{ board, offset,/);
 });
 
-test('a page landing above the Your spot block never moves what the kid is looking at', () => {
+test('a page never lands above what the kid is looking at', () => {
   const m = model.boardModel(firstPage(), 'week', 5);
-  const before = model.listItems(m);
-  const spot = before.findIndex(i => i.type === 'row' && i.row.isMe);
-  const after = model.listItems(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5));
-  const shift = model.anchorShift(before, after, spot);
-  assert.equal(shift, 50 * model.ROW_HEIGHT, 'fifty rows landed above you');
-  const layoutsAfter = model.itemLayouts(after);
-  const layoutsBefore = model.itemLayouts(before);
-  const nowAt = after.findIndex(i => i.type === 'row' && i.row.isMe);
-  assert.equal(layoutsAfter[nowAt].offset - shift, layoutsBefore[spot].offset, 'scrolling by the shift keeps your row in place');
-  // When the list reaches you, your near- row becomes a plain row: still the same anchor.
-  const all = model.mergePage(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5),
-    { rows: ranked(101, 140).map(r => (r.rank === 120 ? { ...r, id: 5, is_me: true } : r)), next_offset: null }, 5);
-  const mid = model.listItems(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5));
-  const meMid = mid.findIndex(i => i.type === 'row' && i.row.isMe);
-  assert.ok(model.anchorShift(mid, model.listItems(all), meMid) !== 0);
-  assert.equal(model.anchorShift(before, after, 999), 0, 'no anchor, no shift');
+  const items = model.listItems(m);
+  const gap = model.firstSkeletonIndex(items);
+  const me = items.findIndex(i => i.type === 'row' && i.row.isMe);
+  assert.ok(me > gap, 'Your spot sits below the grey rows');
+  assert.equal(model.safeToInsert(0, items), true, 'at the top: pages land below');
+  assert.equal(model.safeToInsert(gap, items), true, 'grey rows on screen: they fill in place');
+  assert.equal(model.safeToInsert(gap + model.SKELETON_ROWS, items), false, 'down in Your spot: the page waits');
+  assert.equal(model.shouldPrefetch(me + 3, items, me - 2), false, 'no fetch from the Your spot block');
+  assert.equal(model.shouldPrefetch(gap - 5, items, gap - 12), true);
+  assert.equal(model.safeToInsert(999, model.listItems(model.boardModel(firstPage({ next_offset: null }), 'week', 5))), true);
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(board, /firstVisible\.current > gap\) pendingAnchor\.current =/, 'only when the kid is below the grey rows');
-  assert.match(board, /scrollToOffset\(\{ offset: scrollY\.value \+ shift, animated: false \}\)/);
+  assert.match(board, /if \(safeToInsert\(firstVisible\.current, itemsRef\.current\)\) setModel\(next\);\s+else \{ heldPage\.current = next;/);
+  assert.match(board, /if \(heldPage\.current && safeToInsert\(firstVisible\.current, itemsRef\.current\)\)/, 'a held page lands when the kid scrolls back up');
+  assert.match(board, /onEndReached=\{\(\) => \{ if \(activeRef\.current && safeToInsert\(/);
+  assert.doesNotMatch(board, /pendingAnchor|anchorShift/);
 });

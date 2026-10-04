@@ -11,8 +11,9 @@
  * Goals and anything else live on the card you get by tapping your row.
  *
  * Smooth: FlashList recycles rows, faces stay decoded in memory, and the next
- * page is fetched about two screens before the end. Grey rows hold its place,
- * so nothing jumps when it lands.
+ * page is fetched about two and a half screens before the end. Grey rows hold
+ * its place, and a page never lands above what the kid is looking at (down in
+ * the Your spot block it waits), so nothing on screen ever jumps.
  */
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -46,7 +47,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  anchorShift, DIVIDER_HEIGHT, firstSkeletonIndex, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  DIVIDER_HEIGHT, firstSkeletonIndex, safeToInsert, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -502,9 +503,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const fetchingMore = useRef(false);
   const lastVisible = useRef(0);
   const firstVisible = useRef(0);
-  // A page that lands above what the kid is looking at (the Your spot block)
-  // would push it down: remember what was on top, and shift back after commit.
-  const pendingAnchor = useRef<{ readonly items: readonly ListItem[]; readonly index: number } | null>(null);
+  // A page that lands while the kid is down in the Your spot block would push
+  // it down: it waits here until they scroll back up to the grey rows.
+  const heldPage = useRef<StandingsBoardModel | null>(null);
   const more = useCallback((why: 'idle' | 'scroll' | 'end') => {
     if (fetchingMore.current || !model || model.nextOffset == null) return;
     fetchingMore.current = true;
@@ -515,14 +516,14 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     loadMore(meId, board, parkId).then(next => {
       if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${next?.rows.length ?? 0} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
       if (next && id === request.current) {
-        const gap = firstSkeletonIndex(itemsRef.current);
-        if (gap >= 0 && firstVisible.current > gap) pendingAnchor.current = { items: itemsRef.current, index: firstVisible.current };
-        setModel(next);
+        if (safeToInsert(firstVisible.current, itemsRef.current)) setModel(next);
+        else { heldPage.current = next; if (STANDINGS_PERF_ON) perfMark(`page-held ${board}`); }
       }
     }).catch(() => { if (STANDINGS_PERF_ON) perfMark(`page-failed ${board} ${Date.now() - started}ms`); }).finally(() => { fetchingMore.current = false; });
   }, [model, meId, board, parkId]);
   const moreRef = useRef(more);
   moreRef.current = more;
+  const setModelRef = useRef(setModel);
   // Page 2 is fetched while the kid looks at the podium (from the network or
   // the warm cache alike), so the first fling never waits on the network.
   const firstPageOnly = !!model && model.nextOffset != null && model.rows.length <= model.nextOffset;
@@ -541,14 +542,6 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (urls.length) void ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined);
   }, [model]);
   const layouts = useMemo(() => itemLayouts(items), [items]);
-  useLayoutEffect(() => {
-    const anchor = pendingAnchor.current;
-    pendingAnchor.current = null;
-    if (!anchor) return;
-    const shift = anchorShift(anchor.items, items, anchor.index);
-    if (shift) list.current?.scrollToOffset({ offset: scrollY.value + shift, animated: false });
-    if (STANDINGS_PERF_ON) perfMark(`anchor ${board} shift=${shift}`);
-  }, [items]);
   const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
   const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
   const meOnPodium = podium.some(row => row?.isMe);
@@ -605,8 +598,14 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
     lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
     firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
-    // About two screens before the grey rows: fetch, so the page lands before the kid gets there.
-    if (activeRef.current && shouldPrefetch(lastVisible.current, itemsRef.current)) moreRef.current('scroll');
+    // Back up at the grey rows: a held page lands now.
+    if (heldPage.current && safeToInsert(firstVisible.current, itemsRef.current)) {
+      const held = heldPage.current;
+      heldPage.current = null;
+      setModelRef.current(held);
+    }
+    // About two and a half screens before the grey rows: fetch, so the page lands before the kid gets there.
+    if (activeRef.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
   }).current;
   // Becoming the active tab: wake the list and work out from geometry whether your
   // row is on screen, so the You card never duplicates a visible row.
@@ -732,7 +731,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           viewabilityConfig={viewability}
           onViewableItemsChanged={onViewable}
           // Backstop for a fling past the prefetch point.
-          onEndReached={() => { if (activeRef.current) moreRef.current('end'); }}
+          onEndReached={() => { if (activeRef.current && safeToInsert(firstVisible.current, itemsRef.current)) moreRef.current('end'); }}
           onEndReachedThreshold={2}
           refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 48 }} />}

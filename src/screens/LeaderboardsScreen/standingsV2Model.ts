@@ -284,25 +284,19 @@ export function firstSkeletonIndex(items: readonly ListItem[]): number {
  * Whether to ask for the next page: the kid can see a row within
  * PREFETCH_ROWS of the placeholders, so the page lands before they reach them.
  */
-export function shouldPrefetch(lastVisibleIndex: number, items: readonly ListItem[]): boolean {
+export function shouldPrefetch(lastVisibleIndex: number, items: readonly ListItem[], firstVisibleIndex = 0): boolean {
   const at = firstSkeletonIndex(items);
-  return at >= 0 && lastVisibleIndex >= at - PREFETCH_ROWS;
+  return at >= 0 && lastVisibleIndex >= at - PREFETCH_ROWS && safeToInsert(firstVisibleIndex, items);
 }
 
 /**
- * How far (pt) an item moved when a page landed above it, so the list can
- * shift by the same amount and the kid's view stays still. A row from the
- * "Your spot" block (key near-X) that joined the main list (key X) is the
- * same row. 0 when the anchor is gone or did not move.
+ * Whether a page may land now without moving what the kid is looking at:
+ * the grey rows are on screen or below it. A kid down in the "Your spot"
+ * block (below the grey rows) would see everything shift, so the page waits.
  */
-export function anchorShift(before: readonly ListItem[], after: readonly ListItem[], anchorIndex: number): number {
-  const anchor = before[anchorIndex];
-  if (!anchor) return 0;
-  const plainKey = anchor.key.startsWith('near-') ? anchor.key.slice(5) : anchor.key;
-  const at = after.findIndex(item => item.key === anchor.key || item.key === plainKey || item.key === `near-${plainKey}`);
-  if (at < 0) return 0;
-  const offsetOf = (items: readonly ListItem[], index: number) => itemLayouts(items.slice(0, index + 1))[index]?.offset ?? 0;
-  return offsetOf(after, at) - offsetOf(before, anchorIndex);
+export function safeToInsert(firstVisibleIndex: number, items: readonly ListItem[]): boolean {
+  const at = firstSkeletonIndex(items);
+  return at < 0 || firstVisibleIndex <= at + SKELETON_ROWS - 1;
 }
 
 /** List row heights for the fixed-height items. */
