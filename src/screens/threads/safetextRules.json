@@ -75,7 +75,7 @@
     "\\b(video\\s+chat|videochat|video\\s+call|facetime|face\\s+time|private\\s+chat|chat\\s+privately)\\b",
     "\\b(are|r|is)\\s+(your|ur)\\s+(parents|mom|dad|mum|family)\\s+(home|there|around|out|gone)\\b",
     "\\bdon\\s?t\\s+tell\\s+(your|ur)\\b|\\bdon\\s?t\\s+tell\\s+(anyone|anybody|nobody|no\\s+one)\\s+(we|about\\s+(us|me|this\\s+chat))",
-    "\\b(keep\\s+(it|this)\\s+(a\\s+)?secret|our\\s+(little\\s+)?secret)\\b",
+    "\\b(keep\\s+(it|this)\\s+(a\\s+)?secret(?!\\s*[:\\-]?\\s*(the\\s+)?(best|top|secret|hidden|coolest|fastest|shortest)\\s+(photo|photos|pic|picture|spot|spots|snack|snacks|ride|view|place|seat|seats|trick|hack|churro|treat|time|line|entrance|shortcut|menu)\\b)|our\\s+(little\\s+)?secret)\\b",
     "(?<!character\\s)\\bmeet\\s*-?\\s*(me|ups?|you|u)\\b",
     "\\blet\\s?s\\s+meet\\b",
     "\\bmeet\\s+(at|by|near|in\\s+front\\s+of)\\b",
@@ -591,7 +591,11 @@
     "\\b(drown\\w*)\\s+my\\s?self\\b",
     "\\b(walk|step|run)\\w*\\s+into\\s+traffic\\b",
     "\\b(tie|tying)\\s+a\\s+noose\\b|\\bhow\\s+to\\s+tie\\s+a\\s+noose\\b",
-    "\\bid\\s+be\\s+better\\s+(off\\s+)?dead\\b"
+    "\\bid\\s+be\\s+better\\s+(off\\s+)?dead\\b",
+    "\\b(hate|h8)\\s+(being\\s+alive|living)\\b",
+    "\\b(tired|sick)\\s+of\\s+(being\\s+alive|living)\\b",
+    "\\bwant\\s+(it\\s+all|everything)\\s+to\\s+end\\b",
+    "\\b(should|wanna|want\\s+to)\\s+(just\\s+)?stop\\s+breathing\\b"
   ],
   "review_you": "\\b(u|you|ur|your|yours|ya|yall|urself|yourself|youre|tu|tus|eres|estas|tienes|vives)\\b",
   "review_topics": "\\b(county|area|neighborhood|irl|feet|allowed|date|dating|adorable|candles|age|ages|born|grade|school|teacher|town|city|state|location|address|house|street|hotel|room|floor|face|parents|alone|mature|edad|anos|escuela|donde|papas|bf|gf|boyfriend|girlfriend|body|eyes|older|younger|teen|teens|property|trust|privately|elementary|homeschool\\w*)\\b|\\b(any|a|some|more)\\s+(pics?|photos?|selfies?|fotos?)\\b|\\b(pics?|pictures?|photos?|selfies?|fotos?)\\s+(of|de)\\s+(u|you|ur|urself|yourself|ti)\\b|\\b(turn\\s+on|open|use)\\s+(ur|your)\\s+(camera|cam)\\b|\\bstaying\\s+(on|at|in)\\b|\\blive\\s+(in|near|by|around|far|close|from)\\b|\\b(tell|show|from|away\\s+from|without)\\s+(this\\s+|it\\s+)?(to\\s+)?(ur|your)\\s+(mom|dad|mum|parents|folks|family)\\b",
