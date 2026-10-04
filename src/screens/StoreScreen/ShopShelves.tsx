@@ -485,11 +485,16 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
   // iOS can't present a modal while the last one is still dismissing: hold the next reveal a beat.
   const [revealGate, setRevealGate] = useState(true);
-  const finishReveal = useCallback(() => {
+  const holdReveal = useCallback(() => {
     setRevealGate(false);
     setTimeout(() => setRevealGate(true), 450);
-    setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
   }, []);
+  // The try-on is a modal too: the reveal waits for it to finish dismissing, or iOS drops it.
+  const closeTryOn = useCallback(() => { holdReveal(); setOpen(null); }, [holdReveal]);
+  const finishReveal = useCallback(() => {
+    holdReveal();
+    setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
+  }, [holdReveal]);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
@@ -617,7 +622,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
       {open && (
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
-          onClose={() => setOpen(null)} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
+          onClose={closeTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still} onDone={finishReveal} />}

@@ -627,3 +627,10 @@ test('round 6: copy never uses em dashes (new files too)', () => {
     assert.equal(src(file).includes('—'), false, file);
   }
 });
+
+test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss', () => {
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(code, /closeTryOn = useCallback\(\(\) => \{ holdReveal\(\); setOpen\(null\); \}/);
+  assert.match(code, /onClose=\{closeTryOn\}/);
+  assert.match(code, /reveal && !open && revealGate/);
+});
