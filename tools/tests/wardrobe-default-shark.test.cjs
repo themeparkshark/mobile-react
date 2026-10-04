@@ -95,5 +95,5 @@ test('a wardrobe top card dresses the Classic shark when no skin is worn', () =>
 test('map marker: the dressed shark eyes pause off-screen and under Reduce Motion', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/Map.tsx'), 'utf8');
   const block = src.slice(src.indexOf('sharkBaseLayers(player?.inventory).map'), src.indexOf('outfitLayerUrls(player?.inventory).map'));
-  require('node:assert/strict').match(block, /autoplay=\{screenFocused && !reducedMotion\}/);
+  require('node:assert/strict').match(block, /autoplay=\{playing && screenFocused && !reducedMotion\}/);
 });

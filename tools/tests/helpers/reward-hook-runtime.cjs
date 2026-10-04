@@ -56,7 +56,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   const code = transpile(fs.readFileSync(path.join(root, file), 'utf8'));
   // Shared app hooks that every poll uses run for real in the component's realm.
   const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
-    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', useUserIdle: 'src/hooks/useUserIdle.ts',
+    gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts',
     matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts' };
   const realCache = new Map();
   let sandbox;
