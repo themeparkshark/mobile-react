@@ -6,7 +6,7 @@ import { FX_GEOMETRY, hash01, momentAt, partLayout } from '../registry';
 
 const G = FX_GEOMETRY.rigs.ghost_lantern;
 const LANTERN = require('../../../assets/fx/lantern.webp');
-const GHOST = require('../../../assets/fx/ghost.webp');
+const GHOST_RIM = require('../../../assets/fx/ghost-rim.webp');
 const GLOW = require('../../../assets/fx/glow.webp');
 /** The purple flame inside lantern.webp (part fractions). */
 export const FLAME_AT = { x: 0.54, y: 0.624 };
@@ -66,8 +66,8 @@ function useLanternFrame({ t, box, lod }: RigProps) {
 
 function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean | 'both'; l: ReturnType<typeof partLayout> }) {
   const still = lod === 'still';
-  const ghostW = G.ghost.w * box.w;
-  const ghostH = ghostW * G.ghost.aspect;
+  const rimW = G.ghost.w * box.w * 1.5;
+  const rimH = rimW * 0.9549;
   const ghost = useAnimatedStyle(() => {
     const m = still ? { p: STILL_P, cycle: 0 } : momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350);
     // In a tile the loop always goes right, into the open space (never over the corner tag).
@@ -75,12 +75,8 @@ function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean | 'b
     return { opacity: front === 'both' || g.front === front ? g.o : 0, transform: [{ translateX: g.x * l.width }, { translateY: g.y * l.height }, { scale: g.s }] };
   });
   return (
-    <Animated.View style={[styles.abs, { left: l.width / 2 - ghostW / 2, top: l.height * 0.05 - ghostH / 2, width: ghostW, height: ghostH }, ghost]}>
-      {/* A violet rim so the white ghost reads against the white belly too. */}
-      <Image source={GLOW} style={{ position: 'absolute', left: -ghostW * 0.25, top: -ghostH * 0.25, width: ghostW * 1.5, height: ghostH * 1.5,
-        tintColor: '#9b5cff', opacity: 0.8 }} contentFit="fill" cachePolicy="memory" />
-      <Image source={GHOST} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
-    </Animated.View>
+    // One image: the ghost with its violet rim baked in (reads on the white belly; one layer fades, perf round 3).
+    <Animated.Image source={GHOST_RIM} style={[styles.abs, { left: l.width / 2 - rimW / 2, top: l.height * 0.05 - rimH / 2, width: rimW, height: rimH }, ghost]} />
   );
 }
 

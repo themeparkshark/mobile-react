@@ -540,7 +540,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     </View>
                   </View>
                 )}
-                {!owned && phase === 'idle' && (!vipLocked || secretItem) && (
+                {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && (
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{wishHintCopy(wished, wishStore.alerts())}</Text>
                 )}
               </ScrollView>

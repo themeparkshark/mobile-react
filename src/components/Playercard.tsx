@@ -7,7 +7,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
 let contactIds = 0;
-import { Animated, GestureResponderEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Animated, GestureResponderEvent, Image as RNImage, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
@@ -133,7 +133,14 @@ export default function Playercard({
     setFxIdle(false);
     idleTimer.current = setTimeout(() => setFxIdle(true), 60_000);
   }, []);
-  useEffect(() => { wakeFx(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [wakeFx]);
+  // Only a card with something animating arms the timer; it wakes again whenever the stage resumes.
+  const animates = fx.rigs.length > 0 || (!!fx.scene && showBackground);
+  const resumed = useFxRunning(still || reduced ? 'still' : 'full');
+  useEffect(() => {
+    if (animates && resumed) wakeFx();
+    else if (idleTimer.current) clearTimeout(idleTimer.current);
+    return () => { if (idleTimer.current) clearTimeout(idleTimer.current); };
+  }, [wakeFx, animates, resumed]);
   const lod: FxLod = still || reduced ? 'still' : fxIdle && fxLod === 'full' ? 'lite' : fxLod;
   // Only a look with something to draw runs a clock (a scene off stage draws nothing here).
   const fxRunning = useFxRunning(lod) && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
@@ -326,7 +333,7 @@ export default function Playercard({
         )}
         {grounded && (
           // The plaza shadow: the shark stands on the scene's ground, never floats over it (art panel round 3).
-          <Image pointerEvents="none" source={GROUND_SHADOW} contentFit="fill"
+          <RNImage source={GROUND_SHADOW} resizeMode="stretch"
             style={{ position: 'absolute', left: '33%', width: '52%', top: '86%', height: '9%', opacity: 0.55, tintColor: '#050320' }} />
         )}
         <Animated.View
