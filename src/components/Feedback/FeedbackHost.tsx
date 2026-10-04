@@ -26,6 +26,7 @@ import {
   type FeedbackSnapshot, type FeedbackTrigger,
 } from '../../services/feedback/model';
 import { addBreadcrumb } from '../../services/telemetry';
+import { lastErrorLine, readLastError } from '../../services/fatalErrors';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, GameText, OUTLINE, RADIUS, SPACE } from '../../ui';
 
 type Opener = (trigger: FeedbackTrigger) => void;
@@ -118,9 +119,13 @@ export default function FeedbackHost() {
 
   const submit = async () => {
     if (!draft || busy) return;
+    // The last saved error (even one that closed the app on an earlier launch) rides along.
+    const lastError = await readLastError();
+    const logs = recentLogLines();
     const body = feedbackRequest({
       note, screenshot: draft.screenshot, includeScreenshot: includeShot, trigger: draft.trigger,
-      snapshot: draft.snapshot, logs: recentLogLines(),
+      snapshot: draft.snapshot,
+      logs: lastError ? [...logs.slice(-49), { level: 'error' as const, message: lastErrorLine(lastError).slice(0, 1000), at: lastError.at }] : logs,
     });
     if (!body) {
       setError(FEEDBACK_COPY.needSomething);

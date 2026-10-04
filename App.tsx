@@ -6,6 +6,7 @@ import Root from './src/Root';
 import { holdNativeSplash } from './src/nativeSplash';
 import { captureException, captureMessage, initTelemetry } from './src/services/telemetry';
 import { installConsoleRing } from './src/services/feedback/consoleRing';
+import { installFatalHandler } from './src/services/fatalErrors';
 import { BRAND, FONT, GameButton, OUTLINE, SHADOW } from './src/ui';
 
 // Must run at module scope, before the first render, or the native launch
@@ -17,6 +18,14 @@ installConsoleRing();
 if (initTelemetry() && __DEV__ && process.env.EXPO_PUBLIC_TELEMETRY_TEST === '1') {
   captureMessage('Telemetry test event', 'info', { test: 'true' });
 }
+// After telemetry, so it wraps telemetry's handler: a fatal throw outside render
+// (onPress, timer, async) shows the reload card instead of closing the app, and
+// is saved for Settings > Report a Problem.
+installFatalHandler({
+  errorUtils: (globalThis as unknown as { ErrorUtils?: Parameters<typeof installFatalHandler>[0]['errorUtils'] }).ErrorUtils,
+  dev: __DEV__,
+  report: (error, fatal) => { captureException(error, { fatal, handled: true, source: 'global-handler' }); },
+});
 
 const reportBoundaryError = (error: Error) => {
   captureException(error, { source: 'error-boundary', handled: true });
