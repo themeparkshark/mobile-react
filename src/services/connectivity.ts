@@ -24,3 +24,24 @@ export function onConnectivityChange(listener: Listener): () => void {
     listeners.delete(listener);
   };
 }
+
+/**
+ * A full-screen offline state (e.g. a social screen's "didn't load" card) can
+ * own the offline mark: while it is mounted the global banner stays hidden,
+ * so the player sees exactly one offline indicator.
+ */
+let markOwners = 0;
+const ownerListeners = new Set<(owned: boolean) => void>();
+export function claimOfflineMark(): () => void {
+  markOwners += 1;
+  if (markOwners === 1) ownerListeners.forEach(l => l(true));
+  return () => {
+    markOwners = Math.max(0, markOwners - 1);
+    if (markOwners === 0) ownerListeners.forEach(l => l(false));
+  };
+}
+export const isOfflineMarkOwned = (): boolean => markOwners > 0;
+export function onOfflineMarkOwner(listener: (owned: boolean) => void): () => void {
+  ownerListeners.add(listener);
+  return () => { ownerListeners.delete(listener); };
+}

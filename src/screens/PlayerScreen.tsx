@@ -120,7 +120,8 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               message: 'A grown-up on our team will check it.',
               icon: 'info',
               // Three equal choices.
-              buttons: [{ text: 'Mean name' }, { text: 'Mean to me' }, { text: 'Something else' }, { text: 'Cancel', style: 'cancel' }],
+              // A picture per reason so a kid can pick without reading.
+              buttons: [{ text: 'Mean name', icon: 'edit' }, { text: 'Mean to me', icon: 'shark' }, { text: 'Something else', icon: 'info' }, { text: 'Cancel', style: 'cancel' }],
               equalChoices: true,
             });
             if (choice == null || choice > 2) return;

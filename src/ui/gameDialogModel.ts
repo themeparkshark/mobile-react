@@ -24,6 +24,8 @@ export type GameDialogButton = {
   readonly onPress?: () => void;
   /** Override the automatic button styling. */
   readonly variant?: GameButtonVariant;
+  /** Optional art before the label (e.g. report reasons). */
+  readonly icon?: GameIconName;
 };
 
 export type GameDialogOptions = {
