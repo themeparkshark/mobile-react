@@ -159,3 +159,13 @@ test('r3 panel: the resting board never writes the shine value, and pins share o
   assert.match(pin, /usePinImage\(uri\)/);
   assert.doesNotMatch(pin, /\buseImage\(/);
 });
+
+test('r4 panel: the cross flash, sparks and ring are siblings of the flying pin, never inside it', () => {
+  const cele = read('src/screens/pinTrading/SwapCelebration.tsx');
+  const pinEnd = cele.indexOf('recyclingKey={`slot-${got.id}`} />');
+  const flash = cele.indexOf('<Flash size={220} />');
+  assert.ok(pinEnd > 0 && flash > pinEnd);
+  const between = cele.slice(pinEnd, flash);
+  assert.equal((between.match(/<\/Animated\.View>/g) || []).length, 2, 'both the bob layer and the pin wrapper close before the flash');
+  assert.match(cele, /insets\.top \+ 64/, 'the toss apex stays below the top bar');
+});
