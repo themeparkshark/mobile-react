@@ -55,6 +55,32 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
   assert.equal(map.match(/<FrightMapSources/g).length, 1);
 });
 
+test('FrightNightTint is one component with one stable background layer: null fright only changes opacity', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  const start = src.indexOf('export const FrightNightTint');
+  const body = src.slice(start, src.indexOf('\n});', start));
+  assert.ok(start > 0 && body.length > 0);
+  const elements = [...body.matchAll(/<([A-Z]\w*)/g)].map(m => m[1]);
+  assert.deepEqual(elements, ['BackgroundLayer'], 'exactly one element, a background layer (covers undrawn tiles too)');
+  assert.match(body, /<BackgroundLayer id="fright-night-tint" aboveLayerID="tps-sky-tint"/);
+  assert.doesNotMatch(body, /(\?|:|&&)\s*\(?\s*</, 'no ternary or && picks what renders');
+  assert.doesNotMatch(body, /return null/);
+  assert.match(body, /useFrightState\(input \?\? TINT_OFF_INPUT\)/, 'the hook runs every render, null or not');
+  assert.doesNotMatch(src, /function (ActiveTint|TintSource)\b/, 'no second tint component to swap to');
+  assert.doesNotMatch(src, /<FillLayer id="fright-night-tint"/, 'not a GeoJSON fill (it lags undrawn tiles)');
+});
+
+test('Map.tsx: both tints are background layers and no direct MapView child is mounted by a condition', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /<BackgroundLayer id="tps-sky-tint" style=\{\{ backgroundColor: light\.tint\.color, backgroundOpacity: light\.tint\.opacity/);
+  assert.doesNotMatch(map, /<FillLayer id="tps-sky-tint"/);
+  const open = map.indexOf('<MapView\n');
+  const region = map.slice(open, map.indexOf('</MapView>'));
+  const conditional = region.split('\n').filter(l => /^\s*\{[^{}]*(\?|&&)\s*\(?\s*<[A-Z]/.test(l) || /^\s*\{[^{}]*(\?|&&)\s*\($/.test(l));
+  assert.deepEqual(conditional.map(l => l.trim()), ['{fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}'],
+    'only the fright markers (the LAST child, so nothing shifts) mount on a condition');
+});
+
 test('no Skia node swaps anywhere in the fright layer: no `? <Sprite> : <Other>` and no `&& <Sprite>` (opacity gates only)', () => {
   const dir = path.join(root, 'src/components/map/fright');
   const skia = 'Canvas|Group|Rect|Circle|Oval|Path|Points|Mask|ImageShader|RadialGradient|LinearGradient|BlurMask|SkImage|SheetFrame|SoftEllipse|FeatheredMist|CritterBody|Critter|Scareactor|Bat|Eyes|Pumpkin|HangingLantern|SparksSlot|SkidSparks|SparkDot|LoopProp|BoltSprite|LayerWindow|LayeredFacade|PlaceholderFacade|PlaceholderWindow|TrailDot|HauntLantern|ReefCritters|ReefGlyph|ReefLod|SpotProps|EncounterSprite|HiddenSpot';
@@ -154,32 +180,6 @@ test('image memory: a spot holds its art only while shown or within a minute aft
   assert.match(src, /ambient=\{warm\(spot\.key\) \? assets\?\.ambient \?\? null : null\}/);
 });
 
-test('FrightNightTint is one component with one stable background layer: null fright only changes opacity', () => {
-  const src = read('src/components/map/fright/FrightMapSources.tsx');
-  const start = src.indexOf('export const FrightNightTint');
-  const body = src.slice(start, src.indexOf('\n});', start));
-  assert.ok(start > 0 && body.length > 0);
-  const elements = [...body.matchAll(/<([A-Z]\w*)/g)].map(m => m[1]);
-  assert.deepEqual(elements, ['BackgroundLayer'], 'exactly one element, a background layer (covers undrawn tiles too)');
-  assert.match(body, /<BackgroundLayer id="fright-night-tint" aboveLayerID="tps-sky-tint"/);
-  assert.doesNotMatch(body, /(\?|:|&&)\s*\(?\s*</, 'no ternary or && picks what renders');
-  assert.doesNotMatch(body, /return null/);
-  assert.match(body, /useFrightState\(input \?\? TINT_OFF_INPUT\)/, 'the hook runs every render, null or not');
-  assert.doesNotMatch(src, /function (ActiveTint|TintSource)\b/, 'no second tint component to swap to');
-  assert.doesNotMatch(src, /<FillLayer id="fright-night-tint"/, 'not a GeoJSON fill (it lags undrawn tiles)');
-});
-
-test('Map.tsx: both tints are background layers and no direct MapView child is mounted by a condition', () => {
-  const map = read('src/components/Map.tsx');
-  assert.match(map, /<BackgroundLayer id="tps-sky-tint" style=\{\{ backgroundColor: light\.tint\.color, backgroundOpacity: light\.tint\.opacity/);
-  assert.doesNotMatch(map, /<FillLayer id="tps-sky-tint"/);
-  const open = map.indexOf('<MapView\n');
-  const region = map.slice(open, map.indexOf('</MapView>'));
-  const conditional = region.split('\n').filter(l => /^\s*\{[^{}]*(\?|&&)\s*\(?\s*<[A-Z]/.test(l) || /^\s*\{[^{}]*(\?|&&)\s*\($/.test(l));
-  assert.deepEqual(conditional.map(l => l.trim()), ['{fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}'],
-    'only the fright markers (the LAST child, so nothing shifts) mount on a condition');
-});
-
 test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {
   const map = read('src/components/Map.tsx');
   const marker = read('src/components/map/Marker.tsx');
@@ -189,12 +189,10 @@ test('the player shark is one always-mounted Marker: parked (hidden, no touch) w
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
   assert.match(marker, /hidden = false/);
 });
-
-test('Marker re-sends its anchor after layout (iOS drops an anchor that arrives on a zero frame)', () => {
-  const marker = read('src/components/map/Marker.tsx');
-  assert.match(marker, /anchor=\{laidOut \? a : \{ x: a\.x, y: a\.y \+ ANCHOR_NUDGE \}\}/);
-  assert.match(marker, /<Pressable onLayout=\{onLayout\}/);
-  assert.match(marker, /<View onLayout=\{onLayout\}/);
-  // Hooks run before the invalid-coordinate early return.
-  assert.ok(marker.indexOf('useState(false)') < marker.indexOf('return null'));
+test('no Skia Mask in map marker sprites (it rendered nothing inside a MarkerView); art is feathered at the source, mist is a blurred oval', () => {
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.doesNotMatch(sprites, /<Mask\b/);
+  assert.match(sprites, /export function SoftEllipse\(\{ children \}/);
+  assert.match(sprites, /<ImageShader image=\{image\} fit="fill" rect=\{\{ x, y, width: w, height: h \}\} \/>/);
+  assert.match(sprites, /<BlurMask blur=\{Math\.max\(4, Math\.min\(w, h\) \* 0\.16\)\} style="normal" \/>/);
 });

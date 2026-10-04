@@ -61,9 +61,10 @@ export { parkClock };
  * differs. A performance after midnight is still tonight's show, so it drops
  * "tonight" ("Lagoon show at 12:45 AM"), and 12:00 AM reads "midnight": a
  * repeating show (USF's lagoon show runs every 45 minutes until 12:45 AM) said
- * "tonight at 12:00 AM", which read like a broken placeholder. With a zone
- * label the line drops "tonight at" so the time and zone fit a 375 pt row
- * ("Lagoon show 9:45 PM ET"). No em dashes, no show names.
+ * "tonight at 12:00 AM", which read like a broken placeholder. A daytime show
+ * (4 AM to 5 PM) is "today". Every line fits a 375 pt row: the longest form
+ * that fits wins, dropping "tonight"/"today", then "at" ("Projection show at
+ * 9:45 PM", "Lagoon show 9:45 PM ET"). No em dashes, no show names.
  */
 export function teaserText(show: NightShow, phoneOffset?: number): string {
   const label = parkTimeLabel(show.starts_at, show.timezone, phoneOffset);
@@ -72,16 +73,23 @@ export function teaserText(show: NightShow, phoneOffset?: number): string {
   const zoned = label !== parkClock(show.starts_at);
   const hour = Number(wall[1]);
   const at = hour === 0 && wall[2] === '00' ? label.replace('12:00 AM', 'midnight') : label;
-  if (zoned) {
-    const withAt = `${show.label} at ${at}`;
-    return withAt.length <= TEASER_FIT_CHARS ? withAt : `${show.label} ${at}`;
-  }
-  if (at !== label) return `${show.label} at ${at}`;
-  return hour < 4 ? `${show.label} at ${label}` : `${show.label} tonight at ${label}`;
+  // After midnight it is still tonight's show; before 5 PM it is today's.
+  const day = hour < 4 ? null : hour < 17 ? 'today' : 'tonight';
+  const forms = [
+    ...(day && !zoned ? [`${show.label} ${day} at ${at}`] : []),
+    `${show.label} at ${at}`,
+    `${show.label} ${at}`,
+  ];
+  return forms.find(form => form.length <= TEASER_FIT_CHARS) ?? forms[forms.length - 1];
 }
 
-/** Characters of teaser that fit a 375 pt phone's pill at its smallest font scale (0.85). */
-export const TEASER_FIT_CHARS = 27;
+/**
+ * Characters of teaser that fit a 375 pt phone's pill title at its smallest
+ * font scale (0.85): about 200 pt of title in either layout (the full-width
+ * pill with WHERE, or the declutter's status row with the stack button and an
+ * arrow-only pill). "Lagoon show tonight at 12:34 PM" (31) fits on an SE.
+ */
+export const TEASER_FIT_CHARS = 31;
 
 export function liveText(show: NightShow): string {
   return `${show.label} now! ${show.where}`;

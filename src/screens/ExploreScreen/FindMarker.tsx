@@ -9,16 +9,18 @@ import { FIND_BOX } from './parkMapLayout';
  * spot, faded or kept by the declutter, its timer chip on the side the solver
  * picked. Only this marker re-renders when its placement changes.
  */
-function FindMarker({ id, latitude, longitude, children }: {
+function FindMarker({ id, latitude, longitude, children, hidden = false }: {
   /** Declutter id, e.g. "coin:12" (parkMapLayout). */
   readonly id: string;
   readonly latitude: number;
   readonly longitude: number;
   readonly children: (tag: TagPlacement | null | undefined) => ReactNode;
+  /** An empty pool slot: mounted, parked, draws nothing. */
+  readonly hidden?: boolean;
 }) {
   const placement = usePlacement(id);
   return (
-    <Marker coordinate={{ latitude, longitude }} anchor={{ x: 0.5, y: 0.5 }}>
+    <Marker coordinate={{ latitude, longitude }} hidden={hidden} anchor={{ x: 0.5, y: 0.5 }}>
       <Placed placement={placement} anchor={FIND_BOX.anchor} style={{ width: FIND_BOX.width, height: FIND_BOX.height }}>
         {children(placement.tag)}
       </Placed>

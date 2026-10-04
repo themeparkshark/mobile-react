@@ -53,15 +53,18 @@ test('stacked rides: every island stays mounted in a stable order (MapLibre inse
   const walk = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
     if (named('TaskMarker')(node)) islands.push(node); walk(node.props?.children); };
   walk(app.tree);
-  assert.deepEqual(islands.map(island => island.props.task.id), [20, 21, 22], 'all three mounted, in first-seen order');
-  assert.match(require('node:fs').readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /\{orderedRides\.map\(task => \{[\s\S]{0,200}key=\{task\.id\}/,
-    'keyed by ride, never by fold or goal state');
+  // A fixed pool: the three rides in their first slots, then parked slots (never more, never fewer).
+  assert.equal(islands.length, 81, '80 ride slots and the checklist slot, all mounted');
+  assert.deepEqual(islands.slice(0, 3).map(island => island.props.task.id), [20, 21, 22], 'in first-seen order');
+  assert.ok(islands.slice(3, 80).every(island => island.props.parked), 'empty slots are parked');
+  assert.match(require('node:fs').readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /key=\{`ride-\$\{slot\}`\}/,
+    'keyed by slot, never by the ride or its state');
   // The solver folded rides 20 and 21 into 22 (the store is what the map's camera pass publishes).
   const map = app.find(named('Map'));
   const v = { visible: true, scale: 1, folded: 0, foldedInto: null, reason: null };
   map.props.declutter.store.publish(new Map([['ride:22', { ...v, folded: 2 }], ['ride:20', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }],
     ['ride:21', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }]]));
-  const host = islands.find(island => island.props.task.id === 22);
+  const host = islands.find(island => island.props.task.id === 22 && !island.props.parked);
   host.props.onPress(host.props.task); app.render();
   assert.ok(app.find(named('Map')).props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
   assert.equal(app.find(label('Play queue games for')), undefined);

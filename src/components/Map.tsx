@@ -43,8 +43,7 @@ export const MapQueryContext = createContext<{
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
-/** One empty collection (a stable prop: always-mounted sources show nothing without re-sending a shape). */
-const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
@@ -242,9 +241,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }), [window.height, window.width]);
 
   // Trees, bushes and ripples are planted as icons for what's on screen.
-  const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
-  const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
   const refreshDecorations = useCallback(() => {
@@ -384,13 +383,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const frightOn = !!fright?.active;
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
-    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12 }];
+    // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
+    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
     if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
   }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, hasExtraControls, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
-  const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null }> | null>(null);
+  const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
   const feedDeclutter = useMapDeclutter(declutter, viewSize, declutterPlayer, declutterControls, debugOn ? setDebugRects : undefined);
   // iOS draws a marker view whose point is off screen at the top-left corner: the
@@ -645,12 +645,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Sparkles where the shark walked: on the ground, under the islands. */}
         <SharkTrail latitude={location?.latitude ?? null} longitude={location?.longitude ?? null} />
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
-        {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
-            order, so it comes after the ride islands and is never hidden under one. */}
-        {/* Both shark copies stay mounted and swap by opacity: remounting on every
-            drag reloaded the outfit images and made the shark flash. */}
-        {/* Always mounted: with no location it parks hidden (opacity 0, no touch) instead of
-            mounting mid-list when the first fix lands (MapLibre insertReactSubview crash class). */}
+        {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in order, so it
+            comes after the ride islands and is never hidden under one. It is mounted from the map's
+            first render (hidden until the first fix), like every other map child: with the screen's
+            markers in fixed pools too, no MapView child ever mounts or unmounts mid-list (MapLibre
+            insertReactSubview crash). Both shark copies stay mounted and swap by opacity. */}
         <Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location} anchor={{ x: 0.5, y: 0.65 }}>
           <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
         </Marker>
@@ -666,8 +665,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {fright && viewSize && <FrightMapLayer input={fright} width={viewSize.width} height={viewSize.height} zoom={cameraZoom} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {debugOn && debugRects && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {[...debugRects.entries()].map(([id, { body, tag }]) => <View key={id}>
-          <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]} />
+        {[...debugRects.entries()].map(([id, { body, tag, point }]) => <View key={id}>
+          {point && <View style={[styles.debugPoint, { left: point.x - 3, top: point.y - 3 }]} />}
+          <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]}>
+            <Text style={styles.debugLabel} numberOfLines={2}>{id}</Text>
+          </View>
           {tag && <View style={[styles.debugTag, { left: tag.x, top: tag.y, width: tag.w, height: tag.h }]} />}
         </View>)}
       </View>}
@@ -729,6 +731,8 @@ function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonl
 const styles = StyleSheet.create({
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
+  debugPoint: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#00e5ff' },
+  debugLabel: { fontSize: 8, lineHeight: 9, color: '#ffffff', backgroundColor: 'rgba(160,0,150,0.8)', alignSelf: 'flex-start', paddingHorizontal: 1 },
   guideArrow: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, zIndex: 9 },
   recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },

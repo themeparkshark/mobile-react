@@ -58,6 +58,8 @@ export interface LayoutItem {
   readonly tagObstacleOnly?: boolean;
   /** May shrink to this scale (around the anchor) before it hides. */
   readonly recedeScale?: number;
+  /** Recedes (never hides) where the player's shark stands on it, so the shark is not drawn over full-size art. */
+  readonly recedeUnderPlayer?: boolean;
   /** Always drawn at its recede scale (a closed ride while a night mode leads). */
   readonly forceRecede?: boolean;
   /** Hidden below this zoom unless pinned. */
@@ -108,6 +110,12 @@ export interface SolveOptions {
   readonly previousZoom?: number | null;
   /** A finger is moving the map: shown markers stay exactly as they are. */
   readonly hold?: boolean;
+  /**
+   * With `hold`, while the camera zooms out: shown markers that now collide fold or fade
+   * (by priority) instead of piling up until the settle. Fade only: no scale change, no
+   * chip moves.
+   */
+  readonly fold?: boolean;
   /** Overlap (share of the smaller box) that counts as a collision. */
   readonly overlap?: number;
   /** Extra tolerance for markers that were visible last time. */
@@ -115,7 +123,7 @@ export interface SolveOptions {
   /** Tags keep this far from the screen edge. */
   readonly edge?: number;
   /** Fill `rects` with each placed body and tag (development overlay). */
-  readonly rects?: Map<string, { body: Rect; tag: Rect | null }>;
+  readonly rects?: Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>;
 }
 
 export const VISIBLE: Placement = Object.freeze({ visible: true, scale: 1, folded: 0, foldedInto: null, reason: null });
@@ -123,8 +131,32 @@ export const VISIBLE: Placement = Object.freeze({ visible: true, scale: 1, folde
 /** Zoom change that triggers a full priority re-solve (smaller moves keep what is shown). */
 export const ZOOM_RESOLVE = 0.15;
 /** A ride hidden by other art counts in the "+N" of a shown ride this close (points). */
+/** Share of the player's shark over a haunt that recedes it, and the share that keeps it receded. */
+export const PLAYER_RECEDE = 0.2;
+export const PLAYER_RECEDE_KEEP = 0.1;
 export const FOLD_REACH = 220;
 const DEFAULT_SHARE = 0.35;
+/** Share of a marker's body that must be on screen to show it, and to keep it shown. */
+export const OFFSCREEN_SHOW = 0.5;
+export const OFFSCREEN_KEEP = 0.4;
+
+/** The central part of fixed art that must stay clear of buttons: at most FIXED_CORE square. */
+export const FIXED_CORE = 120;
+/** Points of hysteresis at an inset edge for fixed art (shown keeps, hidden waits). */
+export const FIXED_KEEP = 6;
+function grow(r: Rect, by: number): Rect {
+  return { x: r.x - by, y: r.y - by, w: Math.max(0, r.w + 2 * by), h: Math.max(0, r.h + 2 * by) };
+}
+function coreOf(r: Rect): Rect {
+  const w = Math.min(r.w, FIXED_CORE), h = Math.min(r.h, FIXED_CORE);
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
+function visibleShare(r: Rect, frame: CameraFrame): number {
+  const w = Math.max(0, Math.min(r.x + r.w, frame.width) - Math.max(r.x, 0));
+  const h = Math.max(0, Math.min(r.y + r.h, frame.height) - Math.max(r.y, 0));
+  return r.w * r.h > 0 ? (w * h) / (r.w * r.h) : 0;
+}
 
 const RAD = Math.PI / 180;
 
@@ -195,6 +227,19 @@ function leaderFor(body: Rect, x: number, y: number, w: number, h: number): TagP
   return { x1: tx, y1: ty, x2: body.x + body.w / 2, y2: body.y + Math.min(10, body.h / 4) };
 }
 
+/**
+ * A short pointer from a chip that sits beside its art (not straight above or
+ * below) into that art, so in a crowd every chip has a clear owner.
+ */
+function pointerFor(body: Rect, x: number, y: number, w: number, h: number): TagPlacement['leader'] {
+  const cx = x + w / 2, cy = y + h / 2;
+  const bx = body.x + body.w / 2, by = body.y + body.h / 2;
+  const x1 = Math.max(x, Math.min(x + w, bx)), y1 = Math.max(y, Math.min(y + h, by));
+  const inner = { x: body.x + 10, y: body.y + 10, w: Math.max(0, body.w - 20), h: Math.max(0, body.h - 20) };
+  const x2 = Math.max(inner.x, Math.min(inner.x + inner.w, cx)), y2 = Math.max(inner.y, Math.min(inner.y + inner.h, cy));
+  return Math.hypot(x2 - x1, y2 - y1) < 6 ? null : { x1, y1, x2, y2 };
+}
+
 interface Placed { readonly item: LayoutItem; readonly rect: Rect; readonly order: number; readonly p: { x: number; y: number }; folded: number }
 interface Cell<T> { readonly owner: T; readonly rect: Rect }
 
@@ -237,6 +282,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
   const insets: InsetRect[] = [...(options.insets ?? []), { x: -frame.width, y: -400, w: frame.width * 3, h: 400, share: 0.1 }];
   const previous = options.previous ?? null;
   const hold = !!options.hold;
+  const foldPass = hold && !!options.fold;
   const anchoring = !!previous && (hold || (options.previousZoom != null && Math.abs(frame.zoom - options.previousZoom) < ZOOM_RESOLVE));
   const overlap = options.overlap ?? 0.03;
   const hysteresis = options.hysteresis ?? 0.01;
@@ -265,14 +311,37 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
   };
 
   const bodies = new Map<string, Rect>(sorted.map(item => [item.id, item.bodyFor ? item.bodyFor(frame.zoom) : item.body]));
+  // The player's body, for art that recedes under the shark (tag obstacles are collected again below).
+  const playerRects = sorted.filter(item => item.tagObstacleOnly).map(item => {
+    const p = project(item.latitude, item.longitude, frame);
+    return at(bodies.get(item.id)!, p.x, p.y);
+  });
   for (const item of sorted) {
     const itemBody = bodies.get(item.id)!;
     const p = project(item.latitude, item.longitude, frame);
     points.set(item.id, p);
     if (item.tagObstacleOnly) { tagObstacles.push(at(itemBody, p.x, p.y)); continue; }
-    if (item.fixed || item.pinned) {
+    if (item.pinned) {
       scales.set(item.id, 1);
       place({ item, rect: at(itemBody, p.x, p.y), order: placed.length, p, folded: 0 });
+      continue;
+    }
+    if (item.fixed) {
+      // Fixed art (gym, boss, swords, the encounter and its host reef) beats other art, but it
+      // keeps the zoom limit and the screen rules: it hides below its zoom, when more than half
+      // is off screen, and it fades where its core (the central 120 pt: the critter, not its wide
+      // ring or mist) would sit under any inset (a button, the HUD row, the offline chip). Shown
+      // art stays until its core is FIXED_KEEP pt deep and hidden art waits until it is FIXED_KEEP
+      // pt clear, so GPS jitter at a button edge never blinks it.
+      if (item.minZoom !== undefined && frame.zoom < item.minZoom) { hidden.set(item.id, 'zoom'); continue; }
+      const rect = at(itemBody, p.x, p.y);
+      const wasShown = !!previous?.get(item.id)?.visible;
+      const inView = visibleShare(rect, frame);
+      if (inView <= 0 || inView < (wasShown ? OFFSCREEN_KEEP : OFFSCREEN_SHOW)) { hidden.set(item.id, 'offscreen'); continue; }
+      const core = grow(coreOf(rect), wasShown ? -FIXED_KEEP : FIXED_KEEP);
+      if (insets.some(inset => overlapArea(core, inset) > 0)) { hidden.set(item.id, 'inset'); continue; }
+      scales.set(item.id, 1);
+      place({ item, rect, order: placed.length, p, folded: 0 });
       continue;
     }
     if (item.minZoom !== undefined && frame.zoom < item.minZoom) { hidden.set(item.id, 'zoom'); continue; }
@@ -280,13 +349,16 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     const anchored = shownBefore(item);
     const startScale = anchored && before ? before.scale : item.forceRecede && item.recedeScale ? item.recedeScale : 1;
     let rect = at(itemBody, p.x, p.y, startScale);
-    // Wholly off screen: hidden (iOS draws an off-screen marker view at the top-left corner).
-    if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > frame.width || rect.y > frame.height) { hidden.set(item.id, 'offscreen'); continue; }
+    // Mostly off screen: hidden. Wholly off, iOS draws the marker view at the top-left corner; half
+    // off, a clipped facade leaves its name chip floating alone. Half in shows it; a shown marker
+    // stays until 60 % is off, so an edge pan does not flicker.
+    const inView = visibleShare(rect, frame);
+    if (inView <= 0 || inView < (before?.visible ? OFFSCREEN_KEEP : OFFSCREEN_SHOW)) { hidden.set(item.id, 'offscreen'); continue; }
     // The body and its extras (a haunt's name chip) each hide under an inset by the inset's share.
     const underInset = (r: Rect) => r.w * r.h > 0 && insets.some(inset => overlapArea(r, inset) / (r.w * r.h) > (inset.share ?? DEFAULT_SHARE));
     if (underInset(rect) || (item.extras ?? []).some(extra => underInset(at(extra, p.x, p.y, startScale)))) { hidden.set(item.id, 'inset'); continue; }
     // Held during a gesture: a marker on screen does not change.
-    if (hold && anchored) {
+    if (hold && anchored && !foldPass) {
       scales.set(item.id, startScale);
       place({ item, rect, order: placed.length, p, folded: 0 });
       continue;
@@ -309,12 +381,26 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
         hidden.set(item.id, 'folded');
         continue;
       }
-      if (item.recedeScale && scale === 1) {
+      if (item.recedeScale && scale === 1 && !foldPass) {
         const shrunk = at(itemBody, p.x, p.y, item.recedeScale);
         const shrunkBlockers = blockersAt(shrunk, item.recedeScale);
         if (!shrunkBlockers.length) { rect = shrunk; blockers = shrunkBlockers; scale = item.recedeScale; }
       }
       if (blockers.length) { hidden.set(item.id, 'collision'); continue; }
+    }
+    // Under the player's shark: shrink to the recede scale when that fits (never hide for it).
+    // A fifth of the shark on the art starts it; it stays receded down to a tenth (no flicker on a walk).
+    const underPlayer = before?.visible && before.scale === item.recedeScale ? PLAYER_RECEDE_KEEP : PLAYER_RECEDE;
+    if (item.recedeUnderPlayer && item.recedeScale && !foldPass) {
+      const full = scale === 1 ? rect : at(itemBody, p.x, p.y, 1);
+      const under = playerRects.some(r => overlapShare(full, r) > underPlayer);
+      if (under && scale === 1) {
+        const shrunk = at(itemBody, p.x, p.y, item.recedeScale);
+        if (!blockersAt(shrunk, item.recedeScale).length) { rect = shrunk; scale = item.recedeScale; }
+      } else if (!under && anchored && scale === item.recedeScale && !item.forceRecede && !blockersAt(full, 1).length) {
+        // The shark walked off: grow back once the full-size art is clear.
+        rect = full; scale = 1;
+      }
     }
     scales.set(item.id, scale);
     place({ item, rect, order: placed.length, p, folded: 0 });
@@ -347,7 +433,18 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     if (!item.pinned && item.tag.minZoom !== undefined && frame.zoom < item.tag.minZoom) { tags.set(item.id, null); continue; }
     const body = scaled(bodies.get(item.id)!, scales.get(item.id) ?? 1);
     const all = tagCandidates(body, item.tag.w, item.tag.h);
-    const lastSide = previous?.get(item.id)?.tag?.side;
+    const last = previous?.get(item.id)?.tag ?? null;
+    const lastSide = last?.side;
+    // During a gesture a chip never moves or appears: it keeps last pass's slot while that slot
+    // stays in view and clear of the HUD (sides change only on a settled pass).
+    if (hold && !item.pinned) {
+      const kept = last && previous?.get(item.id)?.visible ? last : null;
+      const rect = kept ? { x: p.x + kept.x, y: p.y + kept.y, w: item.tag.w, h: item.tag.h } : null;
+      const ok = !!rect && insideView(rect, frame, edge) && !insets.some(inset => overlapArea(rect, inset) > 0);
+      tags.set(item.id, ok ? kept : null);
+      if (ok && rect) tagGrid.add(null, rect);
+      continue;
+    }
     // The selected marker's card always sits on top (it draws there itself); others keep last pass's side while it is free.
     const candidates = item.pinned ? all.slice(0, 1)
       : lastSide ? [...all.filter(c => c.side === lastSide), ...all.filter(c => c.side !== lastSide)] : all;
@@ -361,7 +458,9 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
         if (tagGrid.near(rect).some(cell => overlapArea(rect, cell.rect) > 0)) continue;
         if (tagObstacles.some(other => overlapArea(rect, other) > 0)) continue;
       }
-      chosen = { x: c.x, y: c.y, side: c.side, leader: c.far ? leaderFor(body, c.x, c.y, item.tag.w, item.tag.h) : null };
+      const beside = c.side !== 'top' && c.side !== 'bottom';
+      chosen = { x: c.x, y: c.y, side: c.side, leader: c.far ? leaderFor(body, c.x, c.y, item.tag.w, item.tag.h)
+        : beside ? pointerFor(body, c.x, c.y, item.tag.w, item.tag.h) : null };
       tagGrid.add(null, rect);
       break;
     }
@@ -384,7 +483,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     });
     if (options.rects && entry) {
       const tag = tags.get(item.id);
-      options.rects.set(item.id, { body: entry.rect,
+      options.rects.set(item.id, { body: entry.rect, point: entry.p,
         tag: tag && item.tag ? { x: entry.p.x + tag.x, y: entry.p.y + tag.y, w: item.tag.w, h: item.tag.h } : null });
     }
   }

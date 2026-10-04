@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
-import { Marker } from '../../components/map/Marker';
+import { Marker, PARKED } from '../../components/map/Marker';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { Placed, usePlacement } from '../../components/map/declutter/Placed';
 
@@ -11,17 +11,16 @@ import { Placed, usePlacement } from '../../components/map/declutter/Placed';
 export default function VaultMarker({
   vault,
 }: {
-  readonly vault: { id: number; latitude: string; longitude: string };
+  /** Null: an empty pool slot (mounted, parked, draws nothing). */
+  readonly vault: { id: number; latitude: string; longitude: string } | null;
 }) {
   // The GIF stops decoding frames while the map is off screen or calm.
   const { running } = useMapAlive();
-  const placement = usePlacement(`vault:${vault.id}`);
+  const placement = usePlacement(vault ? `vault:${vault.id}` : '');
   return (
     <Marker
-      coordinate={{
-        latitude: Number(vault.latitude),
-        longitude: Number(vault.longitude),
-      }}
+      coordinate={vault ? { latitude: Number(vault.latitude), longitude: Number(vault.longitude) } : PARKED}
+      hidden={!vault}
       tappable={false}
       flat={true}
       tracksViewChanges={false}
@@ -40,7 +39,7 @@ export default function VaultMarker({
 
         <Image
           source={require('../../../assets/images/screens/explore/vault_animation.gif')}
-          autoplay={running && placement.visible}
+          autoplay={running && placement.visible && !!vault}
           style={{ width: 70, height: 70 }}
           contentFit="contain"
         />

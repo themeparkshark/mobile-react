@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
@@ -23,8 +23,10 @@ import { BRAND, GameIcon } from '../../ui';
 import { formatDistance } from './adventureTicketPresentation';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 import { limitedLabel } from '../../services/collection/limitedCoins';
-import { Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
+import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
+import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
+import { findClock } from './FindLife';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -257,24 +259,31 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
 }
 
 /**
- * The island's "m:ss" timer. Ticks once a second while the map is on screen
- * and holds still otherwise. It always renders the same single Text, so
- * pausing never changes the views inside a map marker.
+ * The island's timer chip ("m:ss", or "1h 2m" past an hour). Ticks once a second
+ * while the map is on screen and holds still otherwise. Counts up to the second
+ * (never reads 0:00) and fades itself out at zero, before the ride's data catches
+ * up. Always the same View and Text, so nothing inside the map marker swaps.
  */
-function MarkerTimer({ expiresAt, ticking, urgent }: { readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean }) {
+function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
+  readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
+}) {
   const [now, setNow] = useState(() => Date.now());
+  const left = expiresAt - now;
+  const done = left <= 0;
   useEffect(() => {
-    if (!ticking) return;
+    if (!ticking || done) return;
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [ticking]);
-  const total = Math.round(Math.max(0, expiresAt - now) / 1000) * 1000;
-  const seconds = Math.floor(total / 1000) % 60;
-  return <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>
-    {Math.floor(total / 60000)}:{String(seconds).padStart(2, '0')}
-  </Text>;
+  }, [ticking, done]);
+  const shown = useSharedValue(done ? 0 : 1);
+  useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
+  const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
+  return <Animated.View style={[badgeStyle, fade]}>
+    <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>{findClock(left)}</Text>
+  </Animated.View>;
 }
+const TIMER_FADE_MS = 280;
 
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
 function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly reducedMotion: boolean }) {
@@ -319,6 +328,8 @@ export interface TaskMarkerProps {
   /** Distance order among the islands on the map (0 = nearest): only the nearest few spend animation. */
   readonly aliveRank?: number;
   readonly onPress: (task: TaskType) => void;
+  /** An empty pool slot: both markers stay mounted, parked and empty (MapView children never mount mid-list). */
+  readonly parked?: boolean;
 }
 
 /**
@@ -331,12 +342,13 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
-  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank,
+  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const alive = useMapAlive();
   // Declutter: shown, receded or folded away, and where this island's chip goes (parkMapLayout).
-  const placement = usePlacement(rideLayoutId(task.id));
+  const placed = usePlacement(rideLayoutId(task.id));
+  const placement = parked ? PARKED_PLACEMENT : placed;
   const shown = placement.visible;
   // A hidden island holds every loop still (battery) and ignores taps.
   const calm = alive.tier === 'calm' || !shown;
@@ -429,16 +441,17 @@ function TaskMarker({
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
   return (<>
-    {waterKind && waterSpot && (
-      <Marker coordinate={waterSpot} anchor={{ x: 0.5, y: 0.63 }}>
-        <WaterAmbience kind={waterKind} />
-      </Marker>
-    )}
+    {/* Always mounted (hidden without a water scene): the island's two map markers never come and go. */}
+    <Marker coordinate={waterSpot ?? { latitude, longitude }} hidden={parked || !(waterKind && waterSpot)} anchor={{ x: 0.5, y: 0.63 }}>
+      {/* Same box size either way, so the marker's layout never changes (no corner blink). */}
+      <View style={styles.waterBox}>{waterKind && waterSpot && !parked ? <WaterAmbience kind={waterKind} /> : null}</View>
+    </Marker>
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
       accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
+      hidden={parked}
       anchor={{ x: 0.5, y: 0.9 }}
     >
       {/* One chip at a time keeps the map calm, on the free side the declutter picked (unscaled: the
@@ -457,18 +470,16 @@ function TaskMarker({
             {tagKind === 'limited' && limited && <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
               <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>}
             {tagKind === 'timer' && (
-              <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]}>
-                <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
-              </View>
+              <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
+                badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
             )}
           </TagSlot>
       ) : undefined}>
       <Animated.View style={[styles.container, dropStyle]}>
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
-          <View style={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]}>
-            <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
-          </View>
+          <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
+            badgeStyle={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]} />
         )}
 
         {/* Selected chip: the coin, how far, and what it costs. */}
@@ -524,7 +535,7 @@ function TaskMarker({
           </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
           {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
-          {folded > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{folded}</Text></View>}
+          <FoldBadge count={folded} style={styles.clusterBadge} />
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
@@ -537,7 +548,11 @@ function TaskMarker({
 
 export default memo(TaskMarker);
 
+/** An empty slot's placement: not drawn, no chip, no loops. */
+const PARKED_PLACEMENT: Placement = { visible: false, scale: 1, folded: 0, foldedInto: null, tag: null, reason: 'offscreen' };
+
 const styles = StyleSheet.create({
+  waterBox: { width: 110, height: 70 },
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   goalBadge: { backgroundColor: BRAND.gold,
@@ -586,7 +601,6 @@ const styles = StyleSheet.create({
   restingSlot: { position: 'absolute', bottom: 2, left: -30, right: -30, alignItems: 'center' },
   clusterBadge: { position: 'absolute', top: 16, left: -4, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
-  clusterText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   rushBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },

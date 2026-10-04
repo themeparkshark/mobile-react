@@ -1,13 +1,12 @@
-import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import Countdown, { zeroPad } from 'react-countdown';
+import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
-import { COIN_BODY, FIND_BOX, FIND_ROOT, FIND_TAG } from './parkMapLayout';
+import { COIN_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { useTimeoutWhen } from 'rooks';
+import { FindFade, findClock, useFindExpiry } from './FindLife';
 import { hash01 } from '../../components/map/alive/ambientBudget';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { CurrencyContext } from '../../context/CurrencyProvider';
@@ -48,16 +47,11 @@ export default function Coin({
     return { opacity: k, transform: [{ scale: 0.3 + k * 0.8 }, { rotate: `${p * 120}deg` }] };
   });
 
-  useTimeoutWhen(
-    () => {
-      onExpire();
-    },
-    dayjs(coin.active_to).diff(dayjs()),
-    !!coin.id
-  );
+  // At zero the find fades out and leaves (no 0:00 chip).
+  const gone = useFindExpiry(coin.active_to, onExpire);
 
   return (
-    <View style={FIND_ROOT}>
+    <FindFade gone={gone}>
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: COIN_BODY.y - FIND_TAG.h - 3 }}>
@@ -76,14 +70,14 @@ export default function Coin({
         }}>
           <Countdown
             date={Date.parse(coin.active_to)}
-            renderer={({ minutes, seconds }) => (
+            renderer={({ total }) => (
               <Text style={{
                 fontFamily: 'Shark',
                 fontSize: 15,
                 color: '#B8860B',
                 textAlign: 'center',
               }}>
-                {minutes}:{zeroPad(seconds)}
+                {findClock(total)}
               </Text>
             )}
           />
@@ -115,6 +109,6 @@ export default function Coin({
         <Animated.Image source={SPARKLE} tintColor="#ffffff" resizeMode="contain"
           style={[{ position: 'absolute', top: -5, right: -7, width: 14, height: 14 }, glint]} />
       </Animated.View>
-    </View>
+    </FindFade>
   );
 }

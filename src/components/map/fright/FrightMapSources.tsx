@@ -14,7 +14,7 @@ import { queueHaptic } from '../../../gamekit/Haptics';
 import { SFX_PRIORITY } from '../../../audio/sfxLimiter';
 import type { FrightAmbientAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { Marker } from '../Marker';
-import { FoldBadge, Placed, usePlacement } from '../declutter/Placed';
+import { FoldBadge, Placed, usePlacement, useUnderButton } from '../declutter/Placed';
 import { stepPops, POP_START, type PopState } from './critters';
 import { activeShowStart, encounterChaos, hauntLayers } from './frightAssets';
 import { castUrls, encounterScareactor, reefCast, scareactorAsset, watchSide } from './scareactors';
@@ -316,7 +316,10 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
     return at !== undefined && renderAt - at < WARM_ART_MS;
   };
   const encounterShown = encounterLive && !!encounter && visible > 0 && nearView(encounter, bounds, 1);
-  const encounterOnScreen = encounterShown && !!encounter && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  // Fixed art fades where it would sit under a button (declutter reason "inset").
+  const encounterUnderButton = useUnderButton('encounter');
+  const encounterOnScreen = encounterShown && !!encounter && !encounterUnderButton
+    && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
   const encounterTapRef = useRef<string | null>(null);
   encounterTapRef.current = encounterOnScreen && encounter ? encounter.key : null;
   // One encounter Marker, always mounted; it parks on the first spot when no encounter is live.
@@ -359,11 +362,15 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const on = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
         return (
           <Marker key={`fp-${spot.key}`} coordinate={pin(spot)}>
-            <ShowWhen box={PROPS_BOX} on={on}>
-              <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
-                animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
-                mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
-            </ShowWhen>
+            {/* A reef's props (fog, eyes, bats) share the reef's declutter placement: they fade with it
+                under a button or off screen instead of drawing on their own. Other spots: always placed. */}
+            <PlacedSpot id={spot.kind === 'reef' ? `reef:${spot.key}` : `prop:${spot.key}`}>
+              <ShowWhen box={PROPS_BOX} on={on}>
+                <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
+                  animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
+                  mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
+              </ShowWhen>
+            </PlacedSpot>
           </Marker>
         );
       })}
@@ -520,7 +527,6 @@ const LOD_GLYPH = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, 
 const PARKED = { latitude: 0, longitude: 0 } as const;
 /** The glow's stand-in before the asset exists (keeps the tree fixed; nothing draws). */
 const LAGOON_PARKED: FrightAmbientAsset = { file: null };
-
 
 /** The hook's input while the mode is off: one stable shape, so the tint never swaps components. */
 const TINT_OFF_INPUT: FrightMapInput = {

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Circle } from '../../components/map/Circle';
-import { Marker } from '../../components/map/Marker';
+import { Marker, PARKED } from '../../components/map/Marker';
 import type { ParkProject } from '../../api/endpoints/me/park-projects';
 import { GameIcon } from '../../ui';
 
 interface Props {
+  /** Null: no active project here (the beacon stays mounted, parked and empty: MapView children never mount mid-list). */
   readonly project: Pick<ParkProject,
-    'id' | 'slug' | 'title' | 'stage' | 'play_chapter' | 'park_latitude' | 'park_longitude' | 'ended'>;
+    'id' | 'slug' | 'title' | 'stage' | 'play_chapter' | 'park_latitude' | 'park_longitude' | 'ended'> | null;
   readonly onPress: () => void;
   /** Ride islands on the map; the beacon settles clear of them so no ride is hidden. */
   readonly avoid?: readonly { readonly latitude: number; readonly longitude: number }[];
@@ -82,13 +83,20 @@ export default function ParkProjectMapBeacon({ project, onPress, avoid = [] }: P
     setTracksViewChanges(true);
     const timer = setTimeout(() => setTracksViewChanges(false), 700);
     return () => clearTimeout(timer);
-  }, [project.id, project.slug, project.stage, project.play_chapter]);
+  }, [project?.id, project?.slug, project?.stage, project?.play_chapter]);
 
-  const latitude = Number(project.park_latitude);
-  const longitude = Number(project.park_longitude);
-  if (project.ended || project.park_latitude == null || project.park_longitude == null ||
+  const latitude = Number(project?.park_latitude);
+  const longitude = Number(project?.park_longitude);
+  if (!project || project.ended || project.park_latitude == null || project.park_longitude == null ||
     !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-    latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+    latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    // The same three map children, parked and empty.
+    return <>
+      <Circle hidden center={PARKED} radius={1} />
+      <Circle hidden center={PARKED} radius={1} />
+      <Marker hidden coordinate={PARKED}><View style={styles.parked} /></Marker>
+    </>;
+  }
 
   const stage = Math.max(0, Math.min(3, project.stage));
   const phase = PHASES[stage];
@@ -122,6 +130,7 @@ export default function ParkProjectMapBeacon({ project, onPress, avoid = [] }: P
 }
 
 const styles = StyleSheet.create({
+  parked: { width: 1, height: 1 },
   beacon: { borderWidth: 4, justifyContent: 'center', alignItems: 'center',
     shadowColor: '#003b74', shadowOpacity: 0.35, shadowOffset: { width: 0, height: 4 },
     shadowRadius: 4, elevation: 5 },

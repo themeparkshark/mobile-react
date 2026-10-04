@@ -17,6 +17,7 @@ import {
   ALIVE_CAPS, aliveTier, clockStepDue, governFrames, governIdle, GOVERNOR_START,
   type AliveCaps, type AliveTier, type FrameGovernor,
 } from './ambientBudget';
+import { noteSoakTier, soakLog, SOAK_TRACE } from '../declutter/soakLog';
 import { DAYLIGHT, type SkyLight } from './skyLight';
 
 export interface MapAlive {
@@ -83,6 +84,7 @@ export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   const governed = aliveTier({ reducedMotion, strain: governor.strain });
   const tier: AliveTier = !reducedMotion && (pinned === 'full' || pinned === 'lite') ? pinned : governed;
   const caps = ALIVE_CAPS[tier];
+  if (SOAK_TRACE) noteSoakTier(tier);
   const active = focused && appActive;
   const running = active && !paused && caps.hz > 0;
 
@@ -96,6 +98,8 @@ export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   const windows = useRef(0);
   const onWindow = useCallback((avgMs: number) => {
     if (__DEV__ && ++windows.current % 5 === 0) console.log(`MAP_ALIVE fps=${(1000 / avgMs).toFixed(1)} frame=${avgMs.toFixed(1)}ms`);
+    // UI-thread frame time (the ambient clock's 2 s window), for the Release soak trace.
+    if (SOAK_TRACE) soakLog(`perf ui_frame_ms=${avgMs.toFixed(1)}`);
     setGovernor(state => governFrames(state, avgMs, Date.now()));
   }, [setGovernor]);
 

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Marker } from '../map/Marker';
+import { ButtonFade, useUnderButton } from '../map/declutter/Placed';
 import Animated, {
   cancelAnimation,
   useSharedValue,
@@ -22,7 +23,7 @@ interface Props {
   latitude: number;
   longitude: number;
   onPress: () => void;
-  /** Mounted but hidden and still (the map_gym_swords flag is off). */
+  /** Mounted but parked and still: an empty pool slot, no gym here yet, or the map_gym_swords flag is off. */
   hidden?: boolean;
 }
 
@@ -31,7 +32,8 @@ export default function GymMarker({ leader, latitude, longitude, onPress, hidden
   const glowOpacity = useSharedValue(0.3);
   // The breathing pauses with the living map (off screen, background, calm tier).
   const { running: alive } = useMapAlive();
-  const running = alive && !hidden;
+  const underButton = useUnderButton('gym');
+  const running = alive && !hidden && !underButton;
 
   // Smooth breathing animation
   useEffect(() => {
@@ -78,8 +80,10 @@ export default function GymMarker({ leader, latitude, longitude, onPress, hidden
       coordinate={{ latitude, longitude }}
       onPress={onPress}
       hidden={hidden}
+      touchEnabled={!underButton}
       anchor={{ x: 0.5, y: 0.8 }}
     >
+      <ButtonFade hidden={underButton}>
       <View style={styles.container}>
         {/* Glow effect under the arena */}
         <Animated.View
@@ -106,6 +110,7 @@ export default function GymMarker({ leader, latitude, longitude, onPress, hidden
           </View>
         )}
       </View>
+      </ButtonFade>
     </Marker>
   );
 }

@@ -28,7 +28,8 @@ test('the beacon nudges off a ride island it would cover', () => {
 test('the beacon draws after the ride islands and its label sits on its own tag', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.ok(src.indexOf('<ParkProjectMapBeacon') > src.indexOf('<TaskMarker'), 'rendered after TaskMarker');
-  assert.match(src, /<ParkProjectMapBeacon project=\{activeParkProject\} avoid=\{beaconAvoid\}/);
+  // Always mounted (parked with no project here): MapView children never mount mid-list.
+  assert.match(src, /<ParkProjectMapBeacon project=\{activeParkProject\?\.park_id === park\.id \? activeParkProject : null\} avoid=\{beaconAvoid\}/);
   const own = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen/ParkProjectMapBeacon.tsx'), 'utf8');
   assert.match(own, /labelTag: \{[^}]*backgroundColor: '#ffffff'/);
 });
