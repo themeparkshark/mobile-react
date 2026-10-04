@@ -35,5 +35,6 @@ export function FindFade({ gone, children }: { readonly gone: boolean; readonly 
  */
 export function findClock(totalMs: number): string {
   const seconds = Math.max(1, Math.ceil(totalMs / 1000));
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }

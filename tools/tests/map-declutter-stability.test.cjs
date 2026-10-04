@@ -101,6 +101,10 @@ test('no find ever shows 0:00: at its time it fades out and asks for fresh map d
   assert.equal(findClock(0), '0:01');
   assert.equal(findClock(61_000), '1:01');
   assert.equal(findClock(60_500), '1:01');
+  assert.equal(findClock(3_599_000), '59:59');
+  assert.equal(findClock(3_600_000), '1h 0m', 'an hour reads in hours, never 60:00');
+  assert.equal(findClock(3_752_000), '1h 2m', 'not 62:32');
+  assert.equal(findClock(2 * 3_600_000 + 6 * 60_000 + 1), '2h 6m');
   assert.match(life, /setGone\(true\); onExpire\(\);/);
   for (const file of ['Coin', 'Key', 'Redeemable']) {
     const src = read(`src/screens/ExploreScreen/${file}.tsx`);
@@ -108,4 +112,14 @@ test('no find ever shows 0:00: at its time it fades out and asks for fresh map d
     assert.match(src, /<FindFade gone=\{gone\}>/, file);
     assert.match(src, /\{findClock\(total\)\}/, `${file}: the chip rounds up`);
   }
+});
+
+test('ride timers share the find clock: round up, hours past 60 min, fade themselves out at zero', () => {
+  const src = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  const body = src.slice(src.indexOf('function MarkerTimer'), src.indexOf('const TIMER_FADE_MS'));
+  assert.match(body, /\{findClock\(left\)\}/);
+  assert.doesNotMatch(body, /Math\.round|padStart/, 'no own m:ss math (it rounded the last second to 0:00)');
+  assert.match(body, /if \(!ticking \|\| done\) return;/, 'stops ticking at zero');
+  assert.match(body, /withTiming\(done \? 0 : 1/, 'fades out at zero from inside the timer');
+  assert.doesNotMatch(src, /<View style=\{\[styles\.timerBadge/, 'the chip itself fades, not just its text');
 });

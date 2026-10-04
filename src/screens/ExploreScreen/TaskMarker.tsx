@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
@@ -26,6 +26,7 @@ import { limitedLabel } from '../../services/collection/limitedCoins';
 import { foldLabel, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
 import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, rideLayoutId, rideTagKind, rideTagSize } from './parkMapLayout';
+import { findClock } from './FindLife';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -258,24 +259,31 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
 }
 
 /**
- * The island's "m:ss" timer. Ticks once a second while the map is on screen
- * and holds still otherwise. It always renders the same single Text, so
- * pausing never changes the views inside a map marker.
+ * The island's timer chip ("m:ss", or "1h 2m" past an hour). Ticks once a second
+ * while the map is on screen and holds still otherwise. Counts up to the second
+ * (never reads 0:00) and fades itself out at zero, before the ride's data catches
+ * up. Always the same View and Text, so nothing inside the map marker swaps.
  */
-function MarkerTimer({ expiresAt, ticking, urgent }: { readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean }) {
+function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
+  readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
+}) {
   const [now, setNow] = useState(() => Date.now());
+  const left = expiresAt - now;
+  const done = left <= 0;
   useEffect(() => {
-    if (!ticking) return;
+    if (!ticking || done) return;
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [ticking]);
-  const total = Math.round(Math.max(0, expiresAt - now) / 1000) * 1000;
-  const seconds = Math.floor(total / 1000) % 60;
-  return <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>
-    {Math.floor(total / 60000)}:{String(seconds).padStart(2, '0')}
-  </Text>;
+  }, [ticking, done]);
+  const shown = useSharedValue(done ? 0 : 1);
+  useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
+  const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
+  return <Animated.View style={[badgeStyle, fade]}>
+    <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>{findClock(left)}</Text>
+  </Animated.View>;
 }
+const TIMER_FADE_MS = 280;
 
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
 function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly reducedMotion: boolean }) {
@@ -461,18 +469,16 @@ function TaskMarker({
             {tagKind === 'limited' && limited && <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
               <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>}
             {tagKind === 'timer' && (
-              <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]}>
-                <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
-              </View>
+              <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
+                badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
             )}
           </TagSlot>
       ) : undefined}>
       <Animated.View style={[styles.container, dropStyle]}>
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
-          <View style={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]}>
-            <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent} />
-          </View>
+          <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
+            badgeStyle={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]} />
         )}
 
         {/* Selected chip: the coin, how far, and what it costs. */}
