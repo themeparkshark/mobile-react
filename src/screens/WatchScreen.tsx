@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import view from '../api/endpoints/social-posts/view';
@@ -19,6 +19,7 @@ import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import { SocialPostType } from '../models/social-post-type';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SharkLoader } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -80,6 +81,8 @@ export default function WatchScreen() {
   // a retry succeeds, so "Later" never throws a watched video away.
   const [unsaved, setUnsaved] = useState<readonly SocialPostType[]>([]);
   const [showUnsaved, setShowUnsaved] = useState(false);
+  const unsavedRef = useRef(unsaved);
+  unsavedRef.current = unsaved;
   const playerOpen = useRef(false);
   const dialogOpen = useRef(false);
   const bank = useRef<RewardBank>(EMPTY_BANK);
@@ -168,6 +171,11 @@ export default function WatchScreen() {
   const openVideo = useCallback((post: SocialPostType) => {
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (unsavedRef.current.some(p => p.id === post.id)) {
+      // Already watched; only the save is missing. Tapping saves, no rewatch.
+      retryRef.current(false);
+      return;
+    }
     if (videoIdOf(post)) {
       playerOpen.current = true;
       setPlaying(post);
@@ -228,28 +236,30 @@ export default function WatchScreen() {
   // everything is watched); the rest sit in a two-column grid, newest first.
   // It moves only when nothing is on top of the page, with a short animation,
   // so the kid sees the watched video slide into the grid.
+  const reducedMotion = useUiReducedMotion();
   const [heroWatched, setHeroWatched] = useState<ReadonlySet<number>>(localWatched);
   const calm = playing === null && rewardTotal === null && !showUnsaved && !settling;
   useEffect(() => {
     if (!calm || heroWatched === localWatched) return;
     const id = setTimeout(() => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      if (!reducedMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setHeroWatched(localWatched);
     }, 250);
     return () => clearTimeout(id);
-  }, [calm, localWatched, heroWatched]);
+  }, [calm, localWatched, heroWatched, reducedMotion]);
   const featuredVideo = videos.find(v => !v.has_watched && !heroWatched.has(v.id)) ?? videos[0] ?? null;
   // A new hero pops in, so the change reads as "here's your next one".
   const heroPop = useRef(new Animated.Value(1)).current;
   const heroId = useRef<number | null>(null);
-  useEffect(() => {
+  // Layout effect: the scale is set before the new hero's first frame paints.
+  useLayoutEffect(() => {
     const id = featuredVideo?.id ?? null;
-    if (heroId.current !== null && id !== null && id !== heroId.current) {
+    if (!reducedMotion && heroId.current !== null && id !== null && id !== heroId.current) {
       heroPop.setValue(0.92);
       Animated.spring(heroPop, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }).start();
     }
     heroId.current = id;
-  }, [featuredVideo?.id, heroPop]);
+  }, [featuredVideo?.id, heroPop, reducedMotion]);
   const gridVideos = featuredVideo ? videos.filter(v => v.id !== featuredVideo.id) : [];
   const upNext = useMemo(
     () => (playing ? upNextFor(playing, videos, isWatched) : []),
@@ -305,7 +315,7 @@ export default function WatchScreen() {
 
                 {featuredVideo && (
                   <Animated.View style={{ transform: [{ scale: heroPop }] }}>
-                    <SocialPost socialPost={featuredVideo} featured newest={featuredVideo.id === videos[0]?.id} watched={isWatched(featuredVideo)} onPress={openVideo} />
+                    <SocialPost socialPost={featuredVideo} featured newest={featuredVideo.id === videos[0]?.id} watched={isWatched(featuredVideo)} pendingSave={unsaved.some(p => p.id === featuredVideo.id)} onPress={openVideo} />
                   </Animated.View>
                 )}
 
@@ -317,8 +327,8 @@ export default function WatchScreen() {
                 )}
               </View>
             }
-            renderItem={({ item }) => <SocialPost socialPost={item as SocialPostType} watched={isWatched(item as SocialPostType)} onPress={openVideo} />}
-            extraData={localWatched}
+            renderItem={({ item }) => <SocialPost socialPost={item as SocialPostType} watched={isWatched(item as SocialPostType)} pendingSave={unsaved.some(p => p.id === (item as SocialPostType).id)} onPress={openVideo} />}
+            extraData={[localWatched, unsaved]}
             estimatedItemSize={190}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={{ paddingBottom: 110, paddingHorizontal: 8 }}
