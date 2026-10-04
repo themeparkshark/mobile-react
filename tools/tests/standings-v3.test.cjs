@@ -101,18 +101,23 @@ test('the one next step: top 10 if 3 or fewer away, a weekly goal if 2 or fewer,
   const base = { board: 'week', metric: 'ride_wins' };
   const chase = (over = {}) => ({ name: 'p1010', toPass: 1, tied: false, passes: 1, targetRank: 10, rank: 10, ...over });
   const at11 = { ...base, me: { rank: 11, score: 10 }, chase: chase(), rows: [{ rank: 10, score: 10 }] };
-  assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', text: '1 more ride to make the top 10!' });
+  assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', icon: 'trophy', text: '1 more ride to make the top 10!' });
   const leap = { ...base, me: { rank: 30, score: 5 }, chase: chase({ name: 'p1029', passes: 1, targetRank: 29 }), rows: [{ rank: 10, score: 7 }] };
   assert.equal(model.nextStep(leap).kind, 'jump', 'one ride passes someone; the top 10 is 3 away');
   const block = { ...base, me: { rank: 130, score: 21 }, chase: chase({ name: 'dinoking', tied: true, passes: 23, targetRank: 107 }), rows: [{ rank: 10, score: 37 }] };
   const tie = model.nextStep(block);
-  assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', text: '1 more ride jumps you past 23 players!' });
+  assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', icon: null, text: '1 more ride jumps you past 23 players!' });
   assert.doesNotMatch(tie.text, /dinoking|got there first/, 'never names who beat you');
   const two = model.nextStep({ ...block, chase: chase({ toPass: 2, passes: 5, targetRank: 125 }) });
   assert.equal(two.text, '2 more rides jump you past 5 players!');
   const goal = model.nextStep({ ...block, me: { rank: 130, score: 7 }, chase: chase({ toPass: 3, passes: 40, targetRank: 90 }),
     goals: [{ at: 3, xp: 10, reached: true }, { at: 8, xp: 25, reached: false }, { at: 15, xp: 50, reached: false }] });
-  assert.deepEqual(plain(goal), { kind: 'goal', plus: 1, target: '+25 XP', text: '1 more ride: weekly goal! +25 XP' });
+  assert.deepEqual(plain(goal), { kind: 'goal', plus: 1, target: '8', icon: 'star', text: '1 more ride reaches your weekly goal of 8!' });
+  // r3: a podium landing says so with a crown; a far jump shows how many you pass, not a five-digit rank.
+  const podium = model.nextStep({ ...base, me: { rank: 5, score: 30 }, chase: chase({ toPass: 2, passes: 2, targetRank: 3 }), rows: [] });
+  assert.deepEqual(plain([podium.target, podium.icon, podium.text]), ['#3', 'crown', '2 more rides puts you on the podium!']);
+  const far = model.nextStep({ board: 'all_time', metric: 'ride_coins', me: { rank: 12515, score: 3 }, chase: chase({ toPass: 2, passes: 1250, targetRank: 11265 }), rows: [] });
+  assert.deepEqual(plain([far.target, far.icon]), ['1,250', 'up']);
   const leader = model.nextStep({ ...base, me: { rank: 1, score: 50 }, chase: null });
   assert.equal(leader.kind, 'leader');
   const home = model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, false);
@@ -130,6 +135,8 @@ test('the tab it opens on: friends racing, else your week, else your collection'
   assert.equal(model.defaultStandingsTab({ me: { score: 4 } }, friends(1)), 'week');
   assert.equal(model.defaultStandingsTab({ me: { score: 0 } }, friends(1)), 'all_time');
   assert.equal(model.defaultStandingsTab(null, friends(3)), null, 'unknown until both boards are in');
+  assert.equal(model.defaultStandingsTab({ me: { score: 0 }, lastWeek: { seen: false } }, friends(3)), 'week', 'an unseen Monday card opens This Week first');
+  assert.equal(model.defaultStandingsTab({ me: { score: 0 }, lastWeek: { seen: true } }, friends(3)), 'friends');
   const screen = read('src/screens/LeaderboardScreen.tsx');
   assert.match(screen, /const pick = tabParam \? null : defaultStandingsTab\(/, 'a deep link still wins');
   assert.match(screen, /if \(live && pick && !touched\.current\) setActiveTab/, 'never yanks a tab the kid chose');
@@ -177,7 +184,7 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.doesNotMatch(shark, /<Avatar /, 'rows skip the badge-heavy Avatar');
   assert.match(store, /export function loadMore\(/);
   assert.match(store, /pagesInFlight/, 'one page request per board at a time');
-  assert.match(store, /mergeRefresh\(boardModel\(dto, board, meId\), boards\.get\(key\)\?\.model\)/);
+  assert.match(store, /: mergeRefresh\(fresh, previous\);/, 'same build: a refresh keeps the scrolled pages');
   assert.match(store, /if \(owner !== meId\) return null;/, 'a page that lands after a sign-out is dropped');
   assert.match(store, /getStandingsPage\(board, board === 'all_time' \? parkId \?\? null : null, offset, from\.build\)/, 'later pages read the first page\'s build');
   const perf = read('src/screens/LeaderboardsScreen/standingsPerf.tsx');
@@ -202,7 +209,7 @@ test('a page never lands above what the kid is looking at', () => {
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /if \(canInsert\(\)\) \{\s+apply\(next\);/);
   assert.match(board, /heldPage\.current = next;/);
-  assert.match(board, /\/\/ A new board, park or refresh: a page held for the old one must never land on it\.\s+heldPage\.current = null;/, 'r2: a held page never lands on another board');
+  assert.match(board, /request\.current \+= 1;\s+heldPage\.current = null;/, 'r2/r3: a held or in-flight page never lands on another board');
   const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
   assert.doesNotMatch(store.slice(store.indexOf('export function loadMore'), store.indexOf('export function commitBoard')), /boards\.set\(/, 'a page is cached only once the screen shows it');
   assert.match(board, /if \(heldPage\.current && canInsertRef\.current\(\)\)/, 'a held page lands when the kid scrolls back up');
@@ -228,4 +235,25 @@ test('r2 capture fixes: Up N is never clipped, the dock never overshoots', () =>
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /style=\{\{ position: 'absolute', top: -27, left: -18, width: 80, alignItems: 'center' \}\}/, 'the Up badge is wider than the rank column');
   assert.match(board, /translateY: Math\.max\(0, 1 - shown\.value\)/, 'the dock never rises above its rest spot');
+});
+
+test('r3: dock above the nav, climb reveal, Monday first, step on your row, VoiceOver GO RIDE, park-switch guards', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /bottom: YOU_CARD_BOTTOM - 8 \}, dockStyle\]/, 'the dock stops above the nav icons');
+  assert.doesNotMatch(board, /marginBottom: -40/, 'no strip down to the screen edge');
+  assert.match(board, /opacity: Math\.min\(1, Math\.max\(0, shown\.value\) \* 4\)/, 'fades only in the last quarter: no ghosting');
+  assert.match(board, /const shownRank = revealing && climbFrom \? climbFrom : me\?\.rank;/, 'the old rank until the last tick');
+  assert.match(board, /if \(showResults\) \{ setCelebrate\(false\); setMeJoined\(false\); pendingClimb\.current = celebrateNow; \}/, 'podium confetti waits for the Monday card');
+  assert.match(board, /step=\{item\.row\.isMe \? myStep : null\}/, 'your own row carries the next step');
+  assert.match(board, /\{ name: 'goRide', label: 'Go ride' \}/, 'GO RIDE is a VoiceOver action');
+  assert.match(board, /request\.current \+= 1;\s+heldPage\.current = null;/, 'every load invalidates pages in flight');
+  assert.match(board, /if \(!boardMatches\(next, board, parkIdRef\.current\)\) return;/);
+  assert.match(board, /if \(next === 'rebuilt'\) \{ loadRef\.current\(true\); return; \}/, 'a rebuilt board refreshes, never appends');
+  const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
+  assert.match(store, /if \(!boardMatches\(model, board, parkId\)\) return;/, 'commitBoard refuses another park');
+  assert.match(store, /await refetchPages\(meId, board, parkId, fresh, previous\.rows\.length\)/, 'a new build refetches the scrolled pages');
+  assert.match(read('src/screens/LeaderboardsScreen/faceLayers.ts'), /if \(urgent\) waiting\.unshift\(go\)/, 'faces on screen decode first');
+  assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', 8), true);
+  assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', null), false, 'another park never lands');
+  assert.equal(model.boardMatches({ board: 'week', parkId: null }, 'friends', null), false);
 });

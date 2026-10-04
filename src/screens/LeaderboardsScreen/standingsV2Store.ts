@@ -18,12 +18,12 @@ import { facePoints, faceLayerSources, wearsOwnLook } from './StandingsShark';
 import type { InventoryType } from '../../models/inventory-type';
 import type { ParkType } from '../../models/park-type';
 import { standingsGeneration, standingsSession } from './standingsCache';
-import { boardModel, mergePage, mergeRefresh, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel, type StandingsRowModel } from './standingsV2Model';
+import { boardMatches, boardModel, mergePage, mergeRefresh, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel, type StandingsRowModel } from './standingsV2Model';
 
 const FRESH_MS = 45_000;
 const boards = new Map<string, { model: StandingsBoardModel; at: number }>();
 const inFlight = new Map<string, Promise<StandingsBoardModel>>();
-const pagesInFlight = new Map<string, Promise<StandingsBoardModel | null>>();
+const pagesInFlight = new Map<string, Promise<StandingsBoardModel | 'rebuilt' | null>>();
 let generation = standingsGeneration();
 let owner: number | null = null;
 let session = standingsSession();
@@ -58,9 +58,15 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
   const running = inFlight.get(key);
   if (running) return running;
   const request = getStandings(board, board === 'all_time' ? parkId ?? null : null)
-    .then(dto => {
+    .then(async dto => {
+      const fresh = boardModel(dto, board, meId);
+      const previous = boards.get(key)?.model;
       // A refresh keeps the pages already scrolled through (no jump back to the top 50).
-      const model = mergeRefresh(boardModel(dto, board, meId), boards.get(key)?.model);
+      // When the board changed (a new build), those pages are fetched again from the
+      // new build (up to 4 pages), so no rank is ever skipped or shown twice.
+      const model = previous && previous.build && fresh.build && previous.build !== fresh.build && previous.rows.length > fresh.rows.length
+        ? await refetchPages(meId, board, parkId, fresh, previous.rows.length)
+        : mergeRefresh(fresh, previous);
       // A sign-out while this was in flight must not repopulate the cache.
       if (owner === meId) boards.set(key, { model, at: Date.now() });
       prefetchFaces(model.rows.slice(0, 12));
@@ -78,7 +84,7 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
  * page held while the kid is in Your spot can never land later from the cache
  * above what they are looking at. One request per board at a time.
  */
-export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, from: StandingsBoardModel): Promise<StandingsBoardModel | null> {
+export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, from: StandingsBoardModel): Promise<StandingsBoardModel | 'rebuilt' | null> {
   sync(meId);
   const key = keyOf(meId, board, parkId);
   if (from.nextOffset == null) return Promise.resolve(null);
@@ -88,6 +94,9 @@ export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: 
   const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset, from.build)
     .then(page => {
       if (owner !== meId) return null;
+      // The board was rebuilt and the first page's build expired: the screen refreshes
+      // (refetchPages) instead of appending rows from a different board.
+      if (from.build && page?.build && page.build !== from.build) return 'rebuilt' as const;
       const incoming = Array.isArray(page?.rows) ? page.rows : [];
       // Exactly the new rows' faces, the first 20, so a landing page never floods the decoder.
       prefetchFaces(incoming.slice(0, 20).map(row => boardModel({ rows: [row] }, board, meId).rows[0]).filter(Boolean));
@@ -98,9 +107,25 @@ export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: 
   return request;
 }
 
+/** Pages again from a new build, up to `rows` rows (at most 4 pages). Failures keep what loaded. */
+async function refetchPages(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, fresh: StandingsBoardModel, rows: number): Promise<StandingsBoardModel> {
+  let model = fresh;
+  for (let i = 0; i < 4 && model.nextOffset != null && model.rows.length < rows; i++) {
+    try {
+      const page = await getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, model.nextOffset, model.build);
+      model = mergePage(model, page, meId);
+    } catch {
+      break;
+    }
+  }
+  return model;
+}
+
 /** The screen showed this board: it becomes the cached one (tab switches keep the place). */
 export function commitBoard(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, model: StandingsBoardModel): void {
   sync(meId);
+  // r3: a model from another tab or park is never saved under this key.
+  if (!boardMatches(model, board, parkId)) return;
   const key = keyOf(meId, board, parkId);
   const at = boards.get(key)?.at ?? Date.now();
   if (owner === meId) boards.set(key, { model, at });

@@ -49,7 +49,7 @@ import {
 import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
-  DIVIDER_HEIGHT, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  boardMatches, DIVIDER_HEIGHT, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -174,8 +174,10 @@ export function RankBadge({ rank, me = false }: { readonly rank: number; readonl
 }
 
 /** A 64 pt row: rank, shark, name, number. Muted rows (friends with no rides yet) show the shark greyed and no number. */
-const BoardRow = memo(function BoardRow({ row, metric, muted, enter, onPress }: {
+const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPress }: {
   readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean;
+  /** Your own row only: the next step as its one secondary chip (r3: Friends shows it too). */
+  readonly step: ReturnType<typeof nextStep> | null;
   /** First paint only: the slide-in delay for this row, or null (recycled rows never animate). */
   readonly enter: number | null;
   readonly onPress: (row: StandingsRowModel) => void;
@@ -183,7 +185,7 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, onPress }: 
   return (
     <Animated.View entering={enter != null ? FadeInRight.delay(enter).springify().damping(16).stiffness(180) : undefined}
       style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric)}
+      <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (row.isMe && step && 'plus' in step ? `. ${step.text}` : '')}
         onPress={() => onPress(row)}
         style={({ pressed }) => ({
           height: ROW_HEIGHT - 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.md,
@@ -197,7 +199,9 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, onPress }: 
         <View style={{ marginLeft: 8 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
         <View style={{ flex: 1, marginLeft: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text maxFontSizeMultiplier={FONT_CAP} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
-          {row.isMe && (
+          {row.isMe && step && (step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal') ? (
+            <StepGlyphs compact plus={step.plus} target={step.target} metric={metric} kind={step.kind} icon={step.icon} />
+          ) : row.isMe && (
             <View style={{ paddingHorizontal: 7, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.navy }}>
               <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>YOU</Text>
             </View>
@@ -263,19 +267,29 @@ function Divider({ label }: { readonly label: string }) {
  * The next step as glyphs a 6 year old reads without words: "+1 [cart] -> #107",
  * "+3 [cart] -> TOP 10", "+2 [cart] -> +25 XP". The sentence is the spoken label.
  */
-function StepGlyphs({ plus, target, metric, kind }: { readonly plus: number; readonly target: string; readonly metric: StandingsMetric; readonly kind: 'jump' | 'top10' | 'goal' }) {
+function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
+  readonly plus: number; readonly target: string; readonly metric: StandingsMetric; readonly kind: 'jump' | 'top10' | 'goal';
+  readonly icon: 'crown' | 'trophy' | 'star' | 'up' | null;
+  /** On your own row in the list: a smaller chip that fits beside your name. */
+  readonly compact?: boolean;
+}) {
+  const h = compact ? 22 : 24;
+  const f = compact ? 13 : 15;
+  const gold = kind !== 'jump' || icon === 'crown';
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 26 }} importantForAccessibility="no-hide-descendants">
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, height: 24, borderRadius: 12, backgroundColor: BRAND.blueBright }}>
-        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`+${plus}`}</Text>
-        <ScoreIcon metric={metric} size={18} />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? 4 : 6, height: h + 2 }} importantForAccessibility="no-hide-descendants">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: compact ? 6 : 8, height: h, borderRadius: h / 2, backgroundColor: BRAND.blueBright }}>
+        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`+${plus}`}</Text>
+        <ScoreIcon metric={metric} size={compact ? 15 : 18} />
       </View>
-      <GameIcon name="arrow" size={16} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, height: 24, borderRadius: 12,
-        backgroundColor: kind === 'jump' ? BRAND.navy : BRAND.gold, borderWidth: kind === 'jump' ? 0 : 2, borderColor: BRAND.goldLip }}>
-        {kind === 'top10' && <GameIcon name="trophy" size={16} />}
-        {kind === 'goal' && <GameIcon name="star" size={16} />}
-        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 15, color: kind === 'jump' ? BRAND.white : BRAND.navy, fontVariant: ['tabular-nums'] }}>{target}</Text>
+      <GameIcon name="arrow" size={compact ? 13 : 16} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: compact ? 6 : 8, height: h, borderRadius: h / 2,
+        backgroundColor: gold ? BRAND.gold : BRAND.navy, borderWidth: gold ? 2 : 0, borderColor: BRAND.goldLip }}>
+        {icon === 'crown' && <GameIcon name="crown" size={compact ? 13 : 16} />}
+        {icon === 'trophy' && <GameIcon name="trophy" size={compact ? 13 : 16} />}
+        {icon === 'star' && <GameIcon name="star" size={compact ? 13 : 16} />}
+        {icon === 'up' && <GameIcon name="arrow" size={compact ? 12 : 14} style={{ transform: [{ rotate: '-90deg' }] }} />}
+        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: gold ? BRAND.navy : BRAND.white, fontVariant: ['tabular-nums'] }}>{target}</Text>
       </View>
     </View>
   );
@@ -288,8 +302,10 @@ function StepGlyphs({ plus, target, metric, kind }: { readonly plus: number; rea
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbDone }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbDone }: {
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
+  /** The rank you climbed from: shown until the last "Passed X" tick, so the reveal is never spoiled. */
+  readonly climbFrom: number | null;
   /** Changes for every climb, so two climbs of the same size both play. */
   readonly climbId: number;
   /** Changes when the board becomes the active tab: the row jumps to its state, no slide. */
@@ -349,11 +365,12 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climbId]);
 
-  // Clamped: the spring may overshoot, but the dock never rises above its rest
-  // spot (r2 capture: an overshoot let the row underneath peek out below it).
+  // Clamped: the spring may overshoot, but the dock never rises above its rest spot.
+  // It slides fully opaque and fades only in the last quarter of its travel, so its
+  // text never ghosts over a row (r2).
   const dockStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, shown.value),
-    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
+    opacity: Math.min(1, Math.max(0, shown.value) * 4),
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) }],
   }));
   const joining = step.kind === 'join';
   const reviewing = step.kind === 'review';
@@ -363,14 +380,20 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
   const shownScore = reviewing ? `${model.review?.rides ?? 0}` : score > 0 ? scoreText(model, score) : '0';
   const passing = step2 >= 0 && step2 < passed.length ? passed[step2] : null;
   const climbed = climb > 0 && step2 >= passed.length;
+  // Until the last tick: the old rank and no new line (r2: "You're #1" showed before the ticks).
+  const revealing = climb > 0 && passed.length > 0 && step2 < passed.length;
+  const shownRank = revealing && climbFrom ? climbFrom : me?.rank;
 
   return (
-    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 0, right: 0, bottom: 0 }, dockStyle]}>
-      {/* The dock: rows fade out under it (r2: no row peeking above or below the bar). */}
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}>
+      {/* The dock: rows fade out above it. It stops above the nav's raised icons
+          (r2: a strip down to the screen edge erased them). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
-      {/* The strip bleeds 40 pt past the bottom edge, so nothing ever shows under it. */}
-      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: YOU_CARD_BOTTOM + 40, marginBottom: -40 }}>
+      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8, borderBottomLeftRadius: RADIUS.lg, borderBottomRightRadius: RADIUS.lg }}>
         <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens your card' : 'Shows your row'}
+          // GO RIDE sits inside this row, so VoiceOver reaches it as an action (r2 kids UX).
+          accessibilityActions={joining && step.kind === 'join' && step.canRide ? [{ name: 'activate' }, { name: 'goRide', label: 'Go ride' }] : undefined}
+          onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'goRide') onGoRide(); else (joining ? onOpenCard : onPress)(); }}
           onPress={joining ? onOpenCard : onPress}
           style={({ pressed }) => ({
             height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.lg,
@@ -378,9 +401,9 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
             transform: [{ scale: pressed ? 0.98 : 1 }],
           })}>
           <View style={{ minWidth: 44, alignItems: 'center' }}>
-            {me?.rank ? (
+            {shownRank ? (
               <>
-                <RankBadge rank={me.rank} me />
+                <RankBadge rank={shownRank} me />
                 {climbed && (
                   // Wider than the rank column (r2 capture: "Up 129!" was clipped to "Up 1").
                   <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
@@ -407,8 +430,10 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
                 <StandingsShark avatar={passing.avatar} size={20} />
                 <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</Text>
               </Animated.View>
+            ) : revealing ? (
+              <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip }}>CLIMBING!</Text>
             ) : step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal' ? (
-              <StepGlyphs plus={step.plus} target={step.target} metric={model.metric} kind={step.kind} />
+              <StepGlyphs plus={step.plus} target={step.target} metric={model.metric} kind={step.kind} icon={step.icon} />
             ) : (
               <Text maxFontSizeMultiplier={1.15} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
                 style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>{step.text}</Text>
@@ -456,6 +481,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const inPark = !!useContext(LocationStatusContext).park;
   const [parks, setParks] = useState<ParkType[]>(cachedParks());
   const [parkId, setParkId] = useState<number | null>(board === 'all_time' ? chosenAllTimePark() : null);
+  const parkIdRef = useRef(parkId);
+  parkIdRef.current = parkId;
   const first = cachedBoard(meId, board, parkId);
   const [model, setModel] = useState<StandingsBoardModel | null>(first?.model ?? null);
   const [status, setStatus] = useState<Status>(first ? 'ready' : 'loading');
@@ -466,6 +493,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const [climbing, setClimbing] = useState(false);
   const [climbId, setClimbId] = useState(0);
   const [passed, setPassed] = useState<readonly StandingsRowModel[]>([]);
+  const [climbFrom, setClimbFrom] = useState<number | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [meJoined, setMeJoined] = useState(false);
   const [myRowVisible, setMyRowVisible] = useState(false);
@@ -518,15 +546,16 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     writeSeenRank(meId, next);
     const changed = await podiumChanged(meId, next);
     const top = podiumRows(next);
-    setCelebrate(changed);
-    setMeJoined(changed && top.some(row => row?.isMe) && (seen == null || seen > 3));
+    const joined = changed && top.some(row => row?.isMe) && (seen == null || seen > 3);
     const showResults = next.board === 'week' && !!next.lastWeek && !next.lastWeek.seen
       && resultsShown !== `${meId}:${next.lastWeek.weekStart}`;
-    if (up > 0) {
-      const climbNow = () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimbing(true); setClimb(up); setClimbId(id => id + 1); };
-      // The overtake waits for the Monday card, so it is never played behind it.
-      if (showResults) pendingClimb.current = climbNow; else climbNow();
-    }
+    const climbNow = up > 0
+      ? () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimbFrom(seen); setClimbing(true); setClimb(up); setClimbId(id => id + 1); }
+      : null;
+    // The podium rise, its confetti and the overtake all wait for the Monday card,
+    // so the best moment is never played behind it (r2 game feel).
+    const celebrateNow = () => { setCelebrate(changed); setMeJoined(joined); climbNow?.(); };
+    if (showResults) { setCelebrate(false); setMeJoined(false); pendingClimb.current = celebrateNow; } else celebrateNow();
     // The Monday card shows once: unseen on the server and not already shown this session.
     if (next.board === 'week' && next.lastWeek && !next.lastWeek.seen && resultsShown !== `${meId}:${next.lastWeek.weekStart}`) {
       resultsShown = `${meId}:${next.lastWeek.weekStart}`;
@@ -535,7 +564,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   }, [meId]);
 
   const load = useCallback((force: boolean) => {
-    // A new board, park or refresh: a page held for the old one must never land on it.
+    // A new board, park or refresh: any page in flight or held for the old one must
+    // never land on it (r2 perf: a warm-cache park switch returned before this bump).
+    request.current += 1;
     heldPage.current = null;
     failures.current = 0;
     retryAt.current = 0;
@@ -618,10 +649,13 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     const before = model.rows.length;
     if (STANDINGS_PERF_ON) perfMark(`page-request ${board} offset=${model.nextOffset} why=${why} rowsToEnd=${at - lastVisible.current}`);
     loadMore(meId, board, parkId, model).then(next => {
-      if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${next?.rows.length ?? 0} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
+      if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${typeof next === "object" && next ? next.rows.length : String(next)} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
       failures.current = 0;
       retryAt.current = 0;
       if (!next || id !== request.current) return;
+      // The board was rebuilt between pages: refresh (the store refetches the pages) rather than append.
+      if (next === 'rebuilt') { loadRef.current(true); return; }
+      if (!boardMatches(next, board, parkIdRef.current)) return;
       if (canInsert()) {
         apply(next);
         // VoiceOver near the end hears that more players arrived.
@@ -734,7 +768,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (heldPage.current && canInsertRef.current()) {
       const held = heldPage.current;
       heldPage.current = null;
-      setModelRef.current(held);
+      if (boardMatches(held, board, parkIdRef.current)) setModelRef.current(held);
     }
     // About two and a half screens before the grey rows: fetch, so the page lands before the kid gets there.
     if (activeRef.current && Date.now() >= jumpingUntil.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
@@ -759,17 +793,19 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   }, [active, items]);
 
   const metric = model?.metric ?? 'ride_wins';
+  // Your own row in the list carries the next step too (Friends shows your row, not the dock).
+  const myStep = useMemo(() => (model ? nextStep(model, inPark) : null), [model, inPark]);
   const renderItem: FlashRenderItem<ListItem> = useCallback(({ item, index }) => {
     if (item.type === 'divider') return <Divider label={item.label} />;
     if (item.type === 'skeleton') return <SkeletonRow first={item.key === 'skeleton-0'} />;
     if (item.type === 'retry') return <RetryRow onPress={() => moreRef.current('tap')} />;
     if (item.type === 'footer') return <FooterRow label={item.label} metric={metric} />;
     return (
-      <BoardRow row={item.row} metric={metric} muted={item.muted}
+      <BoardRow row={item.row} metric={metric} muted={item.muted} step={item.row.isMe ? myStep : null}
         enter={!reduced && !entered.current && index < 8 && celebrate ? 120 + index * 45 : null}
         onPress={onRow} />
     );
-  }, [metric, reduced, celebrate, onRow]);
+  }, [metric, reduced, celebrate, onRow, myStep]);
   const onEndReached = useCallback(() => { if (activeRef.current && canInsert()) moreRef.current('end'); }, [canInsert]);
   const onRefresh = useCallback(() => { setRefreshing(true); loadRef.current(true); }, []);
   const refreshControl = useMemo(() => <RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={onRefresh} />, [refreshing, onRefresh]);
@@ -876,14 +912,16 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           // Room for the docked row only while it shows (r2: no cream void under Your spot).
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
         />
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 14 }, topShade]}>
-          <LinearGradient colors={['rgba(5,52,110,0.22)', 'rgba(5,52,110,0)']} style={{ flex: 1 }} />
+        {/* Rows soften into the strip instead of a hard cut (r2 art): a cream fade and a hairline shadow. */}
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }, topShade]}>
+          <View style={{ height: 2, backgroundColor: 'rgba(5,52,110,0.18)' }} />
+          <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ flex: 1 }} />
         </Animated.View>
       </View>
-      <YouRow model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
+      <YouRow model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
-        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); }} />
+        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); setClimbFrom(null); }} />
       <SharkCard row={card} metric={model.metric} board={board} goals={card?.isMe ? model.goals : null} onClose={() => setCard(null)} />
       <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
         onClose={closeResults} />

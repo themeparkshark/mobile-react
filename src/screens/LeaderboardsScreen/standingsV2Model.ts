@@ -51,8 +51,10 @@ export function initialStandingsV2Tab(param: unknown, tabs: readonly StandingsV2
  * Week when you have rides; else All-Time, your collection. Null until both
  * weekly boards are known (keep This Week meanwhile).
  */
-export function defaultStandingsTab(week: Pick<StandingsBoardModel, 'me'> | null, friends: Pick<StandingsBoardModel, 'rows'> | null): 'week' | 'friends' | 'all_time' | null {
+export function defaultStandingsTab(week: Pick<StandingsBoardModel, 'me'> & { readonly lastWeek?: StandingsBoardModel['lastWeek'] } | null, friends: Pick<StandingsBoardModel, 'rows'> | null): 'week' | 'friends' | 'all_time' | null {
   if (!week || !friends) return null;
+  // Monday: an unseen results card (Tickets, a title) lives on This Week, so open there first.
+  if (week.lastWeek && !week.lastWeek.seen) return 'week';
   const friendsRiding = friends.rows.filter(row => !row.isMe && row.score > 0).length;
   if (friendsRiding >= 2) return 'friends';
   if ((week.me?.score ?? 0) > 0) return 'week';
@@ -318,6 +320,12 @@ export function firstSkeletonIndex(items: readonly ListItem[]): number {
   return items.findIndex(item => item.type === 'skeleton');
 }
 
+/** Whether a board model is for this tab and park (a page from another park must never land here). */
+export function boardMatches(model: Pick<StandingsBoardModel, 'board' | 'parkId'> | null | undefined, board: StandingsBoardKey, parkId: number | null | undefined): boolean {
+  if (!model || model.board !== board) return false;
+  return board !== 'all_time' || (model.parkId ?? null) === (parkId ?? null);
+}
+
 /** Only the first page is here and more exist: page 2 can be fetched while the kid looks at the podium. */
 export function onlyFirstPage(model: Pick<StandingsBoardModel, 'nextOffset' | 'rows' | 'pageSize'>): boolean {
   return model.nextOffset != null && model.rows.length <= model.pageSize;
@@ -371,7 +379,9 @@ export type NextStep =
   | { readonly kind: 'review'; readonly text: string }
   | { readonly kind: 'join'; readonly text: string; readonly canRide: boolean }
   | { readonly kind: 'leader'; readonly text: string }
-  | { readonly kind: 'jump' | 'top10' | 'goal'; readonly plus: number; readonly target: string; readonly text: string };
+  | { readonly kind: 'jump' | 'top10' | 'goal'; readonly plus: number; readonly target: string; readonly text: string;
+      /** The glyph on the target chip: a crown for the podium, a trophy for the top 10, a star for a goal, an up arrow for a far jump. */
+      readonly icon: 'crown' | 'trophy' | 'star' | 'up' | null };
 
 export function nextStep(
   model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review']; readonly rows?: StandingsBoardModel['rows']; readonly goals?: StandingsBoardModel['goals'] },
@@ -391,19 +401,25 @@ export function nextStep(
   if (!model.chase) {
     return { kind: 'leader', text: model.board === 'all_time' ? "You're #1! Top collector!" : "You're #1! Hold the top spot!" };
   }
-  const options: { kind: 'jump' | 'top10' | 'goal'; plus: number; target: string; text: string; order: number }[] = [];
+  type Option = { kind: 'jump' | 'top10' | 'goal'; plus: number; target: string; text: string; icon: 'crown' | 'trophy' | 'star' | 'up' | null; order: number };
+  const options: Option[] = [];
   const top10 = topTenGap(model);
-  if (top10 != null && top10 <= 3) options.push({ kind: 'top10', plus: top10, target: 'TOP 10', text: `${top10} more ${unit(top10)} to make the top 10!`, order: 0 });
+  if (top10 != null && top10 <= 3) options.push({ kind: 'top10', plus: top10, target: 'TOP 10', icon: 'trophy', text: `${top10} more ${unit(top10)} to make the top 10!`, order: 0 });
   const goal = model.board !== 'all_time' ? (model.goals ?? []).find(g => !g.reached && g.at > score) : undefined;
   if (goal && goal.at - score <= 2) {
     const n = goal.at - score;
-    options.push({ kind: 'goal', plus: n, target: `+${goal.xp} XP`, text: `${n} more ${unit(n)}: weekly goal! +${goal.xp} XP`, order: 1 });
+    // r3: the goal is the ride count a kid can see ("8"), never the abstract XP.
+    options.push({ kind: 'goal', plus: n, target: `${goal.at}`, icon: 'star', text: `${n} more ${unit(n)} reaches your weekly goal of ${goal.at}!`, order: 1 });
   }
   const n = model.chase.toPass;
   const passes = model.chase.passes ?? 1;
-  const target = `#${model.chase.targetRank ?? model.chase.rank}`;
-  options.push({ kind: 'jump', plus: n, target, order: 2,
-    text: passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
+  const landing = model.chase.targetRank ?? model.chase.rank;
+  // A far jump reads as how many you pass (an up arrow and 1,250), not a five-digit rank.
+  const far = landing > 999;
+  options.push({ kind: 'jump', plus: n, order: 2,
+    target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
+    text: landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
+      : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
   options.sort((x, y) => x.plus - y.plus || x.order - y.order);
   const { order: _order, ...best } = options[0];
   return best;

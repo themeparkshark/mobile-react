@@ -25,9 +25,13 @@ const pending = new Map<string, Promise<ImageRef | null>>();
 let running = 0;
 const waiting: (() => void)[] = [];
 
-function turn(): Promise<void> {
+/** A face on screen goes to the front of the line; prefetches wait behind it. */
+function turn(urgent: boolean): Promise<void> {
   if (running < MAX_RUNNING) { running += 1; return Promise.resolve(); }
-  return new Promise(resolve => waiting.push(() => { running += 1; resolve(); }));
+  return new Promise(resolve => {
+    const go = () => { running += 1; resolve(); };
+    if (urgent) waiting.unshift(go); else waiting.push(go);
+  });
 }
 
 function done(): void {
@@ -79,7 +83,7 @@ export function readyLayer(source: LayerSource, px: number): ImageRef | null {
 }
 
 /** Decode one layer at `px` wide (once; concurrent callers share the request). Null if it cannot load. */
-export function loadLayer(source: LayerSource, px: number): Promise<ImageRef | null> {
+export function loadLayer(source: LayerSource, px: number, urgent = false): Promise<ImageRef | null> {
   const uri = uriOf(source);
   if (!uri) return Promise.resolve(null);
   const key = keyOf(uri, px);
@@ -87,7 +91,7 @@ export function loadLayer(source: LayerSource, px: number): Promise<ImageRef | n
   if (hit) return Promise.resolve(hit);
   const running = pending.get(key);
   if (running) return running;
-  const request = turn()
+  const request = turn(urgent)
     .then(() => ExpoImage.loadAsync({ uri }, { maxWidth: px }).finally(done))
     .then(ref => { remember(key, ref, px); return ref; })
     .catch(() => null)

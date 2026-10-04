@@ -68,7 +68,7 @@ function useFaceLayers(sources: readonly LayerSource[], px: number): readonly Im
   useEffect(() => {
     if (current) { if (state.key !== key) setState({ key, layers: current }); return undefined; }
     let live = true;
-    void Promise.all(sources.map(src => loadLayer(src, px))).then(out => {
+    void Promise.all(sources.map(src => loadLayer(src, px, true))).then(out => {
       if (live) setState({ key, layers: out.every(Boolean) ? (out as ImageRef[]) : [] });
     });
     return () => { live = false; };
