@@ -28,3 +28,12 @@ export function FindFade({ gone, children }: { readonly gone: boolean; readonly 
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View pointerEvents={gone ? 'none' : 'auto'} style={[FIND_ROOT, style]}>{children}</Animated.View>;
 }
+
+/**
+ * The timer chip's "m:ss", rounded up: the last second reads 0:01 and the find
+ * fades at zero, so a chip never shows 0:00 (react-countdown floors).
+ */
+export function findClock(totalMs: number): string {
+  const seconds = Math.max(1, Math.ceil(totalMs / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}

@@ -1,10 +1,10 @@
 import { Image } from 'expo-image';
-import Countdown, { zeroPad } from 'react-countdown';
+import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
 import { REDEEMABLE_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
-import { FindFade, useFindExpiry } from './FindLife';
+import { FindFade, findClock, useFindExpiry } from './FindLife';
 import { RedeemableType } from '../../models/redeemable-type';
 
 /**
@@ -47,14 +47,14 @@ export default function Redeemable({
         }}>
           <Countdown
             date={Date.parse(redeemable.active_to)}
-            renderer={({ minutes, seconds }) => (
+            renderer={({ total }) => (
               <Text style={{
                 fontFamily: 'Shark',
                 fontSize: 15,
                 color: themeColor,
                 textAlign: 'center',
               }}>
-                {minutes}:{zeroPad(seconds)}
+                {findClock(total)}
               </Text>
             )}
           />

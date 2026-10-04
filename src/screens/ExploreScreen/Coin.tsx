@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import Countdown, { zeroPad } from 'react-countdown';
+import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
 import { COIN_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { FindFade, useFindExpiry } from './FindLife';
+import { FindFade, findClock, useFindExpiry } from './FindLife';
 import { hash01 } from '../../components/map/alive/ambientBudget';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { CurrencyContext } from '../../context/CurrencyProvider';
@@ -70,14 +70,14 @@ export default function Coin({
         }}>
           <Countdown
             date={Date.parse(coin.active_to)}
-            renderer={({ minutes, seconds }) => (
+            renderer={({ total }) => (
               <Text style={{
                 fontFamily: 'Shark',
                 fontSize: 15,
                 color: '#B8860B',
                 textAlign: 'center',
               }}>
-                {minutes}:{zeroPad(seconds)}
+                {findClock(total)}
               </Text>
             )}
           />

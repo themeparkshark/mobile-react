@@ -95,10 +95,17 @@ test('the map\'s children are append-only: no conditional, filtered or keyed-by-
 
 test('no find ever shows 0:00: at its time it fades out and asks for fresh map data', () => {
   const life = read('src/screens/ExploreScreen/FindLife.tsx');
+  const { findClock } = loadTs('src/screens/ExploreScreen/FindLife.tsx', {
+    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native-reanimated': {}, './parkMapLayout': {} });
+  assert.equal(findClock(400), '0:01', 'the last second never reads 0:00');
+  assert.equal(findClock(0), '0:01');
+  assert.equal(findClock(61_000), '1:01');
+  assert.equal(findClock(60_500), '1:01');
   assert.match(life, /setGone\(true\); onExpire\(\);/);
   for (const file of ['Coin', 'Key', 'Redeemable']) {
     const src = read(`src/screens/ExploreScreen/${file}.tsx`);
     assert.match(src, /const gone = useFindExpiry\(/, file);
     assert.match(src, /<FindFade gone=\{gone\}>/, file);
+    assert.match(src, /\{findClock\(total\)\}/, `${file}: the chip rounds up`);
   }
 });
