@@ -1,5 +1,5 @@
 'use strict';
-// Fin-ister Nights map FX, tranche 2: the encounter (icon sheet, Chaos Hour,
+// Fin-ister Nights map FX, tranche 2: the encounter (scareactor sheet, Chaos Hour,
 // skid-fin sparks, tap), the Lagoon Glow-Down, and the art manifest geometry.
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -66,22 +66,22 @@ test('Lagoon Glow-Down: only during a performance; never a canvas prop or a movi
   assert.equal(budget.ambientSpriteBudget(budget.ALIVE_CAPS.full), 119);
 });
 
-test('art manifest geometry: every critter is a 3-row sheet of 128 px frames; icons and sparks parse', () => {
-  const slugs = Object.keys(assets.critters);
+test('art manifest geometry: every scareactor is a 4-row sheet of 128 px frames; the Shusher and sparks parse', () => {
+  const sa = loadTs('src/components/map/fright/scareactors.ts');
+  const slugs = Object.keys(assets.scareactors);
   assert.ok(slugs.length >= 11);
   for (const slug of slugs) {
-    const a = fa.critterAsset(assets, slug);
+    const a = sa.scareactorAsset(assets, slug);
     assert.ok(a, slug);
     assert.deepEqual([...a.frame], [128, 128], slug);
-    assert.deepEqual([fa.rowIndex(a, 'idle'), fa.rowIndex(a, 'lurk'), fa.rowIndex(a, 'jump')], [0, 1, 2], slug);
+    assert.deepEqual(['idle', 'lurk', 'scare', 'slide'].map(row => fa.rowIndex(a, row)), [0, 1, 2, 3], slug);
     assert.equal(fa.sheetTiming(a).frames, 10, slug);
+    assert.equal(typeof a.slide_ok, 'boolean', slug);
     assert.ok(a.static, `${slug} has a still frame for calm`);
   }
-  for (const icon of ['chuckles', 'riptide']) {
-    const a = fa.iconAsset(assets, icon);
-    assert.deepEqual([...a.frame], [160, 160]);
-    assert.deepEqual([fa.rowIndex(a, 'idle'), fa.rowIndex(a, 'appear'), fa.rowIndex(a, 'chaos-hour')], [0, 1, 2], icon);
-  }
+  assert.equal(assets.critters, undefined, 'the sea critters are deprecated');
+  assert.deepEqual(Object.keys(assets.icons), ['shusher'], 'Chuckles and Riptide are scareactors now');
+  assert.equal(fa.rowIndex(assets.icons.shusher, 'shh'), 1, 'the Shusher stays the line mascot');
   assert.deepEqual([...assets.ambient['skid-fin-sparks'].frame], [192, 64]);
   assert.deepEqual([...assets.ambient['skid-fin-sparks'].rows], [8]);
   assert.deepEqual([...assets.ambient['lagoon-glow'].frame], [256, 128]);
