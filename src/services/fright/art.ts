@@ -101,3 +101,15 @@ export function showTally(tally: { readonly chaos: number; readonly control: num
   if (encountersEnabled) return true;
   return !!tally && tally.chaos + tally.control > 0;
 }
+
+/**
+ * Team Chaos vs Control bar fill: null (an empty track, no 50/50) until the
+ * first point, then each side's share of the points.
+ */
+export function tallyFill(tally: { readonly chaos: number; readonly control: number } | null | undefined): { chaos: number; control: number } | null {
+  const chaos = Math.max(0, tally?.chaos ?? 0);
+  const control = Math.max(0, tally?.control ?? 0);
+  const total = chaos + control;
+  if (!total) return null;
+  return { chaos: chaos / total, control: control / total };
+}

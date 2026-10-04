@@ -2,7 +2,9 @@
  * The Marquee recap sheet: loads GET /fright/recap/{slug}/{night_on} and shows
  * the marquee card. Share goes through Share Studio (shareFlex 'fright_night',
  * recapFlex). Inside an RN Modal the button stays hidden while SHARE_IN_MODALS
- * is false; the Deep Lantern route carries the recap share instead.
+ * is false, so the modal Marquee shows "Share from your Lantern" instead: it
+ * closes the recap and opens the Deep Lantern screen (FrightCard, a route) with
+ * that night's Share row on top.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,9 +16,10 @@ import { withTimeout } from '../../services/fright/timeout';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon, gameAlert } from '../../ui';
 import FrightRecapCard from './FrightRecapCard';
+import { openDeepLantern } from './openDeepLantern';
 import { NightButton } from './ui';
 
-export function MarqueeBody({ eventSlug, nightOn, playerId, background, inModal = false, onClose }: {
+export function MarqueeBody({ eventSlug, nightOn, playerId, background, inModal = false, onClose, onShareFromLantern = null }: {
   readonly eventSlug: string;
   /** art.recap_bg; defaults to the art learned this session. */
   readonly background?: string | null;
@@ -25,6 +28,8 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, background, inModal 
   /** Rendered inside an RN Modal: the Share button stays hidden unless SHARE_IN_MODALS (Share Studio rule). */
   readonly inModal?: boolean;
   readonly onClose: () => void;
+  /** Modal Marquee only: close and share from the Deep Lantern screen (Share Studio does not run inside modals). */
+  readonly onShareFromLantern?: (() => void) | null;
 }) {
   const [recap, setRecap] = useState<FrightRecap | null>(null);
   const [failed, setFailed] = useState(false);
@@ -56,6 +61,11 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, background, inModal 
           <FlexShareButton kind="fright_night" payload={recapFlex(recap)} surface="fright_recap" size="md"
             style={{ marginTop: 14, alignSelf: 'center' }} />
         )}
+        {recap && !playerId && inModal && !SHARE_IN_MODALS && !!onShareFromLantern && (recap.totals.haunts ?? recap.haunts.length) > 0 && (
+          <NightButton label="Share from your Lantern" icon="arrow" onPress={onShareFromLantern}
+            accessibilityHint="Opens your Deep Lantern, where you can share this night"
+            style={{ marginTop: 14, alignSelf: 'center', minWidth: 240 }} />
+        )}
       </ScrollView>
     </View>
   );
@@ -69,7 +79,11 @@ export default function MarqueeRecap({ target, onClose }: {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.scrim}>
-        <MarqueeBody eventSlug={target.slug} nightOn={target.nightOn} inModal onClose={onClose} />
+        <MarqueeBody eventSlug={target.slug} nightOn={target.nightOn} inModal onClose={onClose}
+          onShareFromLantern={() => {
+            onClose();
+            openDeepLantern(target.slug, { nightOn: target.nightOn });
+          }} />
       </View>
     </Modal>
   );

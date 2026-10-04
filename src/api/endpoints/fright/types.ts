@@ -229,6 +229,8 @@ export interface FrightReward {
   readonly image: string | null;
   readonly item_id?: number | null;
   readonly amount?: number | null;
+  /** The player already had this item (and the coins row paid for the duplicate). Optional: older servers omit it. */
+  readonly owned?: boolean | null;
 }
 
 export interface FrightCaseFileDrop {
@@ -255,6 +257,8 @@ export interface FrightActionResult {
   readonly needs_side?: boolean;
   /** Encounter catches: which critter was caught. */
   readonly critter?: 'chuckles' | 'riptide' | null;
+  /** Encounter catches: the caught critter's display name. Optional: older servers omit it (the app maps `critter`). */
+  readonly critter_name?: string | null;
   readonly fan?: { readonly rank: number | null; readonly score: number | null } | null;
   readonly server_now?: string;
 }
@@ -362,7 +366,8 @@ export interface FrightRecap {
   readonly reefs: readonly { readonly key: string; readonly name: string }[];
   readonly case_files: readonly { readonly key: string; readonly title: string }[];
   readonly pins: readonly { readonly item_id: number; readonly name: string; readonly image: string | null }[];
-  readonly encounter: { readonly key: string; readonly name: string } | null;
+  /** A catch tonight. `name` should be the critter's name; older servers send "Lantern Star" (read via critters.ts). */
+  readonly encounter: { readonly key: string; readonly name: string; readonly critter?: 'chuckles' | 'riptide' | null } | null;
   readonly totals: { readonly haunts: number; readonly minutes_in_line: number; readonly lantern_parts: number };
   readonly ten_in_one: boolean;
   readonly headline: string;

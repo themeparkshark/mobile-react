@@ -23,8 +23,8 @@ test('T1 tutorial: card 4 is Chaos Hour ONLY when config.encounters_enabled; sti
   assert.equal(on.length, 5);
   assert.equal(on[3].key, 'chaos');
   assert.equal(on[3].title, 'Chaos Hour');
-  assert.equal(on[3].line, 'Watch for Chuckles at 11:11 PM.');
-  assert.ok(on.every(card => card.line.split(/\s+/).length <= 7), '7 words max');
+  assert.equal(on[3].line, 'Catch the critters. Chaos Hour at 11:11 PM.', 'names no single critter (panel ship #7)');
+  assert.ok(on.filter(card => card.key !== 'chaos').every(card => card.line.split(/\s+/).length <= 7), '7 words max');
   assert.match(read('src/components/fright/FrightLayer.tsx'), /encountersEnabled=\{night\.tonight\?\.config\?\.encounters_enabled === true\}/);
 });
 
@@ -84,7 +84,9 @@ test('T2 Case File reveal: flip from the silhouette to the front art, NEW stamp,
   assert.match(src, /uri=\{file\.image\}/);
   assert.match(src, /file\.new && <View style=\{styles\.stamp\}>/);
   assert.match(src, /file\.year_label/);
-  assert.match(src, /Into the Lantern/);
+  assert.match(src, /label="Keep it"/);
+  assert.match(src, /label="See my Lantern" variant="ghost"/);
+  assert.doesNotMatch(src, /Into the Lantern/);
 });
 
 test('T3 rewards: render what the server sends; "Added to your wardrobe" only for real items; XP alone shows no modal', () => {
@@ -98,8 +100,9 @@ test('T3 rewards: render what the server sends; "Added to your wardrobe" only fo
   assert.equal(rewards.lanternLine(coat), null);
   assert.equal(rewards.rewardReveal([xp]), null);
   const reveal = rewards.rewardReveal([xp, coat, pin, { kind: 'coins', name: 'Coins', image: null, amount: 10 }]);
-  assert.equal(reveal.items[0].kind, 'pin', 'pins lead');
-  assert.equal(reveal.headline, '5 haunts survived!');
+  assert.equal(reveal.items[0].kind, 'cosmetic', 'earned gear is the hero, ahead of the pin');
+  assert.equal(reveal.items[1].kind, 'pin');
+  assert.equal(reveal.headline, 'Every haunt this season!');
   assert.deepEqual(plain(reveal.chips), ['+25 XP', '+10 Coins']);
   for (const key of ['ten_in_one', 'first_haunt', 'all_haunts', 'haunts_5', 'case_files_10', 'first_night', 'encounter', 'lantern_lv10']) {
     assert.ok(rewards.MILESTONE_LINES[key], key);

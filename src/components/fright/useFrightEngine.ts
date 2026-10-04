@@ -19,6 +19,7 @@ import { COPY } from '../../services/fright/copy';
 import { encounterInRange, encounterLive, encounterMinutesLeft, needsSidePick, reefStep, toWireFix, type ReefHold }
   from '../../services/fright/finds';
 import { dropModal, pushModal, visibleModal, type FrightModal } from '../../services/fright/modalQueue';
+import { critterName } from '../../services/fright/critters';
 import { rewardReveal } from '../../services/fright/rewards';
 import type { FrightFixSample } from '../../services/fright/geo';
 import { isOnPhase } from '../../services/fright/phase';
@@ -329,14 +330,16 @@ export default function useFrightEngine(night: FrightNight, opts: {
     if (rewardReveal(result.rewards)) queueModal({ id: `rewards:${stamp}`, kind: 'rewards', rewards: result.rewards ?? [] });
   }, [spotByKey, applyResult, setLocalRun, me?.runs, queueModal, setSheetOpen, seen, markSeen]);
 
-  const afterFound = useCallback((key: string, result: FrightActionResult, side: FrightSide | null = null) => {
+  const afterFound = useCallback((key: string, result: FrightActionResult, side: FrightSide | null = null, critter: string | null = null) => {
     applyResult(key, result, { found: true, side });
     const stamp = `${key}:${result.server_now ?? Date.now()}`;
     if (result.case_file) {
       queueModal({ id: `file:${result.case_file.key}`, kind: 'case_file', file: result.case_file });
       enqueueCoach('case_file_first');
     }
-    if (rewardReveal(result.rewards)) queueModal({ id: `rewards:${stamp}`, kind: 'rewards', rewards: result.rewards ?? [] });
+    // A catch names its critter in the reveal ("You caught Ringmaster Riptide!"): the catch result first, then the live encounter.
+    const caught = critterName(result) ?? critter;
+    if (rewardReveal(result.rewards, caught)) queueModal({ id: `rewards:${stamp}`, kind: 'rewards', rewards: result.rewards ?? [], critter: caught });
   }, [applyResult, enqueueCoach, queueModal]);
 
   const enter = useCallback(async (spot: FrightSpot) => {
@@ -592,7 +595,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
       if (result.needs_side) {
         queueModal({ id: `side:${encounterNow.key}`, kind: 'side', encounterKey: encounterNow.key, name: encounterNow.name });
       } else if (result.ok) {
-        afterFound(encounterNow.key, result, side ?? me?.side ?? null);
+        afterFound(encounterNow.key, result, side ?? me?.side ?? null, critterName(encounterNow));
       } else {
         setToast(ERROR_COPY[result.error ?? ''] ?? COPY.offline);
       }

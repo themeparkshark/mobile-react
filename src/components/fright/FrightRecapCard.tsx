@@ -32,7 +32,8 @@ const FrightRecapCard = forwardRef<View, {
     m.topHaunt ? `Your #1 tonight: ${m.topHaunt}` : null,
     m.timeInLine,
     m.caseFiles ? `${m.caseFiles} Case File${m.caseFiles === 1 ? '' : 's'}` : null,
-    m.encounter ? `Spotted ${m.encounter}` : null,
+    // One name per critter: "Caught Ringmaster Riptide", or neutral when the recap has no critter name.
+    m.caught,
   ].filter((line): line is string => !!line);
   return (
     <View ref={ref} collapsable={false} style={styles.card} accessible
