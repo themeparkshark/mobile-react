@@ -24,8 +24,14 @@ export function preloadTradeAudio(): void {
 }
 
 /** One beat: a sound, then (optionally) its haptic a moment later. Never throws. */
-export function beat(cue: TradeCue, opts: { volume?: number; pitch?: number } = {}, haptic?: HapticIntent, priority = 1): ReturnType<typeof setTimeout> | undefined {
-  try { GameAudio.play(cue, opts); } catch { /* audio is decoration */ }
-  if (!haptic) return undefined;
-  return setTimeout(() => queueHaptic(haptic, priority), HAPTIC_AFTER_AUDIO_MS);
+export function beat(cue: TradeCue, opts: { volume?: number; pitch?: number } = {}, haptic?: HapticIntent, priority = 1): number {
+  let voice = 0;
+  try { voice = GameAudio.play(cue, opts); } catch { /* audio is decoration */ }
+  if (haptic) setTimeout(() => queueHaptic(haptic, priority), HAPTIC_AFTER_AUDIO_MS);
+  return voice;
+}
+
+/** Cut a playing voice (skip stops the riser). */
+export function stopBeat(voice: number): void {
+  try { if (voice) GameAudio.stop(voice); } catch { /* ignore */ }
 }

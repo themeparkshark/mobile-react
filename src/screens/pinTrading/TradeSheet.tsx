@@ -11,7 +11,7 @@
 import { memo, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, FadeIn, FadeOut, ReduceMotion, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withRepeat,
+  cancelAnimation, FadeIn, FadeOut, LinearTransition, ReduceMotion, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withRepeat,
   withSequence, withTiming, ZoomIn, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -124,6 +124,8 @@ function TradeSheet(props: TradeSheetProps) {
       <Animated.View
         entering={still ? fade(180) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
         exiting={still || props.handedOff ? fadeOut(150) : SlideOutDown.duration(200).reduceMotion(ReduceMotion.Never)}
+        // The top edge glides between phases instead of jumping.
+        layout={still ? undefined : LinearTransition.springify().damping(20).stiffness(220)}
         style={[styles.sheet, { width: sheetWidth, maxHeight: room ? room - SPACE.md : height * 0.85, paddingBottom: Math.max(insets.bottom, compact ? SPACE.sm : SPACE.lg) }, compact && { gap: SPACE.sm }]}
       >
         <View style={styles.grabber} />
@@ -241,7 +243,7 @@ function TradeSheet(props: TradeSheetProps) {
 export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
-  scrim: { backgroundColor: 'rgba(6,30,74,0.8)' },
+  scrim: { backgroundColor: 'rgba(6,30,74,0.86)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,
     borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy, borderBottomWidth: 0, borderColor: BRAND.white,

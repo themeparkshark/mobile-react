@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  cancelAnimation, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withTiming,
 } from 'react-native-reanimated';
 import { vsprintf } from 'sprintf-js';
 import getPins from '../api/endpoints/me/pins';
@@ -42,6 +42,10 @@ import {
 import SwapCelebration from './pinTrading/SwapCelebration';
 import TradeSheet from './pinTrading/TradeSheet';
 import { beat, preloadTradeAudio } from './pinTrading/tradeAudio';
+import { warmPinImages } from './pinTrading/pinImageCache';
+
+/** Trades this app session (for the "Trade #n today!" line). */
+let sessionTrades = 0;
 
 const CORK = require('../../assets/images/screens/pin-swaps/corkboard.png');
 const LANYARD = require('../../assets/images/screens/social/pin_swaps.png');
@@ -117,6 +121,10 @@ export default function PinSwapsScreen() {
     else setRefreshing(true);
     try {
       const swaps = await getPinSwaps();
+      const urls = swaps.map(s => s.pin.item.icon_url);
+      warmPinImages(urls);
+      // Show the new board in one beat once its art is in, not card by card.
+      await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(r => setTimeout(r, 1500))]);
       setBoard(swaps.map(boardEntry));
       setBoardState('ready');
     } catch {
@@ -144,6 +152,7 @@ export default function PinSwapsScreen() {
         page.next += 1;
         if (rows.length === 0) page.finished = true;
         collected = mergePins(collected, rows);
+        warmPinImages(rows.map(r => r.icon_url));
         if (reset && page.next === 2) setPins(collected);
         else setPins(prev => mergePins(prev, rows));
       } while (all && !page.finished && page.next <= MAX_PIN_PAGES);
@@ -168,8 +177,11 @@ export default function PinSwapsScreen() {
     cancelAnimation(shine);
     shine.value = 0;
     if (!boardActive) return;
-    shine.value = withDelay(500, withRepeat(withSequence(withTiming(1, { duration: 1900 }), withDelay(4300, withTiming(0, { duration: 0 }))), -1, false));
-    return () => cancelAnimation(shine);
+    // One sweep every 6.2 s, started from JS: while it rests, the value is untouched, so no pin redraws.
+    const sweep = () => { shine.value = 0; shine.value = withTiming(1, { duration: 1900 }); };
+    const first = setTimeout(sweep, 500);
+    const loop = setInterval(sweep, 6200);
+    return () => { clearTimeout(first); clearInterval(loop); cancelAnimation(shine); };
   }, [boardActive, shine]);
 
   // Let the pin go back on the board if the player leaves mid-trade.
@@ -192,7 +204,7 @@ export default function PinSwapsScreen() {
   const showError = useCallback((error: unknown) => {
     const kind = classifyTradeError(error);
     beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
-    if (kind === 'taken') gameAlert(COPY.takenTitle, errors.pin_swap_unavailable || COPY.takenMessage, undefined, { icon: 'lock' });
+    if (kind === 'taken') gameAlert(COPY.takenTitle, errors.pin_swap_unavailable || COPY.takenMessage, undefined, { icon: 'search' });
     else if (kind === 'owned') gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
     else if (kind === 'network') gameAlert(COPY.networkTitle, COPY.networkMessage, undefined, { icon: 'info' });
     else gameAlert(COPY.genericTitle, COPY.genericMessage, undefined, { icon: 'info' });
@@ -228,6 +240,7 @@ export default function PinSwapsScreen() {
       return;
     }
     setBusyId(swapId);
+    warmPinImages([swap.pin.item.icon_url]);
     beat('ui.select', { volume: 0.9 });
     try {
       const held = await holdPinSwap(swapId);
@@ -311,23 +324,30 @@ export default function PinSwapsScreen() {
       const shift = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
       setDone({ got: h.swap.pin.item, gave: pick, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
       setLastGiven(pick.id);
-      // The sheet hands its two pins to the trade-complete moment and fades out in place
-      // (no slide, so nothing moves under the flying pins); it unmounts when the moment ends.
-      sheetFade.value = withTiming(0, { duration: 200 });
+      // The sheet hands its two pins to the trade-complete moment; it fades out in place once the
+      // moment is on screen (onCelebrationStart), so the board never shows bright in between.
+      sessionTrades += 1;
+      warmPinImages([h.swap.pin.item.icon_url, pick.icon_url]);
     } catch (error) {
       const kind = classifyTradeError(error);
       if (kind === 'owned') {
-        // Not "someone got it first": tell the real reason and let them pick again.
-        setPhase('picking');
-        showError(error);
+        // Already yours: no pin of yours can fix that, so end the trade kindly (no buzz) and go back to the board.
+        void unHoldPinSwap(h.swap.id).catch(() => undefined);
+        setHold(null);
+        setSelected(undefined);
+        beat('ui.modalClose', { volume: 0.6 });
+        gameAlert(COPY.ownedTitle, COPY.ownedEndMessage, undefined, { icon: 'info' });
+        void loadBoard('refresh');
         return;
       }
       beat('fx.nope', { volume: 0.7 }, 'failBuzz', 2);
       setPhase(kind === 'taken' ? 'taken' : 'failed');
     }
-  }, [onExpire]);
+  }, [loadBoard, onExpire, showError]);
 
   const onTradePress = useCallback(() => { void trade(); }, [trade]);
+
+  const onCelebrationStart = useCallback(() => { sheetFade.value = withTiming(0, { duration: 200 }); }, [sheetFade]);
 
   const backToPicking = useCallback(() => {
     if (phaseRef.current !== 'confirming') return;
@@ -407,7 +427,7 @@ export default function PinSwapsScreen() {
           accessibilityElementsHidden={!!hold || !!done}
           importantForAccessibility={hold || done ? 'no-hide-descendants' : 'auto'}
           contentContainerStyle={[styles.scroll, { paddingHorizontal: pagePad }]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadBoard('refresh')} tintColor={BRAND.white} />}
+          refreshControl={<RefreshControl refreshing={refreshing && !hold && !done} onRefresh={() => void loadBoard('refresh')} tintColor={BRAND.white} />}
           scrollEnabled={!hold && !done}
         >
           <Animated.View entering={still ? undefined : FadeInDown.duration(260)} style={styles.hero}>
@@ -447,7 +467,8 @@ export default function PinSwapsScreen() {
                   </View>
                   <View style={styles.grid}>
                     {board.map((swap, i) => (
-                      <Animated.View key={swap.id} entering={still ? undefined : FadeIn.delay(60 + i * 45).duration(220)}>
+                      <Animated.View key={swap.id} entering={still ? undefined : FadeIn.delay(60 + i * 45).duration(220)}
+                        style={done && hold?.swap.id === swap.id ? { opacity: 0 } : undefined}>
                         <BoardPinCard item={swap.pin.item} swapId={swap.id} width={cellWidth} height={cardHeight} shine={shine}
                           lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}
                           busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} />
@@ -497,7 +518,8 @@ export default function PinSwapsScreen() {
           </Animated.View>
         )}
       </View>
-      {done && <SwapCelebration got={done.got} gave={done.gave} from={done.from} still={still} onDone={finishCelebration} />}
+      {done && <SwapCelebration got={done.got} gave={done.gave} from={done.from} still={still} onDone={finishCelebration}
+        onStart={onCelebrationStart} tradeNumber={sessionTrades} />}
     </View>
   );
 }
