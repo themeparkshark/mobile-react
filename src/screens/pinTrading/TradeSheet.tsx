@@ -8,7 +8,7 @@
  * the trade-complete moment layer above it.
  */
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, ReduceMotion, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ItemType } from '../../models/item-type';
 import type { PinSwapType } from '../../models/pin-swap-type';
@@ -62,13 +62,13 @@ export default function TradeSheet(props: TradeSheetProps) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(150)} style={[StyleSheet.absoluteFill, styles.scrim]}>
+      <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.Never)} exiting={FadeOut.duration(150).reduceMotion(ReduceMotion.Never)} style={[StyleSheet.absoluteFill, styles.scrim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={sending ? undefined : props.onClose}
           accessibilityRole="button" accessibilityLabel={COPY.notNow} />
       </Animated.View>
       <Animated.View
-        entering={still ? FadeIn.duration(180) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
-        exiting={still || props.handedOff ? FadeOut.duration(150) : SlideOutDown.duration(200)}
+        entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
+        exiting={still || props.handedOff ? FadeOut.duration(150).reduceMotion(ReduceMotion.Never) : SlideOutDown.duration(200).reduceMotion(ReduceMotion.Never)}
         accessibilityViewIsModal
         style={[styles.sheet, { width: sheetWidth, maxHeight: height * 0.9, paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}
       >
@@ -93,7 +93,7 @@ export default function TradeSheet(props: TradeSheetProps) {
         )}
 
         {ended && (
-          <Animated.View entering={still ? undefined : FadeIn.duration(200)} style={styles.endCard}>
+          <Animated.View entering={still ? undefined : FadeIn.duration(200).reduceMotion(ReduceMotion.Never)} style={styles.endCard}>
             <GameIcon name={phase === 'expired' ? 'timer' : 'info'} size={44} />
             <View style={{ flex: 1 }}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endTitle}>{phase === 'expired' ? COPY.expiredTitle : COPY.failedTitle}</Text>
@@ -142,7 +142,7 @@ export default function TradeSheet(props: TradeSheetProps) {
             <GameButton label={COPY.backToBoard} onPress={props.onClose} />
           ) : (
             confirming ? (
-              <Animated.View key="confirm" entering={still ? undefined : FadeIn.duration(160)} style={styles.actionSlot}>
+              <Animated.View key="confirm" entering={still ? undefined : FadeIn.duration(160).reduceMotion(ReduceMotion.Never)} style={styles.actionSlot}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine}>
                   {selected ? COPY.confirmMessage(pinName(selected), pinName(swap.pin.item)) : ''}
                 </Text>

@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, ReduceMotion,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
@@ -134,7 +134,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
   const name = pinName(got);
 
   return (
-    <Animated.View entering={still ? FadeIn.duration(180) : undefined} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
+    <Animated.View entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : undefined} exiting={FadeOut.duration(200).reduceMotion(ReduceMotion.Never)} style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
       accessibilityViewIsModal>
       <Animated.View style={[StyleSheet.absoluteFill, bgStyle]}><LinearGradient colors={SKY} style={StyleSheet.absoluteFill} /></Animated.View>
       {!still && (
@@ -167,7 +167,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
         <Text maxFontSizeMultiplier={1.2} style={[textPreset('hero', 'onBlue'), styles.title]}>{COPY.doneTitle}</Text>
         <Text maxFontSizeMultiplier={1.3} style={styles.sub}>{COPY.doneMessage(name)}</Text>
       </Animated.View>
-      <Animated.View entering={still ? FadeIn.duration(180) : FadeIn.delay(T.button).duration(220)}
+      <Animated.View entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : FadeIn.delay(T.button).duration(220).reduceMotion(ReduceMotion.Never)}
         style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + SPACE.xl }]}>
         <GameButton label={COPY.doneAction} icon="check" onPress={onDone} />
       </Animated.View>

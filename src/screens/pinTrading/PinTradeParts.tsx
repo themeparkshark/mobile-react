@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
+  cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { ItemType } from '../../models/item-type';
@@ -124,7 +124,8 @@ export function TradeTimer({ deadline, totalMs, frozen, still, label, onExpire }
     if (frozen) return;
     const start = Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs));
     fill.value = start;
-    fill.value = withTiming(0, { duration: Math.max(0, deadline - Date.now()), easing: Easing.linear });
+    // A progress bar, not decoration: it drains under Reduce Motion too.
+    fill.value = withTiming(0, { duration: Math.max(0, deadline - Date.now()), easing: Easing.linear, reduceMotion: ReduceMotion.Never });
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => { clearInterval(id); cancelAnimation(fill); };
   }, [deadline, totalMs, frozen, fill]);
