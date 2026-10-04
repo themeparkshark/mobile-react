@@ -4,6 +4,7 @@
  */
 
 import RULES from './safetextRules.json';
+import SAFE_CHAT from './safeChatPhrases.json';
 
 export type TopicKey = 'park_day' | 'rides' | 'snacks' | 'outfits' | 'collections' | 'ask';
 export type FeedTab = 'hottest' | 'latest' | 'friends' | 'team';
@@ -41,6 +42,63 @@ export const POST_MAX = 500;
  * read, nothing to type or filter.
  */
 export const QUICK_REPLIES = ['So cool!', 'Same!', 'I want to go!', 'Love it!', 'Congrats!', 'Trade?'] as const;
+
+// ── Safe Chat (the Club Penguin way) ──
+// Posts and replies built from curated phrases (safeChatPhrases.json, a copy of the server's
+// resources/safechat/phrases.json) and, for a phrase with a blank, a park, ride or food name
+// from our own data. The server builds the text from ids and publishes it at once.
+
+export type SafeChatSlot = 'ride' | 'park' | 'food';
+export interface SafeChatPhrase { readonly id: string; readonly text: string }
+export interface SafeChatCategory { readonly key: string; readonly title: string; readonly icon: string; readonly phrases: readonly SafeChatPhrase[] }
+export interface SafeChatPlace { readonly id: string; readonly kind: SafeChatSlot; readonly name: string; readonly park_id: number }
+export interface SafeChatPick { readonly phrase: string; readonly place?: string | null }
+
+export const SAFE_CHAT_CATEGORIES: readonly SafeChatCategory[] = SAFE_CHAT.categories;
+const PHRASE_BY_ID = new Map(SAFE_CHAT_CATEGORIES.flatMap((c) => c.phrases.map((p) => [p.id, p] as const)));
+
+/** The quick-reply chips are Safe Chat phrases, so a tap publishes at once. */
+export const QUICK_REPLY_IDS: readonly string[] = QUICK_REPLIES.map((text) => {
+  const hit = SAFE_CHAT_CATEGORIES.find((c) => c.key === 'replies')?.phrases.find((p) => p.text === text);
+  if (!hit) throw new Error(`quick reply "${text}" is not a Safe Chat phrase`);
+  return hit.id;
+});
+
+export function phraseById(id: string | null | undefined): SafeChatPhrase | null {
+  return (id && PHRASE_BY_ID.get(id)) || null;
+}
+
+export function phraseSlot(text: string): SafeChatSlot | null {
+  const m = /\{(ride|park|food)\}/.exec(text);
+  return m ? (m[1] as SafeChatSlot) : null;
+}
+
+/** What a phrase looks like before a place is picked: "{ride} was SO fun!" -> "[ride] was SO fun!". */
+export function phraseLabel(text: string): string {
+  return text.replace(/\{(ride|park|food)\}/, (_m, slot: string) => `[${slot}]`);
+}
+
+/** The exact text the server will build, or null while a slot is still empty. */
+export function composeSafeChat(pick: SafeChatPick | null, places: readonly SafeChatPlace[]): string | null {
+  const phrase = phraseById(pick?.phrase);
+  if (!phrase) return null;
+  let text = phrase.text;
+  const slot = phraseSlot(text);
+  if (slot) {
+    const place = places.find((p) => p.id === pick?.place);
+    if (!place || place.kind !== slot) return null;
+    text = text.replace(`{${slot}}`, place.name);
+  }
+  return text;
+}
+
+/** Picking a topic opens the matching Safe Chat category. */
+export function categoryForTopic(topic: TopicKey | null): string {
+  return ({ park_day: 'parks', rides: 'rides', snacks: 'food', ask: 'questions' } as Partial<Record<TopicKey, string>>)[topic ?? 'outfits'] ?? 'cheers';
+}
+
+/** The line next to free text while AI review is off: honest about the wait. */
+export const FREE_TEXT_LINE = 'A grown-up from Theme Park Shark checks what you write before others see it. Safe Chat posts go up right away!';
 export const REPLY_MAX = 300;
 
 /**
@@ -102,6 +160,12 @@ const REVIEW_YOU = compile([RULES.review_you])[0];
 const REVIEW_TOPICS = compile([RULES.review_topics])[0];
 const REVIEW_PHRASES = compile(RULES.review_phrases);
 const REVIEW_EXEMPT = compile(RULES.review_exempt).map((re) => new RegExp(re.source, 'giu'));
+const REVIEW_EXEMPT_NOUNS = new RegExp(compile([RULES.review_exempt_nouns])[0].source, 'giu');
+const CARE_NEAR = compile([
+  `${RULES.care_me}(?:\\s+\\S+){0,${RULES.care_window - 1}}?\\s+${RULES.care_words}`,
+  `${RULES.care_words}(?:\\s+\\S+){0,${RULES.care_window - 1}}?\\s+${RULES.care_me}`,
+]);
+const CARE_EXEMPT = compile(RULES.care_exempt).map((re) => new RegExp(re.source, 'giu'));
 const TENS: Record<string, string> = RULES.tens;
 const TEENS: Record<string, string> = RULES.teens;
 const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
@@ -353,7 +417,11 @@ export function hasLink(text: string): boolean {
  * block: the composer shows CARE_LINE and the server holds the post for a grown-up.
  */
 export function isDistress(text: string): boolean {
-  return text.trim() !== '' && matchesAny(DISTRESS, forms(text));
+  if (text.trim() === '') return false;
+  if (matchesAny(DISTRESS, forms(text))) return true;
+  // The broad care net: "i" / "me" / "my" within a few words of a death or self-harm word.
+  const words = [wordForm(text, false), wordForm(text)].map((w) => CARE_EXEMPT.reduce((acc, re) => acc.replace(re, ' '), w));
+  return matchesAny(CARE_NEAR, words);
 }
 
 export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher. If you feel unsafe right now, call or text 988.";
@@ -365,7 +433,8 @@ export function needsReview(text: string): boolean {
   for (const themed of RULES.themed_streets) lower = lower.split(themed).join(' park ');
   lower = lower.replace(/\b(ur|your)\s+(pics?|photos?|selfies?|videos?|vids?)\b/gu, ' post ');
   // Park talk that only looks personal: "what age can you ride", "been to the Star Wars hotel".
-  for (const exempt of REVIEW_EXEMPT) lower = lower.replace(exempt, ' park ');
+  // Only the topic noun inside the phrase becomes "park": the you-word stays.
+  for (const exempt of REVIEW_EXEMPT) lower = lower.replace(exempt, (m) => m.replace(REVIEW_EXEMPT_NOUNS, 'park'));
   const all = forms(lower);
   return all.some((f) => REVIEW_YOU.test(f) && REVIEW_TOPICS.test(f)) || matchesAny(REVIEW_PHRASES, all);
 }

@@ -9,7 +9,7 @@ import type { ThreadType } from '../../../models/thread-type';
 import type { CommentType } from '../../../models/comment-type';
 import type { ReactionType } from '../../../models/reaction-type';
 import type { PlayerType } from '../../../models/player-type';
-import type { FeedTab, Page, TopicKey } from '../../../screens/threads/socialModel';
+import type { FeedTab, Page, SafeChatPick, SafeChatPlace, TopicKey } from '../../../screens/threads/socialModel';
 
 export async function fetchFeed(page: number, tab: FeedTab, options: { team?: string | null; topic?: TopicKey | null } = {}): Promise<Page<ThreadType>> {
   // lean: v2 reads reaction_counts, so the server skips the older grouped reactions load.
@@ -49,9 +49,10 @@ export async function fetchReplies(commentId: number, page: number): Promise<Pag
 }
 
 /** No title: the server makes it from the first line (sending it made the filter read the words twice). */
-export async function postThread(body: { content: string; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
+/** A post is free text (held for a grown-up while AI review is off) or a Safe Chat pick (published at once). */
+export async function postThread(body: { content?: string; safeChat?: SafeChatPick; topic?: TopicKey | null; team?: string | null }): Promise<ThreadType> {
   const { data } = await client.post<ApiResponseType<ThreadType>>('/threads', {
-    content: body.content,
+    ...(body.safeChat ? { safe_chat: body.safeChat } : { content: body.content }),
     topic: body.topic ?? null,
     team: body.team ?? null,
   });
@@ -68,9 +69,9 @@ export async function removeThread(id: number): Promise<void> {
 }
 
 /** parentId keeps display one level deep; replyToId is the reply being answered (its author is notified). */
-export async function postComment(threadId: number, content: string, parentId?: number | null, replyToId?: number | null): Promise<CommentType> {
+export async function postComment(threadId: number, content: string | { safeChat: SafeChatPick }, parentId?: number | null, replyToId?: number | null): Promise<CommentType> {
   const { data } = await client.post<ApiResponseType<CommentType>>(`/threads/${threadId}/comments`, {
-    content,
+    ...(typeof content === 'string' ? { content } : { safe_chat: content.safeChat }),
     comment_id: parentId ?? null,
     reply_to_id: replyToId ?? null,
   });
@@ -124,10 +125,18 @@ export async function reportFilterHit(code: 'personal_info' | 'grooming'): Promi
   return data.data;
 }
 
-/** Is posting paused for this player? Asked when the composer or reply bar opens. */
-export async function fetchPostingStatus(): Promise<{ paused: boolean; paused_until: string | null }> {
-  const { data } = await client.get<ApiResponseType<{ paused: boolean; paused_until: string | null }>>('/me/posting-status');
+export interface PostingStatus { paused: boolean; paused_until: string | null; free_text?: 'person' | 'ai' }
+
+/** Is posting paused for this player, and who checks free text? Asked when the composer or reply bar opens. */
+export async function fetchPostingStatus(): Promise<PostingStatus> {
+  const { data } = await client.get<ApiResponseType<PostingStatus>>('/me/posting-status');
   return data.data;
+}
+
+/** Place chips for the Safe Chat picker (parks, rides and food spots from our data). */
+export async function fetchSafeChatPlaces(): Promise<SafeChatPlace[]> {
+  const { data } = await client.get<ApiResponseType<{ places: SafeChatPlace[]; phrases_sha256: string }>>('/social/safe-chat');
+  return data.data.places;
 }
 
 export async function fetchBlocked(): Promise<PlayerType[]> {

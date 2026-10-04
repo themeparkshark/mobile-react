@@ -14,7 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchComments, fetchPostingStatus, fetchReplies, fetchThread, postComment, reportFilterHit } from '../api/endpoints/social';
@@ -35,9 +35,10 @@ import { BRAND, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
+import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
-import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
-import { CARE_LINE, DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
+import { CARE_LINE, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -270,22 +271,31 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const [pausedLine, setPausedLine] = useState<string | null>(null);
   useEffect(() => {
     if (!player) return;
-    fetchPostingStatus().then((s) => setPausedLine(s.paused ? pauseLine(s.paused_until) : null)).catch(() => undefined);
+    fetchPostingStatus().then((s) => {
+      setPausedLine(s.paused ? pauseLine(s.paused_until) : null);
+      setFreeTextBy(s.free_text === 'ai' ? 'ai' : 'person');
+    }).catch(() => undefined);
   }, [player]);
+  // Safe Chat replies (quick chips and the picker sheet) publish at once; free text waits for a grown-up while AI is off.
+  const [freeTextBy, setFreeTextBy] = useState<'person' | 'ai'>('person');
+  const [sheet, setSheet] = useState(false);
+  const [sheetPick, setSheetPick] = useState<SafeChatPick | null>(null);
+  const places = useSafeChatPlaces();
+  const sheetText = composeSafeChat(sheetPick, places);
   const reportedDraft = useRef<string | null>(null);
 
   const shownLine = line ?? pausedLine ?? (hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null) ?? (care ? CARE_LINE : null);
   const sendOff = Boolean(pausedLine) || sending || quickProblem === 'empty';
 
-  const send = async (quick?: string) => {
+  const send = async (safe?: SafeChatPick) => {
     if (!thread || sending) return;
     if (pausedLine) {
       setLine(pausedLine);
       playSound(NOPE, { volume: 0.5 });
       return;
     }
-    const words = (quick ?? text).trim();
-    const problem = checkDraft(words, REPLY_MAX);
+    const words = text.trim();
+    const problem = safe ? null : checkDraft(words, REPLY_MAX);
     if (problem) {
       setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
       void reportBlockedDraft(problem, words, reportedDraft, reportFilterHit).then((pause) => { if (pause) setLine(pause); });
@@ -301,7 +311,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     const parent = replyTo ? (replyTo.parent_id ?? replyTo.id) : null;
     const answered = replyTo && replyTo.parent_id ? replyTo.id : null;
     try {
-      const created = await postComment(thread.id, words, parent, answered);
+      const created = await postComment(thread.id, safe ? { safeChat: safe } : words, parent, answered);
       playSound(SEND, { volume: 0.6 });
       void Haptics.notificationAsync('success');
       const mineCreated: CommentType = { ...created, player: created.player ?? (player as CommentType['player']), children: created.children ?? [], children_count: 0 };
@@ -319,7 +329,9 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
         setThread((current) => (current ? { ...current, comments_count: (current.comments_count ?? 0) + 1 } : current));
         emitSocial({ type: 'replies-changed', id: thread.id, delta: 1 });
       }
-      if (!quick) setText('');
+      if (!safe) setText('');
+      setSheet(false);
+      setSheetPick(null);
       setReplyTo(null);
       setHighlight(created.id);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: !reduced }), 120);
@@ -450,10 +462,24 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   contentContainerStyle={styles.quickRow}
                   accessibilityLabel="Quick replies"
                 >
-                  {QUICK_REPLIES.map((phrase) => (
+                  <PressScale
+                    onPress={() => { setSheetPick(null); setSheet(true); }}
+                    disabled={sending || Boolean(pausedLine)}
+                    scaleTo={0.9}
+                    haptic="medium"
+                    style={[styles.quick, styles.quickSafe, Boolean(pausedLine) && styles.sendOff]}
+                    accessibilityLabel="Open Safe Chat"
+                    testID="reply-safechat"
+                  >
+                    <View style={styles.safeChip}>
+                      <GameIcon name="shark" size={20} />
+                      <Text style={styles.quickText}>Safe Chat</Text>
+                    </View>
+                  </PressScale>
+                  {QUICK_REPLIES.map((phrase, i) => (
                     <PressScale
                       key={phrase}
-                      onPress={() => void send(phrase)}
+                      onPress={() => void send({ phrase: QUICK_REPLY_IDS[i] })}
                       disabled={sending}
                       scaleTo={0.9}
                       haptic="medium"
@@ -471,7 +497,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   value={text}
                   onChangeText={(value) => { setText(value); setLine(null); }}
                   editable={!pausedLine}
-                  placeholder={replyName ? `Reply to ${replyName}` : 'Say something nice!'}
+                  placeholder={freeTextBy === 'person' ? 'Or write your own (a grown-up checks it first)' : replyName ? `Reply to ${replyName}` : 'Say something nice!'}
                   placeholderTextColor="#7d95b5"
                   multiline
                   maxLength={REPLY_MAX + 20}
@@ -494,6 +520,29 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
           ) : null}
         </View>
       </View>
+
+      <Modal visible={sheet} transparent animationType={reduced ? 'fade' : 'slide'} onRequestClose={() => setSheet(false)}>
+        <View style={styles.sheetScrim}>
+          <PressScale style={StyleSheet.absoluteFill} haptic="none" onPress={() => setSheet(false)} accessibilityLabel="Close Safe Chat">
+            <View />
+          </PressScale>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>{replyName ? `Reply to ${replyName}` : 'Safe Chat reply'}</Text>
+              <PressScale onPress={() => setSheet(false)} hitSlop={10} accessibilityLabel="Close">
+                <GameIcon name="close" size={34} />
+              </PressScale>
+            </View>
+            <View style={[card.shell, styles.sheetPreview]}>
+              <Text style={[styles.sheetPreviewText, !sheetText && styles.sheetPreviewEmpty]} accessibilityLiveRegion="polite">
+                {sheetText ?? (sheetPick ? phraseLabel(phraseById(sheetPick.phrase)?.text ?? '') : 'Tap a phrase to reply')}
+              </Text>
+            </View>
+            <SafeChatPicker places={places} pick={sheetPick} onPick={setSheetPick} startCategory="replies" compact />
+            <GoldPill label={sending ? 'Sending' : 'Send'} onPress={() => sheetPick && sheetText && void send(sheetPick)} loading={sending} dimmed={!sheetText} accessibilityLabel="Send Safe Chat reply" />
+          </View>
+        </View>
+      </Modal>
 
       <PostMenu
         target={menu}
@@ -600,6 +649,15 @@ const styles = StyleSheet.create({
     borderColor: '#0a4f9c',
   },
   quickText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 3 },
+  quickSafe: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
+  safeChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  sheetScrim: { flex: 1, justifyContent: 'flex-end', backgroundColor: BRAND.scrim },
+  sheet: { backgroundColor: BRAND.blue, borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 3, borderColor: BRAND.navy, padding: 14, gap: 12 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, marginTop: 4, flex: 1 },
+  sheetPreview: { padding: 12, minHeight: 56, justifyContent: 'center' },
+  sheetPreviewText: { fontFamily: 'Knockout', fontSize: 21, color: '#10233f' },
+  sheetPreviewEmpty: { color: '#7d95b5' },
   replyInput: {
     flex: 1,
     fontFamily: 'Knockout',

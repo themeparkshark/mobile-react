@@ -152,7 +152,7 @@ test('the app classifies the panel probe set like the server: personal info and 
 test('quick replies are fixed kind phrases that pass the filter', () => {
   assert.ok(model.QUICK_REPLIES.length >= 4);
   for (const phrase of model.QUICK_REPLIES) assert.equal(model.checkDraft(phrase, model.REPLY_MAX), null, phrase);
-  assert.match(read('src/screens/ThreadScreen.tsx'), /void send\(phrase\)/);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /void send\(\{ phrase: QUICK_REPLY_IDS\[i\] \}\)/);
 });
 
 test('keyboard: inset comes from the keyboard height, so a header can never leave the input behind it', () => {
@@ -191,8 +191,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), 'ebb6c8cdda3d3d2c7904a65b0491f3600e233e8dab1f39282c9e51bcd99e3cd7');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '8995b287090390c50503363501a9e2f8384a93af0687658a22799aba9d87e640');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'fc67769cf5f9d018a2ac54bb8d1ec6bdfac7e2bc6746d804f342c9de38c18472');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '3e9fd4d802e36d07ecb0a56a4faa061cf4cd2b55114b340b0f9439ffafcab859');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -298,10 +298,10 @@ test('R5: the keystroke path runs only the cheap check; the full filter is debou
   const composer = read('src/screens/threads/Composer.tsx');
   assert.doesNotMatch(composer, /useMemo\(\(\) => checkDraft\(text,/);
   assert.match(composer, /const quick = quickDraftProblem\(text, POST_MAX\)/);
-  assert.match(composer, /const problem = checkDraft\(text, POST_MAX\)/);
+  assert.match(composer, /const problem = safeMode \? \(safeText === null \? 'empty' : null\) : checkDraft\(text, POST_MAX\)/);
   const screen = read('src/screens/ThreadScreen.tsx');
   assert.doesNotMatch(screen, /useMemo\(\(\) => checkDraft\(text,/);
-  assert.match(screen, /const problem = checkDraft\(words, REPLY_MAX\)/);
+  assert.match(screen, /const problem = safe \? null : checkDraft\(words, REPLY_MAX\)/);
   const long = 'Rode Tron and it was so fun, the wait was long but worth it. '.repeat(8).slice(0, 500);
   const t = process.hrtime.bigint();
   for (let i = 0; i < 100; i++) model.quickDraftProblem(long);
@@ -339,4 +339,56 @@ test('R6: 988 in the care line, person-only holds say a grown-up will check, sen
   }
   assert.match(read('src/screens/ThreadScreen.tsx'), /accessibilityState=\{\{ disabled: sendOff \}\}/);
   assert.match(read('src/screens/threads/Composer.tsx'), /held === 'person' \? 'Grown-up check'/);
+});
+
+test('R7: Safe Chat is the default way to post and reply, built only from our phrases and places', () => {
+  const phrases = model.SAFE_CHAT_CATEGORIES.flatMap((c) => c.phrases);
+  assert.ok(phrases.length >= 120, `${phrases.length} phrases`);
+  assert.ok(model.SAFE_CHAT_CATEGORIES.length >= 8);
+  assert.equal(new Set(phrases.map((p) => p.id)).size, phrases.length, 'ids are unique');
+  const places = [
+    { id: 'ride:1', kind: 'ride', name: 'Space Mountain', park_id: 1 },
+    { id: 'park:1', kind: 'park', name: 'Magic Kingdom Park', park_id: 1 },
+    { id: 'food:2', kind: 'food', name: "Casey's Corner", park_id: 1 },
+  ];
+  for (const p of phrases) {
+    const slot = model.phraseSlot(p.text);
+    const place = slot ? places.find((x) => x.kind === slot) : null;
+    const text = model.composeSafeChat({ phrase: p.id, place: place?.id ?? null }, places);
+    assert.ok(text, p.id);
+    assert.equal(model.checkDraft(text), null, text);
+    assert.equal(model.needsReview(text), false, text);
+    assert.equal(model.isDistress(text), false, text);
+    assert.doesNotMatch(p.text, /\d{3}|@|https?:|www\.|—|\p{Extended_Pictographic}/u, p.id);
+  }
+  assert.equal(model.composeSafeChat({ phrase: 'rides.01', place: null }, places), null, 'a blank must be filled from our data');
+  assert.equal(model.composeSafeChat({ phrase: 'rides.01', place: 'park:1' }, places), null, 'a park cannot fill a ride blank');
+  assert.equal(model.composeSafeChat({ phrase: 'rides.01', place: 'ride:1' }, places), 'Space Mountain was SO fun!');
+  for (const c of model.SAFE_CHAT_CATEGORIES) assert.ok(c.icon && !/\p{Extended_Pictographic}/u.test(c.title + c.icon), c.key);
+  assert.deepEqual(plain(model.QUICK_REPLY_IDS.map((id) => model.phraseById(id).text)), [...model.QUICK_REPLIES]);
+
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /useState<'safe' \| 'free'>\('safe'\)/);
+  assert.match(composer, /postThread\(\{ safeChat: pick, \.\.\.where \}\)/);
+  assert.match(composer, /FREE_TEXT_LINE/);
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /postComment\(thread\.id, safe \? \{ safeChat: safe \} : words/);
+  assert.match(screen, /<SafeChatPicker places=\{places\} pick=\{sheetPick\}/);
+  assert.match(model.FREE_TEXT_LINE, /grown-up/);
+  assert.equal(model.categoryForTopic('rides'), 'rides');
+  assert.equal(model.categoryForTopic('snacks'), 'food');
+  assert.equal(model.categoryForTopic(null), 'cheers');
+  assert.match(composer, /const compactTopics = keyboard > 0 \|\| safeMode/);
+});
+
+test('R7: the shared Safe Chat phrases match the server copy', () => {
+  const hash = (file) => require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
+  assert.equal(hash('src/screens/threads/safeChatPhrases.json'), 'f40b6f1cd4da2a1ffa5e980f0c7f312595b3c55090e4a8b6395fa20d0289c7b1');
+});
+
+test('R7: the care net and the exemption fix match the server', () => {
+  for (const t of ['i took a bunch of my moms pills', 'im bleeding inside', 'this is my last post, love u all']) assert.equal(model.isDistress(t), true, t);
+  for (const t of ['I died laughing on Haunted Mansion', 'my phone died at the park', 'I would die for a churro rn']) assert.equal(model.isDistress(t), false, t);
+  assert.equal(model.needsReview('your house decorated? come show me alone'), true);
+  assert.equal(model.needsReview('Is your room decorated for Halloween? Mine has bats'), false);
 });

@@ -50,12 +50,19 @@ import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { GoldPill, PressScale, WATER, card, topicArt } from './socialLook';
 import useKeyboardInset from './useKeyboardInset';
+import SafeChatPicker, { useSafeChatPlaces } from './SafeChatPicker';
 import {
   DEFAULT_PROMPT,
   DRAFT_LINES,
   POST_MAX,
   TOPICS,
+  categoryForTopic,
+  phraseById,
+  phraseLabel,
   checkDraft,
+  composeSafeChat,
+  FREE_TEXT_LINE,
+  type SafeChatPick,
   CARE_LINE,
   HINT_DEBOUNCE_MS,
   isDistress,
@@ -172,17 +179,34 @@ export default function Composer({
   useEffect(() => {
     if (!visible) return;
     setPausedLine(null);
-    fetchPostingStatus().then((s) => setPausedLine(s.paused ? pauseLine(s.paused_until) : null)).catch(() => undefined);
+    fetchPostingStatus().then((s) => {
+      setPausedLine(s.paused ? pauseLine(s.paused_until) : null);
+      setFreeTextBy(s.free_text === 'ai' ? 'ai' : 'person');
+    }).catch(() => undefined);
   }, [visible]);
   const [held, setHeld] = useState<string | null>(null);
+  // Safe Chat is the default way to post: picked phrases publish at once. "Write my own" is
+  // free text, which a grown-up checks first while AI review is off.
+  const [mode, setMode] = useState<'safe' | 'free'>('safe');
+  const [pick, setPick] = useState<SafeChatPick | null>(null);
+  const [freeTextBy, setFreeTextBy] = useState<'person' | 'ai'>('person');
+  const places = useSafeChatPlaces();
+  const safeText = composeSafeChat(pick, places);
+  const safeMode = mode === 'safe' && !editing;
+  useEffect(() => {
+    if (!visible) return;
+    setMode(editing ? 'free' : 'safe');
+    setPick(null);
+  }, [visible, editing]);
   const reportedDraft = useRef<string | null>(null);
   const showProblem = hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null;
   const line = serverLine ?? pausedLine ?? showProblem ?? (care ? CARE_LINE : null);
-  const canPost = !quick && !hintProblem && phase === 'write' && !pausedLine;
+  const canPost = phase === 'write' && !pausedLine && (safeMode ? safeText !== null : !quick && !hintProblem);
   const def = topicFor(topic);
   const left = POST_MAX - text.trim().length;
 
-  const compactTopics = keyboard > 0;
+  // Keyboard up, or Safe Chat (the phrase picker needs the room): topics fold into one chip row.
+  const compactTopics = keyboard > 0 || safeMode;
 
   const pickTopic = (key: TopicKey) => {
     playSound(TAP, { volume: 0.5, rate: 1.1 });
@@ -201,7 +225,7 @@ export default function Composer({
   const submit = async () => {
     setTouched(true);
     if (phase !== 'write') return;
-    const problem = checkDraft(text, POST_MAX);
+    const problem = safeMode ? (safeText === null ? 'empty' : null) : checkDraft(text, POST_MAX);
     if (problem || pausedLine) {
       // An empty or unsafe post never just sits there: the card wiggles, a soft "nope", and the cursor is ready.
       playSound(NOPE, { volume: 0.5 });
@@ -214,7 +238,7 @@ export default function Composer({
       }
       inputRef.current?.focus();
       // The server never sees a blocked draft, so it is told the category (not the words).
-      void reportBlockedDraft(problem, text, reportedDraft, reportFilterHit).then((line) => { if (line) setServerLine(line); });
+      if (!safeMode) void reportBlockedDraft(problem, text, reportedDraft, reportFilterHit).then((line) => { if (line) setServerLine(line); });
       return;
     }
     Keyboard.dismiss();
@@ -222,15 +246,18 @@ export default function Composer({
     setServerLine(null);
     const content = text.trim();
     try {
+      const where = { topic, team: toTeam && playerTeam ? playerTeam : null };
       const thread = editing
         ? await editThread(editing.id, content)
-        : await postThread({ content, topic, team: toTeam && playerTeam ? playerTeam : null });
+        : safeMode && pick
+          ? await postThread({ safeChat: pick, ...where })
+          : await postThread({ content, ...where });
       setHeld(thread.review ?? null);
       setPhase('done');
       playSound(SUCCESS, { volume: 0.7 });
       void Haptics.notificationAsync('success');
       if (!reduced) burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
-      if (!editing) AsyncStorage.removeItem(draftKey(player?.id)).catch(() => undefined);
+      if (!editing && !safeMode) AsyncStorage.removeItem(draftKey(player?.id)).catch(() => undefined);
       doneTimer.current = setTimeout(() => {
         onPosted({ ...thread, player: thread.player ?? (player as ThreadType['player']) }, Boolean(editing));
       }, reduced ? 700 : 1150);
@@ -341,8 +368,21 @@ export default function Composer({
               </View>
             )}
 
+            {!editing && (
+              <View style={styles.seg} accessibilityRole="tablist">
+                <PressScale onPress={() => { setMode('safe'); Keyboard.dismiss(); }} accessibilityRole="tab" accessibilityState={{ selected: mode === 'safe' }} style={[styles.segBtn, mode === 'safe' && styles.segOn]} testID="composer-mode-safe">
+                  <GameIcon name="shark" size={22} />
+                  <Text style={[styles.segText, mode === 'safe' && styles.segTextOn]}>Safe Chat</Text>
+                </PressScale>
+                <PressScale onPress={() => { setMode('free'); setTimeout(() => inputRef.current?.focus(), 150); }} accessibilityRole="tab" accessibilityState={{ selected: mode === 'free' }} style={[styles.segBtn, mode === 'free' && styles.segOn]} testID="composer-mode-free">
+                  <GameIcon name="edit" size={20} />
+                  <Text style={[styles.segText, mode === 'free' && styles.segTextOn]}>Write my own</Text>
+                </PressScale>
+              </View>
+            )}
+
             {/* The card the post will look like. */}
-            <Animated.View style={[card.shell, styles.preview, touched && quick === 'empty' && { borderColor: BRAND.gold }, wiggleStyle]}>
+            <Animated.View style={[card.shell, styles.preview, touched && (safeMode ? safeText === null : quick === 'empty') && { borderColor: BRAND.gold }, wiggleStyle]}>
               <View style={styles.previewHead}>
                 <Avatar player={player as ThreadType['player']} size="sm" />
                 <View style={{ flex: 1 }}>
@@ -355,6 +395,11 @@ export default function Composer({
                   )}
                 </View>
               </View>
+              {safeMode ? (
+                <Text style={[styles.input, styles.safePreview, !safeText && styles.safePlaceholder]} accessibilityLiveRegion="polite">
+                  {safeText ?? (pick ? phraseLabel(phraseById(pick.phrase)?.text ?? '') : 'Tap a phrase below to build your post!')}
+                </Text>
+              ) : (
               <TextInput
                 ref={inputRef}
                 value={text}
@@ -372,21 +417,37 @@ export default function Composer({
                 textAlignVertical="top"
                 autoCapitalize="sentences"
               />
+              )}
               <View style={styles.footer}>
                 {line ? (
                   <Animated.View entering={reduced ? undefined : FadeIn} exiting={reduced ? undefined : FadeOut} style={styles.lineWrap} accessibilityLiveRegion="polite">
                     <GameIcon name="info" size={20} />
                     <Text style={styles.line}>{line}</Text>
                   </Animated.View>
+                ) : safeMode ? (
+                  <View style={styles.lineWrap}>
+                    <GameIcon name="rush" size={18} />
+                    <Text style={styles.kind}>Safe Chat posts go up right away!</Text>
+                  </View>
                 ) : (
                   <View style={styles.lineWrap}>
                     <GameIcon name="heart" size={18} />
-                    <Text style={styles.kind}>Be kind. No real names or addresses.</Text>
+                    <Text style={styles.kind}>{freeTextBy === 'person' && !editing ? FREE_TEXT_LINE : 'Be kind. No real names or addresses.'}</Text>
                   </View>
                 )}
-                {left < 60 && <Text style={[styles.left, left < 0 && { color: BRAND.red }]}>{left}</Text>}
+                {!safeMode && left < 60 && <Text style={[styles.left, left < 0 && { color: BRAND.red }]}>{left}</Text>}
               </View>
             </Animated.View>
+
+            {safeMode && (
+              <SafeChatPicker
+                key={topic ?? 'none'}
+                startCategory={categoryForTopic(topic)}
+                places={places}
+                pick={pick}
+                onPick={(next) => { setPick(next); setServerLine(null); }}
+              />
+            )}
           </ScrollView>
         </View>
 
@@ -451,6 +512,9 @@ const styles = StyleSheet.create({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderWidth: 2, borderRadius: 999, paddingLeft: 4, paddingRight: 10, marginTop: 3 },
   badgeText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 2 },
   input: { fontFamily: 'Knockout', fontSize: 23, lineHeight: 28, color: '#10233f', minHeight: 130, paddingTop: 4 },
+  safePreview: { minHeight: 70 },
+  safePlaceholder: { color: '#7d95b5' },
+
   footer: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 2, borderTopColor: '#e3eefb', paddingTop: 8 },
   lineWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   line: { flex: 1, fontFamily: 'Knockout', fontSize: 17, color: BRAND.redLip },

@@ -1,0 +1,635 @@
+{
+  "_doc": "Shark Social Safe Chat: curated phrases that publish instantly with no moderation. Shared by the server (resources/safechat/phrases.json, SafeChat.php) and the app (src/screens/threads/safeChatPhrases.json); keep them identical. Only the blank varies: {ride}, {park} and {food} are filled from published parks and rides in our own data. Nothing a kid types ever reaches a Safe Chat post. icon is a GameIcon name (the app shows hand-drawn art, never emoji).",
+  "categories": [
+    {
+      "key": "cheers",
+      "title": "Cheers",
+      "icon": "sparkle",
+      "phrases": [
+        {
+          "id": "cheers.01",
+          "text": "Best day ever!"
+        },
+        {
+          "id": "cheers.02",
+          "text": "Let's gooo!"
+        },
+        {
+          "id": "cheers.03",
+          "text": "This is SO cool!"
+        },
+        {
+          "id": "cheers.04",
+          "text": "Park day hype!"
+        },
+        {
+          "id": "cheers.05",
+          "text": "Love this!"
+        },
+        {
+          "id": "cheers.06",
+          "text": "Shark approved!"
+        },
+        {
+          "id": "cheers.07",
+          "text": "Living my best park life!"
+        },
+        {
+          "id": "cheers.08",
+          "text": "Making memories!"
+        },
+        {
+          "id": "cheers.09",
+          "text": "Can't stop smiling!"
+        },
+        {
+          "id": "cheers.10",
+          "text": "Magic everywhere!"
+        },
+        {
+          "id": "cheers.11",
+          "text": "Today was a 10/10!"
+        },
+        {
+          "id": "cheers.12",
+          "text": "Big fan of this post!"
+        },
+        {
+          "id": "cheers.13",
+          "text": "Wow, just wow!"
+        },
+        {
+          "id": "cheers.14",
+          "text": "Totally awesome!"
+        },
+        {
+          "id": "cheers.15",
+          "text": "Happy park day, everyone!"
+        }
+      ]
+    },
+    {
+      "key": "rides",
+      "title": "Ride reactions",
+      "icon": "ride",
+      "phrases": [
+        {
+          "id": "rides.01",
+          "text": "{ride} was SO fun!"
+        },
+        {
+          "id": "rides.02",
+          "text": "{ride} is my favorite ride!"
+        },
+        {
+          "id": "rides.03",
+          "text": "I screamed on {ride}!"
+        },
+        {
+          "id": "rides.04",
+          "text": "{ride} made my day!"
+        },
+        {
+          "id": "rides.05",
+          "text": "Rode {ride} twice!"
+        },
+        {
+          "id": "rides.06",
+          "text": "{ride} is a must-do!"
+        },
+        {
+          "id": "rides.07",
+          "text": "{ride} has the best theming!"
+        },
+        {
+          "id": "rides.08",
+          "text": "The drop on {ride} is wild!"
+        },
+        {
+          "id": "rides.09",
+          "text": "{ride} gave me butterflies!"
+        },
+        {
+          "id": "rides.10",
+          "text": "I love the music on {ride}!"
+        },
+        {
+          "id": "rides.11",
+          "text": "{ride} was smoother than I thought!"
+        },
+        {
+          "id": "rides.12",
+          "text": "{ride} is perfect for the whole family!"
+        },
+        {
+          "id": "rides.13",
+          "text": "Front row on {ride} is the best!"
+        },
+        {
+          "id": "rides.14",
+          "text": "{ride} is even better at night!"
+        },
+        {
+          "id": "rides.15",
+          "text": "I want to ride {ride} again!"
+        },
+        {
+          "id": "rides.16",
+          "text": "{ride} surprised me!"
+        },
+        {
+          "id": "rides.17",
+          "text": "{ride} is a classic!"
+        },
+        {
+          "id": "rides.18",
+          "text": "Big fan of {ride}!"
+        },
+        {
+          "id": "rides.19",
+          "text": "{ride} was not too scary!"
+        },
+        {
+          "id": "rides.20",
+          "text": "{ride} is so detailed!"
+        }
+      ]
+    },
+    {
+      "key": "parks",
+      "title": "Parks",
+      "icon": "map",
+      "phrases": [
+        {
+          "id": "parks.01",
+          "text": "{park} is the best!"
+        },
+        {
+          "id": "parks.02",
+          "text": "I love {park}!"
+        },
+        {
+          "id": "parks.03",
+          "text": "{park} looks amazing at night!"
+        },
+        {
+          "id": "parks.04",
+          "text": "{park} has the best snacks!"
+        },
+        {
+          "id": "parks.05",
+          "text": "{park} is on my wish list!"
+        },
+        {
+          "id": "parks.06",
+          "text": "My first time at {park} was magic!"
+        },
+        {
+          "id": "parks.07",
+          "text": "The fireworks at {park} are epic!"
+        },
+        {
+          "id": "parks.08",
+          "text": "{park} has so much to do!"
+        },
+        {
+          "id": "parks.09",
+          "text": "{park} is great for rope drop!"
+        },
+        {
+          "id": "parks.10",
+          "text": "Can't wait to go back to {park}!"
+        }
+      ]
+    },
+    {
+      "key": "food",
+      "title": "Snacks",
+      "icon": "heart",
+      "phrases": [
+        {
+          "id": "food.01",
+          "text": "{food} is so good!"
+        },
+        {
+          "id": "food.02",
+          "text": "{food} is a must-try!"
+        },
+        {
+          "id": "food.03",
+          "text": "Snack break time!"
+        },
+        {
+          "id": "food.04",
+          "text": "Churros are always a good idea!"
+        },
+        {
+          "id": "food.05",
+          "text": "Dole Whip for the win!"
+        },
+        {
+          "id": "food.06",
+          "text": "Popcorn makes everything better!"
+        },
+        {
+          "id": "food.07",
+          "text": "I'd go back just for {food}!"
+        },
+        {
+          "id": "food.08",
+          "text": "Best treat ever!"
+        },
+        {
+          "id": "food.09",
+          "text": "Mickey pretzels are the best!"
+        },
+        {
+          "id": "food.10",
+          "text": "Ice cream on a hot day hits different!"
+        },
+        {
+          "id": "food.11",
+          "text": "Butterbeer is the best!"
+        },
+        {
+          "id": "food.12",
+          "text": "Snacks count as a ride, right?"
+        },
+        {
+          "id": "food.13",
+          "text": "{food} has the best desserts!"
+        },
+        {
+          "id": "food.14",
+          "text": "Who else loves park food?"
+        }
+      ]
+    },
+    {
+      "key": "waits",
+      "title": "Wait times",
+      "icon": "queue",
+      "phrases": [
+        {
+          "id": "waits.01",
+          "text": "The wait was worth it!"
+        },
+        {
+          "id": "waits.02",
+          "text": "Rope drop is the move!"
+        },
+        {
+          "id": "waits.03",
+          "text": "Rope drop {ride} for a short wait!"
+        },
+        {
+          "id": "waits.04",
+          "text": "Single rider saves so much time!"
+        },
+        {
+          "id": "waits.05",
+          "text": "Ride {ride} during the parade!"
+        },
+        {
+          "id": "waits.06",
+          "text": "Lines get shorter late at night!"
+        },
+        {
+          "id": "waits.07",
+          "text": "Mobile order saves so much time!"
+        },
+        {
+          "id": "waits.08",
+          "text": "Check the app for wait times!"
+        },
+        {
+          "id": "waits.09",
+          "text": "The queue for {ride} is so fun to look at!"
+        },
+        {
+          "id": "waits.10",
+          "text": "Bring a game for the line!"
+        },
+        {
+          "id": "waits.11",
+          "text": "{ride} has the best queue!"
+        },
+        {
+          "id": "waits.12",
+          "text": "Patience pays off!"
+        }
+      ]
+    },
+    {
+      "key": "tips",
+      "title": "Tips",
+      "icon": "info",
+      "phrases": [
+        {
+          "id": "tips.01",
+          "text": "Bring a poncho for {ride}!"
+        },
+        {
+          "id": "tips.02",
+          "text": "Stay hydrated out there!"
+        },
+        {
+          "id": "tips.03",
+          "text": "Wear comfy shoes!"
+        },
+        {
+          "id": "tips.04",
+          "text": "Sunscreen is your best friend!"
+        },
+        {
+          "id": "tips.05",
+          "text": "Take breaks, it's a long day!"
+        },
+        {
+          "id": "tips.06",
+          "text": "Don't miss the fireworks!"
+        },
+        {
+          "id": "tips.07",
+          "text": "Check the show times!"
+        },
+        {
+          "id": "tips.08",
+          "text": "Try {ride} at night!"
+        },
+        {
+          "id": "tips.09",
+          "text": "Get a refillable water bottle!"
+        },
+        {
+          "id": "tips.10",
+          "text": "Hold on to your hat on {ride}!"
+        },
+        {
+          "id": "tips.11",
+          "text": "Charge your phone before you go!"
+        },
+        {
+          "id": "tips.12",
+          "text": "Plan a snack stop!"
+        },
+        {
+          "id": "tips.13",
+          "text": "Find the hidden details on {ride}!"
+        },
+        {
+          "id": "tips.14",
+          "text": "Go left when everyone goes right!"
+        }
+      ]
+    },
+    {
+      "key": "questions",
+      "title": "Questions",
+      "icon": "search",
+      "phrases": [
+        {
+          "id": "questions.01",
+          "text": "What's your favorite ride?"
+        },
+        {
+          "id": "questions.02",
+          "text": "What's your favorite ride at {park}?"
+        },
+        {
+          "id": "questions.03",
+          "text": "Is {ride} scary?"
+        },
+        {
+          "id": "questions.04",
+          "text": "Is {ride} worth the wait?"
+        },
+        {
+          "id": "questions.05",
+          "text": "What should I ride first at {park}?"
+        },
+        {
+          "id": "questions.06",
+          "text": "What's the best snack at {park}?"
+        },
+        {
+          "id": "questions.07",
+          "text": "Is {food} good?"
+        },
+        {
+          "id": "questions.08",
+          "text": "Does {ride} get you wet?"
+        },
+        {
+          "id": "questions.09",
+          "text": "Is {ride} good for little kids?"
+        },
+        {
+          "id": "questions.10",
+          "text": "What's the best show at {park}?"
+        },
+        {
+          "id": "questions.11",
+          "text": "Which park has the best fireworks?"
+        },
+        {
+          "id": "questions.12",
+          "text": "Coasters or dark rides?"
+        },
+        {
+          "id": "questions.13",
+          "text": "What's your favorite land?"
+        },
+        {
+          "id": "questions.14",
+          "text": "Who's your favorite character?"
+        },
+        {
+          "id": "questions.15",
+          "text": "What's your go-to snack?"
+        },
+        {
+          "id": "questions.16",
+          "text": "Should I try {ride}?"
+        }
+      ]
+    },
+    {
+      "key": "feels",
+      "title": "Feelings",
+      "icon": "star",
+      "phrases": [
+        {
+          "id": "feels.01",
+          "text": "So excited!"
+        },
+        {
+          "id": "feels.02",
+          "text": "I'm a little nervous!"
+        },
+        {
+          "id": "feels.03",
+          "text": "That was amazing!"
+        },
+        {
+          "id": "feels.04",
+          "text": "I'm so happy right now!"
+        },
+        {
+          "id": "feels.05",
+          "text": "I'm tired but happy!"
+        },
+        {
+          "id": "feels.06",
+          "text": "That made me laugh!"
+        },
+        {
+          "id": "feels.07",
+          "text": "Mind blown!"
+        },
+        {
+          "id": "feels.08",
+          "text": "I'm so proud I did it!"
+        },
+        {
+          "id": "feels.09",
+          "text": "I conquered my fear!"
+        },
+        {
+          "id": "feels.10",
+          "text": "Feeling brave today!"
+        },
+        {
+          "id": "feels.11",
+          "text": "That was a little scary!"
+        },
+        {
+          "id": "feels.12",
+          "text": "Best feeling ever!"
+        },
+        {
+          "id": "feels.13",
+          "text": "Can't wait!"
+        },
+        {
+          "id": "feels.14",
+          "text": "I miss the parks!"
+        }
+      ]
+    },
+    {
+      "key": "events",
+      "title": "Seasons and events",
+      "icon": "moon",
+      "phrases": [
+        {
+          "id": "events.01",
+          "text": "Spooky season is here!"
+        },
+        {
+          "id": "events.02",
+          "text": "Halloween at the parks is the best!"
+        },
+        {
+          "id": "events.03",
+          "text": "Holiday season at the parks is magic!"
+        },
+        {
+          "id": "events.04",
+          "text": "The holiday lights are so pretty!"
+        },
+        {
+          "id": "events.05",
+          "text": "Love the new parade!"
+        },
+        {
+          "id": "events.06",
+          "text": "The new show is awesome!"
+        },
+        {
+          "id": "events.07",
+          "text": "Fireworks night!"
+        },
+        {
+          "id": "events.08",
+          "text": "Summer park days are the best!"
+        },
+        {
+          "id": "events.09",
+          "text": "Can't wait for the new land!"
+        },
+        {
+          "id": "events.10",
+          "text": "Happy birthday to the park!"
+        }
+      ]
+    },
+    {
+      "key": "replies",
+      "title": "Quick replies",
+      "icon": "fin",
+      "phrases": [
+        {
+          "id": "replies.01",
+          "text": "So cool!"
+        },
+        {
+          "id": "replies.02",
+          "text": "Same!"
+        },
+        {
+          "id": "replies.03",
+          "text": "I want to go!"
+        },
+        {
+          "id": "replies.04",
+          "text": "Love it!"
+        },
+        {
+          "id": "replies.05",
+          "text": "Congrats!"
+        },
+        {
+          "id": "replies.06",
+          "text": "Trade?"
+        },
+        {
+          "id": "replies.07",
+          "text": "Great tip, thanks!"
+        },
+        {
+          "id": "replies.08",
+          "text": "Agree!"
+        },
+        {
+          "id": "replies.09",
+          "text": "Me too!"
+        },
+        {
+          "id": "replies.10",
+          "text": "No way!"
+        },
+        {
+          "id": "replies.11",
+          "text": "That's awesome!"
+        },
+        {
+          "id": "replies.12",
+          "text": "Have fun!"
+        },
+        {
+          "id": "replies.13",
+          "text": "Good luck!"
+        },
+        {
+          "id": "replies.14",
+          "text": "Haha, love it!"
+        },
+        {
+          "id": "replies.15",
+          "text": "Great pic!"
+        }
+      ]
+    }
+  ]
+}
