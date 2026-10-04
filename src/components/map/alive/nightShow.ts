@@ -8,6 +8,8 @@
  * lands on the real end. Visuals only: no names, music or logos.
  */
 
+import { parkClock, parkTimeLabel } from '../../../services/fright/dates';
+
 export type NightShowKind = 'fireworks' | 'water' | 'projection';
 
 export interface NightShow {
@@ -49,22 +51,45 @@ export function showPhase(show: NightShow | null | undefined, now: number): Show
 
 /**
  * "9:30 PM" in the park's own time: read straight from the offset timestamp the
- * server sends, so it is right whatever time zone the phone is set to.
+ * server sends, so it is right whatever time zone the phone is set to. Shared
+ * with Fin-ister Nights (services/fright/dates), so both say times the same way.
  */
-export function parkClock(iso: string): string | null {
-  const match = /T(\d{2}):(\d{2})/.exec(iso);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = match[2];
-  const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${h12}:${minute} ${hour < 12 ? 'AM' : 'PM'}`;
+export { parkClock };
+
+/**
+ * The teaser, in park time, with Fin-ister's zone label when the phone's zone
+ * differs. A performance after midnight is still tonight's show, so it drops
+ * "tonight" ("Lagoon show at 12:45 AM"), and 12:00 AM reads "midnight": a
+ * repeating show (USF's lagoon show runs every 45 minutes until 12:45 AM) said
+ * "tonight at 12:00 AM", which read like a broken placeholder. A daytime show
+ * (4 AM to 5 PM) is "today". Every line fits a 375 pt row: the longest form
+ * that fits wins, dropping "tonight"/"today", then "at" ("Projection show at
+ * 9:45 PM", "Lagoon show 9:45 PM ET"). No em dashes, no show names.
+ */
+export function teaserText(show: NightShow, phoneOffset?: number): string {
+  const label = parkTimeLabel(show.starts_at, show.timezone, phoneOffset);
+  const wall = /T(\d{2}):(\d{2})/.exec(show.starts_at);
+  if (!label || !wall) return `${show.label} tonight`;
+  const zoned = label !== parkClock(show.starts_at);
+  const hour = Number(wall[1]);
+  const at = hour === 0 && wall[2] === '00' ? label.replace('12:00 AM', 'midnight') : label;
+  // After midnight it is still tonight's show; before 5 PM it is today's.
+  const day = hour < 4 ? null : hour < 17 ? 'today' : 'tonight';
+  const forms = [
+    ...(day && !zoned ? [`${show.label} ${day} at ${at}`] : []),
+    `${show.label} at ${at}`,
+    `${show.label} ${at}`,
+  ];
+  return forms.find(form => form.length <= TEASER_FIT_CHARS) ?? forms[forms.length - 1];
 }
 
-/** "Fireworks tonight at 9:30 PM" (no em dashes, no show names). */
-export function teaserText(show: NightShow): string {
-  const at = parkClock(show.starts_at);
-  return at ? `${show.label} tonight at ${at}` : `${show.label} tonight`;
-}
+/**
+ * Characters of teaser that fit a 375 pt phone's pill title at its smallest
+ * font scale (0.85): about 200 pt of title in either layout (the full-width
+ * pill with WHERE, or the declutter's status row with the stack button and an
+ * arrow-only pill). "Lagoon show tonight at 12:34 PM" (31) fits on an SE.
+ */
+export const TEASER_FIT_CHARS = 31;
 
 export function liveText(show: NightShow): string {
   return `${show.label} now! ${show.where}`;
