@@ -188,8 +188,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), 'd49ca859a55ff50e5ca0f1b6b317cd7614c8dc6e92503aec9e078d3205823cb8');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'bff8cdbce594558579375993091556409bc1a210735d9c600d4f22a2ed2b4ce1');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '40a1fedd5ab6feb7810161fa60bdfe104727821b02b0448871a983de73bd5ddf');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '8f26cdd2da794e843f228e311113551c5d8e416accb9e160ce097e1c4511c806');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -209,4 +209,28 @@ test('final round: weird-report reason, server rules promise, unblock confirm, p
   const composer = read('src/screens/threads/Composer.tsx');
   assert.match(composer, /const compactTopics = keyboard > 0/);
   assert.match(composer, /styles\.headerFade/);
+});
+
+test('R3: blocked drafts are reported by category only, once per text, and a pause shows its line', async () => {
+  const sent = [];
+  const send = async (code) => { sent.push(code); return { paused: sent.length >= 3, paused_until: null }; };
+  const last = { current: null };
+  assert.equal(await model.reportBlockedDraft('grooming', 'how old r u', last, send), null);
+  assert.equal(await model.reportBlockedDraft('grooming', 'how old r u', last, send), null, 'same words, same tap: not counted again');
+  await model.reportBlockedDraft('personal_info', 'whats ur snap', last, send);
+  assert.match(await model.reportBlockedDraft('grooming', 'u alone rn?', last, send), /taking a break/);
+  assert.equal(await model.reportBlockedDraft('mean', 'x', last, send), null);
+  assert.deepEqual(plain(sent), ['grooming', 'personal_info', 'grooming']);
+  assert.match(read('src/screens/threads/Composer.tsx'), /reportBlockedDraft\(problem, text, reportedDraft, reportFilterHit\)/);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /reportBlockedDraft\(problem, words, reportedDraft, reportFilterHit\)/);
+});
+
+test('R3: invisible characters, keycaps and foreign digits cannot hide anything; times and prices pass', () => {
+  assert.equal(model.checkDraft('714\u200b555\u200b0199'), 'personal_info');
+  assert.equal(model.checkDraft('7\ufe0f\u20e31\ufe0f\u20e34\ufe0f\u20e35\ufe0f\u20e35\ufe0f\u20e35\ufe0f\u20e30\ufe0f\u20e31\ufe0f\u20e39\ufe0f\u20e39\ufe0f\u20e3'), 'personal_info');
+  assert.equal(model.checkDraft('\u0667\u0661\u0664\u0665\u0665\u0665\u0660\u0661\u0669\u0669'), 'personal_info');
+  assert.equal(model.checkDraft('how o\u200cld are you'), 'grooming');
+  for (const ok of ['The parade starts at 3:30 and 5:30 and 7:30', 'Wait times: 45, 30, 60, 90 min', '$12.99 for a churro', 'Character meetups are the best']) {
+    assert.equal(model.checkDraft(ok), null, ok);
+  }
 });

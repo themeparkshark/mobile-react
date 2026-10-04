@@ -240,8 +240,8 @@ function ReactionFace({
       </Animated.View>
       {count > 0 && <Text style={[styles.faceCount, mine && { color: '#7a3d00' }]}>{shortCount(count)}</Text>}
       {named && (
-        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(150)} style={styles.faceName} pointerEvents="none">
-          <Text style={styles.faceNameText}>{type.name}</Text>
+        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(150)} style={styles.faceNameWrap} pointerEvents="none">
+          <View style={styles.faceName}><Text style={styles.faceNameText}>{type.name}</Text></View>
         </Animated.View>
       )}
     </PressScale>
@@ -414,10 +414,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, borderRadius: 999, borderWidth: 2, borderBottomWidth: 4, borderColor: '#0a4f9c', backgroundColor: '#eef6ff',
   },
   plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 2 },
-  faceName: {
-    position: 'absolute', top: -38, alignSelf: 'center', backgroundColor: BRAND.navy, borderRadius: 12, borderWidth: 2, borderColor: BRAND.white,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
+  faceNameWrap: { position: 'absolute', bottom: '100%', left: -40, right: -40, alignItems: 'center', marginBottom: 6 },
+  faceName: { backgroundColor: BRAND.navy, borderRadius: 12, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },
   faceNameText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 2 },
   extraFace: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 4, opacity: 0.85 },
   extraCount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navySoft, marginTop: 2 },

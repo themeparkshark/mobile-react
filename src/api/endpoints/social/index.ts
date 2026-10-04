@@ -115,6 +115,15 @@ export async function fetchSocialRules(): Promise<string | null> {
   return data.data.social_rules_accepted_at;
 }
 
+/**
+ * A blocked personal-info or grooming draft was tapped. Only the category is
+ * sent, never the words; three in a day pause posting on the server.
+ */
+export async function reportFilterHit(code: 'personal_info' | 'grooming'): Promise<{ paused: boolean; paused_until: string | null }> {
+  const { data } = await client.post<ApiResponseType<{ paused: boolean; paused_until: string | null }>>('/me/filter-hit', { code });
+  return data.data;
+}
+
 export async function fetchBlocked(): Promise<PlayerType[]> {
   const { data } = await client.get<ApiResponseType<PlayerType[]>>('/me/blocks');
   return data.data;

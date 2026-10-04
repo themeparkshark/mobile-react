@@ -15,7 +15,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   Modal,
@@ -38,7 +38,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { postThread, editThread } from '../../api/endpoints/social';
+import { postThread, editThread, reportFilterHit } from '../../api/endpoints/social';
 import Avatar from '../../components/Avatar';
 import RewardBurst from '../../components/RewardBurst';
 import { AuthContext } from '../../context/AuthProvider';
@@ -56,6 +56,7 @@ import {
   POST_MAX,
   TOPICS,
   checkDraft,
+  reportBlockedDraft,
   errorLine,
   topicFor,
   type TopicKey,
@@ -148,7 +149,8 @@ export default function Composer({
     return () => clearTimeout(id);
   }, [text, topic, toTeam, visible, editing, phase, player?.id]);
 
-  const problem = checkDraft(text, POST_MAX);
+  const problem = useMemo(() => checkDraft(text, POST_MAX), [text]);
+  const reportedDraft = useRef<string | null>(null);
   const showProblem = problem && problem !== 'empty' ? DRAFT_LINES[problem] : null;
   const line = serverLine ?? showProblem;
   const canPost = !problem && phase === 'write';
@@ -185,6 +187,8 @@ export default function Composer({
         );
       }
       inputRef.current?.focus();
+      // The server never sees a blocked draft, so it is told the category (not the words).
+      void reportBlockedDraft(problem, text, reportedDraft, reportFilterHit).then((line) => { if (line) setServerLine(line); });
       return;
     }
     Keyboard.dismiss();

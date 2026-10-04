@@ -74,11 +74,11 @@ export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
  * tools/tests/fixtures/safetext_cases.json is shared and both must pass it.
  */
 
-const CONFUSABLES: Record<string, string> = {
-  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm',
-  'н': 'h', 'т': 't', 'в': 'b', 'α': 'a', 'ε': 'e', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'ν': 'v', 'κ': 'k', 'ι': 'i',
-  'ս': 'u', 'օ': 'o', 'ց': 'g', 'հ': 'h', 'ո': 'n', 'ա': 'w', 'ք': 'p',
-};
+const CONFUSABLES: Record<string, string> = RULES.confusables;
+const DIGIT_GLYPHS: Record<string, string> = RULES.digit_glyphs;
+const INVISIBLE: readonly (readonly number[])[] = RULES.invisible_ranges;
+const UNITS = new Set<string>(RULES.units);
+const JOIN = new Set<string>(RULES.join_keywords);
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i', '|': 'l' };
 const NUMBER_WORDS: Record<string, string> = RULES.number_words;
 const AMBIGUOUS = new Set<string>(RULES.ambiguous_number_words);
@@ -93,10 +93,50 @@ function compile(list: readonly string[]): RegExp[] {
 }
 const PERSONAL_PATTERNS = compile(RULES.personal);
 const GROOMING_PATTERNS = compile(RULES.grooming);
+const DESPACED = RULES.despaced.map((source) => new RegExp(source, 'u'));
+const DESPACED_PERSONAL = RULES.despaced_personal.map((source) => new RegExp(source, 'u'));
 
 function baseForm(text: string): string {
-  return [...text.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('');
+  // Invisible characters (zero-width, soft hyphen, variation selectors, keycap marks) go first.
+  let kept = '';
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (INVISIBLE.some(([from, to]) => cp >= from && cp <= to)) continue;
+    kept += DIGIT_GLYPHS[ch] ?? ch;
+  }
+  const folded = [...kept.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('');
+  // Any remaining decimal digit becomes ASCII: its value is its distance from its block's zero.
+  return folded.replace(/(?![0-9])\p{Nd}/gu, (d) => {
+    const cp = d.codePointAt(0) ?? 0;
+    let steps = 0;
+    while (steps < 60 && /^\p{Nd}$/u.test(String.fromCodePoint(cp - steps - 1))) steps++;
+    return String(steps % 10);
+  });
 }
+
+/** Short fragments that spell a rule keyword are joined: "sn ap" -> "snap". */
+function joinFragments(text: string): string {
+  const tokens = text.split(' ');
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    let done = false;
+    for (let k = 3; k >= 2 && !done; k--) {
+      if (i + k > tokens.length) continue;
+      const parts = tokens.slice(i, i + k);
+      if (Math.max(...parts.map((p) => [...p].length)) > 3) continue;
+      const word = parts.join('');
+      if (JOIN.has(word)) {
+        out.push(word);
+        i += k - 1;
+        done = true;
+      }
+    }
+    if (!done) out.push(tokens[i]);
+  }
+  return out.join(' ');
+}
+
+const despace = (text: string) => [wordForm(text, false), wordForm(text)].map((f) => f.replace(/[^a-z]/g, ''));
 
 function wordForm(text: string, leet = true): string {
   let t = baseForm(text).replace(/[’‘`]/g, "'");
@@ -115,7 +155,7 @@ function forms(text: string): string[] {
   const plain = wordForm(text, false);
   const leet = wordForm(text);
   const base = baseForm(text);
-  return [...new Set([leet, plain, base, joinSingles(plain), joinSingles(leet), joinSingles(base)])];
+  return [...new Set([leet, plain, base, joinSingles(plain), joinSingles(leet), joinSingles(base), joinFragments(plain), joinFragments(leet)])];
 }
 
 const matchesAny = (patterns: RegExp[], all: string[]) => patterns.some((p) => all.some((f) => p.test(f)));
@@ -126,7 +166,7 @@ function numericToken(token: string): string | null {
   if (/^\d+$/.test(token)) return token;
   if (token in NUMBER_WORDS) return NUMBER_WORDS[token];
   if (/\d/.test(token)) {
-    const folded = token.replace(/[oli|]/g, (c) => (c === 'o' ? '0' : '1'));
+    const folded = token.replace(/[olis|]/g, (c) => (c === 'o' ? '0' : c === 's' ? '5' : '1'));
     if (/^\d+$/.test(folded)) return folded;
   }
   const n = token.length;
@@ -144,26 +184,31 @@ function numericToken(token: string): string | null {
   return out !== undefined && out.length >= 2 ? out : null;
 }
 
-function scoreRun(run: string, years: boolean): number {
-  if (!run || years) return 0;
-  if (run.length >= 7) {
-    let up = true;
-    let down = true;
-    for (let k = 1; k < run.length; k++) {
-      up = up && Number(run[k]) === (Number(run[k - 1]) + 1) % 10;
-      down = down && Number(run[k]) === (Number(run[k - 1]) + 9) % 10;
-    }
-    if (up || down) return 0;
+function isCountingRun(run: string): boolean {
+  if (run.length < 5) return false;
+  let up = true;
+  let down = true;
+  for (let k = 1; k < run.length; k++) {
+    up = up && Number(run[k]) === (Number(run[k - 1]) + 1) % 10;
+    down = down && Number(run[k]) === (Number(run[k - 1]) + 9) % 10;
   }
-  return run.length;
+  return up || down;
 }
 
-function longestDigitRun(base: string): number {
-  const tokens = base.replace(/\b\d{1,3}(,\d{3})+\b/g, ' amount ').split(/[\s.\-()/,_+:;~*]+/u).filter(Boolean);
+interface DigitRun { groups: string[]; years: boolean; start: number; unit: boolean }
+
+/** A port of SafeText::looksLikePhone (same rules: times, prices, amounts, years, counting, units are not phones). */
+function looksLikePhone(input: string): boolean {
+  const base = input
+    .replace(/(?<![\d:])\d{1,2}:\d{2}(?![\d:])/gu, ' clock ')
+    .replace(/\$\s?\d+(\.\d{1,2})?|(?<![\d.])\d{1,3}\.\d{2}(?![\d.])/gu, ' price ')
+    .replace(/\b\d{1,3}(,\d{3})+\b/gu, ' amount ');
+  const matches = [...base.matchAll(/[^\s.\-()/,_+:;~*]+/gu)];
+  const tokens = matches.map((m) => m[0]);
+  const offsets = matches.map((m) => m.index ?? 0);
   const parsed = tokens.map(numericToken);
-  let best = 0;
-  let run = '';
-  let years = true;
+  const runs: DigitRun[] = [];
+  let run: DigitRun | null = null;
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     let digits = parsed[i];
@@ -171,22 +216,42 @@ function longestDigitRun(base: string): number {
       || (i + 1 < tokens.length && parsed[i + 1] !== null && !AMBIGUOUS.has(tokens[i + 1]));
     if (digits !== null && AMBIGUOUS.has(token) && !neighbour) digits = null;
     if (digits !== null) {
-      run += digits;
-      years = years && (/^(19|20)\d\d$/.test(token) || AMBIGUOUS.has(token));
+      run ??= { groups: [], years: true, start: offsets[i], unit: false };
+      run.groups.push(digits);
+      run.years = run.years && (/^(19|20)\d\d$/.test(token) || AMBIGUOUS.has(token));
       continue;
     }
     if (run && CONNECTORS.has(token) && i + 1 < tokens.length && parsed[i + 1] !== null) continue;
-    best = Math.max(best, scoreRun(run, years));
-    run = '';
-    years = true;
+    if (run && UNITS.has(token)) run.unit = true;
+    if (run) runs.push(run);
+    run = null;
   }
-  return Math.max(best, scoreRun(run, years));
+  if (run) runs.push(run);
+
+  const candidates: [number, number][] = [];
+  for (const r of runs) {
+    const all = r.groups.join('');
+    if (r.years || r.unit || isCountingRun(all)) continue;
+    const sizes = r.groups.map((g) => g.length);
+    const singles = sizes.every((n) => n === 1);
+    const endsLikeLocal = sizes.length >= 2 && sizes[sizes.length - 1] === 4 && sizes[sizes.length - 2] === 3;
+    if (all.length >= 10 || (all.length >= 7 && (sizes.length === 1 || singles || endsLikeLocal))) return true;
+    candidates.push([r.start, all.length]);
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    let sum = 0;
+    for (let j = i; j < candidates.length && candidates[j][0] - candidates[i][0] <= 60; j++) {
+      sum += candidates[j][1];
+      if (sum >= 10 && j > i) return true;
+    }
+  }
+  return false;
 }
 
 /** Phone numbers, emails and street addresses. */
 export function hasContactDetails(text: string): boolean {
   const base = baseForm(text);
-  if (longestDigitRun(base) >= 7) return true;
+  if (looksLikePhone(base)) return true;
   if (/[a-z0-9._%+-]+\s*(@|\(at\)|\[at\])\s*[a-z0-9-]+\s*(\.|\(dot\)|\[dot\])\s*[a-z]{2,}/u.test(base)) return true;
   if (/\b[a-z0-9._]{2,}\s+at\s+[a-z0-9-]+\s+dot\s+(com|net|org|edu|co|us)\b/u.test(wordForm(text, false))) return true;
   let streets = base;
@@ -196,11 +261,11 @@ export function hasContactDetails(text: string): boolean {
 }
 
 export function isGrooming(text: string): boolean {
-  return matchesAny(GROOMING_PATTERNS, forms(text));
+  return matchesAny(GROOMING_PATTERNS, forms(text)) || matchesAny(DESPACED, despace(text));
 }
 
 export function hasPersonalInfo(text: string): boolean {
-  return hasContactDetails(text) || matchesAny(PERSONAL_PATTERNS, forms(text));
+  return hasContactDetails(text) || matchesAny(PERSONAL_PATTERNS, forms(text)) || matchesAny(DESPACED_PERSONAL, despace(text));
 }
 
 export function hasLink(text: string): boolean {
@@ -222,6 +287,35 @@ export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
 export function titleFrom(text: string): string {
   const first = text.trim().split('\n')[0].trim() || text.trim();
   return first.length > 140 ? `${first.slice(0, 137)}...` : first;
+}
+
+/** Kid line when posting is paused (also what the server says). */
+export function pauseLine(until: string | null, now = Date.now()): string {
+  if (!until) return "You're taking a break from posting.";
+  const hours = Math.max(1, Math.ceil((Date.parse(until) - now) / 3_600_000));
+  return `You're taking a break from posting. Try again in ${hours} hours.`;
+}
+
+/**
+ * Report a blocked draft once per distinct text (tapping POST again on the same
+ * words is not a new attempt). Returns the pause line when posting is now paused.
+ */
+export async function reportBlockedDraft(
+  problem: DraftProblem | null,
+  text: string,
+  lastReported: { current: string | null },
+  send: (code: 'personal_info' | 'grooming') => Promise<{ paused: boolean; paused_until: string | null }>,
+): Promise<string | null> {
+  if (problem !== 'personal_info' && problem !== 'grooming') return null;
+  const key = `${problem}:${text.trim()}`;
+  if (lastReported.current === key) return null;
+  lastReported.current = key;
+  try {
+    const result = await send(problem);
+    return result.paused ? pauseLine(result.paused_until) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Time ────────────────────────────────────────────────────────────────
