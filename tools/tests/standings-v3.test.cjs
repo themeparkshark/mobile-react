@@ -140,10 +140,14 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.match(board, /\}, \[active, firstPageOnly\]\);/, 'also for a board served from the warm cache');
   assert.match(board, /item\.type === 'skeleton'\) return <SkeletonRow \/>/);
   const shark = read('src/screens/LeaderboardsScreen/StandingsShark.tsx');
-  assert.match(shark, /recyclingKey=/, 'a recycled row never flashes the last face');
-  assert.match(shark, /cachePolicy="memory-disk"/);
-  assert.doesNotMatch(shark, /<Avatar /, 'rows skip the badge-heavy Avatar');
   const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
+  assert.match(shark, /recyclingKey=/, 'a recycled row never flashes the last face');
+  assert.match(shark, /useFaceLayers\(sources, faceBucket\(facePoints\(size\)\)\)/, 'layers drawn from bitmaps decoded at the drawn size');
+  const layers = read('src/screens/LeaderboardsScreen/faceLayers.ts');
+  assert.match(layers, /ExpoImage\.loadAsync\(\{ uri \}, \{ maxWidth: px \}\)/);
+  assert.match(layers, /const MAX_REFS = \d+;/, 'a bounded cache');
+  assert.match(store, /prefetchLayers\(faceLayerSources\(inv\), facePoints\(40\)\)/, 'the next page decodes its faces before its rows show');
+  assert.doesNotMatch(shark, /<Avatar /, 'rows skip the badge-heavy Avatar');
   assert.match(store, /export function loadMore\(/);
   assert.match(store, /pagesInFlight/, 'one page request per board at a time');
   assert.match(store, /mergeRefresh\(boardModel\(dto, board, meId\), boards\.get\(key\)\?\.model\)/);
@@ -174,4 +178,16 @@ test('a page never lands above what the kid is looking at', () => {
   assert.match(board, /Date\.now\(\) >= jumpingUntil\.current && safeToInsert\(/, 'nothing lands while show-my-row is animating');
   assert.match(board, /jumpingUntil\.current = Date\.now\(\) \+ 1200;\s+if \(myIndex >= 0\) list\.current\?\.scrollToIndex/);
   assert.doesNotMatch(board, /pendingAnchor|anchorShift/);
+});
+
+test('face bitmaps come in a few pixel sizes, never the 1353 px art', () => {
+  const fl = loadTs('src/screens/LeaderboardsScreen/faceLayers.ts', {
+    'expo-image': { Image: { loadAsync: async () => ({}) } },
+    'react-native': { Image: { resolveAssetSource: () => ({ uri: 'file:///a.png' }) }, PixelRatio: { get: () => 3 } },
+  });
+  assert.equal(fl.faceBucket(48, 3), 192, 'a 40 pt row face');
+  assert.equal(fl.faceBucket(52.8, 3), 192, 'your pinned row shares that decode');
+  assert.equal(fl.faceBucket(86.4, 3), 288, 'podium');
+  assert.equal(fl.faceBucket(144, 3), 480, 'the shark card');
+  assert.equal(fl.faceBucket(1000, 3), 576, 'capped');
 });

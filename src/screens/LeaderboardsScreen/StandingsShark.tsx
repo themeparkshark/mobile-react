@@ -4,8 +4,8 @@
  * Alex's eight real shark colors, picked by player id, so the podium and the
  * list read as different players at a glance (ART_RULES 1: real art only).
  */
-import { Image as ExpoImage } from 'expo-image';
-import { memo, useContext, useState } from 'react';
+import { Image as ExpoImage, type ImageRef } from 'expo-image';
+import { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Image, View } from 'react-native';
 import { DEFAULT_PORTRAIT } from '../../components/Avatar';
 import config from '../../config';
@@ -14,6 +14,7 @@ import { hasDressedShark, liveOutfitFor, outfitLayerUrls, sharkBaseLayers } from
 import type { InventoryType } from '../../models/inventory-type';
 import type { PlayerType } from '../../models/player-type';
 import { BRAND } from '../../ui';
+import { faceBucket, loadLayer, readyLayer, type LayerSource } from './faceLayers';
 import { sharkVariant, type StandingsRowModel } from './standingsV2Model';
 
 export const SHARK_ART = [
@@ -40,33 +41,70 @@ export function wearsOwnLook(inventory: InventoryType | null | undefined): boole
   return !!skin?.no_eye_url && Number(skin.cost ?? 0) > 0;
 }
 
+/** The layers of a dressed shark, bottom to top (the same order as <Avatar>). */
+export function faceLayerSources(inventory: InventoryType | null | undefined): LayerSource[] {
+  return [
+    ...(inventory?.background_item?.paper_url ? [{ uri: inventory.background_item.paper_url }] : []),
+    ...(sharkBaseLayers(inventory) as LayerSource[]),
+    ...outfitLayerUrls(inventory).map(uri => ({ uri })),
+  ];
+}
+
+/** Points a face is drawn at for a shark of `size` (the 50 pt avatar's 1.2x layer box, scaled). */
+export const facePoints = (size: number) => AVATAR_PX * 1.2 * (size / AVATAR_PX);
+
+/**
+ * Decoded layers for one face at its drawn size: at once when they are
+ * cached (no blank frame), otherwise after one small decode. Null meanwhile.
+ */
+function useFaceLayers(sources: readonly LayerSource[], px: number): readonly ImageRef[] | null {
+  const key = useMemo(() => sources.map(src => (typeof src === 'number' ? `#${src}` : src.uri)).join('|') + `@${px}`, [sources, px]);
+  const ready = () => {
+    const out = sources.map(src => readyLayer(src, px));
+    return out.every(Boolean) ? (out as ImageRef[]) : null;
+  };
+  const [state, setState] = useState<{ key: string; layers: readonly ImageRef[] | null }>(() => ({ key, layers: ready() }));
+  const current = state.key === key ? state.layers : ready();
+  useEffect(() => {
+    if (current) { if (state.key !== key) setState({ key, layers: current }); return undefined; }
+    let live = true;
+    void Promise.all(sources.map(src => loadLayer(src, px))).then(out => {
+      if (live) setState({ key, layers: out.every(Boolean) ? (out as ImageRef[]) : [] });
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return current;
+}
+
 /**
  * The dressed shark (or a friend's photo) for one row: the same layers and
  * geometry as Avatar (size sm), without its badges, tuned for a scrolling
- * list. Faces stay decoded in memory (memory-disk), a recycled row never
- * flashes the previous player's face (recyclingKey), and there is no fade.
+ * list. Each layer is drawn from a small bitmap decoded at the size it shows
+ * (faceLayers.ts), never the 1353 px art; until it is ready the player's
+ * color shark stands in, and a recycled row never shows the last face.
  */
-const Face = memo(function Face({ id, photo, inventory }: {
-  readonly id: number; readonly photo: string | null; readonly inventory: InventoryType | null;
+const Face = memo(function Face({ id, photo, inventory, size }: {
+  readonly id: number; readonly photo: string | null; readonly inventory: InventoryType | null; readonly size: number;
 }) {
-  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const s = AVATAR_PX;
   // Same rule as <Avatar>: a worn outfit wins over a photo.
-  const usePhoto = !!photo && photo !== failedPhoto && !hasDressedShark(inventory);
-  const layers = usePhoto ? [] : [
-    ...(inventory?.background_item?.paper_url ? [{ uri: inventory.background_item.paper_url }] : []),
-    ...sharkBaseLayers(inventory),
-    ...outfitLayerUrls(inventory).map(uri => ({ uri })),
-  ];
+  const usePhoto = !!photo && !hasDressedShark(inventory);
+  const sources = useMemo(() => (usePhoto ? [{ uri: photo as string }] : faceLayerSources(inventory)), [usePhoto, photo, inventory]);
+  const layers = useFaceLayers(sources, faceBucket(facePoints(size)));
   return (
-    <View style={{ width: s, height: s, borderWidth: 1, borderColor: config.lightBlue, overflow: 'hidden', borderRadius: s / 2 }}>
-      {usePhoto ? (
-        <ExpoImage source={{ uri: photo as string }} placeholder={DEFAULT_PORTRAIT} recyclingKey={`p${id}`} cachePolicy="memory-disk" transition={0}
-          onError={() => setFailedPhoto(photo)} contentFit="contain" style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }} />
+    <View style={{ width: s, height: s, borderWidth: 1, borderColor: config.lightBlue, overflow: 'hidden', borderRadius: s / 2, backgroundColor: BRAND.sky }}>
+      {layers == null || (!usePhoto && !layers.length) ? (
+        // Loading (or the art failed): the player's color shark stands in.
+        <Image source={SHARK_ART[sharkVariant(id)]} style={{ width: s * 1.12, height: s * 1.12, marginTop: s * 0.12, alignSelf: 'center' }}
+          resizeMode="contain" fadeDuration={0} />
+      ) : usePhoto && !layers.length ? (
+        // A photo that 404s or is not an image: the TPS shark, never a blank blob (QA P2-7).
+        <ExpoImage source={DEFAULT_PORTRAIT} contentFit="contain" style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }} />
       ) : (
         <View style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}>
-          {layers.map((source, index) => (
-            <ExpoImage key={index} source={source} recyclingKey={`${id}:${index}`} cachePolicy="memory-disk" transition={0}
+          {layers.map((ref, index) => (
+            <ExpoImage key={index} source={ref} recyclingKey={`${id}:${index}`} transition={0}
               contentFit="contain" style={{ width: '100%', height: '100%', position: 'absolute' }} />
           ))}
         </View>
@@ -105,7 +143,7 @@ function StandingsShark({ avatar, size, muted = false, ring }: {
         </View>
       ) : dressed ? (
         <View style={{ width: AVATAR_PX, height: AVATAR_PX, transform: [{ scale: size / AVATAR_PX }] }}>
-          <Face id={avatar.id} photo={avatar.avatar_url} inventory={outfit} />
+          <Face id={avatar.id} photo={avatar.avatar_url} inventory={outfit} size={size} />
         </View>
       ) : (
         // RN Image: bundled art decodes from the in-memory cache, so a tab switch never paints a blank face.

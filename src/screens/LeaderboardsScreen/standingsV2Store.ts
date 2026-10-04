@@ -12,9 +12,9 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import allParks from '../../api/endpoints/parks/allParks';
-import { Image as ExpoImage } from 'expo-image';
 import { getStandings, getStandingsPage, type StandingsBoardKey } from '../../api/endpoints/me/standings';
-import { outfitLayerUrls } from '../../helpers/wardrobe';
+import { prefetchLayers } from './faceLayers';
+import { facePoints, faceLayerSources, wearsOwnLook } from './StandingsShark';
 import type { InventoryType } from '../../models/inventory-type';
 import type { ParkType } from '../../models/park-type';
 import { standingsGeneration, standingsSession } from './standingsCache';
@@ -99,14 +99,12 @@ export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: 
   return request;
 }
 
-/** Outfit layers for rows about to scroll in, so a face is decoded before its row shows. */
+/** Faces for rows about to scroll in, decoded at row size, so a face is ready before its row shows. */
 function prefetchFaces(rows: readonly StandingsRowModel[]): void {
-  const urls = new Set<string>();
   rows.forEach(row => {
     const inv = row.avatar.inventory as InventoryType | null | undefined;
-    [...outfitLayerUrls(inv), inv?.skin_item?.no_eye_url, inv?.background_item?.paper_url].forEach(url => { if (url) urls.add(url); });
+    if (wearsOwnLook(inv ?? null)) prefetchLayers(faceLayerSources(inv), facePoints(40));
   });
-  if (urls.size) void ExpoImage.prefetch([...urls], 'memory-disk').catch(() => undefined);
 }
 
 /** Warm boards so a tab or park switch is instant. Only fetches what is missing or stale. Failures are ignored. */
