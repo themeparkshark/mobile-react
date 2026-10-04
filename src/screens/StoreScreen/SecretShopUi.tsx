@@ -1,6 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useContext, useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import { FxPauseContext } from '../../fx/FxStage';
 import { SECRET_THEME } from '../../fx/secretTheme';
@@ -29,19 +30,29 @@ type GateRequest = { resolve: (ok: boolean) => void; seed: number };
 let showGate: ((r: GateRequest | null) => void) | null = null;
 
 /** Opens the gate (mounted by GrownUpGateHost) and resolves true only on the right answer. */
-export function askGrownUp(seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
-  if (!showGate) return Promise.resolve(false);
+export async function askGrownUp(seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
+  if (!showGate) return false;
+  await loadRest();
   return new Promise(resolve => showGate!({ resolve, seed: now < gateRestUntil ? -1 : seed }));
 }
 
 /** Judges a typed answer; a wrong one rests the gate. Exported for tests. */
 export function judgeGate(typed: string, seed: number, now = Date.now()): boolean {
   const ok = typed !== '' && Number(typed) === grownUpQuestion(seed).answer;
-  if (!ok) gateRestUntil = now + GATE_REST_MS;
+  if (!ok) {
+    gateRestUntil = now + GATE_REST_MS;
+    void AsyncStorage.setItem(REST_KEY, String(gateRestUntil)).catch(() => undefined);
+  }
   return ok;
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
+const REST_KEY = 'secret-shop:grown-up-rest-until';
+
+/** The 30 s rest survives a force-quit (kids UX round 3). */
+async function loadRest() {
+  try { gateRestUntil = Math.max(gateRestUntil, Number(await AsyncStorage.getItem(REST_KEY)) || 0); } catch { /* storage is best effort */ }
+}
 
 /** The gate's dialog. Mounted once by the Secret Shop. */
 export function GrownUpGateHost() {
@@ -61,10 +72,13 @@ export function GrownUpGateHost() {
     <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
       <View style={styles.gateScrim}>
         <View style={styles.gateCard} accessibilityViewIsModal>
-          <GameIcon name="member" size={40} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateTitle}>Ask a grown-up</Text>
+          <GameIcon name={resting ? 'moon' : 'member'} size={resting ? 64 : 40} />
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateTitle}>{resting ? 'Resting' : 'Ask a grown-up'}</Text>
           {resting ? (
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody}>Let's try again in a little while.</Text>
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <GameIcon name="timer" size={34} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody}>Let's try again in a little while.</Text>
+            </View>
           ) : (
             <>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody} accessibilityLabel={`Grown-ups: what is ${q!.a} times ${q!.b}?`}>
@@ -78,7 +92,8 @@ export function GrownUpGateHost() {
                   <Pressable key={k} onPress={() => press(k)} style={({ pressed }) => [styles.key, k === 'ok' && styles.keyOk, pressed && { opacity: 0.7 }]}
                     accessibilityRole="button" accessibilityLabel={k === 'del' ? 'Delete' : k === 'ok' ? 'Done' : k}
                     disabled={k === 'ok' && !typed}>
-                    {k === 'del' ? <GameIcon name="back" size={22} /> : <Text style={[styles.keyText, k === 'ok' && styles.keyOkText]}>{k === 'ok' ? 'OK' : k}</Text>}
+                    {/* A delete key, never the red Back arrow (that means "leave" everywhere else). */}
+                    <Text style={[styles.keyText, k === 'ok' && styles.keyOkText, k === 'del' && styles.keyDelText]}>{k === 'ok' ? 'OK' : k === 'del' ? '⌫' : k}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -124,10 +139,35 @@ export const SECRET_PREVIEW_COPY = {
 
 const STAR = require('../../../assets/fx/spark.webp');
 
+/**
+ * The Secret unlock beat after a buy (game feel round 3): the stage dims for a
+ * breath, then the gold-and-violet frame flares while the piece plays its
+ * moment twice (Playercard fxPlay). Its own beat, unlike any tap.
+ */
+export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean }) {
+  const dim = useSharedValue(0);
+  const flare = useSharedValue(0);
+  useEffect(() => {
+    if (!trigger || still) return;
+    dim.value = withSequence(withTiming(0.55, { duration: 140 }), withDelay(160, withTiming(0, { duration: 260 })));
+    flare.value = withDelay(300, withSequence(withTiming(1, { duration: 160 }), withDelay(260, withTiming(0, { duration: 520 }))));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trigger]);
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
+  const flareStyle = useAnimatedStyle(() => ({ opacity: flare.value, transform: [{ scale: 1 + 0.02 * flare.value }] }));
+  return (
+    <>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0830' }, dimStyle]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
+    </>
+  );
+}
+
 /** Fixed star spots (fractions of the box) so every render and capture match. */
+/** Stars stay out of the title and button column (the left half), and off the pills (top right). */
 const MOTES = [
-  [0.06, 0.12, 3], [0.18, 0.32, 2], [0.31, 0.08, 2.5], [0.44, 0.22, 2], [0.57, 0.06, 3], [0.68, 0.3, 2],
-  [0.79, 0.14, 2.5], [0.91, 0.26, 2], [0.12, 0.6, 2], [0.88, 0.62, 2.5], [0.38, 0.5, 1.5], [0.72, 0.52, 1.5],
+  [0.6, 0.2, 3], [0.7, 0.33, 2], [0.95, 0.3, 2.5], [0.56, 0.42, 2], [0.86, 0.46, 3], [0.64, 0.58, 2],
+  [0.93, 0.6, 2.5], [0.58, 0.72, 2], [0.04, 0.95, 2], [0.95, 0.8, 2.5], [0.76, 0.24, 1.5], [0.82, 0.66, 1.5],
 ] as const;
 
 function Mote({ i, still }: { i: number; still: boolean }) {
@@ -166,6 +206,7 @@ const styles = StyleSheet.create({
     backgroundColor: SECRET_THEME.violet, borderWidth: 2, borderColor: SECRET_THEME.border },
   bannerCtaText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   mote: { position: 'absolute' },
+  flare: { borderRadius: 19, borderWidth: 6, borderColor: SECRET_THEME.gold },
   gateScrim: { flex: 1, backgroundColor: 'rgba(10,6,40,0.75)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   gateCard: { width: '100%', maxWidth: 340, alignItems: 'center', gap: 10, padding: 18, borderRadius: 24, backgroundColor: SECRET_THEME.panel,
     borderWidth: 3, borderColor: SECRET_THEME.border },
@@ -177,9 +218,10 @@ const styles = StyleSheet.create({
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, width: 3 * 72 + 2 * 8 },
   key: { width: 72, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: SECRET_THEME.card,
     borderWidth: 2, borderColor: SECRET_THEME.border },
-  keyOk: { backgroundColor: SECRET_THEME.violet },
+  keyOk: { backgroundColor: SECRET_THEME.gold, borderColor: BRAND.goldLip },
   keyText: { fontFamily: FONT.display, fontSize: 24, color: '#ffffff' },
-  keyOkText: { fontSize: 20 },
+  keyOkText: { fontSize: 20, color: BRAND.navy },
+  keyDelText: { fontFamily: undefined, fontSize: 26 },
   gateCancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   gateCancelText: { fontFamily: FONT.display, fontSize: 17, color: SECRET_THEME.inkSoft },
 });

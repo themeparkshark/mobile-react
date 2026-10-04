@@ -7,6 +7,7 @@ import { FX_GEOMETRY, momentAt, phaseOf, windowOf } from '../registry';
 const G = FX_GEOMETRY.rigs.midway_fireworks;
 export const BACKDROP = require('../../../assets/fx/backdrop.webp');
 const GLOW = require('../../../assets/fx/glow.webp');
+const SPARK = require('../../../assets/fx/spark.webp');
 const ART: Record<string, number> = {
   'burst-gold.webp': require('../../../assets/fx/burst-gold.webp'),
   'burst-pink.webp': require('../../../assets/fx/burst-pink.webp'),
@@ -60,8 +61,8 @@ function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
     const grow = 1 - Math.pow(1 - Math.min(1, b / 0.3), 3);
     const fall = Math.max(0, b - 0.3);
     return {
-      // Fades out by alpha while it is still bright (never lingers dim and grey).
-      opacity: b < 0.45 ? 1 : Math.max(0, 1 - (b - 0.45) / 0.3),
+      // Gone by alpha while it is still bright and blooming outward: never a dim grey copy (art panel round 3).
+      opacity: b < 0.4 ? 1 : Math.max(0, 1 - (b - 0.4) / 0.18),
       transform: [{ translateY: fall * fall * box.h * 0.09 }, { scale: 0.15 + 0.85 * grow }, { scaleY: 1 + 0.18 * fall }, { rotate: `${b * 10}deg` }],
     };
   });
@@ -77,7 +78,7 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
     const { launch } = shellAt(t.value, kick.value, s);
     if (launch < 0) return { opacity: 0 };
     const y = 0.92 + (s.cy - 0.92) * (1 - Math.pow(1 - launch, 2));
-    return { opacity: 1 - launch * 0.3, transform: [{ translateY: (y - s.cy) * box.h }, { scaleY: 2.4 - launch }] };
+    return { opacity: 1 - launch * 0.3, transform: [{ translateY: (y - s.cy) * box.h }, { rotate: `${launch * 360}deg` }] };
   });
   const flash = useAnimatedStyle(() => {
     const { burst: b } = shellAt(t.value, kick.value, s);
@@ -85,8 +86,9 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
   });
   return (
     <>
-      <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + s.cx * box.w - size, top: box.y + s.cy * box.h,
-        width: size * 2, height: size * 3, tintColor: '#fff3c4' }, rocket]} />
+      {/* The rocket: a drawn spark star rising, not a blurred streak (art panel round 3). */}
+      <Animated.Image source={SPARK} style={[styles.abs, { left: box.x + s.cx * box.w - size * 1.5, top: box.y + s.cy * box.h - size * 1.5,
+        width: size * 3, height: size * 3 }, rocket]} />
       <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + s.cx * box.w - flashSize / 2, top: box.y + s.cy * box.h - flashSize / 2,
         width: flashSize, height: flashSize, tintColor: s.flash }, flash]} />
     </>

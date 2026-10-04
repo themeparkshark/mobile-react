@@ -164,9 +164,10 @@ test('wornFx: animated pieces replace their paper layer, scenes replace the back
 function loadSecretUi() {
   return loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
     react: { memo: f => f, useContext: () => false, useEffect: () => undefined, useState: v => [v, () => undefined] },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
     'react-native-reanimated': { __esModule: true, default: { View: 'AView', Image: 'AImage' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
-      useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withDelay: () => 0, withRepeat: () => 0, withTiming: () => 0 },
+      useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withDelay: () => 0, withRepeat: () => 0, withSequence: () => 0, withTiming: () => 0 },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../../RootNavigation': { navigate: () => undefined },
     '../../fx/FxStage': { FxPauseContext: {} },
@@ -193,6 +194,8 @@ test('the grown-up gate: a typed answer to a 2-digit times 1-digit sum, and a 30
   const code = src('src/screens/StoreScreen/SecretShopUi.tsx');
   assert.doesNotMatch(code, /showGameDialog/, 'no multiple choice to guess from');
   assert.match(code, /const KEYS = \['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'\] as const;/);
+  assert.match(code, /AsyncStorage\.setItem\(REST_KEY/, 'the rest survives a relaunch');
+  assert.doesNotMatch(code, /name="back"/, 'the delete key is not the Back arrow');
   assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /\{secret && <GrownUpGateHost \/>\}/);
 });
 

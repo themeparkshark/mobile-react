@@ -57,6 +57,8 @@ function WornLayer({ uri, slot, pop, popFrom = 1.18, drop = false }: { readonly 
   );
 }
 
+const GROUND_SHADOW = require('../../assets/fx/glow.webp');
+
 export default function Playercard({
   inventory,
   style,
@@ -77,6 +79,7 @@ export default function Playercard({
   fxTapToPlay = false,
   fxStartDelay = 0,
   onFxPlay,
+  sceneGround,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -114,8 +117,11 @@ export default function Playercard({
   readonly fxStartDelay?: number;
   /** Called when the moments replay (a tap or fxPlay), for a scene drawn outside this card (the try-on backdrop). */
   readonly onFxPlay?: (kind: 'tap' | 'unlock') => void;
+  /** The shark stands in a scene (a worn scene, here or behind the stage): smaller, with a shadow on the ground. */
+  readonly sceneGround?: boolean;
 }) {
   const fx = useMemo(() => wornFx(inventory), [inventory]);
+  const grounded = sceneGround ?? (!!fx.scene && showBackground);
   // Reduce Motion is read here, so no screen can forget it (performance panel round 1).
   const reduced = useReducedGameMotion();
   // Long-lived stages (Profile, the Dressing Room, the shop hero) drop their particles after a
@@ -140,14 +146,12 @@ export default function Playercard({
   // A tap replays the worn pieces' moments with their cues (taps during the first 60% of a
   // moment are ignored, so spam-taps never freeze a pose). A buy replays them as a Secret
   // unlock: after the landing settles, twice, sound without a second haptic (game feel round 2).
-  const lastTap = useRef(-1e9);
   const momentMs = Math.max(0, ...fx.rigs.map(r => FX_MOMENT[r.key].ms), fx.scene ? FX_MOMENT[fx.scene].ms : 0);
   const playFx = useCallback((kind: 'tap' | 'unlock' = 'tap') => {
     onFxPlay?.(kind);
     if (!fx.any || !fxRunning) return;
-    const now = Date.now();
-    if (kind === 'tap' && now - lastTap.current < momentMs * 0.6) return;
-    lastTap.current = now;
+    // On the frame clock (the one the motion runs on), so a hitch never lets a tap in early.
+    if (kind === 'tap' && fxClock.value - fxKick.value < momentMs * 0.6) return;
     fxTouch();
     wakeFx();
     const keys = [...fx.rigs.map(r => r.key), ...(fx.scene && showBackground ? [fx.scene] : [])];
@@ -320,17 +324,25 @@ export default function Playercard({
           </Animated.View>
           </FxShadow>
         )}
+        {grounded && (
+          // The plaza shadow: the shark stands on the scene's ground, never floats over it (art panel round 3).
+          <Image pointerEvents="none" source={GROUND_SHADOW} contentFit="fill"
+            style={{ position: 'absolute', left: '33%', width: '52%', top: '86%', height: '9%', opacity: 0.55, tintColor: '#050320' }} />
+        )}
         <Animated.View
           style={{
             position: 'absolute',
             width: '100%',
             height: '100%',
+            transformOrigin: grounded ? '55% 92%' : undefined,
             transform: [
               {
                 translateY: translate,
               },
               ...(sharkTransform || []),
               ...(onItemTap ? [{ scale: nakedBounce }] : []),
+              // One scene scale on every surface: the shark stands about 16% smaller in a scene.
+              ...(grounded ? [{ scale: 0.84 }] : []),
             ],
           }}
         >

@@ -104,6 +104,25 @@ function Flame({ t, kick, box, lod, spec, delay }: RigProps & { spec: typeof G.f
   return <FxPart source={FLAME} box={box} spec={spec} aspect={spec.aspect} style={style} />;
 }
 
+/**
+ * The flame lights the ground: a warm pool under the shark that stays on the
+ * floor while the shark floats, and flares on every boost (light cast, game feel round 3).
+ */
+function GroundPool({ t, kick, box }: RigProps) {
+  const w = box.w * 0.5;
+  const h = w * 0.22;
+  const style = useAnimatedStyle(() => {
+    const b = Math.max(0, boostAt(t.value, kick.value));
+    return {
+      opacity: 0.32 + 0.06 * Math.sin(t.value / 57) + 0.4 * b,
+      // Counter the float, so the light stays on the floor.
+      transform: [{ translateY: -jetpackFloat(t.value, kick.value, box.h) }, { scaleX: 1 + 0.25 * b }],
+    };
+  });
+  return <Animated.Image source={GLOW} resizeMode="stretch" style={[styles.abs, { left: box.x + 0.58 * box.w - w / 2, top: box.y + 0.93 * box.h - h / 2,
+    width: w, height: h, tintColor: '#ffb43a' }, style]} />;
+}
+
 /** In front of the shark: the far flame, the pack, the near flame, glow, sparks and puffs. */
 export function JetpackFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
@@ -120,6 +139,7 @@ export function JetpackFront(props: RigProps) {
       {/* A warm glow sprite around the flames (never a blurred copy). */}
       <Animated.Image source={GLOW} style={[styles.abs, { left: f.left + f.width / 2 - glowSize / 2, top: f.top - glowSize * 0.15,
         width: glowSize, height: glowSize, tintColor: '#ffb43a' }, glow]} />
+      {lod === 'full' && <GroundPool {...props} />}
       {lod === 'full' && PUFFS.map(i => <Puff key={`p${i}`} {...props} i={i} />)}
       <Flame {...props} spec={G.flame2} delay={90} />
       <FxPart source={BODY} box={box} spec={G.body} aspect={G.body.aspect} />

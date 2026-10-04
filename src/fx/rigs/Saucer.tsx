@@ -69,7 +69,9 @@ export function SaucerFront(props: RigProps) {
     };
   });
   const beam = useAnimatedStyle(() => ({ opacity: beamOf(beamP(t, kick, still)) * 0.9 }));
-  const beamW = l.width * 0.95;
+  const landing = useAnimatedStyle(() => ({ opacity: beamOf(beamP(t, kick, still)) * 0.45 }));
+  // A narrow cone that touches the nape, not a wedge down the whole flank (art panel round 3).
+  const beamW = l.width * 0.58;
   const beamH = l.height * 2.1;
   const star = l.width * 0.45;
   const lift = useAnimatedStyle(() => {
@@ -91,6 +93,10 @@ export function SaucerFront(props: RigProps) {
         transformOrigin: '50% 0%', transform: [{ rotate: `${BEAM_TILT}deg` }] }]} pointerEvents="none">
         <Animated.Image source={SPARK} style={[styles.abs, { left: beamW / 2 - star / 2, top: 0, width: star, height: star }, lift]} />
       </Animated.View>
+      {/* Where the beam lands, it tints the shark mint (light cast, game feel round 3). */}
+      <Animated.Image source={GLOW} style={[styles.abs, { left: l.width / 2 - Math.sin((BEAM_TILT * Math.PI) / 180) * beamH * 0.92 - l.width * 0.45,
+        top: l.height * 0.7 + Math.cos((BEAM_TILT * Math.PI) / 180) * beamH * 0.92 - l.width * 0.45, width: l.width * 0.9, height: l.width * 0.9,
+        tintColor: '#a8fff0' }, landing]} />
       <Image source={UFO} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
       {lod === 'full' && RIM_LIGHTS.map((_, i) => <Light key={i} t={t} i={i} size={Math.max(6, l.width * 0.13)} />)}
     </Animated.View>

@@ -123,13 +123,6 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <LinearGradient colors={plate} style={StyleSheet.absoluteFill} />
         {(badge.rarity === 4 || secret) && !owned && <Sheen still={still} width={width + 60} every={secret ? 4200 : undefined} />}
-        {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
-        {secret && (
-          <View style={styles.secretTag}>
-            <GameIcon name="sparkle" size={12} />
-            <Text maxFontSizeMultiplier={1} style={styles.secretTagText}>SECRET</Text>
-          </View>
-        )}
       </View>
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
@@ -138,11 +131,19 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{RIBBON[ribbon].label}</Text>
         </View>
       )}
-      <View style={[styles.art, { marginTop: ribbon ? 10 : 0 }, owned && { opacity: 0.6 }]}>
+      <View style={[styles.art, { marginTop: ribbon ? 10 : secret ? 8 : 0 }, owned && { opacity: 0.6 }]}>
         <TileArt item={item} size={artSize} still={still} />
       </View>
+      {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
+      {secret && (
+        <View style={styles.secretTag}>
+          <GameIcon name="sparkle" size={12} />
+          <Text maxFontSizeMultiplier={1} style={styles.secretTagText}>SECRET</Text>
+        </View>
+      )}
       {/* Reserved chip band: rarity and SET never sit on the art. */}
-      <View style={styles.band}>
+      {/* Secret tiles carry their badge in the corner tag, so the chip band shrinks (no dead gap under the art). */}
+      <View style={[styles.band, secret && !set && { height: 6 }]}>
         {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
         {badge.label && !owned && !secret && (band === 'dot' ? (
           <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
@@ -211,7 +212,8 @@ const styles = StyleSheet.create({
   rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
   // The Secret corner tag (DESIGN.md 6.5): violet with a gold keyline, in the corner of every Secret tile.
-  secretTag: { position: 'absolute', top: 0, left: 0, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 10,
+  // Drawn after the art, so nothing (a scene, a peeking ghost) ever covers it.
+  secretTag: { position: 'absolute', top: 3, left: 3, zIndex: 5, borderTopLeftRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 10,
     height: 22, backgroundColor: '#6a3fd1', borderBottomRightRadius: 12, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#ffd34d' },
   secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
   // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).

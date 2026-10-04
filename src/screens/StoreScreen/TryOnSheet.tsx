@@ -21,7 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/registry';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { openVipWithGrownUp } from './SecretShopUi';
+import { UnlockBeat, openVipWithGrownUp } from './SecretShopUi';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -65,8 +65,6 @@ const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
 const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
-/** In a scene the shark stands a little smaller, feet on the plaza (art panel round 2). */
-const SCENE_SHARK = { transform: [{ scale: 0.84 }], transformOrigin: '50% 92%' } as const;
 /** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
 const SHEET_SETTLE_MS = 450;
 
@@ -453,11 +451,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} play={scenePlay} startDelay={SHEET_SETTLE_MS} /> : undefined}
                     sky={secret ? SECRET_THEME.sky : undefined} plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}>
                     <LandFlash color={glow} still={still} trigger={landed} />
+                    {secret && <UnlockBeat trigger={landed} still={still} />}
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
                         <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow}
                           popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
-                          style={[secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE, stage.scene && SCENE_SHARK]}
+                          style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
                           fxPlay={secret ? landed : 0} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
                           onFxPlay={stage.scene ? onFxPlay : undefined} />
                       ) : (
@@ -494,16 +493,16 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
                 <View style={styles.titleRow}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} numberOfLines={2}>{name}</Text>
-                  {/* Non-members see the price too, with the lock (one marker everywhere). */}
-                  {secretItem && vipLocked && !owned && (
-                    <View style={styles.lockPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins, VIP members can buy`}>
-                      <GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.lockPriceText}>{formatCoins(item.cost)}</Text>
-                      <GameIcon name="lock" size={16} />
-                    </View>
-                  )}
                   {badge.label && <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
                 </View>
+                {/* Non-members see the price too, with the lock (one marker everywhere). */}
+                {secretItem && vipLocked && !owned && (
+                  <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins, VIP members can buy`}>
+                    <GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.lockPriceText}>{formatCoins(item.cost)}</Text>
+                    <GameIcon name="lock" size={16} />
+                  </View>
+                )}
                 {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
                   {lastChanceLine(item.shop?.season)}</Text>}
                 {item.shop?.returning && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}

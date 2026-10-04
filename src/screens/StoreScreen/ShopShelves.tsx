@@ -815,7 +815,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Animated.View entering={enter(events.length + 1)} style={[styles.panel, secret && secretPanel]} onLayout={measure('featured')}>
                 <View style={styles.header}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>{secret ? 'MORE IN THE VAULT' : 'FEATURED'}</Text>
-                  <SectionPills section={featured} offset={offset} still={still} />
+                  <SectionPills section={featured} offset={offset} still={still} single={secret} />
                 </View>
                 {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
                   <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />

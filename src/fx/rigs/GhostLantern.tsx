@@ -70,7 +70,8 @@ function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean | 'b
   const ghostH = ghostW * G.ghost.aspect;
   const ghost = useAnimatedStyle(() => {
     const m = still ? { p: STILL_P, cycle: 0 } : momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350);
-    const g = ghostPose(m.p, m.cycle);
+    // In a tile the loop always goes right, into the open space (never over the corner tag).
+    const g = ghostPose(m.p, front === 'both' ? 1 : m.cycle);
     return { opacity: front === 'both' || g.front === front ? g.o : 0, transform: [{ translateX: g.x * l.width }, { translateY: g.y * l.height }, { scale: g.s }] };
   });
   return (
