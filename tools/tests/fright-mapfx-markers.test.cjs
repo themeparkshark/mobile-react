@@ -49,7 +49,7 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
   assert.match(map, /<FrightNightTint input=\{fright\} \/>/);
   const close = map.indexOf('</MapView>');
   const sources = map.lastIndexOf('<FrightMapSources', close);
-  const shark = map.lastIndexOf('<GlidingMarker coordinate={location ?? FALLBACK_CENTER} hidden={!location}', close);
+  const shark = map.lastIndexOf('<PlayerSharkMarker target={location ?? null}', close);
   assert.ok(shark > 0, 'the player shark is one always-mounted Marker');
   assert.ok(sources > shark && sources < close, 'fright markers come after every other MapView child');
   assert.equal(map.match(/<FrightMapSources/g).length, 1);
@@ -183,7 +183,7 @@ test('Map.tsx: both tints are background layers and no direct MapView child is m
 test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {
   const map = read('src/components/Map.tsx');
   const marker = read('src/components/map/Marker.tsx');
-  assert.equal((map.match(/<GlidingMarker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
+  assert.equal((map.match(/<PlayerSharkMarker target=\{location \?\? null\}/g) || []).length, 1);
   assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<(Gliding)?Marker/, 'no `{location && <Marker>}`');
   assert.doesNotMatch(map, /\{location \? \(\s*\n?\s*<Marker/);
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.

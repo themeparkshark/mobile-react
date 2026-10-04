@@ -171,14 +171,14 @@ test('the shark glides 600 to 1000 ms between fixes, jumps only for a re-seat', 
   assert.equal(end.longitude, offset(HOME, 10, 0).longitude);
 });
 
-test('the player shark glides as one stable marker and the watcher filters every fix', () => {
+test('the player shark is two stable markers and the watcher filters every fix', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const read = f => fs.readFileSync(path.join(__dirname, '../..', f), 'utf8');
-  const gliding = read('src/components/map/GlidingMarker.tsx');
-  // Same Marker every frame: only the coordinate prop changes, never a key or a remount.
-  assert.doesNotMatch(gliding, /key=/);
-  assert.match(gliding, /<Marker coordinate=\{shown\} hidden=\{hidden\} anchor=\{anchor\}>/);
+  const player = read('src/components/map/PlayerSharkMarker.tsx');
+  // Same two markers every frame: only a hidden copy's coordinate prop changes, never a key or a remount.
+  assert.match(player, /\{\[0, 1\]\.map\(slot => \(\s*<PlayerSlot key=\{slot\}/);
+  assert.match(player, /<Marker coordinate=\{coordinate \?\? PARKED\} hidden=\{!coordinate\}>/);
   const provider = read('src/context/LocationProvider.tsx');
   const watcher = provider.slice(provider.indexOf('Location.watchPositionAsync('), provider.indexOf('restartAfterError,', provider.indexOf('Location.watchPositionAsync(')));
   assert.match(watcher, /positionFilter\(\)\.push\(/);

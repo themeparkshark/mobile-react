@@ -41,6 +41,13 @@ export function glideEase(t: number): number {
   return 0.5 * c + 0.5 * (1 - (1 - c) ** 2);
 }
 
+/** The same ease as a Reanimated worklet (UI-thread glide). */
+export function glideEaseWorklet(t: number): number {
+  'worklet';
+  const c = Math.min(1, Math.max(0, t));
+  return 0.5 * c + 0.5 * (1 - (1 - c) ** 2);
+}
+
 export function glidePoint(a: GlidePoint, b: GlidePoint, t: number): GlidePoint {
   if (t >= 1) return { latitude: b.latitude, longitude: b.longitude };
   const k = glideEase(t);
