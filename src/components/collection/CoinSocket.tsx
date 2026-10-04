@@ -7,9 +7,10 @@
  * the mystery art for them.
  */
 import { Image } from 'expo-image';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { View } from 'react-native';
 import MysteryCoinArtwork from '../MysteryCoinArtwork';
+import { COIN_ART_ASPECT, loadedArtAspect } from './ShelfCoin';
 
 export interface CoinSocketProps {
   readonly size: number;
@@ -22,6 +23,8 @@ export interface CoinSocketProps {
 
 function CoinSocket({ size, coinUrl, goal = false, onLight = false }: CoinSocketProps) {
   const inset = Math.max(2, Math.round(size * 0.05));
+  const face = size * 0.8;
+  const [artAspect, setArtAspect] = useState(COIN_ART_ASPECT);
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2,
       backgroundColor: onLight ? '#d7eefc' : '#05509a',
@@ -30,9 +33,13 @@ function CoinSocket({ size, coinUrl, goal = false, onLight = false }: CoinSocket
       borderTopColor: onLight ? '#9ccbe9' : '#033566',
       alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }} pointerEvents="none">
       {coinUrl
-        ? <View style={{ width: size * 0.8, height: size * 0.8, borderRadius: size, overflow: 'hidden' }}>
-            {/* The real coin, faded into the socket like a pressed outline. */}
-            <Image source={coinUrl} contentFit="contain" style={{ width: '100%', height: '100%', opacity: onLight ? 0.35 : 0.3 }} />
+        ? <View style={{ width: face, height: face, borderRadius: size, overflow: 'hidden' }}>
+            {/* The real coin face, faded into the socket like a pressed outline. Pinned left like
+                ShelfCoin (see COIN_ART_ASPECT) so the round face, not the 3/4 edge, is centred. */}
+            <Image source={coinUrl} contentFit={artAspect >= 1 ? 'fill' : 'contain'}
+              onLoad={event => setArtAspect(prev => loadedArtAspect(event.source, prev))}
+              style={{ position: 'absolute', left: 0, top: 0, height: face, width: face * Math.max(1, artAspect),
+                opacity: onLight ? 0.35 : 0.3 }} />
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
               backgroundColor: onLight ? 'rgba(215,238,252,0.35)' : 'rgba(5,80,154,0.35)' }} />
           </View>
