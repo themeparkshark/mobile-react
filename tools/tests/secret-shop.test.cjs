@@ -235,6 +235,14 @@ test('rig performance budget: at most 24 animated views at full LOD per rig', ()
   for (const b of geometry.rigs.midway_fireworks.bursts) assert.ok(b.cx >= 0.15 && b.cx <= 0.85 && b.cy >= 0.08, JSON.stringify(b));
 });
 
+test('every moment-cue progress function is a worklet (a plain function crashes on the UI thread)', () => {
+  for (const file of fs.readdirSync(path.join(root, 'src/fx/rigs'))) {
+    const code = src(`src/fx/rigs/${file}`);
+    const calls = [...code.matchAll(/useMomentCue\(([^,]*?)=>\s*(\{\s*'worklet'|\()/g)];
+    for (const call of calls) assert.ok(call[2].includes("'worklet'"), `${file}: useMomentCue progress must start with 'worklet'`);
+  }
+});
+
 test('Reduce Motion is read inside the shark stage and every tile, so no screen can forget it', () => {
   assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);\s*const lod: FxLod = still \|\| reduced \? 'still' : fxLod;/);
   const solo = src('src/fx/FxSolo.tsx');
