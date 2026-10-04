@@ -830,11 +830,15 @@
     "\\b(someone|somebody|a\\s+man|a\\s+guy|a\\s+lady|a\\s+woman|an\\s+older\\s+(kid|boy|girl|guy|man))\\b.{0,60}\\b(touch\\w*\\s+me|took\\s+(a\\s+)?(my\\s+)?(picture|pic|photo)s?\\s+of\\s+me|keep\\s+it\\s+(a\\s+)?secret)\\b"
   ],
   "disclosure_playful": [
+    "\\b(best|funniest|greatest|coolest)\\s+(\\w+\\s+){0,2}ever\\b",
     "\\b(lol|lmao|haha+|hehe|jk|lolol)\\b",
     "\\bbeat\\s+me\\s+(at|in)\\b",
     "\\bwith\\s+a\\s+(pool\\s+noodle|pillow|nerf|snowball|water\\s+(balloon|gun)|foam)\\b",
     "\\bunder\\s+the\\s+table\\b",
     "\\b(laughing|giggling|playing|tickl\\w*|wrestl\\w*|pillow\\s+fight|tag\\b|game)\\b"
+  ],
+  "distress_hyperbole": [
+    "\\b(made\\s+me\\s+(feel\\s+like|think)|felt\\s+like|thought)\\s+i\\s+(was|were)\\s+(gonna|going\\s+to)\\s+die\\b"
   ],
   "disclosure_strong": [
     "\\b(touch\\w*|secret|dont\\s+tell|not\\s+to\\s+tell|belt|locks?\\s+me\\s+in|locked\\s+me\\s+in|feel\\s+safe|if\\s+i\\s+tell|asking\\s+me\\s+for\\s+(pics|pictures|photos|nudes))\\b"

@@ -126,7 +126,7 @@ export const DRAFT_LINES: Readonly<Record<DraftProblem, string>> = {
   too_long: 'That is a lot of words! Try a shorter post.',
   personal_info: `Stay safe! Don't share phone numbers, addresses, emails or other apps. ${SAFE_LINE}`,
   grooming: `Let's keep it about parks. Don't ask people their age, school, or where they are. ${SAFE_LINE}`,
-  link: "Links can't be posted here.",
+  link: `Links can't be posted here. ${SAFE_LINE}`,
 };
 
 /*
@@ -428,6 +428,17 @@ export function hasLink(text: string): boolean {
  * block: the composer shows CARE_LINE and the server holds the post for a grown-up.
  */
 export function isDistress(text: string): boolean {
+  return distressWords(text) && !isPlayfulHyperbole(text);
+}
+
+/** Same as SafeText::isPlayfulHyperbole: "made me feel like I was going to die lol" is a quiet care check, not 988. */
+const DISTRESS_HYPERBOLE = compile(RULES.distress_hyperbole);
+function isPlayfulHyperbole(text: string): boolean {
+  const all = forms(text);
+  return matchesAny(DISTRESS_HYPERBOLE, all) && matchesAny(DISCLOSURE_PLAYFUL, all);
+}
+
+function distressWords(text: string): boolean {
   if (text.trim() === '') return false;
   if (matchesAny(DISTRESS, forms(text))) return true;
   // The broad care net: "i" / "me" / "my" within a few words of a death or self-harm word.
@@ -438,6 +449,7 @@ export function isDistress(text: string): boolean {
 /** Same as SafeText::isCareCheck: the wide care check. Dustin-facing only (the post is held anyway), never shown to the kid. */
 export function isCareCheck(text: string): boolean {
   if (text.trim() === '') return false;
+  if (distressWords(text) && isPlayfulHyperbole(text)) return true;
   const words = [wordForm(text, false), wordForm(text)].map((w) => [...CARE_EXEMPT, ...CARE_WIDE_EXEMPT].reduce((acc, re) => acc.replace(re, ' '), w));
   return matchesAny(CARE_WIDE, words);
 }
