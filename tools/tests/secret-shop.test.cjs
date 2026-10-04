@@ -257,6 +257,17 @@ test('every moment-cue progress function is a worklet (a plain function crashes 
   }
 });
 
+test('every worklet helper is declared above its first use (the Reanimated plugin does not hoist worklets)', () => {
+  const files = ['src/fx/registry.ts', ...fs.readdirSync(path.join(root, 'src/fx/rigs')).map(f => `src/fx/rigs/${f}`)];
+  for (const file of files) {
+    const code = src(file);
+    for (const m of code.matchAll(/function (\w+)\([^)]*\)[^{]*\{\s*'worklet'/g)) {
+      const first = code.search(new RegExp(`\\b${m[1]}\\(`));
+      assert.ok(first >= m.index, `${file}: ${m[1]} is used above its declaration`);
+    }
+  }
+});
+
 test('Reduce Motion is read inside the shark stage and every tile, so no screen can forget it', () => {
   assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);\s*const lod: FxLod = still \|\| reduced \? 'still' : fxLod;/);
   const solo = src('src/fx/FxSolo.tsx');
