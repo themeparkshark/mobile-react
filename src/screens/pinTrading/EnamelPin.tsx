@@ -82,18 +82,19 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
   useAnimatedReaction(
     () => (shine ? shine.value * (1 + lagSpan) - lag : -1),
     p => {
-      const on = p > 0 && p < 1;
-      if (on) local.value = p;
+      // The visible band crosses the pin in the middle 40% of its window: only then does the canvas redraw.
+      const q = (p - 0.3) / 0.4;
+      if (q > 0 && q < 1) local.value = q;
       else if (local.value !== -1) local.value = -1;
     },
-    [lag, lagSpan],
+    [lag, lagSpan, shine],
   );
   const shineStart = useDerivedValue(() => {
-    const t = local.value * 1.6 - 0.3;
+    const t = local.value * 1.5 - 0.25;
     return vec(pad + size * (t - 0.35), pad + size * (t - 0.35));
   });
   const shineEnd = useDerivedValue(() => {
-    const t = local.value * 1.6 - 0.3;
+    const t = local.value * 1.5 - 0.25;
     return vec(pad + size * (t + 0.05), pad + size * (t + 0.05));
   });
   const shineOn = useDerivedValue(() => (local.value >= 0 ? 1 : 0));

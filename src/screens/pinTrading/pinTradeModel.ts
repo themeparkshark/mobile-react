@@ -103,7 +103,7 @@ export const PIN_TRADE_COPY = {
   boardEyebrow: 'Trading board',
   boardTitle: 'Swap pins with the board',
   steps: [
-    { icon: 'pin' as GameIconName, label: 'Pick a pin' },
+    { icon: 'star' as GameIconName, label: 'Pick a pin' },
     { icon: 'swap' as GameIconName, label: 'Give one of yours' },
     { icon: 'gift' as GameIconName, label: "It's yours!" },
   ],
@@ -129,7 +129,7 @@ export const PIN_TRADE_COPY = {
   expiredTitle: 'Time ran out',
   expiredMessage: 'The pin went back on the board.',
   holdAgain: 'Try again',
-  takenMessage: 'Someone got this pin first. Pick another one!',
+  takenMessage: 'Someone got it first. Pick another pin!',
   failedTitle: "Trade didn't go through",
   failedMessage: 'Your pins are safe. Give it another try.',
   tryAgain: 'Try again',

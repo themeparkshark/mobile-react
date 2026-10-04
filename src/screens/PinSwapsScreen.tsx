@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withTiming,
+  cancelAnimation, FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useSharedValue, withTiming, ZoomIn,
 } from 'react-native-reanimated';
 import { vsprintf } from 'sprintf-js';
 import getPins from '../api/endpoints/me/pins';
@@ -43,7 +43,7 @@ import TradeSheet from './pinTrading/TradeSheet';
 import { beat, preloadTradeAudio } from './pinTrading/tradeAudio';
 import { warmPinImages } from './pinTrading/pinImageCache';
 
-/** Trades this app session (for the "Trade #n today!" line). */
+/** Trades since this screen opened (for the "Trade #n this visit!" line). */
 let sessionTrades = 0;
 
 const CORK = require('../../assets/images/screens/pin-swaps/corkboard.png');
@@ -121,6 +121,8 @@ export default function PinSwapsScreen() {
   const confirmAt = useRef(0);
   const pinsPage = useRef({ next: 1, finished: false, loading: false, token: 0 });
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** After the first load, cards don't fade in (a refreshed board lands in one beat). */
+  const quietBoard = useRef(false);
   const live = useRef({ board: [] as PinSwapType[], busyId: null as number | null, owned: new Set<number>(), pinsCount: 0, pinsKnown: false, lastGiven: null as number | null });
   holdRef.current = hold;
   phaseRef.current = phase;
@@ -175,6 +177,7 @@ export default function PinSwapsScreen() {
 
   useEffect(() => {
     if (!signedIn) return;
+    sessionTrades = 0;
     preloadTradeAudio();
     void loadBoard('first');
     void loadPins(true, true);
@@ -240,7 +243,7 @@ export default function PinSwapsScreen() {
     }
     if (swap.pin.item.id === now.lastGiven) {
       beat('ui.select');
-      gameAlert(COPY.yoursTitle, COPY.yoursMessage, undefined, { icon: 'pin' });
+      gameAlert(COPY.yoursTitle, COPY.yoursMessage, undefined, { icon: 'info' });
       return;
     }
     if (now.pinsKnown && now.pinsCount === 0) {
@@ -294,7 +297,7 @@ export default function PinSwapsScreen() {
     const h = holdRef.current;
     if (!h || phaseRef.current === 'sending') return;
     setPhase('expired');
-    // Gentle: a soft close and one warning tap, not a fail buzz (nothing was lost).
+    // Gentle: a soft close, no buzz (nothing was lost).
     beat('fx.purchaseCancel', { volume: 0.6 });
     void unHoldPinSwap(h.swap.id).catch(() => undefined);
   }, []);
@@ -308,9 +311,32 @@ export default function PinSwapsScreen() {
   const onSelect = useCallback((item: ItemType) => {
     if (phaseRef.current !== 'picking' && phaseRef.current !== 'confirming') return;
     setPhase('picking');
+    warmPinImages([item.icon_url]);
     setSelected(prev => (prev?.id === item.id ? prev : item));
     beat('ui.select', { volume: 0.8 }, 'tickSelection', 1);
   }, []);
+
+  /**
+   * Board, ribbons and your pins land in one beat once the new art is in. If your pins fail to load,
+   * the board still updates (with the pins you had) so it is never left stale.
+   */
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [swaps, mine] = await Promise.all([getPinSwaps(), fetchAllPins().catch(() => null)]);
+      const urls = swaps.map(sw => sw.pin.item.icon_url);
+      warmPinImages(urls);
+      await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(res => setTimeout(res, 1500))]);
+      quietBoard.current = true;
+      if (mine) {
+        pinsPage.current = { next: MAX_PIN_PAGES + 1, finished: true, loading: false, token: pinsPage.current.token + 1 };
+        setPins(mine);
+        setPinsReady(true);
+      } else void loadPins(true, true);
+      setBoard(swaps.map(boardEntry));
+      setBoardState('ready');
+    } catch { /* keep the old board */ } finally { setRefreshing(false); }
+  }, [loadPins]);
 
   const trade = useCallback(async () => {
     const h = holdRef.current;
@@ -347,14 +373,13 @@ export default function PinSwapsScreen() {
         setSelected(undefined);
         beat('ui.modalClose', { volume: 0.6 });
         gameAlert(COPY.ownedTitle, COPY.ownedEndMessage, undefined, { icon: 'info' });
-        void loadBoard('refresh');
-        void loadPins(true, true);
+        void refreshAll();
         return;
       }
       beat('fx.nope', { volume: 0.7 }, 'failBuzz', 2);
       setPhase(kind === 'taken' ? 'taken' : 'failed');
     }
-  }, [loadBoard, loadPins, onExpire, showError]);
+  }, [onExpire, refreshAll, showError]);
 
   const onTradePress = useCallback(() => { void trade(); }, [trade]);
 
@@ -372,24 +397,8 @@ export default function PinSwapsScreen() {
     setSelected(undefined);
     // Your pins changed (one out, one in); refresh both after the fade, then show them together
     // so the board never renders a pin you now own without its Got it ribbon.
-    finishTimer.current = setTimeout(() => {
-      setRefreshing(true);
-      void (async () => {
-        try {
-          const [swaps, mine] = await Promise.all([getPinSwaps(), fetchAllPins()]);
-          const urls = swaps.map(sw => sw.pin.item.icon_url);
-          warmPinImages(urls);
-          await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(r => setTimeout(r, 1500))]);
-          // One beat: the new board, its ribbons and your pins all land together.
-          pinsPage.current = { next: MAX_PIN_PAGES + 1, finished: true, loading: false, token: pinsPage.current.token + 1 };
-          setPins(mine);
-          setPinsReady(true);
-          setBoard(swaps.map(boardEntry));
-          setBoardState('ready');
-        } catch { /* keep the old board */ } finally { setRefreshing(false); }
-      })();
-    }, 240);
-  }, []);
+    finishTimer.current = setTimeout(() => { void refreshAll(); }, 240);
+  }, [refreshAll]);
 
   const timerLabel = useCallback((clock: string, minutes: number, seconds: string) => {
     const template = labels.trade_expiration;
@@ -485,7 +494,9 @@ export default function PinSwapsScreen() {
                   </View>
                   <View style={styles.grid}>
                     {board.map((swap, i) => (
-                      <Animated.View key={swap.id} entering={still ? undefined : FadeIn.delay(60 + i * 45).duration(220)}
+                      <Animated.View key={swap.id}
+                        entering={still || quietBoard.current ? (badgeFor(swap.pin.item) === 'yours' && !still ? ZoomIn.springify().damping(12) : undefined) : FadeIn.delay(60 + i * 45).duration(220)}
+                        layout={still ? undefined : LinearTransition.springify().damping(18)}
                         style={done && hold?.swap.id === swap.id ? { opacity: 0 } : undefined}>
                         <BoardPinCard item={swap.pin.item} swapId={swap.id} width={cellWidth} height={cardHeight} shine={shine}
                           lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}

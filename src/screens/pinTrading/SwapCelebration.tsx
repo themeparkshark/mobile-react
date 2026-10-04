@@ -23,7 +23,7 @@ import { memo, useEffect, useMemo, useRef } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, FadeIn, FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
-  withSpring, withTiming, type SharedValue,
+  withSpring, withTiming, runOnJS, useAnimatedReaction, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Ellipse, Polygon, RadialGradient, Stop } from 'react-native-svg';
@@ -33,8 +33,9 @@ import { textPreset } from '../../ui/TextPresets';
 import { rng } from '../stampbook/SlamFx';
 import EnamelPin from './EnamelPin';
 import type { SlotRect } from './PinTradeParts';
-import { PIN_TRADE_COPY as COPY, pinName, SWAP_TIMELINE as T } from './pinTradeModel';
+import { balanceName, PIN_TRADE_COPY as COPY, pinName, SWAP_TIMELINE as T } from './pinTradeModel';
 import { beat, stopBeat } from './tradeAudio';
+import { queueHaptic } from '../../gamekit/Haptics';
 
 const SHARK = require('../../../assets/images/howto/shark-happy.webp');
 const never = { reduceMotion: ReduceMotion.Never } as const;
@@ -80,19 +81,25 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const mx = (g0.x + v0.x) / 2;
   // The pins meet at the top of the toss, high above the spotlight, then the new one slams down into it.
   // Clamped below the top bar so the exchange stays in the lit band of the screen.
-  const my = Math.max(insets.top + 64 + startSize / 2 + 12, Math.min((g0.y + v0.y) / 2 - 16, cy - 150));
+  const my = Math.max(insets.top + 64 + startSize / 2 + 12, Math.min((g0.y + v0.y) / 2 - 16, cy - 210));
   const arc = Math.min(110, Math.abs(v0.x - g0.x) * 0.45);
   const crossAt = (T.cross - T.travel) / (T.land - T.travel);
   /** Seeded per trade: which way the new pin spins in (the 10th trade is not a copy of the 1st). */
   const spinDir = (got.id + gave.id) % 2 === 0 ? 1 : -1;
   const riser = useRef(0);
 
+  const crossBeat = () => { if (!landed.current) beat('fx.firework', { volume: 0.4, pitch: 4 }, 'hitMedium', 2); };
+  // The cross sound fires when the pins actually meet on screen.
+  useAnimatedReaction(() => travel.value >= crossAt, (now, before) => {
+    if (now && before === false) runOnJS(crossBeat)();
+  }, [crossAt]);
+  const runLandRef = () => runLand();
   const runLand = () => {
     if (landed.current) return;
     landed.current = true;
     timers.current.forEach(clearTimeout);
     timers.current.length = 0;
-    travel.value = 1;
+    if (travel.value < 1) { cancelAnimation(travel); travel.value = 1; }
     land.value = withTiming(1, { duration: 1, ...never });
     squash.value = withSequence(withTiming(1, { duration: 60 }), withSpring(0, { damping: 6, stiffness: 300, mass: 0.5 }));
     shake.value = 0;
@@ -116,6 +123,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     beat('fx.firework', { volume: 1, pitch: -5 }, 'comboHeavy', 4);
     beat('fx.hit', { volume: 1 });
     beat('ui.complete', { volume: 1 });
+    // A light success tail after the heavy impact.
+    timers.current.push(setTimeout(() => queueHaptic('success', 2), 180));
   };
 
   useEffect(() => {
@@ -130,13 +139,16 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     bg.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad), ...never });
     lift.value = withTiming(1, { duration: T.travel, easing: Easing.out(Easing.back(2.2)) });
     // Linear clock; the worklets shape it (steady to the cross, accelerating into the land).
-    travel.value = withDelay(T.travel, withTiming(1, { duration: T.land - T.travel, easing: Easing.linear }));
+    // The land fires from the flight's own completion on the UI thread, so it can never run ahead of
+    // (or behind) the pin, however busy the JS thread is. A JS fallback only covers a cancelled flight.
+    travel.value = withDelay(T.travel, withTiming(1, { duration: T.land - T.travel, easing: Easing.linear }, finished => {
+      if (finished) runOnJS(runLandRef)();
+    }));
     hit.value = withDelay(T.cross, withTiming(1, { duration: 380, easing: Easing.out(Easing.quad) }));
     // The cross flash holds full for 3 frames, then fades.
-    flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 16 }), withDelay(50, withTiming(0, { duration: 160 }))));
+    flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 16 }), withDelay(34, withTiming(0, { duration: 140 }))));
     t.push(setTimeout(() => { riser.current = beat('fx.whooshRev', { volume: 0.9 }, 'tapLight', 1); }, 0));
-    t.push(setTimeout(() => beat('fx.firework', { volume: 0.4, pitch: 4 }, 'hitMedium', 2), T.cross));
-    t.push(setTimeout(runLand, T.land));
+    t.push(setTimeout(runLand, T.land + 300));
     return () => {
       t.forEach(clearTimeout);
       [lift, travel, hit, flash, land, squash, shake, burst, shine, spin, bg, textIn, button, bob].forEach(v => cancelAnimation(v));
@@ -170,13 +182,16 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     } else {
       const u = (t - crossAt) / (1 - crossAt);
       // Falling from the apex, accelerating: fastest on the land frame, but visible on the way down.
-      const e = Math.pow(u, 1.6);
+      const e = Math.pow(u, 1.5);
       x = mx + (cx - mx) * e;
-      y = my + (cy - my) * e;
+      // Starts exactly where the toss ended (no dip or jump at the meeting).
+      y = my - 18 + (cy - (my - 18)) * e;
     }
     const popUp = lift.value;
-    const stretch = t > 0.85 && t < 1 ? (t - 0.85) / 0.15 : 0;
-    const grow = g0.size * (1 + 0.15 * popUp) + (bigSize - g0.size * 1.15) * t * t;
+    const stretch = t > 0.75 && t < 1 ? Math.sin(((t - 0.75) / 0.25) * Math.PI * 0.5) : 0;
+    // Grows mostly during the toss (about 85% by the meeting), so the fall reads as movement, not a zoom.
+    const growT = Math.min(1, 1 - (1 - t) * (1 - t));
+    const grow = g0.size * (1 + 0.15 * popUp) + (bigSize - g0.size * 1.15) * growT;
     const sq = squash.value;
     return {
       transform: [
@@ -284,13 +299,18 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
 
         </Animated.View>
 
-        <Animated.View pointerEvents="none" style={[styles.copyShade, { top: cy + bigSize * 0.62 }, bgStyle]}>
-          <LinearGradient colors={['rgba(4,18,46,0)', 'rgba(4,18,46,0.75)', 'rgba(4,18,46,0.9)']} locations={[0, 0.25, 1]} style={StyleSheet.absoluteFill} />
+        <Animated.View pointerEvents="none" style={[styles.topShade, { height: insets.top + 150 }, bgStyle]}>
+          <LinearGradient colors={['rgba(4,18,46,0.85)', 'rgba(4,18,46,0)']} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[styles.copyShade, { top: cy + bigSize * 0.55 }, bgStyle]}>
+          <LinearGradient colors={['rgba(4,18,46,0)', 'rgba(4,18,46,0.92)', 'rgba(4,18,46,0.97)']} locations={[0, 0.22, 1]} style={StyleSheet.absoluteFill} />
         </Animated.View>
         <Animated.View style={[styles.copy, { top: cy + bigSize * 0.72 }, textStyle]} pointerEvents="none">
           <Text maxFontSizeMultiplier={1.15} style={[textPreset('hero', 'onBlue'), styles.title, compact && { fontSize: 38, lineHeight: 44 }]}>{COPY.doneTitle}</Text>
           <View style={styles.subPill}>
-            <Text maxFontSizeMultiplier={1.25} style={styles.sub}>{COPY.doneMessage(name)}</Text>
+            <Text maxFontSizeMultiplier={1.25} style={[styles.sub, compact && { fontSize: 17, lineHeight: 22 }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>
+              {balanceName(COPY.doneMessage(name), 26)}
+            </Text>
           </View>
           <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave))}`}>
             <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={34} surface="none" flat recyclingKey={`mine-${gave.id}`} /></View>
@@ -303,8 +323,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
         </Animated.View>
         {/* Alex's shark stands on the spotlight's floor beside the pin, looking at it. */}
         <Animated.View pointerEvents="none" style={[styles.shark, { right: SPACE.lg, top: cy + bigSize * 0.5 - 98 }, sharkStyle]}>
-          <Image source={SHARK} style={{ width: 84, height: 94, transform: [{ scaleX: -1 }] }} contentFit="contain" />
-          <View style={styles.sharkFloor} />
+          <View style={{ position: 'absolute', bottom: -6, left: 8 }}><FloorShadow width={62} height={14} strong /></View>
+          <Image source={SHARK} style={{ width: 84, height: 94 }} contentFit="contain" />
         </Animated.View>
       </Pressable>
       <Animated.View style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + (compact ? SPACE.sm : SPACE.xl) }, buttonStyle]}>
@@ -359,12 +379,12 @@ const GlowRays = memo(function GlowRays({ size, seed }: { size: number; seed: nu
 });
 
 /** Soft elliptical floor shadow under the landed pin. */
-const FloorShadow = memo(function FloorShadow({ width, height }: { width: number; height: number }) {
+const FloorShadow = memo(function FloorShadow({ width, height, strong = false }: { width: number; height: number; strong?: boolean }) {
   return (
     <Svg width={width} height={height}>
       <Defs>
         <RadialGradient id="pinFloor" cx="50%" cy="50%" rx="50%" ry="50%">
-          <Stop offset="0" stopColor="#010f2a" stopOpacity="0.55" />
+          <Stop offset="0" stopColor="#010f2a" stopOpacity={strong ? 0.7 : 0.55} />
           <Stop offset="1" stopColor="#010f2a" stopOpacity="0" />
         </RadialGradient>
       </Defs>
@@ -385,10 +405,22 @@ const Flash = memo(function Flash({ size }: { size: number }) {
           <Stop offset="1" stopColor="#ffcf3b" stopOpacity="0" />
         </RadialGradient>
       </Defs>
-      <Circle cx={size / 2} cy={size / 2} r={size / 2} fill="url(#pinFlash)" />
+      <Circle cx={size / 2} cy={size / 2} r={size * 0.28} fill="url(#pinFlash)" />
+      {/* A white 6-point star burst: reads as a hit, not a glow ball. */}
+      <Polygon points={starPoints(size / 2, size * 0.48, size * 0.1, 6)} fill="#ffffff" opacity={0.95} />
     </Svg>
   );
 });
+
+function starPoints(c: number, outer: number, inner: number, n: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 ? inner : outer;
+    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
+    pts.push(`${(c + Math.cos(a) * r).toFixed(1)},${(c + Math.sin(a) * r).toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
 
 /** 10 gold sparks thrown out from the meeting point, driven by the cross value. */
 function Sparks({ x, y, hit, seed }: { x: number; y: number; hit: SharedValue<number>; seed: number }) {
@@ -452,7 +484,7 @@ function Bit({ x, y, ox, oy, vx, vy, spin, w, h, color, delay, burst }: {
 const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   pin: { position: 'absolute', left: 0, top: 0 },
-  ring: { position: 'absolute', borderWidth: 7, borderColor: '#ffe07a' },
+  ring: { position: 'absolute', borderWidth: 5, borderColor: '#fff6d6' },
   spark: { position: 'absolute', backgroundColor: '#fff2b8' },
   newStamp: {
     backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 4,
@@ -460,6 +492,7 @@ const styles = StyleSheet.create({
   },
   newStampText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, letterSpacing: 0.6, textTransform: 'uppercase', paddingTop: 2 },
   copyShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  topShade: { position: 'absolute', left: 0, right: 0, top: 0 },
   copy: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center', gap: SPACE.sm },
   title: { textAlign: 'center', color: BRAND.white, fontSize: 46, lineHeight: 52 },
   subPill: { backgroundColor: 'rgba(5,52,110,0.9)', borderRadius: 999, paddingHorizontal: SPACE.lg, paddingVertical: 6, borderWidth: 2, borderColor: 'rgba(255,224,122,0.6)' },
@@ -470,6 +503,5 @@ const styles = StyleSheet.create({
   gaveChip: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.white },
   gaveLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: '#e2f6ff' },
   shark: { position: 'absolute', alignItems: 'center' },
-  sharkFloor: { width: 64, height: 10, borderRadius: 32, marginTop: -8, backgroundColor: 'rgba(1,12,34,0.45)' },
   cta: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center' },
 });
