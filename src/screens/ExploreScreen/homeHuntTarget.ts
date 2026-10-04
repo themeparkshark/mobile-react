@@ -20,7 +20,7 @@ function metersBetween(a: { latitude: number; longitude: number }, b: { latitude
 /**
  * Offer a quick pickup first, then a missing book slot within a reasonable
  * detour. A distant new variant should not hide a spare the player can collect
- * now for Ticket progress and the four-spare exchange.
+ * now for Ticket progress.
  */
 export function nearestHomeHuntTarget(
   items: readonly PrepItemType[],
