@@ -50,13 +50,23 @@ export function useFxRunning(lod: FxLod): boolean {
   return lod !== 'still' && focused && active && !paused;
 }
 
-/** The stage clock in ms. Starts at `start` so a still stage shows the rest pose. */
-export function useFxClock(running: boolean, start = 0): SharedValue<number> {
+/**
+ * The stage clock in ms. Starts at `start` so a still stage shows the rest
+ * pose. `every` > 1 advances it on every Nth frame only (shop tiles tick at
+ * 30 Hz: half the commits, and at tile size nobody can tell; perf round 2).
+ */
+export function useFxClock(running: boolean, start = 0, every = 1): SharedValue<number> {
   const t = useSharedValue(start);
+  const pending = useSharedValue(0);
+  const frames = useSharedValue(0);
   const frame = useFrameCallback((info) => {
     'worklet';
     // Cap the step so a hitch never teleports a particle across the stage.
-    t.value += Math.min(info.timeSincePreviousFrame ?? 16, 50);
+    pending.value += Math.min(info.timeSincePreviousFrame ?? 16, 50);
+    frames.value += 1;
+    if (frames.value % every !== 0) return;
+    t.value += pending.value;
+    pending.value = 0;
   }, false);
   useEffect(() => {
     frame.setActive(running);

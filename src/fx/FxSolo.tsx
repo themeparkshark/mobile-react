@@ -75,7 +75,7 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
   const reduced = useReducedGameMotion();
   const lod: FxLod = still || reduced ? 'still' : 'lite';
   const running = useFxRunning(lod);
-  const t = useFxClock(running);
+  const t = useFxClock(running, 0, 2);
   const kick = useFxKick();
   useEffect(() => {
     // Staggered by piece, so tiles waking together read as a ripple, not one synchronized burst.
