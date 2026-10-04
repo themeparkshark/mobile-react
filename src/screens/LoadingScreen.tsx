@@ -166,6 +166,11 @@ export default function LoadingScreen() {
       RootNavigation.navigate('Leaderboard', { tab: process.env.EXPO_PUBLIC_STANDINGS_TAB });
       return;
     }
+    // Dev only: EXPO_PUBLIC_PIN_TRADING_PREVIEW=1 lands on Pin Trading for screen captures.
+    if (__DEV__ && process.env.EXPO_PUBLIC_PIN_TRADING_PREVIEW === '1') {
+      RootNavigation.navigate('PinSwaps');
+      return;
+    }
     RootNavigation.navigate('Explore');
   };
 
