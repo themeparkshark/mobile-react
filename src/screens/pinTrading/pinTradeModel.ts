@@ -116,7 +116,8 @@ export const PIN_TRADE_COPY = {
   get: 'You get',
   give: 'You give',
   pickPrompt: 'Pick one of your pins',
-  pickFirst: 'Pick a pin above',
+  pickFirst: 'Tap one of your pins',
+  yourPin: 'Your pin',
   noPinsTitle: 'No pins to trade yet',
   noPinsMessage: 'Collect pins around the parks, then come back to swap.',
   backToBoard: 'Back to board',
@@ -125,13 +126,21 @@ export const PIN_TRADE_COPY = {
   confirmLabel: 'Yes, trade!',
   confirmBack: 'Wait, go back',
   expiredTitle: 'Time ran out',
-  expiredMessage: 'The pin went back on the board. Tap it to try again.',
+  expiredMessage: 'The pin went back on the board.',
+  holdAgain: 'Try again',
+  takenMessage: 'Someone got this pin first. Pick another one!',
   failedTitle: "Trade didn't go through",
   failedMessage: 'Your pins are safe. Give it another try.',
   tryAgain: 'Try again',
   doneTitle: 'Pin traded!',
   doneMessage: (got: string) => `You got the ${got}!`,
   doneAction: 'Awesome!',
+  doneGave: (gave: string) => `Your ${gave} is on the board for another fan.`,
+  newStamp: 'New!',
+  gotIt: 'Got it',
+  fromYou: 'From you',
+  hurry: 'Hurry!',
+  noPinsHint: 'You need a pin of your own to trade. Collect pins around the parks!',
   takenTitle: 'Pin is taken',
   ownedTitle: 'You have this one',
   ownedMessage: "Pick a pin you don't have yet.",
@@ -143,7 +152,7 @@ export const PIN_TRADE_COPY = {
   signIn: 'Sign in',
 } as const;
 
-export type TradePhase = 'loading' | 'picking' | 'confirming' | 'sending' | 'expired' | 'failed';
+export type TradePhase = 'loading' | 'picking' | 'confirming' | 'sending' | 'expired' | 'failed' | 'taken';
 
 /** Phases where the pin is still held for you (leaving lets it go back on the board). */
 export function isHolding(phase: TradePhase): boolean {
@@ -152,15 +161,34 @@ export function isHolding(phase: TradePhase): boolean {
 
 export type StatusChip = { readonly label: string; readonly icon: GameIconName; readonly tone: 'gold' | 'blue' | 'red' | 'green' };
 
-/** The status chip on the trade sheet for each phase. */
-export function statusChip(phase: TradePhase): StatusChip {
+/** The status chip on the trade sheet for each phase. `hurry` turns the picking chip red under 30 s. */
+export function statusChip(phase: TradePhase, hurry = false): StatusChip {
   switch (phase) {
-    case 'confirming': return { label: 'Ready to trade', icon: 'swap', tone: 'blue' };
+    case 'confirming': return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'Ready to trade', icon: 'swap', tone: 'blue' };
     case 'sending': return { label: 'Trading', icon: 'swap', tone: 'blue' };
     case 'expired': return { label: "Time's up", icon: 'timer', tone: 'red' };
     case 'failed': return { label: 'Not traded', icon: 'close', tone: 'red' };
-    default: return { label: 'On hold for you', icon: 'lock', tone: 'gold' };
+    case 'taken': return { label: 'Taken', icon: 'lock', tone: 'red' };
+    default: return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'On hold for you', icon: 'lock', tone: 'gold' };
   }
+}
+
+/**
+ * Two-line names break near the middle ("Astronaut / Shark Pin"), never
+ * leaving "Pin" alone on the second line. Short names stay on one line.
+ */
+export function balanceName(name: string, oneLine = 14): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (name.length <= oneLine || words.length < 2) return name;
+  let best = 1;
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ').length;
+    const b = words.slice(i).join(' ').length;
+    const diff = Math.abs(a - b) + (b < 5 ? 100 : 0);
+    if (diff < bestDiff) { bestDiff = diff; best = i; }
+  }
+  return `${words.slice(0, best).join(' ')}\n${words.slice(best).join(' ')}`;
 }
 
 /**
@@ -168,9 +196,18 @@ export function statusChip(phase: TradePhase): StatusChip {
  * same marks the Reanimated timings use, so audio, haptic and motion land together.
  */
 export const SWAP_TIMELINE = {
+  /** Both pins pop up out of their slots. */
   lift: 0,
-  cross: 490,
-  land: 980,
-  title: 1120,
-  button: 1500,
+  /** They start to travel (the riser swells into the cross). */
+  travel: 180,
+  /** They meet: flash, sparks, pop. */
+  cross: 520,
+  /** The new pin hits the centre at full speed: squash, shake, rays, confetti, jingle. */
+  land: 880,
+  /** Words after the pin: the eye lands on the pin first. */
+  title: 1000,
+  button: 1400,
 } as const;
+
+/** Haptics fire this long after their sound starts, so the buzz never leads the audio. */
+export const HAPTIC_AFTER_AUDIO_MS = 50;

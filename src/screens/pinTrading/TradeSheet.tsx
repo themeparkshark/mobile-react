@@ -1,15 +1,19 @@
 /**
  * The trade sheet: opens when a board pin is held for you. It shows what you
  * get and what you give side by side, the hold timer, your tradeable pins,
- * and the Trade button. Expired and failed trades stay on the sheet with a
- * clear status instead of vanishing.
+ * and a two-step Trade button. Expired, taken and failed trades stay on the
+ * sheet with a clear status and a way forward instead of vanishing.
  *
  * Rendered inside the screen (not a native Modal), so GameDialog prompts and
- * the trade-complete moment layer above it.
+ * the trade-complete moment layer above it. The scrim never closes the sheet:
+ * only the X, "Not now" and "Back to board" do, so a stray tap can't drop a hold.
  */
-import { useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, ReduceMotion, type SharedValue } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation, FadeIn, FadeOut, ReduceMotion, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withRepeat,
+  withSequence, withTiming, ZoomIn, type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ItemType } from '../../models/item-type';
 import type { PinSwapType } from '../../models/pin-swap-type';
@@ -36,7 +40,10 @@ export type TradeSheetProps = {
   readonly onClose: () => void;
   /** Confirming: back to picking. */
   readonly onBack: () => void;
+  /** Expired: hold the same pin again. */
+  readonly onHoldAgain: () => void;
   readonly onExpire: () => void;
+  readonly onTick: (secondsLeft: number) => void;
   readonly onRetryPins: () => void;
   readonly onMorePins: () => void;
   readonly onSlot?: (which: 'get' | 'give', rect: SlotRect) => void;
@@ -45,65 +52,108 @@ export type TradeSheetProps = {
 };
 
 const COLUMNS = 4;
+const fade = (ms: number) => FadeIn.duration(ms).reduceMotion(ReduceMotion.Never);
+const fadeOut = (ms: number) => FadeOut.duration(ms).reduceMotion(ReduceMotion.Never);
 
-export default function TradeSheet(props: TradeSheetProps) {
+/** "Tap one of your pins": plain words with a nudging arrow, not a button shape. */
+function PickHint({ still }: { still: boolean }) {
+  const nudge = useSharedValue(0);
+  useEffect(() => {
+    if (still) return;
+    nudge.value = withRepeat(withSequence(withTiming(1, { duration: 380 }), withTiming(0, { duration: 380 })), -1, false);
+    return () => cancelAnimation(nudge);
+  }, [still, nudge]);
+  const arrow = useAnimatedStyle(() => ({ transform: [{ translateY: -nudge.value * 5 }, { rotate: '-90deg' }] }));
+  return (
+    <View style={styles.pickHint} accessible accessibilityLabel={COPY.pickFirst}>
+      <Animated.View style={arrow}><GameIcon name="arrow" size={26} /></Animated.View>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pickHintText}>{COPY.pickFirst}</Text>
+    </View>
+  );
+}
+
+/** The swap badge between the slots; it spins while the trade is in flight. */
+function SwapBadge({ spinning }: { spinning: boolean }) {
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    cancelAnimation(spin);
+    if (!spinning) { spin.value = 0; return; }
+    spin.value = withRepeat(withTiming(1, { duration: 700 }), -1, false);
+    return () => cancelAnimation(spin);
+  }, [spinning, spin]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+  return (
+    <View style={styles.swapBadge}><Animated.View style={style}><GameIcon name="swap" size={40} /></Animated.View></View>
+  );
+}
+
+function TradeSheet(props: TradeSheetProps) {
   const { swap, phase, deadline, totalMs, pins, pinsLoading, pinsError, selected, still, shine } = props;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const [room, setRoom] = useState(0);
+  const [hurry, setHurry] = useState(false);
   const sheetWidth = Math.min(width, 520);
   const inner = sheetWidth - SPACE.lg * 2 - OUTLINE.heavy * 2;
   const cell = Math.floor((inner - SPACE.sm * (COLUMNS - 1)) / COLUMNS);
   // Short phones (SE, 667 pt): smaller slots, one picker row (it scrolls), tighter gaps.
-  const [room, setRoom] = useState(0);
   const compact = height < 740;
   const slotSize = Math.min(compact ? 68 : 112, Math.round(inner * 0.3));
   const pickerRows = compact ? 1.25 : 2;
-  const ended = phase === 'expired' || phase === 'failed';
+  const ended = phase === 'expired' || phase === 'failed' || phase === 'taken';
   const sending = phase === 'sending';
   const confirming = phase === 'confirming' || sending;
+  useEffect(() => { setHurry(false); }, [deadline]);
 
   // Short phones: the second step hides the picker so both choices fit ("Wait, go back" returns to it).
   const showPicker = !ended && !(compact && confirming);
   const noPins = !pinsLoading && !pinsError && pins.length === 0;
+  const stamp = phase === 'expired' ? "Time's up" : phase === 'taken' ? 'Taken' : undefined;
+  const measureKey = `${phase}:${selected?.id ?? 0}:${pins.length > 0}:${room}`;
+  const endTitle = phase === 'expired' ? COPY.expiredTitle : phase === 'taken' ? COPY.takenTitle : COPY.failedTitle;
+  const endBody = phase === 'expired' ? COPY.expiredMessage : phase === 'taken' ? COPY.takenMessage : COPY.failedMessage;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={e => setRoom(e.nativeEvent.layout.height)}>
-      <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.Never)} exiting={FadeOut.duration(150).reduceMotion(ReduceMotion.Never)} style={[StyleSheet.absoluteFill, styles.scrim]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={sending ? undefined : props.onClose}
-          accessibilityRole="button" accessibilityLabel={COPY.notNow} />
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={e => setRoom(e.nativeEvent.layout.height)}
+      accessibilityViewIsModal>
+      <Animated.View entering={fade(180)} exiting={fadeOut(150)} style={[StyleSheet.absoluteFill, styles.scrim]}>
+        {/* Swallows taps on the dimmed board; it never closes the sheet. */}
+        <Pressable style={StyleSheet.absoluteFill} accessible={false} importantForAccessibility="no" />
       </Animated.View>
       <Animated.View
-        entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
-        exiting={still || props.handedOff ? FadeOut.duration(150).reduceMotion(ReduceMotion.Never) : SlideOutDown.duration(200).reduceMotion(ReduceMotion.Never)}
-        accessibilityViewIsModal
+        entering={still ? fade(180) : SlideInDown.springify().damping(18).stiffness(180).mass(0.9)}
+        exiting={still || props.handedOff ? fadeOut(150) : SlideOutDown.duration(200).reduceMotion(ReduceMotion.Never)}
         style={[styles.sheet, { width: sheetWidth, maxHeight: room ? room - SPACE.md : height * 0.85, paddingBottom: Math.max(insets.bottom, compact ? SPACE.sm : SPACE.lg) }, compact && { gap: SPACE.sm }]}
       >
         <View style={styles.grabber} />
         <View style={styles.topRow}>
-          <StatusChipView chip={statusChip(phase)} />
+          <StatusChipView chip={statusChip(phase, hurry && (phase === 'picking' || phase === 'confirming'))} />
           <Pressable onPress={props.onClose} disabled={sending} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
             <GameIcon name="close" size={36} />
           </Pressable>
         </View>
 
         <View style={styles.stage}>
-          <TradeSlot caption={COPY.get} item={swap.pin.item} hidden={props.handedOff} measureKey={`${phase}:${selected?.id ?? 0}:${pins.length > 0}`} tilt={pinTilt(swap.id)} size={slotSize} shine={shine} still={still}
-            onMeasure={rect => props.onSlot?.('get', rect)} />
-          <View style={styles.swapBadge}><GameIcon name="swap" size={40} /></View>
-          <TradeSlot caption={COPY.give} item={selected} hidden={props.handedOff} measureKey={`${phase}:${selected?.id ?? 0}:${pins.length > 0}`} tilt={selected ? pinTilt(selected.id, 5) : 0} size={slotSize} still={still}
-            placeholder={COPY.pickPrompt} onMeasure={rect => props.onSlot?.('give', rect)} />
+          <TradeSlot caption={COPY.get} item={swap.pin.item} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending}
+            tilt={pinTilt(swap.id)} size={slotSize} shine={shine} still={still} onMeasure={rect => props.onSlot?.('get', rect)} />
+          <SwapBadge spinning={sending && !still} />
+          <TradeSlot caption={COPY.give} item={phase === 'expired' || phase === 'taken' ? undefined : selected} hidden={props.handedOff}
+            measureKey={measureKey} charging={sending} tilt={selected ? pinTilt(selected.id, 5) : 0} size={slotSize} still={still}
+            placeholder={COPY.yourPin} onMeasure={rect => props.onSlot?.('give', rect)} />
         </View>
 
         {!ended && (
-          <TradeTimer deadline={deadline} totalMs={totalMs} frozen={sending} still={still} label={props.timerLabel} onExpire={props.onExpire} />
+          <TradeTimer deadline={deadline} totalMs={totalMs} frozen={sending} still={still} label={props.timerLabel}
+            onExpire={props.onExpire} onTick={props.onTick} onUrgent={() => setHurry(true)} />
         )}
 
         {ended && (
-          <Animated.View entering={still ? undefined : FadeIn.duration(200).reduceMotion(ReduceMotion.Never)} style={styles.endCard}>
-            <GameIcon name={phase === 'expired' ? 'timer' : 'info'} size={44} />
+          <Animated.View entering={still ? undefined : fade(200)} style={styles.endCard} accessible accessibilityLiveRegion="polite"
+            accessibilityLabel={`${endTitle}. ${endBody}`}>
+            <GameIcon name={phase === 'expired' ? 'timer' : phase === 'taken' ? 'lock' : 'close'} size={44} />
             <View style={{ flex: 1 }}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endTitle}>{phase === 'expired' ? COPY.expiredTitle : COPY.failedTitle}</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endBody}>{phase === 'expired' ? COPY.expiredMessage : COPY.failedMessage}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endTitle}>{endTitle}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endBody}>{endBody}</Text>
             </View>
           </Animated.View>
         )}
@@ -144,26 +194,23 @@ export default function TradeSheet(props: TradeSheetProps) {
         <View style={styles.actions}>
           {phase === 'failed' ? (
             <GameButton label={COPY.tryAgain} icon="retry" onPress={props.onTrade} />
-          ) : phase === 'expired' || noPins ? (
+          ) : phase === 'expired' ? (
+            <GameButton label={COPY.holdAgain} icon="retry" onPress={props.onHoldAgain} />
+          ) : phase === 'taken' || noPins ? (
             <GameButton label={COPY.backToBoard} onPress={props.onClose} />
+          ) : confirming ? (
+            <Animated.View key="confirm" entering={still ? undefined : fade(140)} style={styles.actionSlot}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} lineBreakStrategyIOS="standard">
+                {selected ? COPY.confirmMessage(pinName(selected), pinName(swap.pin.item)) : ''}
+              </Text>
+              <GameButton label={COPY.confirmLabel} icon="check" onPress={props.onTrade} loading={sending} haptics={false} />
+            </Animated.View>
+          ) : selected ? (
+            <Animated.View key="trade" entering={still ? undefined : ZoomIn.springify().damping(12).stiffness(260)} style={styles.actionSlot}>
+              <GameButton label={props.tradeLabel} icon="swap" onPress={props.onTrade} />
+            </Animated.View>
           ) : (
-            confirming ? (
-              <Animated.View key="confirm" entering={still ? undefined : FadeIn.duration(160).reduceMotion(ReduceMotion.Never)} style={styles.actionSlot}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine}>
-                  {selected ? COPY.confirmMessage(pinName(selected), pinName(swap.pin.item)) : ''}
-                </Text>
-                <GameButton label={COPY.confirmLabel} icon="check" onPress={props.onTrade} loading={sending} />
-              </Animated.View>
-            ) : selected ? (
-              <Animated.View key="trade" entering={still ? undefined : ZoomIn.springify().damping(12).stiffness(260)} style={styles.actionSlot}>
-                <GameButton label={props.tradeLabel} icon="swap" onPress={props.onTrade} />
-              </Animated.View>
-            ) : (
-              <View key="hint" style={[styles.actionSlot, styles.pickHint, compact && { minHeight: 56 }]} accessible accessibilityLabel={COPY.pickFirst}>
-                <GameIcon name="arrow" size={26} style={{ transform: [{ rotate: '-90deg' }] }} />
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pickHintText}>{COPY.pickFirst}</Text>
-              </View>
-            )
+            <View key="hint" style={[styles.actionSlot, compact && { minHeight: 56 }]}><PickHint still={still} /></View>
           )}
           {(phase === 'confirming' || phase === 'sending') && (
             // Stays (invisible) while sending, so the sheet never jumps under the player's finger.
@@ -171,8 +218,8 @@ export default function TradeSheet(props: TradeSheetProps) {
               <GameButton variant="ghost" tone="onBlue" label={COPY.confirmBack} onPress={props.onBack} />
             </View>
           )}
-          {(phase === 'picking' || phase === 'loading' || phase === 'failed') && !noPins && (
-            <GameButton variant="ghost" tone="onBlue" label={phase === 'failed' ? COPY.backToBoard : COPY.notNow} onPress={props.onClose} />
+          {(phase === 'picking' || phase === 'loading' || phase === 'failed' || phase === 'expired') && !noPins && (
+            <GameButton variant="ghost" tone="onBlue" label={phase === 'picking' || phase === 'loading' ? COPY.notNow : COPY.backToBoard} onPress={props.onClose} />
           )}
         </View>
       </Animated.View>
@@ -180,8 +227,10 @@ export default function TradeSheet(props: TradeSheetProps) {
   );
 }
 
+export default memo(TradeSheet);
+
 const styles = StyleSheet.create({
-  scrim: { backgroundColor: 'rgba(8,40,96,0.55)' },
+  scrim: { backgroundColor: 'rgba(6,30,74,0.72)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,
     borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy, borderBottomWidth: 0, borderColor: BRAND.white,
@@ -204,9 +253,6 @@ const styles = StyleSheet.create({
   actions: { alignItems: 'center', gap: SPACE.xs },
   actionSlot: { width: '100%', maxWidth: 320, minHeight: 84, alignItems: 'center', justifyContent: 'center', gap: SPACE.xs },
   confirmLine: { fontFamily: FONT.display, fontSize: 19, lineHeight: 24, color: BRAND.white, textAlign: 'center', paddingTop: 2 },
-  pickHint: {
-    flexDirection: 'row', gap: SPACE.sm, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thick, borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.55)', minHeight: 72, marginVertical: 6,
-  },
-  pickHintText: { fontFamily: FONT.display, fontSize: 20, letterSpacing: 0.5, color: BRAND.white, textTransform: 'uppercase', paddingTop: 3 },
+  pickHint: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  pickHintText: { fontFamily: FONT.display, fontSize: 20, letterSpacing: 0.5, color: TRADE_SURFACE.inkGold, paddingTop: 3 },
 });
