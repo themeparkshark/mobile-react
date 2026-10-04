@@ -16,7 +16,7 @@ import type { ItemType } from '../../models/item-type';
 import { BRAND, FONT, GameIcon, MOTION, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import EnamelPin from './EnamelPin';
 import {
-  balanceName, cardTilt, formatClock, HOLD_FINAL_S, HOLD_URGENT_S, pinName, pinTilt, secondsLeft, type StatusChip,
+  balanceName, cardTilt, formatClock, HAPTIC_AFTER_AUDIO_MS, HOLD_FINAL_S, HOLD_URGENT_S, pinName, pinTilt, secondsLeft, type StatusChip,
 } from './pinTradeModel';
 
 /** Trading surfaces (the shop v2 blue panels). Every ink here is AA on its surface. */
@@ -163,14 +163,16 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
       if (!fired.current) { fired.current = true; onExpire(); }
       return;
     }
+    // The chip follows the clock on every render path (a hold that opens under 30 s is red at once);
+    // only the warning haptic is one-shot.
+    if (left <= HOLD_URGENT_S) onUrgent?.();
     if (left <= HOLD_URGENT_S && !warned.current) {
       warned.current = true;
-      queueHaptic('warning', 2);
-      onUrgent?.();
+      setTimeout(() => queueHaptic('warning', 2), HAPTIC_AFTER_AUDIO_MS);
     }
     if (left <= HOLD_FINAL_S) {
-      queueHaptic('tickSelection', 1);
       onTick?.(left);
+      setTimeout(() => queueHaptic('tickSelection', 1), HAPTIC_AFTER_AUDIO_MS);
     }
     // The pulse lands on the digit flip, not on its own clock.
     if (left <= HOLD_URGENT_S && !still) {
@@ -257,7 +259,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
       <View ref={box} collapsable={false}
         style={[styles.slot, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
         {item ? (
-          <View style={{ opacity: hidden ? 0 : stamp ? 0.45 : 1 }}>
+          <View style={{ opacity: hidden ? 0 : stamp ? 0.62 : 1 }}>
             <Animated.View style={style}>
               <EnamelPin uri={item.icon_url} size={pinSize} tilt={tilt} shine={still || stamp ? undefined : shine} surface="board"
                 transition={0} recyclingKey={`slot-${item.id}`} />
@@ -347,7 +349,7 @@ const styles = StyleSheet.create({
     borderWidth: OUTLINE.thick, borderColor: BRAND.white, ...SHADOW.card,
   },
   slotEmpty: { backgroundColor: 'rgba(255,255,255,0.08)', borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.7)', shadowOpacity: 0, elevation: 0 },
-  slotDim: { backgroundColor: '#d9d4c4' },
+  slotDim: { backgroundColor: '#cfc8b4' },
   slotQuestion: { fontFamily: FONT.display, fontSize: 44, color: 'rgba(255,255,255,0.8)', paddingTop: 6 },
   slotName: { marginTop: SPACE.xs, fontFamily: FONT.body, fontSize: 15, lineHeight: 18, color: BRAND.white, textAlign: 'center', minHeight: 36, paddingHorizontal: 2 },
   stamp: {

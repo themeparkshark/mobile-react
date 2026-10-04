@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ItemType } from '../../models/item-type';
 import type { PinSwapType } from '../../models/pin-swap-type';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SharkLoader, SPACE } from '../../ui';
+import EnamelPin from './EnamelPin';
 import { PickPin, type SlotRect, StatusChipView, TRADE_SURFACE, TradeSlot, TradeTimer, MAX_FONT } from './PinTradeParts';
 import { PIN_TRADE_COPY as COPY, pinName, pinTilt, statusChip, type TradePhase } from './pinTradeModel';
 
@@ -134,15 +135,15 @@ function TradeSheet(props: TradeSheetProps) {
         </View>
 
         <View style={styles.stage}>
-          <TradeSlot caption={COPY.get} item={swap.pin.item} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending}
+          <TradeSlot caption={COPY.get} item={swap.pin.item} hidden={props.handedOff} measureKey={measureKey} stamp={stamp} charging={sending && !props.handedOff}
             tilt={pinTilt(swap.id)} size={slotSize} shine={shine} still={still} onMeasure={rect => props.onSlot?.('get', rect)} />
-          <SwapBadge spinning={sending && !still} />
+          <SwapBadge spinning={sending && !still && !props.handedOff} />
           <TradeSlot caption={COPY.give} item={phase === 'expired' || phase === 'taken' ? undefined : selected} hidden={props.handedOff}
-            measureKey={measureKey} charging={sending} tilt={selected ? pinTilt(selected.id, 5) : 0} size={slotSize} still={still}
+            measureKey={measureKey} charging={sending && !props.handedOff} tilt={selected ? pinTilt(selected.id, 5) : 0} size={slotSize} still={still}
             placeholder={COPY.yourPin} onMeasure={rect => props.onSlot?.('give', rect)} />
         </View>
 
-        {!ended && (
+        {(!ended || phase === 'failed') && (
           <TradeTimer deadline={deadline} totalMs={totalMs} frozen={sending} still={still} label={props.timerLabel}
             onExpire={props.onExpire} onTick={props.onTick} onUrgent={() => setHurry(true)} />
         )}
@@ -150,7 +151,7 @@ function TradeSheet(props: TradeSheetProps) {
         {ended && (
           <Animated.View entering={still ? undefined : fade(200)} style={styles.endCard} accessible accessibilityLiveRegion="polite"
             accessibilityLabel={`${endTitle}. ${endBody}`}>
-            <GameIcon name={phase === 'expired' ? 'timer' : phase === 'taken' ? 'lock' : 'close'} size={44} />
+            <GameIcon name={phase === 'expired' ? 'timer' : phase === 'taken' ? 'search' : 'retry'} size={44} />
             <View style={{ flex: 1 }}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endTitle}>{endTitle}</Text>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.endBody}>{endBody}</Text>
@@ -197,13 +198,23 @@ function TradeSheet(props: TradeSheetProps) {
           ) : phase === 'expired' ? (
             <GameButton label={COPY.holdAgain} icon="retry" onPress={props.onHoldAgain} />
           ) : phase === 'taken' || noPins ? (
-            <GameButton label={COPY.backToBoard} onPress={props.onClose} />
+            <GameButton label={COPY.backToBoard} icon="back" onPress={props.onClose} />
           ) : confirming ? (
             <Animated.View key="confirm" entering={still ? undefined : fade(140)} style={styles.actionSlot}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} lineBreakStrategyIOS="standard">
-                {selected ? COPY.confirmMessage(pinName(selected), pinName(swap.pin.item)) : ''}
-              </Text>
-              <GameButton label={COPY.confirmLabel} icon="check" onPress={props.onTrade} loading={sending} haptics={false} />
+              {/* The second step looks different without words: give -> get, in a gold-edged well. */}
+              {selected && (
+                <View style={styles.confirmWell} accessible accessibilityLabel={COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}>
+                  <EnamelPin uri={selected.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`mine-${selected.id}`} />
+                  <GameIcon name="arrow" size={26} />
+                  <EnamelPin uri={swap.pin.item.icon_url} size={compact ? 34 : 42} surface="none" recyclingKey={`board-${swap.id}`} />
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.confirmLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {COPY.confirmMessage(pinName(selected), pinName(swap.pin.item))}
+                  </Text>
+                </View>
+              )}
+              <Animated.View entering={still ? undefined : ZoomIn.springify().damping(11).stiffness(240)} style={{ width: '100%', alignItems: 'center' }}>
+                <GameButton label={sending ? COPY.sendingLabel : COPY.confirmLabel} icon={sending ? 'swap' : 'check'} onPress={props.onTrade} haptics={false} />
+              </Animated.View>
             </Animated.View>
           ) : selected ? (
             <Animated.View key="trade" entering={still ? undefined : ZoomIn.springify().damping(12).stiffness(260)} style={styles.actionSlot}>
@@ -230,7 +241,7 @@ function TradeSheet(props: TradeSheetProps) {
 export default memo(TradeSheet);
 
 const styles = StyleSheet.create({
-  scrim: { backgroundColor: 'rgba(6,30,74,0.72)' },
+  scrim: { backgroundColor: 'rgba(6,30,74,0.8)' },
   sheet: {
     position: 'absolute', bottom: 0, alignSelf: 'center', backgroundColor: TRADE_SURFACE.panel,
     borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: OUTLINE.heavy, borderBottomWidth: 0, borderColor: BRAND.white,
@@ -250,9 +261,13 @@ const styles = StyleSheet.create({
   endCard: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: TRADE_SURFACE.well, borderRadius: RADIUS.lg, padding: SPACE.md },
   endTitle: { fontFamily: FONT.display, fontSize: 20, lineHeight: 25, color: BRAND.white, paddingTop: 2 },
   endBody: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: TRADE_SURFACE.inkSoft },
-  actions: { alignItems: 'center', gap: SPACE.xs },
+  actions: { alignItems: 'center', gap: SPACE.xs, minHeight: 150, justifyContent: 'flex-start' },
   actionSlot: { width: '100%', maxWidth: 320, minHeight: 84, alignItems: 'center', justifyContent: 'center', gap: SPACE.xs },
-  confirmLine: { fontFamily: FONT.display, fontSize: 19, lineHeight: 24, color: BRAND.white, textAlign: 'center', paddingTop: 2 },
+  confirmWell: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'stretch', backgroundColor: TRADE_SURFACE.well,
+    borderRadius: RADIUS.lg, borderWidth: OUTLINE.thin, borderColor: BRAND.gold, paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm,
+  },
+  confirmLine: { flex: 1, fontFamily: FONT.display, fontSize: 16, lineHeight: 20, color: BRAND.white, paddingTop: 2 },
   pickHint: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   pickHintText: { fontFamily: FONT.display, fontSize: 20, letterSpacing: 0.5, color: TRADE_SURFACE.inkGold, paddingTop: 3 },
 });
