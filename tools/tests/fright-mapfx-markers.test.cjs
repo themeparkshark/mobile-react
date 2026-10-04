@@ -189,3 +189,10 @@ test('the player shark is one always-mounted Marker: parked (hidden, no touch) w
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
   assert.match(marker, /hidden = false/);
 });
+test('no Skia Mask in map marker sprites (it rendered nothing inside a MarkerView); art is feathered at the source, mist is a blurred oval', () => {
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.doesNotMatch(sprites, /<Mask\b/);
+  assert.match(sprites, /export function SoftEllipse\(\{ children \}/);
+  assert.match(sprites, /<ImageShader image=\{image\} fit="fill" rect=\{\{ x, y, width: w, height: h \}\} \/>/);
+  assert.match(sprites, /<BlurMask blur=\{Math\.max\(4, Math\.min\(w, h\) \* 0\.16\)\} style="normal" \/>/);
+});

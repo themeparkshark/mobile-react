@@ -6,7 +6,7 @@
  * sheets); the Skia placeholders only draw while art loads or if it fails.
  * `animated: false` draws a still frame.
  */
-import { BlurMask, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { BlurMask, Circle, Group, Image as SkImage, ImageShader, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
 import { FrightCanvas } from './frightRepaint';
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -50,30 +50,26 @@ function SheetFrame({ image, fw, fh, frame, row, x, y, opacity }: {
 /* ── Soft edges ───────────────────────────────────────────────────────── */
 
 /**
- * Masks its children to a soft ellipse inscribed in the box: fully opaque in
- * the middle, fading to zero alpha before every edge. No fog sprite or
- * critter cloud base ever shows a straight edge, at any zoom.
+ * Soft edges without a Skia Mask. A Mask inside a MapLibre MarkerView renders nothing in
+ * some states (no performer or encounter on the map, seen on device in the calm tier), so
+ * the scareactor art is feathered at the source (every frame fades to zero alpha at its
+ * edges, art round 4) and this wrapper only groups. The props stay for the call sites.
  */
-export function SoftEllipse({ x, y, w, h, inner = 0.55, children }: {
+export function SoftEllipse({ children }: {
   x: number; y: number; w: number; h: number; inner?: number; children: ReactNode;
 }) {
-  const c = vec(x + w / 2, y + h / 2);
-  return (
-    <Mask mode="alpha" mask={
-      <Rect x={x} y={y} width={w} height={h}>
-        <RadialGradient c={c} r={w / 2} origin={c} transform={[{ scaleY: h / w }]}
-          colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']} positions={[0, inner, 1]} />
-      </Rect>
-    }>{children}</Mask>
-  );
+  return <Group>{children}</Group>;
 }
 
-/** Ground mist feathered to zero alpha on all four edges (never a hard band). */
+/** Ground mist: an oval filled with the mist image and blurred, so it never ends in a hard band (no Mask). */
 function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType | null; x: number; y: number; w: number; h: number; opacity: number }) {
   return (
-    <SoftEllipse x={x} y={y} w={w} h={h} inner={0.35}>
-      <SkImage image={image} x={x} y={y} width={w} height={h} fit="fill" opacity={opacity} />
-    </SoftEllipse>
+    <Group opacity={image ? opacity : 0}>
+      <Oval x={x + w * 0.1} y={y + h * 0.12} width={w * 0.8} height={h * 0.76}>
+        <ImageShader image={image} fit="fill" rect={{ x, y, width: w, height: h }} />
+        <BlurMask blur={Math.max(4, Math.min(w, h) * 0.16)} style="normal" />
+      </Oval>
+    </Group>
   );
 }
 

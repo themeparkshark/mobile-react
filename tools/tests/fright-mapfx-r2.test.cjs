@@ -45,7 +45,9 @@ test('screen projection follows the map heading; the camera center is the player
 test('no hard fog edge: every mist is feathered to zero alpha inside its canvas; critter bases are round', () => {
   const src = sprites();
   assert.match(src, /export function SoftEllipse/);
-  assert.match(src, /colors=\{\['rgba\(0,0,0,1\)', 'rgba\(0,0,0,1\)', 'rgba\(0,0,0,0\)'\]\}/, 'fades to zero alpha');
+  // Mist fades to zero at its edges by blur (a Skia Mask rendered nothing inside a MarkerView);
+  // performer frames are feathered in the art itself (round 4).
+  assert.match(src, /<BlurMask blur=\{Math\.max\(4, Math\.min\(w, h\) \* 0\.16\)\} style="normal" \/>/, 'fades to zero alpha');
   assert.doesNotMatch(src, /<SkImage image=\{mist\}/, 'no raw, rectangular mist sprite');
   assert.equal((src.match(/<FeatheredMist /g) ?? []).length, 2, 'reef mist and fog-thick props');
   assert.doesNotMatch(src, /x=\{-20\} y=\{PH - 70\} width=\{PW \+ 40\}/, 'never wider than its canvas (the canvas edge cut a hard band)');
