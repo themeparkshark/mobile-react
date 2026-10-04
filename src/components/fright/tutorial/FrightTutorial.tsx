@@ -21,21 +21,23 @@
 import { Blur, Canvas, Circle, Oval, RadialGradient, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { FRIGHT_SOUNDS, playFrightSfx } from '../../map/fright/frightAudio';
 import { NIGHT } from '../../../services/fright/theme';
-import { cardLayout, HERO_COPY_BAND, TUTORIAL_CARDS } from '../../../services/fright/tutorial';
+import { cardLayout, HERO_COPY_BAND, tutorialCards } from '../../../services/fright/tutorial';
 import { casePlateRect, cinematicGlow } from '../../../services/fright/introArt';
 import { NightButton } from '../ui';
+import { CARD_ART_WAIT_MS, preloadFrightTutorialArt, TUTORIAL_HERO, TUTORIAL_LANTERN, TUTORIAL_SKY } from './preloadTutorialArt';
 
 const FOG_FAR = require('../../map/fright/art/fog-far.webp');
 const FOG_NEAR = require('../../map/fright/art/fog-near.webp');
-const LANTERN = require('../art/lantern.webp');
-const HERO = require('../art/tutorial-hero.webp');
-const SKY = require('../art/card-sky.webp');
+// Shared with the preloader so the card's source hits the warmed memory copy.
+const LANTERN = TUTORIAL_LANTERN;
+const HERO = TUTORIAL_HERO;
+const SKY = TUTORIAL_SKY;
 
 /**
  * Each card has its own subject on the shared night scene (same sky band for
@@ -51,6 +53,8 @@ const CARD_SUBJECTS: Readonly<Record<string, CardSubject>> = {
   reefs: { kind: 'images', images: [require('../art/card-case-file.webp')], scale: 0.42, plate: 'Tug of the Tides' },
   marquee: { kind: 'images', images: [require('../art/pin-survived.webp')], scale: 0.5 },
   lantern: { kind: 'images', images: [LANTERN], scale: 0.56 },
+  // Chaos Hour (only when encounters are on): the lantern until a Chuckles static exists.
+  chaos: { kind: 'images', images: [LANTERN], scale: 0.5 },
 };
 /** The subject area on the card (fractions of the card height): below the copy band, above the cloud base. */
 export const SUBJECT_BAND = { top: 0.5, bottom: 0.84 } as const;
@@ -58,8 +62,11 @@ export const SUBJECT_BAND = { top: 0.5, bottom: 0.84 } as const;
 export type FrightTutorialMode = 'intro' | 'welcome_back' | 'replay';
 export type FrightTutorialStep = 'cinematic' | 'lantern' | 'cards' | 'welcome';
 
-export default function FrightTutorial({ mode, title, whatsNew, spooky = true, hero = null, onDone, initialStep, initialPage = 0 }: {
+export default function FrightTutorial({ mode, title, whatsNew, spooky = true, hero = null, onDone, initialStep, initialPage = 0,
+  encountersEnabled = false }: {
   readonly mode: FrightTutorialMode;
+  /** config.encounters_enabled: card 4 becomes Chaos Hour only when true. */
+  readonly encountersEnabled?: boolean;
   /** Server tutorial hero (720x1080, sky band empty for copy); the bundled copy is the fallback. */
   readonly hero?: string | null;
   readonly title: string;
@@ -77,6 +84,9 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, h
   const fog = useRef(new Animated.Value(initialStep && initialStep !== 'cinematic' ? 1 : 0)).current;
   const glow = useRef(new Animated.Value(initialStep && initialStep !== 'cinematic' ? 1 : 0)).current;
   const flash = useRef(new Animated.Value(0)).current;
+
+  // Warm card 1's hero and the card sky now (the cinematic gives them seconds; a replay still gets the card hold below).
+  useEffect(() => { void preloadFrightTutorialArt(); }, []);
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: reduced ? 200 : 600, useNativeDriver: true }).start();
@@ -122,7 +132,8 @@ export default function FrightTutorial({ mode, title, whatsNew, spooky = true, h
           <Cinematic step={step} title={title} glow={glow}
             onAdvance={() => setStep(step === 'cinematic' ? 'lantern' : 'cards')} />
         )}
-        {step === 'cards' && <Cards title={title} hero={hero} onDone={onDone} initialPage={initialPage} />}
+        {step === 'cards' && <Cards title={title} hero={hero} onDone={onDone} initialPage={initialPage} encountersEnabled={encountersEnabled}
+          reduced={reduced} />}
         {step === 'welcome' && <Welcome title={title} whatsNew={whatsNew} onDone={onDone} />}
         <TopBar title={step === 'cards' ? title : null} onSkip={onDone} />
       </Animated.View>
@@ -211,15 +222,17 @@ function Cinematic({ step, title, glow, onAdvance }: {
   );
 }
 
-function Cards({ title, hero, onDone, initialPage }: {
+function Cards({ title, hero, onDone, initialPage, encountersEnabled, reduced }: {
   readonly title: string; readonly hero: string | null; readonly onDone: () => void; readonly initialPage: number;
+  readonly encountersEnabled: boolean; readonly reduced: boolean;
 }) {
+  const CARDS = tutorialCards(encountersEnabled);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const layout = cardLayout({ width, height, insetTop: insets.top, insetBottom: insets.bottom });
   const [page, setPage] = useState(initialPage);
   const scroll = useRef<ScrollView>(null);
-  const last = page >= TUTORIAL_CARDS.length - 1;
+  const last = page >= CARDS.length - 1;
   const go = (next: number) => {
     scroll.current?.scrollTo({ x: next * width, animated: true });
     setPage(next);
@@ -229,11 +242,12 @@ function Cards({ title, hero, onDone, initialPage }: {
       <ScrollView ref={scroll} horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}
         contentOffset={{ x: initialPage * width, y: 0 }}
         onMomentumScrollEnd={event => setPage(Math.round(event.nativeEvent.contentOffset.x / width))}>
-        {TUTORIAL_CARDS.map((card, index) => (
+        {CARDS.map((card, index) => (
           <View key={card.key} style={{ width, alignItems: 'center' }}>
-            <View style={[styles.card, { width: layout.cardWidth, height: layout.cardHeight }]} accessible
-              accessibilityLabel={`Card ${index + 1} of ${TUTORIAL_CARDS.length}. ${card.title}. ${card.line}`}>
-              <CardArt cardKey={card.key} hero={hero} width={layout.cardWidth} height={layout.cardHeight} />
+            <ArtHold reduced={reduced} style={[styles.card, { width: layout.cardWidth, height: layout.cardHeight }]}
+              accessibilityLabel={`Card ${index + 1} of ${CARDS.length}. ${card.title}. ${card.line}`}>
+              {onLoad => <>
+              <CardArt cardKey={card.key} hero={hero} width={layout.cardWidth} height={layout.cardHeight} onLoad={onLoad} />
               <View style={[styles.copy, {
                 top: layout.cardHeight * HERO_COPY_BAND.top, height: layout.cardHeight * (HERO_COPY_BAND.bottom - HERO_COPY_BAND.top),
                 paddingHorizontal: layout.cardWidth * 0.08 }]}>
@@ -241,13 +255,14 @@ function Cards({ title, hero, onDone, initialPage }: {
                 <Text style={[styles.cardLine, { fontSize: layout.lineSize, lineHeight: layout.lineSize * 1.2 }]}
                   numberOfLines={2} adjustsFontSizeToFit>{card.line}</Text>
               </View>
-            </View>
+              </>}
+            </ArtHold>
           </View>
         ))}
       </ScrollView>
       <View style={[styles.bottomBand, { paddingBottom: insets.bottom + 14 }]}>
-        <View style={styles.dots} accessibilityLabel={`Card ${page + 1} of ${TUTORIAL_CARDS.length}`}>
-          {TUTORIAL_CARDS.map((card, index) => (
+        <View style={styles.dots} accessibilityLabel={`Card ${page + 1} of ${CARDS.length}`}>
+          {CARDS.map((card, index) => (
             <View key={card.key} style={[styles.dot, { backgroundColor: index === page ? NIGHT.candy : NIGHT.dusk }]} />
           ))}
         </View>
@@ -258,19 +273,51 @@ function Cards({ title, hero, onDone, initialPage }: {
   );
 }
 
-function CardArt({ cardKey, hero, width, height }: { readonly cardKey: string; readonly hero: string | null; readonly width: number; readonly height: number }) {
+/**
+ * Holds a card at opacity 0 until its art reports onLoad (or CARD_ART_WAIT_MS
+ * passes), then fades it in: never an empty purple card while the art decodes.
+ */
+function ArtHold({ reduced, style, accessibilityLabel, children }: {
+  readonly reduced: boolean;
+  readonly style: StyleProp<ViewStyle>;
+  readonly accessibilityLabel: string;
+  readonly children: (onLoad: () => void) => ReactNode;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const shown = useRef(false);
+  const show = useRef(() => {
+    if (shown.current) return;
+    shown.current = true;
+    Animated.timing(opacity, { toValue: 1, duration: reduced ? 0 : 180, useNativeDriver: true }).start();
+  }).current;
+  useEffect(() => {
+    const timer = setTimeout(show, CARD_ART_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [show]);
+  return (
+    <Animated.View style={[style, { opacity }]} accessible accessibilityLabel={accessibilityLabel}>
+      {children(show)}
+    </Animated.View>
+  );
+}
+
+function CardArt({ cardKey, hero, width, height, onLoad }: {
+  readonly cardKey: string; readonly hero: string | null; readonly width: number; readonly height: number;
+  /** The card's backdrop art finished loading (ArtHold fades the card in). */
+  readonly onLoad?: () => void;
+}) {
   const subject = CARD_SUBJECTS[cardKey] ?? { kind: 'hero' };
   if (subject.kind === 'hero') {
-    // The bundled hero is the cleaned art (no smudge disc behind the lantern), so card 1 always uses it.
+    // The bundled hero is the cleaned art (no smudge disc or ring behind the lantern), so card 1 always uses it.
     void hero;
-    return <Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} />;
+    return <Image source={HERO} contentFit="cover" style={StyleSheet.absoluteFill} onLoad={onLoad} onError={onLoad} />;
   }
   const band = (SUBJECT_BAND.bottom - SUBJECT_BAND.top) * height;
   const many = subject.images.length > 1;
   const item = Math.min(width * subject.scale * (many ? 1 : 1.6), band);
   return (
     <>
-      <Image source={SKY} contentFit="cover" style={StyleSheet.absoluteFill} />
+      <Image source={SKY} contentFit="cover" style={StyleSheet.absoluteFill} onLoad={onLoad} onError={onLoad} />
       <View style={{ position: 'absolute', left: 0, right: 0, top: SUBJECT_BAND.top * height, height: band,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
         {subject.images.map((source, i) => (

@@ -29,6 +29,7 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { useFrightCaptureFlow } from '../components/fright/preview/useFrightCaptureFlow';
 import { isConfirmedOutsidePark, isHomeMapConfirmed, nextHomeAnchor, type ParkLookupRecord } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
@@ -243,7 +244,7 @@ function ExploreScreen() {
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
   const { refreshPlayer, player } = useContext(AuthContext);
-  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef } =
+  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef, moveDevLocation } =
     useContext(LocationContext);
   // The anchor is the newest outside-park confirmation (kept through a failed
   // re-check), so walking past the 25 m re-check never blanks the home map.
@@ -534,6 +535,9 @@ function ExploreScreen() {
   useEffect(() => { setFrightIntroOwns(frightEngine.introPending); }, [frightEngine.introPending]);
   const frightStressSpots = useRef<readonly { latitude: number; longitude: number }[]>([]);
   frightStressSpots.current = frightNight.tonight?.spots ?? [];
+  // Dev-only scripted night (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=flow): real engine + server, no touch input.
+  useFrightCaptureFlow({ night: frightNight, engine: frightEngine, location, moveDevLocation,
+    storeId: Number(process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_STORE) || 'shark-shop' });
   // Dev-only capture driver (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=card|profile|collection): opens that screen
   // 25 s after the map loads so simulator captures can show real flows without touch input.
   useEffect(() => {
@@ -542,6 +546,7 @@ function ExploreScreen() {
     const timer = setTimeout(() => {
       const slug = frightNight.tonight?.event?.slug;
       if (target === 'card' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug });
+      if (target === 'card-files' && slug) (navigation as any).navigate('FrightCard', { eventSlug: slug, section: 'files' });
       if (target === 'profile') (navigation as any).navigate('Profile');
       if (target === 'collection') (navigation as any).navigate('SetCollection');
     }, 25_000);
@@ -562,8 +567,10 @@ function ExploreScreen() {
       player: location ?? null, spooky: frightEngine.spooky, doneKeys: frightEngine.doneKeys, quiet: frightEngine.quiet,
       cinematic: frightEngine.tutorial === 'intro' ? 'intro' : null, showLive: nightShow.phase === 'live',
       onHauntPress: frightEngine.openSheetAt, ambience: frightEngine.ambient,
+      // Chaos Hour: tapping the encounter sprite tries the catch (the engine checks range, side and quiet).
+      onEncounterPress: () => { void frightEngine.catchEncounter(); },
       tierCap: frightNight.tonight.config?.fx_tier_cap ?? undefined,
-    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
+    } : null, [stressOff, frightEngine.openSheetAt, frightEngine.ambient, frightEngine.catchEncounter, frightNight.tonight, frightNight.modeOn, frightNight.phase, frightNight.eventPark, frightNight.offset, location,
     frightEngine.spooky, frightEngine.doneKeys, frightEngine.quiet, frightEngine.tutorial, nightShow.phase]);
   const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
   const nightPill = !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');

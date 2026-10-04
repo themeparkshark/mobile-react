@@ -12,6 +12,7 @@
  *   pending POST never re-shows a card.
  */
 import { FRIGHT_DEFAULTS } from './config';
+import { chaosCoachLine } from './critters';
 
 export const FRIGHT_SEEN_KEYS = ['intro', 'welcome_back', 'haunt_near', 'reef_first', 'case_file_first', 'rank_first',
   'chaos_hour', 'recap', 'exit'] as const;
@@ -70,6 +71,18 @@ export const TUTORIAL_CARDS: readonly { readonly key: string; readonly title: st
   { key: 'marquee', title: 'Your night, in lights', line: 'Every haunt lands on your Marquee.' },
   { key: 'lantern', title: 'The Deep Lantern', line: 'Your whole season on one card.' },
 ];
+
+/** Card 4 when Chaos Hour (the encounter) is switched on server-side. Names no critter: either one can show up. */
+export const CHAOS_CARD = { key: 'chaos', title: 'Chaos Hour', line: 'Catch the critters. Chaos Hour at 11:11 PM.' } as const;
+
+/**
+ * The 5 cards for tonight: card 4 becomes Chaos Hour ONLY when
+ * config.encounters_enabled is true (never promise an encounter that is off).
+ */
+export function tutorialCards(encountersEnabled: boolean | null | undefined): readonly { readonly key: string; readonly title: string; readonly line: string }[] {
+  if (!encountersEnabled) return TUTORIAL_CARDS;
+  return TUTORIAL_CARDS.map(card => card.key === 'marquee' ? CHAOS_CARD : card);
+}
 
 /**
  * Where card copy goes on the tutorial hero (720x1080): the clear sky band
@@ -141,9 +154,15 @@ export const COACH_LINES: Readonly<Record<FrightCoachKey, { readonly line: strin
   reef_first: { line: 'Fright Reef. Stand still. Listen.', target: 'map' },
   case_file_first: { line: 'Case Files live on your Deep Lantern card.', target: 'pill' },
   rank_first: { line: 'Rate it fast. The next line won\'t wait.', target: 'rank' },
-  chaos_hour: { line: 'Chaos Hour! Something is giggling near a reef.', target: 'map' },
+  // Neutral by default; coachLine names the live critter (never a giggle for Ringmaster Riptide).
+  chaos_hour: { line: chaosCoachLine(null), target: 'map' },
   recap: { line: 'Share your Marquee. Your night, in lights.', target: 'share' },
 };
+
+/** A coach mark's line for right now: Chaos Hour names the live critter when one is known. */
+export function coachLine(key: FrightCoachKey, critter: string | null = null): string {
+  return key === 'chaos_hour' ? chaosCoachLine(critter) : COACH_LINES[key].line;
+}
 
 /** Chaos Hour: the encounter window that contains 11:11 PM park time. */
 export function isChaosHour(encounterStartIso: string | null | undefined, encounterEndIso: string | null | undefined): boolean {

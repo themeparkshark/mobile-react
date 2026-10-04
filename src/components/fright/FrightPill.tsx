@@ -49,10 +49,11 @@ export default function FrightPill({ night, engine, onHelp, inline = false }: {
   });
   const label = `${title}. ${hauntCountText(done, haunts.length)}. ${sub}. Open the haunt list.`;
   return (
-    <View ref={rowRef} style={[styles.row, inline && styles.inline]} onLayout={() => {
-      // Coach marks and toasts sit just under the pill, never on top of it.
+    <View ref={rowRef} onLayout={() => {
+      // Coach marks and toasts sit just under the pill (and the catch strip), never on top of it.
       rowRef.current?.measureInWindow((_x, y, _w, h) => { if (Number.isFinite(y) && h > 0) setPillBottom(y + h); });
     }}>
+    <View style={[styles.row, inline && styles.inline]}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => engine.setSheetOpen(true)}
         style={({ pressed }) => [styles.pill, pressed && { opacity: 0.9 }]}>
         <View style={styles.lantern}>
@@ -76,11 +77,34 @@ export default function FrightPill({ night, engine, onHelp, inline = false }: {
         </Pressable>
       )}
     </View>
+    {/* Chaos Hour: the live encounter (server-gated), hidden inside a haunt's quiet window. */}
+    {engine.encounter && !engine.encounter.caught && !engine.quiet && (
+      <View style={[styles.catchStrip, inline && styles.catchInline]} accessibilityLiveRegion="polite">
+        <Text style={styles.catchText} numberOfLines={1}>
+          {`${engine.encounter.name} · ${engine.encounter.minutesLeft} min`}
+        </Text>
+        <Pressable accessibilityRole="button" disabled={!engine.encounter.inRange || engine.busyKey === engine.encounter.key}
+          accessibilityLabel={engine.encounter.inRange ? `Catch ${engine.encounter.name}` : `Get closer to ${engine.encounter.name}`}
+          onPress={() => { void engine.catchEncounter(); }}
+          style={({ pressed }) => [styles.catchButton, !engine.encounter?.inRange && styles.catchOff, pressed && { opacity: 0.85 }]}>
+          <Text style={styles.catchLabel}>{engine.encounter.inRange ? 'Catch!' : 'Get closer'}</Text>
+        </Pressable>
+      </View>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  catchStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginTop: 6, paddingVertical: 4,
+    paddingLeft: 12, paddingRight: 4, borderRadius: 14, borderWidth: 2, borderColor: NIGHT.lantern, backgroundColor: NIGHT.midnight },
+  catchText: { flex: 1, fontFamily: 'Shark', fontSize: 13, color: NIGHT.moon },
+  catchButton: { minHeight: 40, minWidth: 92, borderRadius: 12, backgroundColor: NIGHT.pumpkin, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, borderWidth: 2, borderColor: NIGHT.moon },
+  catchOff: { backgroundColor: NIGHT.dusk, borderColor: NIGHT.fog },
+  catchLabel: { fontFamily: 'Shark', fontSize: 14, color: NIGHT.ink },
   inline: { marginHorizontal: 0, marginTop: 0 },
+  catchInline: { marginHorizontal: 0 },
   row: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 8, gap: 6 },
   pill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: NIGHT.fog,
     backgroundColor: NIGHT.haunt, paddingVertical: 5, paddingLeft: 6, paddingRight: 10, minHeight: 48,

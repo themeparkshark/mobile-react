@@ -43,12 +43,12 @@ test('R3-9 coach: rank_first shows ON the first rank card; toasts and coach mark
   assert.match(map, /top: controlsTop,\s*right: 16,/);
 });
 
-test('R3-11 Case File reveal: the image, NEW stamp, year badge, and "Into the Lantern" opens the Deep Lantern', () => {
+test('R3-11 Case File reveal: the image, NEW stamp, year badge, and "See my Lantern" opens the Deep Lantern', () => {
   const reveal = read('src/components/fright/CaseFileReveal.tsx');
   assert.match(reveal, /uri=\{file\.image\}/);
   assert.match(reveal, /file\.new && <View style=\{styles\.stamp\}>/);
-  assert.match(reveal, /RootNavigation\.navigate\('FrightCard', \{ eventSlug \}\)/);
-  assert.match(reveal, /eventSlug \? 'Into the Lantern' : 'Keep it'/);
+  assert.match(reveal, /openDeepLantern\(eventSlug\)/);
+  assert.match(reveal, /\{!!eventSlug && \(\s*<NightButton label="See my Lantern"/);
   assert.match(reveal, /transform: reduced \? \[\] :/, 'Reduce Motion fades');
   assert.match(read('src/components/fright/FrightLayer.tsx'), /eventSlug=\{night\.tonight\?\.event\?\.slug \?\? null\}/);
   // Card 3's blank nameplate gets a title, inside the plate of the contain-fit image.

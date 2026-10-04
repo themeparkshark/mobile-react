@@ -6,6 +6,7 @@
  * The fan comparison comes only from server fan data. Skippable.
  */
 import { useEffect, useRef, useState } from 'react';
+import { CAPTURE_FLOW } from './preview/useFrightCaptureFlow';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FrightReaction } from '../../api/endpoints/fright';
 import * as Haptics from '../../helpers/haptics';
@@ -44,6 +45,14 @@ export default function RankCard({ prompt, onSubmit, onClose, initialScore = nul
   const stampScale = useRef(new Animated.Value(0.7)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // Dev capture flow only (no touch input in the capture sim): pick 4 fins, then send, like the buttons.
+  const drive = useRef<{ pick: (n: number) => void; send: () => Promise<void> } | null>(null);
+  useEffect(() => {
+    if (!CAPTURE_FLOW || !prompt) return;
+    const a = setTimeout(() => drive.current?.pick(4), 2500);
+    const b = setTimeout(() => { void drive.current?.send(); }, 5000);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [prompt?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!prompt) return null;
 
   const finish = () => { setScore(null); setReaction(null); setStamp(null); onClose(); };
@@ -68,6 +77,7 @@ export default function RankCard({ prompt, onSubmit, onClose, initialScore = nul
     if (!reduced) Animated.spring(stampScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
     timer.current = setTimeout(finish, RANK_STAMP_MS);
   };
+  drive.current = { pick, send };
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={finish}>

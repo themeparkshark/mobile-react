@@ -3,6 +3,7 @@
  * card art so Share Studio can take the same data. Pure, unit tested (F4).
  */
 import type { FrightRecap } from '../../api/endpoints/fright/types';
+import { critterName, marqueeCatchLine } from './critters';
 import { formatMinutes, nightDateLabel } from './dates';
 
 export interface MarqueeModel {
@@ -13,7 +14,10 @@ export interface MarqueeModel {
   readonly topHaunt: string | null;
   readonly timeInLine: string | null;
   readonly caseFiles: number;
+  /** The caught critter's name (null when unknown or nothing was caught). */
   readonly encounter: string | null;
+  /** "Caught Ringmaster Riptide", "Caught a Chaos critter" when only the catch is known, or null. */
+  readonly caught: string | null;
   readonly tenInOne: boolean;
   readonly nightNumber: number;
 }
@@ -30,7 +34,8 @@ export function marqueeModel(recap: FrightRecap): MarqueeModel {
     topHaunt: ranked[0]?.name ?? null,
     timeInLine: minutes > 0 ? `${formatMinutes(minutes)} in line` : null,
     caseFiles: recap.case_files.length,
-    encounter: recap.encounter?.name ?? null,
+    encounter: recap.encounter && typeof recap.encounter === 'object' ? critterName(recap.encounter) : null,
+    caught: marqueeCatchLine(recap.encounter),
     tenInOne: !!recap.ten_in_one,
     nightNumber: recap.night_number,
   };

@@ -100,6 +100,7 @@ export default function FrightAppPreview({ state }: { readonly state: AppPreview
     openRun, openSpot: openRun ? robot : null, quiet: state === 'in-line', canSurvive: state === 'survive-ready',
     busyKey: null, pendingSync: 0, enter: async () => {}, survived: async () => {},
     enterCheck: spot => CHECKS[spot.key] ?? { ok: false, reason: 'too_far', distance: 300 + spot.sort * 40 },
+    modal: null, closeModal: noop, encounter: null, catchEncounter: async () => {}, pickSide: async () => {},
     rank: null, submitRank: async () => null, closeRank: noop, caseFile: null, closeCaseFile: noop,
     toast: state === 'in-line' ? COPY.inLineToast : null, clearToast: noop,
     tutorial: null, introPending: false, finishTutorial: noop, replayTutorial: noop,

@@ -32,12 +32,12 @@ test('FrightMapSources never mounts or unmounts a Marker: no early return, no co
   assert.doesNotMatch(body, /&& <Marker/, 'no conditional Marker');
   assert.doesNotMatch(body, /\.map\([^)]*\) => \{[^}]*return null;/s, 'no Marker dropped inside a map()');
   assert.match(body, /stable\.reefs\.map/);
-  assert.match(body, /stable\.props\.map/);
+  assert.match(body, /stable\.props(\.filter\([^\n]*\))?\.map/, 'prop markers come from the fixed list');
   assert.match(body, /stable\.haunts\.map/);
   assert.match(body, /<Marker key="fe"/, 'one encounter Marker, always mounted');
   // Opacity-only: no stand-in swap either. Every spot keeps its real sprite tree; hidden = ShowWhen opacity 0.
   assert.doesNotMatch(src, /HiddenSpot/, 'no HiddenSpot-vs-sprite swaps inside a Marker');
-  assert.match(body, /<ShowWhen on=\{on\}>/);
+  assert.match(body, /<ShowWhen box=\{[A-Z_]+\} on=\{on\}>/);
   assert.doesNotMatch(body, /\? <(HauntLantern|ReefCritters|ReefGlyph|SpotProps|EncounterSprite)\b/, 'no ternary picks a sprite type');
   assert.doesNotMatch(body, /: <(HauntLantern|ReefCritters|ReefGlyph|SpotProps|EncounterSprite)\b/);
   assert.doesNotMatch(body, /onPress=\{[^}]*\? \(\) =>/, 'onPress never toggles the Marker between Pressable and View');
@@ -83,7 +83,7 @@ test('Map.tsx: both tints are background layers and no direct MapView child is m
 
 test('no Skia node swaps anywhere in the fright layer: no `? <Sprite> : <Other>` and no `&& <Sprite>` (opacity gates only)', () => {
   const dir = path.join(root, 'src/components/map/fright');
-  const skia = 'Canvas|Group|Rect|Circle|Oval|Path|Points|Mask|ImageShader|RadialGradient|LinearGradient|BlurMask|SkImage|SheetFrame|SoftEllipse|FeatheredMist|CritterBody|Critter|Bat|Eyes|Pumpkin|HangingLantern|SparksSlot|SkidSparks|SparkDot|LoopProp|BoltSprite|LayerWindow|LayeredFacade|PlaceholderFacade|PlaceholderWindow|TrailDot|HauntLantern|ReefCritters|ReefGlyph|ReefLod|SpotProps|EncounterSprite|HiddenSpot';
+  const skia = 'Canvas|Group|Rect|Circle|Oval|Path|Points|Mask|ImageShader|RadialGradient|LinearGradient|BlurMask|SkImage|SheetFrame|SoftEllipse|FeatheredMist|CritterBody|Critter|Scareactor|Bat|Eyes|Pumpkin|HangingLantern|SparksSlot|SkidSparks|SparkDot|LoopProp|BoltSprite|LayerWindow|LayeredFacade|PlaceholderFacade|PlaceholderWindow|TrailDot|HauntLantern|ReefCritters|ReefGlyph|ReefLod|SpotProps|EncounterSprite|HiddenSpot';
   const swap = new RegExp(`(\\?|:|&&)\\s*\\(?\\s*<(${skia})\\b`);
   for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.tsx'))) {
     const lines = fs.readFileSync(path.join(dir, file), 'utf8').split('\n');
@@ -107,6 +107,35 @@ test('ExploreScreen keeps the fright input for the whole event-park session (mod
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.doesNotMatch(explore, /frightNight\.tonight && \(frightNight\.modeOn \|\| frightNight\.phase === 'after'\)/);
   assert.match(explore, /active: frightNight\.modeOn/);
+});
+
+test('GPS jump or resume: markers re-lay out and Skia canvases repaint on reveal, by props only', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(src, /export const RELAYOUT_JUMP_M = 80;/);
+  assert.match(src, /distanceMeters\(prev, player\) > RELAYOUT_JUMP_M\) kick\.current\(\)/);
+  assert.match(src, /AppState\.addEventListener\('change', state => \{ if \(state === 'active'\) kick\.current\(\); \}\)/);
+  // Every fright Marker coordinate goes through the nudge (a prop change, never a remount).
+  const markers = src.match(/<Marker key=[^>]*coordinate=\{[^}]*\}?/g) || [];
+  assert.ok(markers.length >= 6);
+  for (const m of markers) assert.match(m, /coordinate=\{pin\(/, m);
+  assert.match(src, /export const BOUNDS_POLL_MS = 1500;/);
+  assert.match(src, /\[on, zoom, mapRef, relayout\]/, 'a jump reads bounds at once');
+  assert.match(src, /<RepaintContext\.Provider value=\{token\}>/);
+  const repaint = read('src/components/map/fright/frightRepaint.tsx');
+  assert.match(repaint, /<Canvas \{\.\.\.props\}>/);
+  // The re-add is a 0.5 pt change of the constant marker box, only around a relayout.
+  assert.match(src, /style=\{\[styles\.box, \{ width: repaintWidth\(box\.w, token\), height: box\.h \}, on \? SHOWN_STYLE : HIDDEN_STYLE\]\}/);
+  assert.match(src, /if \(on && Date\.now\(\) - lastRelayout\.current < RELAYOUT_REVEAL_MS\) setToken/);
+  // Every ShowWhen has a constant box (no zoom-sized native frames).
+  const shows = src.match(/<ShowWhen [^>]*>/g) || [];
+  assert.equal(shows.length, 6);
+  for (const tag of shows) assert.match(tag, /^<ShowWhen box=\{(REEF|PROPS|HAUNT|LAGOON|RING|CRITTER)_BOX\}/, tag);
+  assert.match(repaint, /<Group opacity=\{repaintOpacity\(token\)\}>\{children\}<\/Group>/);
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.doesNotMatch(sprites, /<Canvas[\s>]/, 'sprites draw through FrightCanvas');
+  const m = loadTs('src/components/map/fright/frightRepaint.tsx', { '@shopify/react-native-skia': {}, react: { createContext: () => ({}), useContext: () => 0 }, 'react-native': { StyleSheet: { flatten: x => x } }, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null } });
+  assert.equal(m.repaintWidth(52, 1), 52.5);
+  assert.equal(m.repaintWidth(52, 2), 52);
 });
 
 test('night tint: one stable component in its MapView slot whether fright is null or set (no component swap mid-list)', () => {
@@ -140,6 +169,15 @@ test('map GL sources are always mounted (lamps, crowd haze, guide line): off mea
   assert.match(map, /<ShapeSource id="tps-crowd-haze" shape=\{crowdHaze \?\? NO_FEATURES\}>/);
   assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
   assert.doesNotMatch(map, /(lampPoints|crowdHaze|pathShown)[^\n]*&&\s*\(\s*\n\s*<ShapeSource/);
+});
+
+test('image memory: a spot holds its art only while shown or within a minute after (null URLs when cold, tree unchanged)', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(src, /export const WARM_ART_MS = 60_000;/);
+  assert.match(src, /const sheets = cast\.map\(slug => \(hot \? scareactorAsset\(assets, slug\) : null\)\);/);
+  assert.match(src, /layers=\{warm\(haunt\.key\) \? layersOf\(haunt\) : null\}/);
+  assert.match(src, /iconUrl=\{warm\(haunt\.key\) \? haunt\.art\?\.icon \?\? null : null\}/);
+  assert.match(src, /ambient=\{warm\(spot\.key\) \? assets\?\.ambient \?\? null : null\}/);
 });
 
 test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {

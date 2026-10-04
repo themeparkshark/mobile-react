@@ -339,13 +339,27 @@ export function critterWant(fx: FrightSpot['fx']): number {
   return Number.isFinite(n) ? Math.max(1, Math.min(3, Math.round(n))) : 2;
 }
 
+/** The most performers a reef ever draws (its fixed slot count). */
+export const REEF_MAX_SLOTS = 4;
+
+/**
+ * A reef's fixed slots: what it asks for (fx.critters) or its whole cast (fx.scareactors),
+ * whichever is larger, up to 4. Fixed for the payload, so a 4-performer reef shows all 4
+ * and the budget only shows or hides slots (never mounts them).
+ */
+export function reefSlots(fx: FrightSpot['fx']): number {
+  const cast = Array.isArray((fx as { scareactors?: unknown } | null | undefined)?.scareactors)
+    ? ((fx as { scareactors: unknown[] }).scareactors.length) : 0;
+  return Math.max(1, Math.min(REEF_MAX_SLOTS, Math.max(critterWant(fx), cast)));
+}
+
 /** Lantern windows a haunt asks for: fx.windows clamped to 2..6 (default 3). */
 export function windowWant(fx: FrightSpot['fx']): number {
   const n = Number(fx?.windows ?? 3);
   return Number.isFinite(n) ? Math.max(2, Math.min(6, Math.round(n))) : 3;
 }
 
-export const KNOWN_PROPS = ['bats', 'eyes', 'pumpkin', 'skid-fins', 'lantern', 'fog-thick'] as const;
+export const KNOWN_PROPS = ['bats', 'eyes', 'pumpkin', 'skid-fins', 'lantern', 'fog-thick', 'lagoon-glow'] as const;
 export type FrightProp = typeof KNOWN_PROPS[number];
 
 /** A spot's props, known kinds only, in a stable order, no duplicates. */
@@ -356,7 +370,12 @@ export function spotProps(fx: FrightSpot['fx']): FrightProp[] {
 
 /** Props that move and cost budget (fog-thick is a still mist). */
 export function movingProps(props: readonly FrightProp[]): FrightProp[] {
-  return props.filter(p => p !== 'fog-thick' && p !== 'bats');
+  return props.filter(p => p !== 'fog-thick' && p !== 'bats' && p !== 'lagoon-glow');
+}
+
+/** Props drawn by the spot props canvas (the lagoon glow has its own marker, at showtimes only). */
+export function canvasProps(props: readonly FrightProp[]): FrightProp[] {
+  return props.filter(p => p !== 'lagoon-glow');
 }
 
 /* ── Night show yield ─────────────────────────────────────────────────── */

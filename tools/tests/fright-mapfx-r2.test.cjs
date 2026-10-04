@@ -89,6 +89,6 @@ test('off-screen spots draw the hidden stand-in (MapLibre iOS parks off-screen M
     'north of center is up');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /return !at \|\| onScreen\(at, chipCenter, zoom, heading, screenW, screenH, ON_SCREEN_SLACK\);/);
-  assert.match(sources, /<ShowWhen on=\{encounterOnScreen && !!encounter\}>/);
-  assert.match(sources, /setInterval\(read, 600\)/);
+  assert.match(sources, /<ShowWhen box=\{(RING|CRITTER)_BOX\} on=\{encounterOnScreen && !!encounter\}>/);
+  assert.match(sources, /setInterval\(read, BOUNDS_POLL_MS\)/); // 1.5 s, plus an immediate read on a GPS jump or resume
 });

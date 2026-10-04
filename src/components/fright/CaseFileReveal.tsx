@@ -1,28 +1,48 @@
 /**
  * Case File reveal: the card flips from the locked silhouette to its front
  * (server art when present, the title overlaid on the blank plate), with the
- * year badge, a NEW stamp for a first find, the body and "Into the Lantern",
- * which really opens the Deep Lantern (FrightCard for this event); without an
- * event slug the button reads "Keep it" and just closes.
+ * year badge, a NEW stamp for a first find and the body. "Keep it" (primary)
+ * closes and keeps the kid on the map; "See my Lantern" (ghost, only with an
+ * event slug) closes and opens the Deep Lantern (FrightCard for this event).
  * Reduce Motion: a plain fade, no flip.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, StyleSheet, Text, View } from 'react-native';
 import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import * as RootNavigation from '../../RootNavigation';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
 import ArtImage from './ArtImage';
+import { openDeepLantern } from './openDeepLantern';
 import { NightButton } from './ui';
 
 const CARD_W = 260;
 const CARD_H = 360;
+/**
+ * The blank nameplate on the Case File fronts (card/case-files/cf-*.webp, 480 x 719, the same
+ * frame for every year): measured band, as fractions of the art. The art is cover-fit into the
+ * card, so the plate's box in card points follows from the scale and the vertical crop.
+ */
+export const CASE_FILE_ART = { w: 480, h: 719, plateTop: 0.659, plateBottom: 0.821, plateLeft: 0.11, plateRight: 0.9 } as const;
+export function caseFilePlate(cardW: number, cardH: number): { top: number; height: number; left: number; right: number } {
+  const scale = Math.max(cardW / CASE_FILE_ART.w, cardH / CASE_FILE_ART.h);
+  const drawnW = CASE_FILE_ART.w * scale;
+  const drawnH = CASE_FILE_ART.h * scale;
+  const x0 = (cardW - drawnW) / 2;
+  const y0 = (cardH - drawnH) / 2;
+  return {
+    top: Math.round(y0 + drawnH * CASE_FILE_ART.plateTop),
+    height: Math.round(drawnH * (CASE_FILE_ART.plateBottom - CASE_FILE_ART.plateTop)),
+    left: Math.round(x0 + drawnW * CASE_FILE_ART.plateLeft),
+    right: Math.round(cardW - (x0 + drawnW * CASE_FILE_ART.plateRight)),
+  };
+}
+const PLATE = caseFilePlate(CARD_W, CARD_H);
 
 export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
   readonly file: FrightCaseFileDrop | null;
   readonly onClose: () => void;
-  /** The event whose Deep Lantern "Into the Lantern" opens. */
+  /** The event whose Deep Lantern "See my Lantern" opens. */
   readonly eventSlug?: string | null;
 }) {
   const reduced = useReducedGameMotion();
@@ -61,7 +81,7 @@ export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
               <View style={styles.yearBadge}><Text style={styles.yearText}>{file.year_label}</Text></View>
               {file.new && <View style={styles.stamp}><Text style={styles.stampText}>NEW</Text></View>}
               <View style={styles.plate}>
-                <Text style={styles.title} numberOfLines={2} accessibilityRole="header">{file.title}</Text>
+                <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75} accessibilityRole="header">{file.title}</Text>
               </View>
             </>
           ) : (
@@ -72,11 +92,15 @@ export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
           )}
         </Animated.View>
         {front && <Text style={styles.body}>{file.body}</Text>}
-        <NightButton label={eventSlug ? 'Into the Lantern' : 'Keep it'} style={{ marginTop: 14, minWidth: 220 }}
-          onPress={() => {
-            onClose();
-            if (eventSlug) RootNavigation.navigate('FrightCard', { eventSlug });
-          }} />
+        {/* "Keep it" keeps the kid on the map; the Lantern is a choice, never a yank mid-line. */}
+        <NightButton label="Keep it" style={{ marginTop: 14, minWidth: 220 }} onPress={onClose} />
+        {!!eventSlug && (
+          <NightButton label="See my Lantern" variant="ghost" style={{ marginTop: 10, minWidth: 220 }}
+            onPress={() => {
+              onClose();
+              openDeepLantern(eventSlug);
+            }} />
+        )}
       </Animated.View>
     </Modal>
   );
@@ -95,9 +119,9 @@ const styles = StyleSheet.create({
   stamp: { position: 'absolute', top: 14, right: 10, borderWidth: 3, borderColor: NIGHT.pumpkin, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: '12deg' }], backgroundColor: 'rgba(30,24,56,0.6)' },
   stampText: { fontFamily: 'Shark', fontSize: 18, color: NIGHT.pumpkin },
-  plate: { position: 'absolute', left: 16, right: 16, bottom: 18, minHeight: 56, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 8 },
-  title: { fontFamily: 'Shark', fontSize: 20, color: NIGHT.moon, textAlign: 'center',
-    textShadowColor: NIGHT.ink, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  // On the art's blank cream nameplate (CASE_FILE_ART), in dark ink.
+  plate: { position: 'absolute', top: PLATE.top, height: PLATE.height, left: PLATE.left, right: PLATE.right,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  title: { fontFamily: 'Shark', fontSize: 20, color: NIGHT.ink, textAlign: 'center' },
   body: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 22, color: NIGHT.fogLight, textAlign: 'center', marginTop: 14, maxWidth: 320 },
 });

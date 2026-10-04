@@ -42,9 +42,9 @@ test('the declutter only changes opacity and transforms; it never feeds a placem
 
 test('MapView children never mount mid-list: sources always mounted, glints and trail are fixed pools, islands keep their order', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : NO_FEATURES\}>/);
-  assert.match(map, /<ShapeSource id="tps-crowd-haze" shape=\{crowdHaze \?\? NO_FEATURES\}>/);
-  assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
+  assert.match(map, /<ShapeSource id="tps-lamps" shape=\{light\.lamps >= 0\.05 \? lampPoints : (?:EMPTY|NO_FEATURES)\}>/);
+  assert.match(map, /<ShapeSource id="tps-crowd-haze" shape=\{crowdHaze \?\? (?:EMPTY|NO_FEATURES)\}>/);
+  assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : (?:EMPTY|NO_FEATURES)\}>/);
   const glints = read('src/components/map/alive/WaterGlints.tsx');
   assert.match(glints, /Array\.from\(\{ length: GLINT_SLOTS \}/);
   assert.match(glints, /key=\{`glint-\$\{slot\}`\}/);

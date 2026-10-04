@@ -84,6 +84,9 @@ export const HeadingContext = createContext<HeadingContextType>({
 
 // Default dev location: Universal Studios Hollywood. EXPO_PUBLIC_DEV_START_LAT/LNG
 // (dev builds only) drop the joystick at a specific ride for playtesting.
+// A simulated point is exact: dev builds report it as a 5 m fix so accuracy-gated flows
+// (Fin-ister reef finds and haunt entry) work with the joystick. Release samples are untouched.
+const DEV_SAMPLE_ACCURACY = __DEV__ ? { accuracyMeters: 5 } : {};
 const DEV_DEFAULT_LAT = Number(process.env.EXPO_PUBLIC_DEV_START_LAT) || 34.1381;
 const DEV_DEFAULT_LNG = Number(process.env.EXPO_PUBLIC_DEV_START_LNG) || -118.3534;
 /** Where the App Store review account starts: inside Epic Universe (park 10). */
@@ -129,7 +132,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       longitude: prev.longitude + dx * speed,
     };
     devLocationRef.current = newLoc;
-    latestLocationSampleRef.current = { ...newLoc, timestamp: Date.now() };
+    latestLocationSampleRef.current = { ...newLoc, timestamp: Date.now(), ...DEV_SAMPLE_ACCURACY };
     setGlobalDevLocation(newLoc);
     setLocation(newLoc);
   }, []);
@@ -139,7 +142,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     if (devMode && simulationAllowed) {
       setDevModeEnabled(true);
       setGlobalDevLocation(devLocationRef.current);
-      latestLocationSampleRef.current = { ...devLocationRef.current, timestamp: Date.now() };
+      latestLocationSampleRef.current = { ...devLocationRef.current, timestamp: Date.now(), ...DEV_SAMPLE_ACCURACY };
       setLocation(devLocationRef.current);
       setPermissionGranted(true);
     } else {

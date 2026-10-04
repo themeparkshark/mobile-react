@@ -402,3 +402,19 @@ test('fixed art (encounter, gym, boss, the reef under the encounter) fades under
   const pinnedUnder = { ...selected, latitude: enc(pill.y + 20).latitude, longitude: enc(pill.y + 20).longitude };
   assert.equal(s.solveLayout([pinnedUnder], f, { insets: INSETS }).get('ride:sel').visible, true);
 });
+
+test('the reef the Fin-ister encounter swims at is drawn with it (fixed), never hidden under the encounter; other reefs unchanged', () => {
+  const host = { key: 'kelp', ...at(0, 0), radius: 40 };
+  const other = { key: 'bog', ...at(160, 250), radius: 40 };
+  const items = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host, other],
+    fixed: [{ id: 'encounter', ...at(0, 0), kind: 'encounter', radius: 40 }], nightMode: true });
+  const reefItem = id => items.find(i => i.id === `reef:${id}`);
+  assert.equal(reefItem('kelp').fixed, true);
+  assert.equal(reefItem('bog').fixed, undefined);
+  const out = s.solveLayout(items, frame());
+  assert.equal(out.get('reef:kelp').visible, true, 'host reef drawn');
+  assert.equal(out.get('encounter').visible, true, 'encounter drawn');
+  // Without an encounter the reef is an ordinary item.
+  const plain = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host], fixed: [], nightMode: true });
+  assert.equal(plain.find(i => i.id === 'reef:kelp').fixed, undefined);
+});

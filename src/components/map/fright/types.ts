@@ -33,6 +33,8 @@ export interface FrightMapInput {
   readonly showLive?: boolean;
   /** A haunt facade was tapped (open the haunt sheet at that haunt). */
   readonly onHauntPress?: (spotKey: string) => void;
+  /** The live encounter's critter was tapped (encounter.key). */
+  readonly onEncounterPress?: (encounterKey: string) => void;
   /**
    * Screen rects (points) of HUD the haunt chips keep clear of, beyond the map's
    * own right rail (which Map measures): a joystick, the energy meter.

@@ -1,22 +1,22 @@
 /**
- * Map-anchored fright sprites: reef critters (and their still glyph), haunt
+ * Map-anchored fright sprites: reef scareactors (and their still glyph), haunt
  * facades, spot props and the encounter. Each is one small Skia canvas in a
  * map marker, animated from the living map's single ambient clock on the UI
  * thread. Art is server-hosted (assets), drawn at half pixel size (@2x
  * sheets); the Skia placeholders only draw while art loads or if it fails.
  * `animated: false` draws a still frame.
  */
-import { BlurMask, Canvas, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { BlurMask, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
+import { FrightCanvas } from './frightRepaint';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { FrightAmbientAsset, FrightHauntLayers, FrightSheetAsset } from '../../../api/endpoints/fright/types';
 import { hash01 } from '../alive/ambientBudget';
-import { CritterBody } from './CritterBody';
-import { critterPose, sheetPose } from './critters';
-import { BAT_FRAME, BAT_FRAMES, critterLook, EYES_FRAMES, EYES_H, EYES_W, FRIGHT_ART, MIST_H, MIST_W, NIGHT } from './frightArt';
-import { critterRows, rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
+import { encounterRows, nextFace, restFace, scareactorPose, scareactorRows, scareactorSpot } from './scareactors';
+import { BAT_FRAME, BAT_FRAMES, EYES_FRAMES, EYES_H, EYES_W, FRIGHT_ART, MIST_H, MIST_W, NIGHT } from './frightArt';
+import { encounterPose, sheetTiming, SPARK_RUN_S, sparkPass, timelineLit, windowTimelines } from './frightAssets';
 import { flickerPlan, flickerProfile, silhouetteAt, silhouettePlan, windowLevel } from './flicker';
 import { hashString } from './random';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
@@ -77,85 +77,86 @@ function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType | nu
   );
 }
 
-/* ── Reef critters ────────────────────────────────────────────────────── */
+/* ── Reef scareactors ─────────────────────────────────────────────────── */
 
-const NO_ROWS = [0, -1, -1];
+const NO_ROWS = [0, -1, -1, -1];
 
-function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, index, cx, cy, animated, lite, on = true }: {
-  seed: number; clock: SharedValue<number>; wander: number; watch: number; jumpStart: SharedValue<number>;
-  jumper: boolean; slug: string | null; asset: FrightSheetAsset | null; index: number; cx: number; cy: number;
-  animated: boolean; lite: boolean;
+/**
+ * One scareactor standing in the reef (sheet rows idle, lurk, scare, slide):
+ * idle by default, a lurk every 6 to 14 s (full), the scare row on a jump,
+ * the knee slide only when the sheet may slide. Turns toward the player
+ * within 60 m, flipping only on an idle frame. Paused: frame 0, no clock read.
+ */
+function Scareactor({ seed, index, slots, clock, wander, watch, jumpStart, jumper, asset, cx, cy, animated, full, on = true }: {
+  seed: number; index: number; slots: number; clock: SharedValue<number>; wander: number; watch: number;
+  jumpStart: SharedValue<number>; jumper: boolean; asset: FrightSheetAsset | null; cx: number; cy: number;
+  animated: boolean;
+  /** Full tier: lurks and slides. Lite: idle and the jump only. */
+  full: boolean;
   /** Drawn or not (opacity): the slot stays mounted (see ReefCritters). */
   on?: boolean;
 }) {
-  const look = useMemo(() => critterLook(slug, index), [slug, index]);
   const sheet = useRemoteImage(asset?.sheet);
-  const still = useMemo(() => critterPose(seed, 0, wander, watch, -1), [seed, wander, watch]);
+  const still = useRemoteImage(asset?.static);
+  const spot = useMemo(() => scareactorSpot(seed, index, slots, wander), [seed, index, slots, wander]);
   const timing = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
-  const rows = useMemo(() => (asset ? critterRows(asset) : NO_ROWS), [asset]);
-  const useSheet = !!sheet && !!asset;
-  const pose = useDerivedValue(() => {
-    if (!animated) return still;
-    // With real art the jump is in the sheet: the sprite itself only wanders.
-    const popAge = jumper && !useSheet ? clock.value - jumpStart.value : -1;
-    return critterPose(seed, clock.value, wander, watch, popAge);
-  });
+  const rows = useMemo(() => (asset ? scareactorRows(asset) : NO_ROWS), [asset]);
+  const idleRow = rows[0] >= 0 ? rows[0] : 0;
+  const rest = restFace(seed);
   const frameState = useDerivedValue(() => (animated
-    ? sheetPose(seed, clock.value, timing.frames, timing.fps, rows, !lite, jumper ? clock.value - jumpStart.value : -1)
-    : { row: rows[0] >= 0 ? rows[0] : 0, frame: 0 }));
+    ? scareactorPose(seed, clock.value, timing.frames, timing.fps, rows, full, jumper ? clock.value - jumpStart.value : -1)
+    : { row: idleRow, frame: 0 })); // paused: no clock read
   const frame = useDerivedValue(() => frameState.value.frame);
   const row = useDerivedValue(() => frameState.value.row);
-  const body = useDerivedValue(() => {
-    const p = pose.value;
-    if (useSheet) return [{ translateX: cx + p.x }, { translateY: cy + p.y }, { scaleX: p.face }];
-    return [{ translateX: cx + p.x }, { translateY: cy + p.y + p.hop },
-      { scaleX: p.face * (1 + (1 - p.squash) * 0.5) }, { scaleY: p.squash }];
-  });
-  const shadow = useDerivedValue(() => {
-    const p = pose.value;
-    const s = useSheet ? 1 : Math.max(0.5, 1 + p.hop / 60);
-    return [{ translateX: cx + p.x }, { translateY: cy + p.y }, { scale: s }];
-  });
+  // Facing changes only on an idle frame (MAP_FX_SPEC): the reaction re-runs when the watch side changes.
+  const face = useSharedValue<number>(watch !== 0 ? watch : rest);
+  useAnimatedReaction(() => frameState.value.row, current => {
+    face.value = nextFace(face.value, watch, rest, current, idleRow);
+  }, [watch, rest, idleRow]);
+  const body = useDerivedValue(() => [{ translateX: cx + spot.x }, { translateY: cy + spot.y }, { scaleX: face.value }]);
   const fw = asset?.frame[0] ?? 128;
   const fh = asset?.frame[1] ?? 128;
   return (
     <Group opacity={on ? 1 : 0}>
-      <Group transform={shadow}><Oval x={-10} y={-3} width={20} height={6} color="rgba(10,6,30,0.35)" /></Group>
+      <Oval x={cx + spot.x - 12} y={cy + spot.y - 3} width={24} height={6} color="rgba(10,6,30,0.35)" opacity={sheet || still ? 1 : 0} />
       <Group transform={body}>
-        {/* Sheet and placeholder both mounted: the art cross-fades in when it loads. */}
-        <Group opacity={useSheet && sheet ? 1 : 0}>
+        {/* Sheet and still both mounted: the still shows until the sheet loads; nothing draws without art. */}
+        <Group opacity={sheet ? 1 : 0}>
           <SoftEllipse x={-fw / 4} y={-fh / 2} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
               <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 2} />
             </SoftEllipse>
         </Group>
-        <Group opacity={useSheet && sheet ? 0 : 1}><CritterBody look={look} /></Group>
+        <Group opacity={!sheet && still ? 1 : 0}>
+          <SoftEllipse x={-fw / 4} y={-fh / 2} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
+            <SkImage image={still} x={-fw / 4} y={-fh / 2} width={fw / 2} height={fh / 2} fit="contain" />
+          </SoftEllipse>
+        </Group>
       </Group>
     </Group>
   );
 }
 
-/** Critters wandering a reef, over a still ground mist (fog is thicker at reefs). */
-export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets, count, slots, wanderPts, clock, animated, lite, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
+/** Scareactors standing in a reef, over a still ground mist (fog is thicker at reefs). */
+export const ReefCritters = memo(function ReefCritters({ reefKey, assets, count, slots, wanderPts, clock, animated, full, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
   readonly reefKey: string;
-  readonly slugs: readonly string[];
-  /** Each slug's sheet (null: placeholder). */
+  /** The reef's cast in order (null: unknown slug, the slot draws nothing). */
   readonly assets: readonly (FrightSheetAsset | null)[];
-  /** Critters drawn now. */
+  /** Performers drawn now. */
   readonly count: number;
   /**
-   * Critter slots always mounted (the reef's most). Budget and motion changes
-   * only show or hide slots: mounting and unmounting Skia nodes that a moving
+   * Slots always mounted (the reef's most). Budget and motion changes only
+   * show or hide slots: mounting and unmounting Skia nodes that a moving
    * clock still animates crashed RN Skia (JsiDomDeclarationNode::invalidateContext).
    */
   readonly slots: number;
   readonly wanderPts: number;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
-  /** Lite: idle and jump only, no lurk. */
-  readonly lite: boolean;
+  /** Full tier: lurks and slides. Lite: idle and jump only. */
+  readonly full: boolean;
   /** 0, or the side (+1 / -1) the player is on when within 60 m. */
   readonly watch: number;
-  /** Bumps on each jump (reef entry or the ambient jump); `jumpIndex` picks the critter. */
+  /** Bumps on each jump (reef entry or the ambient jump); `jumpIndex` picks the performer. */
   readonly jumpToken: number;
   readonly jumpIndex: number;
   readonly intensity: number;
@@ -172,36 +173,35 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
   // Inside the canvas (a canvas edge would cut it into a hard band) and feathered on every side.
   const mistW = W * 0.96;
   const mistH = Math.min(H * 0.6, MIST_H * (mistW / MIST_W) * 1.6);
+  const shown = Math.min(count, slots);
   return (
-    <Canvas style={{ width: W, height: H }} pointerEvents="none">
+    <FrightCanvas style={{ width: W, height: H }} pointerEvents="none">
       {<FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
       {/* Fixed at `slots` (the reef's most): the budget only shows or hides slots, never mounts them. */}
       {Array.from({ length: slots }, (_, i) => {
-        const k = slugs.length ? i % slugs.length : 0;
+        const k = assets.length ? i % assets.length : 0;
         return (
-          <Critter key={i} seed={seed + i * 37} clock={clock} wander={wanderPts} watch={watch} jumpStart={jumpStart}
-            jumper={i === jumpIndex % Math.max(1, Math.min(count, slots))} slug={slugs[k] ?? null} asset={assets[k] ?? null} index={i}
-            cx={cx} cy={cy} animated={animated && i < Math.min(count, slots)} lite={lite} on={i < Math.min(count, slots)} />
+          <Scareactor key={i} seed={seed + i * 37} index={i} slots={slots} clock={clock} wander={wanderPts} watch={watch}
+            jumpStart={jumpStart} jumper={i === jumpIndex % Math.max(1, shown)} asset={assets[k] ?? null}
+            cx={cx} cy={cy} animated={animated && i < shown} full={full} on={i < shown} />
         );
       })}
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
-/** Zoomed out or calm: the first critter's still frame marks the reef. */
-export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }: {
-  readonly slug: string | null; readonly staticUrl: string | null; readonly intensity: number;
+/** Zoomed out (under 15.5), calm or low battery: the reef's first scareactor, still. */
+export const ReefGlyph = memo(function ReefGlyph({ staticUrl, intensity }: {
+  readonly staticUrl: string | null; readonly intensity: number;
 }) {
-  const look = useMemo(() => critterLook(slug, 0), [slug]);
   const still = useRemoteImage(staticUrl);
   return (
-    <Canvas style={{ width: 52, height: 52 }} pointerEvents="none">
+    <FrightCanvas style={{ width: 52, height: 52 }} pointerEvents="none">
       <Oval x={4} y={36} width={44} height={12} color={NIGHT.fog} opacity={0.45 * Math.max(0.4, intensity)} />
       <Group opacity={still ? 1 : 0}>
         <SoftEllipse x={6} y={2} w={40} h={41} inner={0.7}><SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" /></SoftEllipse>
       </Group>
-      <Group opacity={still ? 0 : 1}><Group transform={[{ translateX: 26 }, { translateY: 42 }, { scale: 0.9 }]}><CritterBody look={look} /></Group></Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
@@ -213,6 +213,8 @@ const LH = 100;
 const LANTERN_FOOT = 36;
 /** The marker is wider than the facade so the name chip is never squeezed to the facade's width. */
 const LANTERN_W = 168;
+/** The haunt marker's box (constant: facade plus the reserved chip foot). */
+export const HAUNT_BOX = { w: LANTERN_W, h: LH + LANTERN_FOOT } as const;
 /** The facade's ground point (glow pool center) as a marker anchor. */
 export const HAUNT_ANCHOR = { x: 0.5, y: (LH - 18) / (LH + LANTERN_FOOT) };
 const HOUSE = Skia.Path.MakeFromSVGString('M14 36 L38 12 L62 36 L62 74 L14 74 Z')!;
@@ -403,7 +405,7 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
     ? chipShiftClear(chipX, chipY ?? Number.NaN, chipSize.w, chipSize.h, screenW, huds) : 0;
   return (
     <View style={styles.lantern}>
-      <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
+      <FrightCanvas style={{ width: LW, height: LH }} pointerEvents="none">
         <Group opacity={lit}>
           <Circle cx={LW / 2} cy={LH - 18} r={36} opacity={glow}>
             <RadialGradient c={vec(LW / 2, LH - 18)} r={36} colors={[glowColor, `${glowColor}00`]} />
@@ -419,7 +421,7 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
               clock={clock} animated={animated && !base && !showIcon} dim={dim} done={done} />
           </Group>
         </Group>
-      </Canvas>
+      </FrightCanvas>
       {/* Opacity-only inside the Marker: icon, survived badge and chip are always mounted. */}
       <Image source={iconUrl ? { uri: iconUrl } : null} style={[styles.icon, dim && styles.iconDim, !showIcon && styles.gone]}
         contentFit="contain" cachePolicy="memory-disk" transition={0} />
@@ -453,6 +455,8 @@ const NO_LAYERS: FrightHauntLayers = { frame: [160, 160], base: null, windows: n
 const MAX_BATS = 2;
 const PW = 200;
 const PH = 150;
+/** The SpotProps canvas (constant). */
+export const PROPS_BOX = { w: PW, h: PH } as const;
 
 function Bat({ k, seed, clock, sheet, fw, fh, frames, animated, on = true }: {
   k: number; seed: number; clock: SharedValue<number>; sheet: SkImageType | null; fw: number; fh: number; frames: number; animated: boolean;
@@ -618,7 +622,7 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
   const batFrame = batAsset?.frame ?? [BAT_FRAME, BAT_FRAME];
   const batFrames = batAsset?.rows?.[0] ?? BAT_FRAMES;
   return (
-    <Canvas style={{ width: PW, height: PH }} pointerEvents="none">
+    <FrightCanvas style={{ width: PW, height: PH }} pointerEvents="none">
       {/* Fixed Skia trees: every prop node is mounted; the spot's props, budget, tier and motion only
           show or hide them (RN Skia unmount race under a moving map). */}
       <Group opacity={props.includes('fog-thick') ? 1 : 0}>
@@ -638,90 +642,159 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
         <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames}
           animated={props.includes('bats') && animated && !lite && k < bats} on={props.includes('bats') && animated && !lite && k < bats} />
       ))}
-    </Canvas>
+    </FrightCanvas>
   );
 });
-
-const ENCOUNTER_LOOKS = ['chuckles', 'riptide'] as const;
-
-/** Trail dots always mounted (tier changes only show or hide them). */
-const MAX_TRAIL = 6;
 
 /* ── Encounter ────────────────────────────────────────────────────────── */
 
+/** The tappable critter's box: 88 pt, above the 44 pt minimum. */
+export const ENCOUNTER_CRITTER_PT = 88;
+
 /**
- * The Lantern Star encounter: its icon sheet (appear once, then idle; the
- * chaos loop during Chaos Hour and the first 20 s) inside a pulsing ring,
- * with a spark trail. Calm: the still frame and a "here" ring.
+ * The Lantern Star encounter's ring: a pulsing radius ring and the skid-fin
+ * spark passes (sheet `skid-fin-sparks`, 8 frames at 16 fps, sliding 80 pt/s
+ * for 1.5 s on a new heading each pass). Takes no touches; the critter on top
+ * is its own (tappable) marker. Calm: a still "here" ring.
  */
-export const EncounterSprite = memo(function EncounterSprite({ critter, asset, chaos, ringPts, trail, clock, animated, lite }: {
-  readonly critter: 'chuckles' | 'riptide';
-  readonly asset: FrightSheetAsset | null;
-  readonly chaos: boolean;
+export const EncounterRing = memo(function EncounterRing({ ringPts, clock, animated, sparkToken, sparks }: {
   readonly ringPts: number;
-  readonly trail: number;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
-  readonly lite: boolean;
+  /** Bumps when a spark pass starts (through the 2-event gate). */
+  readonly sparkToken: number;
+  readonly sparks: FrightAmbientAsset | null;
 }) {
-  const S = Math.round(Math.max(ringPts * 2 + 60, 120));
+  const S = Math.round(Math.max(ringPts * 2 + 40, 140));
   const c = S / 2;
-  const look = useMemo(() => critterLook(critter), [critter]);
-  const sheet = useRemoteImage(asset?.sheet);
-  const still = useRemoteImage(asset?.static);
-  const spawn = useSharedValue(clock.value);
-  const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'appear'), rowIndex(asset, 'chaos-hour')] : [0, -1, -1]), [asset]);
-  const { frames, fps } = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
+  const sheet = useRemoteImage(animated ? sparks?.file : null);
+  const sparkAt = useSharedValue(-1000);
+  const heading = useSharedValue(0);
+  useEffect(() => {
+    if (sparkToken <= 0) return;
+    heading.value = hash01(sparkToken * 13.7) * Math.PI * 2;
+    sparkAt.value = clock.value;
+  }, [sparkToken, clock, sparkAt, heading]);
   const ringR = useDerivedValue(() => ringPts * (animated ? 0.94 + 0.06 * Math.sin(clock.value * 2.4) : 1));
-  const ringO = useDerivedValue(() => (animated ? 0.55 + 0.25 * Math.sin(clock.value * 2.4) : 0.7));
-  const at = (lag: number) => {
-    'worklet';
-    const a = (animated ? clock.value : 0) * 0.5 - lag;
-    return { x: c + Math.cos(a) * ringPts * 0.35, y: c + Math.sin(a) * ringPts * 0.25 };
-  };
-  const pose = useDerivedValue(() => {
-    const idle = rows[0] >= 0 ? rows[0] : 0;
-    if (!animated) return { row: idle, frame: 0 }; // paused: no clock read
-    const age = clock.value - spawn.value;
-    const frame = Math.floor(clock.value * fps) % frames;
-    if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.floor(age * fps) };
-    if (!lite && rows[2] >= 0 && (chaos || age < 20)) return { row: rows[2], frame };
-    return { row: idle, frame };
+  const ringO = useDerivedValue(() => (animated ? 0.55 + 0.25 * Math.sin(clock.value * 2.4) : 0.75));
+  const [fw, fh] = sparks?.frame ?? [192, 64];
+  const frames = sparks?.rows?.[0] ?? 8;
+  const fps = Math.min(16, Number(sparks?.fps) || 16);
+  const pass = useDerivedValue(() => (animated ? sparkPass(clock.value - sparkAt.value, frames, fps) : { d: 0, frame: 0, opacity: 0 }));
+  // The pass crosses the ring through its middle: start 60 pt before center along the heading.
+  const sparkTransform = useDerivedValue(() => {
+    const d = pass.value.d - SPARK_RUN_S * 40;
+    return [{ translateX: c + Math.cos(heading.value) * d }, { translateY: c + Math.sin(heading.value) * d },
+      { rotate: heading.value }];
   });
-  const frame = useDerivedValue(() => pose.value.frame);
-  const row = useDerivedValue(() => pose.value.row);
-  const body = useDerivedValue(() => {
-    const p = at(0);
-    return [{ translateX: p.x }, { translateY: p.y }];
-  });
-  const fw = asset?.frame[0] ?? 160;
-  const fh = asset?.frame[1] ?? 160;
+  const sparkFrame = useDerivedValue(() => pass.value.frame);
+  const sparkOpacity = useDerivedValue(() => pass.value.opacity);
+  const row = useSharedValue(0);
   return (
-    <Canvas style={{ width: S, height: S }} pointerEvents="none">
-      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
+    <FrightCanvas style={{ width: S, height: S }} pointerEvents="none">
       <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} opacity={0.08} />
-      {Array.from({ length: MAX_TRAIL }, (_, j) => <TrailDot key={j} j={j} at={at} on={animated && j < trail} />)}
-      <Group transform={body}>
-        {/* Every look stays mounted; only one is opaque (sheet while animated, else still, else placeholder). */}
-        <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 4 - 8} opacity={sheet && animated ? 1 : 0} />
-        <SkImage image={still} x={-fw / 4} y={-fh / 4 - 8} width={fw / 2} height={fh / 2} fit="contain" opacity={!(sheet && animated) && still ? 1 : 0} />
-        {ENCOUNTER_LOOKS.map(name => (
-          <Group key={name} transform={[{ translateY: 10 }, { scale: 1.1 }]} opacity={!(sheet && animated) && !still && critter === name ? 1 : 0}>
-            <CritterBody look={critterLook(name)} />
-          </Group>
-        ))}
+      <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
+      {/* Always mounted: no sheet or paused = opacity 0. */}
+      <Group transform={sparkTransform} opacity={animated && sheet ? 1 : 0}>
+        <SheetFrame image={sheet} fw={fw} fh={fh} frame={sparkFrame} row={row} x={-fw / 2} y={-fh / 4} opacity={sparkOpacity} />
       </Group>
-    </Canvas>
+    </FrightCanvas>
   );
 });
 
-function TrailDot({ j, at, on }: { j: number; at: (lag: number) => { x: number; y: number }; on: boolean }) {
-  const c = useDerivedValue(() => {
-    const p = at(0.12 * (j + 1));
-    return vec(p.x, p.y + 20);
-  });
-  return <Circle c={c} r={3 - j * 0.35} color={NIGHT.candy} opacity={on ? 0.7 - j * 0.1 : 0} />;
-}
+/** The performer draws at most this much over its @2x size (128 px frames would blur past it). */
+const ENCOUNTER_MAX_SCALE = 1.2;
+
+/**
+ * The Lantern Star encounter's performer (human Chuckles or Riptide, a
+ * scareactor sheet: rows idle, lurk, scare, slide; 128 px frames @2x): the
+ * scare row once on spawn (out of the fog and back), then the knee slide
+ * during Chaos Hour and the first 20 s (full tier), else idle. Lite: appear
+ * and idle. Calm or not animated: the still. A soft glow marks the spot
+ * while the art loads.
+ */
+export const EncounterCritter = memo(function EncounterCritter({ asset, chaos, clock, animated, full, spawnKey }: {
+  /** The performer's scareactor sheet (null: the glow only). */
+  readonly asset: FrightSheetAsset | null;
+  readonly chaos: boolean;
+  readonly clock: SharedValue<number>;
+  readonly animated: boolean;
+  readonly full: boolean;
+  /** The encounter now on screen (null when none). The sprite is always mounted, so the
+   * appear row plays when a new key first shows, not when the map mounts. */
+  readonly spawnKey: string | null;
+}) {
+  const B = ENCOUNTER_CRITTER_PT;
+  const sheet = useRemoteImage(asset?.sheet);
+  const still = useRemoteImage(asset?.static);
+  const spawn = useSharedValue(-1e6); // no spawn yet: idle, never the appear row
+  const spawned = useRef<string | null>(null);
+  useEffect(() => {
+    if (!spawnKey || spawned.current === spawnKey) return;
+    spawned.current = spawnKey;
+    spawn.value = clock.value;
+  }, [spawnKey, clock, spawn]);
+  const rows = useMemo(() => (asset ? encounterRows(asset) : [0, -1, -1]), [asset]);
+  const fw = asset?.frame[0] ?? 128;
+  const fh = asset?.frame[1] ?? 128;
+  const timing = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
+  const frames = sheet ? Math.max(1, Math.min(timing.frames, Math.round(sheet.width() / fw))) : timing.frames;
+  const fps = timing.fps;
+  const pose = useDerivedValue(() => (animated
+    ? encounterPose(clock.value, clock.value - spawn.value, rows, frames, fps, chaos, full)
+    : { row: rows[0] >= 0 ? rows[0] : 0, frame: 0 })); // paused: no clock read
+  const frame = useDerivedValue(() => pose.value.frame);
+  const row = useDerivedValue(() => pose.value.row);
+  const scale = Math.min(ENCOUNTER_MAX_SCALE, B / (fw / 2));
+  const inset = (B - (fw / 2) * scale) / 2;
+  return (
+    <FrightCanvas style={{ width: B, height: B }} pointerEvents="none">
+      {/* Every look stays mounted; only one is opaque (sheet while animated, else still, else the glow). */}
+      <Circle cx={B / 2} cy={B / 2} r={B / 4} color={NIGHT.lantern} opacity={!(sheet && animated) && !still ? 0.35 : 0}>
+        <BlurMask blur={10} style="normal" />
+      </Circle>
+      <Group transform={[{ translateX: inset }, { translateY: inset }, { scale }]}>
+        {/* Feathered like the reef cast: a frame's fog never ends in a hard band at its edge. */}
+        <SoftEllipse x={0} y={0} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
+          <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} opacity={sheet && animated ? 1 : 0} />
+          <SkImage image={still} x={0} y={0} width={fw / 2} height={fh / 2} fit="contain" opacity={!(sheet && animated) && still ? 1 : 0} />
+        </SoftEllipse>
+      </Group>
+    </FrightCanvas>
+  );
+});
+
+/* ── Lagoon Glow-Down ─────────────────────────────────────────────────── */
+
+/**
+ * The show spot's glow (sheet `lagoon-glow`, 10 frames) while a performance
+ * runs: 10 fps in full, 6 fps in lite, the still first frame in calm.
+ */
+export const LagoonGlow = memo(function LagoonGlow({ asset, widthPts, clock, fps, intensity }: {
+  readonly asset: FrightAmbientAsset;
+  readonly widthPts: number;
+  readonly clock: SharedValue<number>;
+  /** 0 holds frame 0. */
+  readonly fps: number;
+  readonly intensity: number;
+}) {
+  const image = useRemoteImage(asset.file);
+  const [fw, fh] = asset.frame ?? [256, 128];
+  const frames = asset.rows?.[0] ?? 10;
+  const W = Math.round(widthPts);
+  const scale = W / (fw / 2);
+  const H = Math.round((fh / 2) * scale);
+  const frame = useDerivedValue(() => (fps > 0 ? Math.floor(clock.value * fps) % frames : 0));
+  const row = useSharedValue(0);
+  return (
+    <FrightCanvas style={{ width: W, height: H }} pointerEvents="none">
+      {/* Fixed tree: the frame is mounted before the sheet loads (opacity 0 until then). */}
+      <Group transform={[{ scale }]} opacity={image ? Math.max(0.4, intensity) : 0}>
+        <SheetFrame image={image} fw={fw} fh={fh} frame={frame} row={row} x={0} y={0} />
+      </Group>
+    </FrightCanvas>
+  );
+});
 
 const styles = StyleSheet.create({
   // At least 44 pt wide and tall: the whole facade is the tap target.

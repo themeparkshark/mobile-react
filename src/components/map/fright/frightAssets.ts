@@ -2,8 +2,9 @@
  * Server-hosted art for the fright map (GET /parks/{id}/fright `assets`):
  * slug lookups, sheet geometry, window flicker timelines per MAP_FX_SPEC,
  * the encounter's Chaos Hour and an image cache that loads each URL once.
- * Pure, unit tested. Nothing here hard-codes a critter or haunt slug: spots
- * name their art (`fx.critter`, `fx.art`) and the manifest says what exists.
+ * Pure, unit tested. Nothing here hard-codes a scareactor or haunt slug: spots
+ * name their art (`fx.scareactors`, `fx.art`) and the manifest says what
+ * exists. Scareactor lookups and rows live in scareactors.ts.
  */
 import type { FrightAssets, FrightHauntLayers, FrightSheetAsset, FrightSpot } from '../../../api/endpoints/fright/types';
 import { randAt } from './random';
@@ -15,12 +16,6 @@ export function hauntLayers(assets: FrightAssets | null | undefined, spot: Pick<
   const slug = spot.fx?.art;
   const layers = slug ? assets?.haunts?.[slug]?.layers : null;
   return layers && layers.base && validFrame(layers.frame) ? layers : null;
-}
-
-/** A critter's sheet by slug (null: unknown slug, draw the placeholder). */
-export function critterAsset(assets: FrightAssets | null | undefined, slug: string | null | undefined): FrightSheetAsset | null {
-  const a = slug ? assets?.critters?.[slug] : null;
-  return a && (a.sheet || a.static) && validFrame(a.frame) ? a : null;
 }
 
 export function iconAsset(assets: FrightAssets | null | undefined, slug: string): FrightSheetAsset | null {
@@ -36,18 +31,9 @@ function validFrame(frame: readonly number[] | null | undefined): boolean {
   return !!frame && frame.length === 2 && frame[0] > 0 && frame[1] > 0;
 }
 
-/** Row index for a row name ("idle", "jump", "appear"...): rows may carry suffixes ("idle loop"). -1 when absent. */
+/** Row index for a row name ("idle", "scare", "shh"...): rows may carry suffixes ("idle loop"). -1 when absent. */
 export function rowIndex(asset: Pick<FrightSheetAsset, 'rows'>, name: string): number {
   return asset.rows.findIndex(row => row === name || row.startsWith(`${name} `));
-}
-
-/**
- * A critter sheet's [idle, lurk, jump] rows. The scareactor redo names its
- * pop-out row "scare" (rows idle, lurk, scare, slide): it plays as the jump.
- */
-export function critterRows(asset: Pick<FrightSheetAsset, 'rows'>): number[] {
-  const jump = rowIndex(asset, 'jump');
-  return [rowIndex(asset, 'idle'), rowIndex(asset, 'lurk'), jump >= 0 ? jump : rowIndex(asset, 'scare')];
 }
 
 /** Frames per row (manifest value, 10 by default) and the frame rate (10 fps, never above 10). */
@@ -78,6 +64,50 @@ export function isChaosHour(startsAt: string, endsAt: string): boolean {
   const chaos = 23 * 60 + 11;
   if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
   return a <= b ? a <= chaos && chaos < b : a <= chaos || chaos < b;
+}
+
+/** Chaos Hour from the server's flag when sent, else from the window's park times. */
+export function encounterChaos(enc: { readonly chaos_hour?: boolean | null; readonly starts_at: string; readonly ends_at: string }): boolean {
+  return typeof enc.chaos_hour === 'boolean' ? enc.chaos_hour : isChaosHour(enc.starts_at, enc.ends_at);
+}
+
+/** Seconds the chaos loop plays after any spawn (MAP_FX_SPEC). */
+export const CHAOS_SPAWN_S = 20;
+
+/**
+ * The encounter's frame (UI thread). `rows` = [idle, appear, chaos] row
+ * indexes (-1 when missing). On spawn `appear` plays once; then `chaos`
+ * during Chaos Hour and for the first 20 s (full only), else `idle`.
+ */
+export function encounterPose(t: number, age: number, rows: readonly number[], frames: number, fps: number,
+  chaos: boolean, full: boolean): { row: number; frame: number } {
+  'worklet';
+  const idle = rows[0] >= 0 ? rows[0] : 0;
+  const loop = Math.floor(Math.max(0, t) * fps) % frames;
+  if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.min(frames - 1, Math.floor(age * fps)) };
+  if (full && rows[2] >= 0 && (chaos || (age >= 0 && age < 20))) return { row: rows[2], frame: loop };
+  return { row: idle, frame: loop };
+}
+
+/** Skid-fin sparks: 8 frames at 16 fps, sliding 80 pt/s for 1.5 s across the encounter (MAP_FX_SPEC). */
+export const SPARK_RUN_S = 1.5;
+export const SPARK_SPEED_PT = 80;
+
+/** Where a spark pass is at `age` seconds: offset from its start along its heading, frame, opacity. */
+export function sparkPass(age: number, frames: number, fps: number): { d: number; frame: number; opacity: number } {
+  'worklet';
+  if (age < 0 || age >= SPARK_RUN_S) return { d: 0, frame: 0, opacity: 0 };
+  const fade = Math.min(1, age / 0.15, (SPARK_RUN_S - age) / 0.25);
+  return { d: age * SPARK_SPEED_PT, frame: Math.floor(age * fps) % Math.max(1, frames), opacity: fade };
+}
+
+/** Lagoon Glow-Down: the start (ms) of the show performance running now, or null. */
+export function activeShowStart(times: readonly string[] | null | undefined, serverNowMs: number, windowMs: number): number | null {
+  for (const iso of times ?? []) {
+    const start = Date.parse(iso);
+    if (Number.isFinite(start) && serverNowMs >= start && serverNowMs < start + windowMs) return start;
+  }
+  return null;
 }
 
 /* ── Window flicker timelines (MAP_FX_SPEC section 2, Haunts) ─────────── */
