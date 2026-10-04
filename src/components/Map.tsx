@@ -3,7 +3,7 @@ import { createContext, type MutableRefObject, ReactNode, useCallback, useContex
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
-import { courseDeg, facingFor, wakeTurn } from './map/playerMotion';
+import { courseDeg, facingFor, strideHalfMs, wakeTurn } from './map/playerMotion';
 import { glideDurationMs, glideMeters } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -23,7 +23,7 @@ import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput,
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
-import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
+import { canMirrorShark, hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
 import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
@@ -61,6 +61,8 @@ const SHARK_GROUND = { x: 50, y: 100 } as const;
 const WEAK_RING_MAX_PT = 200;
 const WEAK_RING_MIN_PT = 110;
 const WEAK_RING_MIN_M = 40;
+/** The wake stays up this long after a real step (a walk sends a fix every 1 to 2 s). */
+const WAKE_HOLD_MS = 2200;
 /** At this accuracy (m) or worse the ring is at its widest and strongest. */
 const WEAK_RING_FULL_M = 150;
 
@@ -161,17 +163,33 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [gpsSignal?.weak, gpsSignal?.accuracyMeters, weak, weakAccuracy]);
   // Walking: the shark faces its screen direction (art flips) and a quick stride bounce
   // rides on the idle bob while the wake is up; standing, both settle.
+  // A shark wearing lettering (a TPS tee, a jersey) never mirrors: it leans into the turn instead.
+  const mirrorOk = useSharedValue(1);
+  const canMirror = canMirrorShark(player?.inventory);
+  useEffect(() => { mirrorOk.value = canMirror ? 1 : 0; }, [canMirror, mirrorOk]);
   const facing = useSharedValue(1);
   const stride = useSharedValue(0);
   useAnimatedReaction(() => facingFor(travelCourse.value, mapBearing.value, facing.value > 0 ? 1 : -1), (next, prevSign) => {
-    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 220 });
+    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 260 });
   });
+  // The stride runs only while walking, at the walking pace (a stroll waddles slower).
+  const strideMs = useRef(0);
+  const strideStop = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runStride = (speedMps: number, holdMs: number) => {
+    if (reducedMotion || !screenFocused || ambientFrozen) return;
+    const ms = strideHalfMs(speedMps);
+    if (Math.abs(ms - strideMs.current) >= 20) {
+      strideMs.current = ms;
+      stride.value = withRepeat(withSequence(withTiming(1, { duration: ms }), withTiming(0, { duration: ms })), -1, false);
+    }
+    if (strideStop.current) clearTimeout(strideStop.current);
+    strideStop.current = setTimeout(() => { strideMs.current = 0; cancelAnimation(stride); stride.value = withTiming(0, { duration: 200 }); }, holdMs);
+  };
+  useEffect(() => () => { if (strideStop.current) clearTimeout(strideStop.current); }, []);
   useEffect(() => {
-    if (reducedMotion || !screenFocused || ambientFrozen) { stride.value = 0; return; }
-    stride.value = withRepeat(withSequence(withTiming(1, { duration: 170 }), withTiming(0, { duration: 170 })), -1, false);
-    return () => cancelAnimation(stride);
+    if (reducedMotion || !screenFocused || ambientFrozen) { strideMs.current = 0; cancelAnimation(stride); stride.value = 0; }
   }, [reducedMotion, screenFocused, ambientFrozen, stride]);
-  const motion = { idle, sway, glow, wake, stride, facing, weak, weakAccuracy };
+  const motion = { idle, sway, glow, wake, stride, facing, mirrorOk, weak, weakAccuracy };
   // One set of animated styles per drawn copy (follow view, two marker copies). A copy that is
   // not on screen holds still, so only the visible shark costs UI-thread work each frame.
   const overlayLive = useSharedValue(1);
@@ -233,7 +251,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const course = courseDeg(prev, location);
     if (walking && course !== null) travelCourse.value = course;
     if (walking) {
-      wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(glideDuration + 600, withTiming(0, { duration: 700 })));
+      // Held across the gap to the next fix (about 1 to 2 s on a walk), so the wake never drops mid-walk.
+      const hold = Math.max(glideDuration + 600, WAKE_HOLD_MS);
+      wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(hold, withTiming(0, { duration: 700 })));
+      runStride(distMeters / Math.max(0.5, sinceLastS), hold + 900);
     }
   }, [location?.latitude, location?.longitude]);
 
@@ -815,7 +836,7 @@ const styles = StyleSheet.create({
     left: SHARK_GROUND.x - WEAK_RING_MAX_PT / 2, top: SHARK_GROUND.y - WEAK_RING_MAX_PT / 2 },
   weakFill: { ...StyleSheet.absoluteFillObject, opacity: 0.55 },
   weakRim: { ...StyleSheet.absoluteFillObject, margin: 14, borderRadius: WEAK_RING_MAX_PT / 2, borderWidth: 2.5,
-    borderColor: 'rgba(170, 215, 255, 0.85)', backgroundColor: 'rgba(79, 149, 214, 0.08)' },
+    borderColor: 'rgba(170, 215, 255, 0.6)', backgroundColor: 'rgba(79, 149, 214, 0.08)' },
   sharkMarkerContainer: {
     width: 100,
     height: 110,
@@ -870,6 +891,7 @@ const styles = StyleSheet.create({
 type SharkMotion = {
   readonly idle: SharedValue<number>; readonly sway: SharedValue<number>; readonly glow: SharedValue<number>;
   readonly wake: SharedValue<number>; readonly stride: SharedValue<number>; readonly facing: SharedValue<number>;
+  readonly mirrorOk: SharedValue<number>;
   readonly weak: SharedValue<number>; readonly weakAccuracy: SharedValue<number>;
 };
 type SharkStyles = ReturnType<typeof useSharkStyles>;
@@ -880,11 +902,17 @@ type SharkStyles = ReturnType<typeof useSharkStyles>;
  */
 function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
   const shark = useAnimatedStyle(() => {
-    if (live.value === 0) return { transform: [{ translateY: 0 }, { rotate: '0deg' }, { scale: 1 }, { scaleX: 1 }] };
+    if (live.value === 0) return { transform: [{ translateY: 0 }, { rotate: '0deg' }, { scale: 1 }, { scaleX: 1 }, { scaleY: 1 }] };
     const step = m.stride.value * m.wake.value;
+    // The turn: never thinner than 35 % (a swim turn, not a card flip), a slight squash and a
+    // lean into it. A shark wearing lettering keeps facing left and only leans.
+    const f = m.facing.value;
+    const mid = 1 - Math.abs(f);
+    const sx = m.mirrorOk.value > 0 ? (f >= 0 ? 1 : -1) * Math.max(0.35, Math.abs(f)) : 1;
+    const lean = (m.mirrorOk.value > 0 ? 7 * mid : 8 * (1 - f) / 2) * (f >= 0 ? -1 : 1);
     return {
-      transform: [{ translateY: -8 * m.idle.value - 5 * step }, { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value}deg` },
-        { scale: 1 + 0.04 * m.idle.value }, { scaleX: m.facing.value }],
+      transform: [{ translateY: -8 * m.idle.value - 5 * step }, { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value + lean}deg` },
+        { scale: 1 + 0.04 * m.idle.value }, { scaleX: sx }, { scaleY: 1 - 0.06 * mid }],
     };
   });
   const shadow = useAnimatedStyle(() => {

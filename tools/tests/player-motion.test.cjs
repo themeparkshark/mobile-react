@@ -150,8 +150,9 @@ test('the shark faces where it walks on screen (art flips), with a dead band for
   assert.equal(motion.facingFor(90, 90, -1), -1, 'east on an east-up map is straight up: unchanged');
   assert.equal(motion.facingFor(0, 90, 1), 1, 'north on an east-up map heads left');
   const map = read('src/components/Map.tsx');
-  assert.match(map, /\{ scaleX: m\.facing\.value \}/);
-  assert.match(map, /facing\.value = withTiming\(next, \{ duration: 220 \}\)/);
+  assert.match(map, /Math\.max\(0\.35, Math\.abs\(f\)\)/, 'never a paper-thin card flip');
+  assert.match(map, /\{ scaleX: sx \}, \{ scaleY: 1 - 0\.06 \* mid \}/, 'a slight squash mid-turn');
+  assert.match(map, /facing\.value = withTiming\(next, \{ duration: 260 \}\)/);
   assert.match(map, /const step = m\.stride\.value \* m\.wake\.value;/, 'the stride bounce only rides on a real walk');
 });
 
@@ -171,4 +172,42 @@ test('the weak ring grades with accuracy (not zoom) and has a rim apart from the
   assert.match(map, /\(m\.weakAccuracy\.value - WEAK_RING_MIN_M\) \/ \(WEAK_RING_FULL_M - WEAK_RING_MIN_M\)/);
   assert.doesNotMatch(map.slice(map.indexOf('function useSharkStyles')), /zoomPpm/);
   assert.match(map, /<View style=\{styles\.weakRim\} \/>/);
+});
+
+test('a shark wearing lettering never mirrors (TPS tees, jerseys, hoodies, passes); plain outfits do', () => {
+  const w = loadTs('src/helpers/wardrobe.ts');
+  // Names from the wardrobe catalog (local items table, October 2026).
+  const lettered = ['White TPS T-Shirt', 'I Love Whip Black T-Shirt', 'Blue Jersey Shirt', 'Shark Squad Jersey', 'Rainbow Hoodie',
+    'JPland21 Hoodie', 'Greetings From TPS Shirt', 'Red Beta Pass', 'Yellow Annual Pass', 'Black White TPS Hat', 'Christmas Sweater',
+    'Letterman Jacket', "Jake's TPS Long Sleeve", '1000', 'Red Construction Update', 'Super Shark Shirt', 'Oogity Boo Jersey Shirt'];
+  const plain = ['Blue Cape', 'Witch Hat', 'Pirate Sword', 'Ice Cream Cone', 'Shutter Shades', 'Yellow Backpack', 'Owl Shoulder Toy',
+    'Blue Shark Overalls', 'Gold Medal', 'Cowboy Hat', 'Red Viking Helmet', 'Hawaiian Lei', 'Santa Beard', 'Magic Wand'];
+  for (const name of lettered) assert.ok(w.LETTERED_ITEM.test(name), `${name} has lettering`);
+  for (const name of plain) assert.ok(!w.LETTERED_ITEM.test(name), `${name} can mirror`);
+  const inv = slot => ({ [slot]: { name: slot === 'body_item' ? 'Blue TPS T-Shirt' : 'Witch Hat', paper_url: 'x' } });
+  assert.equal(w.canMirrorShark(inv('body_item')), false);
+  assert.equal(w.canMirrorShark(inv('head_item')), true);
+  assert.equal(w.canMirrorShark({ body_item: { name: 'Blue TPS T-Shirt', paper_url: '' } }), true, 'an item with no layer is not drawn');
+  assert.equal(w.canMirrorShark(null), true);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const sx = m\.mirrorOk\.value > 0 \?/);
+});
+
+test('the stride paces with the walk and stops when standing; the wake holds across the gap between fixes', () => {
+  assert.equal(motion.strideHalfMs(0.8), 225);
+  assert.equal(motion.strideHalfMs(2), 140);
+  assert.equal(motion.strideHalfMs(5), 140);
+  assert.equal(motion.strideHalfMs(0.2), 225);
+  assert.ok(motion.strideHalfMs(1.4) < 225 && motion.strideHalfMs(1.4) > 140);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const WAKE_HOLD_MS = 2200;/);
+  assert.match(map, /const hold = Math\.max\(glideDuration \+ 600, WAKE_HOLD_MS\);/);
+  assert.match(map, /runStride\(distMeters \/ Math\.max\(0\.5, sinceLastS\), hold \+ 900\);/);
+  assert.doesNotMatch(map, /stride\.value = withRepeat\(withSequence\(withTiming\(1, \{ duration: 170 \}\)/, 'no endless fixed-pace stride');
+});
+
+test('the glide reach is measured from the visible copy\'s point, so a burst of fixes never outgrows the clip box', () => {
+  const src = read('src/components/map/PlayerSharkMarker.tsx');
+  assert.match(src, /const reachM = Math\.hypot\(tE - \(active === 0 \? a0E\.value : a1E\.value\)/);
+  assert.match(src, /reachM \* ppm <= PLAYER_MAX_GLIDE_PT \? 'glide' : 'catch-up'/);
 });
