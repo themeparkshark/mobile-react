@@ -22,7 +22,7 @@ import { BRAND, GameIcon } from '../ui';
 import StandingsBoardV2 from './LeaderboardsScreen/StandingsBoardV2';
 import { prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
 import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standingsDemo';
-import { initialStandingsV2Tab, standingsV2Tabs, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
+import { initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
@@ -37,7 +37,10 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   const size = standingsTabSizing(tabs.length);
   const reduced = useUiReducedMotion();
   const [width, setWidth] = useState(0);
-  const segment = width / tabs.length;
+  // The rail has a 2 px border and 4 px padding on each side, so the tabs share
+  // width - 12. Sizing the pill from that inner width keeps it centred under
+  // every tab (the outer width drifted it right by a few px per tab).
+  const { inner: contentWidth, segment } = tabPillGeometry(width, tabs.length);
   // One shared position drives the pill and every label's color, so a label is
   // navy exactly while the white pill is under it (never white on white mid-slide).
   const pillX = useSharedValue(active);
@@ -45,14 +48,13 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
     pillX.value = reduced ? active : withSpring(active, { damping: 17, stiffness: 230 });
   }, [active, reduced, pillX]);
   const pill = useAnimatedStyle(() => ({
-    width: Math.max(0, segment - 8),
+    width: segment,
     transform: [{ translateX: pillX.value * segment }],
   }), [segment]);
   // Two-layer labels: white labels on the rail, and a navy copy of the same row
   // clipped to the pill. The navy follows the pill's edge exactly, with no grey
   // midpoint frame.
   const inner = useAnimatedStyle(() => ({ transform: [{ translateX: -pillX.value * segment }] }), [segment]);
-  const contentWidth = Math.max(0, width - 12);
   const tabContent = (tab: StandingsTabSpec | StandingsV2Tab, color: string, icon: boolean) => (
     <>
       {icon ? <GameIcon name={tab.icon} size={size.icon} /> : <View style={{ width: size.icon, height: size.icon }} />}

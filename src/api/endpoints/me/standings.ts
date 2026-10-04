@@ -41,6 +41,8 @@ export interface StandingsBoardDto {
   readonly last_week?: {
     readonly week_start: string; readonly rank: number; readonly score: number; readonly players_count: number;
     readonly title: string | null; readonly tickets: number; readonly seen: boolean;
+    /** A top-three place held for review (older servers omit it). */
+    readonly held?: boolean;
   } | null;
 }
 

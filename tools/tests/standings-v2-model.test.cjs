@@ -49,7 +49,7 @@ test('the server answer is read defensively: rows, rows around you, chase, goals
   assert.deepEqual(plain(board.aroundMe.map(r => r.id)), [70], 'rows already on the board are not repeated');
   assert.equal(board.chase.tied, false);
   assert.equal(board.goals.length, 3);
-  assert.deepEqual(plain(board.lastWeek), { weekStart: '2026-09-21', rank: 7, score: 14, playersCount: 28, title: null, tickets: 0, seen: false });
+  assert.deepEqual(plain(board.lastWeek), { weekStart: '2026-09-21', rank: 7, score: 14, playersCount: 28, title: null, tickets: 0, held: false, seen: false });
 
   const empty = model.boardModel(null, 'all_time', 5);
   assert.equal(empty.metric, 'ride_coins');
@@ -238,4 +238,27 @@ test('round 5: your row visibility from geometry, the goal note held while the w
   assert.ok(modal.indexOf('{(noteSlot || goalNote) && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');
   assert.match(modal, /setNoteSlot\(visible && hasWinNote\(\)\)/, 'its slot is reserved before it lands, so the list never shrinks');
   assert.match(read('src/components/OfflineBanner.tsx'), /ROUTE_EXTRA_TOP[^\n]*Leaderboard: 66/);
+});
+
+test('r6 follow-up: the tab pill is one inner tab wide, the goal note settles dimmed instead of leaving a gap', () => {
+  assert.deepEqual(plain(model.tabPillGeometry(372, 3)), { inner: 360, segment: 120 });
+  assert.deepEqual(plain(model.tabPillGeometry(372, 4)), { inner: 360, segment: 90 });
+  assert.deepEqual(plain(model.tabPillGeometry(0, 3)), { inner: 0, segment: 0 });
+  const screen = read('src/screens/LeaderboardScreen.tsx');
+  assert.match(screen, /tabPillGeometry\(width, tabs\.length\)/);
+  assert.match(screen, /width: segment,/, 'the pill fills exactly one tab');
+  const modal = read('src/components/PostWinRewardsModal.tsx');
+  assert.doesNotMatch(modal, /setTimeout\(\(\) => setGoalNote\(null\)/, 'the note never vanishes mid-screen');
+  assert.match(modal, /withTiming\(GOAL_NOTE_SETTLED_OPACITY/);
+  assert.match(modal, /accessibilityLiveRegion=\{noteSettled \? 'none' : 'polite'\}/, 'the settled copy is not announced twice');
+});
+
+test('r6 follow-up: a held podium week gets a "being checked" card, never a prize it might not get', () => {
+  const held = model.lastWeekCopy({ rank: 1, score: 26, playersCount: 30, title: null, tickets: 0, held: true });
+  assert.deepEqual(plain(held), { headline: '26 rides!', line: 'Top 3! The shark crew is checking your week.', reward: null });
+  assert.doesNotMatch(held.line, /Ticket|#1|Champ/);
+  const paidLater = model.lastWeekCopy({ rank: 1, score: 26, playersCount: 30, title: 'Ride Champ', tickets: 5, held: false });
+  assert.deepEqual(plain(paidLater), { headline: '26 rides!', line: 'Ride Champ! #1', reward: '+5 Tickets' });
+  const board = model.boardModel({ board: 'week', rows: [], last_week: { week_start: '2026-09-28', rank: 1, score: 26, players_count: 30, title: null, tickets: 0, held: true, seen: false } }, 'week', 5);
+  assert.equal(board.lastWeek.held, true);
 });
