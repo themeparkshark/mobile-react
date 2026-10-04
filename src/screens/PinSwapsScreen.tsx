@@ -106,6 +106,8 @@ export default function PinSwapsScreen() {
   const selectedRef = useRef<ItemType | undefined>(undefined);
   const confirmAt = useRef(0);
   const pinsPage = useRef({ next: 1, finished: false, loading: false, token: 0 });
+  const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const live = useRef({ board: [] as PinSwapType[], busyId: null as number | null, owned: new Set<number>(), pinsCount: 0, pinsKnown: false, lastGiven: null as number | null });
   holdRef.current = hold;
   phaseRef.current = phase;
   selectedRef.current = selected;
@@ -172,6 +174,7 @@ export default function PinSwapsScreen() {
 
   // Let the pin go back on the board if the player leaves mid-trade.
   useEffect(() => () => {
+    if (finishTimer.current) clearTimeout(finishTimer.current);
     const h = holdRef.current;
     if (h && isHolding(phaseRef.current)) void unHoldPinSwap(h.swap.id).catch(() => undefined);
   }, []);
@@ -197,22 +200,29 @@ export default function PinSwapsScreen() {
   }, [errors.pin_swap_unavailable]);
 
   const owned = useMemo(() => new Set(pins.map(p => p.id)), [pins]);
+  live.current = { board, busyId, owned, pinsCount: pins.length, pinsKnown: pinsReady && !pinsLoading && !pinsError, lastGiven };
   const badgeFor = useCallback((item: ItemType): BoardBadge => (
     owned.has(item.id) ? 'owned' : item.id === lastGiven ? 'yours' : undefined
   ), [owned, lastGiven]);
 
   /** Hold a board pin (fresh from the board, or "Try again" on the same pin after it expired). */
   const startHold = useCallback(async (swapId: number, again = false) => {
-    if (busyId != null || (holdRef.current && !again)) return;
-    const swap = again ? holdRef.current?.swap : board.find(s => s.id === swapId);
+    const now = live.current;
+    if (now.busyId != null || (holdRef.current && !again)) return;
+    const swap = again ? holdRef.current?.swap : now.board.find(s => s.id === swapId);
     if (!swap) return;
-    // No server call when the answer is already known: you own it, or you have nothing to give.
-    if (owned.has(swap.pin.item.id)) {
+    // No server call when the answer is already known: you own it, you just put it up, or you have nothing to give.
+    if (now.owned.has(swap.pin.item.id)) {
       beat('ui.select');
       gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
       return;
     }
-    if (pinsReady && !pinsLoading && !pinsError && pins.length === 0) {
+    if (swap.pin.item.id === now.lastGiven) {
+      beat('ui.select');
+      gameAlert(COPY.yoursTitle, COPY.yoursMessage, undefined, { icon: 'pin' });
+      return;
+    }
+    if (now.pinsKnown && now.pinsCount === 0) {
       beat('ui.select');
       gameAlert(COPY.noPinsTitle, COPY.noPinsHint, undefined, { icon: 'chest' });
       return;
@@ -226,19 +236,20 @@ export default function PinSwapsScreen() {
       setPhase('picking');
       sheetFade.value = 1;
       setHold({ swap: { ...swap, held_from: held.held_from, held_to: held.held_to }, deadline: Date.now() + totalMs, totalMs });
-      if (pinsError || !pinsReady) void loadPins(true, true);
+      if (!live.current.pinsKnown) void loadPins(true, true);
     } catch (error) {
-      if (again) {
+      const kind = classifyTradeError(error);
+      if (again && kind === 'taken') {
         setPhase('taken');
-        beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
+        beat('fx.nope', { volume: 0.6 }, 'failBuzz', 2);
       } else {
-        const kind = showError(error);
-        if (kind === 'taken') void loadBoard('refresh');
+        showError(error);
+        if (!again && kind === 'taken') void loadBoard('refresh');
       }
     } finally {
       setBusyId(null);
     }
-  }, [board, busyId, loadBoard, loadPins, owned, pins.length, pinsError, pinsLoading, pinsReady, showError]);
+  }, [loadBoard, loadPins, sheetFade, showError]);
 
   const onBoardPress = useCallback((swapId: number) => { void startHold(swapId); }, [startHold]);
   const onHoldAgain = useCallback(() => {
@@ -261,13 +272,14 @@ export default function PinSwapsScreen() {
     const h = holdRef.current;
     if (!h || phaseRef.current === 'sending') return;
     setPhase('expired');
-    beat('fx.nope', { volume: 0.8 }, 'warning', 2);
+    // Gentle: a soft close and one warning tap, not a fail buzz (nothing was lost).
+    beat('fx.purchaseCancel', { volume: 0.6 }, 'warning', 2);
     void unHoldPinSwap(h.swap.id).catch(() => undefined);
   }, []);
 
   const onTick = useCallback((left: number) => {
     // Soft coin ticks that climb as the last seconds run out.
-    beat('fx.coinTick', { volume: 0.5, pitch: (6 - left) * 1.5 });
+    beat('fx.coinTick', { volume: 0.35, pitch: (6 - left) * 0.8 });
   }, []);
 
   const onSelect = useCallback((item: ItemType) => {
@@ -304,8 +316,14 @@ export default function PinSwapsScreen() {
       sheetFade.value = withTiming(0, { duration: 200 });
     } catch (error) {
       const kind = classifyTradeError(error);
-      beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
-      setPhase(kind === 'taken' || kind === 'owned' ? 'taken' : 'failed');
+      if (kind === 'owned') {
+        // Not "someone got it first": tell the real reason and let them pick again.
+        setPhase('picking');
+        showError(error);
+        return;
+      }
+      beat('fx.nope', { volume: 0.7 }, 'failBuzz', 2);
+      setPhase(kind === 'taken' ? 'taken' : 'failed');
     }
   }, [onExpire]);
 
@@ -321,12 +339,16 @@ export default function PinSwapsScreen() {
     setDone(null);
     setHold(null);
     setSelected(undefined);
-    // Your pins changed (one out, one in); the board reloads after the fade, not under it.
-    setTimeout(() => {
-      void loadBoard('refresh');
-      void loadPins(true, true);
+    // Your pins changed (one out, one in); refresh both after the fade, then show them together
+    // so the board never renders a pin you now own without its Got it ribbon.
+    finishTimer.current = setTimeout(() => {
+      setRefreshing(true);
+      void Promise.all([getPinSwaps(), loadPins(true, true)]).then(([swaps]) => {
+        setBoard(swaps.map(boardEntry));
+        setBoardState('ready');
+      }).catch(() => undefined).finally(() => setRefreshing(false));
     }, 240);
-  }, [loadBoard, loadPins]);
+  }, [loadPins]);
 
   const timerLabel = useCallback((clock: string, minutes: number, seconds: string) => {
     const template = labels.trade_expiration;
@@ -378,10 +400,12 @@ export default function PinSwapsScreen() {
 
   return (
     <View style={styles.root} ref={rootRef} onLayout={onRootLayout} collapsable={false}>
-      {topbar}
+      <View accessibilityElementsHidden={!!hold || !!done} importantForAccessibility={hold || done ? 'no-hide-descendants' : 'auto'}>{topbar}</View>
       <View style={styles.body}>
         <PageWash />
         <ScrollView
+          accessibilityElementsHidden={!!hold || !!done}
+          importantForAccessibility={hold || done ? 'no-hide-descendants' : 'auto'}
           contentContainerStyle={[styles.scroll, { paddingHorizontal: pagePad }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadBoard('refresh')} tintColor={BRAND.white} />}
           scrollEnabled={!hold && !done}
@@ -444,7 +468,8 @@ export default function PinSwapsScreen() {
         </ScrollView>
 
         {hold && (
-          <Animated.View style={[StyleSheet.absoluteFill, sheetFadeStyle]} pointerEvents={done ? 'none' : 'box-none'}>
+          <Animated.View style={[StyleSheet.absoluteFill, sheetFadeStyle]} pointerEvents={done ? 'none' : 'box-none'} accessibilityViewIsModal={!done}
+            accessibilityElementsHidden={!!done} importantForAccessibility={done ? 'no-hide-descendants' : 'auto'}>
           <TradeSheet
             swap={hold.swap}
             phase={phase}

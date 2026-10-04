@@ -10,7 +10,9 @@ export default async function acceptPinSwap(
     `/pin-swaps/${pinSwap}/accept`,
     {
       item_id: item,
-    }
+    },
+    // The trade-complete moment says it; no duplicate "You now have..." banner.
+    { skipBroadcasts: true } as object
   );
 
   return data.data;

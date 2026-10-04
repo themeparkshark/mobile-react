@@ -1,23 +1,35 @@
 /**
- * A server pin drawn as a real enamel pin: one soft drop shadow tinted to the
- * surface it sits on, a feathered resting gloss on the upper face, and a
- * moving shine band. Every layer is a tinted copy of the pin's own art, so
- * shadow and shine follow the die-cut edge of any shape (castle, honey pot,
- * racecar) instead of a circle or a box. The art itself is never redrawn.
+ * A server pin drawn as a real enamel pin, in one Skia canvas:
+ * - a soft die-cut shadow (the art tinted to the surface and blurred, in a
+ *   padded canvas so the blur never clips on wide art),
+ * - the art itself, untouched,
+ * - a resting gloss: a long soft white falloff from the upper-left, plus one
+ *   small specular dot on the rim,
+ * - a moving shine: a soft 0 -> 0.45 -> 0 gradient sweep.
+ * Gloss, dot and shine are drawn with `srcATop` inside a layer, so they only
+ * ever land on the pin's own pixels (any die-cut shape), never as boxes.
+ * The art is never redrawn or restyled; these are light and shadow only.
+ *
+ * Until Skia has decoded the image, the plain art shows through expo-image
+ * (already cached by the board), so a pin is never blank.
  *
  * The shine is driven by one shared 0..1 value per screen (`shine`), offset
  * per pin with `lag`; `lagSpan` is the largest lag in the group, so every
- * band has fully left its pin by the time the shared value reaches 1.
+ * band has fully left its pin by the time the shared value reaches 1. While
+ * the shared value rests, nothing redraws.
  */
+import {
+  BlendColor, Blur, Canvas, Circle, Group, Image as SkiaImage, LinearGradient, RadialGradient, Rect, useImage, vec,
+} from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-
-const GLOSS_ANGLE = 28;
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
 /** Shadow tint per surface: warm on cork and cream, navy on the blue panels. */
 const SHADOW_TINT = { board: '#4a2c0e', panel: '#021c40' } as const;
+/** Canvas padding around the art, as a share of the pin size (room for the shadow blur). */
+const PAD = 0.14;
 
 type Props = {
   readonly uri: string;
@@ -34,72 +46,79 @@ type Props = {
   readonly lift?: SharedValue<number>;
   /** Surface under the pin, for the shadow tint. 'none' skips the shadow (small picker tiles). */
   readonly surface?: 'board' | 'panel' | 'none';
-  /** Image fade-in. 0 for pins that take over from another view (no blink). */
+  /** Kept for callers; the Skia pin has no fade-in of its own. */
   readonly transition?: number;
   readonly recyclingKey?: string;
   readonly style?: StyleProp<ViewStyle>;
 };
 
-/** One tinted copy of the art, shown through a diagonal window of the face. */
-function GlossBand({ uri, size, top, height, opacity, shine, lag = 0, span = 0, travel = 0 }: {
-  uri: string; size: number; top: number; height: number; opacity: number;
-  shine?: SharedValue<number>; lag?: number; span?: number; travel?: number;
-}) {
-  const D = size * 2;
-  const move = useAnimatedStyle(() => {
-    if (!shine) return { transform: [{ translateY: 0 }], opacity };
-    const p = shine.value * (1 + span) - lag;
-    const on = p > 0 && p < 1;
-    return { transform: [{ translateY: on ? p * travel : -D }], opacity: on ? opacity * Math.sin(p * Math.PI) : 0 };
-  });
-  const counter = useAnimatedStyle(() => {
-    if (!shine) return { transform: [{ translateY: 0 }] };
-    const p = shine.value * (1 + span) - lag;
-    const on = p > 0 && p < 1;
-    return { transform: [{ translateY: on ? -p * travel : D }] };
-  });
-  return (
-    <View pointerEvents="none" style={[styles.window, { width: D, height: D, left: -size / 2, top: -size / 2, transform: [{ rotate: `${GLOSS_ANGLE}deg` }] }]}>
-      <Animated.View style={[styles.clip, { top, height, width: D }, move]}>
-        <Animated.View style={[{ position: 'absolute', top: -top, left: 0, width: D, height: D }, counter]}>
-          <Image source={uri} style={{ position: 'absolute', left: size / 2, top: size / 2, width: size, height: size, transform: [{ rotate: `${-GLOSS_ANGLE}deg` }] }}
-            contentFit="contain" tintColor="#ffffff" cachePolicy="memory-disk" transition={0} />
-        </Animated.View>
-      </Animated.View>
-    </View>
-  );
-}
+function EnamelPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
+  const image = useImage(uri);
+  const pad = Math.round(size * PAD);
+  const box = size + pad * 2;
+  const blur = Math.max(2, size * 0.045);
 
-function EnamelPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', transition = 120, recyclingKey, style }: Props) {
-  const shadow = useAnimatedStyle(() => {
-    const l = lift ? lift.value : 0;
-    return {
-      opacity: 0.3 - l * 0.08,
-      transform: [{ translateX: size * (0.012 + l * 0.02) }, { translateY: size * (0.03 + l * 0.06) }, { scale: 1 + l * 0.03 }],
-    };
+  // Shine: a soft diagonal band whose gradient line slides across the pin.
+  const shineStart = useDerivedValue(() => {
+    const p = shine ? shine.value * (1 + lagSpan) - lag : -1;
+    const t = p * 1.6 - 0.3;
+    return vec(pad + size * (t - 0.35), pad + size * (t - 0.35));
   });
-  const D = size * 2;
+  const shineEnd = useDerivedValue(() => {
+    const p = shine ? shine.value * (1 + lagSpan) - lag : -1;
+    const t = p * 1.6 - 0.3;
+    return vec(pad + size * (t + 0.05), pad + size * (t + 0.05));
+  });
+  const shineOn = useDerivedValue(() => {
+    if (!shine) return 0;
+    const p = shine.value * (1 + lagSpan) - lag;
+    return p > 0 && p < 1 ? 1 : 0;
+  });
+  const shadowShift = useDerivedValue(() => {
+    const l = lift ? lift.value : 0;
+    return [{ translateX: size * (0.012 + l * 0.02) }, { translateY: size * (0.035 + l * 0.06) }];
+  });
+  const shadowOpacity = useDerivedValue(() => 0.34 - (lift ? lift.value : 0) * 0.1);
+
   return (
     <View style={[{ width: size, height: size, transform: [{ rotate: `${tilt}deg` }] }, style]} pointerEvents="none">
-      {surface !== 'none' && (
-        <Animated.View style={[StyleSheet.absoluteFill, shadow]}>
-          <Image source={uri} style={StyleSheet.absoluteFill} contentFit="contain" tintColor={SHADOW_TINT[surface]} blurRadius={8}
-            cachePolicy="memory-disk" transition={0} recyclingKey={recyclingKey ? `${recyclingKey}-s` : undefined} />
-        </Animated.View>
+      {!image && (
+        <Image source={uri} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" transition={0} recyclingKey={recyclingKey} />
       )}
-      <Image source={uri} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk"
-        recyclingKey={recyclingKey} transition={transition} />
-      {/* Resting gloss: the upper-left face catches the light; two stacked cuts feather the edge. */}
-      <GlossBand uri={uri} size={size} top={0} height={D * 0.42} opacity={0.11} />
-      <GlossBand uri={uri} size={size} top={0} height={D * 0.37} opacity={0.11} />
-      {shine && <GlossBand uri={uri} size={size} top={D * 0.18} height={size * 0.18} opacity={0.7} shine={shine} lag={lag} span={lagSpan} travel={D * 0.62} />}
+      {image && (
+        <Canvas style={{ position: 'absolute', left: -pad, top: -pad, width: box, height: box }}>
+          {surface !== 'none' && (
+            <Group transform={shadowShift} opacity={shadowOpacity}>
+              <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain">
+                <BlendColor color={SHADOW_TINT[surface]} mode="srcIn" />
+                <Blur blur={blur} />
+              </SkiaImage>
+            </Group>
+          )}
+          <Group layer>
+            <SkiaImage image={image} x={pad} y={pad} width={size} height={size} fit="contain" />
+            {/* Resting gloss: a long soft falloff from the upper-left face. */}
+            <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
+              <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}
+                colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0)']} positions={[0, 0.45, 1]} />
+            </Rect>
+            {/* One small specular dot near the upper-left rim. */}
+            <Circle cx={pad + size * 0.27} cy={pad + size * 0.22} r={size * 0.11} blendMode="srcATop">
+              <RadialGradient c={vec(pad + size * 0.27, pad + size * 0.22)} r={size * 0.11}
+                colors={['rgba(255,255,255,0.75)', 'rgba(255,255,255,0)']} />
+            </Circle>
+            {shine && (
+              <Rect x={0} y={0} width={box} height={box} blendMode="srcATop" opacity={shineOn}>
+                <LinearGradient start={shineStart} end={shineEnd}
+                  colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} positions={[0, 0.5, 1]} />
+              </Rect>
+            )}
+          </Group>
+        </Canvas>
+      )}
     </View>
   );
 }
 
 export default memo(EnamelPin);
 
-const styles = StyleSheet.create({
-  window: { position: 'absolute', overflow: 'hidden' },
-  clip: { position: 'absolute', left: 0, overflow: 'hidden' },
-});

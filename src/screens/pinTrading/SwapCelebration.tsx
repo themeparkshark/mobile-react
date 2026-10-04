@@ -55,14 +55,18 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
   const burst = useSharedValue(0);
   const shine = useSharedValue(0);
   const spin = useSharedValue(0);
-  const bg = useSharedValue(still ? 1 : 0);
+  // Starts at the sheet's scrim level, so the board never flashes bright during the hand-off.
+  const bg = useSharedValue(still ? 1 : 0.78);
+  const flash = useSharedValue(0);
+  const button = useSharedValue(still ? 1 : 0);
+  const bob = useSharedValue(0);
   const textIn = useSharedValue(still ? 1 : 0);
   const landed = useRef(still);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const bigSize = Math.min(190, width * 0.47);
   const cx = width / 2;
-  const cy = Math.max(height * 0.4, insets.top + 150 + bigSize / 2);
+  const cy = Math.max(height * 0.43, insets.top + 150 + bigSize / 2);
   const startSize = Math.min(120, width * 0.3);
 
   const g0 = from?.get ?? { x: cx - 100, y: cy + 80, size: startSize };
@@ -82,10 +86,17 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
     shake.value = 0;
     shake.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.quad) });
     burst.value = withTiming(1, { duration: 1300, easing: Easing.linear });
-    spin.value = withTiming(1, { duration: 3200, easing: Easing.out(Easing.cubic) });
+    // Rays: a quick turn on the land, then a slow idle drift so the end card never looks frozen.
+    spin.value = withSequence(withTiming(1, { duration: 2400, easing: Easing.out(Easing.cubic) }),
+      withRepeat(withTiming(10, { duration: 60000, easing: Easing.linear }), -1, false));
+    bob.value = withDelay(900, withRepeat(withSequence(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+      withTiming(0, { duration: 1100, easing: Easing.inOut(Easing.sin) })), -1, false));
+    button.value = withDelay(T.button - T.land, withTiming(1, { duration: 220 }));
     shine.value = withDelay(260, withRepeat(withSequence(withTiming(1, { duration: 850 }), withDelay(2400, withTiming(0, { duration: 0 }))), 3, false));
     textIn.value = withDelay(T.title - T.land, withSpring(1, { damping: 14, stiffness: 220 }));
-    beat('fx.hit', { volume: 0.9 });
+    // The land is the loudest beat: a deep firework thump, a clack, then the jingle.
+    beat('fx.firework', { volume: 1, pitch: -5 });
+    beat('fx.hit', { volume: 1 });
     beat('ui.complete', { volume: 1 }, 'success', 3);
   };
 
@@ -100,13 +111,15 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
     lift.value = withTiming(1, { duration: T.travel, easing: Easing.out(Easing.back(2.2)) });
     // Linear clock; the worklets shape it (steady to the cross, accelerating into the land).
     travel.value = withDelay(T.travel, withTiming(1, { duration: T.land - T.travel, easing: Easing.linear }));
-    hit.value = withDelay(T.cross, withTiming(1, { duration: 420, easing: Easing.out(Easing.exp) }));
+    hit.value = withDelay(T.cross, withTiming(1, { duration: 380, easing: Easing.out(Easing.quad) }));
+    // The cross flash holds full for 3 frames, then fades.
+    flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 16 }), withDelay(50, withTiming(0, { duration: 160 }))));
     t.push(setTimeout(() => beat('fx.whooshRev', { volume: 0.9 }, 'tapLight', 1), 0));
-    t.push(setTimeout(() => beat('fx.firework', { volume: 0.8 }, 'hitMedium', 2), T.cross));
+    t.push(setTimeout(() => beat('fx.firework', { volume: 0.4, pitch: 4 }, 'hitMedium', 2), T.cross));
     t.push(setTimeout(runLand, T.land));
     return () => {
       t.forEach(clearTimeout);
-      [lift, travel, hit, land, squash, shake, burst, shine, spin, bg, textIn].forEach(v => cancelAnimation(v));
+      [lift, travel, hit, flash, land, squash, shake, burst, shine, spin, bg, textIn, button, bob].forEach(v => cancelAnimation(v));
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,6 +128,10 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
     if (landed.current || still) return;
     cancelAnimation(travel);
     cancelAnimation(lift);
+    cancelAnimation(hit);
+    cancelAnimation(flash);
+    hit.value = 0;
+    flash.value = 0;
     lift.value = 1;
     runLand();
   };
@@ -129,7 +146,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
       y = g0.y + (my - g0.y) * u - Math.sin(u * Math.PI) * arc;
     } else {
       const u = (t - crossAt) / (1 - crossAt);
-      const e = u * u;
+      // Starts at the incoming speed and keeps accelerating, so the pin is fastest on the land frame.
+      const e = 0.35 * u + 0.65 * u * u * u;
       x = mx + (cx - mx) * e;
       y = my + (cy - my) * e;
     }
@@ -164,10 +182,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
       transform: [{ translateX: x - startSize / 2 }, { translateY: y - startSize / 2 - popUp * 10 * (1 - t) }, { scale: s }, { rotate: `${t * 50}deg` }],
     };
   });
-  const flashStyle = useAnimatedStyle(() => {
-    const h = hit.value;
-    return { opacity: h === 0 ? 0 : h < 0.12 ? 1 : Math.max(0, 1 - (h - 0.12) * 2.4), transform: [{ scale: 0.4 + h * 1.1 }] };
-  });
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value, transform: [{ scale: 0.6 + hit.value * 0.7 }] }));
   const ringStyle = useAnimatedStyle(() => ({
     opacity: hit.value === 0 ? 0 : Math.max(0, 1 - hit.value * 1.15),
     transform: [{ scale: 0.3 + hit.value * 1.3 }],
@@ -178,10 +193,18 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
     return { transform: [{ translateX: Math.sin(s * Math.PI * 7) * amp }, { translateY: Math.cos(s * Math.PI * 5) * amp * 0.6 }] };
   });
   const stageStyle = useAnimatedStyle(() => ({ opacity: land.value, transform: [{ scale: 0.7 + land.value * 0.3 }] }));
-  const raysStyle = useAnimatedStyle(() => ({ opacity: land.value, transform: [{ scale: 0.6 + land.value * 0.4 }, { rotate: `${spin.value * 40}deg` }] }));
+  const raysStyle = useAnimatedStyle(() => ({
+    opacity: land.value * (0.85 + bob.value * 0.15),
+    transform: [{ scale: 0.6 + land.value * 0.4 }, { rotate: `${spin.value * 40}deg` }],
+  }));
+  const buttonStyle = useAnimatedStyle(() => ({ opacity: button.value, transform: [{ translateY: (1 - button.value) * 10 }] }));
+  const restStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 5 }] }));
   const stampStyle = useAnimatedStyle(() => ({ opacity: land.value, transform: [{ scale: 0.3 + land.value * 0.7 + squash.value * 0.25 }, { rotate: '12deg' }] }));
   const textStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, textIn.value), transform: [{ translateY: (1 - textIn.value) * 18 }] }));
-  const sharkStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, textIn.value * 1.5), transform: [{ translateY: (1 - textIn.value) * 60 }, { rotate: `${-8 + (1 - textIn.value) * -10}deg` }] }));
+  const sharkStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, textIn.value * 1.5),
+    transform: [{ translateY: (1 - textIn.value) * 60 - bob.value * 4 }, { rotate: `${-6 + (1 - textIn.value) * -10 + bob.value * 3}deg` }],
+  }));
   const bgStyle = useAnimatedStyle(() => ({ opacity: bg.value }));
 
   const name = pinName(got);
@@ -215,6 +238,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
             <Animated.View style={[styles.ring, { left: mx - 90, top: my - 90, width: 180, height: 180, borderRadius: 90 }, ringStyle]} />
           )}
 
+          {!still && <BurstConfetti x={cx} y={cy} rim={bigSize * 0.4} burst={burst} seed={seed} />}
           {!still && (
             <Animated.View style={[styles.pin, { width: startSize, height: startSize }, gaveStyle]}>
               <EnamelPin uri={gave.icon_url} size={startSize} surface="panel" transition={0} recyclingKey={`slot-${gave.id}`} />
@@ -222,14 +246,15 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
           )}
           <Animated.View
             style={[styles.pin, { width: bigSize, height: bigSize }, still ? { transform: [{ translateX: cx - bigSize / 2 }, { translateY: cy - bigSize / 2 }] } : gotStyle]}>
-            <EnamelPin uri={got.icon_url} size={bigSize} tilt={-4} shine={still ? undefined : shine} surface="panel" transition={0}
-              recyclingKey={`slot-${got.id}`} />
+            <Animated.View style={restStyle}>
+              <EnamelPin uri={got.icon_url} size={bigSize} tilt={-4} shine={still ? undefined : shine} surface="panel" transition={0}
+                recyclingKey={`slot-${got.id}`} />
+            </Animated.View>
           </Animated.View>
           <Animated.View style={[styles.abs, { left: cx + bigSize * 0.18, top: cy - bigSize * 0.62 }, stampStyle]}>
             <View style={styles.newStamp}><Text maxFontSizeMultiplier={1} style={styles.newStampText}>{COPY.newStamp}</Text></View>
           </Animated.View>
 
-          {!still && <BurstConfetti x={cx} y={cy} burst={burst} seed={seed} />}
         </Animated.View>
 
         <Animated.View style={[styles.copy, { top: cy + bigSize * 0.72 }, textStyle]} pointerEvents="none">
@@ -237,14 +262,17 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
           <View style={styles.subPill}>
             <Text maxFontSizeMultiplier={1.25} style={styles.sub}>{COPY.doneMessage(name)}</Text>
           </View>
-          <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{COPY.doneGave(pinName(gave))}</Text>
+          <View style={styles.gaveRow}>
+            <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={30} surface="none" recyclingKey={`mine-${gave.id}`} /></View>
+            <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{COPY.doneGave(pinName(gave))}</Text>
+          </View>
         </Animated.View>
-        <Animated.View pointerEvents="none" style={[styles.shark, { left: SPACE.md, top: cy + bigSize * 0.2 }, sharkStyle]}>
-          <Image source={SHARK} style={{ width: 92, height: 102 }} contentFit="contain" />
+        <Animated.View pointerEvents="none" style={[styles.shark, { right: SPACE.sm, top: cy - bigSize * 1.05 }, sharkStyle]}>
+          <Image source={SHARK} style={{ width: 112, height: 124, transform: [{ scaleX: -1 }] }} contentFit="contain" />
+          <View style={styles.sharkShadow} />
         </Animated.View>
       </Pressable>
-      <Animated.View entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : FadeIn.delay(T.button).duration(220).reduceMotion(ReduceMotion.Never)}
-        style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + SPACE.xl }]}>
+      <Animated.View style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + SPACE.xl }, buttonStyle]}>
         <GameButton label={COPY.doneAction} icon="check" onPress={onDone} />
       </Animated.View>
     </Animated.View>
@@ -343,7 +371,10 @@ function Sparks({ x, y, hit, seed }: { x: number; y: number; hit: SharedValue<nu
 function Spark({ x, y, dx, dy, r, hit }: { x: number; y: number; dx: number; dy: number; r: number; hit: SharedValue<number> }) {
   const style = useAnimatedStyle(() => {
     const h = hit.value;
-    return { opacity: h === 0 || h >= 1 ? 0 : 1 - h, transform: [{ translateX: dx * h }, { translateY: dy * h + 20 * h * h }, { scale: 1 - h * 0.6 }] };
+    return {
+      opacity: h === 0 || h >= 1 ? 0 : h < 0.6 ? 1 : (1 - h) / 0.4,
+      transform: [{ translateX: dx * h }, { translateY: dy * h + 30 * h * h }, { scale: 1 - h * 0.5 }],
+    };
   });
   return <Animated.View style={[styles.spark, { left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r }, style]} />;
 }
@@ -351,13 +382,14 @@ function Spark({ x, y, dx, dy, r, hit }: { x: number; y: number; dx: number; dy:
 const CONFETTI = ['#FFCF3B', '#FF6B4A', '#2F6BFF', '#16B39A', '#FFFFFF', '#29B6F6'];
 
 /** A radial confetti burst from the pin with gravity. Mounted hidden at the start; one shared value drives it. */
-function BurstConfetti({ x, y, burst, seed }: { x: number; y: number; burst: SharedValue<number>; seed: number }) {
+function BurstConfetti({ x, y, rim, burst, seed }: { x: number; y: number; rim: number; burst: SharedValue<number>; seed: number }) {
   const bits = useMemo(() => {
     const rand = rng(seed + 11);
     return Array.from({ length: 36 }, (_, i) => {
       const a = rand() * Math.PI * 2;
       const v = 160 + rand() * 220;
       return {
+        ox: Math.cos(a) * rim, oy: Math.sin(a) * rim,
         vx: Math.cos(a) * v, vy: Math.sin(a) * v - 160, spin: 360 + rand() * 720,
         w: 6 + rand() * 5, h: 9 + rand() * 7, color: CONFETTI[i % CONFETTI.length], delay: i < 12 ? 0 : rand() * 0.12,
       };
@@ -366,15 +398,17 @@ function BurstConfetti({ x, y, burst, seed }: { x: number; y: number; burst: Sha
   return <>{bits.map((b, i) => <Bit key={i} x={x} y={y} {...b} burst={burst} />)}</>;
 }
 
-function Bit({ x, y, vx, vy, spin, w, h, color, delay, burst }: {
-  x: number; y: number; vx: number; vy: number; spin: number; w: number; h: number; color: string; delay: number; burst: SharedValue<number>;
+function Bit({ x, y, ox, oy, vx, vy, spin, w, h, color, delay, burst }: {
+  x: number; y: number; ox: number; oy: number; vx: number; vy: number; spin: number; w: number; h: number; color: string; delay: number; burst: SharedValue<number>;
 }) {
   const style = useAnimatedStyle(() => {
     const t = Math.max(0, burst.value - delay) * 1.3;
     if (burst.value === 0 || t <= 0 || burst.value >= 1) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { rotate: '0deg' }] };
+    // Explosive start (fast out, drag), gravity on y; it starts at the pin's rim, never over its face.
+    const out = 1 - Math.exp(-3.2 * t);
     return {
       opacity: t > 1 ? Math.max(0, 1 - (t - 1) * 3) : 1,
-      transform: [{ translateX: vx * t }, { translateY: vy * t + 520 * t * t }, { rotate: `${spin * t}deg` }],
+      transform: [{ translateX: ox + vx * out * 0.6 }, { translateY: oy + vy * out * 0.6 + 380 * t * t }, { rotate: `${spin * t}deg` }],
     };
   });
   return <Animated.View style={[{ position: 'absolute', left: x - w / 2, top: y - h / 2, width: w, height: h, borderRadius: 2, backgroundColor: color }, style]} />;
@@ -394,7 +428,10 @@ const styles = StyleSheet.create({
   title: { textAlign: 'center', color: BRAND.white, fontSize: 46, lineHeight: 52 },
   subPill: { backgroundColor: 'rgba(5,52,110,0.9)', borderRadius: 999, paddingHorizontal: SPACE.lg, paddingVertical: 6, borderWidth: 2, borderColor: 'rgba(255,224,122,0.6)' },
   sub: { fontFamily: FONT.display, fontSize: 20, lineHeight: 25, color: '#ffe07a', textAlign: 'center', paddingTop: 2 },
-  gaveLine: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: '#e2f6ff', textAlign: 'center' },
+  gaveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: 330 },
+  gaveChip: { width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.white },
+  gaveLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: '#e2f6ff' },
+  sharkShadow: { alignSelf: 'center', width: 70, height: 10, borderRadius: 35, backgroundColor: 'rgba(1,15,42,0.35)', marginTop: -6 },
   shark: { position: 'absolute' },
   cta: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center' },
 });
