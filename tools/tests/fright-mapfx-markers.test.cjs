@@ -148,7 +148,6 @@ test('the player shark is one always-mounted Marker: parked (hidden, no touch) w
   assert.equal((map.match(/<Marker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
   assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<Marker/, 'no `{location && <Marker>}`');
   assert.doesNotMatch(map, /\{location \? \(\s*\n?\s*<Marker/);
-  // Marker's hidden state: opacity 0 and not tappable.
-  assert.match(marker, /const off = hidden \|\| !valid;/);
-  assert.match(marker, /const tappable = !off &&/);
+  // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
+  assert.match(marker, /hidden = false/);
 });
