@@ -143,6 +143,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
+  const lastFixAtRef = useRef(0);
   const locationRef = useRef(location);
   locationRef.current = location;
   const headingRef = useRef(heading);
@@ -175,7 +176,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     // 600 ms for a step, up to 1 s for a stride, a jump for a re-seat (out of the car).
     const prev = prevLocationRef.current;
     const distMeters = glideMeters(prev, location);
-    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location);
+    const arrived = Date.now();
+    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, arrived - lastFixAtRef.current);
+    lastFixAtRef.current = arrived;
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
     glideRef.current = glideDuration;

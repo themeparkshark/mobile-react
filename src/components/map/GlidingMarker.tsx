@@ -24,12 +24,16 @@ export const GlidingMarker = memo(function GlidingMarker({ coordinate, glide, hi
   const shownRef = useRef(shown);
   shownRef.current = shown;
   const frameRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const lastTargetAtRef = useRef(0);
 
   useEffect(() => {
     const from = shownRef.current;
     const to = { latitude: coordinate.latitude, longitude: coordinate.longitude };
     if (frameRef.current !== null) { cancelAnimationFrame(frameRef.current); frameRef.current = null; }
-    const duration = glide && !hidden ? glideDurationMs(from, to) : 0;
+    const arrived = Date.now();
+    const sinceLast = arrived - lastTargetAtRef.current;
+    lastTargetAtRef.current = arrived;
+    const duration = glide && !hidden ? glideDurationMs(from, to, sinceLast) : 0;
     if (duration <= 0) {
       if (from.latitude !== to.latitude || from.longitude !== to.longitude) setShown(to);
       return;

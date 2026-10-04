@@ -160,9 +160,12 @@ test('the shark glides 600 to 1000 ms between fixes, jumps only for a re-seat', 
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 40, 0)), 1000, 'capped at 1 s');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 400, 0)), 0, 'a re-seat jumps');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 0.1, 0)), 0, 'nothing to see');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1.4, 0), 1100), 1000, 'a walk fills the gap to the next fix (max 1 s)');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1.4, 0), 300), 600, 'never shorter than a step');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 400, 0), 1000), 0, 'a re-seat still jumps');
   const mid = glide.glidePoint(HOME, offset(HOME, 10, 0), 0.5);
   const d = pf.metersBetween(HOME, mid);
-  assert.ok(d > 5 && d < 10, `ease-out: past halfway at half time (${d.toFixed(2)} m)`);
+  assert.ok(d > 5.5 && d < 7, `gentle ease-out: a little past halfway at half time (${d.toFixed(2)} m)`);
   const end = glide.glidePoint(HOME, offset(HOME, 10, 0), 1);
   assert.equal(end.latitude, offset(HOME, 10, 0).latitude);
   assert.equal(end.longitude, offset(HOME, 10, 0).longitude);
@@ -182,4 +185,19 @@ test('the player shark glides as one stable marker and the watcher filters every
   assert.match(watcher, /accuracy: locationUpdate\.coords\.accuracy/);
   assert.match(watcher, /if \(verdict\.kind !== 'publish'\) return;/);
   assert.match(provider, /positionFilterRef\.current\?\.reset\(\)/);
+});
+
+test('glitches never add up to a teleport: two vague fixes then a wild one, or scattered wild ones', () => {
+  const filter = new pf.PositionFilter();
+  for (let i = 0; i < 5; i++) filter.push({ ...HOME, accuracy: 8, timestamp: i * 1000 });
+  const v = [
+    filter.push({ ...offset(HOME, 20, 0), accuracy: 70, timestamp: 5000 }),
+    filter.push({ ...offset(HOME, -20, 0), accuracy: 70, timestamp: 6000 }),
+    filter.push({ ...offset(HOME, 600, 300), accuracy: 10, timestamp: 7000 }),
+    filter.push({ ...offset(HOME, -500, 200), accuracy: 10, timestamp: 8000 }),
+    filter.push({ ...offset(HOME, 300, -700), accuracy: 10, timestamp: 9000 }),
+    filter.push({ ...offset(HOME, -400, -400), accuracy: 10, timestamp: 10000 }),
+  ];
+  assert.deepEqual(v.map(x => x.kind), ['reject', 'reject', 'reject', 'reject', 'reject', 'reject']);
+  assert.ok(pf.metersBetween(HOME, filter.current) < 1, 'the shark stayed home');
 });
