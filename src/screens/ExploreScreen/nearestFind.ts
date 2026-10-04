@@ -16,3 +16,10 @@ export function nearestFind(placed: readonly PlacedFind[]): { latitude: number; 
   }
   return best && { latitude: best.latitude, longitude: best.longitude };
 }
+
+/** How to Play's highlight request is a Date.now() stamp; past this age it is dropped, never replayed. */
+export const HIGHLIGHT_MAX_AGE_MS = 10_000;
+
+export function isStaleHighlight(requestedAt: number, now: number): boolean {
+  return !Number.isFinite(requestedAt) || now - requestedAt > HIGHLIGHT_MAX_AGE_MS;
+}

@@ -141,7 +141,15 @@ function ExploreScreen() {
   const route = useRoute();
   const cardFade = useMenuCardFade();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
-  const highlightNearestFind = (route.params as { highlightNearestFind?: number } | undefined)?.highlightNearestFind ?? null;
+  // How to Play's hand-off is a one-shot: take it into state and clear the route param
+  // at once, so a later focus or remount never replays an old request.
+  const highlightParam = (route.params as { highlightNearestFind?: number } | undefined)?.highlightNearestFind ?? null;
+  const [highlightNearestFind, setHighlightNearestFind] = useState<number | null>(null);
+  useEffect(() => {
+    if (highlightParam == null) return;
+    setHighlightNearestFind(highlightParam);
+    navigation.setParams({ highlightNearestFind: undefined });
+  }, [highlightParam, navigation]);
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined

@@ -30,7 +30,7 @@ import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import type { FingerSide } from './PrepItem';
 import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
-import { nearestFind } from './nearestFind';
+import { isStaleHighlight, nearestFind } from './nearestFind';
 import { catchSound } from './ridePhoto/catchAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { RedeemPrepItemResponseType } from '../../models/redeem-prep-item-response-type';
@@ -393,8 +393,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   const [findFocus, setFindFocus] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
   const handledHighlight = useRef<number | null>(null);
   const [pulse, setPulse] = useState<{ pivot: number; key: number } | null>(null);
+  const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => {
     if (highlightNearestFind == null || handledHighlight.current === highlightNearestFind || !homeLocationConfirmed) return;
+    // A request older than ~10 s (finds took that long, or the screen came back later) is dropped, not replayed.
+    if (isStaleHighlight(highlightNearestFind, Date.now())) { handledHighlight.current = highlightNearestFind; return; }
     const nearest = nearestFind(placed);
     if (!nearest) return;
     handledHighlight.current = highlightNearestFind;
@@ -405,7 +409,8 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     if (target?.item.pivot_id != null) {
       const pivot = target.item.pivot_id;
       const key = highlightNearestFind;
-      setTimeout(() => { setPulse({ pivot, key }); catchSound('tick', { volume: 0.55, pitch: 7 }); }, 650);
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+      pulseTimer.current = setTimeout(() => { pulseTimer.current = null; setPulse({ pivot, key }); catchSound('tick', { volume: 0.55, pitch: 7 }); }, 650);
     }
   }, [highlightNearestFind, placed, homeLocationConfirmed]);
   useEffect(() => {

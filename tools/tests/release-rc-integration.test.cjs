@@ -75,3 +75,15 @@ test('"Let sharks find me" sends the grown-up yes the server requires (notif-fri
   assert.match(screen, /grown_up_confirmed: true/);
   assert.match(read('src/api/endpoints/me/update-player.ts'), /grown_up_confirmed/);
 });
+
+test('the How to Play highlight is a one-shot: param cleared, stale requests dropped, timer cleared on unmount', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /navigation\.setParams\(\{ highlightNearestFind: undefined \}\)/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /isStaleHighlight\(highlightNearestFind, Date\.now\(\)\)/);
+  assert.match(home, /useEffect\(\(\) => \(\) => \{ if \(pulseTimer\.current\) clearTimeout\(pulseTimer\.current\); \}, \[\]\)/);
+  const { isStaleHighlight } = loadTs('src/screens/ExploreScreen/nearestFind.ts');
+  assert.equal(isStaleHighlight(1000, 5000), false);
+  assert.equal(isStaleHighlight(1000, 11_001), true);
+  assert.equal(isStaleHighlight(Number.NaN, 0), true);
+});
