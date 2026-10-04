@@ -118,7 +118,17 @@ export default function Playercard({
   const fx = useMemo(() => wornFx(inventory), [inventory]);
   // Reduce Motion is read here, so no screen can forget it (performance panel round 1).
   const reduced = useReducedGameMotion();
-  const lod: FxLod = still || reduced ? 'still' : fxLod;
+  // Long-lived stages (Profile, the Dressing Room, the shop hero) drop their particles after a
+  // minute with no touch, and wake on the next tap or new piece (perf round 3).
+  const [fxIdle, setFxIdle] = useState(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeFx = useCallback(() => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    setFxIdle(false);
+    idleTimer.current = setTimeout(() => setFxIdle(true), 60_000);
+  }, []);
+  useEffect(() => { wakeFx(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [wakeFx]);
+  const lod: FxLod = still || reduced ? 'still' : fxIdle && fxLod === 'full' ? 'lite' : fxLod;
   // Only a look with something to draw runs a clock (a scene off stage draws nothing here).
   const fxRunning = useFxRunning(lod) && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
   const fxClock = useFxClock(fxRunning, -fxStartDelay);
@@ -139,6 +149,7 @@ export default function Playercard({
     if (kind === 'tap' && now - lastTap.current < momentMs * 0.6) return;
     lastTap.current = now;
     fxTouch();
+    wakeFx();
     const keys = [...fx.rigs.map(r => r.key), ...(fx.scene && showBackground ? [fx.scene] : [])];
     const cue = keys.length ? FX_MOMENT[keys[0]].cue : null;
     if (kind === 'tap') {
@@ -153,7 +164,7 @@ export default function Playercard({
   const unlockTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => unlockTimers.current.forEach(clearTimeout), []);
   const lookKey = [fx.scene, ...fx.rigs.map(r => r.key)].join(',');
-  useEffect(() => { fxTouch(); }, [lookKey]);
+  useEffect(() => { fxTouch(); wakeFx(); }, [lookKey]);
   useEffect(() => { if (fxPlay) playFx('unlock'); }, [fxPlay]);
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;

@@ -201,7 +201,7 @@ test('the Playercard draws rigs in place of their paper and keeps the shark on i
   assert.match(card, /if \(fx\.rigs\.some\(r => r\.slot === slot\)\) return null;/, 'an animated piece never double-draws its paper');
   assert.match(card, /<FxRigLayers fx=\{fx\} side="back"[\s\S]*sharkBaseLayers\(inventory\)[\s\S]*<FxRigLayers fx=\{fx\} side="front"/,
     'back layers, then the shark, then the front layers');
-  assert.match(card, /const lod: FxLod = still \|\| reduced \? 'still' : fxLod;/, 'Reduce Motion holds the rest pose');
+  assert.match(card, /const lod: FxLod = still \|\| reduced \? 'still' : fxIdle && fxLod === 'full' \? 'lite' : fxLod;/, 'Reduce Motion holds the rest pose; idle stages drop particles');
   assert.match(card, /fx\.scene && <FxScene/);
 });
 
@@ -245,6 +245,11 @@ test('rig performance budget: at most 24 animated views at full LOD per rig', ()
   assert.equal(shells, 7);
   assert.ok(shells * 3 + 1 <= 24, `fireworks: ${shells * 3 + 1}`);
   assert.match(fireworks, /\{lod === 'full' && shells\.map\(i => <ShellExtras/);
+  // Lite (tile) budgets: the halo and the lantern keep one ghost/fish layer, never a hidden duplicate.
+  const lantern = src('src/fx/rigs/GhostLantern.tsx');
+  assert.match(lantern, /if \(props\.lod !== 'full'\) return null;/, 'the lantern back layer is full LOD only');
+  assert.match(lantern, /front=\{props\.lod === 'full' \? true : 'both'\}/);
+  assert.match(src('src/fx/rigs/ReefHalo.tsx'), /props\.lod !== 'lite' && FISH\.map/);
   // Every shell stays inside the portrait safe area (x 0.15 to 0.85, below y 0.08).
   for (const b of geometry.rigs.midway_fireworks.bursts) assert.ok(b.cx >= 0.15 && b.cx <= 0.85 && b.cy >= 0.08, JSON.stringify(b));
 });
@@ -269,7 +274,7 @@ test('every worklet helper is declared above its first use (the Reanimated plugi
 });
 
 test('Reduce Motion is read inside the shark stage and every tile, so no screen can forget it', () => {
-  assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);\s*const lod: FxLod = still \|\| reduced \? 'still' : fxLod;/);
+  assert.match(src('src/components/Playercard.tsx'), /const reduced = useReducedGameMotion\(\);[\s\S]{0,900}const lod: FxLod = still \|\| reduced \? 'still'/);
   const solo = src('src/fx/FxSolo.tsx');
   assert.equal((solo.match(/const reduced = useReducedGameMotion\(\);/g) || []).length, 2);
   // A look with nothing to draw runs no clock.

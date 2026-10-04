@@ -84,11 +84,13 @@ export function SaucerFront(props: RigProps) {
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, { left: l.left, top: l.top, width: l.width,
       height: l.height, transformOrigin: l.origin }, drift]}>
+      {/* The beam fades as one image (no group opacity); the star rides the same tilt as a sibling. */}
+      <Animated.Image source={BEAM} resizeMode="stretch" style={[styles.abs, { left: (l.width - beamW) / 2, top: l.height * 0.7, width: beamW,
+        height: beamH, transformOrigin: '50% 0%', transform: [{ rotate: `${BEAM_TILT}deg` }] }, beam]} />
       <Animated.View style={[styles.abs, { left: (l.width - beamW) / 2, top: l.height * 0.7, width: beamW, height: beamH,
-          transformOrigin: '50% 0%', transform: [{ rotate: `${BEAM_TILT}deg` }] }, beam]}>
-          <Image source={BEAM} style={StyleSheet.absoluteFill} contentFit="fill" cachePolicy="memory" />
-          <Animated.Image source={SPARK} style={[styles.abs, { left: beamW / 2 - star / 2, top: 0, width: star, height: star }, lift]} />
-        </Animated.View>
+        transformOrigin: '50% 0%', transform: [{ rotate: `${BEAM_TILT}deg` }] }]} pointerEvents="none">
+        <Animated.Image source={SPARK} style={[styles.abs, { left: beamW / 2 - star / 2, top: 0, width: star, height: star }, lift]} />
+      </Animated.View>
       <Image source={UFO} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
       {lod === 'full' && RIM_LIGHTS.map((_, i) => <Light key={i} t={t} i={i} size={Math.max(6, l.width * 0.13)} />)}
     </Animated.View>

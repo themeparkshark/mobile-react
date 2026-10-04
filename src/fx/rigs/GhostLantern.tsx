@@ -64,14 +64,14 @@ function useLanternFrame({ t, box, lod }: RigProps) {
   return { l, sway, still };
 }
 
-function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean; l: ReturnType<typeof partLayout> }) {
+function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean | 'both'; l: ReturnType<typeof partLayout> }) {
   const still = lod === 'still';
   const ghostW = G.ghost.w * box.w;
   const ghostH = ghostW * G.ghost.aspect;
   const ghost = useAnimatedStyle(() => {
     const m = still ? { p: STILL_P, cycle: 0 } : momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350);
     const g = ghostPose(m.p, m.cycle);
-    return { opacity: g.front === front ? g.o : 0, transform: [{ translateX: g.x * l.width }, { translateY: g.y * l.height }, { scale: g.s }] };
+    return { opacity: front === 'both' || g.front === front ? g.o : 0, transform: [{ translateX: g.x * l.width }, { translateY: g.y * l.height }, { scale: g.s }] };
   });
   return (
     <Animated.View style={[styles.abs, { left: l.width / 2 - ghostW / 2, top: l.height * 0.05 - ghostH / 2, width: ghostW, height: ghostH }, ghost]}>
@@ -85,8 +85,9 @@ function Ghost({ t, kick, box, lod, front, l }: RigProps & { front: boolean; l: 
 
 /** Behind the shark: the ghost on the far half of its loop. */
 export function GhostLanternBack(props: RigProps) {
-  const { l, sway, still } = useLanternFrame(props);
-  if (still) return null;
+  const { l, sway } = useLanternFrame(props);
+  // Full stages only: a tile keeps the whole loop in front (4 views at lite, perf round 3).
+  if (props.lod !== 'full') return null;
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, { left: l.left, top: l.top, width: l.width, height: l.height, transformOrigin: l.origin }, sway]}>
       <Ghost {...props} front={false} l={l} />
@@ -111,7 +112,7 @@ export function GhostLanternFront(props: RigProps) {
       <Animated.Image source={GLOW} style={[styles.abs, { left: FLAME_AT.x * l.width - glowSize / 2, top: FLAME_AT.y * l.height - glowSize / 2,
         width: glowSize, height: glowSize, tintColor: '#b26cff' }, glow]} />
       <Image source={LANTERN} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
-      <Ghost {...props} front l={l} />
+      <Ghost {...props} front={props.lod === 'full' ? true : 'both'} l={l} />
     </Animated.View>
   );
 }
