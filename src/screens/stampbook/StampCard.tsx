@@ -178,7 +178,6 @@ function Frame(props: Props & { stamp: BookStamp }) {
   useLayoutEffect(() => { setPhase('idle'); }, [stamp.id]);
 
   const claimed = stamp.rewardClaimed || claimedIds.includes(stamp.id);
-  const legendary = stamp.earned && stamp.rarity === 'legendary';
   const req = requirement(stamp);
   const claimable = stamp.earned && !claimed && hasRewards(stamp.rewards);
 
@@ -193,14 +192,23 @@ function Frame(props: Props & { stamp: BookStamp }) {
   else if (!stamp.earned && req.go) action = { label: 'Go!', icon: req.icon, onPress: () => onGo(stamp), a11y: `Go. ${stamp.howTo}` };
   const status = phase === 'gotIt' ? 'Got it!' : phase === 'cascading' ? 'Stamped!' : claimed && stamp.earned && !action ? 'Stamped!' : null;
 
+  // While the outgoing stamp is held on top, every part of the card shows THAT stamp (title, frame,
+  // button), so nothing mixes two stamps for even one frame.
+  const holding = !!held && held.id !== stamp.id;
+  const display = holding ? (held as BookStamp) : stamp;
+  const displayLegendary = display.earned && display.rarity === 'legendary';
+  if (holding) action = { label: `Next reward (${nextCount + 1} left)`, icon: 'gift', onPress: noop, a11y: `Next reward, ${nextCount + 1} left` };
+  const shownStatus = holding ? null : status;
+  const displayClaimed = display.rewardClaimed || claimedIds.includes(display.id);
+
   return (
     <View style={styles.root} accessible={false}>
       <Animated.View style={[styles.backdrop, backdropStyle]} />
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no" />
       <Animated.View style={[styles.card, cardStyle]} accessibilityViewIsModal onAccessibilityEscape={onClose}>
         <View style={styles.lip} />
-        <View style={[styles.body, legendary && styles.bodyLegendary]}>
-          <View style={styles.ribbon}><Ribbon text={stamp.name} /></View>
+        <View style={[styles.body, displayLegendary && styles.bodyLegendary]}>
+          <View style={styles.ribbon}><Ribbon text={display.name} /></View>
           <Pressable onPress={onClose} hitSlop={14} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">
             <GameIcon name="close" size={44} />
           </Pressable>
@@ -231,10 +239,10 @@ function Frame(props: Props & { stamp: BookStamp }) {
           </View>
 
           <View style={styles.actions}>
-            {(action || status) && (
+            {(action || shownStatus) && (
               <View style={styles.actionSlot}>
-                <View style={status ? styles.hidden : undefined} importantForAccessibility={status ? 'no-hide-descendants' : 'auto'}
-                  accessibilityElementsHidden={!!status} pointerEvents={status ? 'none' : 'auto'}>
+                <View style={shownStatus ? styles.hidden : undefined} importantForAccessibility={shownStatus ? 'no-hide-descendants' : 'auto'}
+                  accessibilityElementsHidden={!!shownStatus} pointerEvents={shownStatus || holding ? 'none' : 'auto'}>
                   {/* While the claim is in flight the button stays yellow (no olive disabled look); presses are ignored. */}
                   {/* In flight: GameButton's `loading` keeps the yellow art, pulses the label, ignores taps silently and reports busy. */}
                   <GameButton label={phase === 'claiming' ? 'Stamping...' : action?.label ?? 'Stamped!'} icon={action?.icon ?? 'check'}
@@ -242,19 +250,19 @@ function Frame(props: Props & { stamp: BookStamp }) {
                     onPress={busy ? undefined : action?.onPress}
                     accessibilityLabel={action?.a11y} />
                 </View>
-                {!!status && (
-                  <View style={styles.status} accessible accessibilityRole="text" accessibilityLabel={status}>
+                {!!shownStatus && (
+                  <View style={styles.status} accessible accessibilityRole="text" accessibilityLabel={shownStatus}>
                     <GameIcon name="check" size={26} />
-                    <Text style={styles.statusText} maxFontSizeMultiplier={1.2}>{status}</Text>
+                    <Text style={styles.statusText} maxFontSizeMultiplier={1.2}>{shownStatus}</Text>
                   </View>
                 )}
               </View>
             )}
             {/* Mounted (invisible) as soon as the stamp has a title, so its art and label are measured before it shows:
                 a freshly mounted GameButton otherwise flashes one frame of blank art. */}
-            {!!stamp.rewards.title && stamp.earned && (
-              <View style={!(claimed && !busy) && styles.hidden} pointerEvents={claimed && !busy ? 'auto' : 'none'}
-                importantForAccessibility={claimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(claimed && !busy)}>
+            {!!display.rewards.title && display.earned && (
+              <View style={!(displayClaimed && !busy) && styles.hidden} pointerEvents={displayClaimed && !busy && !holding ? 'auto' : 'none'}
+                importantForAccessibility={displayClaimed && !busy ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!(displayClaimed && !busy)}>
                 <GameButton label={equipping ? 'Saving...' : wearingTitle ? 'Remove title' : 'Wear title'} variant="secondary"
                   icon="crown" loading={equipping} onPress={onToggleTitle} />
               </View>
@@ -490,7 +498,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
   const pillGold = rank >= 5;
 
   return (
-    <View style={[styles.content, overlay && styles.overlay]} pointerEvents={overlay ? 'none' : 'auto'}
+    <View collapsable={false} style={[styles.content, overlay && styles.overlay]} pointerEvents={overlay ? 'none' : 'auto'}
       importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} accessibilityElementsHidden={overlay}>
       <Pressable
         style={styles.stage}
@@ -508,7 +516,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
             <View style={[styles.secret, { borderColor: accent }]}><GameIcon name="info" size={ART * 0.4} /></View>
           ) : (
             <>
-              <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} onShown={onShown} />
+              <StampArt stamp={stamp} size="full" priority="high" onReady={onArtReady} onShown={onShown} transition={0} />
               {bleed > 0 && (
                 <View style={[styles.bleed, { height: `${Math.round(bleed * 100)}%` }]}>
                   <View style={styles.bleedInner}><StampArt stamp={stamp} size="full" locked={false} /></View>
@@ -600,7 +608,7 @@ const styles = StyleSheet.create({
   close: { position: 'absolute', top: -18, right: -14, zIndex: 5 },
   content: { alignSelf: 'stretch', alignItems: 'center' },
   contentWrap: { alignSelf: 'stretch' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: DIALOG_CARD.backgroundColor },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: DIALOG_CARD.backgroundColor, zIndex: 20, elevation: 20 },
   hud: { zIndex: 3, elevation: 3, flexDirection: 'row', gap: 12, backgroundColor: 'rgba(0,40,90,0.45)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, marginTop: 6 },
   hudItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   hudText: { fontFamily: 'Shark', fontSize: 18, color: '#FFFFFF' },
@@ -653,22 +661,26 @@ const styles = StyleSheet.create({
   },
   statusText: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF', textShadowColor: '#05346e', textShadowOffset: { width: 1.5, height: 1.5 }, textShadowRadius: 0 },
   preload: { position: 'absolute', opacity: 0, width: 1, height: 1, overflow: 'hidden' },
-  levelUp: {
-    position: 'absolute', left: 24, right: 24, top: '30%', alignItems: 'center', paddingVertical: 18, borderRadius: 22,
-    backgroundColor: LEGENDARY_GOLD, borderWidth: 4, borderColor: '#FFFFFF', zIndex: 10, elevation: 10,
+  levelUpWrap: { position: 'absolute', left: 24, right: 24, top: '30%', zIndex: 30, elevation: 30 },
+  levelUpPlate: {
+    alignItems: 'center', paddingVertical: 18, paddingHorizontal: 12, borderRadius: 22,
+    backgroundColor: LEGENDARY_GOLD, borderWidth: 4, borderColor: '#FFFFFF', overflow: 'hidden',
   },
+  levelUpPill: { marginTop: 6, backgroundColor: INK, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 2, borderColor: '#FFFFFF' },
   levelUpTitle: { fontFamily: 'Shark', fontSize: 34, color: '#FFFFFF', textShadowColor: '#8A5A00', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: INK },
+  levelUpLevel: { fontFamily: 'Shark', fontSize: 22, color: '#FFFFFF' },
   message: { fontFamily: 'Knockout', fontSize: 15, color: '#E2F6FF', textAlign: 'center', marginTop: 8 },
 });
 
 /** Level-up moment: the stamp's XP moved the level bar. A gold ribbon pops over the card with a fanfare. */
 function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotion: boolean; onDone: () => void }) {
+  // The plate is a static, opaque, full-size view; only its wrapper scales and fades, so the gold
+  // fill covers the whole plate from the first frame.
   const pop = useSharedValue(reducedMotion ? 1 : 0.4);
   const fade = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     haptic('success');
-    playSfx('fx.purchase');
+    playSfx('fx.redeemOpen');
     if (!reducedMotion) {
       fade.value = withTiming(1, { duration: 140 });
       pop.value = withSpring(1, { damping: 9, stiffness: 260 });
@@ -680,10 +692,12 @@ function LevelUp({ level, reducedMotion, onDone }: { level: number; reducedMotio
   }, []);
   const style = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ scale: pop.value }] }));
   return (
-    <Animated.View pointerEvents="none" style={[styles.levelUp, style]} accessibilityLiveRegion="assertive">
-      <GameIcon name="xp" size={48} />
-      <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>LEVEL UP!</Text>
-      <Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.2}>Level {level}</Text>
+    <Animated.View pointerEvents="none" style={[styles.levelUpWrap, style]} accessibilityLiveRegion="assertive">
+      <View style={styles.levelUpPlate}>
+        <GameIcon name="xp" size={48} />
+        <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>LEVEL UP!</Text>
+        <View style={styles.levelUpPill}><Text style={styles.levelUpLevel} maxFontSizeMultiplier={1.2}>Level {level}</Text></View>
+      </View>
       {!reducedMotion && <Confetti width={300} height={240} seed={level} count={24} />}
     </Animated.View>
   );

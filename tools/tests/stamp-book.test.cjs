@@ -168,7 +168,7 @@ test('claim cascade: instant feedback, rising pitch, per-landing count-up, fresh
   assert.match(src, /AccessibilityInfo\.announceForAccessibility/);
   assert.match(src, /tokenShake\.value = withSequence/);
   // Status is not a button, and the action button lives in the Frame (not remounted per chained stamp).
-  assert.match(src, /accessibilityRole="text" accessibilityLabel=\{status\}/);
+  assert.match(src, /accessibilityRole="text" accessibilityLabel=\{shownStatus\}/);
   assert.match(src, /<Content key=\{s\.id\} ref=\{s\.id === stamp\.id \? content : undefined\}/);
   assert.ok(src.indexOf("<GameButton label={phase === 'claiming'") > src.indexOf('<Content key={s.id}'));
   // Pending stays yellow: the button is not disabled while the claim is in flight.
@@ -331,7 +331,7 @@ test('round 6: hand-off prefetches the next art, HUD lives outside the remountin
   assert.match(card, /if \(levelled\) later\(lastLanding \+ 650, \(\) => bus\.levelUp\(result\.level as number\)\);/);
   assert.match(card, /function LevelUp\(/);
   const screen = read('src/screens/StampBookScreen.tsx');
-  assert.match(screen, /Image\.prefetch\(\[thumb\], 'memory-disk'\)\.then\(go, go\);\n\s+setTimeout\(go, 350\);/);
+  assert.match(screen, /Image\.prefetch\(\[thumb\], 'memory-disk'\)\.then\(go, go\);\n\s+handoffTimer\.current = setTimeout\(go, 350\);/);
   assert.match(screen, /levelsGained: Number\(res\?\.levels_gained \?\? 0\)/);
   assert.match(screen, /coins: player\?\.coins \?\? 0/);
 });
@@ -342,11 +342,11 @@ test('round 6: coin stamps show coins in the HUD; Holiday Shark and Wild Legend 
   assert.equal(model.requirement({ metric: 'holiday_login', target: 1 }).icon, 'gift');
   assert.equal(model.requirement({ metric: 'wild_legendary_variants', target: 2 }).icon, 'sparkle');
   const icons = read('src/ui/iconNames.ts');
-  for (const n of ['gift', 'sparkle', 'moon']) assert.ok(icons.includes(`'${n}'`), n);
+  for (const n of ['gift', 'sparkle', 'moon', 'pumpkin']) assert.ok(icons.includes(`'${n}'`), n);
 });
 
-test('round 6: event haunt stamps get the moon pictogram; the postmark stays off the badge and the name', () => {
-  assert.equal(model.requirement({ metric: 'fright_haunts', target: 5 }).icon, 'moon');
+test('round 6: event haunt stamps get the pumpkin pictogram; the postmark stays off the badge and the name', () => {
+  assert.equal(model.requirement({ metric: 'fright_haunts', target: 5 }).icon, 'pumpkin');
   assert.match(read('src/screens/stampbook/StampTile.tsx'), /bl: \{ left: -10, bottom: 0 \}, br: \{ right: -10, bottom: 0 \}/);
 });
 
@@ -357,4 +357,28 @@ test('round 6: the outgoing stamp stays drawn until the incoming art is on scree
   assert.match(card, /const cap = setTimeout\(\(\) => setHeld\(null\), 700\);/);
   assert.match(card, /if \(current\.id !== stamp\.id\) \{\n\s+setHeld\(current\);/);
   assert.match(read('src/screens/stampbook/StampArt.tsx'), /onDisplay=\{onShown\}/);
+});
+
+test('round 7: opaque level-up plate above everything; the held stamp drives the whole card; no crossfade', () => {
+  const card = read('src/screens/stampbook/StampCard.tsx');
+  // The gold plate is a static full-size view inside the animated wrapper.
+  assert.match(card, /<Animated\.View pointerEvents="none" style=\{\[styles\.levelUpWrap, style\]\}/);
+  assert.match(card, /<View style=\{styles\.levelUpPlate\}>/);
+  assert.match(card, /levelUpWrap: \{ position: 'absolute', left: 24, right: 24, top: '30%', zIndex: 30, elevation: 30 \}/);
+  assert.match(card, /levelUpPlate: \{\n\s+alignItems: 'center',[^}]*backgroundColor: LEGENDARY_GOLD/);
+  assert.match(card, /<View style=\{styles\.levelUpPill\}>/);
+  // Hand-off: overlay on top, never flattened; ribbon, frame and button from the held stamp.
+  assert.match(card, /overlay: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: DIALOG_CARD\.backgroundColor, zIndex: 20, elevation: 20 \}/);
+  assert.match(card, /<View collapsable=\{false\} style=\{\[styles\.content, overlay && styles\.overlay\]\}/);
+  assert.match(card, /<Ribbon text=\{display\.name\} \/>/);
+  assert.match(card, /if \(holding\) action = \{ label: `Next reward \(\$\{nextCount \+ 1\} left\)`/);
+  assert.match(card, /onShown=\{onShown\} transition=\{0\} \/>/);
+});
+
+test('round 7: claim broadcasts are not doubled; a pending hand-off is cancelled on close', () => {
+  assert.match(read('src/api/endpoints/me/stamps.ts'), /\{ skipBroadcasts: true \}/);
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /if \(!quiet && response\.data && Array\.isArray\(response\.data\.broadcasts\)\)/);
+  const screen = read('src/screens/StampBookScreen.tsx');
+  assert.match(screen, /handoffCancelled\.current = true;\n\s+if \(handoffTimer\.current\) clearTimeout\(handoffTimer\.current\);\n\s+playSfx\('ui\.modalClose'/);
+  assert.ok(!/Park Collector|Park Coin/.test(read('src/screens/stampbook/preview.ts')));
 });

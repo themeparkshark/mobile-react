@@ -68,7 +68,8 @@ export async function getStamps(): Promise<StampsResponse> {
 }
 
 export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null }> {
-  const { data } = await client.post(`/me/stamps/${stampId}/claim`);
+  // The card shows the rewards and any level-up itself: skip the global broadcast banners for this call.
+  const { data } = await client.post(`/me/stamps/${stampId}/claim`, undefined, { skipBroadcasts: true } as object);
   return data;
 }
 

@@ -23,9 +23,11 @@ interface Props {
   readonly onReady?: () => void;
   /** Fires once the image is actually on screen (decoded and drawn). */
   readonly onShown?: () => void;
+  /** Fade-in ms (0 = draw at once, used for the incoming card so nothing crossfades). */
+  readonly transition?: number;
 }
 
-function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady, onShown }: Props) {
+function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, priority = 'normal', style, onReady, onShown, transition }: Props) {
   const [failed, setFailed] = useState(false);
   const { source, ghostIsReal } = stampArt(stamp, size, locked);
   const dim = locked && !ghostIsReal && !tint;
@@ -39,7 +41,7 @@ function StampArt({ stamp, size, locked = !stamp.earned, tint, placeholder, prio
         style={[StyleSheet.absoluteFill, dim && styles.dim]}
         contentFit="contain"
         tintColor={tint}
-        transition={tint ? 0 : 140}
+        transition={tint ? 0 : transition ?? 140}
         priority={priority}
         recyclingKey={`${stamp.id}-${size}-${locked ? 'g' : 'c'}${tint ? '-t' : ''}`}
         placeholder={thumb}

@@ -208,7 +208,7 @@ export const BLEED_CAP = 0.65;
 
 // ── Zero-reading: what to do, as a picture ─────────────────────────────
 
-export type Pictogram = 'pin' | 'streak' | 'map' | 'member' | 'coins' | 'xp' | 'chest' | 'coin' | 'queue' | 'trophy' | 'ride' | 'star' | 'moon' | 'gift' | 'sparkle';
+export type Pictogram = 'pin' | 'streak' | 'map' | 'member' | 'coins' | 'xp' | 'chest' | 'coin' | 'queue' | 'trophy' | 'ride' | 'star' | 'moon' | 'pumpkin' | 'gift' | 'sparkle';
 
 export interface Requirement {
   readonly icon: Pictogram;
@@ -247,7 +247,7 @@ export function requirement(s: Pick<BookStamp, 'metric' | 'target'>): Requiremen
   if (/^(trivia_|ride_boss)/.test(m)) return r('trophy', ['win', 'wins'], 'CoinShelf');
   if (m === 'night_show') return r('moon', ['night', 'nights'], 'Explore', null);
   if (m === 'holiday_login') return r('gift', ['holiday', 'holidays'], null, null);
-  if (m.startsWith('fright_')) return r('moon', ['haunt', 'haunts'], null);
+  if (m.startsWith('fright_')) return r('pumpkin', ['haunt', 'haunts'], null);
   if (m === 'total_experience' || m === 'experience_level') return r('xp', ['XP', 'XP'], 'Explore');
   if (m === 'coins_earned' || m === 'coins_held') return r('coins', ['coin', 'coins'], 'Explore');
   return r('star', ['step', 'steps'], null, null);
