@@ -511,7 +511,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const jumpingUntil = useRef(0);
   const canInsert = useCallback(() => Date.now() >= jumpingUntil.current && safeToInsert(firstVisible.current, itemsRef.current), []);
   const more = useCallback((why: 'idle' | 'scroll' | 'end') => {
-    if (fetchingMore.current || !model || model.nextOffset == null) return;
+    // A held page is the next page: never fetch past it.
+    if (fetchingMore.current || heldPage.current || !model || model.nextOffset == null) return;
     fetchingMore.current = true;
     const id = request.current;
     const started = Date.now();
@@ -602,8 +603,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
-    lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
-    firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
+    // A fast programmatic scroll can report an empty window for a frame: keep the last known one.
+    if (viewableItems.length) {
+      lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
+      firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
+    }
     // Back up at the grey rows: a held page lands now.
     if (heldPage.current && canInsertRef.current()) {
       const held = heldPage.current;
