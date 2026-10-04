@@ -226,7 +226,7 @@ test('round 2: the map steps back during a catch and the catch never reads GPS o
   assert.match(home, /ambientFrozen=\{catchOpen\}/);
   assert.match(home, /\[StyleSheet\.absoluteFill, chromeFade\]/, "menus leave on the catch shared value");
   assert.doesNotMatch(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /LocationContext/);
-  assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen\) return null;/);
+  assert.match(read('src/components/OfflineBanner.tsx'), /if \(!mounted \|\| catchOpen( \|\| markOwned)?\) return null;/);
   const scene = read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx');
   assert.doesNotMatch(scene, /BlurMask|<Shadow/, "no blur or shadow filters (a sprite colour grade is fine)");
   assert.match(scene, /createPicture/);

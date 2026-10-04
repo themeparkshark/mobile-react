@@ -239,7 +239,7 @@ test('round 4b: one offline mark, report reasons with pictures', () => {
   const kit = read('src/screens/social/SocialKit.tsx');
   assert.match(kit, /useEffect\(\(\) => claimOfflineMark\(\), \[\]\)/);
   const banner = read('src/components/OfflineBanner.tsx');
-  assert.match(banner, /if \(!mounted \|\| markOwned\) return null;/, 'the global banner hides while a screen owns the mark');
+  assert.match(banner, /if \(!mounted( \|\| catchOpen)? \|\| markOwned\) return null;/, 'the global banner hides while a screen owns the mark');
   const conn = loadTs('src/services/connectivity.ts');
   const seen = [];
   const off = conn.onOfflineMarkOwner(v => seen.push(v));
