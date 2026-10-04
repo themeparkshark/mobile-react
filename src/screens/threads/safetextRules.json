@@ -1,5 +1,5 @@
 {
-  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted.",
+  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted. R5: distress (self-harm about the author) and review_you + review_topics / review_phrases (hold for a person) are not blocks; see SafeText::isDistress and ::needsReview. tens/teens turn number words like 'fifty five' into digits.",
   "vars": {
     "CHAT": "snap|snp|snapchat|sc|insta|instagram|the gram|gram|kik|discord|disc|telegram|whatsapp|whats app|wa|messenger|wechat|dms|signal|skype|viber|imessage|groupme",
     "APPS": "snap|snp|snapchat|sc|insta|instagram|ig|the gram|kik|discord|telegram|whatsapp|whats app|messenger|tiktok|tik tok|tt|youtube|yt|twitch|roblox|rblx|rbx|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter|steam|pinterest|bereal|threads|bird app|the bird app|x app|signal|skype|viber|line|imessage|zoom|groupme",
@@ -45,7 +45,10 @@
     "\\b({APPS})\\s+(display\\s+)?name\\s+(is)?",
     "\\b(follows?|subscribe\\s+to)\\s+{HANDLE}",
     "\\b(venmo|cash\\s?app|paypal|zelle)\\s+(u|you)\\b",
-    "\\b(dame|pasame|p[aá]same)\\s+tu\\s+(n[uú]mero|snap|insta|whats|celular|tel[eé]fono)"
+    "\\b(dame|pasame|p[aá]same)\\s+tu\\s+(n[uú]mero|snap|insta|whats|celular|tel[eé]fono)",
+    "\\bgot\\s+({APPS})\\s*\\?",
+    "\\b(on|in)\\s+({APPS})\\s+my\\s+(name|user|username|tag)\\s+is\\b",
+    "\\b(send|share)\\s+(me\\s+)?(ur|your)\\s+(location|loc|address|addy)\\b"
   ],
   "grooming": [
     "\\bhow\\s+old\\s+(are|r)\\s+(you|u|ya)\\b",
@@ -131,7 +134,33 @@
     "\\bcu[aá]ntos\\s+a[nñ]os",
     "\\bd[oó]nde\\s+vives",
     "\\b(minecoins|robux|vbucks|v\\s?bucks)\\b.{0,40}\\b(follow|add|dm|friend)",
-    "\\b(follow|add|dm|friend)\\w*\\b.{0,40}\\b(minecoins|robux|vbucks)\\b"
+    "\\b(follow|add|dm|friend)\\w*\\b.{0,40}\\b(minecoins|robux|vbucks)\\b",
+    "\\b(u|you)\\s+(like\\s+)?\\d{1,2}(\\s+or\\s+\\d{1,2})?\\s*\\?",
+    "\\b(r|are)\\s+(u|you)\\s+(like\\s+)?\\d{1,2}\\s*$",
+    "\\bages\\s*\\?",
+    "^\\s*age\\s*\\?*\\s*$",
+    "\\b(do|d)\\s+(u|you)\\s+go\\s+to\\s+\\w+\\s+(middle|elementary|high|academy)\\b",
+    "\\bpull\\s+up\\s+(to|at)\\b",
+    "\\b(wanna|lets|want\\s+to|can\\s+we)\\s+link\\s+(after|later|at|by|up)\\b",
+    "\\bjust\\s+us(\\s+two)?\\b",
+    "\\bcome\\s+get\\s+(it|them)\\s+from\\s+me\\b",
+    "\\bnos\\s+vemos\\s+en\\b",
+    "\\bmandame\\s+(una\\s+)?(foto|pic)",
+    "\\bque\\s+edad\\b",
+    "\\bdonde\\s+estas\\b",
+    "\\bde\\s+donde\\s+eres\\b",
+    "\\ben\\s+que\\s+escuela\\b",
+    "\\bno\\s+le\\s+digas\\s+a\\s+tus\\b",
+    "\\beres\\s+(muy\\s+)?(bonita|bonito|linda|lindo|guapa|guapo|hermosa|hermoso)\\b",
+    "\\bi\\s+(wont|will\\s+not)\\s+tell\\s+(anyone|anybody)\\b",
+    "\\bclear\\s+(ur|your)\\s+chat\\b",
+    "\\bwouldnt\\s+understand\\s+us\\b",
+    "\\bwhen\\s+(were|was)\\s+(u|you)\\s+born\\b",
+    "\\b(u|you)\\s+born\\s+in\\b",
+    "\\bhow\\s+many\\s+birthdays\\b",
+    "\\bsneak\\s+(away|out)\\b",
+    "\\bcome\\s+by\\s+(ur|your)self\\b",
+    "\\bnot\\s+like\\s+other\\s+(kids|girls|boys)\\b"
   ],
   "number_words": {
     "zero": "0",
@@ -483,6 +512,51 @@
     "area code",
     "reach",
     "phone",
-    "num"
-  ]
+    "num",
+    "numbers"
+  ],
+  "distress": [
+    "\\bsuicid\\w*",
+    "\\b(want|wanna|going|gonna|wish\\s+i\\s+could)\\s+(to\\s+)?die\\b",
+    "\\b(kill|hurt|harm|cut|cutting|harming|hurting|unalive)\\s+my\\s?self\\b",
+    "\\bend\\s+(my\\s+life|it\\s+all)\\b",
+    "\\b(disappear|vanish)\\s+forever\\b",
+    "\\b(nobody|no\\s+one|noone)\\s+would\\s+(miss|care\\s+about|notice)\\s+me\\b",
+    "\\b(better\\s+off|happier)\\s+without\\s+me\\b",
+    "\\bi\\s+(hate|h8)\\s+my\\s?self\\b",
+    "\\b(dont|do\\s+not)\\s+want\\s+to\\s+(live|be\\s+alive|be\\s+here\\s+anymore|exist)\\b",
+    "\\bwish\\s+i\\s+(was|were)\\s+(dead|never\\s+born)\\b",
+    "\\bno\\s+reason\\s+to\\s+live\\b"
+  ],
+  "review_you": "\\b(u|you|ur|your|yours|ya|urself|yourself|youre|tu|tus|eres|estas|tienes|vives)\\b",
+  "review_topics": "\\b(age|ages|born|grade|school|teacher|town|city|state|location|address|house|street|hotel|room|floor|face|parents|alone|mature|edad|anos|escuela|donde|papas)\\b|\\b(any|a|some|more)\\s+(pics?|photos?|selfies?|fotos?)\\b|\\b(pics?|photos?|selfies?|fotos?)\\s+(of|de)\\s+(u|you|ur|urself|yourself|ti)\\b|\\blive\\s+(in|near|by|around|far|close|from)\\b|\\b(tell|from|away\\s+from|without)\\s+(ur|your)\\s+(mom|dad|mum|parents)\\b",
+  "review_phrases": [
+    "\\bh\\w{0,2}\\s+old\\s+(is|iz|r|are)\\s+(u|you|ya)\\b",
+    "\\b(i\\s?ll|ill|i\\s+will|i\\s+can)\\s+(find|come\\s+to|get)\\s+(u|you)\\b",
+    "\\bjust\\s+(u|you)\\b",
+    "\\bwhat\\s+(do\\s+|does\\s+)?(u|you|ya)\\s+look\\s+like\\b"
+  ],
+  "tens": {
+    "twenty": "2",
+    "thirty": "3",
+    "forty": "4",
+    "fourty": "4",
+    "fifty": "5",
+    "sixty": "6",
+    "seventy": "7",
+    "eighty": "8",
+    "ninety": "9"
+  },
+  "teens": {
+    "ten": "10",
+    "eleven": "11",
+    "twelve": "12",
+    "thirteen": "13",
+    "fourteen": "14",
+    "fifteen": "15",
+    "sixteen": "16",
+    "seventeen": "17",
+    "eighteen": "18",
+    "nineteen": "19"
+  }
 }

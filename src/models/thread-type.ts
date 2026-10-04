@@ -25,5 +25,6 @@ export interface ThreadType {
   readonly is_official?: boolean;
   readonly reaction_counts?: { readonly reaction_type_id: number; readonly count: number }[];
   /** Held for a quick safety look: only the author sees it. */
-  readonly review?: 'pending' | null;
+  /** Held for a person: 'pending' (quick look) or 'care' (self-harm words, a grown-up checks in). Author only. */
+  readonly review?: 'pending' | 'care' | null;
 }

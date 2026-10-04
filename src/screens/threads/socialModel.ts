@@ -97,6 +97,16 @@ const DESPACED = RULES.despaced.map((source) => new RegExp(source, 'u'));
 const DESPACED_PERSONAL = RULES.despaced_personal.map((source) => new RegExp(source, 'u'));
 const LOCATION_NOW = compile(RULES.location_now);
 const PHONE_CUES: readonly string[] = RULES.phone_cues;
+const DISTRESS = compile(RULES.distress);
+const REVIEW_YOU = compile([RULES.review_you])[0];
+const REVIEW_TOPICS = compile([RULES.review_topics])[0];
+const REVIEW_PHRASES = compile(RULES.review_phrases);
+const TENS: Record<string, string> = RULES.tens;
+const TEENS: Record<string, string> = RULES.teens;
+const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
+const TENS_ONES = new RegExp(`\\b(${Object.keys(TENS).join('|')})[\\s-]*(${Object.keys(ONES).join('|')})\\b`, 'gu');
+const TENS_ALONE = new RegExp(`\\b(${Object.keys(TENS).join('|')})\\b`, 'gu');
+const TEENS_RE = new RegExp(`\\b(${Object.keys(TEENS).join('|')})\\b`, 'gu');
 const RUN_EXEMPT_AFTER = new Set<string>(RULES.run_exempt_after);
 
 function baseForm(text: string): string {
@@ -191,7 +201,26 @@ function numericToken(token: string): string | null {
     }
   }
   const out = best[n];
-  return out !== undefined && out.length >= 2 ? out : null;
+  if (out !== undefined && out.length >= 2) return out;
+  // Long glued runs with a typo or two ("zeroonenineninine"): up to 2 stray letters, 4+ digits.
+  if (n < 10) return null;
+  const state: Map<number, string>[] = [new Map([[0, '']])];
+  const put = (pos: number, skips: number, digits: string) => {
+    state[pos] ??= new Map();
+    if (!state[pos].has(skips)) state[pos].set(skips, digits);
+  };
+  for (let i = 0; i < n; i++) {
+    for (const [skips, digits] of state[i] ?? []) {
+      if (/\d/.test(token[i])) put(i + 1, skips, digits + token[i]);
+      for (const [word, digit] of GLUE_VOCAB) if (token.startsWith(word, i)) put(i + word.length, skips, digits + digit);
+      if (skips < 2) put(i + 1, skips + 1, digits);
+    }
+  }
+  for (const skips of [0, 1, 2]) {
+    const got = state[n]?.get(skips);
+    if (got !== undefined && got.length >= 4) return got;
+  }
+  return null;
 }
 
 function isCountingRun(run: string): boolean {
@@ -211,7 +240,17 @@ const escapeRe = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** A port of SafeText::looksLikePhone (same rules, same order). */
 function looksLikePhone(input: string): boolean {
-  let base = input.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])/gu, (m, h, mm) => (Number(h) <= 23 && Number(mm) <= 59 ? ' clock ' : m));
+  const cue = PHONE_CUES.some((word) => new RegExp(`\\b${escapeRe(word)}\\b`, 'u').test(input));
+  // Letters slipped between single digits: "7a1b4c5d5e5f0g1h9i9".
+  let base = input.replace(/\d(?:[a-z]\d){5,}/gu, (m) => m.replace(/[a-z]/gu, ''));
+  // Tens and teens: "fifty five" -> 55, "fourteen" -> 14, "ninety" -> 90.
+  base = base.replace(TENS_ONES, (_m, t: string, o: string) => ` ${TENS[t]}${ONES[o]} `)
+    .replace(TENS_ALONE, (_m, t: string) => ` ${TENS[t]}0 `)
+    .replace(TEENS_RE, (_m, t: string) => ` ${TEENS[t]} `);
+  // Real clock times only; with a phone cue ("my numbers 7:14 5:55") they count as digits.
+  base = base.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])/gu, (m, h, mm) => (Number(h) <= 23 && Number(mm) <= 59 ? (cue ? ` ${h} ${mm} ` : ' clock ') : m));
+  // "$714 $555 $0199": a "$" on three or more whole-number groups is not three prices.
+  if ((base.match(/\$\s?\d+(?![.\d])/gu) ?? []).length >= 3) base = base.replace(/\$\s?(\d+)(?![.\d])/gu, ' $1 ');
   base = base.replace(/\$\s?\d+(\.\d{1,2})?/gu, ' price ');
   base = base.replace(/(?<![\d.])\d{1,3}\.\d{2}(?![\d.])(?=\s*(usd|dollars?|bucks))/gu, ' price ');
   base = base.replace(/(?<![\d.])(?<!\d\s)(?<!\d\s\s)\d{1,3}\.\d{2}(?![\d.])(?!\s{0,2}\d)/gu, ' price ');
@@ -267,7 +306,6 @@ function looksLikePhone(input: string): boolean {
     if (all.length >= 10 || (all.length >= 7 && (sizes.length === 1 || singles || endsLikeLocal || manySmall))) return true;
     candidates.push([r.start, all.length]);
   }
-  const cue = PHONE_CUES.some((word) => new RegExp(`\\b${escapeRe(word)}\\b`, 'u').test(base));
   const windowSize = cue ? Number.MAX_SAFE_INTEGER : 60;
   for (let i = 0; i < candidates.length; i++) {
     let sum = 0;
@@ -307,6 +345,36 @@ export function hasPersonalInfo(text: string): boolean {
 
 export function hasLink(text: string): boolean {
   return /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\s*\.\s*(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b|\b[a-z0-9-]{2,}\s+dot\s+(com|net|org|io|gg|me|co|tv)\b)/u.test(baseForm(text));
+}
+
+/**
+ * Same as SafeText::isDistress: the author sounds like they may hurt themselves. Never a
+ * block: the composer shows CARE_LINE and the server holds the post for a grown-up.
+ */
+export function isDistress(text: string): boolean {
+  return text.trim() !== '' && matchesAny(DISTRESS, forms(text));
+}
+
+export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher.";
+
+/** Same as SafeText::needsReview: "u" plus a personal topic. The server holds it; the app does not block. */
+export function needsReview(text: string): boolean {
+  if (!text.trim()) return false;
+  let lower = text.toLowerCase();
+  for (const themed of RULES.themed_streets) lower = lower.split(themed).join(' park ');
+  lower = lower.replace(/\b(ur|your)\s+(pics?|photos?|selfies?|videos?|vids?)\b/gu, ' post ');
+  const all = forms(lower);
+  return all.some((f) => REVIEW_YOU.test(f) && REVIEW_TOPICS.test(f)) || matchesAny(REVIEW_PHRASES, all);
+}
+
+/**
+ * The cheap check for the keystroke path (POST enabled, send button): empty or too long.
+ * The full filter runs on the debounced text and again on submit.
+ */
+export function quickDraftProblem(text: string, max = POST_MAX): 'empty' | 'too_long' | null {
+  const trimmed = text.trim();
+  if (!trimmed) return 'empty';
+  return trimmed.length > max ? 'too_long' : null;
 }
 
 export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
@@ -360,6 +428,11 @@ export async function reportBlockedDraft(
 export const HINT_DEBOUNCE_MS = 250;
 
 export const REVIEW_LINE = "Posting... we're giving it a quick look.";
+
+/** The line under a held post or reply, for its author. */
+export function reviewLine(review: string | null | undefined): string | null {
+  return review === 'care' ? CARE_LINE : review === 'pending' ? REVIEW_LINE : null;
+}
 
 // ── Time ────────────────────────────────────────────────────────────────
 
