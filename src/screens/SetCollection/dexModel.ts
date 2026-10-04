@@ -565,15 +565,6 @@ export function caughtLine(item: DexItem): string {
 
 
 
-/** Spare progress toward swapping in one missing item. */
-export function swapProgress(item: Pick<DexItem, 'found' | 'exchangeCost' | 'canExchange'>, spares: number): {
-  readonly have: number; readonly need: number; readonly ready: boolean;
-} {
-  const need = Math.max(1, item.exchangeCost);
-  const have = Math.max(0, Math.min(need, spares));
-  return { have, need, ready: !item.found && (item.canExchange || spares >= need) };
-}
-
 /** Reuse the previous object when an item did not change, so memoized tiles skip the re-render. */
 export function mergeStable<T extends { readonly id: number }>(previous: readonly T[] | null | undefined, next: readonly T[]): T[] {
   if (!previous || previous.length === 0) return next.slice();
@@ -619,14 +610,4 @@ export function prizeChips(reward: Pick<DexReward, 'energy' | 'tickets' | 'exper
   if (reward.wearableName) list.push({ icon: 'shark', value: reward.wearableName, label: reward.wearableName });
   if (reward.title) list.push({ icon: 'crown', value: reward.title, label: `the ${reward.title} title` });
   return list;
-}
-
-/** The spare meter goal: the cheapest swap among missing items (or the set cost), and how far along the player is. */
-export function swapGoal(items: readonly Pick<DexItem, 'found' | 'exchangeCost'>[], spares: number, fallback = 4): {
-  readonly cost: number; readonly have: number; readonly extra: number; readonly ready: boolean; readonly anyMissing: boolean;
-} {
-  const missing = items.filter(item => !item.found);
-  const cost = Math.max(1, missing.length ? Math.min(...missing.map(item => item.exchangeCost || fallback)) : fallback);
-  const have = Math.max(0, Math.min(cost, spares));
-  return { cost, have, extra: Math.max(0, spares - cost), ready: missing.length > 0 && spares >= cost, anyMissing: missing.length > 0 };
 }
