@@ -192,6 +192,9 @@ export function momentAt(t: number, kick: number, period: number, length: number
   const lengthMs = length * period;
   const sinceKick = t - kick;
   if (sinceKick >= 0 && sinceKick < lengthMs) return { p: sinceKick / lengthMs, cycle: -1 };
+  // A kick due in the next 2 s (an equip or unlock beat) holds the timer, so no other piece's
+  // moment lands just before it and two tricks never stack 0.4 s apart (game feel round 5).
+  if (sinceKick < 0 && sinceKick > -2000) return { p: -1, cycle: 0 };
   // A tap re-phases the timer: the next automatic moment is a full period after the tap's moment
   // ends, so the piece never does its trick twice in a row (game feel round 4).
   const origin = sinceKick >= 0 ? Math.max(firstAt, kick + lengthMs + period) : firstAt;

@@ -50,7 +50,21 @@ export function shellAt(t: number, kick: number, s: Shell): { launch: number; bu
   return { launch: windowOf(p, 0, LAUNCH), burst: windowOf(p, LAUNCH, BURST) };
 }
 
-/** The burst: a quick bloom, then it droops with gravity and fades into embers. */
+const FADE_AT = 0.36;
+const FADE_LEN = 0.12;
+
+function burstShape(b: number, h: number) {
+  'worklet';
+  const grow = 1 - Math.pow(1 - Math.min(1, b / 0.3), 3);
+  const fall = Math.max(0, b - 0.3);
+  return [{ translateY: fall * fall * h * 0.09 }, { scale: 0.15 + 0.85 * grow }, { scaleY: 1 + 0.18 * fall }, { rotate: `${b * 10}deg` }];
+}
+
+/**
+ * The burst: a quick bloom, then it droops with gravity and fades into embers. While it fades,
+ * the colour copy drops fast and a white-hot copy carries it out, so a fading burst reads lighter
+ * and softer, never a murky olive or grey-blue half-alpha on navy (art panel round 5).
+ */
 function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
   const s = SHELLS[i];
   const still = lod === 'still';
@@ -58,15 +72,27 @@ function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
     if (still) return i < STILL_BURSTS ? { opacity: 1, transform: [{ scale: 1 }] } : { opacity: 0 };
     const { burst: b } = shellAt(t.value, kick.value, s);
     if (b < 0) return { opacity: 0, transform: [{ scale: 0.1 }] };
-    const grow = 1 - Math.pow(1 - Math.min(1, b / 0.3), 3);
-    const fall = Math.max(0, b - 0.3);
-    return {
-      // Gone by alpha while it is still bright and blooming outward: never a dim grey copy (art panel round 3).
-      opacity: b < 0.36 ? 1 : Math.max(0, 1 - (b - 0.36) / 0.12),
-      transform: [{ translateY: fall * fall * box.h * 0.09 }, { scale: 0.15 + 0.85 * grow }, { scaleY: 1 + 0.18 * fall }, { rotate: `${b * 10}deg` }],
-    };
+    const u = (b - FADE_AT) / FADE_LEN;
+    // Lite has no white copy, so its colour fade is quicker still.
+    const k = lod === 'full' ? 1.8 : 2.6;
+    return { opacity: u < 0 ? 1 : Math.max(0, 1 - u * k), transform: burstShape(b, box.h) };
   });
-  return <FxPart source={ART[s.file]} box={box} spec={{ cx: s.cx, cy: s.cy, w: s.w }} style={style} />;
+  return (
+    <>
+      <FxPart source={ART[s.file]} box={box} spec={{ cx: s.cx, cy: s.cy, w: s.w }} style={style} />
+      {lod === 'full' && <BurstWhite t={t} kick={kick} box={box} s={s} />}
+    </>
+  );
+}
+
+function BurstWhite({ t, kick, box, s }: Pick<RigProps, 't' | 'kick' | 'box'> & { s: Shell }) {
+  const style = useAnimatedStyle(() => {
+    const { burst: b } = shellAt(t.value, kick.value, s);
+    const u = b < 0 ? -1 : (b - FADE_AT) / FADE_LEN;
+    if (u < 0 || u >= 1) return { opacity: 0 };
+    return { opacity: 0.8 * Math.sin(Math.PI * Math.min(1, u * 1.4)) * (1 - u * 0.5), transform: burstShape(b, box.h) };
+  });
+  return <FxPart source={ART[s.file]} box={box} spec={{ cx: s.cx, cy: s.cy, w: s.w }} tint="#fff8ea" style={style} />;
 }
 
 /** Full LOD only: the rocket trail up and a bright flash of light at the bloom. */
@@ -99,19 +125,38 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
  * The fireworks light the shark: each bloom washes the near side in its colour
  * for a beat (light cast, game feel round 4). Drawn in front of the shark.
  */
-export function SceneFlashOnShark({ t, kick, box, lod }: RigProps) {
-  const size = box.w * 0.9;
+export function SceneFlashOnShark(props: RigProps) {
+  if (props.lod !== 'full') return null;
+  return (
+    <>
+      <SharkFlash {...props} gold />
+      <SharkFlash {...props} gold={false} />
+    </>
+  );
+}
+
+/** Each burst's own colour: a 0.45 peak held about 120 ms, then a 250 ms fade, shifted toward its side. */
+const FLASH_HOLD = 0.07;
+const FLASH_FADE = 0.16;
+
+function SharkFlash({ t, kick, box, gold }: RigProps & { gold: boolean }) {
+  const size = box.w * 0.8;
+  const shells = SHELLS.filter(s => s.file.includes('gold') === gold);
   const style = useAnimatedStyle(() => {
-    if (lod !== 'full') return { opacity: 0 };
     let f = 0;
-    for (let i = 0; i < SHELLS.length; i++) {
-      const b = shellAt(t.value, kick.value, SHELLS[i]).burst;
-      if (b >= 0) f = Math.max(f, Math.max(0, 1 - b * 3.5));
+    let cx = 0.5;
+    let cy = 0.2;
+    for (let i = 0; i < shells.length; i++) {
+      const b = shellAt(t.value, kick.value, shells[i]).burst;
+      if (b < 0) continue;
+      const v = b < FLASH_HOLD ? 1 : Math.max(0, 1 - (b - FLASH_HOLD) / FLASH_FADE);
+      if (v > f) { f = v; cx = shells[i].cx; cy = shells[i].cy; }
     }
-    return { opacity: 0.22 * f };
+    // The wash sits on the side and top facing the burst.
+    return { opacity: 0.45 * f, transform: [{ translateX: (cx - 0.5) * box.w * 0.45 }, { translateY: (cy - 0.2) * box.h * 0.4 }] };
   });
-  return <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + box.w * 0.52 - size / 2, top: box.y + box.h * 0.12,
-    width: size, height: size, tintColor: '#ffe6b8' }, style]} />;
+  return <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + box.w * 0.52 - size / 2, top: box.y + box.h * 0.1,
+    width: size, height: size, tintColor: gold ? '#ffc94a' : '#ff6fd0' }, style]} />;
 }
 
 /**

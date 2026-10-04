@@ -124,6 +124,7 @@ export default function Playercard({
   const grounded = sceneGround ?? (!!fx.scene && showBackground);
   // Reduce Motion is read here, so no screen can forget it (performance panel round 1).
   const reduced = useReducedGameMotion();
+  const stageAwake = useFxRunning(still || reduced ? 'still' : 'full');
   // Long-lived stages (Profile, the Dressing Room, the shop hero) drop their particles after a
   // minute with no touch, and wake on the next tap or new piece (perf round 3).
   const [fxIdle, setFxIdle] = useState(false);
@@ -135,7 +136,7 @@ export default function Playercard({
   }, []);
   // Only a card with something animating arms the timer; it wakes again whenever the stage resumes.
   const animates = fx.rigs.length > 0 || (!!fx.scene && showBackground);
-  const resumed = useFxRunning(still || reduced ? 'still' : 'full');
+  const resumed = stageAwake;
   useEffect(() => {
     if (animates && resumed) wakeFx();
     else if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -143,7 +144,8 @@ export default function Playercard({
   }, [wakeFx, animates, resumed]);
   const lod: FxLod = still || reduced ? 'still' : fxIdle && fxLod === 'full' ? 'lite' : fxLod;
   // Only a look with something to draw runs a clock (a scene off stage draws nothing here).
-  const fxRunning = useFxRunning(lod) && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
+  // One focus/AppState subscription per card: the stage is awake, then the clock runs if there is something to draw.
+  const fxRunning = stageAwake && lod !== 'still' && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
   const fxClock = useFxClock(fxRunning, -fxStartDelay);
   const fxKick = useFxKick();
   const [stageH, setStageH] = useState(0);
@@ -402,7 +404,7 @@ export default function Playercard({
               ) : null;
             })}
             {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="front" t={fxClock} kick={fxKick} cue={fxCue} lod={lod} />}
-            {grounded && fx.scene && showBackground && <FxSceneLight fx={fx} t={fxClock} kick={fxKick} lod={lod} />}
+            {grounded && fx.scene && showBackground && lod === 'full' && <FxSceneLight fx={fx} t={fxClock} kick={fxKick} lod={lod} />}
             {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
             {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
               <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"

@@ -65,7 +65,8 @@ test('rig art ships as WebP (the OTA asset budget)', () => {
   const files = fs.readdirSync(path.join(root, 'assets/fx'));
   assert.deepEqual(files.filter(f => !f.endsWith('.webp')), []);
   const bytes = files.reduce((n, f) => n + fs.statSync(path.join(root, 'assets/fx', f)).size, 0);
-  assert.ok(bytes < 450 * 1024, `assets/fx is ${Math.round(bytes / 1024)} KB`);
+  // 480 KB: the gold burst went to 768 px so the unlock reads crisp on 3x screens (perf panel round 5).
+  assert.ok(bytes < 480 * 1024, `assets/fx is ${Math.round(bytes / 1024)} KB`);
 });
 
 test('part aspects in geometry match the bundled art, so the live rig lines up with the rest frame', () => {
@@ -119,6 +120,10 @@ test('moments fire 350 ms after a piece appears, replay on a tap, and vary per c
   // After a tap the timer re-phases: no automatic moment until a full period after the tap's moment ends.
   for (let t = 4200; t < 3000 + 1200 + 6000; t += 50) assert.equal(fx.momentAt(t, 3000, 6000, 0.2).p, -1, `no repeat at ${t}`);
   assert.ok(fx.momentAt(3000 + 1200 + 6000 + 10, 3000, 6000, 0.2).p >= 0);
+  // A kick due soon (an equip 400 ms out) holds every timer moment until it lands.
+  assert.ok(fx.momentAt(950, NO, 6000, 0.2).p >= 0);
+  assert.equal(fx.momentAt(950, 1350, 6000, 0.2).p, -1, 'held before a pending equip kick');
+  assert.ok(fx.momentAt(950, 1e7, 6000, 0.2).p >= 0, 'a far-off kick (clock restarted) never freezes the timer');
   // Later cycles shift by a seeded jitter (same every run), never by Math.random.
   const starts = [1, 2, 3, 4].map(c => { for (let t = 350 + c * 6000; t < 350 + (c + 1) * 6000; t += 10) if (fx.momentAt(t, NO, 6000, 0.2).p >= 0) return t; return null; });
   assert.ok(starts.every(t => t !== null));
@@ -295,7 +300,9 @@ test('Reduce Motion is read inside the shark stage and every tile, so no screen 
   const solo = src('src/fx/FxSolo.tsx');
   assert.equal((solo.match(/const reduced = useReducedGameMotion\(\);/g) || []).length, 2);
   // A look with nothing to draw runs no clock.
-  assert.match(src('src/components/Playercard.tsx'), /useFxRunning\(lod\) && \(fx\.rigs\.length > 0 \|\| \(!!fx\.scene && showBackground\)\)/);
+  assert.match(src('src/components/Playercard.tsx'), /stageAwake && lod !== 'still' && \(fx\.rigs\.length > 0 \|\| \(!!fx\.scene && showBackground\)\)/);
+  // One focus/AppState subscription per card (performance panel round 5).
+  assert.equal((src('src/components/Playercard.tsx').match(/useFxRunning\(/g) || []).length, 1);
 });
 
 // ------------------------------------------------------------- the shop

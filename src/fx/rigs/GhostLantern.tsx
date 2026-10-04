@@ -100,10 +100,14 @@ export function GhostLanternFront(props: RigProps) {
   const { t, kick, cue } = props;
   const { l, sway, still } = useLanternFrame(props);
   useMomentCue(t, kick, () => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('peek') : undefined);
-  const glowSize = l.width * 1.9;
+  // Big enough to wash the fin that holds it, and it swells as the ghost peeks out, so the violet
+  // light reads on the shark at try-on size (game feel round 5).
+  const glowSize = l.width * (props.lod === 'full' ? 2.8 : 1.9);
   const glow = useAnimatedStyle(() => {
     const f = still ? 1 : flickerAt(t.value);
-    return { opacity: 0.75 * f, transform: [{ scale: 0.9 + 0.12 * f }] };
+    const m = still ? -1 : momentAt(t.value, kick.value, PEEK_PERIOD, PEEK_LENGTH, 350).p;
+    const peek = m < 0 ? 0 : Math.sin(Math.PI * Math.min(1, m * 1.6));
+    return { opacity: Math.min(1, 0.75 * f + 0.25 * peek), transform: [{ scale: 0.9 + 0.12 * f + 0.15 * peek }] };
   });
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, { left: l.left, top: l.top, width: l.width,

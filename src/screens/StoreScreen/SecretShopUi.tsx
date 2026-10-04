@@ -71,14 +71,11 @@ export function GrownUpGateHost() {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
       <View style={styles.gateScrim}>
-        <View style={styles.gateCard} accessibilityViewIsModal>
-          <GameIcon name={resting ? 'moon' : 'member'} size={resting ? 64 : 40} />
+        <View style={[styles.gateCard, resting && styles.gateCardRest]} accessibilityViewIsModal>
+          <GameIcon name={resting ? 'moon' : 'member'} size={resting ? 56 : 40} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateTitle}>{resting ? 'Resting' : 'Ask a grown-up'}</Text>
           {resting ? (
-            <View style={{ alignItems: 'center', gap: 6 }}>
-              <GameIcon name="timer" size={34} />
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody}>Let's try again in a little while.</Text>
-            </View>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody}>Let's try again in a little while.</Text>
           ) : (
             <>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody} accessibilityLabel={`Grown-ups: what is ${q!.a} times ${q!.b}?`}>
@@ -99,9 +96,17 @@ export function GrownUpGateHost() {
               </View>
             </>
           )}
-          <Pressable onPress={() => close(false)} style={styles.gateCancel} accessibilityRole="button" hitSlop={8}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateCancelText}>{resting ? 'OK' : 'Not now'}</Text>
-          </Pressable>
+          {resting ? (
+            // The same yellow key as the gate's OK one tap earlier.
+            <Pressable onPress={() => close(false)} style={({ pressed }) => [styles.key, styles.keyOk, styles.restOk, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button" accessibilityLabel="OK">
+              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>OK</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => close(false)} style={styles.gateCancel} accessibilityRole="button" hitSlop={8}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateCancelText}>Not now</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>
@@ -162,15 +167,21 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
   }, [trigger]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   const flareStyle = useAnimatedStyle(() => ({ opacity: flare.value, transform: [{ scale: 1 + 0.02 * flare.value }] }));
-  // The drawn gold starburst (pipeline art, charcoal outline) pops at full strength and scales out.
-  const burstStyle = useAnimatedStyle(() => ({
-    opacity: burst.value <= 0 ? 0 : burst.value < 0.6 ? 1 : (1 - burst.value) / 0.4,
-    transform: [{ scale: 0.3 + 1.1 * burst.value }, { rotate: `${burst.value * 30}deg` }],
-  }));
+  // The drawn gold starburst (pipeline art, charcoal outline) frames the head and upper body: it pops
+  // at full strength from 0.6, peaks at 1.25 and is fully gone by 1.1 on the way out, so it never
+  // passes the stage width or turns into a soft haze (art panel round 5).
+  const burstStyle = useAnimatedStyle(() => {
+    const k = burst.value;
+    const s = 0.6 + 0.65 * k;
+    return {
+      opacity: k <= 0 ? 0 : s <= 0.95 ? 1 : Math.max(0, (1.1 - s) / 0.15),
+      transform: [{ scale: s }, { rotate: `${k * 24}deg` }],
+    };
+  });
   return (
     <>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0830' }, dimStyle]} />
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View pointerEvents="none" style={styles.burstAnchor}>
         <Animated.Image source={BURST} style={[{ width: 240, height: 236 }, burstStyle]} />
         {UNLOCK_SPARKS.map(i => <UnlockSpark key={i} i={i} burst={burst} />)}
       </View>
@@ -179,6 +190,7 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
   );
 }
 
+// One 768 px gold burst serves the unlock (crisp at 240 pt on 3x) and the fireworks (perf panel round 5).
 const BURST = require('../../../assets/fx/burst-gold.webp');
 const UNLOCK_SPARKS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -239,6 +251,8 @@ const styles = StyleSheet.create({
   bannerCtaText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   mote: { position: 'absolute' },
   flare: { borderRadius: 19, borderWidth: 6, borderColor: SECRET_THEME.gold },
+  // A zero-height row at 35% of the stage: the burst and sparks centre on the head, not the belly.
+  burstAnchor: { position: 'absolute', left: 0, right: 0, top: '35%', height: 0, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
   gateScrim: { flex: 1, backgroundColor: 'rgba(10,6,40,0.75)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   gateCard: { width: '100%', maxWidth: 340, alignItems: 'center', gap: 10, padding: 18, borderRadius: 24, backgroundColor: SECRET_THEME.panel,
     borderWidth: 3, borderColor: SECRET_THEME.border },
@@ -250,6 +264,8 @@ const styles = StyleSheet.create({
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, width: 3 * 72 + 2 * 8 },
   key: { width: 72, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: SECRET_THEME.card,
     borderWidth: 2, borderColor: SECRET_THEME.border },
+  gateCardRest: { maxWidth: 270, paddingVertical: 16, gap: 8 },
+  restOk: { width: 160, marginTop: 4 },
   keyOk: { backgroundColor: SECRET_THEME.gold, borderColor: BRAND.goldLip },
   keyText: { fontFamily: FONT.display, fontSize: 24, color: '#ffffff' },
   keyOkText: { fontSize: 20, color: BRAND.navy },

@@ -26,7 +26,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, FadeIn, Keyframe, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -467,7 +467,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     </Animated.View>
                   </ShopStage>
                   {boughtNow ? (
-                    <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
+                    <Animated.View entering={still ? undefined : secret ? NEW_POP : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
                       <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'NEW!'}</Text>
                     </Animated.View>
                   ) : owned ? (
@@ -604,6 +604,16 @@ function CoinAmount({ n, label }: { n: number; label?: string }) {
 }
 
 const S = SHOP_SURFACE;
+/**
+ * Secret NEW!: hidden through the dim, then it pops in at full colour with the burst
+ * (0 to 1.15 to 1), never fading up grey under the dim (art panel round 5).
+ */
+const NEW_POP = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0 }] },
+  60: { opacity: 1, transform: [{ scale: 1.15 }] },
+  100: { opacity: 1, transform: [{ scale: 1 }] },
+}).duration(260).delay(300);
+
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
