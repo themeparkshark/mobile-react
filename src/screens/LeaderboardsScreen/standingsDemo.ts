@@ -9,7 +9,8 @@ type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly t
 
 const listeners = new Set<(event: DemoEvent) => void>();
 
-export const STANDINGS_DEMO_ON = __DEV__ && process.env.EXPO_PUBLIC_STANDINGS_DEMO === '1';
+const DEMO = process.env.EXPO_PUBLIC_STANDINGS_DEMO;
+export const STANDINGS_DEMO_ON = __DEV__ && (DEMO === '1' || DEMO === 'climb');
 
 export function onStandingsDemo(listener: (event: DemoEvent) => void): () => void {
   listeners.add(listener);
@@ -38,9 +39,15 @@ const TOUR: readonly (readonly [number, DemoEvent])[] = [
   [42000, { type: 'refresh' }],
 ];
 
+/** The climb capture: open This Week, close the Monday card, then let the overtake and podium play. */
+const CLIMB: readonly (readonly [number, DemoEvent])[] = [
+  [3000, { type: 'tab', index: 0 }],
+  [7000, { type: 'dismiss' }],
+];
+
 export function startStandingsDemo(): () => void {
   if (!STANDINGS_DEMO_ON) return () => undefined;
   console.log('standings-demo-start');
-  const timers = TOUR.map(([at, event]) => setTimeout(() => listeners.forEach(listener => listener(event)), at));
+  const timers = (DEMO === 'climb' ? CLIMB : TOUR).map(([at, event]) => setTimeout(() => listeners.forEach(listener => listener(event)), at));
   return () => timers.forEach(clearTimeout);
 }
