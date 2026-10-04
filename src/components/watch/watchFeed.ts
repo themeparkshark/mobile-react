@@ -1,5 +1,17 @@
 import type { SocialPostType } from '../../models/social-post-type';
 
+/**
+ * The coin thank-you is for watching, not for opening and closing: the
+ * player must stay open this long (a Short is under a minute, so less).
+ */
+export function minWatchMs(isShort: boolean | undefined): number {
+  return isShort ? 10_000 : 30_000;
+}
+
+export function earnedView(openedAt: number | null, closedAt: number, isShort: boolean | undefined): boolean {
+  return openedAt !== null && closedAt - openedAt >= minWatchMs(isShort);
+}
+
 /** A video counts as NEW for its first 24 hours on the channel. */
 export const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 

@@ -20,16 +20,17 @@ export default function WatchScreen() {
   const [failed, setFailed] = useState(false);
   const [videos, setVideos] = useState<SocialPostType[]>([]);
   const mounted = useRef(true);
-  const inFlight = useRef(false);
+  const inFlight = useRef<Promise<void> | null>(null);
   const lastFetch = useRef(0);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
   // The backend syncs the channel every few minutes (and on YouTube's push),
   // so a fetch on open, on focus and on pull is enough to stay current.
-  const fetchVideos = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+  const fetchVideos = useCallback((): Promise<void> => {
+    // A pull during a focus fetch waits for that fetch instead of ending at once.
+    if (inFlight.current) return inFlight.current;
+    inFlight.current = (async () => {
     try {
       const data = await youtube();
       if (!mounted.current) return;
@@ -40,9 +41,11 @@ export default function WatchScreen() {
       // Keep whatever is on screen; an empty first load shows the retry hint.
       if (mounted.current) setFailed(true);
     } finally {
-      inFlight.current = false;
+      inFlight.current = null;
       if (mounted.current) setLoading(false);
     }
+    })();
+    return inFlight.current;
   }, []);
 
   // Runs on first focus too, so this is also the initial load. Coming back

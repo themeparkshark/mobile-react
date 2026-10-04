@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import view from '../api/endpoints/social-posts/view';
 import { SocialPostType } from '../models/social-post-type';
 import YouTubePlayerModal from './watch/YouTubePlayerModal';
-import { formatDuration, isNewVideo, thumbnailFor, videoIdOf } from './watch/watchFeed';
+import { earnedView, formatDuration, isNewVideo, thumbnailFor, videoIdOf } from './watch/watchFeed';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { GameIcon } from '../ui';
@@ -37,6 +37,7 @@ export default function SocialPost({
   const [watchedId, setWatchedId] = useState<number | null>(null);
   const hasWatched = socialPost.has_watched || watchedId === socialPost.id;
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const openedAt = useRef<number | null>(null);
   const [showReward, setShowReward] = useState(false);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { refreshPlayer } = useContext(AuthContext);
@@ -114,7 +115,8 @@ export default function SocialPost({
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (videoId) {
-      // Plays in-app; the thank-you is paid when the player closes.
+      // Plays in-app; the thank-you is paid on close after a real watch.
+      openedAt.current = Date.now();
       setPlayingId(videoId);
       return;
     }
@@ -123,7 +125,10 @@ export default function SocialPost({
   };
 
   const closePlayer = () => {
+    const earned = earnedView(openedAt.current, Date.now(), socialPost.is_short);
+    openedAt.current = null;
     setPlayingId(null);
+    if (!earned) return;
     // Let the player sheet finish sliding away before the reward modal opens
     // (iOS drops a modal presented during another one's dismissal).
     setTimeout(() => { recordView(); }, 450);
@@ -341,7 +346,7 @@ export default function SocialPost({
         </Animated.View>
       </Pressable>
 
-      <YouTubePlayerModal videoId={playingId} title={socialPost.title} onClose={closePlayer} />
+      <YouTubePlayerModal videoId={playingId} title={socialPost.title} isShort={socialPost.is_short} onClose={closePlayer} />
 
       {/* Reward confirmation modal */}
       <Modal

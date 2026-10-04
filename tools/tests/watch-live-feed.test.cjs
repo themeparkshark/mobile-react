@@ -78,3 +78,13 @@ test('the Watch page refetches on focus and the card plays in-app, not in a brow
   assert.match(player, /onShouldStartLoadWithRequest=\{req => allowPlayerNavigation\(/);
   assert.match(player, /javaScriptCanOpenWindowsAutomatically=\{false\}/);
 });
+
+test('coins need a real watch: 30s for a video, 10s for a Short, never a quick open/close', () => {
+  assert.equal(feed.earnedView(0, 29_999, false), false);
+  assert.equal(feed.earnedView(0, 30_000, false), true);
+  assert.equal(feed.earnedView(0, 10_000, true), true);
+  assert.equal(feed.earnedView(0, 3_000, true), false);
+  assert.equal(feed.earnedView(null, 60_000, false), false);
+  const card = read('src/components/SocialPost.tsx');
+  assert.match(card, /if \(!earned\) return;/);
+});
