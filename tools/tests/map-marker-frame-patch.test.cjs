@@ -15,7 +15,9 @@ test('postinstall patches MLRNPointAnnotation so React never moves a marker MapL
   assert.match(pkg.scripts.postinstall, /node tools\/maplibre\/patch-marker-frame\.mjs/);
   const script = read('tools/maplibre/patch-marker-frame.mjs');
   assert.match(script, /- \(void\)setFrame:\(CGRect\)frame \{/);
-  assert.match(script, /\[_map\.annotations containsObject:self\]/);
+  assert.match(script, /if \(!_tpsOnMap \|\| self\.superview == nil \|\| _map == nil\)/);
+  assert.match(script, /BOOL _tpsOnMap;/);
+  assert.match(script, /_tpsOnMap = YES;/);
   assert.match(script, /\[super setBounds:bounds\]/);
   assert.match(script, /self\.layer\.position = /);
   const native = path.join(root, 'node_modules/@maplibre/maplibre-react-native/ios/MLRN/MLRNPointAnnotation.m');

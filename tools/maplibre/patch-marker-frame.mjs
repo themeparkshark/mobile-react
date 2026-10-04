@@ -57,17 +57,19 @@ const method = `// ${MARK} (tools/maplibre/patch-marker-frame.mjs): once MapLibr
 // view it places it by center each map frame. A React layout pass writes the
 // Yoga frame (origin 0,0 = the map's top-left corner); take only its size and
 // keep the view where MapLibre put it, so markers never blink to the corner.
+// Ownership is a flag set where this class adds and removes itself (no scan of
+// the map's annotation list on every layout pass).
 - (void)setFrame:(CGRect)frame {
-  if (self.superview == nil || _map == nil || ![_map.annotations containsObject:self]) {
+  if (!_tpsOnMap || self.superview == nil || _map == nil) {
     [super setFrame:frame];
     return;
   }
-  CGPoint position = self.layer.position;
-  CGVector oldOffset = self.centerOffset;
   CGRect bounds = self.bounds;
   if (CGSizeEqualToSize(bounds.size, frame.size)) {
     return;
   }
+  CGPoint position = self.layer.position;
+  CGVector oldOffset = self.centerOffset;
   bounds.size = frame.size;
   [super setBounds:bounds];
   [self _setCenterOffset:CGRectMake(0, 0, frame.size.width, frame.size.height)];
@@ -77,5 +79,24 @@ const method = `// ${MARK} (tools/maplibre/patch-marker-frame.mjs): once MapLibr
 }
 
 `;
-fs.writeFileSync(file, src.replace(anchor, method + anchor));
+const edits = [
+  // the ownership flag
+  ['  UITapGestureRecognizer *customViewTap;\n}', '  UITapGestureRecognizer *customViewTap;\n  BOOL _tpsOnMap;\n}'],
+  // removed before React re-applies a frame (Paper path)
+  ['  if ([_map.annotations containsObject:self]) {\n    [_map removeAnnotation:self];\n  }\n  [super reactSetFrame:frame];',
+   '  if ([_map.annotations containsObject:self]) {\n    [_map removeAnnotation:self];\n  }\n  _tpsOnMap = NO;\n  [super reactSetFrame:frame];'],
+  // removed when the map goes away
+  ['  if (map == nil) {\n    [_map removeAnnotation:self];', '  if (map == nil) {\n    _tpsOnMap = NO;\n    [_map removeAnnotation:self];'],
+  // added
+  ['  [_map addAnnotation:self];\n', '  [_map addAnnotation:self];\n  _tpsOnMap = YES;\n'],
+];
+let out = src.replace(anchor, method + anchor);
+for (const [from, to] of edits) {
+  if (!out.includes(from)) {
+    console.error('maplibre marker frame: MLRNPointAnnotation.m changed upstream (' + from.split('\n')[0].trim() + '), patch not applied');
+    process.exit(1);
+  }
+  out = out.replace(from, to);
+}
+fs.writeFileSync(file, out);
 console.log('maplibre marker frame: patched (rebuild the native app)');
