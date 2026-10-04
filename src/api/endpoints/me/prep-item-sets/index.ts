@@ -92,7 +92,9 @@ export interface PrepItemSetListItem {
   is_complete: boolean;
   spare_count: number;
   recent_gift_count?: number;
-  exchange_cost: number;
+  /** Null once swaps are retired (the server refuses them). */
+  exchange_cost: number | null;
+  swaps_enabled?: boolean;
   /** Absent from the live list endpoint; getPrepItemSets fills it from the detail for finished sets. */
   rewards_claimed?: boolean;
   starter_milestone: StarterMilestone | null;
@@ -161,7 +163,8 @@ export interface PrepItemSetDetailResponse {
       is_complete: boolean;
       collected_ids: number[];
       spare_count: number;
-      exchange_cost: number;
+      exchange_cost: number | null;
+      swaps_enabled?: boolean;
       /** Authored sets: cost by rarity number, for example { 1: 4, 4: 8, 5: 12 }. */
       exchange_costs?: Record<string, number> | null;
       rewards_claimed: boolean;
@@ -269,10 +272,6 @@ export async function claimStarterRewards(slug: string, itemId?: number): Promis
 
 export async function equipSetTitle(slug: string, equipped: boolean, tier: 'starter' | 'complete' = 'complete'): Promise<void> {
   await client.put(`/me/prep-item-sets/${slug}/title`, { equipped, tier });
-}
-
-export async function exchangeSetDuplicates(slug: string, prepItemId: number): Promise<void> {
-  await client.post(`/me/prep-item-sets/${slug}/exchange`, { prep_item_id: prepItemId });
 }
 
 export async function focusPrepItemSet(slug: string): Promise<void> {

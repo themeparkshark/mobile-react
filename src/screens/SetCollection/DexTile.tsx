@@ -1,7 +1,7 @@
 /**
  * A sticker slot in the book: the rarity frame and gems, the item art (or a
  * dark silhouette), the name underneath, an "x3" badge from two copies up,
- * a swap badge when spares can buy a missing item, a shimmer sweep on found
+ * a shimmer sweep on found
  * Legendaries, and a one-time flip from silhouette to color for a new find.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
@@ -38,8 +38,8 @@ function markSeen(id: number) {
   });
 }
 
-export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress }: {
-  readonly item: DexItem; readonly width: number; readonly swapReady: boolean; readonly onPress: (item: DexItem) => void;
+export const ItemTile = memo(function ItemTile({ item, width, onPress }: {
+  readonly item: DexItem; readonly width: number; readonly onPress: (item: DexItem) => void;
 }) {
   const reduced = useUiReducedMotion();
   const look = rarityLook(item.rarity);
@@ -90,18 +90,12 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
   const shadowStyle = useAnimatedStyle(() => ({ opacity: flipping && turn.value < 0.5 ? 1 : 0 }));
   const shineStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shine.value * width * 1.4 }, { rotate: '20deg' }] }));
   const rimStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(shine.value) * 1.4) }));
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    if (!swapReady || reduced) { pulse.value = 1; return; }
-    pulse.value = withRepeat(withSequence(withSpring(1.15, { damping: 6 }), withTiming(1, { duration: 500 })), -1, false);
-  }, [swapReady, reduced, pulse]);
-  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
 
   const art = artFailed ? GIFT : itemArt(item);
   const artSize = width * 0.7;
   const label = item.found
     ? `${item.name}, ${look.label}${item.caught > 1 ? `, caught ${item.caught} times` : ''}`
-    : `Missing: ${item.name}, ${look.label}${swapReady ? ', you can swap for it' : ''}`;
+    : `Missing: ${item.name}, ${look.label}`;
   return (
     <SpringPress onPress={() => onPress(item)} accessibilityLabel={label} style={{ width, marginBottom: 10 }}>
       <Animated.View style={flipStyle}>
@@ -128,15 +122,12 @@ export const ItemTile = memo(function ItemTile({ item, width, swapReady, onPress
             <View style={styles.count}><Text style={styles.countText} maxFontSizeMultiplier={1.2}>x{item.caught}</Text></View>
           )}
           {item.isNew && item.found && <View style={styles.newTag}><GameIcon name="new" size={30} /></View>}
-          {swapReady && (
-            <Animated.View style={[styles.swap, pulseStyle]}><GameIcon name="swap" size={22} /></Animated.View>
-          )}
         </TilePanel>
       </Animated.View>
       <Text numberOfLines={2} style={[styles.name, !item.found && styles.nameMissing]} maxFontSizeMultiplier={1.25}>{item.name}</Text>
     </SpringPress>
   );
-}, (a, b) => a.item === b.item && a.width === b.width && a.swapReady === b.swapReady && a.onPress === b.onPress);
+}, (a, b) => a.item === b.item && a.width === b.width && a.onPress === b.onPress);
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
@@ -147,10 +138,6 @@ const styles = StyleSheet.create({
   },
   countText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
   newTag: { position: 'absolute', bottom: 2, left: 2 },
-  swap: {
-    position: 'absolute', bottom: 4, right: 4, width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.gold,
-    borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
-  },
   shine: { position: 'absolute', width: 60, left: '35%' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 13, borderWidth: 4, borderColor: '#ffe07a' },
   name: {

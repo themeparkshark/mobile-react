@@ -312,37 +312,13 @@ function AnimatedCount({ value, style, suffix }: { readonly value: number; reado
   return <Animated.Text style={[style, style2]} maxFontSizeMultiplier={1.2}>{shown}{suffix}</Animated.Text>;
 }
 
-/** Spares as progress toward the next swap: sockets fill to the cheapest missing item's cost, then glow gold. */
-export function SparesMeter({ spares, cost, ready, extra, anyMissing, onPress }: {
-  readonly spares: number; readonly cost: number; readonly ready: boolean; readonly extra: number; readonly anyMissing: boolean;
-  readonly onPress: () => void;
-}) {
-  const have = Math.min(cost, spares);
-  if (!anyMissing) {
-    // Nothing left to swap for in this set: just the spare count (they can still be shared with friends).
-    return (
-      <SpringPress onPress={onPress} style={styles.meterPlaque} accessibilityLabel={`${spareWord(spares, 'spare copy', 'spare copies')}. Tap to see how swapping works.`}>
-        <GameIcon name="swap" size={28} />
-        <AnimatedCount value={spares} style={styles.meterCount} suffix={spares === 1 ? ' spare' : ' spares'} />
-      </SpringPress>
-    );
-  }
+/** The spare count: extra copies of finds already owned. Spares never swap for a missing item (rare finds are earned on the map). */
+export function SparesMeter({ spares, onPress }: { readonly spares: number; readonly onPress: () => void }) {
   return (
-    <SpringPress onPress={onPress} style={[styles.meterPlaque, ready && styles.meterReady]}
-      accessibilityLabel={ready ? `Swap ready. You have ${spareWord(spares, 'spare', 'spares')}; a swap costs ${cost}. Tap to see how.`
-        : `${have} of ${spareWord(cost, 'spare', 'spares')} for a swap. Tap to see how.`}>
-      <GameIcon name="swap" size={28} />
-      {ready ? (
-        <Text style={styles.meterReadyText} maxFontSizeMultiplier={1.2}>Swap ready!</Text>
-      ) : (
-        <View style={styles.meterSockets}>
-          {Array.from({ length: Math.min(12, cost) }, (_, index) => (
-            <View key={index} style={[styles.meterSocket, index < have && styles.meterSocketOn]} />
-          ))}
-        </View>
-      )}
-      {/* Ready: the button already shows the price, so no bare "+N" here. */}
-      {!ready && <Text style={styles.meterCount} maxFontSizeMultiplier={1.2}>{`${have}/${cost}`}</Text>}
+    <SpringPress onPress={onPress} style={styles.meterPlaque}
+      accessibilityLabel={`${spareWord(spares, 'spare copy', 'spare copies')}. Tap to see what spares are for.`}>
+      <GameIcon name="gift" size={28} />
+      <AnimatedCount value={spares} style={styles.meterCount} suffix={spares === 1 ? ' spare' : ' spares'} />
     </SpringPress>
   );
 }
@@ -582,11 +558,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 12, borderRadius: 16,
     backgroundColor: '#1a8fe3', borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 6, borderBottomColor: '#0b5aa0',
   },
-  meterReady: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
-  meterSockets: { flexDirection: 'row', gap: 3 },
-  meterSocket: { width: 12, height: 16, borderRadius: 4, backgroundColor: '#0b5aa0', borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
-  meterSocketOn: { backgroundColor: BRAND.goldLight, borderColor: BRAND.white },
-  meterReadyText: { fontFamily: 'Shark', fontSize: 17, color: '#7a3d00' },
   meterCount: {
     fontFamily: 'Shark', fontSize: 16, color: BRAND.white,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
