@@ -15,21 +15,6 @@ const SLASH_DEG = -52;
 /** Reduce Motion and the rest frame: the blade at its proudest, glowing. */
 export const STILL_T = 1100;
 
-/**
- * Extra rotation of the blade at time t: a wind-up back, a fast outward slash,
- * then a springy settle with one overshoot (game feel round 2). Every few
- * swings it slashes the other way.
- */
-export function swingAt(t: number, kick: number): number {
-  'worklet';
-  const m = momentAt(t, kick, SWING_PERIOD, SWING_LENGTH, 350);
-  if (m.p < 0) return 0;
-  // Always outward, away from the face. Every third swing is a quick double slash (the variant).
-  const double = m.cycle > 0 && m.cycle % 3 === 2;
-  if (!double) return slashCurve(m.p);
-  return m.p < 0.5 ? slashCurve(m.p * 2) : 0.7 * slashCurve((m.p - 0.5) * 2);
-}
-
 /** One slash: 0-0.1 wind-up (a few degrees back), 0.1-0.24 the slash out, then a springy settle. */
 export function slashCurve(p: number): number {
   'worklet';
@@ -42,6 +27,22 @@ export function slashCurve(p: number): number {
   // The overshoot back stays small (under 5 degrees), so the blade never sweeps over the face.
   return SLASH_DEG * Math.cos(k * Math.PI * 1.5) * Math.exp(-3.6 * k);
 }
+
+/**
+ * Extra rotation of the blade at time t: a wind-up back, a fast outward slash,
+ * then a springy settle (game feel round 2). Every third swing is a double
+ * slash. A worklet helper must be declared above the worklet that calls it.
+ */
+export function swingAt(t: number, kick: number): number {
+  'worklet';
+  const m = momentAt(t, kick, SWING_PERIOD, SWING_LENGTH, 350);
+  if (m.p < 0) return 0;
+  // Always outward, away from the face. Every third swing is a quick double slash (the variant).
+  const double = m.cycle > 0 && m.cycle % 3 === 2;
+  if (!double) return slashCurve(m.p);
+  return m.p < 0.5 ? slashCurve(m.p * 2) : 0.7 * slashCurve((m.p - 0.5) * 2);
+}
+
 
 /** 0..1 how fast the blade is moving right now (trail strength). */
 function speedAt(t: number, kick: number): number {
