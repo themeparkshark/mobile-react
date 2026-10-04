@@ -573,7 +573,8 @@ test('round 6: stage geometry is tied to the real shark PNG and the drawn plinth
   assert.equal(Number(wrap[3]) / 100, shelves.PLINTH.bottom);
   assert.equal(Number(wrap[4]) / Number(wrap[5]), shelves.PLINTH.aspect);
   assert.match(ui, /viewBox="0 0 200 64"/);
-  const face = /<Ellipse cx="100" cy="(\d+)" rx="94" ry="22" fill="#d6ecfb"/.exec(ui);
+  const face = /<Ellipse cx="100" cy="(\d+)" rx="94" ry="22" fill=\{PLINTH\[plinth\]\.top\}/.exec(ui);
+  assert.match(ui, /house: \{ side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' \}/, 'the house plinth keeps its colours');
   assert.ok(face, 'top face ellipse found');
   assert.equal(Number(face[1]) / 64, shelves.PLINTH.faceY);
 });
@@ -740,14 +741,14 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
   for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
-  assert.match(code, /<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  assert.match(code, /<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\}[^/]*\/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
   assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
   for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
 });
 
 test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the next-week placeholder', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /colors=\{\[\.\.\.NIGHT_SKY\]\}/, 'the card is the night stage blue, so the stage has no seam');
+  assert.match(code, /colors=\{secret \? \[\.\.\.SECRET_THEME\.sky\] : \[\.\.\.NIGHT_SKY\]\}/, 'the card is the night stage blue (midnight in the Secret Shop), so the stage has no seam');
   const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
   const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {
