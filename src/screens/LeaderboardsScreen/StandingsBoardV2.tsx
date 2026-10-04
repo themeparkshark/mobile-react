@@ -46,7 +46,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  DIVIDER_HEIGHT, firstSkeletonIndex, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  anchorShift, DIVIDER_HEIGHT, firstSkeletonIndex, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -501,6 +501,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // Infinite scroll: one page at a time, merged into the cached board.
   const fetchingMore = useRef(false);
   const lastVisible = useRef(0);
+  const firstVisible = useRef(0);
+  // A page that lands above what the kid is looking at (the Your spot block)
+  // would push it down: remember what was on top, and shift back after commit.
+  const pendingAnchor = useRef<{ readonly items: readonly ListItem[]; readonly index: number } | null>(null);
   const more = useCallback((why: 'idle' | 'scroll' | 'end') => {
     if (fetchingMore.current || !model || model.nextOffset == null) return;
     fetchingMore.current = true;
@@ -510,7 +514,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (STANDINGS_PERF_ON) perfMark(`page-request ${board} offset=${model.nextOffset} why=${why} rowsToEnd=${at - lastVisible.current}`);
     loadMore(meId, board, parkId).then(next => {
       if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${next?.rows.length ?? 0} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
-      if (next && id === request.current) setModel(next);
+      if (next && id === request.current) {
+        const gap = firstSkeletonIndex(itemsRef.current);
+        if (gap >= 0 && firstVisible.current > gap) pendingAnchor.current = { items: itemsRef.current, index: firstVisible.current };
+        setModel(next);
+      }
     }).catch(() => { if (STANDINGS_PERF_ON) perfMark(`page-failed ${board} ${Date.now() - started}ms`); }).finally(() => { fetchingMore.current = false; });
   }, [model, meId, board, parkId]);
   const moreRef = useRef(more);
@@ -533,6 +541,14 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (urls.length) void ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined);
   }, [model]);
   const layouts = useMemo(() => itemLayouts(items), [items]);
+  useLayoutEffect(() => {
+    const anchor = pendingAnchor.current;
+    pendingAnchor.current = null;
+    if (!anchor) return;
+    const shift = anchorShift(anchor.items, items, anchor.index);
+    if (shift) list.current?.scrollToOffset({ offset: scrollY.value + shift, animated: false });
+    if (STANDINGS_PERF_ON) perfMark(`anchor ${board} shift=${shift}`);
+  }, [items]);
   const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
   const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
   const meOnPodium = podium.some(row => row?.isMe);
@@ -588,6 +604,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
     lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
+    firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
     // About two screens before the grey rows: fetch, so the page lands before the kid gets there.
     if (activeRef.current && shouldPrefetch(lastVisible.current, itemsRef.current)) moreRef.current('scroll');
   }).current;

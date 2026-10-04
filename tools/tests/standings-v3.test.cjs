@@ -152,3 +152,26 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   const api = read('src/api/endpoints/me/standings.ts');
   assert.match(api, /params: \{ board, offset,/);
 });
+
+test('a page landing above the Your spot block never moves what the kid is looking at', () => {
+  const m = model.boardModel(firstPage(), 'week', 5);
+  const before = model.listItems(m);
+  const spot = before.findIndex(i => i.type === 'row' && i.row.isMe);
+  const after = model.listItems(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5));
+  const shift = model.anchorShift(before, after, spot);
+  assert.equal(shift, 50 * model.ROW_HEIGHT, 'fifty rows landed above you');
+  const layoutsAfter = model.itemLayouts(after);
+  const layoutsBefore = model.itemLayouts(before);
+  const nowAt = after.findIndex(i => i.type === 'row' && i.row.isMe);
+  assert.equal(layoutsAfter[nowAt].offset - shift, layoutsBefore[spot].offset, 'scrolling by the shift keeps your row in place');
+  // When the list reaches you, your near- row becomes a plain row: still the same anchor.
+  const all = model.mergePage(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5),
+    { rows: ranked(101, 140).map(r => (r.rank === 120 ? { ...r, id: 5, is_me: true } : r)), next_offset: null }, 5);
+  const mid = model.listItems(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5));
+  const meMid = mid.findIndex(i => i.type === 'row' && i.row.isMe);
+  assert.ok(model.anchorShift(mid, model.listItems(all), meMid) !== 0);
+  assert.equal(model.anchorShift(before, after, 999), 0, 'no anchor, no shift');
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /firstVisible\.current > gap\) pendingAnchor\.current =/, 'only when the kid is below the grey rows');
+  assert.match(board, /scrollToOffset\(\{ offset: scrollY\.value \+ shift, animated: false \}\)/);
+});

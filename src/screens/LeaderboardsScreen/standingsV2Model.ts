@@ -289,6 +289,22 @@ export function shouldPrefetch(lastVisibleIndex: number, items: readonly ListIte
   return at >= 0 && lastVisibleIndex >= at - PREFETCH_ROWS;
 }
 
+/**
+ * How far (pt) an item moved when a page landed above it, so the list can
+ * shift by the same amount and the kid's view stays still. A row from the
+ * "Your spot" block (key near-X) that joined the main list (key X) is the
+ * same row. 0 when the anchor is gone or did not move.
+ */
+export function anchorShift(before: readonly ListItem[], after: readonly ListItem[], anchorIndex: number): number {
+  const anchor = before[anchorIndex];
+  if (!anchor) return 0;
+  const plainKey = anchor.key.startsWith('near-') ? anchor.key.slice(5) : anchor.key;
+  const at = after.findIndex(item => item.key === anchor.key || item.key === plainKey || item.key === `near-${plainKey}`);
+  if (at < 0) return 0;
+  const offsetOf = (items: readonly ListItem[], index: number) => itemLayouts(items.slice(0, index + 1))[index]?.offset ?? 0;
+  return offsetOf(after, at) - offsetOf(before, anchorIndex);
+}
+
 /** List row heights for the fixed-height items. */
 export function itemLayouts(items: readonly ListItem[]): readonly { readonly length: number; readonly offset: number }[] {
   let offset = 0;
