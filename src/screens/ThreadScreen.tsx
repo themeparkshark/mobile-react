@@ -17,7 +17,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchComments, fetchReplies, fetchThread, postComment, reportFilterHit } from '../api/endpoints/social';
+import { fetchComments, fetchPostingStatus, fetchReplies, fetchThread, postComment, reportFilterHit } from '../api/endpoints/social';
 import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
 import RichText from '../components/RichText';
@@ -37,7 +37,7 @@ import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import { emitSocial } from './threads/socialEvents';
 import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
-import { DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { CARE_LINE, DRAFT_LINES, QUICK_REPLIES, REPLY_MAX, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -97,6 +97,7 @@ function Bubble({
             <Text style={styles.bubbleTime}>{timeAgo(comment.created_at)}</Text>
           </View>
           <RichText style={styles.bubbleText}>{comment.content ?? ''}</RichText>
+          {comment.review ? <Text style={styles.bubbleReview}>{reviewLine(comment.review)}</Text> : null}
           <View style={styles.bubbleFoot}>
             <PressScale onPress={() => onReply(comment)} hitSlop={14} accessibilityLabel={`Reply to ${name}`} style={styles.footAction}>
               <Text style={styles.footReply}>Reply</Text>
@@ -257,13 +258,34 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   };
 
   /** Send the typed reply, or a one-tap quick reply (fixed kind phrases, nothing to filter). */
-  const draftProblem = useMemo(() => checkDraft(text, REPLY_MAX), [text]);
+  // Keystroke path: only the cheap check. The full filter runs debounced and again on send.
+  const quickProblem = quickDraftProblem(text, REPLY_MAX);
+  const [hintText, setHintText] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setHintText(text), HINT_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [text]);
+  const hintProblem = useMemo(() => checkDraft(hintText, REPLY_MAX), [hintText]);
+  const care = useMemo(() => isDistress(hintText), [hintText]);
+  const [pausedLine, setPausedLine] = useState<string | null>(null);
+  useEffect(() => {
+    if (!player) return;
+    fetchPostingStatus().then((s) => setPausedLine(s.paused ? pauseLine(s.paused_until) : null)).catch(() => undefined);
+  }, [player]);
   const reportedDraft = useRef<string | null>(null);
+
+  const shownLine = line ?? pausedLine ?? (hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null) ?? (care ? CARE_LINE : null);
+  const sendOff = Boolean(pausedLine) || sending || quickProblem === 'empty';
 
   const send = async (quick?: string) => {
     if (!thread || sending) return;
+    if (pausedLine) {
+      setLine(pausedLine);
+      playSound(NOPE, { volume: 0.5 });
+      return;
+    }
     const words = (quick ?? text).trim();
-    const problem = quick ? checkDraft(words, REPLY_MAX) : draftProblem;
+    const problem = checkDraft(words, REPLY_MAX);
     if (problem) {
       setLine(problem === 'empty' ? null : DRAFT_LINES[problem]);
       void reportBlockedDraft(problem, words, reportedDraft, reportFilterHit).then((pause) => { if (pause) setLine(pause); });
@@ -403,12 +425,12 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
 
           {player && thread ? (
             <View style={[styles.replyBar, { paddingBottom: keyboard > 0 ? 8 : Math.max(insets.bottom, 10) }]}>
-              {(replyTo || line) && (
+              {(replyTo || shownLine) && (
                 <Animated.View entering={reduced ? undefined : FadeIn} exiting={reduced ? undefined : FadeOut} style={styles.replyInfo}>
-                  {line ? (
+                  {shownLine ? (
                     <>
                       <GameIcon name="info" size={18} />
-                      <Text style={styles.replyLine} accessibilityLiveRegion="polite">{line}</Text>
+                      <Text style={styles.replyLine} accessibilityLiveRegion="polite">{shownLine}</Text>
                     </>
                   ) : (
                     <>
@@ -448,6 +470,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   ref={inputRef}
                   value={text}
                   onChangeText={(value) => { setText(value); setLine(null); }}
+                  editable={!pausedLine}
                   placeholder={replyName ? `Reply to ${replyName}` : 'Say something nice!'}
                   placeholderTextColor="#7d95b5"
                   multiline
@@ -461,8 +484,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                   haptic="medium"
                   scaleTo={0.88}
                   accessibilityLabel="Send reply"
-                  accessibilityState={{ disabled: Boolean(draftProblem) || sending }}
-                  style={[styles.send, (draftProblem === 'empty' || sending) && styles.sendOff]}
+                  accessibilityState={{ disabled: sendOff || Boolean(quickProblem || hintProblem) }}
+                  style={[styles.send, sendOff && styles.sendOff]}
                 >
                   <GameIcon name="arrow" size={30} />
                 </PressScale>
@@ -554,6 +577,7 @@ const styles = StyleSheet.create({
   bubbleHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
   bubbleName: { flexShrink: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 2 },
   bubbleTime: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
+  bubbleReview: { fontFamily: 'Knockout', fontSize: 14, color: '#7a3d00', marginTop: 2 },
   bubbleText: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 24, color: '#10233f' },
   ghost: { flex: 1, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 12, paddingVertical: 8 },
   ghostText: { fontFamily: 'Knockout', fontSize: 16, color: '#dbefff' },

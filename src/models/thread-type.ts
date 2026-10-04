@@ -24,4 +24,7 @@ export interface ThreadType {
   /** Pinned or written by a staff account: shown as Theme Park Shark with a check. */
   readonly is_official?: boolean;
   readonly reaction_counts?: { readonly reaction_type_id: number; readonly count: number }[];
+  /** Held for a quick safety look: only the author sees it. */
+  /** Held for a person: 'pending' (quick look) or 'care' (self-harm words, a grown-up checks in). Author only. */
+  readonly review?: 'pending' | 'care' | null;
 }

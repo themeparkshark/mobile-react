@@ -95,6 +95,19 @@ const PERSONAL_PATTERNS = compile(RULES.personal);
 const GROOMING_PATTERNS = compile(RULES.grooming);
 const DESPACED = RULES.despaced.map((source) => new RegExp(source, 'u'));
 const DESPACED_PERSONAL = RULES.despaced_personal.map((source) => new RegExp(source, 'u'));
+const LOCATION_NOW = compile(RULES.location_now);
+const PHONE_CUES: readonly string[] = RULES.phone_cues;
+const DISTRESS = compile(RULES.distress);
+const REVIEW_YOU = compile([RULES.review_you])[0];
+const REVIEW_TOPICS = compile([RULES.review_topics])[0];
+const REVIEW_PHRASES = compile(RULES.review_phrases);
+const TENS: Record<string, string> = RULES.tens;
+const TEENS: Record<string, string> = RULES.teens;
+const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
+const TENS_ONES = new RegExp(`\\b(${Object.keys(TENS).join('|')})[\\s-]*(${Object.keys(ONES).join('|')})\\b`, 'gu');
+const TENS_ALONE = new RegExp(`\\b(${Object.keys(TENS).join('|')})\\b`, 'gu');
+const TEENS_RE = new RegExp(`\\b(${Object.keys(TEENS).join('|')})\\b`, 'gu');
+const RUN_EXEMPT_AFTER = new Set<string>(RULES.run_exempt_after);
 
 function baseForm(text: string): string {
   // Invisible characters (zero-width, soft hyphen, variation selectors, keycap marks) go first.
@@ -104,7 +117,14 @@ function baseForm(text: string): string {
     if (INVISIBLE.some(([from, to]) => cp >= from && cp <= to)) continue;
     kept += DIGIT_GLYPHS[ch] ?? ch;
   }
-  const folded = [...kept.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('');
+  // Regional indicators and enclosed/squared letters spell letters.
+  kept = kept.replace(/[\u{1F1E6}-\u{1F1FF}\u{1F130}-\u{1F189}]/gu, (ch) => {
+    const cp = ch.codePointAt(0) ?? 0;
+    const index = cp >= 0x1f1e6 ? cp - 0x1f1e6 : (cp - 0x1f130) % 32;
+    return String.fromCharCode(97 + index);
+  });
+  // NFKC, look-alikes, then accents off (NFD, drop combining marks).
+  const folded = [...kept.normalize('NFKC').toLowerCase()].map((ch) => CONFUSABLES[ch] ?? ch).join('').normalize('NFD').replace(/\p{M}/gu, '');
   // Any remaining decimal digit becomes ASCII: its value is its distance from its block's zero.
   return folded.replace(/(?![0-9])\p{Nd}/gu, (d) => {
     const cp = d.codePointAt(0) ?? 0;
@@ -181,7 +201,26 @@ function numericToken(token: string): string | null {
     }
   }
   const out = best[n];
-  return out !== undefined && out.length >= 2 ? out : null;
+  if (out !== undefined && out.length >= 2) return out;
+  // Long glued runs with a typo or two ("zeroonenineninine"): up to 2 stray letters, 4+ digits.
+  if (n < 10) return null;
+  const state: Map<number, string>[] = [new Map([[0, '']])];
+  const put = (pos: number, skips: number, digits: string) => {
+    state[pos] ??= new Map();
+    if (!state[pos].has(skips)) state[pos].set(skips, digits);
+  };
+  for (let i = 0; i < n; i++) {
+    for (const [skips, digits] of state[i] ?? []) {
+      if (/\d/.test(token[i])) put(i + 1, skips, digits + token[i]);
+      for (const [word, digit] of GLUE_VOCAB) if (token.startsWith(word, i)) put(i + word.length, skips, digits + digit);
+      if (skips < 2) put(i + 1, skips + 1, digits);
+    }
+  }
+  for (const skips of [0, 1, 2]) {
+    const got = state[n]?.get(skips);
+    if (got !== undefined && got.length >= 4) return got;
+  }
+  return null;
 }
 
 function isCountingRun(run: string): boolean {
@@ -195,15 +234,30 @@ function isCountingRun(run: string): boolean {
   return up || down;
 }
 
-interface DigitRun { groups: string[]; years: boolean; start: number; unit: boolean }
+interface DigitRun { groups: string[]; years: boolean; start: number; unit: boolean; after: boolean; afterScore: boolean }
 
-/** A port of SafeText::looksLikePhone (same rules: times, prices, amounts, years, counting, units are not phones). */
+const escapeRe = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** A port of SafeText::looksLikePhone (same rules, same order). */
 function looksLikePhone(input: string): boolean {
-  const base = input
-    .replace(/(?<![\d:])\d{1,2}:\d{2}(?![\d:])/gu, ' clock ')
-    .replace(/\$\s?\d+(\.\d{1,2})?|(?<![\d.])\d{1,3}\.\d{2}(?![\d.])/gu, ' price ')
-    .replace(/\b\d{1,3}(,\d{3})+\b/gu, ' amount ');
-  const matches = [...base.matchAll(/[^\s.\-()/,_+:;~*]+/gu)];
+  const cue = PHONE_CUES.some((word) => new RegExp(`\\b${escapeRe(word)}\\b`, 'u').test(input));
+  // Letters slipped between single digits: "7a1b4c5d5e5f0g1h9i9".
+  let base = input.replace(/\d(?:[a-z]\d){5,}/gu, (m) => m.replace(/[a-z]/gu, ''));
+  // Tens and teens: "fifty five" -> 55, "fourteen" -> 14, "ninety" -> 90.
+  base = base.replace(TENS_ONES, (_m, t: string, o: string) => ` ${TENS[t]}${ONES[o]} `)
+    .replace(TENS_ALONE, (_m, t: string) => ` ${TENS[t]}0 `)
+    .replace(TEENS_RE, (_m, t: string) => ` ${TEENS[t]} `);
+  // Real clock times only; with a phone cue ("my numbers 7:14 5:55") they count as digits.
+  base = base.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])/gu, (m, h, mm) => (Number(h) <= 23 && Number(mm) <= 59 ? (cue ? ` ${h} ${mm} ` : ' clock ') : m));
+  // "$714 $555 $0199": a "$" on three or more whole-number groups is not three prices.
+  if ((base.match(/\$\s?\d+(?![.\d])/gu) ?? []).length >= 3) base = base.replace(/\$\s?(\d+)(?![.\d])/gu, ' $1 ');
+  base = base.replace(/\$\s?\d+(\.\d{1,2})?/gu, ' price ');
+  base = base.replace(/(?<![\d.])\d{1,3}\.\d{2}(?![\d.])(?=\s*(usd|dollars?|bucks))/gu, ' price ');
+  base = base.replace(/(?<![\d.])(?<!\d\s)(?<!\d\s\s)\d{1,3}\.\d{2}(?![\d.])(?!\s{0,2}\d)/gu, ' price ');
+  if (/\b(?:\$|usd|dollars?|bucks|cents|price|prices|cost|costs)\b/u.test(base)) base = base.replace(/(?<![\d.])\d{1,3}\.\d{2}(?![\d.])/gu, ' price ');
+  base = base.replace(/(?<![\d,])\d{1,3}(,\d{3})+(?![\d,])/gu, (m) => (m.replace(/,/g, '').length <= 7 ? ' amount ' : m.replace(/,/g, ' ')));
+
+  const matches = [...base.matchAll(/[\p{L}\p{N}]+/gu)];
   const tokens = matches.map((m) => m[0]);
   const offsets = matches.map((m) => m.index ?? 0);
   const parsed = tokens.map(numericToken);
@@ -215,8 +269,18 @@ function looksLikePhone(input: string): boolean {
     const neighbour = (i > 0 && parsed[i - 1] !== null && !AMBIGUOUS.has(tokens[i - 1]))
       || (i + 1 < tokens.length && parsed[i + 1] !== null && !AMBIGUOUS.has(tokens[i + 1]));
     if (digits !== null && AMBIGUOUS.has(token) && !neighbour) digits = null;
+    if (digits !== null && AMBIGUOUS.has(token) && i > 0 && i + 1 < tokens.length && /^\d{2,}$/.test(tokens[i - 1]) && /^\d{2,}$/.test(tokens[i + 1])) digits = null;
     if (digits !== null) {
-      run ??= { groups: [], years: true, start: offsets[i], unit: false };
+      if (!run) {
+        const before = tokens.slice(Math.max(0, i - 3), i);
+        let after = false;
+        before.forEach((word, k) => {
+          const pair = k + 1 < before.length ? `${word} ${before[k + 1]}` : word;
+          after = after || RUN_EXEMPT_AFTER.has(word) || RUN_EXEMPT_AFTER.has(pair);
+        });
+        const prev = i > 0 ? tokens[i - 1] : '';
+        run = { groups: [], years: true, start: offsets[i], unit: false, after, afterScore: prev === 'score' || prev === 'points' };
+      }
       run.groups.push(digits);
       run.years = run.years && (/^(19|20)\d\d$/.test(token) || AMBIGUOUS.has(token));
       continue;
@@ -231,16 +295,21 @@ function looksLikePhone(input: string): boolean {
   const candidates: [number, number][] = [];
   for (const r of runs) {
     const all = r.groups.join('');
-    if (r.years || r.unit || isCountingRun(all)) continue;
     const sizes = r.groups.map((g) => g.length);
+    const smallGroups = Math.max(...sizes) <= 3 && all.length < 10;
+    if (r.years || isCountingRun(all)) continue;
+    if ((r.unit && smallGroups) || (r.after && Math.max(...sizes) <= 3 && sizes.length >= 2)) continue;
+    if (r.afterScore && sizes.length === 1 && all.length < 10) continue;
     const singles = sizes.every((n) => n === 1);
     const endsLikeLocal = sizes.length >= 2 && sizes[sizes.length - 1] === 4 && sizes[sizes.length - 2] === 3;
-    if (all.length >= 10 || (all.length >= 7 && (sizes.length === 1 || singles || endsLikeLocal))) return true;
+    const manySmall = sizes.length >= 3 && Math.max(...sizes) <= 4;
+    if (all.length >= 10 || (all.length >= 7 && (sizes.length === 1 || singles || endsLikeLocal || manySmall))) return true;
     candidates.push([r.start, all.length]);
   }
+  const windowSize = cue ? Number.MAX_SAFE_INTEGER : 60;
   for (let i = 0; i < candidates.length; i++) {
     let sum = 0;
-    for (let j = i; j < candidates.length && candidates[j][0] - candidates[i][0] <= 60; j++) {
+    for (let j = i; j < candidates.length && candidates[j][0] - candidates[i][0] <= windowSize; j++) {
       sum += candidates[j][1];
       if (sum >= 10 && j > i) return true;
     }
@@ -260,8 +329,14 @@ export function hasContactDetails(text: string): boolean {
   return /\b\d{1,6}\s+([a-z]+\s+){1,2}(street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|circle|terrace|parkway|pkwy)\b\.?(\s|,|$)/u.test(streets);
 }
 
-export function isGrooming(text: string): boolean {
-  return matchesAny(GROOMING_PATTERNS, forms(text)) || matchesAny(DESPACED, despace(text));
+export function isGrooming(text: string, includeLocationNow = true): boolean {
+  const all = forms(text);
+  return (includeLocationNow && matchesAny(LOCATION_NOW, all)) || matchesAny(GROOMING_PATTERNS, all) || matchesAny(DESPACED, despace(text));
+}
+
+/** Same as SafeText::countsTowardPause: location-now over-blocks never pause a kid. */
+export function countsTowardPause(text: string): boolean {
+  return hasContactDetails(text) || hasPersonalInfo(text) || isGrooming(text, false);
 }
 
 export function hasPersonalInfo(text: string): boolean {
@@ -270,6 +345,36 @@ export function hasPersonalInfo(text: string): boolean {
 
 export function hasLink(text: string): boolean {
   return /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\s*\.\s*(com|net|org|io|gg|me|co|tv|ly|app|xyz|link|site|us|uk)\b|\b[a-z0-9-]{2,}\s+dot\s+(com|net|org|io|gg|me|co|tv)\b)/u.test(baseForm(text));
+}
+
+/**
+ * Same as SafeText::isDistress: the author sounds like they may hurt themselves. Never a
+ * block: the composer shows CARE_LINE and the server holds the post for a grown-up.
+ */
+export function isDistress(text: string): boolean {
+  return text.trim() !== '' && matchesAny(DISTRESS, forms(text));
+}
+
+export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher.";
+
+/** Same as SafeText::needsReview: "u" plus a personal topic. The server holds it; the app does not block. */
+export function needsReview(text: string): boolean {
+  if (!text.trim()) return false;
+  let lower = text.toLowerCase();
+  for (const themed of RULES.themed_streets) lower = lower.split(themed).join(' park ');
+  lower = lower.replace(/\b(ur|your)\s+(pics?|photos?|selfies?|videos?|vids?)\b/gu, ' post ');
+  const all = forms(lower);
+  return all.some((f) => REVIEW_YOU.test(f) && REVIEW_TOPICS.test(f)) || matchesAny(REVIEW_PHRASES, all);
+}
+
+/**
+ * The cheap check for the keystroke path (POST enabled, send button): empty or too long.
+ * The full filter runs on the debounced text and again on submit.
+ */
+export function quickDraftProblem(text: string, max = POST_MAX): 'empty' | 'too_long' | null {
+  const trimmed = text.trim();
+  if (!trimmed) return 'empty';
+  return trimmed.length > max ? 'too_long' : null;
 }
 
 export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
@@ -307,6 +412,7 @@ export async function reportBlockedDraft(
   send: (code: 'personal_info' | 'grooming') => Promise<{ paused: boolean; paused_until: string | null }>,
 ): Promise<string | null> {
   if (problem !== 'personal_info' && problem !== 'grooming') return null;
+  if (!countsTowardPause(text)) return null;
   const key = `${problem}:${text.trim()}`;
   if (lastReported.current === key) return null;
   lastReported.current = key;
@@ -316,6 +422,16 @@ export async function reportBlockedDraft(
   } catch {
     return null;
   }
+}
+
+/** The live hint waits until typing pauses (~250 ms); submit always runs the full check. */
+export const HINT_DEBOUNCE_MS = 250;
+
+export const REVIEW_LINE = "Posting... we're giving it a quick look.";
+
+/** The line under a held post or reply, for its author. */
+export function reviewLine(review: string | null | undefined): string | null {
+  return review === 'care' ? CARE_LINE : review === 'pending' ? REVIEW_LINE : null;
 }
 
 // ── Time ────────────────────────────────────────────────────────────────

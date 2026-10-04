@@ -124,6 +124,12 @@ export async function reportFilterHit(code: 'personal_info' | 'grooming'): Promi
   return data.data;
 }
 
+/** Is posting paused for this player? Asked when the composer or reply bar opens. */
+export async function fetchPostingStatus(): Promise<{ paused: boolean; paused_until: string | null }> {
+  const { data } = await client.get<ApiResponseType<{ paused: boolean; paused_until: string | null }>>('/me/posting-status');
+  return data.data;
+}
+
 export async function fetchBlocked(): Promise<PlayerType[]> {
   const { data } = await client.get<ApiResponseType<PlayerType[]>>('/me/blocks');
   return data.data;

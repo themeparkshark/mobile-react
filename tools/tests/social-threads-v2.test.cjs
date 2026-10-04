@@ -137,9 +137,12 @@ test('the app classifies the panel probe set like the server: personal info and 
   const wrong = [];
   for (const [want, list] of Object.entries(cases)) {
     for (const text of list) {
-      const got = model.checkDraft(text) ?? 'ok';
+      // self_harm and personal_question are server holds, never app blocks.
+      const blocked = model.checkDraft(text, 100000);
+      const got = want === 'self_harm' ? (model.isDistress(text) ? 'self_harm' : 'missed')
+        : (blocked ?? (model.needsReview(text) ? 'personal_question' : 'ok'));
       // Mean words are the server's job; the composer only explains safety rules early.
-      const expected = want === 'mean' ? 'ok' : want;
+      const expected = want === 'mean' ? (model.needsReview(text) ? 'personal_question' : 'ok') : want;
       if (got !== expected) wrong.push(`${text} => ${got} (want ${expected})`);
     }
   }
@@ -188,8 +191,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '40a1fedd5ab6feb7810161fa60bdfe104727821b02b0448871a983de73bd5ddf');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '8f26cdd2da794e843f228e311113551c5d8e416accb9e160ce097e1c4511c806');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '69acedb9a4548cf98c9b3b4f012edb8d4840f5eb4841eed1e24885bcc58c3c05');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '5ff28f7f43de8d5522098e1680294acfff5991774aba5fe3d67dc7df72384c0d');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -231,6 +234,93 @@ test('R3: invisible characters, keycaps and foreign digits cannot hide anything;
   assert.equal(model.checkDraft('\u0667\u0661\u0664\u0665\u0665\u0665\u0660\u0661\u0669\u0669'), 'personal_info');
   assert.equal(model.checkDraft('how o\u200cld are you'), 'grooming');
   for (const ok of ['The parade starts at 3:30 and 5:30 and 7:30', 'Wait times: 45, 30, 60, 90 min', '$12.99 for a churro', 'Character meetups are the best']) {
+    assert.equal(model.checkDraft(ok), null, ok);
+  }
+});
+
+test('R4: phone tricks, accents and grooming openers are caught; scores, waits and school trips pass', () => {
+  for (const t of ['7145550199 in case u need it', '714\u2014555\u20140199', '714\u2022555\u20220199', '714,555,0199', '5 55 01 99 thats my line']) assert.equal(model.checkDraft(t), 'personal_info', t);
+  for (const t of ['h\u00f3w \u00f3ld \u00e1r\u00e8 \u00fc', 'what age r u', 'wanna meet?', 'cuantos a\u00f1os tienes']) assert.equal(model.checkDraft(t), 'grooming', t);
+  for (const t of ['New high score 4827193 on Toy Story Mania!!', 'Wait times today 20 35 50 15 10', 'My school is going to Disneyland for grad night']) assert.equal(model.checkDraft(t), null, t);
+});
+
+test('R4: location-now over-blocks are not reported toward the pause', async () => {
+  const sent = [];
+  const send = async (code) => { sent.push(code); return { paused: false, paused_until: null }; };
+  assert.equal(model.checkDraft('im at the castle now'), 'grooming');
+  await model.reportBlockedDraft('grooming', 'im at the castle now', { current: null }, send);
+  assert.deepEqual(plain(sent), []);
+  await model.reportBlockedDraft('grooming', 'what age r u', { current: null }, send);
+  assert.deepEqual(plain(sent), ['grooming']);
+});
+
+test('R4: composer and reply bar ask for the pause before typing, debounce the hint, show the review line, neutral empty border', () => {
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /fetchPostingStatus\(\)/);
+  assert.match(composer, /setTimeout\(\(\) => setHintText\(text\), HINT_DEBOUNCE_MS\)/);
+  assert.match(composer, /setHeld\(thread\.review/);
+  assert.doesNotMatch(composer, /problem === 'empty' && \{ borderColor: BRAND\.red \}/);
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /fetchPostingStatus\(\)/);
+  assert.match(screen, /HINT_DEBOUNCE_MS/);
+  assert.match(read('src/screens/threads/ThreadCard.tsx'), /reviewLine\(thread\.review\)/);
+  assert.equal(model.HINT_DEBOUNCE_MS, 250);
+});
+
+test('R5: self-harm words never block, they show a kind line and the held post says so', () => {
+  for (const text of ['i want to die', 'nobody would miss me if i was gone', 'i cut myself']) {
+    assert.equal(model.isDistress(text), true, text);
+    assert.equal(model.checkDraft(text), null, `${text} is not blocked in the app`);
+  }
+  assert.equal(model.isDistress('that drop made me want to scream'), false);
+  assert.match(model.CARE_LINE, /grown-up you trust/);
+  assert.equal(model.reviewLine('care'), model.CARE_LINE);
+  assert.equal(model.reviewLine('pending'), model.REVIEW_LINE);
+  assert.equal(model.reviewLine(null), null);
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /care \? CARE_LINE : null/);
+  assert.match(composer, /held === 'care' \? 'We hear you'/);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /reviewLine\(comment\.review\)/);
+});
+
+test('R5: you plus a personal topic is held by the server, never blocked by the app', () => {
+  assert.equal(model.needsReview('what floor r u on'), true);
+  assert.equal(model.checkDraft('what floor r u on'), null);
+  for (const ok of ['See you on Main Street!', "Who's your favorite character to meet?", 'Can u send me good luck for the drop tower', 'Your pic of the castle is amazing']) {
+    assert.equal(model.needsReview(ok), false, ok);
+  }
+});
+
+test('R5: the keystroke path runs only the cheap check; the full filter is debounced and runs on send', () => {
+  assert.equal(model.quickDraftProblem('   '), 'empty');
+  assert.equal(model.quickDraftProblem('x'.repeat(model.POST_MAX + 1)), 'too_long');
+  assert.equal(model.quickDraftProblem('call me 714 555 0199'), null);
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.doesNotMatch(composer, /useMemo\(\(\) => checkDraft\(text,/);
+  assert.match(composer, /const quick = quickDraftProblem\(text, POST_MAX\)/);
+  assert.match(composer, /const problem = checkDraft\(text, POST_MAX\)/);
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.doesNotMatch(screen, /useMemo\(\(\) => checkDraft\(text,/);
+  assert.match(screen, /const problem = checkDraft\(words, REPLY_MAX\)/);
+  const long = 'Rode Tron and it was so fun, the wait was long but worth it. '.repeat(8).slice(0, 500);
+  const t = process.hrtime.bigint();
+  for (let i = 0; i < 100; i++) model.quickDraftProblem(long);
+  assert.ok(Number(process.hrtime.bigint() - t) / 1e6 / 100 < 1, 'cheap check under 1 ms');
+});
+
+test('R5: on a posting break the reply send is dimmed and disabled and both text boxes are read-only', () => {
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /const sendOff = Boolean\(pausedLine\) \|\| sending/);
+  assert.match(screen, /accessibilityState=\{\{ disabled: sendOff/);
+  assert.match(screen, /editable=\{!pausedLine\}/);
+  assert.match(read('src/screens/threads/Composer.tsx'), /editable=\{!pausedLine\}/);
+});
+
+test('R5: phone tricks from the panel are caught', () => {
+  for (const text of ['its $714 $555 $0199 total lol', 'my numbers like 7:14 5:55 01 99', 'seven fourteen, five fifty five, oh one ninety nine', 'sevenonefour fivefivefive zeroonenineninine', '7a1b4c5d5e5f0g1h9i9 decode it']) {
+    assert.equal(model.checkDraft(text), 'personal_info', text);
+  }
+  for (const ok of ['Mickey pretzel was $8.49 and so worth it', 'the castle show starts at 8:30 and again at 9:45', 'seventy five minutes for Peter Pan!']) {
     assert.equal(model.checkDraft(ok), null, ok);
   }
 });
