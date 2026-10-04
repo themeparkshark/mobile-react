@@ -382,7 +382,9 @@ test('round 7: opaque level-up plate above everything; the held stamp drives the
 
 test('round 7: claim broadcasts are not doubled; a pending hand-off is cancelled on close', () => {
   assert.match(read('src/api/endpoints/me/stamps.ts'), /\{ skipBroadcasts: true \}/);
-  assert.match(read('src/hooks/useAxiosSetup.ts'), /if \(!quiet && response\.data && Array\.isArray\(response\.data\.broadcasts\)\)/);
+  // RC: merged with production's Watch coin filter; skipBroadcasts still suppresses every broadcast.
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /const skipAll = cfg\?\.skipBroadcasts === true;/);
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /if \(!skipAll && response\.data && Array\.isArray\(response\.data\.broadcasts\)\)/);
   const screen = read('src/screens/StampBookScreen.tsx');
   assert.match(screen, /handoffCancelled\.current = true;\n\s+if \(handoffTimer\.current\) clearTimeout\(handoffTimer\.current\);\n\s+playSfx\('ui\.modalClose'/);
   assert.ok(!/Park Collector|Park Coin/.test(read('src/screens/stampbook/preview.ts')));

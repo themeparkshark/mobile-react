@@ -1,6 +1,7 @@
 import { AxiosError, AxiosResponse } from 'axios';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
+import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
@@ -29,11 +30,14 @@ export const useAxiosSetup = () => {
     const interceptorId = client.interceptors.response.use(
       (response: AxiosResponse) => {
         consecutive500Count = 0;
-        // A screen that shows the result itself (the stamp claim cascade and level-up plate) opts out,
-        // so the player never gets the same news twice.
-        const quiet = (response.config as { skipBroadcasts?: boolean } | undefined)?.skipBroadcasts === true;
-        if (!quiet && response.data && Array.isArray(response.data.broadcasts)) {
-          enqueueRef.current(response.data.broadcasts);
+        // A screen that shows the result itself (the stamp claim cascade and level-up plate) opts out of
+        // every broadcast (skipBroadcasts), so the player never gets the same news twice. Watch opts out of
+        // coin broadcasts only (QUIET_COIN_BROADCAST); its own reward moment shows the coins.
+        const cfg = response.config as Record<string, unknown> | undefined;
+        const skipAll = cfg?.skipBroadcasts === true;
+        if (!skipAll && response.data && Array.isArray(response.data.broadcasts)) {
+          const shown = visibleBroadcasts<string>(response.data.broadcasts, Boolean(cfg?.[QUIET_COIN_BROADCAST]));
+          if (shown.length > 0) enqueueRef.current(shown);
         }
         return response;
       },
