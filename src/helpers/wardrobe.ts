@@ -202,3 +202,25 @@ export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_mem
     labelColor: ui.label ?? '#123e65',
   };
 }
+
+/**
+ * The item an Inventory deep link pins and pulses. "See it in Inventory"
+ * sends highlightItemId and WEAR IT sends focusItemId; both mean the same
+ * thing, so either one works. Anything that is not a positive id is ignored.
+ */
+export function inventoryPinTarget(params?: { readonly highlightItemId?: unknown; readonly focusItemId?: unknown } | null): number | undefined {
+  for (const value of [params?.highlightItemId, params?.focusItemId]) {
+    const id = typeof value === 'string' ? Number(value) : value;
+    if (typeof id === 'number' && Number.isInteger(id) && id > 0) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Where the pinned item sits in the first page, or -1. The server returns it
+ * first, but a list that still holds it further down should light it too.
+ */
+export function pinnedItemIndex(page: number, pin: number | undefined, items: readonly { readonly id: number }[]): number {
+  if (page !== 1 || !pin) return -1;
+  return items.findIndex((item) => item.id === pin);
+}

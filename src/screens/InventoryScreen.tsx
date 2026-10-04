@@ -29,7 +29,7 @@ import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
-import { isRequiredSlot, requiredSlotCopy, slotForItem, wardrobeCategoryLabel } from '../helpers/wardrobe';
+import { inventoryPinTarget, isRequiredSlot, pinnedItemIndex, requiredSlotCopy, slotForItem, wardrobeCategoryLabel } from '../helpers/wardrobe';
 import { SLOT_KEYS } from '../models/look-type';
 import useLook from '../hooks/useLook';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -51,11 +51,12 @@ const SEEN_FLUSH_MS = 3000;
 export default function InventoryScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const params = route.params as { itemTypeId?: number; highlightItemId?: number } | undefined;
+  const params = route.params as { itemTypeId?: number; highlightItemId?: number; focusItemId?: number } | undefined;
   const requestedItemTypeId = params?.itemTypeId;
-  // A deep link ("See it in Inventory") pins its item first and pulses it
-  // once; captured at open so a back-and-forward never replays it.
-  const pinItemId = useRef(params?.highlightItemId).current;
+  // A deep link ("See it in Inventory" sends highlightItemId, WEAR IT sends
+  // focusItemId) pins its item first and pulses it once; captured at open so
+  // a back-and-forward never replays it.
+  const pinItemId = useRef(inventoryPinTarget(params)).current;
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const listRef = useRef<FlashList<ItemType>>(null);
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
@@ -184,11 +185,16 @@ export default function InventoryScreen() {
           ...response.filter((item) => !previous.some((owned) => owned.id === item.id)),
         ]);
         setHasMore(nextPageAvailable);
-        if (page === 1 && pin && response[0]?.id === pin && highlightedId === null) {
+        const pinnedAt = pinnedItemIndex(page, pin, response);
+        if (pin && pinnedAt >= 0 && highlightedId === null) {
           setHighlightedId(pin);
-          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          if (pinnedAt === 0) {
+            listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          } else {
+            requestAnimationFrame(() => listRef.current?.scrollToIndex({ index: pinnedAt, animated: false }));
+          }
           HapticPatterns.selection();
-          (navigation as unknown as { setParams?: (value: object) => void }).setParams?.({ highlightItemId: undefined });
+          (navigation as unknown as { setParams?: (value: object) => void }).setParams?.({ highlightItemId: undefined, focusItemId: undefined });
         }
       })
       .catch(() => {
