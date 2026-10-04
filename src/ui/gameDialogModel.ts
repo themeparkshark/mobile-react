@@ -26,6 +26,8 @@ export type GameDialogButton = {
   readonly variant?: GameButtonVariant;
   /** Optional art before the label (e.g. report reasons). */
   readonly icon?: GameIconName;
+  /** Bundled art instead of an icon. */
+  readonly image?: number;
 };
 
 export type GameDialogOptions = {

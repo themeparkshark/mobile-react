@@ -121,7 +121,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
               icon: 'info',
               // Three equal choices.
               // A picture per reason so a kid can pick without reading.
-              buttons: [{ text: 'Mean name', icon: 'edit' }, { text: 'Mean to me', icon: 'shark' }, { text: 'Something else', icon: 'info' }, { text: 'Cancel', style: 'cancel' }],
+              buttons: [{ text: 'Mean name', icon: 'edit' }, { text: 'Mean to me', image: require('../../assets/images/screens/player/report_mean.png') }, { text: 'Something else', icon: 'info' }, { text: 'Cancel', style: 'cancel' }],
               equalChoices: true,
             });
             if (choice == null || choice > 2) return;

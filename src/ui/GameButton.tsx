@@ -16,7 +16,7 @@
  * keeps presses instant.
  */
 import { useEffect, useState } from 'react';
-import { ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -48,6 +48,8 @@ export type GameButtonProps = {
   /** compact is the secondary width on any image variant. */
   readonly size?: GameButtonSize;
   readonly icon?: GameIconName;
+  /** Bundled art instead of a GameIcon (same size and spacing). */
+  readonly image?: number;
   readonly disabled?: boolean;
   /** Shows a busy state and ignores presses (for example while a request is in flight). */
   readonly loading?: boolean;
@@ -89,6 +91,7 @@ export default function GameButton({
   variant = 'primary',
   size = 'regular',
   icon,
+  image,
   disabled = false,
   loading = false,
   tone = 'onLight',
@@ -130,7 +133,8 @@ export default function GameButton({
   const fontSize = look.art ? artButtonFontSize(labelAreaHeight) : size === 'compact' ? 16 : 18;
   const iconSize = Math.round(fontSize * 1.25);
   const content = <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' }, labelStyle]}>
-    {icon && <GameIcon name={icon} size={iconSize} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
+    {image ? <Image source={image} style={{ width: iconSize * 1.2, height: iconSize * 1.2, marginRight: Math.round(fontSize * 0.3) }} />
+      : icon && <GameIcon name={icon} size={iconSize} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
     <Text
       numberOfLines={1}
       adjustsFontSizeToFit

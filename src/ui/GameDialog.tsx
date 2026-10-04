@@ -239,7 +239,7 @@ export function GameDialog({
             {children}
             <View style={{ alignSelf: 'stretch', gap: SPACE.xs, marginTop: SPACE.xs }}>
               {actions.map(action => (
-                <GameButton key={action.index} label={action.text} variant={action.variant} tone="onBlue" icon={action.icon}
+                <GameButton key={action.index} label={action.text} variant={action.variant} tone="onBlue" icon={action.icon} image={action.image}
                   onPress={() => close(action.index)} />
               ))}
             </View>
