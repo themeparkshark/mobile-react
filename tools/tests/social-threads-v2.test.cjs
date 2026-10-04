@@ -453,7 +453,9 @@ test('R11: disclosures reach the server (never blocked here) with the Childhelp 
 
 test('Clean Social: shared clean background, no topic chips, badges or picker, More sheet runs actions after it hides', () => {
   const bg = read('src/components/CleanScreenBackground.tsx');
-  assert.match(bg, /bg: '#f0f4f8'/);
+  // RC: the shared page is notif-polish's CLEAN_SCREEN_BG (#EAF3FB, coordinator decision); CLEAN.bg points at it.
+  assert.match(bg, /CLEAN_SCREEN_BG = '#EAF3FB'/);
+  assert.match(bg, /bg: CLEAN_SCREEN_BG/);
   const social = read('src/screens/SocialScreen.tsx');
   assert.match(social, /<CleanScreenBackground style=\{styles\.body\}>/);
   assert.doesNotMatch(social, /WATER|accessibilityLabel="Topics"|All topics|TOPICS\.map|topicChip/);
