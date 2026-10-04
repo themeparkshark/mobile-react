@@ -91,9 +91,15 @@ test('PlayerSharkMarker: a 1 pt marker, a fixed clipped art box, two stable copi
   assert.match(src, /clip: \{ position: 'absolute', width: 100 \+ 2 \* PLAYER_MARGIN, height: 110 \+ 2 \* PLAYER_MARGIN, overflow: 'hidden' \}/);
   assert.match(src, /\{\[0, 1\]\.map\(slot => \(\s*<PlayerSlot key=\{slot\}/);
   assert.match(src, /visE\.value = withTiming\(e, \{ duration: ms, easing: glideEaseWorklet \}\)/, 'the glide runs on the UI thread');
-  assert.doesNotMatch(src, /requestAnimationFrame|setInterval/, 'no JS-thread animation loop');
-  assert.match(src, /active\.value = slot;/);
-  assert.match(src, /SWAP_SETTLE_MS/);
+  assert.doesNotMatch(src, /setInterval/, 'no JS-thread animation loop');
+  assert.doesNotMatch(src, /setAnchors\([^)]*\)\s*;\s*\n\s*requestAnimationFrame/, 'frames are only used to time the swap');
+  assert.match(src, /activeSlot\.value = slot;/);
+  // The swap waits for the hidden copy's commit (an effect on the anchors), two frames, then the settle time.
+  assert.match(src, /\}, \[anchors\]\);/);
+  assert.equal((src.match(/requestAnimationFrame\(/g) || []).length, 2);
+  assert.match(src, /\}, SWAP_SETTLE_MS\);/);
+  // The hidden copy's offset style holds still.
+  assert.match(src, /if \(active\.value !== slot \|\| shown\.value === 0\) return/);
   // Every hook before any early return (none here): the component never returns null.
   assert.doesNotMatch(src, /return null/);
 });
@@ -114,12 +120,54 @@ test('Map: the location point is the ground ring middle, in both the marker and 
 
 test('Map: wake turns behind the walk and only stirs on a real step; weak ring always mounted', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /<SharkWake moving=\{wake\} trail=\{wakeTrail\} \/>/);
+  assert.match(map, /<SharkWake moving=\{wake\} trail=\{wakeTrail\} live=\{live\} \/>/);
   assert.match(map, /const wakeTrail = useDerivedValue\(\(\) => wakeTurn\(travelCourse\.value, mapBearing\.value\)\);/);
   assert.match(map, /distMeters \/ Math\.max\(0\.5, sinceLastS\) >= 0\.4/, 'a slow drift of the estimate is not a walk');
-  assert.match(map, /<Reanimated\.View pointerEvents="none" style=\{\[styles\.weakRing, weakRingStyle\]\}>/);
+  assert.match(map, /<Reanimated\.View pointerEvents="none" style=\{\[styles\.weakRing, st\.weakRing\]\}>/);
   assert.doesNotMatch(map, /gpsSignal\??\.weak && </, 'never a conditional mount');
   const trail = read('src/components/map/alive/SharkTrail.tsx');
   const wakeFn = trail.slice(trail.indexOf('export const SharkWake'), trail.indexOf('function WakeSparkle'));
   assert.ok(wakeFn.indexOf('useAnimatedStyle') < wakeFn.indexOf('return null'), 'hooks before the early return');
+});
+
+test('a long step jumps most of the way and glides the last stretch, so zooming in never brings jumps back', () => {
+  // 30 m step, at most 10 m drawn as a glide: start 10 m short, on the line from the shark.
+  const [e, n] = motion.catchUpStart(30, 0, 0, 0, 10);
+  assert.ok(close(e, 20) && close(n, 0));
+  const [e2, n2] = motion.catchUpStart(3, 4, 0, 0, 10);
+  assert.ok(close(e2, 0) && close(n2, 0), 'a short step starts where the shark is');
+  const src = read('src/components/map/PlayerSharkMarker.tsx');
+  assert.match(src, /mode === 'catch-up'/);
+  assert.match(src, /visE\.value = sE; visN\.value = sN;/);
+});
+
+test('the shark faces where it walks on screen (art flips), with a dead band for straight up or down', () => {
+  assert.equal(motion.facingFor(90, 0, 1), -1, 'walking east on a north-up map: heads right, flipped');
+  assert.equal(motion.facingFor(270, 0, -1), 1, 'walking west: heads left');
+  assert.equal(motion.facingFor(0, 0, -1), -1, 'straight up the screen keeps the last facing');
+  assert.equal(motion.facingFor(180, 0, 1), 1);
+  assert.equal(motion.facingFor(90, 90, -1), -1, 'east on an east-up map is straight up: unchanged');
+  assert.equal(motion.facingFor(0, 90, 1), 1, 'north on an east-up map heads left');
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /\{ scaleX: m\.facing\.value \}/);
+  assert.match(map, /facing\.value = withTiming\(next, \{ duration: 220 \}\)/);
+  assert.match(map, /const step = m\.stride\.value \* m\.wake\.value;/, 'the stride bounce only rides on a real walk');
+});
+
+test('only the visible shark copy animates: hidden copies return fixed styles', () => {
+  const map = read('src/components/Map.tsx');
+  const hook = map.slice(map.indexOf('function useSharkStyles'));
+  assert.equal((hook.match(/if \(live\.value === 0/g) || []).length, 3);
+  assert.match(hook, /opacity: live\.value === 0 \? 0\.5 :/);
+  assert.match(map, /const overlayStyles = useSharkStyles\(overlayLive, motion\);/);
+  assert.match(map, /const slot0Live = useDerivedValue\(\(\) => \(slotActive\.value === 0 \? slotShown\.value : 0\)\);/);
+  const trail = read('src/components/map/alive/SharkTrail.tsx');
+  assert.match(trail, /if \(moving\.value === 0 \|\| \(live && live\.value === 0\)\) return/);
+});
+
+test('the weak ring grades with accuracy (not zoom) and has a rim apart from the contact shadow', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /\(m\.weakAccuracy\.value - WEAK_RING_MIN_M\) \/ \(WEAK_RING_FULL_M - WEAK_RING_MIN_M\)/);
+  assert.doesNotMatch(map.slice(map.indexOf('function useSharkStyles')), /zoomPpm/);
+  assert.match(map, /<View style=\{styles\.weakRim\} \/>/);
 });

@@ -3,10 +3,10 @@ import { createContext, type MutableRefObject, ReactNode, useCallback, useContex
 import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
-import { courseDeg, wakeTurn } from './map/playerMotion';
+import { courseDeg, facingFor, wakeTurn } from './map/playerMotion';
 import { glideDurationMs, glideMeters } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
@@ -53,8 +53,10 @@ const FOLLOW_ZOOM = 17.6;
 const SHARK_GROUND = { x: 50, y: 99 } as const;
 /** The weak-GPS ring: drawn at most this wide (points), scaled down to the fix's accuracy circle. */
 const WEAK_RING_MAX_PT = 200;
-const WEAK_RING_MIN_PT = 90;
+const WEAK_RING_MIN_PT = 110;
 const WEAK_RING_MIN_M = 40;
+/** At this accuracy (m) or worse the ring is at its widest and strongest. */
+const WEAK_RING_FULL_M = 150;
 // Radial falloff texture (the weak-GPS glow pool).
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
@@ -142,24 +144,36 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
   }, [reducedMotion, screenFocused, idle, sway, glow]);
-  const sharkStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -8 * idle.value }, { rotate: `${3 * sway.value}deg` }, { scale: 1 + 0.04 * idle.value }],
-  }));
-  const shadowStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 1 - 0.15 * idle.value }, { scaleY: 1 - 0.15 * idle.value }] }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.4 * glow.value }));
-  // Weak GPS: a soft ring the size of the fix's uncertainty breathes under the shark
-  // (the map's glow art, cool and faint). No words; it fades away once fixes are good.
+  // Weak GPS: graded by the fix's accuracy (40 m small and faint, 150 m wide and stronger).
   const weak = useSharedValue(0);
   const weakAccuracy = useSharedValue(WEAK_RING_MIN_M);
   useEffect(() => {
     weak.value = withTiming(gpsSignal?.weak ? 1 : 0, { duration: 700 });
     if (gpsSignal?.accuracyMeters) weakAccuracy.value = withTiming(gpsSignal.accuracyMeters, { duration: 700 });
   }, [gpsSignal?.weak, gpsSignal?.accuracyMeters, weak, weakAccuracy]);
-  const weakRingStyle = useAnimatedStyle(() => {
-    const ppm = zoomPpm.value > 0 ? zoomPpm.value : 3;
-    const size = Math.min(WEAK_RING_MAX_PT, Math.max(WEAK_RING_MIN_PT, 2 * weakAccuracy.value * ppm));
-    return { opacity: weak.value * (0.3 + 0.25 * glow.value), transform: [{ scale: (size / WEAK_RING_MAX_PT) * (0.95 + 0.07 * glow.value) }] };
+  // Walking: the shark faces its screen direction (art flips) and a quick stride bounce
+  // rides on the idle bob while the wake is up; standing, both settle.
+  const facing = useSharedValue(1);
+  const stride = useSharedValue(0);
+  useAnimatedReaction(() => facingFor(travelCourse.value, mapBearing.value, facing.value > 0 ? 1 : -1), (next, prevSign) => {
+    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 220 });
   });
+  useEffect(() => {
+    if (reducedMotion || !screenFocused || ambientFrozen) { stride.value = 0; return; }
+    stride.value = withRepeat(withSequence(withTiming(1, { duration: 170 }), withTiming(0, { duration: 170 })), -1, false);
+    return () => cancelAnimation(stride);
+  }, [reducedMotion, screenFocused, ambientFrozen, stride]);
+  const motion = { idle, sway, glow, wake, stride, facing, weak, weakAccuracy };
+  // One set of animated styles per drawn copy (follow view, two marker copies). A copy that is
+  // not on screen holds still, so only the visible shark costs UI-thread work each frame.
+  const overlayLive = useSharedValue(1);
+  const slotActive = useSharedValue(0);
+  const slotShown = useSharedValue(0);
+  const slot0Live = useDerivedValue(() => (slotActive.value === 0 ? slotShown.value : 0));
+  const slot1Live = useDerivedValue(() => (slotActive.value === 1 ? slotShown.value : 0));
+  const overlayStyles = useSharkStyles(overlayLive, motion);
+  const slot0Styles = useSharkStyles(slot0Live, motion);
+  const slot1Styles = useSharkStyles(slot1Live, motion);
 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
@@ -324,6 +338,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [guideTarget?.requestId, projectGuide]); // eslint-disable-line react-hooks/exhaustive-deps
   const arrow = guideTarget && guidePoint && viewSize ? edgeArrow(guidePoint, viewSize) : null;
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
+  // The follow-view shark animates only while it is the one on screen.
+  useEffect(() => { overlayLive.value = focusedOnPlayer ? 1 : 0; }, [focusedOnPlayer, overlayLive]);
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
   const ppmLat = location ? Math.round(location.latitude * 100) / 100 : null;
@@ -396,24 +412,27 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }],
   };
 
-  const playerShark = (
+  // One drawn copy of the player's shark, with that copy's own (freezable) styles.
+  const sharkArt = (st: SharkStyles, live: SharedValue<number>, playing: boolean) => (
       <View style={styles.sharkMarkerContainer}>
         {/* Weak GPS: always mounted (faded out when the signal is good). */}
-        <Reanimated.View pointerEvents="none" style={[styles.weakRing, weakRingStyle]}>
-          <Image source={GROUND_GLOW} tintColor="#5f9fd8" style={StyleSheet.absoluteFill} contentFit="fill" />
+        <Reanimated.View pointerEvents="none" style={[styles.weakRing, st.weakRing]}>
+          {/* A soft cool fill (the glow art) inside a thin bright rim: an accuracy circle, apart from the shadow. */}
+          <Image source={GROUND_GLOW} tintColor="#4f95d6" style={styles.weakFill} contentFit="fill" />
+          <View style={styles.weakRim} />
         </Reanimated.View>
         {/* Animated glow ring */}
-        <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
+        <Reanimated.View style={[styles.outerGlowRing, st.glow]} />
         {/* Inner blue ring (ground indicator) */}
         <View style={styles.groundRing} />
         {/* Wake: sparkles spill from under the shark while it walks. */}
-        <SharkWake moving={wake} trail={wakeTrail} />
+        <SharkWake moving={wake} trail={wakeTrail} live={live} />
         {/* Animated shadow — shrinks when shark bobs up */}
-        <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
+        <Reanimated.View style={[styles.shadowDisc, st.shadow]} />
         {/* Directional indicator — only visible in heading mode */}
         {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
-        <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
+        <Reanimated.View style={[{ width: 60, height: 60 }, st.shark]}>
           {hasDressedShark(player?.inventory) ? (
             <View style={{ width: 60, height: 60, position: 'relative' }}>
               {/* Skin (or Alex's Classic) with no eyes, then the eyes layer */}
@@ -434,7 +453,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           ) : (
             <Image
               source={require('../../assets/images/screens/explore/shark_player.gif')}
-              autoplay={screenFocused && !reducedMotion}
+              autoplay={playing && screenFocused && !reducedMotion}
               style={styles.sharkImage}
               contentFit="contain"
             />
@@ -611,9 +630,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             Panned away, it glides between fixes instead of jumping. */}
         {/* Moves on the UI thread at the display rate and never changes layout (PlayerSharkMarker). */}
         <PlayerSharkMarker target={location ?? null} visible={!focusedOnPlayer} glide={!reducedMotion}
-          zoomPpm={zoomPpm} bearingDeg={mapBearing} groundX={SHARK_GROUND.x} groundY={SHARK_GROUND.y}>
-          {playerShark}
-        </PlayerSharkMarker>
+          zoomPpm={zoomPpm} bearingDeg={mapBearing} groundX={SHARK_GROUND.x} groundY={SHARK_GROUND.y}
+          activeSlot={slotActive} shown={slotShown}
+          renderArt={slot => (slot === 0 ? sharkArt(slot0Styles, slot0Live, !focusedOnPlayer) : sharkArt(slot1Styles, slot1Live, !focusedOnPlayer))} />
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
@@ -642,7 +661,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       )}
       {location && (
         <View pointerEvents="none" style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
-          <View style={styles.centerShark}>{playerShark}</View>
+          <View style={styles.centerShark}>{sharkArt(overlayStyles, overlayLive, focusedOnPlayer)}</View>
         </View>
       )}
     </View>
@@ -699,6 +718,9 @@ const styles = StyleSheet.create({
   centerShark: { transform: [{ translateY: 55 - SHARK_GROUND.y }] },
   weakRing: { position: 'absolute', width: WEAK_RING_MAX_PT, height: WEAK_RING_MAX_PT,
     left: SHARK_GROUND.x - WEAK_RING_MAX_PT / 2, top: SHARK_GROUND.y - WEAK_RING_MAX_PT / 2 },
+  weakFill: { ...StyleSheet.absoluteFillObject, opacity: 0.55 },
+  weakRim: { ...StyleSheet.absoluteFillObject, margin: 14, borderRadius: WEAK_RING_MAX_PT / 2, borderWidth: 2.5,
+    borderColor: 'rgba(170, 215, 255, 0.85)', backgroundColor: 'rgba(79, 149, 214, 0.08)' },
   sharkMarkerContainer: {
     width: 100,
     height: 110,
@@ -754,3 +776,39 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 });
+
+type SharkMotion = {
+  readonly idle: SharedValue<number>; readonly sway: SharedValue<number>; readonly glow: SharedValue<number>;
+  readonly wake: SharedValue<number>; readonly stride: SharedValue<number>; readonly facing: SharedValue<number>;
+  readonly weak: SharedValue<number>; readonly weakAccuracy: SharedValue<number>;
+};
+type SharkStyles = ReturnType<typeof useSharkStyles>;
+
+/**
+ * The player shark's animated styles for one drawn copy. `live` is 1 while that copy is on
+ * screen; at 0 every style returns a fixed value, so a hidden copy does no per-frame work.
+ */
+function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
+  const shark = useAnimatedStyle(() => {
+    if (live.value === 0) return { transform: [{ translateY: 0 }, { rotate: '0deg' }, { scale: 1 }, { scaleX: 1 }] };
+    const step = m.stride.value * m.wake.value;
+    return {
+      transform: [{ translateY: -8 * m.idle.value - 5 * step }, { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value}deg` },
+        { scale: 1 + 0.04 * m.idle.value }, { scaleX: m.facing.value }],
+    };
+  });
+  const shadow = useAnimatedStyle(() => {
+    if (live.value === 0) return { transform: [{ scaleX: 1 }, { scaleY: 1 }] };
+    return { transform: [{ scaleX: 1 - 0.15 * m.idle.value }, { scaleY: 1 - 0.15 * m.idle.value }] };
+  });
+  const glow = useAnimatedStyle(() => ({ opacity: live.value === 0 ? 0.5 : 0.3 + 0.4 * m.glow.value }));
+  const weakRing = useAnimatedStyle(() => {
+    if (live.value === 0 || m.weak.value === 0) return { opacity: 0, transform: [{ scale: WEAK_RING_MIN_PT / WEAK_RING_MAX_PT }] };
+    // Graded by accuracy (not zoom): 40 m is a small faint ring, 150 m or worse a wide, stronger one.
+    const k = Math.min(1, Math.max(0, (m.weakAccuracy.value - WEAK_RING_MIN_M) / (WEAK_RING_FULL_M - WEAK_RING_MIN_M)));
+    const size = WEAK_RING_MIN_PT + (WEAK_RING_MAX_PT - WEAK_RING_MIN_PT) * k;
+    return { opacity: m.weak.value * (0.45 + 0.25 * k + 0.2 * m.glow.value),
+      transform: [{ scale: (size / WEAK_RING_MAX_PT) * (0.96 + 0.06 * m.glow.value) }] };
+  });
+  return { shark, shadow, glow, weakRing };
+}

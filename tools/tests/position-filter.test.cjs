@@ -201,3 +201,21 @@ test('glitches never add up to a teleport: two vague fixes then a wild one, or s
   assert.deepEqual(v.map(x => x.kind), ['reject', 'reject', 'reject', 'reject', 'reject', 'reject']);
   assert.ok(pf.metersBetween(HOME, filter.current) < 1, 'the shark stayed home');
 });
+
+test('back from a silence (a ride roof, a tunnel): a vague first fix is waited out, a good one re-seats', () => {
+  const filter = new pf.PositionFilter();
+  filter.push({ ...HOME, accuracy: 8, timestamp: 0 });
+  const away = offset(HOME, 300, 0);
+  const t = 60_000;
+  assert.equal(filter.push({ ...offset(HOME, -90, 40), accuracy: 100, timestamp: t }).kind, 'reject', 'a 100 m guess after silence is not trusted');
+  assert.ok(pf.metersBetween(HOME, filter.current) < 1, 'the shark did not snap away');
+  const v = filter.push({ ...away, accuracy: 10, timestamp: t + 1000 });
+  assert.equal(v.kind, 'publish');
+  assert.ok(pf.metersBetween(away, v.position) < 1, 'the first good fix re-seats');
+  // Only vague fixes after a silence: the third is taken (never stuck forever).
+  const f2 = new pf.PositionFilter();
+  f2.push({ ...HOME, accuracy: 8, timestamp: 0 });
+  const vague = offset(HOME, 200, 0);
+  const r = [0, 1, 2].map(i => f2.push({ ...vague, accuracy: 90, timestamp: t + i * 1000 }).kind);
+  assert.deepEqual(r, ['reject', 'reject', 'publish']);
+});

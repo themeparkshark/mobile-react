@@ -82,6 +82,8 @@ export class PositionFilter {
   private lastAcceptedAt = 0;
   /** Any fix at all, accepted or not: a real silence (background) versus a run of rejections. */
   private lastSeenAt = 0;
+  /** After a silence: vague fixes waited out so far (the next good one, or the third, re-seats). */
+  private afterSilence = -1;
   /** Vague fixes skipped in a row. */
   private vagueStreak = 0;
   /** Far-off fixes skipped in a row (latest last), to tell a real move from scattered glitches. */
@@ -98,6 +100,7 @@ export class PositionFilter {
     this.lastTimestamp = 0;
     this.lastAcceptedAt = 0;
     this.lastSeenAt = 0;
+    this.afterSilence = -1;
     this.vagueStreak = 0;
     this.far = [];
     this.published = null;
@@ -116,9 +119,16 @@ export class PositionFilter {
     if (now < this.lastTimestamp) return { kind: 'reject', reason: 'stale' };
 
     // Back after a real silence (the app was in the background): trust the new fix.
-    const silent = now - this.lastSeenAt >= RESEAT_AFTER_MS;
+    // Back after a real silence (the app in the background, a ride roof, a tunnel):
+    // re-seat on the first good fix. A vague one (over POOR_ACCURACY_M) is waited
+    // out, so a 100 m guess never snaps the shark away and back; the third is taken anyway.
+    if (now - this.lastSeenAt >= RESEAT_AFTER_MS) this.afterSilence = 0;
     this.lastSeenAt = now;
-    if (silent) return this.seat(fix, accuracy, now);
+    if (this.afterSilence >= 0) {
+      if (accuracy <= POOR_ACCURACY_M || this.afterSilence >= RESEAT_AFTER_REJECTS - 1) return this.seat(fix, accuracy, now);
+      this.afterSilence += 1;
+      return { kind: 'reject', reason: 'inaccurate' };
+    }
     const estimate = { latitude: this.lat, longitude: this.lng };
     const jump = metersBetween(estimate, fix);
     const dt = Math.max(0.001, (now - this.lastTimestamp) / 1000);
@@ -178,6 +188,7 @@ export class PositionFilter {
     this.lastTimestamp = now;
     this.lastAcceptedAt = now;
     this.lastSeenAt = now;
+    this.afterSilence = -1;
     this.vagueStreak = 0;
     this.far = [];
     const position = { latitude: fix.latitude, longitude: fix.longitude };
