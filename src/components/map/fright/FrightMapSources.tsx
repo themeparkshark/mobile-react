@@ -48,6 +48,8 @@ function sameBounds(a: Bounds | null, b: Bounds): boolean {
 
 /** How often the view bounds are read while the mode is on (the panel's battery ask). */
 export const BOUNDS_POLL_MS = 1500;
+/** A spot keeps its decoded art this long after it leaves the screen. */
+export const WARM_ART_MS = 60_000;
 
 function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: number, relayout: number): Bounds | null {
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -292,6 +294,16 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   };
   const shownRef = useRef(shown);
   shownRef.current = shown;
+  // Image memory: a spot holds its art only while shown or shown in the last minute. A cold
+  // spot passes null URLs (a prop change; its Skia tree stays mounted), so the decoded-image
+  // sweeper can free it. The always-mounted tree used to retain every spot's images.
+  const lastShown = useRef<Map<string, number>>(new Map());
+  const renderAt = Date.now();
+  const warm = (key: string) => {
+    if (shown(key)) { lastShown.current.set(key, renderAt); return true; }
+    const at = lastShown.current.get(key);
+    return at !== undefined && renderAt - at < WARM_ART_MS;
+  };
   const encounterShown = encounterLive && !!encounter && visible > 0 && nearView(encounter, bounds, 1);
   const encounterOnScreen = encounterShown && !!encounter && onScreen(encounter, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
   const encounterTapRef = useRef<string | null>(null);
@@ -312,7 +324,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const n = critterAlloc[reef.key] ?? 0;
         const glyph = lod === 'glyph' || st.tier === 'calm';
         const slots = critterWant(reef.fx);
-        const sheets = cast.map(slug => scareactorAsset(assets, slug));
+        const hot = warm(reef.key);
+        const sheets = cast.map(slug => (hot ? scareactorAsset(assets, slug) : null));
         return (
           <Marker key={`fr-${reef.key}`} coordinate={pin(reef)}>
             <PlacedSpot id={`reef:${reef.key}`}>
@@ -321,7 +334,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
                   critters={<ReefCritters reefKey={reef.key} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
                     wanderPts={wander} clock={alive.clock} animated={on && !glyph && animate && n > 0} full={st.tier === 'full'} watch={watch}
                     jumpToken={tokens[`jump:${reef.key}`] ?? 0} jumpIndex={jumpWho[reef.key] ?? 0} intensity={visible}
-                    mistUrl={assets?.fog_night?.ground_mist ?? null} />}
+                    mistUrl={hot ? assets?.fog_night?.ground_mist ?? null : null} />}
                   glyphArt={<ReefGlyph staticUrl={sheets[0]?.static ?? null} intensity={visible} />} />
               </ShowWhen>
             </PlacedSpot>
@@ -337,8 +350,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
           <Marker key={`fp-${spot.key}`} coordinate={pin(spot)}>
             <ShowWhen on={on}>
               <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
-                animated={on && animate} lite={lite} intensity={visible} ambient={assets?.ambient ?? null}
-                mistUrl={assets?.fog_night?.ground_mist ?? null} />
+                animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
+                mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
             </ShowWhen>
           </Marker>
         );
@@ -361,7 +374,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
                   animatedWindows={on ? windowAlloc[haunt.key] ?? 0 : 0} clock={alive.clock} animated={on && animate}
                   rate={on && (windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
                   ghostToken={tokens[`ghost:${haunt.key}`] ?? 0} doorToken={tokens[`door:${haunt.key}`] ?? 0}
-                  layers={layersOf(haunt)}
+                  layers={warm(haunt.key) ? layersOf(haunt) : null}
                   label={chip ? parts.name : null}
                   chipDetail={parts.detail}
                   chipX={chipCenter && chip ? screenX(at, chipCenter, zoom, heading, screenW) : null}
@@ -370,7 +383,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
                   survivedPin={assets?.event_pins?.['ev-survived']?.['256'] ?? null}
                   done={beads[haunt.key] !== undefined} beads={beads[haunt.key] ?? 0} dim={hauntDim(haunt)}
                   index={rankIndex.get(haunt.key) ?? 0}
-                  iconUrl={haunt.art?.icon ?? null} intensity={visible} reducedMotion={alive.reducedMotion} />
+                  iconUrl={warm(haunt.key) ? haunt.art?.icon ?? null : null} intensity={visible} reducedMotion={alive.reducedMotion} />
               </ShowWhen>
             </PlacedSpot>
           </Marker>

@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef } from 'react';
 import * as RootNavigation from '../../../RootNavigation';
+import { openDeepLantern } from '../openDeepLantern';
 import type { FrightEngine } from '../useFrightEngine';
 import type { FrightNight } from '../../../hooks/useFrightNight';
 
@@ -142,7 +143,8 @@ export function useFrightCaptureFlow({ night, engine, location, moveDevLocation,
       RootNavigation.navigate('Store', { store: storeId });
       log('shelf');
       await sleep(12000);
-      RootNavigation.navigate('PinCollections');
+      // Fin-ister pins live on the Deep Lantern card's pin ring, not in Pin Packs.
+      if (slug) openDeepLantern(slug, { section: 'pins' });
       log('pins');
       await sleep(12000);
       RootNavigation.navigate('Profile');

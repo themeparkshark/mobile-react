@@ -136,3 +136,12 @@ test('map GL sources are always mounted (lamps, crowd haze, guide line): off mea
   assert.match(map, /<ShapeSource id="tps-guide" shape=\{guideTarget && location && pathShown \? guideLine\(location, guideTarget\) : NO_FEATURES\}>/);
   assert.doesNotMatch(map, /(lampPoints|crowdHaze|pathShown)[^\n]*&&\s*\(\s*\n\s*<ShapeSource/);
 });
+
+test('image memory: a spot holds its art only while shown or within a minute after (null URLs when cold, tree unchanged)', () => {
+  const src = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(src, /export const WARM_ART_MS = 60_000;/);
+  assert.match(src, /const sheets = cast\.map\(slug => \(hot \? scareactorAsset\(assets, slug\) : null\)\);/);
+  assert.match(src, /layers=\{warm\(haunt\.key\) \? layersOf\(haunt\) : null\}/);
+  assert.match(src, /iconUrl=\{warm\(haunt\.key\) \? haunt\.art\?\.icon \?\? null : null\}/);
+  assert.match(src, /ambient=\{warm\(spot\.key\) \? assets\?\.ambient \?\? null : null\}/);
+});
