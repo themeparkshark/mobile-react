@@ -105,6 +105,8 @@ const STICKER_LEFT = 8;
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 /** The catch reveal's fade onto the map before the print flies (CatchReveal fades in 220 ms). */
 const REVEAL_FADE_MS = 230;
+/** After the print's 460 ms flight lands, the map and player updates commit. */
+const PRINT_SETTLE_MS = 620;
 /** RIDE AGAIN reopens the viewfinder after its close has fully reset. */
 const RIDE_AGAIN_MS = 1150;
 const GRADE_CHIP: Record<PhotoGrade, [string, string]> = {
@@ -158,7 +160,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Development recordings only (see RidePhotoCatch). */
   readonly autoShots?: number[] | null;
   /** Development recordings: pin the ride and sky. */
-  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
+  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky; readonly gullPass?: number } | null;
   /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
   /** The reward banner is on the map (map markers under it hide their tags). */
   readonly onCascade?: (active: boolean) => void;
@@ -202,6 +204,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [bonusXp, setBonusXp] = useState<number | null>(null);
   // v2: the full-screen catch reveal for Ride Photo catches (the print, the pop, the tally, the book page).
   const [shownReveal, setReveal] = useState<CatchRevealData | null>(null);
+  /** Bumped by every prime, so a finished catch's deferred clears never touch the next ride. */
+  const primeSeq = useRef(0);
   const [revealOutcome, setRevealOutcome] = useState<RevealOutcome>('pending');
   const [revealEscape, setRevealEscape] = useState<RevealEscape | null>(null);
   // The reveal and the viewfinder share two UI-thread flags (no React props): the reveal's opaque scrim stops
@@ -249,6 +253,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   useImperativeHandle(ref, () => ({
     primeRide: (item, from) => {
       if (catchStyleFor(item.rarity) !== 'ride_photo' || layer.width === 0) return false;
+      primeSeq.current += 1;
       setRideItem(item);
       const full = from ? { x: from.x + offset.x, y: from.y + offset.y } : null;
       setPrimed({ item, from: full });
@@ -284,9 +289,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     setSummary(next);
     latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
-    if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
-    latest.current.onCollected(data);
-    if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
+    // Via the print, the map and player updates wait out the close and the flight (their commits never land in
+    // the hand-off's frames); they still run if the catch is closed early.
+    const settle = () => {
+      if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
+      latest.current.onCollected(data);
+      if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
+    };
+    if (viaPrint && motion) setTimeout(settle, PRINT_SETTLE_MS); else settle();
     progress.value = next.progressFrom;
     // Via the print, the pad stays fully hidden until the print lands (arrive() springs it in with the kick).
     const pad = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
@@ -369,8 +379,16 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     releasePhoto();
     newRideRef.current = false; setNewRide(null); rideIn.value = 0;
     const finished = rideItemRef.current;
-    requestAnimationFrame(() => requestAnimationFrame(() => { if (finished) setReadyItem(finished); setStageNonce(n => n + 1); }));
-    setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+    // The done frame commits only what is visible (the catch layer goes); the invisible bookkeeping clears two
+    // frames later, unless a new ride was primed in between (RIDE AGAIN, a fast tap).
+    const seq = primeSeq.current;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (finished) setReadyItem(finished);
+      setStageNonce(n => n + 1);
+      if (primeSeq.current !== seq) return;
+      setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+    }));
+    setShowing(null);
     reveal.value = 0; gradeIn.value = 0;
     // The (already invisible) reveal clears two frames later, off the done frame; its photo is released after.
     revealedRef.current = false; revealCovered.value = false; revealHand.current = null; escapeHand.current = null;
@@ -383,6 +401,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   useEffect(() => {
     if (!request || layer.width === 0) return;
     const token = ++aliveRef.current;
+    primeSeq.current += 1;
     const alive = () => aliveRef.current === token;
     const { item, pivotId } = request;
     const motion = !latest.current.reducedMotion;
@@ -495,7 +514,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           rideAgainPending.current = true;
           setTimeout(() => { if (aliveRef.current === token) finish(false, true); }, 200);
           setTimeout(() => { rideAgainPending.current = false; revealHidden.value = false; latest.current.onRideAgain?.(req.item, req.pivotId); }, RIDE_AGAIN_MS);
-          setTimeout(() => { setReveal(current => (current?.key === token ? null : current)); setRevealEscape(null); }, RIDE_AGAIN_MS + 420);
+          setTimeout(() => { setReveal(current => (current?.key === token ? null : current)); setRevealEscape(null); }, RIDE_AGAIN_MS + 160); // gone before the first pass (its clack)
           // If the next ride did not open (the parent declined), bring the map back rather than strand the kid.
           setTimeout(() => { if (!busyRef.current) { showCatchChrome(false); setCatchOpen(false); } }, RIDE_AGAIN_MS + 600);
         } else {
@@ -543,26 +562,33 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // CONTINUE: the reveal fades itself on the UI thread; the hand-off runs on the next frame. The reveal's
   // data stays until the moment ends (finish), so nothing blanks while it fades.
   const onRevealContinue = useCallback(() => {
+    cancelShareEncode();
     const hand = revealHand.current;
     revealHand.current = null;
     if (hand) void hand();
   }, []);
   const onRevealEscaped = useCallback((choice: 'map' | 'again') => {
+    cancelShareEncode();
     const fail = escapeHand.current;
     escapeHand.current = null;
     fail?.(choice);
   }, []);
-  // The print's JPEG for SHARE, encoded once while the buttons sit idle (never on the tap).
+  // The print's JPEG for SHARE: encoded once the buttons have settled (never during a beat, never on the tap),
+  // cancelled on CONTINUE or an escape, and skipped on a repeat that continues on its own (encoded on the tap).
   const shareUri = useRef<{ key: number; uri: string | undefined } | null>(null);
-  useEffect(() => {
-    if (!shownReveal || revealOutcome !== 'caught') return;
-    const key = shownReveal.key, photo = shownReveal.photo;
-    if (shareUri.current?.key === key) return;
-    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
-      ?? ((cb: () => void) => setTimeout(cb, 0));
-    const timer = setTimeout(() => idle(() => { if (revealRef.current?.key === key) shareUri.current = { key, uri: encodePrint(photo) }; }, { timeout: 3000 }), 4500);
-    return () => clearTimeout(timer);
-  }, [shownReveal?.key, revealOutcome]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelShareEncode = () => { if (shareTimer.current) clearTimeout(shareTimer.current); shareTimer.current = null; };
+  const onRevealActions = useCallback((compact: boolean) => {
+    cancelShareEncode();
+    const current = revealRef.current;
+    if (!current || compact || shareUri.current?.key === current.key) return;
+    const key = current.key, photo = current.photo;
+    shareTimer.current = setTimeout(() => {
+      shareTimer.current = null;
+      if (revealRef.current?.key === key && revealHand.current) shareUri.current = { key, uri: encodePrint(photo) };
+    }, 700);
+  }, []);
+  useEffect(() => cancelShareEncode, []);
   const revealRef = useRef(shownReveal);
   revealRef.current = shownReveal;
   const onRevealShare = useCallback(() => {
@@ -752,7 +778,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   }, [stageItem?.id, stageItem?.rarity, forceRide?.kind, forceRide?.sky, stageNonce, window.width, window.height, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
-  const rewardBusy = !!request || !!primed || !!ride || !!showing;
+  // A reveal still on screen (a held RIDE AGAIN card included) counts as busy.
+  const rewardBusy = !!request || !!primed || !!ride || !!showing || !!shownReveal;
   const rewardBusyRef = useRef(rewardBusy);
   rewardBusyRef.current = rewardBusy;
   const rewardEndRef = useRef(0);
@@ -760,13 +787,22 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const settled = () => !rewardBusyRef.current && Date.now() - rewardEndRef.current > 600;
   useEffect(() => {
     if (!warm || window.width === 0 || rewardBusy) return;
-    const timer = setTimeout(() => {
-      for (const entry of warm) {
-        if (catchStyleFor(entry.item.rarity) !== 'ride_photo') continue;
+    // One stage per idle slice, each after two clean frames, and never once a reward has started again.
+    const queue = warm.filter(entry => catchStyleFor(entry.item.rarity) === 'ride_photo');
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+      ?? ((cb: () => void) => setTimeout(cb, 50));
+    let live = true;
+    const step = () => {
+      const entry = queue.shift();
+      if (!live || !entry || rewardBusyRef.current) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => idle(() => {
+        if (!live || rewardBusyRef.current) return;
         prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
-      }
-    }, 600);
-    return () => clearTimeout(timer);
+        step();
+      }, { timeout: 2000 })));
+    };
+    const timer = setTimeout(step, 600);
+    return () => { live = false; clearTimeout(timer); };
   }, [warmKey, rewardBusy, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
   const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);
@@ -811,7 +847,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       {layer.width > 0 && <View pointerEvents="box-none"
         style={{ position: 'absolute', left: -offset.x, top: -offset.y, width: window.width, height: window.height }}>
         <CatchReveal data={shownReveal} outcome={revealOutcome} escape={revealEscape} flags={revealFlags} width={window.width} height={window.height} insets={insets} reducedMotion={reducedMotion}
-          onContinue={onRevealContinue} onShare={onRevealShare} onEscaped={onRevealEscaped}
+          onContinue={onRevealContinue} onShare={onRevealShare} onEscaped={onRevealEscaped} onActions={onRevealActions}
           autoContinue={autoShots ? 2600 : null} autoSkipMs={autoSkipReveal ? 1500 : null} autoEscape={autoEscape} />
       </View>}
 

@@ -170,7 +170,7 @@ export interface RidePhotoProps {
   /** Development recordings: latency-compensated shot offsets per pass (ms; negative is early). */
   readonly autoShots?: number[] | null;
   /** Development recordings: pin the ride and sky. */
-  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
+  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky; /** Development recordings: a gull on this pass, crossing at arrival. */ readonly gullPass?: number } | null;
   /**
    * The catch reveal's shared flags (no React props, no re-render): `covered` stops the scene clock while the
    * reveal's scrim is opaque; `hidden` hides the viewfinder on the UI thread the moment CONTINUE is pressed.
@@ -480,7 +480,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const next = passPlan({ rarity: item?.rarity, seed: (item?.id ?? 0) + ridesUsed * 7919, pass: passCount.current, fromT, tFrame, passMs, steady: mercy });
     const seed = (item?.id ?? 0) + ridesUsed * 7919;
     const bump = bumpFor(item?.rarity, seed, passCount.current, parkedMode || reducedMotion, mercy);
-    const gull = gullFor(item?.rarity, seed, passCount.current, { reducedMotion: parkedMode || reducedMotion, mercy, freeze: hintFreeze.value });
+    const forcedGull = __DEV__ && forceRide?.gullPass != null && !parkedMode && !reducedMotion
+      ? (forceRide.gullPass === passCount.current ? { centerMs: 0, dir: 1 as const } : null) : undefined;
+    const gull = forcedGull !== undefined ? forcedGull
+      : gullFor(item?.rarity, seed, passCount.current, { reducedMotion: parkedMode || reducedMotion, mercy, freeze: hintFreeze.value });
     passCount.current += 1;
     plan.value = next;
     cancelAnimation(bumpV); bumpV.value = 0;
@@ -677,7 +680,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       setPrint(null); setPrintImage(null); setMissed([]); setStrip(null);
       // Native photo memory is invisible to Hermes' GC: free every photo this ride made except the one
       // handed to the badge (the catch layer frees that one once its sticker clears).
-      const handed = caughtRef.current ? printImageRef.current : null;
+      // The handed photo is the one given at print-ready (kept even if a new open has reset caughtRef): the badge
+      // sticker draws it until the badge has faded, so freeing it here blanked the thumbnail mid-fade (R5).
+      const handed = handedImage.current ?? (caughtRef.current ? printImageRef.current : null);
+      handedImage.current = null;
       const made = madeImages.current;
       madeImages.current = [];
       printImageRef.current = null;
@@ -809,7 +815,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         finishHold.current = null;
         holding.value = false;
         burst.value = withTiming(0, { duration: 250 });
-        if (caught) { catchMark('print-ready'); onPrintReady(grade, printImageRef.current); }
+        if (caught) { catchMark('print-ready'); handedImage.current = printImageRef.current; onPrintReady(grade, printImageRef.current); }
         else {
           // Epic's first photo drops into slot 1 of the film strip in the band, with a click and a glow,
           // and the car goes around again for photo 2.
@@ -832,6 +838,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   }, [spec.developBeats, reducedMotion, later, layer.width, sceneH, onPrintReady, retry, owned]); // eslint-disable-line react-hooks/exhaustive-deps
   const printImageRef = useRef<SkImage | null>(null);
   const madeImages = useRef<SkImage[]>([]);
+  const handedImage = useRef<SkImage | null>(null);
   // Shutter taps during the hold skip it; mashing during the develop never skips the suspense.
   const callSkip = useCallback(() => { const done = finishHold.current; if (done) done(); }, []);
   // x: during the hold it skips; still developing a counted catch, it fast-forwards to the reveal
@@ -951,8 +958,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       }
     }
     cancelAnimation(t);
-    flash.value = withSequence(withTiming(0.9, { duration: 40 }), withTiming(0, { duration: 380, easing: Easing.out(Easing.quad) }));
-    iris.value = withSequence(withTiming(0.55, { duration: 55 }), withTiming(0, { duration: 140 }));
+    // R6: one full-bleed white flash, status bar to shutter tray, 1 frame up and 3 frames down. No iris blink
+    // on the shot (its black bars read as bands), and nothing moves the scene.
+    flash.value = withSequence(withTiming(0.92, { duration: 16 }), withTiming(0, { duration: 60, easing: Easing.out(Easing.quad) }));
     ready.value = 0;
     runOnJS(shutterNow)();
     runOnJS(onShot)(grade, offset, direction, soClose, parked.value ? tFrame : t.value, bombed, gullMs.value, gullDir.value);
@@ -1069,6 +1077,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     };
   });
   // Iris bars are fixed half-screen views scaled on Y (a transform, not a layout prop).
+  const shotFlashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const irisTop = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
   const irisBottom = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
   // Shutter: the disc fills red, amber, then green; a gold arc fills as the car nears. Drawn in Skia.
@@ -1275,7 +1284,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           <View accessible accessibilityRole="button" accessibilityLabel={`Take the ride photo of ${name}`}
             accessibilityHint="Double tap when the car is in the frame" onAccessibilityTap={accessibleShoot}
             style={[StyleSheet.absoluteFill, { top: insets.top + 56 }]} />
-          {/* The iris: black bars that blink on the shot and close the viewfinder at the end */}
+          {/* The shot's flash, full bleed over the whole viewfinder */}
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shotFlash, shotFlashStyle]} />
+          {/* The iris: black bars that close the viewfinder at the end */}
           <Animated.View pointerEvents="none" style={[styles.iris, { top: 0, height: layer.height / 2, transformOrigin: 'top' }, irisTop]} />
           <Animated.View pointerEvents="none" style={[styles.iris, { bottom: 0, height: layer.height / 2, transformOrigin: 'bottom' }, irisBottom]} />
         </Animated.View>
@@ -1349,6 +1360,7 @@ const styles = StyleSheet.create({
     textShadowColor: '#1b3a5c', textShadowOffset: { width: 0, height: 1.5 * PLATE_PEAK }, textShadowRadius: 0.1 },
   view: { position: 'absolute', left: 0, top: 0, overflow: 'hidden', backgroundColor: '#000000' },
   iris: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000000' },
+  shotFlash: { backgroundColor: '#ffffff' },
   corner: { position: 'absolute', width: 26, height: 26, borderColor: 'rgba(255,255,255,0.85)' },
   band: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 18, backgroundColor: '#000000' },

@@ -323,7 +323,9 @@ test('reveal wiring: always mounted, server numbers only, CONTINUE hands off to 
   // Reduce Motion: no rays, wobble or flash.
   assert.match(reveal, /rays\.value = rm \? 0 :/);
   // Counts tick on the UI thread (no React render per tick).
-  assert.match(reveal, /const shown = useDerivedValue\(\(\) => tallyValue\(to, progress\.value\)\);/, 'native text only when the number changes');
+  assert.match(reveal, /const shown = useDerivedValue\(\(\) => tallyValue\(to, progress\.value >= 1 \? 1 : Math\.floor\(progress\.value \* 12\) \/ 12\)\);/,
+    'native text only when the number changes, at most 12 steps a row (R6 perf)');
+  assert.match(reveal, /Math\.min\(Math\.round\(ms \/ 125\), 12\)/, 'coin ticks at 8 a second or fewer');
   assert.doesNotMatch(reveal, /<FxStage/, 'no always-on FX frame loop in the reveal (one shared value per confetti volley)');
   assert.match(reveal, /<Volley x=\{cx\} y=\{L\.medal\} progress=\{volleyA\}/);
 });
@@ -465,4 +467,22 @@ test('R6 NEW BEST!: only on the server word for a repeat; the slot flips to gold
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(moment, /const newBest = isNewBest\(sum\.isNew, data\?\.photo\);/);
   assert.match(moment, /'is_collected' \| 'best_photo_grade'/);
+});
+
+test('R6 real ride seed: RIDE AGAIN (rides used + 1) never replays the ride before it', () => {
+  const base = { fromT: 0.1, tFrame: 0.62, passMs: 2300 };
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /const seed = \(item\?\.id \?\? 0\) \+ ridesUsed \* 7919;/);
+  const seedFor = (id, used) => id + used * 7919;
+  let same = 0, n = 0;
+  for (let id = 1; id < 200; id++) for (const pass of [0, 1, 2]) {
+    const a = ride.passPlan({ ...base, rarity: 5, seed: seedFor(id, 0), pass });
+    const b = ride.passPlan({ ...base, rarity: 5, seed: seedFor(id, 1), pass });
+    n++;
+    if (Math.abs(a.k - b.k) < 1e-6 && Math.abs(a.r - b.r) < 1e-6) same++;
+    const ba = ride.bumpFor(5, seedFor(id, 0), pass), bb = ride.bumpFor(5, seedFor(id, 1), pass);
+    if (ba.leadMs === bb.leadMs && ba.dir === bb.dir) same += 0; // bumps may coincide by chance; the approach must not
+  }
+  assert.equal(same, 0, 'every ride 2 approach differs from ride 1');
+  assert.ok(n > 500);
 });

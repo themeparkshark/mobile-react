@@ -59,7 +59,9 @@ if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignor
 
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
   /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;
-  /** The escape picks RIDE AGAIN (the next ride then catches). */ again?: boolean };
+  /** The escape picks RIDE AGAIN (the next ride then catches). */ again?: boolean;
+  /** R6: a gull crosses at arrival on this pass (the shot is photobombed). */ gullPass?: number;
+  /** R6: a repeat whose photo beats its stored best (the server says new_best). */ newBest?: boolean };
 /**
  * Performance experiments (EXPO_PUBLIC_HH3_EXP): 'nowarm' disables the next-step stage warm; 'order'
  * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds; 'noforce' lets
@@ -76,16 +78,16 @@ const BARE = EXP === 'still-bare';
 const V2_SCRIPT: ScriptStep[] = [
   // Uncommon, first ride: the one-time freeze gives a Frame It!.
   { index: 2, kind: 'coaster', sky: 'day', shots: [0], rarity: 2 },
-  // Rare: a Blurry, then a Good.
-  { index: 0, kind: 'flume', sky: 'sunset', shots: [-420, 120], rarity: 3 },
+  // Rare: a Blurry, then a dead-on shot as a gull crosses the frame: Photobombed! (capped at Good).
+  { index: 0, kind: 'flume', sky: 'sunset', shots: [-420, 10], rarity: 3, gullPass: 1 },
   // Epic: two photos, Great then Frame It! (the dark ride).
   { index: 3, kind: 'teacups', sky: 'night', shots: [50, 4], rarity: 4 },
   // Legendary: a Frame It! and the charge; the server's roll takes 1.6 s, so the print keeps shivering.
   { index: 4, kind: 'coaster', sky: 'night', shots: [4], rarity: 5 },
   // Legendary again: a Great, and the roll says no. The print shakes free: SO CLOSE! Then RIDE AGAIN, and it's caught.
   { index: 4, kind: 'flume', sky: 'sunset', shots: [45], rarity: 5, escape: true, again: true },
-  // Uncommon again, owned, a Great: the reveal is skippable now and gets skipped.
-  { index: 5, kind: 'teacups', sky: 'day', shots: [70], rarity: 2, owned: true, skip: true },
+  // Uncommon again, owned, a Great that beats its stored Good: skipped with a tap, which lands on NEW BEST!.
+  { index: 5, kind: 'teacups', sky: 'day', shots: [70], rarity: 2, owned: true, skip: true, newBest: true },
   // Reduce Motion: the car waits in the frame, one tap is a Great, the reveal fades.
   { index: 2, kind: 'flume', sky: 'day', shots: [-400], rarity: 3, reduced: true },
 ];
@@ -244,7 +246,9 @@ function HomeCatchPreview() {
       // Consistent with the preview book page: 4 owned there, plus this find when it is new.
       set_progress: { total: 12, collected: 4 + (item.is_new_variant ? 1 : 0), percentage: 40, is_complete: false, collected_ids: [] },
       dex: { set_slug: 'snack_stand', found: 4 + (item.is_new_variant ? 1 : 0), total: 12, reward_status: 'locked' },
-      photo: quality ? { quality, golden_hour: false, bonus_xp: GRADE_BONUS_XP[quality] } : null,
+      photo: quality ? { quality, golden_hour: false, bonus_xp: GRADE_BONUS_XP[quality],
+        // As the server: the best before this catch, and whether this photo beat it (owned finds only).
+        previous_best: item.is_new_variant ? null : 'good', new_best: !item.is_new_variant && !!SCRIPT[stepRef.current]?.newBest && quality !== 'good' } : null,
       item: { id, name: item.name, rarity: item.rarity, rarity_label: '', set_name: item.set_name, set_color: item.set_color, caught_count: item.is_new_variant ? 1 : 3 },
     } };
   };
@@ -396,7 +400,7 @@ function HomeCatchPreview() {
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
-        forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
+        forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky, gullPass: SCRIPT[step].gullPass } : null}
         onCascade={setCascadeOn} forceReducedMotion={autoplay && !!SCRIPT[step]?.reduced}
         autoSkipReveal={autoplay && !!SCRIPT[step]?.skip}
         loadSetPage={async () => previewSetPage(stepItem.current ?? request?.item ?? null)}
@@ -428,8 +432,11 @@ function previewSetPage(caught: PrepItemType | null): BookItem[] {
   const fixtures = FIXTURES.map((f, i) => ({ id: caught && caught.name === f.name ? caught.id : 900 + i, name: f.name,
     icon_url: `${ART_DIR}${f.slug}.png`, variant_slug: f.slug,
     // Owned on the page: the pretzel, and a repeat being caught again (it is in the book already).
-    is_collected: i === 1 || (!!caught && caught.name === f.name && caught.is_new_variant === false) }));
-  const rest = extra.map((slug, i) => ({ id: 950 + i, name: slug, icon_url: `${ART_DIR}${slug}.png`, variant_slug: slug, is_collected: i < 3 }));
+    is_collected: i === 1 || (!!caught && caught.name === f.name && caught.is_new_variant === false),
+    // Book stars: the stored best photo per owned item (the repeat being caught had a Good).
+    best_photo_grade: i === 1 ? 'great' : caught && caught.name === f.name && caught.is_new_variant === false ? 'good' : null }));
+  const rest = extra.map((slug, i) => ({ id: 950 + i, name: slug, icon_url: `${ART_DIR}${slug}.png`, variant_slug: slug, is_collected: i < 3,
+    best_photo_grade: (['frame_it', 'good', null] as const)[i] ?? null }));
   return [...rest.slice(0, 3), ...fixtures, ...rest.slice(3)];
 }
 /** The nearest in-range fixture shows the only finger (as in the app). */

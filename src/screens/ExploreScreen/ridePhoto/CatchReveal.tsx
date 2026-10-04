@@ -168,30 +168,83 @@ const Volley = memo(function Volley({ x, y, progress, seed, spread = 1, stars = 
 });
 
 /** A firework: a bright core and 12 spokes that burst out, trail and fade. One shared value drives it. */
-const Firework = memo(function Firework({ x, y, progress }: { readonly x: number; readonly y: number; readonly progress: SharedValue<number> }) {
+/** R6: a firework 70 to 90 pt across: a tinted gold core, 12 gold and white spokes, and 8 glitter stars that hang. */
+const Firework = memo(function Firework({ x, y, progress, size = 84 }: { readonly x: number; readonly y: number; readonly progress: SharedValue<number>; readonly size?: number }) {
   const core = useAnimatedStyle(() => {
     const p = progress.value;
-    return { opacity: p <= 0 || p >= 1 ? 0 : 1 - p, transform: [{ scale: 0.4 + 1.4 * Math.min(1, p * 3) }] };
+    return { opacity: p <= 0 || p >= 1 ? 0 : (1 - p) * 0.95, transform: [{ scale: 0.3 + 1.1 * Math.min(1, p * 3.2) }] };
   });
+  const r = size / 2;
   return (
-    <View pointerEvents="none" style={[styles.firework, { left: x - 45, top: y - 45 }]}>
+    <View pointerEvents="none" style={[styles.firework, { left: x - 90, top: y - 90 }]}>
       <Animated.View style={[styles.fireCore, core]}>
-        <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffe9a0" />
+        <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffc93b" />
       </Animated.View>
-      {Array.from({ length: 12 }, (_, i) => <Spoke key={i} angle={(i / 12) * 360} progress={progress} long={i % 2 === 0} />)}
+      {Array.from({ length: 12 }, (_, i) => <Spoke key={i} angle={(i / 12) * 360} progress={progress} long={i % 2 === 0} reach={r} />)}
+      {Array.from({ length: 8 }, (_, i) => <Glitter key={i} angle={(i / 8) * 360 + 22.5} progress={progress} reach={r} />)}
     </View>
   );
 });
-const Spoke = memo(function Spoke({ angle, progress, long }: { readonly angle: number; readonly progress: SharedValue<number>; readonly long: boolean }) {
+const Spoke = memo(function Spoke({ angle, progress, long, reach }: { readonly angle: number; readonly progress: SharedValue<number>; readonly long: boolean; readonly reach: number }) {
   const style = useAnimatedStyle(() => {
     const p = progress.value;
-    const out = 1 - (1 - Math.min(1, p * 1.6)) ** 3;
+    const out = 1 - (1 - Math.min(1, p * 1.7)) ** 3;
     return {
-      opacity: p <= 0 || p >= 1 ? 0 : p > 0.6 ? (1 - p) / 0.4 : 1,
-      transform: [{ rotate: `${angle}deg` }, { translateY: -(10 + out * (long ? 34 : 26)) }, { scaleY: 0.4 + 0.6 * (1 - p) }],
+      opacity: p <= 0 || p >= 1 ? 0 : p > 0.55 ? (1 - p) / 0.45 : 1,
+      transform: [{ rotate: `${angle}deg` }, { translateY: -(8 + out * (long ? reach - 10 : reach - 18)) }, { scaleY: 0.5 + 0.7 * (1 - p) }],
     };
   });
   return <Animated.View style={[styles.spoke, long && styles.spokeLong, style]} />;
+});
+const Glitter = memo(function Glitter({ angle, progress, reach }: { readonly angle: number; readonly progress: SharedValue<number>; readonly reach: number }) {
+  const style = useAnimatedStyle(() => {
+    const p = progress.value;
+    const out = 1 - (1 - Math.min(1, p * 1.4)) ** 2;
+    const a = (angle * Math.PI) / 180;
+    const d = 6 + out * (reach + 4);
+    return {
+      opacity: p <= 0.12 || p >= 1 ? 0 : p > 0.7 ? (1 - p) / 0.3 : 1,
+      transform: [{ translateX: Math.sin(a) * d }, { translateY: -Math.cos(a) * d + p * p * 14 }, { scale: 0.6 + 0.5 * Math.sin(p * 18) ** 2 }],
+    };
+  });
+  return <Animated.View style={[styles.glitter, style]}><GameIcon name="star" size={13} /></Animated.View>;
+});
+
+/**
+ * R6: a curling, glossy gold ribbon unfurling from behind the medallion (Legendary): a chain of segments laid
+ * along a curl, revealed one after another, then drifting down and fading. One shared value drives it.
+ */
+const Ribbon = memo(function Ribbon({ x, y, angle, curl, progress, count = 12 }: {
+  readonly x: number; readonly y: number; readonly angle: number; readonly curl: number; readonly progress: SharedValue<number>; readonly count?: number;
+}) {
+  const segs = useMemo(() => {
+    const out: { x: number; y: number; rot: number; i: number }[] = [];
+    let px = x, py = y, th = (angle * Math.PI) / 180;
+    for (let i = 0; i < count; i++) {
+      const step = 13;
+      px += Math.cos(th) * step; py += Math.sin(th) * step;
+      out.push({ x: px, y: py, rot: (th * 180) / Math.PI, i });
+      th += curl * (0.7 + i * 0.08);
+    }
+    return out;
+  }, [x, y, angle, curl, count]);
+  return <>{segs.map(seg => <RibbonSeg key={seg.i} seg={seg} n={count} progress={progress} />)}</>;
+});
+const RibbonSeg = memo(function RibbonSeg({ seg, n, progress }: { readonly seg: { x: number; y: number; rot: number; i: number }; readonly n: number; readonly progress: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => {
+    const p = progress.value;
+    const show = p * 2.6 * n - seg.i; // unfurls over the first ~40%
+    if (p <= 0 || p >= 1 || show <= 0) return { opacity: 0, transform: [{ translateX: -100 }, { translateY: -100 }, { rotate: '0deg' }, { scaleX: 0 }] };
+    const fall = p > 0.45 ? (p - 0.45) * (p - 0.45) * 160 : 0;
+    return {
+      opacity: p > 0.8 ? (1 - p) / 0.2 : 1,
+      transform: [{ translateX: seg.x - 9 }, { translateY: seg.y - 5 + fall }, { rotate: `${seg.rot + Math.sin(p * 9 + seg.i) * 6}deg` },
+        { scaleX: Math.min(1, show) }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.ribbonSeg, { backgroundColor: seg.i % 2 ? '#ffb800' : '#ffd23f' }, style]}>
+    <View style={styles.ribbonGloss} />
+  </Animated.View>;
 });
 
 const Piece = memo(function Piece({ piece, x, y, progress, stars }: {
@@ -224,7 +277,8 @@ const Piece = memo(function Piece({ piece, x, y, progress, stars }: {
 function CountText({ to, progress, prefix = '+', style }: {
   readonly to: number; readonly progress: SharedValue<number>; readonly prefix?: string; readonly style: TextInputProps['style'];
 }) {
-  const shown = useDerivedValue(() => tallyValue(to, progress.value));
+  // At most 12 text steps per row (each step is a native text commit): the count still lands on the exact total.
+  const shown = useDerivedValue(() => tallyValue(to, progress.value >= 1 ? 1 : Math.floor(progress.value * 12) / 12));
   const props = useAnimatedProps(() => {
     const text = `${prefix}${shown.value}`;
     return { text, defaultValue: text } as unknown as TextInputProps;
@@ -276,9 +330,12 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   return (
     <Animated.View style={[styles.slot, index >= total && styles.hidden, owned && styles.slotOwned, plainOwned && { backgroundColor: color }, flip]}>
       {/* Every slot keeps its image view mounted; only the source and the tint change between catches. */}
+      {/* A missing item: its silhouette in #1b3a5c at 30% with a darker 1.5 pt outline (a darker copy just behind it) */}
+      <Image source={!owned && !isNew ? shownArt ?? undefined : undefined} style={[styles.slotArt, styles.slotOutline, (owned || isNew || !shownArt) && styles.hidden]}
+        tintColor="#0b1f36" contentFit="contain" transition={0} />
       <Image source={shownArt ?? undefined} style={[styles.slotArt, !shownArt && styles.hidden, !owned && !isNew && styles.slotMissing]}
         tintColor={!owned && !isNew ? '#1b3a5c' : undefined} contentFit="contain" transition={0} />
-      {plainOwned && <GameIcon name="check" size={24} />}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.slotCheck, !plainOwned && styles.gone]}><GameIcon name="check" size={22} /></View>
       <Animated.View pointerEvents="none" style={[styles.slotNew, { borderColor: BRAND.gold }, !isNew && styles.hidden, style]}>
         <Image source={isNew ? art ?? undefined : undefined} style={styles.slotNewArt} contentFit="contain" transition={0} />
       </Animated.View>
@@ -300,7 +357,7 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   );
 });
 
-function CatchReveal({ data, outcome, escape = null, flags = null, width, height, insets, reducedMotion, onContinue, onShare, onEscaped, autoContinue = null, autoSkipMs = null, autoEscape = 'map' }: {
+function CatchReveal({ data, outcome, escape = null, flags = null, width, height, insets, reducedMotion, onContinue, onShare, onEscaped, onActions, autoContinue = null, autoSkipMs = null, autoEscape = 'map' }: {
   readonly data: CatchRevealData | null;
   readonly outcome: RevealOutcome;
   /** A ride-by: what the escape shows (null for a failed call). */
@@ -314,6 +371,8 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   /** CONTINUE: the reveal has started its fade; hand off to the badge. */
   readonly onContinue: () => void;
   readonly onShare: () => void;
+  /** The buttons are up (`compact`: a repeat that continues on its own). SHARE's JPEG is prepared only now. */
+  readonly onActions?: (compact: boolean) => void;
   /** The escape has played: back to the map, or RIDE AGAIN (the same find's next ride). */
   readonly onEscaped: (choice: 'map' | 'again') => void;
   /** Development recordings only: press CONTINUE this long after the buttons arrive. */
@@ -389,9 +448,11 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const flee = useSharedValue(0);
   const punch = useSharedValue(0);
   const whiteout = useSharedValue(0);
+  const starFlash = useSharedValue(0);
   const fireA = useSharedValue(0), fireB = useSharedValue(0), streamV = useSharedValue(0);
   const escapeIn = useSharedValue(0);
   const crack = useSharedValue(0);
+  const againGo = useSharedValue(0);
   const exit = useSharedValue(0);
   const volleyA = useSharedValue(0), volleyB = useSharedValue(0), volleyC = useSharedValue(0), sparkleV = useSharedValue(0);
   const ring = useSharedValue(0);
@@ -417,7 +478,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
 
   const allValues = [bg, spot, charge, flash, printPos, printTuck, printGone, wobble, printFlash, rays, medal, item, title, ribbon, chips, tally,
     ...rowP, ...rowIn, bonusFly, page, fill, stamp, best, actions, flee, volleyA, volleyB, volleyC, sparkleV, ring,
-    printGone, punch, whiteout, fireA, fireB, streamV, escapeIn, exit, crack];
+    printGone, punch, whiteout, starFlash, fireA, fireB, streamV, escapeIn, exit, crack, againGo];
 
   const dispatch = useCallback((event: Parameters<typeof revealStep>[1]) => {
     const next = revealStep(stateRef.current, event, planRef.current);
@@ -431,7 +492,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
     to(bg, 1); to(spot, 0); to(charge, 0); to(flash, 0); to(printPos, 1); to(printTuck, 1); to(wobble, 0); to(printFlash, 0);
     to(rays, reducedMotion ? 0 : 1); to(medal, 1); to(item, 1); to(title, 1); to(ribbon, 1); to(chips, 1); to(tally, 1);
     rowP.forEach(v => to(v, 1)); rowIn.forEach(v => to(v, 1)); to(bonusFly, 1);
-    to(printGone, 0); to(punch, 0); to(whiteout, 0);
+    to(printGone, 0); to(punch, 0); to(whiteout, 0); to(starFlash, 0);
     if (!keepBook) { to(page, 1); to(fill, 1); to(stamp, dataRef.current?.isNew || dataRef.current?.newBest ? 1 : 0); to(best, 1); to(actions, 1); }
   }, [reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -484,8 +545,10 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
         later(150, () => { printTuck.value = 1; printFlash.value = 0; });
       }
       if (t === 5 && !rm) {
-        // Legendary: a white-out and a punch-in on the whole stage.
-        whiteout.value = withSequence(withTiming(0.6, { duration: 40 }), withDelay(80, withTiming(0, { duration: 260 })));
+        // Legendary: a warm gold radial bloom on the medallion (60% peak, clear at the edges, gone in under
+        // 200 ms), an 8-point star flash behind the medallion, and a punch-in on the whole stage.
+        whiteout.value = withSequence(withTiming(0.6, { duration: 40 }), withTiming(0, { duration: 150, easing: Easing.out(Easing.quad) }));
+        starFlash.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
         exit.value = -0.15;
         exit.value = withDelay(120, withSpring(0, { damping: 12, stiffness: 160 }));
       }
@@ -542,12 +605,13 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
         // A repeat counts every row at once, straight to the total (the bonus folded in).
         const ms = compact ? COMPACT_TALLY_MS : rowMs(row.to);
         if (compact && !rm) at = 100;
-        rowIn[i].value = rm ? withTiming(1, { duration: 150 }) : withDelay(at, withSpring(1, { damping: 9, stiffness: 230 }));
+        // The plaques deal in together (a centred group, 60 ms apart); the counts run one after another.
+        rowIn[i].value = rm ? withTiming(1, { duration: 150 }) : withDelay(100 + i * 60, withSpring(1, { damping: 9, stiffness: 230 }));
         // XP counts its own XP first; the photo bonus flies in after the rows (below).
         const target = row.key === 'xp' && !compact ? xp.baseProgress : 1;
         rowP[i].value = rm ? withTiming(target, { duration: 1 }) : withDelay(at + 60, withTiming(target, { duration: ms, easing: Easing.linear }));
         if (!rm) {
-          const ticks = Math.max(3, Math.round(ms / 70));
+          const ticks = Math.max(2, Math.min(Math.round(ms / 125), 12)); // 8 ticks a second at most
           for (let k = 0; k < (compact && i > 0 ? 0 : ticks); k++) { const p = pitch++; later(at + 60 + (k * ms) / ticks, () => catchSound('coinTick', { volume: 0.7, pitch: p * 0.5 })); }
           later(at + 60 + ms, () => catchHaptic('tapLight', 1));
           if (!compact) at += 60 + ms + 40;
@@ -599,6 +663,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       // The light settles: the rays stop turning 4 s after the buttons (no idle animation left running).
       later(4000, () => { cancelAnimation(spin); cancelAnimation(float); });
       setPhase('actions');
+      onActionsRef.current?.(compact);
       const auto = inputRef.current ? autoContinueMs(inputRef.current) : null;
       if (auto != null) later(auto, () => { if (!shareTapped.current) onContinuePressRef.current(); });
     }
@@ -661,9 +726,13 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   }, [reducedMotion, later]); // eslint-disable-line react-hooks/exhaustive-deps
   const escapeRef = useRef(escape);
   escapeRef.current = escape;
+  const [againPressed, setAgainPressed] = useState(false);
   const leaveEscape = useCallback((choice: 'map' | 'again') => {
     if (phaseRef.current !== 'escape') return;
     clearTimers();
+    // Nothing keeps turning under the held card (the next viewfinder opens under it); the rays go first.
+    cancelAnimation(spin); cancelAnimation(float);
+    rays.value = withTiming(0, { duration: 160 });
     if (flags) flags.hidden.value = true; // the held print leaves with the card, never ghosts over the map
     setPhase('leaving');
     // RIDE AGAIN: the card stays up, covering, until the next ride's viewfinder is open (the map never flashes).
@@ -672,6 +741,16 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   }, [clearTimers, flags]); // eslint-disable-line react-hooks/exhaustive-deps
   const onEscapedRef = useRef(onEscaped);
   onEscapedRef.current = onEscaped;
+  const onActionsRef = useRef(onActions);
+  onActionsRef.current = onActions;
+  /** RIDE AGAIN answers the tap at once: the button reads "Here it comes!" and the car slides off toward the ride. */
+  const onAgainPress = useCallback(() => {
+    if (phaseRef.current !== 'escape') return;
+    setAgainPressed(true);
+    catchSound('pop', { volume: 0.7, pitch: 4 }); catchHaptic('tapLight', 3);
+    againGo.value = withTiming(1, { duration: 260, easing: Easing.in(Easing.cubic) });
+    requestAnimationFrame(() => leaveEscape('again'));
+  }, [leaveEscape]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** At the burst's time: go on if the server has answered, or keep shivering (Legendary's roll) until it does. */
   const atBurst = useCallback((startedWaiting: number, i = 0) => {
@@ -709,6 +788,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
     planRef.current = plan;
     stateRef.current = revealStart(canSkip(seenTiers, data.tier), data.isNew || !!data.newBest);
     shareTapped.current = false;
+    setAgainPressed(false);
     if (flags) flags.hidden.value = false;
     shown.value = 1;
     setPhase('playing');
@@ -791,7 +871,11 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
 
   // ── Styles ──
   const rootStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 1 - 0.08 * exit.value }] }));
-  const whiteStyle = useAnimatedStyle(() => ({ opacity: whiteout.value }));
+  const whiteStyle = useAnimatedStyle(() => ({ opacity: whiteout.value, transform: [{ scale: 0.7 + 0.5 * (1 - whiteout.value / 0.6) }] }));
+  const starFlashStyle = useAnimatedStyle(() => {
+    const f = starFlash.value;
+    return { opacity: f <= 0 || f >= 1 ? 0 : f < 0.25 ? 1 : (1 - f) / 0.75, transform: [{ scale: 0.4 + 0.9 * f }, { rotate: `${f * 30}deg` }] };
+  });
   const bgStyle = useAnimatedStyle(() => ({ opacity: bg.value }));
   const chargeStyle = useAnimatedStyle(() => ({ opacity: charge.value * 0.9 }));
   const spotStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, spot.value) * 0.9, transform: [{ scale: 0.85 + 0.25 * spot.value }] }));
@@ -805,14 +889,16 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const printStyle = useAnimatedStyle(() => {
     const p = printPos.value, k = printTuck.value, g = flee.value;
     // Held spot -> centre stage (lift) -> collapses at the burst -> back as a tucked polaroid; or slides off (escape).
-    const liftY = hero.cy + (L.lift - hero.cy) * p;
-    const liftScale = 1 + 0.06 * p;
+    // Reduce Motion: the print stays at its held spot at full size (no lift, no scale), and cross-fades.
+    const liftY = reducedMotion ? hero.cy : hero.cy + (L.lift - hero.cy) * p;
+    const liftScale = reducedMotion ? 1 : 1 + 0.06 * p;
     const gm = reducedMotion ? 0 : g; // Reduce Motion: the escaping print fades in place
     const x = cx + (tuck.x - cx) * k + gm * width * 0.9;
     const y = liftY + (tuck.y - liftY) * k - gm * 40;
-    const scale = (liftScale + (tuck.scale - liftScale) * k) * (1 + 0.08 * punch.value) * (1 - printGone.value);
-    const rot = wobble.value * 10 + tuck.rot * k + gm * 15;
-    return { opacity: 1 - g, transform: [{ translateX: x - hero.w / 2 }, { translateY: y - hero.h / 2 }, { scale }, { rotate: `${rot}deg` }] };
+    const gone = printGone.value;
+    const scale = (liftScale + (tuck.scale - liftScale) * k) * (1 + 0.08 * punch.value) * (reducedMotion ? 1 : 1 - gone);
+    const rot = (reducedMotion ? 0 : wobble.value * 10) + tuck.rot * k + gm * 15;
+    return { opacity: (1 - g) * (reducedMotion ? 1 - gone : 1), transform: [{ translateX: x - hero.w / 2 }, { translateY: y - hero.h / 2 }, { scale }, { rotate: `${rot}deg` }] };
   });
   const tapeStyle = useAnimatedStyle(() => ({ opacity: printTuck.value }));
   const printFlashStyle = useAnimatedStyle(() => ({ opacity: printFlash.value }));
@@ -831,7 +917,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const rmOn = reducedMotion;
   const titleStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, title.value * 1.6), transform: [{ scale: rmOn ? 1 : title.value <= 0 ? 0.5 : title.value }] }));
   const ribbonStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, ribbon.value * 1.5), transform: [{ scaleX: rmOn ? 1 : 0.25 + 0.75 * ribbon.value }] }));
-  const chipsStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, chips.value * 1.5), transform: [{ translateY: (1 - chips.value) * 12 }] }));
+  const chipsStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, chips.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - chips.value) * 12 }] }));
   const tallyStyle = useAnimatedStyle(() => ({ opacity: tally.value }));
   const rowStyle0 = useAnimatedStyle(() => ({ opacity: Math.min(1, rowIn0.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - rowIn0.value) * 26 }, { scale: rmOn ? 1 : (0.6 + 0.4 * rowIn0.value) * bump0.value }] }));
   const rowStyle1 = useAnimatedStyle(() => ({ opacity: Math.min(1, rowIn1.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - rowIn1.value) * 26 }, { scale: rmOn ? 1 : (0.6 + 0.4 * rowIn1.value) * bump1.value }] }));
@@ -849,10 +935,15 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   });
   const crackStyle = useAnimatedStyle(() => {
     const c = crack.value;
-    return { opacity: 1 - 0.65 * c, transform: [{ rotate: `${Math.sin(c * Math.PI * 4) * 8 * (1 - c)}deg` }, { scale: 1 - 0.1 * c }] };
+    const shake = rmOn || c <= 0 || c >= 0.3 ? 0 : Math.sin(c * Math.PI * 20) * 4;
+    return { opacity: 1 - 0.55 * c, transform: [{ translateX: shake }, { rotate: `${rmOn ? 0 : Math.sin(c * Math.PI * 4) * 8 * (1 - c)}deg` }, { scale: rmOn ? 1 : 1 - 0.1 * c }] };
   });
+  const greyStyle = useAnimatedStyle(() => ({ opacity: 0.55 * crack.value }));
+  // RIDE AGAIN: the next ride's vehicle lights up and rolls forward on the tap.
+  const nextRideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: rmOn ? 0 : againGo.value * 14 }, { scale: 1 + 0.12 * againGo.value }],
+    borderColor: againGo.value > 0 ? '#ffffff' : BRAND.gold }));
   const crackLineStyle = useAnimatedStyle(() => ({ opacity: crack.value > 0.15 ? 1 : 0, transform: [{ rotate: '-28deg' }, { scaleX: Math.min(1, crack.value * 2) }] }));
-  const escapeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, escapeIn.value * 1.5), transform: [{ translateY: (1 - escapeIn.value) * 30 }] }));
+  const escapeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, escapeIn.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - escapeIn.value) * 30 }] }));
   const pageStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, page.value * 1.4), transform: [{ translateY: rmOn ? 0 : (1 - page.value) * 90 }] }));
   const stampNew = !!view?.isNew || !!view?.newBest;
   const stampStyle = useAnimatedStyle(() => ({
@@ -867,7 +958,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
     opacity: tapSpark.value <= 0 || tapSpark.value >= 1 ? 0 : 1 - tapSpark.value,
     transform: [{ translateX: tapAt.value.x - 18 }, { translateY: tapAt.value.y - 18 }, { scale: 0.6 + 0.8 * tapSpark.value }, { rotate: `${tapSpark.value * 90}deg` }],
   }));
-  const actionsStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, actions.value * 1.5), transform: [{ translateY: (1 - actions.value) * 40 }] }));
+  const actionsStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, actions.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - actions.value) * 40 }] }));
 
   const d = view;
   const active = !!data && phase !== 'leaving';
@@ -883,10 +974,17 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const pageW = width - 40;
   const cell = 38 + 4;
   const gridW = Math.min(perRow, Math.max(1, slotsShown)) * cell - 4;
+  // The stamp sits on the slot's lower half, overhanging only toward the panel's middle, never past a 6 pt inset.
+  const stampW = !d?.isNew && d?.newBest ? 92 : 54;
+  const slotLeft = (pageW - 6 - gridW) / 2 + (newIndex % perRow) * cell;
+  const towardMiddle = slotLeft + 19 < (pageW - 6) / 2 ? slotLeft - 4 : slotLeft + 42 - stampW;
   const stampAt = book.grid && newIndex >= 0 && newIndex < slotsShown
-    ? { left: Math.min(pageW - 6 - 74, Math.max(4, (pageW - 6 - gridW) / 2 + (newIndex % perRow) * cell - 16)),
-      top: 34 + 10 + Math.floor(newIndex / perRow) * cell + 24 }
+    ? { left: Math.min(pageW - 6 - 6 - stampW, Math.max(6, towardMiddle)), top: 34 + 10 + Math.floor(newIndex / perRow) * cell + 22 }
     : { left: -14, top: -22 };
+  // CONTINUE keeps 12 pt clear of the book panel's bottom edge (its border included).
+  const bookRows = book.grid ? Math.ceil(Math.max(1, slotsShown) / perRow) : 0;
+  const bookH = Math.max(112 * u, 34 + 20 + (book.grid ? bookRows * cell - 4 : 24) + 9);
+  const actionsTop = Math.max(L.actions, L.book + bookH + 12);
   const ridesLeft = escape?.ridesLeft ?? null;
   const vehicleArt = escape?.vehicle ? VEHICLE[escape.vehicle] ?? VEHICLE.coaster : VEHICLE.coaster;
 
@@ -927,6 +1025,11 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
           adjustsFontSizeToFit>{escaped ? 'SO CLOSE!' : revealTitle(tier)}</StrokedText>
       </Animated.View>
 
+      {/* Legendary: an 8-point star flash behind the medallion (two crossed gold squares) */}
+      <Animated.View pointerEvents="none" style={[styles.abs, styles.starFlash, { width: medalSize * 1.3, height: medalSize * 1.3, left: cx - medalSize * 0.65, top: L.medal - medalSize * 0.65 }, starFlashStyle]}>
+        <View style={[StyleSheet.absoluteFill, styles.starRay]} />
+        <View style={[StyleSheet.absoluteFill, styles.starRay, { transform: [{ rotate: '45deg' }] }]} />
+      </Animated.View>
       {/* The medallion and the find */}
       <Animated.View pointerEvents="none" style={[styles.medal, { width: medalSize, height: medalSize, left: cx - medalSize / 2, top: L.medal - medalSize / 2 }, medalStyle]}>
         {/* All four medallions stay mounted (decoded once), the current tier shows */}
@@ -1002,7 +1105,8 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       </Animated.View>
 
       {/* The Collection Book page */}
-      <Animated.View pointerEvents="none" style={[styles.page, { top: L.book, left: 20, width: pageW, minHeight: 112 * u }, pageStyle]}>
+      <Animated.View pointerEvents="none" style={[styles.page, { top: L.book, left: 20, width: pageW, minHeight: 112 * u }, pageStyle]}
+        accessible accessibilityLabel={`${d?.setName ?? 'Collection Book'}${book.total > 0 ? `, ${book.after} of ${book.total}` : ''}. ${d?.isNew ? 'Added to your Collection Book' : d?.caughtCount && d.caughtCount > 1 ? `Caught ${d.caughtCount} times` : 'Already in your book'}${d?.newBest ? '. New best photo' : ''}`}>
         <View style={[styles.pageHead, { backgroundColor: d?.setColor ?? BRAND.gold }]}>
           <GameIcon name="chest" size={20} />
           <Text style={styles.pageTitle} numberOfLines={1}>{d?.setName ?? 'Collection Book'}</Text>
@@ -1019,7 +1123,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
                 times={!d?.isNew && d?.caughtCount && d.caughtCount > 1 ? d.caughtCount : null} />
             ))}
           </View>
-          <Text style={[styles.pageLine, book.grid && (d?.isNew || !!d?.slots) && styles.gone]} numberOfLines={1}>
+          <Text style={[styles.pageLine, book.grid && styles.gone]} numberOfLines={1}>
             {d?.isNew ? 'Added to your Collection Book' : d?.caughtCount && d.caughtCount > 1 ? `Caught ${d.caughtCount} times` : 'Already in your book'}
           </Text>
         </View>
@@ -1031,14 +1135,18 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       </Animated.View>
 
       {/* The escape: the rides left as vehicles (used ones dim), then RIDE AGAIN or back to the map */}
-      <Animated.View pointerEvents={phase === 'escape' ? 'box-none' : 'none'} style={[styles.escape, { top: L.ribbon, width }, escapeStyle, !escaped && styles.gone]}>
+      <Animated.View pointerEvents={phase === 'escape' ? 'box-none' : 'none'} style={[styles.escape, { top: L.ribbon + 34 * u, width }, escapeStyle, !escaped && styles.gone]}>
         <View style={[styles.escapeRides, ridesLeft == null && styles.gone]} accessible
           accessibilityLabel={ridesLeft != null ? `${ridesLeft} ${ridesLeft === 1 ? 'ride' : 'rides'} left` : undefined}>
           {Array.from({ length: LEGENDARY_RIDES }, (_, i) => (
             <Animated.View key={i} style={[styles.escapeRide, i < LEGENDARY_RIDES - (ridesLeft ?? 0) - 1 && styles.escapeRideUsed,
-              i === LEGENDARY_RIDES - (ridesLeft ?? 0) - 1 && crackStyle]}>
+              i === LEGENDARY_RIDES - (ridesLeft ?? 0) - 1 && crackStyle, i === LEGENDARY_RIDES - (ridesLeft ?? 0) && nextRideStyle]}>
               <Image source={vehicleArt} style={styles.escapeRideArt} contentFit="contain" transition={0} />
-              {i === LEGENDARY_RIDES - (ridesLeft ?? 0) - 1 && <Animated.View pointerEvents="none" style={[styles.crackLine, crackLineStyle]} />}
+              {i === LEGENDARY_RIDES - (ridesLeft ?? 0) - 1 && <>
+                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.rideGrey, greyStyle]} />
+                <Animated.View pointerEvents="none" style={[styles.crackLine, crackLineStyle]} />
+                <Animated.View pointerEvents="none" style={[styles.crackLine, styles.crackLineB, crackLineStyle]} />
+              </>}
             </Animated.View>))}
         </View>
         <View style={[styles.escapePlate, ridesLeft == null && styles.gone]}>
@@ -1048,12 +1156,18 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
           <Pressable accessibilityRole="button" accessibilityLabel="Back to the map" onPress={() => leaveEscape('map')} hitSlop={8} style={styles.escapeBack}>
             <GameIcon name="pin" size={30} />
           </Pressable>
-          <View style={styles.actionMain}><GameButton label="Ride again" icon="camera" onPress={() => leaveEscape('again')} fullWidth /></View>
+          <View style={styles.actionMain}><GameButton label={againPressed ? 'Here it comes!' : 'Ride again'} icon="camera"
+            onPress={onAgainPress} loading={againPressed} fullWidth /></View>
+        </View>
+        {/* A tip for the next ride: the Legendary is read from the car */}
+        <View style={[styles.escapeTip, !escape?.canRetry && styles.gone]}>
+          <GameIcon name="camera" size={22} />
+          <Text style={styles.escapeTipText}>Tip: watch the car, not the lamp</Text>
         </View>
       </Animated.View>
 
       {/* SHARE (a round icon) and CONTINUE (full width) */}
-      <Animated.View pointerEvents={inActions ? 'box-none' : 'none'} style={[styles.actions, { top: L.actions, width }, actionsStyle]}>
+      <Animated.View pointerEvents={inActions ? 'box-none' : 'none'} style={[styles.actions, { top: actionsTop, width }, actionsStyle]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Share your ride photo" onPress={onSharePress} hitSlop={8} style={styles.share}>
           <Image source={SHARE_ROUND} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
           <ShareGlyph size={26} />
@@ -1072,11 +1186,16 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
         <Volley x={width * 0.12} y={L.medal + 60} progress={volleyB} seed={11} spread={0.7} />
         <Volley x={width * 0.88} y={L.medal + 60} progress={volleyC} seed={19} spread={0.7} />
         {/* Legendary only: gold streamers from the medallion and two firework bursts in the upper third */}
-        <Volley x={cx} y={L.medal} progress={streamV} seed={23} streamers />
-        <Firework x={width * 0.22} y={L.title + 92} progress={fireA} />
-        <Firework x={width * 0.8} y={L.title + 70} progress={fireB} />
+        <Ribbon x={cx - medalSize * 0.3} y={L.medal - medalSize * 0.2} angle={-150} curl={0.32} progress={streamV} />
+        <Ribbon x={cx + medalSize * 0.3} y={L.medal - medalSize * 0.2} angle={-30} curl={-0.32} progress={streamV} />
+        <Ribbon x={cx} y={L.medal + medalSize * 0.3} angle={100} curl={0.28} progress={streamV} count={10} />
+        <Firework x={width * 0.2} y={L.title + 96} progress={fireA} size={88} />
+        <Firework x={width * 0.8} y={L.title + 74} progress={fireB} size={76} />
       </View>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.white, whiteStyle]} />
+      {/* Legendary: the gold bloom, centred on the medallion, clear at the edges */}
+      <Animated.View pointerEvents="none" style={[styles.abs, { width: width * 1.5, height: width * 1.5, left: cx - width * 0.75, top: L.medal - width * 0.75 }, whiteStyle]}>
+        <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#FFE27A" />
+      </Animated.View>
       <Animated.View pointerEvents="none" style={[styles.tapSpark, tapStyle]}><GameIcon name="sparkle" size={36} /></Animated.View>
     </Animated.View>
   );
@@ -1158,21 +1277,30 @@ const styles = StyleSheet.create({
   timesBubble: { position: 'absolute', right: -10, top: -12, minWidth: 30, height: 28, borderRadius: 14, paddingHorizontal: 5, zIndex: 3,
     backgroundColor: INK, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   timesText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textShadowColor: INK, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
-  white: { backgroundColor: '#fff3c4' },
-  firework: { position: 'absolute', width: 90, height: 90, alignItems: 'center', justifyContent: 'center' },
-  fireCore: { position: 'absolute', width: 60, height: 60 },
-  spoke: { position: 'absolute', width: 5, height: 16, borderRadius: 3, backgroundColor: '#ffe07a' },
-  spokeLong: { width: 6, height: 22, backgroundColor: '#ffffff' },
+  firework: { position: 'absolute', width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
+  fireCore: { position: 'absolute', width: 70, height: 70 },
+  spoke: { position: 'absolute', width: 7, height: 20, borderRadius: 4, backgroundColor: '#ffd23f', borderWidth: 1, borderColor: '#fff1b8' },
+  spokeLong: { width: 7, height: 26, backgroundColor: '#ffffff', borderColor: '#ffe07a' },
   escape: { position: 'absolute', left: 0, alignItems: 'center', gap: 14, paddingHorizontal: 20 },
   escapeRides: { flexDirection: 'row', gap: 12 },
   escapeRide: { width: 76, height: 60, borderRadius: 14, backgroundColor: '#0b2f5c', borderWidth: 3, borderColor: BRAND.gold,
     alignItems: 'center', justifyContent: 'center' },
   escapeRideUsed: { opacity: 0.35, borderColor: 'rgba(255,255,255,0.45)' },
   escapeRideArt: { width: 60, height: 40 },
-  crackLine: { position: 'absolute', width: 70, height: 5, borderRadius: 3, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: INK },
+  crackLine: { position: 'absolute', width: 66, height: 3, borderRadius: 2, backgroundColor: '#0b1730', borderTopWidth: 1.5, borderTopColor: 'rgba(255,255,255,0.85)' },
+  crackLineB: { width: 30, left: 30, top: 22, transform: [{ rotate: '34deg' }] },
+  rideGrey: { borderRadius: 11, backgroundColor: '#7c8796' },
   escapePlate: { paddingHorizontal: 18, height: 40, borderRadius: 20, justifyContent: 'center', backgroundColor: BRAND.white, borderWidth: 3, borderColor: INK },
   escapePlateText: { fontFamily: 'Shark', fontSize: 19, color: INK },
   escapeActions: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'stretch', marginTop: 24 },
+  escapeTip: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, paddingHorizontal: 16, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  escapeTipText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, letterSpacing: 0.3 },
+  starFlash: { alignItems: 'center', justifyContent: 'center' },
+  starRay: { margin: '15%', backgroundColor: '#ffd23f', borderRadius: 6, borderWidth: 3, borderColor: '#fff1b8' },
+  glitter: { position: 'absolute', left: 83, top: 83, width: 14, height: 14 },
+  ribbonSeg: { position: 'absolute', left: 0, top: 0, width: 18, height: 10, borderRadius: 3, overflow: 'hidden', borderWidth: 1, borderColor: '#c27a00' },
+  ribbonGloss: { position: 'absolute', left: 0, right: 0, top: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.6)' },
   mystery: { position: 'absolute', fontFamily: 'Shark', fontSize: 64, color: BRAND.gold, textShadowColor: INK,
     textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   escapeBack: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b5aa0',
@@ -1180,22 +1308,24 @@ const styles = StyleSheet.create({
   slotOwned: { backgroundColor: BRAND.white },
   slotFrame: { borderRadius: 8, borderWidth: 2, borderColor: 'rgba(5,52,110,0.22)' },
   slotArt: { width: 34, height: 34 },
-  slotMissing: { opacity: 0.28 },
+  slotMissing: { opacity: 0.3 },
+  slotOutline: { position: 'absolute', opacity: 0.6, transform: [{ scale: 1.09 }] },
+  slotCheck: { alignItems: 'center', justifyContent: 'center' },
   slotNew: {
-    position: 'absolute', left: -6, top: -6, width: 50, height: 50, borderRadius: 11, borderWidth: 3, zIndex: 2,
+    position: 'absolute', left: -4, top: -4, width: 46, height: 46, borderRadius: 11, borderWidth: 3, zIndex: 2,
     backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center',
   },
-  slotNewArt: { width: 42, height: 42 },
+  slotNewArt: { width: 38, height: 38 },
   pageLine: { fontFamily: 'Shark', fontSize: 16, color: INK, marginTop: 4 },
-  newStampWrap: { position: 'absolute', minWidth: 70, height: 32, zIndex: 3 },
-  bestStamp: { width: 112, backgroundColor: '#f0a800', borderColor: BRAND.white },
+  newStampWrap: { position: 'absolute', minWidth: 54, height: 24, zIndex: 3 },
+  bestStamp: { width: 92, backgroundColor: '#f0a800', borderColor: BRAND.white },
   slotGold: { borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b', backgroundColor: 'rgba(255,214,90,0.28)' },
   slotStars: { position: 'absolute', bottom: -6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', zIndex: 2 },
   newStamp: {
-    width: 70, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 9,
-    backgroundColor: BRAND.red, borderWidth: 3, borderColor: BRAND.white,
+    width: 54, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 7,
+    backgroundColor: BRAND.red, borderWidth: 2.5, borderColor: BRAND.white,
   },
-  newText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, letterSpacing: 1, textShadowColor: '#7a1309', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  newText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, letterSpacing: 1, textShadowColor: '#7a1309', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   actions: { position: 'absolute', left: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
   piece: { position: 'absolute', left: 0, top: 0, borderRadius: 2, overflow: 'hidden' },
   gloss: { position: 'absolute', left: 2, top: 0, bottom: 0, width: 3, backgroundColor: 'rgba(255,255,255,0.55)' },
