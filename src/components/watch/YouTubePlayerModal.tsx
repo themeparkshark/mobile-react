@@ -13,10 +13,12 @@ import { allowPlayerNavigation, EMBED_BASE_URL, embedHtml } from './watchFeed';
 export default function YouTubePlayerModal({
   videoId,
   title,
+  isShort = false,
   onClose,
 }: {
   readonly videoId: string | null;
   readonly title: string;
+  readonly isShort?: boolean;
   readonly onClose: () => void;
 }) {
   const [ready, setReady] = useState(false);
@@ -63,7 +65,10 @@ export default function YouTubePlayerModal({
           </Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center' }}>
-          <View style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' }}>
+          {/* Shorts are vertical: a 9:16 frame instead of a tiny box inside 16:9. */}
+          <View style={isShort
+            ? { height: '100%', maxHeight: '100%', aspectRatio: 9 / 16, alignSelf: 'center', backgroundColor: '#000' }
+            : { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' }}>
             {source && (
               <WebView
                 source={source}
