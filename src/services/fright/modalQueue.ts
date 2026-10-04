@@ -20,7 +20,8 @@ export interface RankModalPrompt {
 export type FrightModal =
   | { readonly id: string; readonly kind: 'rank'; readonly prompt: RankModalPrompt }
   | { readonly id: string; readonly kind: 'case_file'; readonly file: FrightCaseFileDrop }
-  | { readonly id: string; readonly kind: 'rewards'; readonly rewards: readonly FrightReward[] }
+  /** `critter`: the caught critter's name for the encounter milestone headline (catches only). */
+  | { readonly id: string; readonly kind: 'rewards'; readonly rewards: readonly FrightReward[]; readonly critter?: string | null }
   | { readonly id: string; readonly kind: 'side'; readonly encounterKey: string; readonly name: string };
 
 export interface ModalGate {

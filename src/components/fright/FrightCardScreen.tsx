@@ -13,11 +13,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFrightCard, type FrightCard, type FrightSlot } from '../../api/endpoints/fright';
-import { artFromCard, frameFor, orderCaseFiles, pinCounts, pinImage, rememberFrightArt, showTally } from '../../services/fright/art';
+import { artFromCard, frameFor, orderCaseFiles, pinCounts, pinImage, rememberFrightArt, showTally, tallyFill } from '../../services/fright/art';
 import { getFrightSnapshot } from '../../services/fright/store';
 import { hauntsWord } from '../../services/fright/pace';
 import { FlexShareButton } from '../../share';
-import { badgeFlex, lanternFlex, nightFlex } from '../../services/fright/share';
+import { badgeFlex, featuredNight, lanternFlex, nightFlex } from '../../services/fright/share';
 import { COPY } from '../../services/fright/copy';
 import { withTimeout } from '../../services/fright/timeout';
 import { NightButton } from './ui';
@@ -30,6 +30,10 @@ import { MarqueeBody } from './MarqueeRecap';
 export interface FrightCardParams {
   readonly eventSlug: string;
   readonly playerId?: number | null;
+  /** 'pins': scroll to the pins section (reward reveal pins line). */
+  readonly section?: 'pins' | null;
+  /** A night to feature with its own Share row at the top (Marquee "Share from your Lantern"). */
+  readonly nightOn?: string | null;
 }
 
 const RING = 220;
@@ -62,6 +66,17 @@ export default function FrightCardScreen() {
   const [misty, setMisty] = useState(false);
   const taps = useRef<number[]>([]);
   const glow = useRef(new Animated.Value(0.6)).current;
+  const scroll = useRef<ScrollView>(null);
+  const [pinsY, setPinsY] = useState<number | null>(null);
+  const scrolledToPins = useRef(false);
+
+  // Fright pins open here (never PinCollections): scroll once to the pins section.
+  useEffect(() => {
+    if (params.section !== 'pins' || pinsY == null || scrolledToPins.current) return;
+    scrolledToPins.current = true;
+    const timer = setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, pinsY - 8), animated: true }), 250);
+    return () => clearTimeout(timer);
+  }, [params.section, pinsY]);
 
   useEffect(() => {
     if (!params.eventSlug) { setFailed(true); return; }
@@ -113,10 +128,12 @@ export default function FrightCardScreen() {
   const others = card.slots.filter(slot => slot.kind !== 'haunt');
   const pins = card.slots.filter(slot => slot.pin || slot.pin_art?.image || slot.pin_art?.locked);
   const frame = card.art.frames?.[frameFor(card)] ?? null;
-  const tallyTotal = card.tally.chaos + card.tally.control;
-  const chaosShare = tallyTotal ? card.tally.chaos / tallyTotal : 0.5;
+  // An empty track until the first point (never a 50/50 fill at Chaos 0 · Control 0).
+  const fill = tallyFill(card.tally);
   const lanternProgress = card.lantern.next_at ? Math.min(1, card.lantern.parts / card.lantern.next_at) : 1;
   const friend = !!params.playerId;
+  // The Marquee's "Share from your Lantern": that night's share, up top (this is a screen, so Share works in release).
+  const featured = friend ? null : featuredNight(card, params.nightOn);
 
   const pinCount = pinCounts(card);
   const files = orderCaseFiles(card.case_files);
@@ -146,7 +163,16 @@ export default function FrightCardScreen() {
         </View>
 
       </View>
-      <ScrollView contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>
+      <ScrollView ref={scroll} contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>
+        {featured && (
+          <View style={styles.featured} accessible={false}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.featuredTitle}>{`Your night: ${hauntsWord(featured.night.haunts)}`}</Text>
+              <Text style={styles.meta}>{`${nightDateLabel(featured.night.night_on) ?? featured.night.night_on} · ${formatMinutes(featured.night.minutes_in_line)}`}</Text>
+            </View>
+            <FlexShareButton kind="fright_night" payload={nightFlex(card, featured.night, featured.number)} surface="fright_recap" size="md" />
+          </View>
+        )}
         <View style={styles.ringWrap}>
           {frame && <ArtImage uri={frame} style={styles.frame} />}
           <View style={[styles.ring, card.ten_in_one && styles.ringGold, frame ? styles.ringFramed : null]}>
@@ -171,8 +197,10 @@ export default function FrightCardScreen() {
         {tallyOn && <>
           <Text style={styles.section}>Team Chaos vs Team Control</Text>
           <View style={styles.tally} accessibilityLabel={`Chaos ${card.tally.chaos}, Control ${card.tally.control}`}>
-            <View style={[styles.tallyChaos, { flex: chaosShare }]} />
-            <View style={[styles.tallyControl, { flex: 1 - chaosShare }]} />
+            {fill && <>
+              <View style={[styles.tallyChaos, { flex: fill.chaos }]} />
+              <View style={[styles.tallyControl, { flex: fill.control }]} />
+            </>}
           </View>
           <Text style={styles.meta}>{`Chaos ${card.tally.chaos} · Control ${card.tally.control}${card.tally.my_side ? ` · You: Team ${card.tally.my_side === 'chaos' ? 'Chaos' : 'Control'}` : ''}`}</Text>
         </>}
@@ -206,7 +234,9 @@ export default function FrightCardScreen() {
           </View>
         ))}
 
-        {pins.length > 0 && <Text style={styles.section}>{`Pins ${pinCount.earned} of ${pinCount.total}`}</Text>}
+        {pins.length > 0 && (
+          <Text style={styles.section} onLayout={event => setPinsY(event.nativeEvent.layout.y)}>{`Pins ${pinCount.earned} of ${pinCount.total}`}</Text>
+        )}
         <View style={styles.pins}>
           {pins.map(slot => (
             (() => {
@@ -319,7 +349,8 @@ const styles = StyleSheet.create({
   meta: { fontFamily: 'Knockout', fontSize: 13, color: NIGHT.fog },
   bar: { height: 12, borderRadius: 6, backgroundColor: NIGHT.haunt, overflow: 'hidden', borderWidth: 2, borderColor: NIGHT.dusk },
   barFill: { height: '100%', backgroundColor: NIGHT.lantern },
-  tally: { flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', borderWidth: 2, borderColor: NIGHT.dusk },
+  tally: { flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', borderWidth: 2, borderColor: NIGHT.dusk,
+    backgroundColor: NIGHT.haunt },
   tallyChaos: { backgroundColor: NIGHT.pumpkin },
   tallyControl: { backgroundColor: '#3f9fb0' },
   headerArt: { height: 64, width: '100%', justifyContent: 'center' },
@@ -340,6 +371,9 @@ const styles = StyleSheet.create({
   fileTitle: { fontFamily: 'Shark', fontSize: 15, color: NIGHT.moon, marginTop: 2 },
   fileBody: { fontFamily: 'Knockout', fontSize: 13, color: NIGHT.fogLight, marginTop: 4 },
   cold: { fontFamily: 'Knockout', fontSize: 13, color: NIGHT.fog, marginTop: 6 },
+  featured: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, borderWidth: 2,
+    borderColor: NIGHT.candy, backgroundColor: NIGHT.haunt, marginTop: 6 },
+  featuredTitle: { fontFamily: 'Shark', fontSize: 16, color: NIGHT.candy },
   recapRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, minHeight: 44,
     borderBottomWidth: 1, borderBottomColor: 'rgba(185,168,230,0.2)' },
 });

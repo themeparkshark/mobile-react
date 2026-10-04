@@ -9,7 +9,7 @@ import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import { COPY } from '../../services/fright/copy';
 import { overlayRightInset } from '../../services/fright/layout';
 import { NIGHT } from '../../services/fright/theme';
-import { COACH_LINES, type FrightCoachKey } from '../../services/fright/tutorial';
+import { COACH_LINES, coachLine, type FrightCoachKey } from '../../services/fright/tutorial';
 import { GameIcon } from '../../ui';
 import { NightButton, NightCard } from './ui';
 
@@ -24,15 +24,20 @@ export function FrightToast({ text, onClose, top = 120 }: { readonly text: strin
   );
 }
 
-export function FrightCoachMark({ coach, onClose, top = 120 }: { readonly coach: FrightCoachKey | null; readonly onClose: () => void; readonly top?: number }) {
+export function FrightCoachMark({ coach, onClose, top = 120, critter = null }: {
+  readonly coach: FrightCoachKey | null; readonly onClose: () => void; readonly top?: number;
+  /** The live encounter critter's name: the Chaos Hour line names it (or stays neutral). */
+  readonly critter?: string | null;
+}) {
   useEffect(() => {
     if (!coach) return;
-    AccessibilityInfo.announceForAccessibility?.(COACH_LINES[coach].line);
+    AccessibilityInfo.announceForAccessibility?.(coachLine(coach, critter));
     const timer = setTimeout(onClose, 9000);
     return () => clearTimeout(timer);
   }, [coach]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!coach) return null;
-  const { line, target } = COACH_LINES[coach];
+  const { target } = COACH_LINES[coach];
+  const line = coachLine(coach, critter);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${line} Dismiss`} onPress={onClose}
       style={[styles.coach, { top }]}>

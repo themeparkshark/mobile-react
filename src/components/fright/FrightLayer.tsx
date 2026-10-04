@@ -4,7 +4,7 @@
  * tutorial, the exit moment and the Marquee. Mounted outside the in-park block
  * so the exit moment and the Marquee still show after the presence leaves.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { overlayTop } from '../../services/fright/layout';
@@ -16,6 +16,7 @@ import SidePicker from './SidePicker';
 import MarqueeRecap from './MarqueeRecap';
 import RankCard from './RankCard';
 import FrightTutorial from './tutorial/FrightTutorial';
+import { preloadFrightTutorialArt } from './tutorial/preloadTutorialArt';
 import type { FrightEngine } from './useFrightEngine';
 
 export default function FrightLayer({ night, engine, top = 132 }: {
@@ -27,18 +28,22 @@ export default function FrightLayer({ night, engine, top = 132 }: {
   const box = useRef<View>(null);
   const [boxY, setBoxY] = useState<number | null>(null);
   const lineTop = overlayTop(engine.pillBottom, boxY, top);
+  // The mode just turned on: warm the intro art before the first tutorial card can mount.
+  useEffect(() => { if (night.modeOn) void preloadFrightTutorialArt(); }, [night.modeOn]);
   return (
     <>
       <View ref={box} style={[StyleSheet.absoluteFill, { zIndex: 60 }]} pointerEvents="box-none"
         onLayout={() => box.current?.measureInWindow((_x, y) => { if (Number.isFinite(y)) setBoxY(y); })}>
         <FrightToast text={engine.toast} onClose={engine.clearToast} top={lineTop} />
-        {!engine.toast && <FrightCoachMark coach={engine.coach} onClose={engine.dismissCoach} top={lineTop} />}
+        {!engine.toast && <FrightCoachMark coach={engine.coach} onClose={engine.dismissCoach} top={lineTop} critter={engine.encounter?.name ?? null} />}
       </View>
       {night.modeOn && <FrightSheet night={night} engine={engine} />}
       {/* One modal at a time (engine.modal): rank, Case File, rewards, team pick. */}
       <RankCard key={engine.modal?.kind === 'rank' ? engine.modal.id : 'rank'} prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
       <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} eventSlug={night.tonight?.event?.slug ?? null} />
-      <RewardReveal rewards={engine.modal?.kind === 'rewards' ? engine.modal.rewards : null} onClose={engine.closeModal} />
+      <RewardReveal rewards={engine.modal?.kind === 'rewards' ? engine.modal.rewards : null}
+        critter={engine.modal?.kind === 'rewards' ? engine.modal.critter ?? null : null}
+        eventSlug={night.tonight?.event?.slug ?? null} onClose={engine.closeModal} />
       <SidePicker name={engine.modal?.kind === 'side' ? engine.modal.name : null} onClose={engine.closeModal}
         onPick={side => { void engine.pickSide(side); }} />
       <FrightExitCard visible={!!engine.recapOffer && !engine.modal}

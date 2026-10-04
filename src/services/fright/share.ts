@@ -47,3 +47,17 @@ export function lanternFlex(card: FrightCard): FlexPayloads['fright_lifetime'] {
   const distinct = haunts.filter(slot => slot.earned).length;
   return { hauntsSurvived: runs, reSwims: Math.max(0, runs - distinct), nights: card.nights, cardTitle: card.card_title };
 }
+
+/**
+ * The night a Marquee "Share from your Lantern" tap asked for: its recap row
+ * and its night number (1 = the first night on the card), or null when the
+ * card has no shareable row for that night (no haunts yet, or not on the card).
+ */
+export function featuredNight(card: Pick<FrightCard, 'recaps'>, nightOn: string | null | undefined):
+  { readonly night: FrightCard['recaps'][number]; readonly number: number } | null {
+  if (!nightOn) return null;
+  const ordered = card.recaps.slice().sort((a, b) => a.night_on.localeCompare(b.night_on));
+  const index = ordered.findIndex(item => item.night_on === nightOn);
+  if (index < 0 || ordered[index].haunts <= 0) return null;
+  return { night: ordered[index], number: index + 1 };
+}

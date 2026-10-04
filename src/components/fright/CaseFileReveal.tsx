@@ -1,19 +1,19 @@
 /**
  * Case File reveal: the card flips from the locked silhouette to its front
  * (server art when present, the title overlaid on the blank plate), with the
- * year badge, a NEW stamp for a first find, the body and "Into the Lantern",
- * which really opens the Deep Lantern (FrightCard for this event); without an
- * event slug the button reads "Keep it" and just closes.
+ * year badge, a NEW stamp for a first find and the body. "Keep it" (primary)
+ * closes and keeps the kid on the map; "See my Lantern" (ghost, only with an
+ * event slug) closes and opens the Deep Lantern (FrightCard for this event).
  * Reduce Motion: a plain fade, no flip.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, StyleSheet, Text, View } from 'react-native';
 import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import * as RootNavigation from '../../RootNavigation';
 import { NIGHT } from '../../services/fright/theme';
 import { GameIcon } from '../../ui';
 import ArtImage from './ArtImage';
+import { openDeepLantern } from './openDeepLantern';
 import { NightButton } from './ui';
 
 const CARD_W = 260;
@@ -22,7 +22,7 @@ const CARD_H = 360;
 export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
   readonly file: FrightCaseFileDrop | null;
   readonly onClose: () => void;
-  /** The event whose Deep Lantern "Into the Lantern" opens. */
+  /** The event whose Deep Lantern "See my Lantern" opens. */
   readonly eventSlug?: string | null;
 }) {
   const reduced = useReducedGameMotion();
@@ -72,11 +72,15 @@ export default function CaseFileReveal({ file, onClose, eventSlug = null }: {
           )}
         </Animated.View>
         {front && <Text style={styles.body}>{file.body}</Text>}
-        <NightButton label={eventSlug ? 'Into the Lantern' : 'Keep it'} style={{ marginTop: 14, minWidth: 220 }}
-          onPress={() => {
-            onClose();
-            if (eventSlug) RootNavigation.navigate('FrightCard', { eventSlug });
-          }} />
+        {/* "Keep it" keeps the kid on the map; the Lantern is a choice, never a yank mid-line. */}
+        <NightButton label="Keep it" style={{ marginTop: 14, minWidth: 220 }} onPress={onClose} />
+        {!!eventSlug && (
+          <NightButton label="See my Lantern" variant="ghost" style={{ marginTop: 10, minWidth: 220 }}
+            onPress={() => {
+              onClose();
+              openDeepLantern(eventSlug);
+            }} />
+        )}
       </Animated.View>
     </Modal>
   );
