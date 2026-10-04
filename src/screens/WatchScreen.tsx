@@ -85,6 +85,10 @@ export default function WatchScreen() {
   const bank = useRef<RewardBank>(EMPTY_BANK);
   const deliverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retrying = useRef(false);
+  // Saves still in flight; while any are, or a dialog is due, the hero and
+  // meter hold still so they move after the reward, where the kid sees it.
+  const savesInFlight = useRef(0);
+  const [settling, setSettling] = useState(false);
   const isWatched = useCallback(
     (post: SocialPostType) => post.has_watched || localWatched.has(post.id),
     [localWatched],
@@ -121,6 +125,9 @@ export default function WatchScreen() {
     deliverTimer.current = setTimeout(() => {
       deliverTimer.current = null;
       const next = nextBankDialog(bank.current, playerOpen.current || dialogOpen.current);
+      if (next === null && !playerOpen.current && !dialogOpen.current && savesInFlight.current === 0) {
+        setSettling(false);
+      }
       if (next === 'reward') {
         const coins = bank.current.coins;
         bank.current = { ...bank.current, coins: 0 };
@@ -138,7 +145,10 @@ export default function WatchScreen() {
   };
 
   const save = (post: SocialPostType) => {
+    savesInFlight.current += 1;
+    setSettling(true);
     void record(post).then(result => {
+      savesInFlight.current -= 1;
       bank.current = bankResult(bank.current, result);
       deliverSoon();
     });
@@ -189,15 +199,18 @@ export default function WatchScreen() {
   const retryUnsaved = useCallback(async (quiet: boolean) => {
     if (retrying.current || unsaved.length === 0) return;
     retrying.current = true;
+    savesInFlight.current += 1;
+    setSettling(true);
     try {
       const results = await Promise.all(unsaved.map(post => record(post)));
       for (const result of results) {
         // A quiet retry that fails again stays quiet; the card still offers +25.
         if (result !== null || !quiet) bank.current = bankResult(bank.current, result);
       }
-      deliverSoon();
     } finally {
+      savesInFlight.current -= 1;
       retrying.current = false;
+      deliverSoon();
     }
   }, [unsaved]);
 
@@ -208,7 +221,7 @@ export default function WatchScreen() {
   // It moves only when nothing is on top of the page, with a short animation,
   // so the kid sees the watched video slide into the grid.
   const [heroWatched, setHeroWatched] = useState<ReadonlySet<number>>(localWatched);
-  const calm = playing === null && rewardTotal === null && !showUnsaved;
+  const calm = playing === null && rewardTotal === null && !showUnsaved && !settling;
   useEffect(() => {
     if (!calm || heroWatched === localWatched) return;
     const id = setTimeout(() => {
