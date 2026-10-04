@@ -53,6 +53,9 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
   const still = useReducedGameMotion();
   return <ShopCta label={label} icon="crown" width={Math.min(300, SCREEN_W - 80)} onPress={onPress} loading={busy} still={still} />;
 }
+import { FxSceneBackdrop } from '../../fx/FxSolo';
+import { SECRET_THEME } from '../../fx/secretTheme';
+import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
 
@@ -62,6 +65,9 @@ const GAP = 12;
 const GRID_PAD = 8;
 const TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP * 2) / 3);
 const EVENT_TILE_W = Math.min(124, TILE_W + 8);
+// Secret Shop shelves hold 1 to 3 pieces: two big showcase tiles a row, centred, so an animated piece
+// has room to move and a short shelf never reads as half empty (secret-shop/DESIGN.md 6.3).
+const SECRET_TILE_W = Math.floor((SCREEN_W - 2 * (10 + 3 + GRID_PAD) - GAP) / 2);
 // The hero card (heroLayout is shared with the layout test): kicker row, then text column and stage.
 const HERO_L = heroLayout(SCREEN_W);
 const HERO_H = HERO.kickerH + HERO_L.bodyH;
@@ -106,8 +112,8 @@ const TeaseChip = memo(function TeaseChip({ tease, label }: { tease: ShopTease; 
   );
 });
 
-const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = false, flipIn = false, width = TILE_W, horizontal = false, onOpen, onWish }: {
-  items: ShopItem[]; vip: boolean; balance: number; still: boolean; bought: number[]; quiet?: boolean;
+const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = false, flipIn = false, width = TILE_W, horizontal = false, centered = false, onOpen, onWish }: {
+  items: ShopItem[]; vip: boolean; balance: number; still: boolean; bought: number[]; quiet?: boolean; centered?: boolean;
   /** First open of the shop day: tiles flip in one by one. */
   flipIn?: boolean; width?: number; horizontal?: boolean;
   onOpen: (item: ShopItem) => void; onWish: (item: ShopItem) => void;
@@ -123,7 +129,7 @@ const Grid = memo(function Grid({ items, vip, balance, still, bought, quiet = fa
   ));
   return horizontal
     ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventRow}>{tiles}</ScrollView>
-    : <View style={styles.grid}>{tiles}</View>;
+    : <View style={[styles.grid, centered && { justifyContent: 'center' }]}>{tiles}</View>;
 });
 
 /** Your shark in the set, small (completed callouts). */
@@ -210,8 +216,8 @@ const ReadyCard = memo(function ReadyCard({ sets, todayIds, busy, onClaimAll }: 
   );
 });
 
-const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, flipIn, todayIds, setsBySlug, onOpen, onWish, onTrySet }: {
-  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; flipIn: boolean;
+const EventBanner = memo(function EventBanner({ section, offset, still, vip, balance, bought, flipIn, todayIds, setsBySlug, onOpen, onWish, onTrySet, secret = false }: {
+  section: ShopSection; offset: number; still: boolean; vip: boolean; balance: number; bought: number[]; flipIn: boolean; secret?: boolean;
   todayIds: number[]; setsBySlug: Map<string, ShopSetSummary>;
   onOpen: OpenFn; onWish: (item: ShopItem) => void; onTrySet: (set: ShopSetSummary) => void;
 }) {
@@ -226,16 +232,16 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
         </ImageBackground>
       ) : <View style={styles.eventShine} pointerEvents="none" />}
       <View style={styles.eventHead}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventKicker, { color: section.last_chance ? '#ffe07a' : ink }]}>{eventKicker(section)}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventKicker, { color: section.last_chance ? '#ffe07a' : ink }]}>{eventKicker(section, secret)}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventTitle, { color: ink }]} numberOfLines={1}>{section.title}</Text>
         {section.subtitle && section.subtitle !== section.wave?.title ? (
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventSub, { color: ink }]} numberOfLines={2}>{section.subtitle}</Text>
         ) : null}
         <SectionPills section={section} offset={offset} still={still} />
-        {section.next_wave && <View style={{ marginTop: 8 }}><TeaseChip tease={section.next_wave} label="NEXT" /></View>}
+        {section.next_wave && !secret && <View style={{ marginTop: 8 }}><TeaseChip tease={section.next_wave} label="NEXT" /></View>}
       </View>
       <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} quiet={!!section.quiet_tiles} flipIn={flipIn}
-        width={EVENT_TILE_W} horizontal onOpen={openHere} onWish={onWish} />
+        width={secret ? SECRET_TILE_W : EVENT_TILE_W} horizontal={!secret} centered={secret} onOpen={openHere} onWish={onWish} />
       {section.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
         <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={onTrySet} />
       ))}
@@ -251,8 +257,10 @@ type ShelfChip = { key: string; icon: GameIconName; label: string; fill?: string
  * itself, never the shelves. Every chip keeps a fixed 50pt box; the active one only scales, so the
  * row never shifts.
  */
-const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump }: {
+const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump, floor }: {
   chips: ShelfChip[]; tops: SharedValue<number[]>; scrollY: SharedValue<number>; maxY: SharedValue<number>; onJump: (i: number) => void;
+  /** The screen floor colour (brand blue, or the Secret Shop's midnight). */
+  floor?: string;
 }) {
   const [active, setActive] = useState(0);
   useAnimatedReaction(() => activeShelf(tops.value, scrollY.value, 24, maxY.value), (next, prev) => {
@@ -260,7 +268,7 @@ const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump }: {
   });
   if (chips.length < 2) return null;
   return (
-    <View style={styles.jumpBar} accessibilityRole="tablist">
+    <View style={[styles.jumpBar, floor ? { backgroundColor: floor } : null]} accessibilityRole="tablist">
       {chips.map((chip, i) => {
         const on = i === active;
         return (
@@ -277,9 +285,11 @@ const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump }: {
   );
 });
 
-const Hero = memo(function Hero({ item, set, section, offset, still, todayItems, tease, onOpen }: {
+const Hero = memo(function Hero({ item, set, section, offset, still, todayItems, tease, onOpen, secret = false }: {
   item: ShopItem; set: ShopSetSummary | null; section: ShopSection; offset: number; still: boolean;
   todayItems: ShopItem[]; tease: ShopTease | null | undefined; onOpen: OpenFn;
+  /** The Secret Shop's Vault: midnight stage, the piece live on your shark. */
+  secret?: boolean;
 }) {
   const { player } = useContext(AuthContext);
   const badge = wearableBadge(item);
@@ -289,7 +299,8 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   const pieces = set?.pieces ?? [];
   // The star alone on your shark's own skin: the brightest thing in the panel.
   const stage = useMemo(() => previewLook(player?.inventory, [{ id: item.id, name: item.name, icon_url: item.icon_url,
-    paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type }], 'base'), [player?.inventory?.skin_item?.id, item.id]);
+    paper_url: item.paper_url, no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null }], 'base'),
+    [player?.inventory?.skin_item?.id, item.id]);
   // As many 36pt chips as the measured text column holds; more shows "+N".
   const chips = heroChips(pieces.length, HERO_L.chips);
   const priceRow = heroPriceRow(HERO_L.textW, formatCoins(item.cost), badge.label);
@@ -300,13 +311,16 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   };
 
   return (
-    <View style={[styles.hero, { height: HERO_H + (tease ? 44 : 0), borderColor: glow }]}>
+    <View style={[styles.hero, secret && { backgroundColor: SECRET_THEME.panel }, { height: HERO_H + (tease ? 44 : 0), borderColor: secret ? SECRET_THEME.gold : glow }]}>
       {/* House blue like the panels: the lit plinth on a night stage is the one bright object. */}
-      <LinearGradient colors={[...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={secret ? [...SECRET_THEME.sky] : [...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
+      {secret && <StarMotes still={still} />}
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
         accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
-          <ShopStage rim={glow} backdropUrl={stage?.backdrop} tone="night" sky={false} still={still}>
+          <ShopStage rim={secret ? SECRET_THEME.gold : glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
+            plinth={secret ? 'secret' : 'house'}
+            backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
             {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
@@ -314,7 +328,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       </Pressable>
       {/* Kicker row: the label and the timer pill share one line above the stage, never on the hat. */}
       <View style={styles.heroKickerRow} pointerEvents="none">
-        <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>{secret ? 'THE VAULT' : "THIS WEEK'S STAR"}</Text>
         <SectionPills section={section} offset={offset} still={still} />
       </View>
       <View style={styles.heroText} pointerEvents="box-none">
@@ -335,6 +349,13 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
             {badge.label ? (priceRow === 'inline' ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View>
               : <View style={[styles.heroRarityDot, { backgroundColor: badge.labelColor }]} />) : null}
+          </View>
+        )}
+        {secret && !!item.fx_key && (
+          // Kids can't see "animated" in a still: say it with an icon and three words.
+          <View style={styles.heroMoves} accessible accessibilityLabel="This piece moves on your shark">
+            <GameIcon name="sparkle" size={16} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroMovesText}>Moves on your shark</Text>
           </View>
         )}
         <View style={{ marginTop: 'auto' }}>
@@ -358,7 +379,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
   );
 });
 
-export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff }: {
+export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff, secret = false }: {
   readonly today: ShopToday;
   readonly setToday: Dispatch<SetStateAction<ShopToday | null>>;
   readonly onRefresh: () => Promise<boolean>;
@@ -370,6 +391,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   readonly scrollY?: SharedValue<number>;
   /** The buy hand-off into a Set Complete reveal: the screen covers everything (header too) in navy. */
   readonly onHandoff?: (on: boolean) => void;
+  /** The members-only Secret Shop (secret-shop/DESIGN.md 6): same shelves, midnight look, VIP preview banner. */
+  readonly secret?: boolean;
 }) {
   const { player } = useContext(AuthContext);
   const { playSound: playSoundNow } = useContext(SoundEffectContext);
@@ -663,10 +686,10 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const chips: ShelfChip[] = useMemo(() => {
     const looks = eventChips(events);
     return [
-      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: "this week's star" }] : []),
+      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star" }] : []),
       ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, fill: looks[i].fill, ring: looks[i].ring })),
-      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: 'Featured' }] : []),
-      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: 'Daily' }] : []),
+      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured' }] : []),
+      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? 'Tonight Only' : 'Daily' }] : []),
     ];
   }, [chipSig]);
   const chipKeys = chips.map(c => c.key).join('|');
@@ -687,7 +710,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   return (
     <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />
+        <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} floor={secret ? SECRET_THEME.floor : undefined} />
         <View style={{ flex: 1 }}>
         <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
           onScroll={scrollHandler} scrollEventThrottle={16}
@@ -703,6 +726,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.emptyBody}>{empty.body}</Text>
             </View>
           )}
+          {secret && !vip && <SecretPreviewBanner />}
           {readySets.length > 0 && (
             <Animated.View entering={enter(0)} exiting={still ? undefined : FadeOutUp.duration(220)}>
               <ReadyCard sets={readySets} todayIds={todayIds} busy={claiming} onClaimAll={() => void claimAll()} />
@@ -715,7 +739,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Animated.View entering={enter(0)} onLayout={measure('hero')}>
                 <ShopProfile id="hero">
                   <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
-                    tease={heroTease} onOpen={openItem} />
+                    tease={heroTease} onOpen={openItem} secret={secret} />
                 </ShopProfile>
               </Animated.View>
             )}
@@ -724,41 +748,43 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
               <Animated.View key={section.key} entering={enter(index + 1)} onLayout={measure(section.key)}>
                 <ShopProfile id={`banner-${section.key}`}>
                   <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} flipIn={firstOpenToday}
-                    todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} />
+                    todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} secret={secret} />
                 </ShopProfile>
               </Animated.View>
             ))}
 
             {featured && (
-              <Animated.View entering={enter(events.length + 1)} style={styles.panel} onLayout={measure('featured')}>
+              <Animated.View entering={enter(events.length + 1)} style={[styles.panel, secret && secretPanel]} onLayout={measure('featured')}>
                 <View style={styles.header}>
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>FEATURED</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>{secret ? 'MORE IN THE VAULT' : 'FEATURED'}</Text>
                   <SectionPills section={featured} offset={offset} still={still} />
                 </View>
                 {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
                   <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />
                 ))}
-                <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish} />
+                <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
+                  width={secret ? SECRET_TILE_W : TILE_W} centered={secret} />
               </Animated.View>
             )}
 
             {daily && (
-              <Animated.View entering={enter(events.length + 2)} style={styles.panel} onLayout={measure('daily')}>
+              <Animated.View entering={enter(events.length + 2)} style={[styles.panel, secret && secretPanel]} onLayout={measure('daily')}>
                 <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
                   {firstOpenToday && <Sheen still={still} delay={700} width={SCREEN_W} />}
                   <View style={{ flexShrink: 1, gap: 4 }}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>DAILY</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>{secret ? 'TONIGHT ONLY' : 'DAILY'}</Text>
                     {dailyNew && <View style={styles.newChip}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.newChipText}>{dailyNew}</Text></View>}
                   </View>
                   <SectionPills section={daily} offset={offset} still={still} />
                 </View>
-                <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish} />
+                <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
+                  width={secret ? SECRET_TILE_W : TILE_W} centered={secret} />
               </Animated.View>
             )}
           </Animated.View>
         </Animated.ScrollView>
         {/* Content fades under the tab row instead of a hard cut. */}
-        <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
+        <LinearGradient pointerEvents="none" colors={secret ? [SECRET_THEME.floor, 'rgba(22,15,61,0)'] : [BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
         </View>
         <ShopToast message={toast} still={still} />
         {handoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />}
@@ -768,7 +794,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought}
           onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
-          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} />
+          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
         bridged={handoff} onDone={finishReveal} onShown={revealShown} />}
@@ -783,6 +809,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 }
 
 const S = SHOP_SURFACE;
+const secretPanel = { backgroundColor: SECRET_THEME.panel, borderColor: SECRET_THEME.border };
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
@@ -836,6 +863,9 @@ const styles = StyleSheet.create({
   heroMore: { width: 36, height: 36, borderRadius: 12, backgroundColor: S.card, borderWidth: 2, borderColor: S.border, alignItems: 'center', justifyContent: 'center' },
   heroMoreText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   heroPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, height: HERO.priceRow },
+  heroMoves: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 999, backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.violet },
+  heroMovesText: { fontFamily: FONT.display, fontSize: 13, color: SECRET_THEME.inkGold },
   heroPriceText: { fontFamily: FONT.display, fontSize: 18, color: S.ink },
   heroCta: { alignSelf: 'flex-start', minHeight: HERO.cta, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 999, paddingHorizontal: 16,
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },

@@ -1,5 +1,9 @@
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Reanimated from 'react-native-reanimated';
+import { FxFloat, FxRigLayers, FxScene, useFloatShadowStyle, useFxEquipSound, wornFx } from '../fx/FxLayers';
+import { useFxClock, useFxRunning } from '../fx/FxStage';
+import { FxLod } from '../fx/registry';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
 let contactIds = 0;
@@ -66,6 +70,8 @@ export default function Playercard({
   dropIn = false,
   shadow = false,
   shadowAt,
+  fxLod = 'full',
+  fxSound,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -86,7 +92,21 @@ export default function Playercard({
   readonly shadow?: boolean;
   /** Where the tail rests, in this card's box (from stageCard): the shadow sits exactly there. */
   readonly shadowAt?: { left: string; top: string };
+  /**
+   * Secret Shop rigs (secret-shop/DESIGN.md 8.2): 'full' on stages, 'lite' for
+   * small or recorded cards, 'still' for the rest pose. `still` forces 'still'.
+   */
+  readonly fxLod?: FxLod;
+  /** Play a rig's equip cue when it is put on here. Defaults to popLayers (the stages where pieces are worn). */
+  readonly fxSound?: boolean;
 }) {
+  const fx = useMemo(() => wornFx(inventory), [inventory]);
+  const lod: FxLod = still ? 'still' : fxLod;
+  const fxRunning = useFxRunning(lod) && fx.any;
+  const fxClock = useFxClock(fxRunning);
+  const [stageH, setStageH] = useState(0);
+  const floatShadow = useFloatShadowStyle(fx, fxClock, stageH);
+  useFxEquipSound(fx, fxSound ?? popLayers);
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -170,7 +190,8 @@ export default function Playercard({
           position: 'relative',
         }}
       >
-        {inventory?.background_item && showBackground && (
+        {inventory?.background_item && showBackground && fx.scene && <FxScene fx={fx} t={fxClock} lod={lod} />}
+        {inventory?.background_item && showBackground && !fx.scene && (
           <Image
             source={{
               uri: inventory.background_item.paper_url,
@@ -219,6 +240,7 @@ export default function Playercard({
           )
         )}
         {shadow && (
+          <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, floatShadow]}>
           <Animated.View pointerEvents="none" style={[styles.shadow, shadowAt ? { left: shadowAt.left as never, top: shadowAt.top as never } : null, {
             opacity: translate.interpolate({ inputRange: [0, 10], outputRange: [0.55, 1] }),
             transform: [{ scaleX: translate.interpolate({ inputRange: [0, 10], outputRange: [0.82, 1] }) }],
@@ -235,6 +257,7 @@ export default function Playercard({
               <Ellipse cx="50" cy="10" rx="50" ry="10" fill={`url(#${contactId})`} />
             </Svg>
           </Animated.View>
+          </Reanimated.View>
         )}
         <Animated.View
           style={{
@@ -250,12 +273,14 @@ export default function Playercard({
             ],
           }}
         >
+          <FxFloat fx={fx} t={fxClock} height={stageH}>
           <View
             onLayout={(e) => {
               containerSize.current = {
                 width: e.nativeEvent.layout.width,
                 height: e.nativeEvent.layout.height,
               };
+              if (fx.floats && Math.abs(e.nativeEvent.layout.height - stageH) > 0.5) setStageH(e.nativeEvent.layout.height);
             }}
             style={{
               position: 'absolute',
@@ -264,6 +289,8 @@ export default function Playercard({
               marginTop: '5%',
             }}
           >
+            {/* Secret Shop rigs that sit behind the shark (far side of a halo) */}
+            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="back" t={fxClock} lod={lod} />}
             {/* Shark body (worn skin or Alex's Classic) and eyes */}
             {sharkBaseLayers(inventory).map((source, index) => (
               <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain" />
@@ -271,10 +298,13 @@ export default function Playercard({
             {/* Item layers: purely visual, no individual Pressables */}
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
               const worn = inventory?.[slot];
+              // An animated piece draws as its rig below, not as its rest-frame paper.
+              if (fx.rigs.some(r => r.slot === slot)) return null;
               return worn?.paper_url ? (
                 <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} popFrom={popFrom} drop={dropIn} />
               ) : null;
             })}
+            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="front" t={fxClock} lod={lod} />}
             {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
             {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
               <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
@@ -288,6 +318,7 @@ export default function Playercard({
               />
             )}
           </View>
+          </FxFloat>
         </Animated.View>
       </View>
     </View>

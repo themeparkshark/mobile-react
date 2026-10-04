@@ -28,6 +28,7 @@ import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import { profileStores } from '../components/profile/profileStores';
+import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
@@ -192,11 +193,22 @@ export default function ProfileScreen() {
     }
   }, [loading, route.params]);
 
+  // secret_shop_v2 decides the Secret Shop tile's name and where it opens (read once, cached 5 min).
+  const [secretV2, setSecretV2] = useState(secretShopFlagNow());
+  useEffect(() => {
+    let live = true;
+    void loadSecretShopFlag().then(on => { if (live) setSecretV2(on); });
+    return () => { live = false; };
+  }, []);
+
   const shortcuts = useMemo<ProfileShortcut[]>(() => {
     const { sharkShop, others } = profileStores(stores);
     const openStore = (store: StoreType) => {
       if (store.is_secret_store && !player?.is_subscribed) {
-        void openMembership();
+        // Secret Shop v2: non-members window-shop (live previews and try-on) and join from there.
+        void loadSecretShopFlag().then(on => (on
+          ? RootNavigation.navigate('Store', { store: store.id })
+          : RootNavigation.navigate('Membership')));
         return;
       }
       RootNavigation.navigate('Store', { store: store.id });
@@ -231,16 +243,16 @@ export default function ProfileScreen() {
       },
       ...others.map((store): ProfileShortcut => ({
         key: `store-${store.id}`,
-        label: store.name,
+        label: store.is_secret_store && secretV2 ? 'Secret Shop' : store.name,
         image: store.icon_url || require('../../assets/images/screens/profile/pin_collections.png'),
         locked: store.is_secret_store && !player?.is_subscribed,
         hint: store.is_secret_store && !player?.is_subscribed
-          ? 'VIP members only. Opens VIP membership'
+          ? (secretV2 ? 'Animated gear for VIP members. Opens the Secret Shop to try it on' : 'VIP members only. Opens VIP membership')
           : `Opens the ${store.name}`,
         onPress: () => openStore(store),
       })),
     ];
-  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim]);
+  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim, secretV2]);
 
   // Redirect guests to login: must be in useEffect, not during render.
   // Signing out also forgets the Stamp Book dot (it is keyed by player too).

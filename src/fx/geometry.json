@@ -1,0 +1,128 @@
+{
+  "canvas": [
+    1353,
+    1530
+  ],
+  "note": "Rig part placement in paper-canvas fractions. Shared by the app rigs (src/fx) and the rest-frame compositor (next-wave/secret-shop/art/tools/compose.py). cx/cy: where the part's anchor (ax, ay, fractions of the part) sits; w: part width as a fraction of canvas width; aspect: part height / width; rot: degrees clockwise about the anchor.",
+  "rigs": {
+    "jetpack": {
+      "body": {
+        "file": "jetpack.png",
+        "aspect": 1.5238,
+        "cx": 0.83,
+        "cy": 0.43,
+        "w": 0.21,
+        "ax": 0.5,
+        "ay": 0.5,
+        "rot": 0
+      },
+      "flame": {
+        "file": "flame.png",
+        "aspect": 2.4151,
+        "cx": 0.851,
+        "cy": 0.552,
+        "w": 0.078,
+        "ax": 0.5,
+        "ay": 0.04,
+        "rot": 0
+      }
+    },
+    "plasma_blade": {
+      "blade": {
+        "file": "blade.png",
+        "aspect": 2.0317,
+        "cx": 0.31,
+        "cy": 0.515,
+        "w": 0.19,
+        "ax": 0.5,
+        "ay": 0.86,
+        "rot": -42
+      }
+    },
+    "reef_halo": {
+      "ring": {
+        "cx": 0.6,
+        "cy": 0.15,
+        "rx": 0.175,
+        "ry": 0.052,
+        "tilt": -5,
+        "stroke": 0.012
+      },
+      "fishA": {
+        "file": "fish-yellow.png",
+        "aspect": 0.875,
+        "w": 0.11
+      },
+      "fishB": {
+        "file": "fish-pink.png",
+        "aspect": 0.8906,
+        "w": 0.11
+      },
+      "fishC": {
+        "file": "fish-yellow.png",
+        "aspect": 0.875,
+        "w": 0.095
+      }
+    },
+    "saucer": {
+      "ufo": {
+        "file": "ufo.png",
+        "aspect": 0.776,
+        "cx": 0.85,
+        "cy": 0.255,
+        "w": 0.25,
+        "ax": 0.5,
+        "ay": 0.5,
+        "rot": 6
+      }
+    },
+    "midway_fireworks": {
+      "backdrop": {
+        "file": "backdrop.jpg"
+      },
+      "bursts": [
+        {
+          "file": "burst-gold.png",
+          "cx": 0.2,
+          "cy": 0.13,
+          "w": 0.22
+        },
+        {
+          "file": "burst-pink.png",
+          "cx": 0.84,
+          "cy": 0.11,
+          "w": 0.2
+        },
+        {
+          "file": "burst-gold.png",
+          "cx": 0.56,
+          "cy": 0.06,
+          "w": 0.13
+        },
+        {
+          "file": "burst-pink.png",
+          "cx": 0.1,
+          "cy": 0.33,
+          "w": 0.12
+        }
+      ]
+    },
+    "ghost_lantern": {
+      "lantern": {
+        "file": "lantern.png",
+        "aspect": 1.6623,
+        "cx": 0.315,
+        "cy": 0.49,
+        "w": 0.155,
+        "ax": 0.5,
+        "ay": 0.04,
+        "rot": 0
+      },
+      "ghost": {
+        "file": "ghost.png",
+        "aspect": 0.9323,
+        "w": 0.13
+      }
+    }
+  }
+}

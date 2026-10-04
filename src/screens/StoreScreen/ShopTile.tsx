@@ -12,6 +12,9 @@
  * re-renders this tile only.
  */
 import { Image } from 'expo-image';
+import { FxTileArt } from '../../fx/FxSolo';
+import { fxKeyOf, isSecretItem } from '../../fx/registry';
+import { SECRET_THEME } from '../../fx/secretTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -34,11 +37,18 @@ const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; 
  * paper layer, then resizes: sharp, no mini shark); the flat icon is the
  * fallback. Everything else uses the 256 px icon thumbnail.
  */
-export function TileArt({ item, size, thumb = true }: {
-  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_torso_thumb_url?: string | null };
+export function TileArt({ item, size, thumb = true, still = false }: {
+  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_torso_thumb_url?: string | null;
+    fx_key?: string | null };
   readonly size: number; readonly thumb?: boolean;
+  /** Secret Shop pieces animate in their tile (secret-shop/DESIGN.md 6); Reduce Motion holds the rest pose. */
+  readonly still?: boolean;
 }) {
   const h = size * 0.8;
+  const fx = fxKeyOf(item);
+  if (fx) {
+    return <View style={{ width: size, height: h, alignItems: 'center', justifyContent: 'center' }}><FxTileArt fxKey={fx} size={h} still={still} /></View>;
+  }
   const source = item.item_type?.id === 4
     ? (item.paper_torso_thumb_url || item.icon_url)
     : ((thumb && item.icon_thumb_url) || item.icon_url);
@@ -64,7 +74,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
   const { ribbon } = tileLanes(item, quiet);
   const name = itemDisplayName(item);
-  const plate = plateFor(item.rarity);
+  const secret = isSecretItem(item);
+  const plate = secret ? SECRET_THEME.tilePlate : plateFor(item.rarity);
   const set = item.shop?.set;
   const artSize = width - 18;
   // The band is decided from the tile's measured width (the prop is the first guess, so the first
@@ -105,13 +116,13 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
-      style={({ pressed }) => [styles.tile, { width, borderColor: badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
+      style={({ pressed }) => [styles.tile, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
         transform: [{ scale: pressed ? 0.95 : 1 }] },
         badge.glow ? { shadowColor: badge.glow, shadowOpacity: 0.9, shadowRadius: 10 } : null]}
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <LinearGradient colors={plate} style={StyleSheet.absoluteFill} />
-        {badge.rarity === 4 && !owned && <Sheen still={still} width={width + 60} />}
+        {(badge.rarity === 4 || secret) && !owned && <Sheen still={still} width={width + 60} />}
       </View>
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
@@ -121,7 +132,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
         </View>
       )}
       <View style={[styles.art, { marginTop: ribbon ? 10 : 0 }, owned && { opacity: 0.6 }]}>
-        <TileArt item={item} size={artSize} />
+        <TileArt item={item} size={artSize} still={still} />
       </View>
       {/* Reserved chip band: rarity and SET never sit on the art. */}
       <View style={styles.band}>
@@ -144,6 +155,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <View style={styles.priceRow}>
         {owned ? (
           slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
+        ) : vipLocked && secret ? (
+          // Secret pieces keep their price on show; the badge says who can buy (DESIGN.md 4.2).
+          <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> {formatCoins(item.cost)}</Text></>
         ) : vipLocked ? (
           <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> VIP</Text></>
         ) : (

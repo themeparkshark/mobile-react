@@ -250,16 +250,25 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
  * - a cel-shaded round plinth with a top-left highlight band and a gloss tick
  * Children (the Playercard, which draws its own bobbing contact shadow) sit on top.
  */
-export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', sky: paintSky = true, rays = false, still, children }: {
+/** Plinth fills: the house blue-and-ice, or the Secret Shop's violet-and-lilac. */
+const PLINTH = {
+  house: { side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' },
+  secret: { side: '#4a2fa8', line: '#1d1052', band: '#6d4fd6', top: '#e9ddff' },
+} as const;
+
+export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, tone = 'sky', sky: paintSky = true, rays = false, still, children, plinth = 'house' }: {
   rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night';
-  /** false: no sky of its own (the hero card is already the night sky), so there is no seam. */
-  sky?: boolean; rays?: boolean; still: boolean; children?: ReactNode;
+  plinth?: keyof typeof PLINTH;
+  /** An animated backdrop (a Secret Shop scene); wins over backdropUrl and the sky. */
+  backdrop?: ReactNode;
+  /** false: no sky of its own (the hero card is already the night sky), so there is no seam. A pair of colours paints that sky. */
+  sky?: boolean | readonly [string, string]; rays?: boolean; still: boolean; children?: ReactNode;
 }) {
-  const sky = tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'] as const;
+  const sky: readonly [string, string] = typeof paintSky === 'object' ? paintSky : tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'];
   const lightId = useSvgId('stage-light');
   return (
     <View style={StyleSheet.absoluteFill}>
-      {backdropUrl ? (
+      {backdrop ? backdrop : backdropUrl ? (
         <Image source={backdropUrl} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : paintSky ? (
         <LinearGradient colors={[...sky]} style={StyleSheet.absoluteFill} />
@@ -278,9 +287,9 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky
       <View pointerEvents="none" style={styles.plinthWrap}>
         <Svg width="100%" height="100%" viewBox="0 0 200 64">
           {/* Side band, then the top face. Dark slate outlines, flat cel fills. */}
-          <Ellipse cx="100" cy="36" rx="94" ry="24" fill="#2b679e" stroke="#123a63" strokeWidth={3} />
-          <Path d="M8 36 A92 22 0 0 0 192 36" fill="none" stroke="#3f84bf" strokeWidth={5} strokeOpacity={0.9} />
-          <Ellipse cx="100" cy="27" rx="94" ry="22" fill="#d6ecfb" stroke="#123a63" strokeWidth={3} />
+          <Ellipse cx="100" cy="36" rx="94" ry="24" fill={PLINTH[plinth].side} stroke={PLINTH[plinth].line} strokeWidth={3} />
+          <Path d="M8 36 A92 22 0 0 0 192 36" fill="none" stroke={PLINTH[plinth].band} strokeWidth={5} strokeOpacity={0.9} />
+          <Ellipse cx="100" cy="27" rx="94" ry="22" fill={PLINTH[plinth].top} stroke={PLINTH[plinth].line} strokeWidth={3} />
           {/* Rarity rim light on the back edge only. */}
           <Path d="M12 25 A90 19 0 0 1 188 25" fill="none" stroke={rim} strokeWidth={4.5} />
           {/* Top-left cel highlight band and a gloss tick. */}
