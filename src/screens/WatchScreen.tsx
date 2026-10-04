@@ -1,9 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { useAsyncEffect } from 'rooks';
 import youtube from '../api/endpoints/social-posts/youtube';
+import { sortNewestFirst } from '../components/watch/watchFeed';
 import Loading from '../components/Loading';
 import SocialPost from '../components/SocialPost';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -16,23 +17,47 @@ import { SocialPostType } from '../models/social-post-type';
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [videos, setVideos] = useState<SocialPostType[]>([]);
+  const mounted = useRef(true);
+  const inFlight = useRef(false);
+  const lastFetch = useRef(0);
 
-  const fetchVideos = async () => {
-    const data = await youtube();
-    setVideos(data);
-  };
+  useEffect(() => () => { mounted.current = false; }, []);
 
-  useAsyncEffect(async () => {
-    await fetchVideos();
-    setLoading(false);
+  // The backend syncs the channel every few minutes (and on YouTube's push),
+  // so a fetch on open, on focus and on pull is enough to stay current.
+  const fetchVideos = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const data = await youtube();
+      if (!mounted.current) return;
+      setVideos(sortNewestFirst(data));
+      setFailed(false);
+      lastFetch.current = Date.now();
+    } catch {
+      // Keep whatever is on screen; an empty first load shows the retry hint.
+      if (mounted.current) setFailed(true);
+    } finally {
+      inFlight.current = false;
+      if (mounted.current) setLoading(false);
+    }
   }, []);
+
+  // Runs on first focus too, so this is also the initial load. Coming back
+  // from the player or another screen refetches unless it just did.
+  useFocusEffect(
+    useCallback(() => {
+      if (Date.now() - lastFetch.current > 15_000) fetchVideos();
+    }, [fetchVideos]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchVideos();
-    setRefreshing(false);
-  }, []);
+    if (mounted.current) setRefreshing(false);
+  }, [fetchVideos]);
 
   // First video gets featured (full width), rest in 2-column grid
   const featuredVideo = videos.length > 0 ? videos[0] : null;
@@ -171,8 +196,8 @@ export default function WatchScreen() {
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 6 }}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={{ paddingTop: 40, alignItems: 'center' }}>
+            ListEmptyComponent={videos.length > 0 ? null : (
+              <View style={{ paddingTop: 40, paddingHorizontal: 24, alignItems: 'center' }}>
                 <Text
                   style={{
                     fontFamily: 'Knockout',
@@ -181,10 +206,10 @@ export default function WatchScreen() {
                     textAlign: 'center',
                   }}
                 >
-                  No videos yet
+                  {failed ? 'Couldn\u2019t load videos. Pull down to try again.' : 'No videos yet'}
                 </Text>
               </View>
-            }
+            )}
           />
         </View>
       )}

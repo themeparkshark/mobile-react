@@ -13,6 +13,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import view from '../api/endpoints/social-posts/view';
 import { SocialPostType } from '../models/social-post-type';
+import YouTubePlayerModal from './watch/YouTubePlayerModal';
+import { formatDuration, isNewVideo, thumbnailFor, videoIdOf } from './watch/watchFeed';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { GameIcon } from '../ui';
@@ -30,7 +32,11 @@ export default function SocialPost({
   readonly socialPost: SocialPostType;
   readonly fullWidth?: boolean;
 }) {
-  const [hasWatched, setHasWatched] = useState<boolean>(socialPost.has_watched);
+  // FlashList recycles this component across videos, so the local "just
+  // watched" mark is tied to the video id instead of seeded once from props.
+  const [watchedId, setWatchedId] = useState<number | null>(null);
+  const hasWatched = socialPost.has_watched || watchedId === socialPost.id;
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const [showReward, setShowReward] = useState(false);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { refreshPlayer } = useContext(AuthContext);
@@ -86,22 +92,41 @@ export default function SocialPost({
     ).start();
   };
 
+  const videoId = videoIdOf(socialPost);
+  const isNew = isNewVideo(socialPost);
+  const duration = socialPost.is_short ? null : formatDuration(socialPost.duration_seconds);
+
+  const recordView = async () => {
+    if (hasWatched) return;
+    const id = socialPost.id;
+    try {
+      await view(socialPost);
+      setWatchedId(id);
+      await refreshPlayer(); // Update coin count in header
+      showRewardModal();
+    } catch {
+      // Already watched or error: just mark it
+      setWatchedId(id);
+    }
+  };
+
   const handlePress = async () => {
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await WebBrowser.openBrowserAsync(socialPost.permalink);
-
-    if (!hasWatched) {
-      try {
-        await view(socialPost);
-        setHasWatched(true);
-        await refreshPlayer(); // Update coin count in header
-        showRewardModal();
-      } catch {
-        // Already watched or error — just mark it
-        setHasWatched(true);
-      }
+    if (videoId) {
+      // Plays in-app; the thank-you is paid when the player closes.
+      setPlayingId(videoId);
+      return;
     }
+    await WebBrowser.openBrowserAsync(socialPost.permalink);
+    await recordView();
+  };
+
+  const closePlayer = () => {
+    setPlayingId(null);
+    // Let the player sheet finish sliding away before the reward modal opens
+    // (iOS drops a modal presented during another one's dismissal).
+    setTimeout(() => { recordView(); }, 450);
   };
 
   return (
@@ -131,10 +156,64 @@ export default function SocialPost({
           {/* Thumbnail */}
           <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
             <Image
-              source={socialPost.image_url}
-              style={{ width: '100%', height: '100%' }}
+              source={thumbnailFor(socialPost, fullWidth)}
+              recyclingKey={String(socialPost.id)}
+              style={{ width: '100%', height: '100%', backgroundColor: '#1f2a44' }}
               contentFit="cover"
+              transition={180}
+              cachePolicy="memory-disk"
+              priority={fullWidth ? 'high' : 'normal'}
+              accessibilityIgnoresInvertColors
             />
+
+            {/* NEW: on the channel less than 24 hours */}
+            {isNew && (
+              <View
+                accessible
+                accessibilityLabel="New video"
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  backgroundColor: '#ef4444',
+                  borderRadius: 8,
+                  paddingHorizontal: fullWidth ? 10 : 7,
+                  paddingVertical: fullWidth ? 4 : 3,
+                  borderWidth: 1.5,
+                  borderColor: 'white',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 3,
+                  elevation: 4,
+                  zIndex: 2,
+                }}
+              >
+                <Text style={{ fontFamily: 'Shark', fontSize: fullWidth ? 14 : 11, color: 'white', letterSpacing: 1 }}>
+                  NEW
+                </Text>
+              </View>
+            )}
+
+            {/* Short or duration chip */}
+            {(socialPost.is_short || duration) && (
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: 6,
+                  right: 6,
+                  backgroundColor: 'rgba(0,0,0,0.78)',
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  zIndex: 2,
+                }}
+              >
+                <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'white', letterSpacing: 0.5 }}>
+                  {socialPost.is_short ? 'SHORT' : duration}
+                </Text>
+              </View>
+            )}
 
             {/* Watched overlay */}
             {hasWatched && (
@@ -261,6 +340,8 @@ export default function SocialPost({
           </View>
         </Animated.View>
       </Pressable>
+
+      <YouTubePlayerModal videoId={playingId} title={socialPost.title} onClose={closePlayer} />
 
       {/* Reward confirmation modal */}
       <Modal
