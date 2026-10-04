@@ -1,4 +1,5 @@
-import { createContext, FC, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, FC, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { warmBadgeArt } from '../components/notificationBadgeArt';
 import useLivePoll from '../hooks/useLivePoll';
 import unreadNotificationsCount from '../api/endpoints/me/unread-notifications-count';
 import { AuthContext } from './AuthProvider';
@@ -29,6 +30,9 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
 
   // Paused in the background; a return to the app refreshes the badge if it is due.
   useLivePoll(refreshNotificationCount, 120000, { enabled: Boolean(isReady && player), key: player?.id ?? null });
+
+  // Signed in: decode the bell's small bundled art once, so the bell opens with its pictures on the first frame.
+  useEffect(() => { if (isReady && player) warmBadgeArt(); }, [isReady, player]);
 
   const value = useMemo(() => ({ notificationCount, refreshNotificationCount }),
     [notificationCount, refreshNotificationCount]);
