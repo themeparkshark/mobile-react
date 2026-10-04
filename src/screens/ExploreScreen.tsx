@@ -30,6 +30,7 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { useFrightCaptureFlow } from '../components/fright/preview/useFrightCaptureFlow';
 import { isConfirmedOutsidePark, isHomeMapConfirmed, nextHomeAnchor, type ParkLookupRecord } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
@@ -230,7 +231,7 @@ function ExploreScreen() {
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
   const { refreshPlayer, player } = useContext(AuthContext);
-  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef } =
+  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef, moveDevLocation } =
     useContext(LocationContext);
   // The anchor is the newest outside-park confirmation (kept through a failed
   // re-check), so walking past the 25 m re-check never blanks the home map.
@@ -499,6 +500,9 @@ function ExploreScreen() {
   useEffect(() => { setFrightIntroOwns(frightEngine.introPending); }, [frightEngine.introPending]);
   const frightStressSpots = useRef<readonly { latitude: number; longitude: number }[]>([]);
   frightStressSpots.current = frightNight.tonight?.spots ?? [];
+  // Dev-only scripted night (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=flow): real engine + server, no touch input.
+  useFrightCaptureFlow({ night: frightNight, engine: frightEngine, location, moveDevLocation,
+    storeId: Number(process.env.EXPO_PUBLIC_FRIGHT_CAPTURE_STORE) || 'shark-shop' });
   // Dev-only capture driver (EXPO_PUBLIC_FRIGHT_CAPTURE_NAV=card|profile|collection): opens that screen
   // 25 s after the map loads so simulator captures can show real flows without touch input.
   useEffect(() => {

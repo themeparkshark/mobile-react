@@ -106,3 +106,12 @@ test('wiring: the encounter critter is tappable, its ring takes no touches; spar
   assert.match(sprites, /ENCOUNTER_CRITTER_PT = 88/, 'tap target over 44 pt');
   assert.doesNotMatch(sprites, /TrailDot/, 'the Skia-drawn trail is gone');
 });
+
+test('always-mounted encounter: the appear row plays when a new encounter shows, not at map mount; no clock read in render', () => {
+  const sprites = read('src/components/map/fright/FrightSprites.tsx');
+  assert.doesNotMatch(sprites, /useSharedValue\(clock\.value\)/, 'no shared-value read during render');
+  assert.match(sprites, /const spawn = useSharedValue\(-1e6\);/);
+  assert.match(sprites, /if \(!spawnKey \|\| spawned\.current === spawnKey\) return;/);
+  const sources = read('src/components/map/fright/FrightMapSources.tsx');
+  assert.match(sources, /spawnKey=\{encounterOnScreen && encounter \? encounter\.key : null\}/);
+});

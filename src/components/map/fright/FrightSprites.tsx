@@ -8,7 +8,7 @@
  */
 import { BlurMask, Canvas, Circle, Group, Image as SkImage, Mask, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { FrightAmbientAsset, FrightHauntLayers, FrightSheetAsset } from '../../../api/endpoints/fright/types';
@@ -706,18 +706,27 @@ export const EncounterRing = memo(function EncounterRing({ ringPts, clock, anima
  * Hour and the first 20 s (full tier), else idle. Lite: appear and idle.
  * Calm or not animated: the still frame. Placeholder while the art loads.
  */
-export const EncounterCritter = memo(function EncounterCritter({ critter, asset, chaos, clock, animated, full }: {
+export const EncounterCritter = memo(function EncounterCritter({ critter, asset, chaos, clock, animated, full, spawnKey }: {
   readonly critter: 'chuckles' | 'riptide';
   readonly asset: FrightSheetAsset | null;
   readonly chaos: boolean;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
   readonly full: boolean;
+  /** The encounter now on screen (null when none). The sprite is always mounted, so the
+   * appear row plays when a new key first shows, not when the map mounts. */
+  readonly spawnKey: string | null;
 }) {
   const B = ENCOUNTER_CRITTER_PT;
   const sheet = useRemoteImage(asset?.sheet);
   const still = useRemoteImage(asset?.static);
-  const spawn = useSharedValue(clock.value);
+  const spawn = useSharedValue(-1e6); // no spawn yet: idle, never the appear row
+  const spawned = useRef<string | null>(null);
+  useEffect(() => {
+    if (!spawnKey || spawned.current === spawnKey) return;
+    spawned.current = spawnKey;
+    spawn.value = clock.value;
+  }, [spawnKey, clock, spawn]);
   const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'appear'), rowIndex(asset, 'chaos-hour')] : [0, -1, -1]), [asset]);
   const fw = asset?.frame[0] ?? 160;
   const fh = asset?.frame[1] ?? 160;

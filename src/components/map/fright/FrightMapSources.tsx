@@ -359,7 +359,8 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         <ShowWhen on={encounterOnScreen && !!encounter}>
           <EncounterCritter critter={encounter?.critter ?? 'chuckles'} asset={encounter ? iconAsset(assets, encounter.critter) : null}
             chaos={encounter ? encounterChaos(encounter) : false} clock={alive.clock}
-            animated={encounterOnScreen && !!encounter && animate} full={st.tier === 'full'} />
+            animated={encounterOnScreen && !!encounter && animate} full={st.tier === 'full'}
+            spawnKey={encounterOnScreen && encounter ? encounter.key : null} />
         </ShowWhen>
       </Marker>
     </>
