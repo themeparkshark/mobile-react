@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -42,9 +42,6 @@ export const MapQueryContext = createContext<{
 // eases under it (Pokemon GO style); panned away, it becomes a map marker.
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
-// The whole map, for the time-of-day tint layer.
-const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
-  geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 /** One empty collection (a stable prop: always-mounted sources show nothing without re-sending a shape). */
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -603,10 +600,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }} />
         </ShapeSource>
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
-        <ShapeSource id="tps-sky-tint" shape={WORLD}>
-          <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
-            fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
-        </ShapeSource>
+        {/* A background layer, not a GeoJSON fill: it covers the whole viewport, including tiles that
+            have not drawn yet, so a camera jump never shows an untinted strip. */}
+        <BackgroundLayer id="tps-sky-tint" style={{ backgroundColor: light.tint.color, backgroundOpacity: light.tint.opacity,
+          backgroundColorTransition: { duration: 4000, delay: 0 }, backgroundOpacityTransition: { duration: 4000, delay: 0 } }} />
         {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
         <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
@@ -652,11 +649,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             order, so it comes after the ride islands and is never hidden under one. */}
         {/* Both shark copies stay mounted and swap by opacity: remounting on every
             drag reloaded the outfit images and made the shark flash. */}
-        {location && (
-          <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
-            <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
-          </Marker>
-        )}
+        {/* Always mounted: with no location it parks hidden (opacity 0, no touch) instead of
+            mounting mid-list when the first fix lands (MapLibre insertReactSubview crash class). */}
+        <Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location} anchor={{ x: 0.5, y: 0.65 }}>
+          <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
+        </Marker>
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
