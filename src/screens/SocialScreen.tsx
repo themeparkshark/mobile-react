@@ -11,7 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,6 +69,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [menuThread, setMenuThread] = useState<ThreadType | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
+  // iOS can't present Safari or push a screen while this sheet is still sliding away,
+  // so a shortcut closes the sheet first and runs its action once the sheet is hidden.
+  const afterShortcutsHide = useRef<(() => void) | null>(null);
+  const runAfterShortcuts = useCallback((action: () => void) => {
+    afterShortcutsHide.current = action;
+    setShortcuts(false);
+  }, []);
   const [rules, setRules] = useState(false);
   const [freshId, setFreshId] = useState<number | null>(null);
   const listRef = useRef<FlashList<ThreadType>>(null);
@@ -371,6 +378,11 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         animationIn={reduced ? 'fadeIn' : 'slideInUp'}
         animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
         useNativeDriverForBackdrop
+        onModalHide={() => {
+          const action = afterShortcutsHide.current;
+          afterShortcutsHide.current = null;
+          action?.();
+        }}
       >
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
@@ -379,31 +391,31 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
             buttons={[
               {
                 image: require('../../assets/images/screens/social/pin_swaps.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); }),
                 text: 'Pin Trading',
                 permission: PermissionEnums.TradePins,
               },
               {
                 image: require('../../assets/images/screens/social/redeem.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.RedeemCoinCodes)) navigation.navigate('RedeemCoinCode'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.RedeemCoinCodes)) navigation.navigate('RedeemCoinCode'); }),
                 text: 'Redeem',
                 permission: PermissionEnums.RedeemCoinCodes,
               },
               {
                 image: require('../../assets/images/screens/social/merch.png'),
-                onPress: () => { setShortcuts(false); void WebBrowser.openBrowserAsync(urls.shop); },
+                onPress: () => runAfterShortcuts(() => { WebBrowser.openBrowserAsync(urls.shop).catch(() => { void Linking.openURL(urls.shop); }); }),
                 text: 'Merch',
               },
               {
                 image: require('../../assets/images/screens/social/membership.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.BecomeAMember)) navigation.navigate('Membership'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.BecomeAMember)) navigation.navigate('Membership'); }),
                 text: 'Member',
                 permission: PermissionEnums.BecomeAMember,
                 show: !player || Boolean(player && !player.is_subscribed),
               },
               {
                 image: require('../../assets/images/screens/social/social_media.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.WatchContent)) navigation.navigate('Watch'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.WatchContent)) navigation.navigate('Watch'); }),
                 text: 'Watch',
                 permission: PermissionEnums.WatchContent,
               },
