@@ -17,7 +17,7 @@ import {
   ALIVE_CAPS, aliveTier, clockStepDue, governFrames, governIdle, GOVERNOR_START,
   type AliveCaps, type AliveTier, type FrameGovernor,
 } from './ambientBudget';
-import { soakLog, SOAK_TRACE } from '../declutter/soakLog';
+import { noteSoakTier, soakLog, SOAK_TRACE } from '../declutter/soakLog';
 import { DAYLIGHT, type SkyLight } from './skyLight';
 
 export interface MapAlive {
@@ -84,6 +84,7 @@ export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   const governed = aliveTier({ reducedMotion, strain: governor.strain });
   const tier: AliveTier = !reducedMotion && (pinned === 'full' || pinned === 'lite') ? pinned : governed;
   const caps = ALIVE_CAPS[tier];
+  if (SOAK_TRACE) noteSoakTier(tier);
   const active = focused && appActive;
   const running = active && !paused && caps.hz > 0;
 

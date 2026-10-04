@@ -13,6 +13,12 @@ export function soakLog(message: string): void {
   else console.log(line);
 }
 
+let soakTier = '?';
+/** The living map's current tier (full, lite, calm), reported with every perf sample. */
+export function noteSoakTier(tier: string): void {
+  if (SOAK_TRACE && tier !== soakTier) { soakTier = tier; soakLog(`perf tier=${tier}`); }
+}
+
 type HermesStats = { js_heapSize?: number; js_allocatedBytes?: number };
 
 /**
@@ -38,7 +44,7 @@ export function startSoakPerf(): () => void {
     const hermes = (globalThis as unknown as { HermesInternal?: { getInstrumentedStats?: () => HermesStats } }).HermesInternal;
     const stats = hermes?.getInstrumentedStats?.() ?? {};
     soakLog(`perf js_frames=${sorted.length} js_p50=${q(0.5).toFixed(1)} js_p95=${q(0.95).toFixed(1)} js_max=${q(1).toFixed(1)}`
-      + ` heap_mb=${((stats.js_heapSize ?? 0) / 1048576).toFixed(1)} alloc_mb=${((stats.js_allocatedBytes ?? 0) / 1048576).toFixed(1)}`);
+      + ` heap_mb=${((stats.js_heapSize ?? 0) / 1048576).toFixed(1)} alloc_mb=${((stats.js_allocatedBytes ?? 0) / 1048576).toFixed(1)} tier=${soakTier}`);
   }, 1000);
   return () => { clearInterval(timer); cancelAnimationFrame(raf); };
 }
