@@ -289,7 +289,11 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       if (preview) {
         // Nothing to send: the local mark below is the whole claim.
       } else if (reward.claim.kind === 'complete') {
-        await claimSetRewards(set.slug);
+        // On an authored set the server pays the full-set claim as its Master milestone, wearable included,
+        // so the same "Added to your Inventory / WEAR IT" outcome applies (a legacy set grants no item: no card).
+        const outcome = claimOutcome(await claimSetRewards(set.slug));
+        setClaimResult(outcome);
+        if (outcome.toast) showToast(outcome.toast, 'success');
       } else if (reward.claim.kind === 'starter') {
         await claimStarterRewards(set.slug, itemId);
       } else {

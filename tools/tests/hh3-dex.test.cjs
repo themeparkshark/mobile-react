@@ -566,3 +566,13 @@ test('round 7b: a finished set the live list sends without rewards_claimed reads
   const success = screen.slice(screen.indexOf('const claim = useCallback'), screen.indexOf('celebrate(reward);'));
   assert.match(success, /setBook\(current => \(\{ \.\.\.current, sets: current\.sets\.map/, 'the claimed reward is marked locally before the reveal');
 });
+
+test('round 7b: a full-set claim on an authored set shows WEAR IT for its wearable (the server pays it as Master)', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  assert.match(screen, /reward\.claim\.kind === 'complete'\) \{[\s\S]{0,400}const outcome = claimOutcome\(await claimSetRewards\(set\.slug\)\);\s*setClaimResult\(outcome\);/);
+  const model = loadTs('src/screens/SetCollection/setHuntModel.ts');
+  const legacy = model.claimOutcome({ rewards_granted: { energy: 10, tickets: 2, experience: 50, title: 'Churro Champ', badge_url: null } });
+  assert.equal(legacy.wear, null, 'a legacy claim grants no item: no card');
+  const authored = model.claimOutcome({ rewards_granted: { item: { id: 49, name: 'Churro Blue T-Shirt', item_type_id: 4 } } });
+  assert.deepEqual(plain(authored.wear), { itemId: 49, itemTypeId: 4, name: 'Churro Blue T-Shirt' });
+});

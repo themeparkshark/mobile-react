@@ -244,7 +244,11 @@ export interface ClaimRewardsResponse {
       tickets: number;
       experience: number;
       title: string | null;
-      badge_url: string | null;
+      badge_url?: string | null;
+      /** Authored sets pay this claim as the Master milestone: its wearable comes back here. */
+      item?: { id: number; name: string; item_type_id: number; paper_url?: string | null } | null;
+      pending_wearable?: string | null;
+      ticket_note?: string | null;
     };
     new_totals: {
       energy: number;
