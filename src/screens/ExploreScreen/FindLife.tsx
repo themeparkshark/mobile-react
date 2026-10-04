@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { soakLog, SOAK_TRACE } from '../../components/map/declutter/soakLog';
 import { FIND_ROOT } from './parkMapLayout';
 
 /**
@@ -15,7 +16,7 @@ export function useFindExpiry(activeTo: string | null | undefined, onExpire: () 
     const left = end - Date.now();
     if (left <= 0) { setGone(true); onExpire(); return; }
     setGone(false);
-    const timer = setTimeout(() => { setGone(true); onExpire(); }, Math.min(left, 2 ** 31 - 1));
+    const timer = setTimeout(() => { if (SOAK_TRACE) soakLog(`find expired ${activeTo}`); setGone(true); onExpire(); }, Math.min(left, 2 ** 31 - 1));
     return () => clearTimeout(timer);
   }, [end]); // eslint-disable-line react-hooks/exhaustive-deps
   return gone;
@@ -24,7 +25,10 @@ export function useFindExpiry(activeTo: string | null | undefined, onExpire: () 
 /** The find's root box, fading out (280 ms) once it is gone. */
 export function FindFade({ gone, children }: { readonly gone: boolean; readonly children: ReactNode }) {
   const opacity = useSharedValue(gone ? 0 : 1);
-  useEffect(() => { opacity.value = withTiming(gone ? 0 : 1, { duration: 280 }); }, [gone, opacity]);
+  useEffect(() => {
+    if (SOAK_TRACE) soakLog(`find fade ${gone ? 'out' : 'in'}`);
+    opacity.value = withTiming(gone ? 0 : 1, { duration: 280 });
+  }, [gone, opacity]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View pointerEvents={gone ? 'none' : 'auto'} style={[FIND_ROOT, style]}>{children}</Animated.View>;
 }

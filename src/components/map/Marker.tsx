@@ -1,6 +1,7 @@
 import { MarkerView } from '@maplibre/maplibre-react-native';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Pressable, type LayoutChangeEvent } from 'react-native';
+import { soakLog, SOAK_TRACE } from './declutter/soakLog';
 
 type LatLng = { readonly latitude: number | string; readonly longitude: number | string };
 
@@ -49,8 +50,13 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   // zero frame, and is dropped: the art draws centred on its point (islands sat ~38 pt low). So the
   // first anchor is nudged by a hair and the real one is sent once the view is laid out.
   const [laidOut, setLaidOut] = useState(false);
+  const label = useRef(accessibilityLabel);
+  label.current = accessibilityLabel;
   const onLayout = useCallback((e: LayoutChangeEvent) => {
-    if (e.nativeEvent.layout.width > 0 && e.nativeEvent.layout.height > 0) setLaidOut(true);
+    const { width, height } = e.nativeEvent.layout;
+    // Soak trace: a marker laid out again re-adds its native annotation (a possible one-frame blink).
+    if (SOAK_TRACE) soakLog(`marker layout ${(label.current ?? '?').slice(0, 32)} ${width}x${height}`);
+    if (width > 0 && height > 0) setLaidOut(true);
   }, []);
   const a = anchor ?? CENTER;
   return (

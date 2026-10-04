@@ -9,6 +9,7 @@
  * as a hidden, parked marker. Only what a slot draws changes.
  */
 import { useRef } from 'react';
+import { soakLog, SOAK_TRACE } from './declutter/soakLog';
 
 /** Slots per kind: more than a park ever shows at once. */
 export const SLOTS = {
@@ -22,22 +23,41 @@ export const SLOTS = {
   swords: 8,
 } as const;
 
+/** A freed slot rests this long before a new id may take it: the old art's fade (280 ms) plus a frame. */
+export const SLOT_COOL_MS = 400;
+
 /**
  * Keep each id in its slot while it is present; new ids take the lowest free
  * slots in the order given; ids past the pool size wait for a free slot.
+ *
+ * A slot vacated in this pass, or listed in `cooling` (vacated moments ago), is
+ * taken only when no other slot is free. Reusing it at once moves one native
+ * marker view to a new coordinate in the same frame its content swaps, and iOS
+ * can show one frame of the old art at the new spot (the soak's 1-frame blip).
  */
-export function assignSlots(previous: readonly (string | null)[], ids: readonly string[], size: number): (string | null)[] {
+export function assignSlots(previous: readonly (string | null)[], ids: readonly string[], size: number,
+  cooling: ReadonlySet<number> = new Set()): (string | null)[] {
   const present = new Set(ids);
+  const resting = new Set(cooling);
   const slots: (string | null)[] = Array.from({ length: size }, (_, i) => {
     const id = previous[i] ?? null;
+    if (id !== null && !present.has(id)) resting.add(i);
     return id !== null && present.has(id) ? id : null;
   });
   const placed = new Set(slots.filter((id): id is string => id !== null));
-  let free = 0;
+  const freeSlot = () => {
+    let fallback = -1;
+    for (let i = 0; i < size; i++) {
+      if (slots[i] !== null) continue;
+      if (!resting.has(i)) return i;
+      if (fallback < 0) fallback = i;
+    }
+    return fallback;
+  };
   for (const id of ids) {
     if (placed.has(id)) continue;
-    while (free < size && slots[free] !== null) free++;
-    if (free >= size) break;
+    const free = freeSlot();
+    if (free < 0) break;
     slots[free] = id;
     placed.add(id);
   }
@@ -45,10 +65,20 @@ export function assignSlots(previous: readonly (string | null)[], ids: readonly 
 }
 
 /** A fixed pool of `size` slots for these items (stable across renders): item or null per slot. */
-export function useMarkerSlots<T>(items: readonly T[], keyOf: (item: T) => string, size: number): (T | null)[] {
+export function useMarkerSlots<T>(items: readonly T[], keyOf: (item: T) => string, size: number, label = 'slots'): (T | null)[] {
   const previous = useRef<(string | null)[]>([]);
+  const freedAt = useRef<number[]>([]);
   const byKey = new Map(items.map(item => [keyOf(item), item]));
-  const slots = assignSlots(previous.current, [...byKey.keys()], size);
+  const now = Date.now();
+  const cooling = new Set<number>();
+  freedAt.current.forEach((at, i) => { if (at && now - at < SLOT_COOL_MS) cooling.add(i); });
+  const slots = assignSlots(previous.current, [...byKey.keys()], size, cooling);
+  for (let i = 0; i < size; i++) {
+    const was = previous.current[i] ?? null, is = slots[i];
+    if (was === is) continue;
+    if (was !== null) freedAt.current[i] = now;
+    if (SOAK_TRACE) soakLog(`${label} slot ${i}: ${was ?? '-'} -> ${is ?? '-'}${was !== null && is !== null ? ' (direct reuse)' : ''}`);
+  }
   previous.current = slots;
   return slots.map(id => (id === null ? null : byKey.get(id) ?? null));
 }

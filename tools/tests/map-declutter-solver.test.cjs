@@ -350,3 +350,23 @@ test('marker art is anchored where the solver thinks: the anchor is re-sent afte
   assert.match(placed, /transformOrigin: anchor \? \[anchor\.x, anchor\.y, 0\] : 'center'/);
   assert.doesNotMatch(placed, /transformOrigin: [^\n]*px/);
 });
+
+test('zooming out mid-gesture folds what now collides (fade only, no scale or chip moves); a plain hold keeps everything', () => {
+  // Two rides 80 pt apart at z17.6 collide once the camera is at z16.4.
+  const a = rideAt('a', -40, 0, { priority: 320, tag: { w: 56, h: 22 } });
+  const b = rideAt('b', 40, 0, { priority: 300 });
+  const settled = s.solveLayout([a, b], frame());
+  assert.equal(settled.get('ride:a').visible && settled.get('ride:b').visible, true);
+  const far = frame({ zoom: 16.4 });
+  const held = s.solveLayout([a, b], far, { previous: settled, previousZoom: 17.6, hold: true });
+  assert.equal(held.get('ride:b').visible, true, 'a plain held pass never changes shown art');
+  const folded = s.solveLayout([a, b], far, { previous: settled, previousZoom: 17.6, hold: true, fold: true });
+  assert.equal(folded.get('ride:a').visible, true);
+  assert.equal(folded.get('ride:b').reason, 'folded', 'the weaker island folds into the stronger one');
+  assert.equal(folded.get('ride:a').folded, 1, '+1 on the host');
+  assert.equal(folded.get('ride:a').scale, settled.get('ride:a').scale, 'no scale change mid-gesture');
+  const settledTag = settled.get('ride:a').tag, foldedTag = folded.get('ride:a').tag;
+  assert.ok(foldedTag === null || (foldedTag.x === settledTag.x && foldedTag.y === settledTag.y), 'the chip never moves mid-gesture');
+  const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/map/declutter/useMapDeclutter.ts'), 'utf8');
+  assert.match(hook, /const fold = holding\.current && lastZoom\.current !== null && full\.zoom < lastZoom\.current - FOLD_DURING_ZOOM;/);
+});

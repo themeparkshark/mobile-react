@@ -993,14 +993,14 @@ function ExploreScreen() {
   const liveRedeemables = useMemo(() => (redeemables?.redeemables ?? []).filter(item => opportunityIsActive(item, mapNow)), [redeemables, mapNow]);
   const shownItems = useMemo(() => (redeemables?.items ?? []).filter(item => !item.is_hidden), [redeemables]);
   const shownPins = useMemo(() => (redeemables?.pins ?? []).filter(item => !item.is_hidden), [redeemables]);
-  const rideSlots = useMarkerSlots(orderedRides, task => String(task.id), SLOTS.rides);
-  const coinSlots = useMarkerSlots(liveCoins, coin => String(coin.id), SLOTS.coins);
-  const keySlots = useMarkerSlots(liveKeys, key => String(key.id), SLOTS.keys);
-  const redeemableSlots = useMarkerSlots(liveRedeemables, item => String(item.id), SLOTS.redeemables);
-  const itemSlots = useMarkerSlots(shownItems, item => String(item.id), SLOTS.items);
-  const pinSlots = useMarkerSlots(shownPins, item => String(item.id), SLOTS.pins);
-  const vaultSlots = useMarkerSlots(redeemables?.vaults ?? [], vault => String(vault.id), SLOTS.vaults);
-  const swordSlots = useMarkerSlots(swords, sword => String(sword.id), SLOTS.swords);
+  const rideSlots = useMarkerSlots(orderedRides, task => String(task.id), SLOTS.rides, 'rides');
+  const coinSlots = useMarkerSlots(liveCoins, coin => String(coin.id), SLOTS.coins, 'coins');
+  const keySlots = useMarkerSlots(liveKeys, key => String(key.id), SLOTS.keys, 'keys');
+  const redeemableSlots = useMarkerSlots(liveRedeemables, item => String(item.id), SLOTS.redeemables, 'redeemables');
+  const itemSlots = useMarkerSlots(shownItems, item => String(item.id), SLOTS.items, 'items');
+  const pinSlots = useMarkerSlots(shownPins, item => String(item.id), SLOTS.pins, 'pins');
+  const vaultSlots = useMarkerSlots(redeemables?.vaults ?? [], vault => String(vault.id), SLOTS.vaults, 'vaults');
+  const swordSlots = useMarkerSlots(swords, sword => String(sword.id), SLOTS.swords, 'swords');
   const refreshFinds = useCallback(() => { void refreshMapOpportunities().catch(() => undefined); }, [refreshMapOpportunities]);
   const checklistRide = focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
     !visibleTasks.some(task => task.id === focusedFromChecklist.id) ? focusedFromChecklist : null;

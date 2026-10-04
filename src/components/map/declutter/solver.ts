@@ -110,6 +110,12 @@ export interface SolveOptions {
   readonly previousZoom?: number | null;
   /** A finger is moving the map: shown markers stay exactly as they are. */
   readonly hold?: boolean;
+  /**
+   * With `hold`, while the camera zooms out: shown markers that now collide fold or fade
+   * (by priority) instead of piling up until the settle. Fade only: no scale change, no
+   * chip moves.
+   */
+  readonly fold?: boolean;
   /** Overlap (share of the smaller box) that counts as a collision. */
   readonly overlap?: number;
   /** Extra tolerance for markers that were visible last time. */
@@ -255,6 +261,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
   const insets: InsetRect[] = [...(options.insets ?? []), { x: -frame.width, y: -400, w: frame.width * 3, h: 400, share: 0.1 }];
   const previous = options.previous ?? null;
   const hold = !!options.hold;
+  const foldPass = hold && !!options.fold;
   const anchoring = !!previous && (hold || (options.previousZoom != null && Math.abs(frame.zoom - options.previousZoom) < ZOOM_RESOLVE));
   const overlap = options.overlap ?? 0.03;
   const hysteresis = options.hysteresis ?? 0.01;
@@ -309,7 +316,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     const underInset = (r: Rect) => r.w * r.h > 0 && insets.some(inset => overlapArea(r, inset) / (r.w * r.h) > (inset.share ?? DEFAULT_SHARE));
     if (underInset(rect) || (item.extras ?? []).some(extra => underInset(at(extra, p.x, p.y, startScale)))) { hidden.set(item.id, 'inset'); continue; }
     // Held during a gesture: a marker on screen does not change.
-    if (hold && anchored) {
+    if (hold && anchored && !foldPass) {
       scales.set(item.id, startScale);
       place({ item, rect, order: placed.length, p, folded: 0 });
       continue;
@@ -332,7 +339,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
         hidden.set(item.id, 'folded');
         continue;
       }
-      if (item.recedeScale && scale === 1) {
+      if (item.recedeScale && scale === 1 && !foldPass) {
         const shrunk = at(itemBody, p.x, p.y, item.recedeScale);
         const shrunkBlockers = blockersAt(shrunk, item.recedeScale);
         if (!shrunkBlockers.length) { rect = shrunk; blockers = shrunkBlockers; scale = item.recedeScale; }
@@ -342,7 +349,7 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     // Under the player's shark: shrink to the recede scale when that fits (never hide for it).
     // A fifth of the shark on the art starts it; it stays receded down to a tenth (no flicker on a walk).
     const underPlayer = before?.visible && before.scale === item.recedeScale ? PLAYER_RECEDE_KEEP : PLAYER_RECEDE;
-    if (item.recedeUnderPlayer && item.recedeScale) {
+    if (item.recedeUnderPlayer && item.recedeScale && !foldPass) {
       const full = scale === 1 ? rect : at(itemBody, p.x, p.y, 1);
       const under = playerRects.some(r => overlapShare(full, r) > underPlayer);
       if (under && scale === 1) {

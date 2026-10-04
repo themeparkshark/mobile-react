@@ -145,9 +145,9 @@ export default function MapDeclutterPreview() {
     return () => clearInterval(timer);
   }, []);
   const liveFinds = finds.filter(find => find.until > Date.now());
-  const coinSlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'coin'), find => find.id, SLOTS.coins);
-  const keySlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'key'), find => find.id, SLOTS.keys);
-  const rideSlots = useMarkerSlots(tasks, task => String(task.id), SLOTS.rides);
+  const coinSlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'coin'), find => find.id, SLOTS.coins, 'coins');
+  const keySlots = useMarkerSlots(liveFinds.filter(find => find.kind === 'key'), find => find.id, SLOTS.keys, 'keys');
+  const rideSlots = useMarkerSlots(tasks, task => String(task.id), SLOTS.rides, 'rides');
   const findsKey = liveFinds.map(find => find.id).join('|');
 
   const items = useMemo(() => buildParkLayout({

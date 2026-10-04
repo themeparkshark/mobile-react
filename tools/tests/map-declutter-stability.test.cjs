@@ -67,7 +67,11 @@ test('slot pools: a find keeps its slot while it lives, new finds take free slot
   let slots = assignSlots([], ['a', 'b', 'c'], 4);
   assert.deepEqual(plain(slots), ['a', 'b', 'c', null]);
   slots = assignSlots(slots, ['c', 'd', 'a'], 4);
-  assert.deepEqual(plain(slots), ['a', 'd', 'c', null], 'b left; d took its slot; a and c never moved');
+  assert.deepEqual(plain(slots), ['a', null, 'c', 'd'], 'b left; its slot rests (no same-frame reuse); a and c never moved');
+  slots = assignSlots(slots, ['a', 'c', 'd', 'e'], 4);
+  assert.deepEqual(plain(slots), ['a', 'e', 'c', 'd'], 'a rested slot is free again next pass');
+  assert.deepEqual(plain(assignSlots(['a', 'b'], ['a', 'x'], 2)), ['a', 'x'], 'a full pool falls back to the just-freed slot');
+  assert.deepEqual(plain(assignSlots(['a', null, null], ['a', 'x'], 3, new Set([1]))), ['a', null, 'x'], 'cooling slots are skipped');
   slots = assignSlots(slots, ['a', 'c', 'd', 'e', 'f'], 4);
   assert.equal(slots.length, 4, 'a full pool waits instead of growing');
   assert.ok(SLOTS.coins >= 24 && SLOTS.rides >= 80);

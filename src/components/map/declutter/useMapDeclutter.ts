@@ -20,6 +20,8 @@ export interface MapDeclutterInput {
 
 /** Gesture passes run at most this often. */
 export const HOLD_MS = 100;
+/** Zoomed out this far past the last settled pass, gesture passes also fold what now collides (fade only). */
+export const FOLD_DURING_ZOOM = 0.25;
 
 type Camera = { latitude: number; longitude: number; zoom: number; bearing: number };
 
@@ -43,8 +45,11 @@ export default function useMapDeclutter(input: MapDeclutterInput | null | undefi
     const insets = [...resolveInsets(current.insets, size.width, size.height), ...moreInsets];
     const items = more.length ? [...current.items, ...more] : current.items;
     const rects = onRects ? new Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }>() : undefined;
+    // Zooming out mid-gesture (a pinch or a long camera ease): fold as it goes, so islands never
+    // pile up for the length of the ease and then jump at the settle.
+    const fold = holding.current && lastZoom.current !== null && full.zoom < lastZoom.current - FOLD_DURING_ZOOM;
     current.store.publish(solveLayout(items, full, {
-      insets, previous: current.store.snapshot(), previousZoom: lastZoom.current, hold: holding.current, rects,
+      insets, previous: current.store.snapshot(), previousZoom: lastZoom.current, hold: holding.current, fold, rects,
     }));
     // A held pass keeps the zoom it started from, so the settle after a pinch re-solves by priority.
     if (!holding.current) lastZoom.current = full.zoom;
