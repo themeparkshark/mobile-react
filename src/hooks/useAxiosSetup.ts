@@ -1,6 +1,7 @@
 import { AxiosError, AxiosResponse } from 'axios';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
+import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
@@ -30,7 +31,9 @@ export const useAxiosSetup = () => {
       (response: AxiosResponse) => {
         consecutive500Count = 0;
         if (response.data && Array.isArray(response.data.broadcasts)) {
-          enqueueRef.current(response.data.broadcasts);
+          const quiet = Boolean((response.config as Record<string, unknown> | undefined)?.[QUIET_COIN_BROADCAST]);
+          const shown = visibleBroadcasts<string>(response.data.broadcasts, quiet);
+          if (shown.length > 0) enqueueRef.current(shown);
         }
         return response;
       },
