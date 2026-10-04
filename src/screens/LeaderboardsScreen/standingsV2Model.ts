@@ -79,6 +79,8 @@ export interface LastWeekResult {
   readonly playersCount: number;
   readonly title: string | null;
   readonly tickets: number;
+  /** A top-three place held for a grown-up review: no prize shown or promised yet. */
+  readonly held: boolean;
   readonly seen: boolean;
 }
 
@@ -147,7 +149,7 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
   const lw = dto?.last_week;
   const lastWeek = lw && Number.isFinite(Number(lw.rank)) && num(lw.rank) > 0
     ? { weekStart: String(lw.week_start ?? ''), rank: num(lw.rank), score: num(lw.score), playersCount: num(lw.players_count),
-      title: typeof lw.title === 'string' && lw.title ? lw.title : null, tickets: num(lw.tickets), seen: lw.seen === true }
+      title: typeof lw.title === 'string' && lw.title ? lw.title : null, tickets: num(lw.tickets), held: lw.held === true, seen: lw.seen === true }
     : null;
   const rv = (dto as { review?: { checking?: boolean; rides?: unknown; benched?: boolean } | null } | null | undefined)?.review;
   const review = rv && rv.checking === true ? { rides: num(rv.rides), benched: rv.benched === true } : null;
@@ -361,9 +363,11 @@ export function emptyCopy(board: StandingsBoardKey, friendsCount: number | null)
 export function lastWeekCopy(result: LastWeekResult): { readonly headline: string; readonly line: string; readonly reward: string | null } {
   // The card's header already says LAST WEEK: the lines never repeat it.
   const headline = `${result.score} ${unitWord('ride_wins', result.score)}!`;
-  const paid = result.tickets > 0 && !!result.title;
+  const paid = !result.held && result.tickets > 0 && !!result.title;
   // A top-three place that was not paid (a late, reviewed row) never shows a rank.
+  // A held one says the crew is checking, and never promises the prize.
   const line = paid ? `${result.title}! #${result.rank}`
+    : result.held ? 'Top 3! The shark crew is checking your week.'
     : result.rank <= 3 ? 'Great riding!' : `You finished #${result.rank}`;
   const reward = paid ? `+${result.tickets} Tickets` : null;
   return { headline, line, reward };
@@ -407,4 +411,14 @@ export function rowOnScreen(rowTop: number, rowHeight: number, scrollTop: number
   if (!(viewport > 0) || !(rowHeight > 0)) return false;
   const visible = Math.min(rowTop + rowHeight, scrollTop + viewport) - Math.max(rowTop, scrollTop);
   return visible >= rowHeight * 0.6;
+}
+
+/**
+ * Tab rail geometry. The rail draws a 2 px border and 4 px padding on each
+ * side, so its tabs share (width - 12); the pill is one tab wide and slides by
+ * that same segment, staying centred under every tab.
+ */
+export function tabPillGeometry(railWidth: number, count: number): { readonly inner: number; readonly segment: number } {
+  const inner = Math.max(0, railWidth - 12);
+  return { inner, segment: count > 0 ? inner / count : 0 };
 }

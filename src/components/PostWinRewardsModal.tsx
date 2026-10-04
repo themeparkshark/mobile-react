@@ -41,6 +41,8 @@ import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsSc
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
+/** The goal note stays in the footer after its moment, dimmed to this opacity. */
+const GOAL_NOTE_SETTLED_OPACITY = 0.5;
 
 interface Props {
   visible: boolean;
@@ -239,6 +241,9 @@ export default function PostWinRewardsModal({
   // A waiting note reserves its footer slot from the start, so the reward list
   // never shrinks when it lands (and does not grow back when it fades).
   const [noteSlot, setNoteSlot] = useState(false);
+  const [noteSettled, setNoteSettled] = useState(false);
+  const goalNoteOpacity = useSharedValue(1);
+  const goalNoteStyle = useAnimatedStyle(() => ({ opacity: goalNoteOpacity.value }));
   useEffect(() => {
     holdWinNotes(visible);
     setNoteSlot(visible && hasWinNote());
@@ -249,10 +254,18 @@ export default function PostWinRewardsModal({
     const note = takeWinNote();
     if (!note) return;
     setGoalNote(note);
+    setNoteSettled(false);
+    goalNoteOpacity.value = 1;
     if (note.big) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    const timer = setTimeout(() => setGoalNote(null), note.big ? 4200 : 2600);
+    // After its moment the note settles to a dimmed copy in place, so the
+    // footer never shows a blank gap where it was.
+    const timer = setTimeout(() => {
+      setNoteSettled(true);
+      goalNoteOpacity.value = reducedMotion ? GOAL_NOTE_SETTLED_OPACITY : withTiming(GOAL_NOTE_SETTLED_OPACITY, { duration: 450 });
+    }, note.big ? 4200 : 2600);
     return () => clearTimeout(timer);
   }, [caught, visible]);
+  useEffect(() => { if (!visible) setGoalNote(null); }, [visible]);
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
   useEffect(() => {
@@ -517,10 +530,10 @@ export default function PostWinRewardsModal({
             <View style={{ height: 50, alignItems: 'center', justifyContent: 'flex-start' }}>
               {goalNote && (
                 <Animated.View entering={reducedMotion ? undefined : FadeInDown.springify().damping(14)}
-                  accessibilityLiveRegion="polite" accessibilityLabel={goalNote.text}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 42,
+                  accessibilityLiveRegion={noteSettled ? 'none' : 'polite'} accessibilityLabel={goalNote.text}
+                  style={[goalNoteStyle, { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 42,
                     borderRadius: 21, backgroundColor: goalNote.big ? '#ffcf3b' : '#ffffff', borderWidth: 3,
-                    borderBottomWidth: 5, borderColor: goalNote.big ? '#d99a00' : '#7cc6f5' }}>
+                    borderBottomWidth: 5, borderColor: goalNote.big ? '#d99a00' : '#7cc6f5' }]}>
                   <GameIcon name={goalNote.big ? 'star' : 'ride'} size={24} />
                   <Text style={{ fontFamily: 'Shark', fontSize: 17, color: '#05346e' }}>{goalNote.text}</Text>
                 </Animated.View>
