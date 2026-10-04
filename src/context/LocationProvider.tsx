@@ -10,6 +10,7 @@ import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../he
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
+import { PositionFilter } from './positionFilter';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -117,7 +118,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // visit one). Every other player always uses real GPS.
   const isAppReviewer = !!player?.is_app_reviewer;
   const simulationAllowed = __DEV__ || isAppReviewer;
-  const [devMode, setDevMode] = useState<boolean>(__DEV__);
+  // EXPO_PUBLIC_DEV_REAL_GPS=1 starts a dev build on the real (or simulated) GPS stream instead of the joystick.
+  const [devMode, setDevMode] = useState<boolean>(__DEV__ && process.env.EXPO_PUBLIC_DEV_REAL_GPS !== '1');
   const devLocationRef = useRef<LocationType>({ latitude: DEV_DEFAULT_LAT, longitude: DEV_DEFAULT_LNG });
   useEffect(() => {
     if (!isAppReviewer) return;
@@ -178,6 +180,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const positionSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const lastLocationRef = useRef<LocationType | null>(null);
+  // Every real GPS fix goes through this before it moves the shark: outliers
+  // dropped, jitter smoothed, a dead zone while standing still (positionFilter.ts).
+  const positionFilterRef = useRef<PositionFilter | null>(null);
+  const positionFilter = () => (positionFilterRef.current ??= new PositionFilter());
   const parkLookupRef = useRef<ParkLookupRecord | null>(null);
   const [parkLookupRecord, setParkLookupRecord] = useState<ParkLookupRecord | null>(null);
   const parkLookupPromiseRef = useRef<Promise<void> | null>(null);
@@ -284,37 +290,21 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  // Minimum distance (meters) before location state updates
-  // 1m is tight enough to feel responsive while still filtering GPS noise
-  const LOCATION_DISTANCE_FILTER_M = 1;
-
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
     if (!newLocation) return;
 
-    // Exact match — skip
-    if (
-      location &&
-      newLocation.longitude === location.longitude &&
-      newLocation.latitude === location.latitude
-    ) {
+    // The joystick position is exact; a real fix goes through the same filter as the stream.
+    if (devMode && simulationAllowed) {
+      if (location && newLocation.longitude === location.longitude && newLocation.latitude === location.latitude) return;
+      lastLocationRef.current = newLocation;
+      debouncedSetLocation(newLocation);
       return;
     }
-
-    // Distance filter — ignore tiny GPS drift (< 10m)
-    if (location) {
-      const R = 6371e3;
-      const φ1 = (location.latitude * Math.PI) / 180;
-      const φ2 = (newLocation.latitude * Math.PI) / 180;
-      const Δφ = ((newLocation.latitude - location.latitude) * Math.PI) / 180;
-      const Δλ = ((newLocation.longitude - location.longitude) * Math.PI) / 180;
-      const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      if (dist < LOCATION_DISTANCE_FILTER_M) return;
-    }
-
-    lastLocationRef.current = newLocation;
-    debouncedSetLocation(newLocation);
+    const verdict = positionFilter().push({ ...newLocation, timestamp: Date.now() });
+    if (verdict.kind !== 'publish') return;
+    lastLocationRef.current = verdict.position;
+    debouncedSetLocation(verdict.position);
   };
 
   const lookupParkAt = (coordinates: LocationType): Promise<void> => {
@@ -464,21 +454,13 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
               accuracyMeters: locationUpdate.coords.accuracy,
               speedMps: locationUpdate.coords.speed };
 
-            // Distance filter — skip tiny GPS drift
-            const prev = lastLocationRef.current;
-            if (prev) {
-              const R = 6371e3;
-              const p1 = (prev.latitude * Math.PI) / 180;
-              const p2 = (newLoc.latitude * Math.PI) / 180;
-              const dp = ((newLoc.latitude - prev.latitude) * Math.PI) / 180;
-              const dl = ((newLoc.longitude - prev.longitude) * Math.PI) / 180;
-              const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-              const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-              if (dist < LOCATION_DISTANCE_FILTER_M) return;
-            }
+            // Outliers, jitter and standing-still drift never reach the map.
+            const verdict = positionFilter().push({ ...newLoc, accuracy: locationUpdate.coords.accuracy,
+              speed: locationUpdate.coords.speed, timestamp: locationUpdate.timestamp });
+            if (verdict.kind !== 'publish') return;
 
-            lastLocationRef.current = newLoc;
-            debouncedSetLocation(newLoc);
+            lastLocationRef.current = verdict.position;
+            debouncedSetLocation(verdict.position);
           },
           restartAfterError,
         );
@@ -562,6 +544,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setHeading(null);
     smoothedHeadingRef.current = null;
     lastLocationRef.current = null;
+    positionFilterRef.current?.reset();
     latestLocationSampleRef.current = null;
     if (positionSubscriptionRef.current) {
       positionSubscriptionRef.current.remove();
