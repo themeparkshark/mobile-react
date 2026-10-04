@@ -36,7 +36,8 @@ export const previewPlayer: PlayerType = {
   username: 'themeparkshark',
   verified_at: '',
   visited_parks_count: 1,
-  title: 'Churro Collection Scout',
+  // The undo capture shows the profile right after Remove (no title).
+  title: process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'undo' ? null : 'Churro Finder',
 };
 
 export default function ProfilePreviewScreen() {

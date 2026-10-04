@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import GameIcon from '../../ui/GameIcon';
+import { haptic } from '../../gamekit/Haptics';
 
 export default function TitlePill({ title, trophy, onPress }: {
   readonly title?: string | null;
@@ -24,13 +25,13 @@ export default function TitlePill({ title, trophy, onPress }: {
         maxFontSizeMultiplier={1.3}>
         {title}
       </Text>
-      {onPress && <GameIcon name="info" size={18} />}
+      {onPress && <GameIcon name="swap" size={20} />}
     </>
   );
   return (
     <View style={styles.row}>
       {!!title && (onPress ? (
-        <Pressable style={({ pressed }) => [styles.pill, pressed && styles.pressed]} onPress={onPress} hitSlop={6}
+        <Pressable style={({ pressed }) => [styles.pill, pressed && styles.pressed]} onPress={() => { haptic('tapLight'); onPress(); }} hitSlop={6}
           accessibilityRole="button" accessibilityLabel={`Title: ${title}`} accessibilityHint="Shows what your title means and lets you change or remove it">
           {label}
         </Pressable>

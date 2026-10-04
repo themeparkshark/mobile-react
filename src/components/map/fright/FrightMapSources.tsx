@@ -31,7 +31,7 @@ import { RepaintContext, repaintWidth } from './frightRepaint';
 import type { FrightMapInput } from './types';
 import { prefetchFrightImages } from './useFrightImage';
 import { HalloweenStall, STALL_ANCHOR, STALL_BOX } from './HalloweenStall';
-import { AWAY_LINE, endsInLabel, HALLOWEEN_SHOP_NAME } from '../../fright/halloweenShop';
+import { HALLOWEEN_SHOP_NAME, stallLine } from '../../fright/halloweenShop';
 import { useFrightState } from './useFrightState';
 
 /** Deep night over the tiles (night-tint.json overlay, a touch lighter so paths stay legible). */
@@ -444,10 +444,10 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
       <Marker key="fs" coordinate={pin(stall ?? stable.all[0] ?? PARKED)} anchor={STALL_ANCHOR}
         onPress={() => { if (stallRef.current) onShopPressRef.current?.(stallRef.current); }}
         touchEnabled={stallOn && !!input.onShopPress}
-        accessibilityLabel={stall ? `${HALLOWEEN_SHOP_NAME}, ${stall.open ? endsInLabel(stall.ends_at, st.serverNow) : AWAY_LINE}` : HALLOWEEN_SHOP_NAME}>
+        accessibilityLabel={stall ? `${HALLOWEEN_SHOP_NAME}, ${stallLine(stall, input.tonight.night, st.serverNow)}` : HALLOWEEN_SHOP_NAME}>
         <ShowWhen box={STALL_BOX} on={stallOn}>
-          <HalloweenStall name={stall?.name || HALLOWEEN_SHOP_NAME} tag={stall?.tag || 'LIMITED'} iconUrl={stall?.icon_url ?? null}
-            open={!!stall?.open} line={stall ? (stall.open ? endsInLabel(stall.ends_at, st.serverNow) || stall.subtitle : stall.away_line || AWAY_LINE) : ''} />
+          <HalloweenStall name={stall?.name || HALLOWEEN_SHOP_NAME} tag={stall?.tag || 'LIMITED'} open={!!stall?.open}
+            line={stall ? stallLine(stall, input.tonight.night, st.serverNow) : ''} />
         </ShowWhen>
       </Marker>
       {/* Always a Pressable (never swapped): no encounter on screen = no touches. */}

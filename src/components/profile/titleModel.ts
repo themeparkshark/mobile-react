@@ -3,8 +3,8 @@
  * and the list of titles the player can wear instead.
  *
  * Titles come from two places on the server:
- *  - Collection Books (Home Hunt): the starter step ("<Book name> Scout",
- *    after the first finds) and the finish reward (the set's completion title).
+ *  - Collection Books (Home Hunt): the starter step ("Churro Finder" for the
+ *    Churro Collection, after the first finds; "<Book name> Scout" before Nov 6) and the finish reward (the set's completion title).
  *    Worn with PUT /me/prep-item-sets/{slug}/title { equipped, tier }.
  *  - Stamps with a title reward (GET /me/stamps unlocked_titles).
  *    Worn with PUT /me/stamp-title { stamp_id }.
@@ -22,11 +22,14 @@ export interface EarnedTitle {
   /** One short sentence: how you earned it. */
   readonly meaning: string;
   readonly equip: TitleEquip;
+  /** The book's own art (sets); stamps show the stamp seal. */
+  readonly iconUrl: string | null;
 }
 
 type SetLike = {
   readonly slug: string;
   readonly name: string;
+  readonly icon_url?: string | null;
   readonly total_items?: number;
   readonly rewards_claimed?: boolean;
   readonly is_complete?: boolean;
@@ -89,12 +92,12 @@ export function earnedTitles(sets: readonly SetLike[] | null | undefined, stamps
     const starterTitle = clean(starter?.rewards?.title);
     if (starter?.rewards_claimed && starterTitle) {
       push({ key: `set:${set.slug}:starter`, title: starterTitle, meaning: starterMeaning(set.name, count(starter.target, 8)),
-        equip: { kind: 'set', slug: set.slug, tier: 'starter' } });
+        equip: { kind: 'set', slug: set.slug, tier: 'starter' }, iconUrl: set.icon_url ?? null });
     }
     const finishTitle = clean(set.completion_rewards?.title);
     if (set.rewards_claimed && finishTitle) {
       push({ key: `set:${set.slug}:complete`, title: finishTitle, meaning: completeMeaning(set.name, count(set.total_items, 1)),
-        equip: { kind: 'set', slug: set.slug, tier: 'complete' } });
+        equip: { kind: 'set', slug: set.slug, tier: 'complete' }, iconUrl: set.icon_url ?? null });
     }
   }
   const byId = new Map<number, StampLike>();
@@ -102,7 +105,7 @@ export function earnedTitles(sets: readonly SetLike[] | null | undefined, stamps
   for (const unlocked of stamps?.unlocked_titles ?? []) {
     const title = clean(unlocked.title);
     push({ key: `stamp:${unlocked.stamp_id}`, title, meaning: stampMeaning(byId.get(Number(unlocked.stamp_id))),
-      equip: { kind: 'stamp', stampId: Number(unlocked.stamp_id) } });
+      equip: { kind: 'stamp', stampId: Number(unlocked.stamp_id) }, iconUrl: null });
   }
   return out;
 }
@@ -115,7 +118,16 @@ export function describeTitle(title: string, earned: readonly EarnedTitle[]): st
   const name = clean(title);
   const known = earned.find(entry => entry.title === name);
   if (known) return known.meaning;
+  // Starter book titles: "Churro Finder" (and the older "Churro Collection Scout").
+  const finder = /^(.+?)\s+Finder$/i.exec(name);
+  if (finder) return `You found your first ${bookNoun(`${finder[1]} Collection`)} in your ${finder[1]} book.`;
   const scout = /^(.+)\s+Scout$/i.exec(name);
   if (scout) return `You found your first ${bookNoun(scout[1])} in your ${scout[1]} book.`;
   return 'You earned this title in the game. It shows on your profile for everyone to see.';
+}
+
+/** The earned entry for the worn title, if the lists know it (Remove keeps it for Undo). */
+export function findEarned(title: string | null | undefined, earned: readonly EarnedTitle[]): EarnedTitle | null {
+  const name = clean(title);
+  return name ? earned.find(entry => entry.title === name) ?? null : null;
 }

@@ -10,6 +10,38 @@ export const HALLOWEEN_SHOP_NAME = 'Halloween Shop';
 export const HALLOWEEN_SHOP_NAMES: readonly string[] = ['The Sunken Sideshow', HALLOWEEN_SHOP_NAME];
 export const AWAY_LINE = 'Only at Fin-ister Nights';
 
+/** Tonight's event window, as GET /parks/{id}/fright sends it (ISO with the park's offset). */
+type NightLike = { readonly opens_at?: string | null; readonly early_opens_at?: string | null; readonly closes_at?: string | null } | null | undefined;
+
+/** "6:30 PM" from the ISO's own wall time (the park's clock, not the phone's). */
+export function parkClock(iso: string | null | undefined): string | null {
+  const match = /T(\d{2}):(\d{2})/.exec(iso ?? '');
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  return `${h % 12 === 0 ? 12 : h % 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/** The shop opens with the night's early entry when it has one, else at the gates. */
+function shopOpensAt(night: NightLike): string | null {
+  const early = night?.early_opens_at && night.opens_at && Date.parse(night.early_opens_at) < Date.parse(night.opens_at) ? night.early_opens_at : null;
+  return early ?? night?.opens_at ?? null;
+}
+
+/** The stall's second line, with tonight's real hours: "Open till 2 AM", "Opens at 6:30 PM", "Closed for tonight". */
+export function stallLine(stall: { readonly open: boolean; readonly reason?: string | null; readonly ends_at?: string | null },
+  night: NightLike, nowMs: number): string {
+  const opens = shopOpensAt(night);
+  const closes = night?.closes_at ?? null;
+  if (stall.open) return parkClock(closes) ? `Open till ${parkClock(closes)}` : endsInLabel(stall.ends_at, nowMs);
+  if (stall.reason === 'off_season') return 'Closed for the season';
+  if (stall.reason === 'not_event_hours') {
+    if (opens && nowMs < Date.parse(opens) && parkClock(opens)) return `Opens at ${parkClock(opens)}`;
+    if (closes && nowMs >= Date.parse(closes)) return 'Closed for tonight';
+  }
+  return AWAY_LINE;
+}
+
 type StoreLike = { readonly name?: string | null; readonly slug?: string | null; readonly event?: { readonly only_at_event?: boolean } | null };
 
 /** True for the event-only Halloween Shop under any of its names. */
@@ -39,9 +71,16 @@ export function stallAction(stall: { readonly open: boolean; readonly store_id: 
   return stall.open ? 'open' : 'away';
 }
 
-/** The teaser line under "Only at Fin-ister Nights" for a player who cannot shop right now. */
-export function awayMessage(reason: string | null | undefined): string {
-  if (reason === 'not_event_hours') return 'The Halloween Shop opens during Fin-ister Nights event hours. Come back tonight!';
+/** The teaser under "Only at Fin-ister Nights" for a player who cannot shop right now, with tonight's real hours. */
+export function awayMessage(reason: string | null | undefined, night?: NightLike, nowMs: number = Date.now()): string {
+  const opens = parkClock(shopOpensAt(night));
+  const closes = parkClock(night?.closes_at);
+  const hours = opens && closes ? ` Tonight it's open ${opens} to ${closes}.` : '';
   if (reason === 'off_season') return 'The Halloween Shop is closed for the season.';
-  return 'Come to the event at the park during event hours to shop.';
+  if (reason === 'not_event_hours') {
+    if (night?.closes_at && nowMs >= Date.parse(night.closes_at)) return 'The Halloween Shop is closed for tonight. Come back next event night!';
+    return opens ? `The Halloween Shop opens at ${opens}, when Fin-ister Nights starts.${closes ? ` It stays open till ${closes}.` : ''}`
+      : 'The Halloween Shop opens during Fin-ister Nights event hours. Come back tonight!';
+  }
+  return `Come to Fin-ister Nights at the park to shop.${hours}`;
 }
