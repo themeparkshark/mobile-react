@@ -583,3 +583,16 @@ test('round 7b: a finished set the live list sends without rewards_claimed reads
   const success = screen.slice(screen.indexOf('const claim = useCallback'), screen.indexOf('celebrate(reward);'));
   assert.match(success, /setBook\(current => \(\{ \.\.\.current, sets: current\.sets\.map/, 'the claimed reward is marked locally before the reveal');
 });
+
+test('ship: "Report this spot" is reachable from a tapped find\'s peek, and the park goal help names the real entry', () => {
+  const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(explore, /action: pivot != null \? \{ label: 'Report', hint: HOME_HUNT_COPY\.reportTitle, onPress: \(\) => reportSpot\(pivot\) \}/);
+  assert.match(explore, /reportHomeSpot\(pivotId, reason\)/);
+  assert.match(explore, /showToast\(HOME_HUNT_COPY\.reportThanks/);
+  const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');
+  assert.match(chip, /message\.action && \(/);
+  assert.match(chip, /accessibilityLabel=\{message\.action\.hint \?\? message\.action\.label\}/);
+  const glossary = read('src/services/help/glossary.ts');
+  assert.doesNotMatch(glossary, /Next Park Trip/);
+  assert.match(glossary, /coin shelf and tap Set Goal/);
+});

@@ -14,6 +14,8 @@ export interface HuntChipMessage {
   /** Auto-dismiss after this long; 0 keeps it up while the state lasts (status lines). */
   readonly ttlMs?: number;
   readonly onPress?: () => void;
+  /** A small trailing link inside the pill, e.g. "Report" on a tapped find's peek. */
+  readonly action?: { readonly label: string; readonly hint?: string; readonly onPress: () => void };
 }
 
 export const HUNT_CHIP_TTL_MS = 2600;
@@ -21,7 +23,8 @@ export const HUNT_CHIP_TTL_MS = 2600;
 /** About how wide a chip's line draws (Shark 14 pt, padding, arrow), capped at the wrap's 320 pt. Errs wide. */
 export function chipWidthFor(message: HuntChipMessage | null): number {
   if (!message) return 320;
-  return Math.min(320, Math.round(36 + message.text.length * 6.6 + (message.arrowDeg != null ? 26 : 0)));
+  return Math.min(320, Math.round(36 + message.text.length * 6.6 + (message.arrowDeg != null ? 26 : 0)
+    + (message.action ? 20 + message.action.label.length * 6.2 : 0)));
 }
 const noop = () => undefined;
 
@@ -86,6 +89,12 @@ export default function HomeHuntChip({ message, onDismiss }: {
           )}
           {error && <GameIcon name="retry" size={16} />}
           <Text style={styles.text} numberOfLines={1}>{message.text}</Text>
+          {message.action && (
+            <Pressable accessibilityRole="button" accessibilityLabel={message.action.hint ?? message.action.label}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }} onPress={message.action.onPress} style={styles.action}>
+              <Text style={styles.actionText}>{message.action.label}</Text>
+            </Pressable>
+          )}
         </Pressable>
       </Animated.View>
       </Animated.View>
@@ -100,6 +109,8 @@ const styles = StyleSheet.create({
     shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 3 }, shadowRadius: 0, shadowOpacity: 0.25 },
   chipError: { backgroundColor: 'rgba(179,38,27,0.92)' },
   text: { color: BRAND.white, fontFamily: 'Shark', fontSize: 14, letterSpacing: 0.3, flexShrink: 1 },
+  action: { marginLeft: 2, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.45)' },
+  actionText: { color: BRAND.gold, fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.4, textDecorationLine: 'underline' },
   arrow: { width: 18, height: 18, alignItems: 'center' },
   arrowHead: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 8,
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: BRAND.gold },
