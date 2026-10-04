@@ -16,7 +16,7 @@ import { initialWindowMetrics } from 'react-native-safe-area-context';
 import client from '../api/client';
 import { navigationRef } from '../RootNavigation';
 import * as Haptics from '../helpers/haptics';
-import { isOffline, onConnectivityChange } from '../services/connectivity';
+import { isOffline, onConnectivityChange, isOfflineMarkOwned, onOfflineMarkOwner } from '../services/connectivity';
 import { BRAND, FONT, GameButton, HIT_SLOP, OUTLINE, Z } from '../ui';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
@@ -73,6 +73,9 @@ export default function OfflineBanner() {
   const reduceMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('hidden');
+  // A screen showing its own full offline state owns the mark: no second one here.
+  const [markOwned, setMarkOwned] = useState(isOfflineMarkOwned());
+  useEffect(() => onOfflineMarkOwner(setMarkOwned), []);
   const [probing, setProbing] = useState(false);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,8 +196,8 @@ export default function OfflineBanner() {
     transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * shrink.value }],
   }));
 
-  // A catch moment owns the screen; the banner waits (its probe keeps running).
-  if (!mounted || catchOpen) return null;
+  // A catch moment owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).
+  if (!mounted || catchOpen || markOwned) return null;
   const back = phase === 'back';
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.

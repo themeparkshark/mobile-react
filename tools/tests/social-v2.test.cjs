@@ -234,3 +234,22 @@ test('round 4: a real grown-up gate, honest Off copy, rows leave inside the cell
   const kit = read('src/screens/social/SocialKit.tsx');
   assert.match(kit, /export function LeavingRow/);
 });
+
+test('round 4b: one offline mark, report reasons with pictures', () => {
+  const kit = read('src/screens/social/SocialKit.tsx');
+  assert.match(kit, /useEffect\(\(\) => claimOfflineMark\(\), \[\]\)/);
+  const banner = read('src/components/OfflineBanner.tsx');
+  assert.match(banner, /if \(!mounted \|\| markOwned\) return null;/, 'the global banner hides while a screen owns the mark');
+  const conn = loadTs('src/services/connectivity.ts');
+  const seen = [];
+  const off = conn.onOfflineMarkOwner(v => seen.push(v));
+  const a = conn.claimOfflineMark(); const b = conn.claimOfflineMark();
+  assert.equal(conn.isOfflineMarkOwned(), true);
+  a(); assert.equal(conn.isOfflineMarkOwned(), true, 'still owned by the second screen');
+  b(); assert.equal(conn.isOfflineMarkOwned(), false);
+  assert.deepEqual(seen, [true, false]);
+  off();
+  const profile = read('src/screens/PlayerScreen.tsx');
+  assert.match(profile, /\{ text: 'Mean name', icon: 'edit' \}, \{ text: 'Mean to me', icon: 'shark' \}, \{ text: 'Something else', icon: 'info' \}/);
+  assert.match(read('src/ui/GameDialog.tsx'), /icon=\{action\.icon\}/);
+});
