@@ -1,5 +1,5 @@
 /**
- * One post in the feed: who and when, a topic badge, big readable text, an
+ * One post in the feed: who and when, big readable text, an
  * optional photo, then the things a kid can do with one tap: react with a
  * shark face, or open the replies. The "..." menu holds report and block.
  */
@@ -14,8 +14,8 @@ import { isTeam, TEAMS } from '../../constants/teams';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
-import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
-import { reviewLine, timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
+import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './socialLook';
+import { reviewLine, timeAgo, timeAgoSpoken } from './socialModel';
 import useReactions from './useReactions';
 
 function ThreadCard({
@@ -24,7 +24,6 @@ function ThreadCard({
   fresh,
   onOpen,
   onMenu,
-  onTopic,
 }: {
   readonly thread: ThreadType;
   readonly index: number;
@@ -32,7 +31,6 @@ function ThreadCard({
   readonly fresh?: boolean;
   readonly onOpen: (thread: ThreadType) => void;
   readonly onMenu: (thread: ThreadType) => void;
-  readonly onTopic?: (topic: TopicKey) => void;
 }) {
   const { player } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
@@ -80,7 +78,6 @@ function ThreadCard({
               {official ? <OfficialName /> : <Text style={styles.name} numberOfLines={1}>{name}</Text>}
               <View style={styles.meta}>
                 <Text style={styles.time}>{timeAgo(thread.created_at)}</Text>
-                <TopicBadge topic={thread.topic} onPress={onTopic && thread.topic ? () => onTopic(thread.topic as TopicKey) : undefined} />
               </View>
             </View>
           </View>

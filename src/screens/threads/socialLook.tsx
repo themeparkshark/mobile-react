@@ -17,7 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from '../../helpers/haptics';
-import { BRAND, GameIcon, SHADOW } from '../../ui';
+import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { countFor, shortCount, topicFor, type ReactionState, type TopicKey } from './socialModel';
 import type { ReactionTypeType } from '../../models/reaction-type-type';
@@ -112,13 +112,17 @@ export function PressScale({
 // ── Card ───────────────────────────────────────────────────────────────
 
 export const card = StyleSheet.create({
+  // Clean look (old production Social): white card, hairline border, soft shadow.
   shell: {
     backgroundColor: BRAND.white,
-    borderRadius: 22,
-    borderWidth: 3,
-    borderBottomWidth: 6,
-    borderColor: '#0a4f9c',
-    ...SHADOW.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#dbe4ee',
+    shadowColor: '#05346e',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
 });
 
@@ -411,7 +415,7 @@ const styles = StyleSheet.create({
   faceCount: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navySoft, marginTop: 2 },
   plus: {
     flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 56, justifyContent: 'center',
-    paddingHorizontal: 10, borderRadius: 999, borderWidth: 2, borderBottomWidth: 4, borderColor: '#0a4f9c', backgroundColor: '#eef6ff',
+    paddingHorizontal: 10, borderRadius: 999, borderWidth: 1.5, borderColor: '#bfe5ff', backgroundColor: '#e8f4ff',
   },
   plusText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 2 },
   faceNameWrap: { position: 'absolute', bottom: '100%', left: -40, right: -40, alignItems: 'center', marginBottom: 6 },

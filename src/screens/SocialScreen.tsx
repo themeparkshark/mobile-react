@@ -11,7 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,8 +39,9 @@ import SocialHelp from './threads/SocialHelp';
 import RulesCard, { hasPromised } from './threads/RulesCard';
 import ThreadCard from './threads/ThreadCard';
 import { applySocialEvent, emitSocial, onSocial } from './threads/socialEvents';
-import { COMPOSE_ART, PressScale, WATER, topicArt } from './threads/socialLook';
-import { DEFAULT_PROMPT, TOPICS, mergePage, topicFor, type FeedTab, type TopicKey } from './threads/socialModel';
+import CleanScreenBackground, { CLEAN } from '../components/CleanScreenBackground';
+import { COMPOSE_ART, PressScale } from './threads/socialLook';
+import { DEFAULT_PROMPT, mergePage, type FeedTab } from './threads/socialModel';
 
 const TAB_SOUND = require('../../assets/sounds/tap.mp3');
 
@@ -58,7 +59,6 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const team = isTeam(playerTeam) ? TEAMS[playerTeam] : null;
 
   const [tab, setTab] = useState<FeedTab>('hottest');
-  const [topic, setTopic] = useState<TopicKey | null>(null);
   const [threads, setThreads] = useState<ThreadType[]>([]);
   const [pinned, setPinned] = useState<ThreadType[]>([]);
   const [status, setStatus] = useState<Status>('loading');
@@ -70,6 +70,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [menuThread, setMenuThread] = useState<ThreadType | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
+  // iOS can't present Safari or push a screen while this sheet is still sliding away,
+  // so a shortcut closes the sheet first and runs its action once the sheet is hidden.
+  const afterShortcutsHide = useRef<(() => void) | null>(null);
+  const runAfterShortcuts = useCallback((action: () => void) => {
+    afterShortcutsHide.current = action;
+    setShortcuts(false);
+  }, []);
   const [rules, setRules] = useState(false);
   const [freshId, setFreshId] = useState<number | null>(null);
   const listRef = useRef<FlashList<ThreadType>>(null);
@@ -80,8 +87,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     if (mode === 'append') setLoadingMore(true);
     try {
       const [feed, pins] = await Promise.all([
-        fetchFeed(nextPage, tab, { team: playerTeam ?? null, topic }),
-        nextPage === 1 && (tab === 'hottest' || tab === 'latest') && !topic ? fetchPinned() : Promise.resolve(null),
+        fetchFeed(nextPage, tab, { team: playerTeam ?? null }),
+        nextPage === 1 && (tab === 'hottest' || tab === 'latest') ? fetchPinned() : Promise.resolve(null),
       ]);
       if (id !== request.current) return;
       if (pins) setPinned(pins);
@@ -99,9 +106,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         setRefreshing(false);
       }
     }
-  }, [tab, topic, playerTeam]);
+  }, [tab, playerTeam]);
 
-  // A new tab or topic starts fresh (and cancels any slower request in flight).
+  // A new tab starts fresh (and cancels any slower request in flight).
   useEffect(() => {
     setStatus('loading');
     setThreads([]);
@@ -182,10 +189,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
       return;
     }
     // Show it where the kid will look: top of the feed, glowing gold.
-    const fits = (thread.team ? tab === 'team' : tab !== 'team' && tab !== 'friends') && (!topic || thread.topic === topic);
+    const fits = thread.team ? tab === 'team' : tab !== 'team' && tab !== 'friends';
     if (!fits) {
       setTab(thread.team ? 'team' : 'latest');
-      setTopic(null);
     }
     setThreads((current) => [thread, ...current.filter((item) => item.id !== thread.id)]);
     setFreshId(thread.id);
@@ -214,7 +220,6 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     { key: 'friends', label: 'Friends', icon: 'shark' },
     ...(team ? [{ key: 'team' as FeedTab, label: 'Team', badge: team.badge }] : []),
   ];
-  const topicDef = topicFor(topic);
 
   const header = (
     <View>
@@ -252,45 +257,17 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         })}
       </View>
 
-      {/* Topics are visible, not hidden behind a badge tap. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow} accessibilityLabel="Topics">
-        <PressScale
-          onPress={() => setTopic(null)}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: topic === null }}
-          style={[styles.topicChip, topic === null && styles.topicChipOn]}
-          accessibilityLabel="All topics"
-        >
-          <Text style={styles.topicChipText}>All</Text>
-        </PressScale>
-        {TOPICS.map((item) => {
-          const on = topic === item.key;
-          return (
-            <PressScale
-              key={item.key}
-              onPress={() => setTopic(on ? null : item.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={`${item.label} posts`}
-              style={[styles.topicChip, on && { backgroundColor: item.chip, borderColor: item.color }]}
-            >
-              <Image source={topicArt(item.key)} style={{ width: 24, height: 24 }} contentFit="contain" />
-              <Text style={styles.topicChipText}>{item.label}</Text>
-            </PressScale>
-          );
-        })}
-      </ScrollView>
     </View>
   );
 
   const empty = status === 'loading' ? (
-    <SharkLoader tone="onBlue" onRetry={() => void load(1, 'replace')} style={styles.state} />
+    <SharkLoader tone="onLight" onRetry={() => void load(1, 'replace')} style={styles.state} />
   ) : status === 'error' ? (
-    <SharkLoader state="error" tone="onBlue" title="Can't reach Shark Social" message="Check your signal and try again." onRetry={() => { setStatus('loading'); void load(1, 'replace'); }} style={styles.state} />
+    <SharkLoader state="error" tone="onLight" title="Can't reach Shark Social" message="Check your signal and try again." onRetry={() => { setStatus('loading'); void load(1, 'replace'); }} style={styles.state} />
   ) : tab === 'friends' ? (
     <SharkLoader
       state="empty"
-      tone="onBlue"
+      tone="onLight"
       title="No friend posts yet"
       message="When your friends post, you'll see it here."
       action={{ label: 'Find friends', icon: 'shark', onPress: () => RootNavigation.navigate('Friends') }}
@@ -299,7 +276,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   ) : (
     <SharkLoader
       state="empty"
-      tone="onBlue"
+      tone="onLight"
       title={tab === 'team' && team ? `Be the first ${team.name} post!` : 'Be the first to post!'}
       message="Share your park day with the Shark fam."
       action={player ? { label: 'Write a post', icon: 'edit', onPress: () => void openComposer() } : undefined}
@@ -320,8 +297,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>
       </Topbar>
 
-      <View style={styles.body}>
-        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <CleanScreenBackground style={styles.body}>
         <FlashList
           ref={listRef}
           data={status === 'ready' ? items : []}
@@ -333,20 +309,19 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
               fresh={item.id === glowId}
               onOpen={openThread}
               onMenu={openMenu}
-              onTopic={setTopic}
             />
           )}
           extraData={glowId}
           estimatedItemSize={260}
           ListHeaderComponent={header}
           ListEmptyComponent={empty}
-          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onBlue" style={{ marginVertical: 12 }} /> : <View style={{ height: 24 + insets.bottom }} />}
+          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onLight" style={{ marginVertical: 12 }} /> : <View style={{ height: 24 + insets.bottom }} />}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.white} colors={[BRAND.blueBright]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.navySoft} colors={[BRAND.blueBright]} />}
           contentContainerStyle={{ paddingTop: 12 }}
         />
-      </View>
+      </CleanScreenBackground>
 
       <Composer
         visible={composer.open}
@@ -376,6 +351,11 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         isVisible={shortcuts}
         onBackdropPress={() => setShortcuts(false)}
         onSwipeComplete={() => setShortcuts(false)}
+        onModalHide={() => {
+          const action = afterShortcutsHide.current;
+          afterShortcutsHide.current = null;
+          action?.();
+        }}
         swipeDirection="down"
         style={{ margin: 0, justifyContent: 'flex-end' }}
         backdropColor={BRAND.navy}
@@ -391,31 +371,31 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
             buttons={[
               {
                 image: require('../../assets/images/screens/social/pin_swaps.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.TradePins)) navigation.navigate('PinSwaps'); }),
                 text: 'Pin Trading',
                 permission: PermissionEnums.TradePins,
               },
               {
                 image: require('../../assets/images/screens/social/redeem.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.RedeemCoinCodes)) navigation.navigate('RedeemCoinCode'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.RedeemCoinCodes)) navigation.navigate('RedeemCoinCode'); }),
                 text: 'Redeem',
                 permission: PermissionEnums.RedeemCoinCodes,
               },
               {
                 image: require('../../assets/images/screens/social/merch.png'),
-                onPress: () => { setShortcuts(false); void WebBrowser.openBrowserAsync(urls.shop); },
+                onPress: () => runAfterShortcuts(() => { WebBrowser.openBrowserAsync(urls.shop).catch(() => { void Linking.openURL(urls.shop); }); }),
                 text: 'Merch',
               },
               {
                 image: require('../../assets/images/screens/social/membership.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.BecomeAMember)) navigation.navigate('Membership'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.BecomeAMember)) navigation.navigate('Membership'); }),
                 text: 'Member',
                 permission: PermissionEnums.BecomeAMember,
                 show: !player || Boolean(player && !player.is_subscribed),
               },
               {
                 image: require('../../assets/images/screens/social/social_media.png'),
-                onPress: () => { setShortcuts(false); if (checkPermission(PermissionEnums.WatchContent)) navigation.navigate('Watch'); },
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.WatchContent)) navigation.navigate('Watch'); }),
                 text: 'Watch',
                 permission: PermissionEnums.WatchContent,
               },
@@ -428,7 +408,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, backgroundColor: BRAND.blue },
+  body: { flex: 1 },
   compose: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -438,13 +418,12 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 6,
     paddingVertical: 6,
-    backgroundColor: BRAND.white,
+    backgroundColor: CLEAN.card,
     borderRadius: 999,
-    borderWidth: 3,
-    borderBottomWidth: 6,
-    borderColor: '#0a4f9c',
+    borderWidth: 1.5,
+    borderColor: CLEAN.line,
   },
-  composeField: { flex: 1, backgroundColor: '#eef6ff', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
+  composeField: { flex: 1, backgroundColor: CLEAN.bg, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
   composeText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navySoft, marginTop: 3 },
   composeArt: { width: 56, height: 56 },
   tabs: {
@@ -454,19 +433,14 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(5,52,110,0.55)',
+    backgroundColor: CLEAN.card,
+    borderWidth: 1.5,
+    borderColor: CLEAN.line,
   },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 46, borderRadius: 999, paddingHorizontal: 4 },
-  tabOn: { backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 4, borderColor: '#7a3d00' },
-  tabText: { fontFamily: 'Shark', fontSize: 16, color: '#cfe6ff', marginTop: 3 },
+  tabOn: { backgroundColor: BRAND.gold, borderWidth: 1.5, borderBottomWidth: 3, borderColor: BRAND.goldLip },
+  tabText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navySoft, marginTop: 3 },
   tabTextOn: { color: '#7a3d00' },
-  topicRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
-  topicChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 999,
-    backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4, borderColor: '#0a4f9c',
-  },
-  topicChipOn: { backgroundColor: BRAND.gold, borderColor: '#7a3d00' },
-  topicChipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, marginTop: 3 },
   more: { alignItems: 'center', minWidth: 48 },
   moreText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   state: { marginTop: 40, paddingHorizontal: 24 },
