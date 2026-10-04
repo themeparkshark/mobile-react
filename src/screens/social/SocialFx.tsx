@@ -19,6 +19,19 @@ import type { GameIconName } from '../../ui/iconNames';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { INK } from './SocialKit';
 
+/** 90 pt ring: 0.9 scale is a 40 pt radius. */
+export const RING_MAX_SCALE = 0.9;
+
+/**
+ * Map any angle into the left half (0.6 pi to 1.4 pi: up-left, left, down-left),
+ * away from the words to the right of the face. Pure, tested.
+ */
+export function awayAngle(angle: number): number {
+  const TAU = Math.PI * 2;
+  const unit = (((angle % TAU) + TAU) % TAU) / TAU; // 0..1
+  return Math.PI * (0.6 + 0.8 * unit);
+}
+
 const PIECES: readonly { icon: GameIconName; angle: number; dist: number; size: number }[] = Array.from({ length: 10 }, (_, i) => ({
   icon: (i % 3 === 0 ? 'heart' : i % 3 === 1 ? 'star' : 'sparkle') as GameIconName,
   angle: (Math.PI * 2 * i) / 10 + (i % 2 ? 0.2 : -0.1),
@@ -60,7 +73,8 @@ export const Burst = memo(function Burst({ style, onDone, big = 1, away = false 
   }, [reduced, ring, onDone]);
   const ringStyle = useAnimatedStyle(() => ({
     opacity: ring.value < 1 ? 0.9 : 0.9 * (2 - ring.value),
-    transform: [{ scale: (0.3 + 0.9 * Math.min(1, ring.value)) * big }],
+    // The ring never grows past about 40 pt from the face centre (the text column starts there).
+    transform: [{ scale: Math.min((0.3 + 0.9 * Math.min(1, ring.value)) * big, RING_MAX_SCALE) }],
   }));
   return (
     <View pointerEvents="none" style={[styles.burst, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
@@ -69,7 +83,7 @@ export const Burst = memo(function Burst({ style, onDone, big = 1, away = false 
         <>
           <Animated.View style={[styles.ring, ringStyle]} />
           {(big > 1 ? [...PIECES, ...PIECES.map(p => ({ ...p, angle: p.angle + 0.3, dist: p.dist * 0.6 }))] : PIECES)
-            .map(p => (away ? { ...p, angle: Math.PI / 2 + ((p.angle % (Math.PI * 2)) / 2) } : p))
+            .map(p => (away ? { ...p, angle: awayAngle(p.angle) } : p))
             .map((p, i) => <Piece key={i} {...p} big={big} delay={i * 6} />)}
         </>
       )}

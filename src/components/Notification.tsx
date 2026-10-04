@@ -10,7 +10,7 @@
  * read state or friend answer changed re-renders.
  */
 import { Image } from 'expo-image';
-import { memo, useCallback, useContext, useEffect, useLayoutEffect, useState } from 'react';
+import { memo, useCallback, useContext, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useFriendActions } from '../hooks/useFriends';
@@ -47,10 +47,12 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const [artFailed, setArtFailed] = useState(false);
   const [faceFailed, setFaceFailed] = useState(false);
   const [heartBack, setHeartBack] = useState<'idle' | 'sent'>('idle');
-  const [burst, setBurst] = useState(false);
-  const endBurst = useCallback(() => setBurst(false), []);
+  // The Yes moment starts in the same render as the green card: the store's
+  // one-time token is taken during render (kept in a ref), never in an effect.
+  const burstFor = useRef<string | null>(null);
+  const [burstDone, setBurstDone] = useState<string | null>(null);
+  const endBurst = useCallback(() => setBurstDone(burstFor.current), []);
   const surface = useContext(SurfaceContext);
-  const hop = useHop(burst);
   // A No: the buttons stay as they were while the screen's LeavingRow fades the row out.
   const leaving = kind === 'friend_request' && answer === 'none';
   const overrides = new Map(answer && actor ? [[actor, answer]] : []);
@@ -65,11 +67,11 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const storedArt = notification.content?.image ?? null;
   const art = artFailed ? null : answeredYes && storedArt ? storedArt.replace('friend_request_received', 'friend_request_accepted') : storedArt;
   // The row only offers Yes/No while the request waits, so the answer starts from 'incoming'.
-  // The Yes moment: a burst on this row, once.
-  // Layout effect: the hop, the burst and the green card land on the same frame.
-  useLayoutEffect(() => {
-    if (answeredYes && actor !== null && takeJustFriended(actor, surface)) setBurst(true);
-  }, [answeredYes, actor, surface]);
+  if (answeredYes && actor !== null && burstFor.current !== notification.id && takeJustFriended(actor, surface)) {
+    burstFor.current = notification.id;
+  }
+  const burst = burstFor.current === notification.id && burstDone !== notification.id;
+  const hop = useHop(burst);
   const actorFace = !faceFailed ? (notification.actor_avatar_url ?? null) : null;
   const canHeartBack = kind === 'compliment' && actor !== null && (answer ?? notification.friend_status) === 'friends';
   const target = actor ? { id: actor, screen_name: nameFrom(stored), friend_status: 'incoming' as const } : null;

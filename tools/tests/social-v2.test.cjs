@@ -206,7 +206,7 @@ test('round 3: strangers see Friends only, Block and Unblock have their own art,
 });
 
 test('round 4: a real grown-up gate, honest Off copy, rows leave inside the cell', () => {
-  const { numberWords, makeProblem } = loadTs('src/screens/social/GrownUpGate.tsx', {
+  const { numberWords, makeProblem, recordMiss, recordPass, gateLockedFor, resetGate, MAX_MISSES, LOCK_MS } = loadTs('src/screens/social/GrownUpGate.tsx', {
     react: { useEffect() {}, useMemo: f => f(), useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' },
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-reanimated': {}, '../../gamekit/Haptics': {}, '../../gamekit/SFX': {},
@@ -215,11 +215,33 @@ test('round 4: a real grown-up gate, honest Off copy, rows leave inside the cell
   assert.equal(numberWords(7), 'seven');
   assert.equal(numberWords(40), 'forty');
   assert.equal(numberWords(47), 'forty-seven');
-  const seq = [0.5, 0.5];
-  const p = makeProblem(() => seq.shift() ?? 0);
-  assert.equal(p.answer, 53 + 19);
-  assert.equal(p.text, 'fifty-three plus nineteen');
+  // Every sum carries (ones digits add to 10+) and stays two-digit plus two-digit.
+  let seed = 1;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  for (let i = 0; i < 2000; i++) {
+    const p = makeProblem(rand);
+    const m = /^([a-z-]+) plus ([a-z-]+)$/.exec(p.text);
+    assert.ok(m, p.text);
+    const toN = w => { const W = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+      const T = ['', '', 'twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+      const [t, o] = w.split('-'); return T.includes(t) && T.indexOf(t) > 1 ? T.indexOf(t) * 10 + (o ? W.indexOf(o) : 0) : W.indexOf(t); };
+    const a = toN(m[1]), b = toN(m[2]);
+    assert.equal(a + b, p.answer, p.text);
+    assert.ok((a % 10) + (b % 10) >= 10, `no carry in ${p.text}`);
+    assert.ok(a >= 10 && b >= 10, p.text);
+  }
+  // Three wrong answers lock the gate for 60 s; a pass resets the count.
+  resetGate();
+  assert.equal(MAX_MISSES, 3); assert.equal(LOCK_MS, 60000);
+  assert.equal(recordMiss(1000), false); assert.equal(recordMiss(1000), false);
+  assert.equal(gateLockedFor(1000), 0);
+  assert.equal(recordMiss(1000), true);
+  assert.equal(gateLockedFor(1000), 60);
+  assert.equal(gateLockedFor(61000), 0);
+  recordMiss(70000); recordPass(); recordMiss(70000); recordMiss(70000);
+  assert.equal(gateLockedFor(70000), 0, 'a pass resets the miss count');
   const gate = read('src/screens/social/GrownUpGate.tsx');
+  assert.match(gate, /setRound\(r => r \+ 1\)/, 'a new sum after every miss');
   assert.match(gate, /const HOLD_MS = 3000/);
   assert.match(gate, /label="Keep it off" tone="gold"/, 'Keep it off is the primary button');
   const friends = read('src/screens/FriendsScreen.tsx');
@@ -250,6 +272,22 @@ test('round 4b: one offline mark, report reasons with pictures', () => {
   assert.deepEqual(seen, [true, false]);
   off();
   const profile = read('src/screens/PlayerScreen.tsx');
-  assert.match(profile, /\{ text: 'Mean name', icon: 'edit' \}, \{ text: 'Mean to me', icon: 'shark' \}, \{ text: 'Something else', icon: 'info' \}/);
-  assert.match(read('src/ui/GameDialog.tsx'), /icon=\{action\.icon\}/);
+  assert.ok(profile.includes("{ text: 'Mean name', icon: 'edit' }, { text: 'Mean to me', image: require('../../assets/images/screens/player/report_mean.png') }, { text: 'Something else', icon: 'info' }"), 'a picture per reason; Mean to me is a storm cloud');
+  assert.match(read('src/ui/GameDialog.tsx'), /icon=\{action\.icon\} image=\{action\.image\}/);
+});
+
+test('round 5: the burst stays on the left of the face and the ring stops before the words', () => {
+  const src = read('src/screens/social/SocialFx.tsx');
+  const fn = src.slice(src.indexOf('export function awayAngle'), src.indexOf('const PIECES'));
+  const js = require(path.join(root, 'node_modules/typescript')).transpileModule(fn, { compilerOptions: { module: 1 } }).outputText;
+  const mod = { exports: {} }; new Function('module', 'exports', js)(mod, mod.exports);
+  for (let a = -20; a <= 20; a += 0.01) {
+    const t = mod.exports.awayAngle(a);
+    assert.ok(t >= Math.PI * 0.6 - 1e-9 && t <= Math.PI * 1.4 + 1e-9, `angle ${a} -> ${t}`);
+    assert.ok(Math.cos(t) < 0, 'every piece moves left, away from the text column');
+  }
+  assert.match(src, /export const RING_MAX_SCALE = 0\.9/);
+  const row = read('src/components/Notification.tsx');
+  assert.doesNotMatch(row, /useLayoutEffect\(\(\) => \{\s*if \(answeredYes/, 'the burst starts in the same render as the green card');
+  assert.match(row, /takeJustFriended\(actor, surface\)\) \{\s*burstFor\.current = notification\.id;/);
 });
