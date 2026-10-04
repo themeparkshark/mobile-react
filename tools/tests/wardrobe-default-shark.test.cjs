@@ -21,7 +21,8 @@ const wardrobe = loadTs('src/helpers/wardrobe.ts');
 const fxRegistry = loadTs('src/fx/registry.ts');
 const fxStubs = {
   '../fx/FxLayers': { wornFx: fxRegistry.wornFx, FxFloat: 'FxFloat', FxRigLayers: 'FxRigLayers', FxScene: 'FxScene',
-    useFloatShadowStyle: () => ({}), useFxEquipSound: () => undefined, useFxMomentCue: () => undefined },
+    useFloatShadowStyle: () => ({}), useFxEquipSound: () => undefined,
+    useFxMomentCue: () => ({ cue: undefined, touch: () => undefined, play: () => undefined }), FxShadow: 'FxShadow' },
   '../fx/FxStage': { useFxClock: () => ({ value: 0 }), useFxKick: () => ({ value: 0 }), useFxRunning: () => false },
   '../hooks/useReducedGameMotion': { default: () => false },
   '../fx/registry': fxRegistry,

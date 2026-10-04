@@ -49,25 +49,27 @@ function flipping(cycle: number, i: number): boolean {
   return cycle < 0 || cycle % 3 === i;
 }
 
-function Fish({ t, kick, box, i, near, lod }: RigProps & { i: number; near: boolean }) {
+/** near: drawn in the front layer only; far: back layer only; both: one view for the whole orbit (lite LOD). */
+function Fish({ t, kick, box, i, near, lod }: RigProps & { i: number; near: boolean | 'both' }) {
   const { spec, source } = FISH[i];
   const style = useAnimatedStyle(() => {
     const v = lod === 'still' ? STILL_T : t.value;
     const p = ringPoint(orbitAngle(v, i));
-    const show = near ? p.depth > 0 : p.depth <= 0;
+    const show = near === 'both' ? true : near ? p.depth > 0 : p.depth <= 0;
     const m = momentAt(v, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350);
     const flip = m.p >= 0 && flipping(m.cycle, i) ? m.p : -1;
     const hop = flip < 0 ? 0 : Math.sin(Math.PI * flip);
     const scale = 0.8 + 0.2 * (p.depth + 1) / 2;
     // Facing the way it swims: thin at the ring's ends, so the turn reads as a turn.
-    const face = -Math.max(-1, Math.min(1, p.depth * 3));
+    // Snaps round quickly and never thinner than 0.4, so a far fish never reads as a sliver.
+    const face = -Math.max(-1, Math.min(1, p.depth * 7));
     return {
-      opacity: show ? (near ? 1 : 0.85) : 0,
+      opacity: show ? (p.depth > 0 ? 1 : 0.8) : 0,
       transform: [
         { translateX: (p.x - 0.5) * box.w },
-        { translateY: (p.y - 0.5) * box.h - hop * box.h * 0.08 },
+        { translateY: (p.y - 0.5) * box.h - hop * box.h * 0.1 },
         { scale: scale * (1 + 0.15 * hop) },
-        { scaleX: Math.abs(face) < 0.15 ? (face < 0 ? -0.15 : 0.15) : face },
+        { scaleX: Math.abs(face) < 0.4 ? (face < 0 ? -0.4 : 0.4) : face },
         { rotate: `${flip < 0 ? 0 : flip * 360}deg` },
       ],
     };
@@ -120,7 +122,8 @@ export function ReefHaloBack(props: RigProps) {
   return (
     <>
       <Ring box={props.box} half="back" />
-      {FISH.map((_, i) => <Fish key={i} {...props} i={i} near={false} />)}
+      {/* Lite (tiles): one view per fish, all in the front layer, the far ones dimmed (perf round 2). */}
+      {props.lod !== 'lite' && FISH.map((_, i) => <Fish key={i} {...props} i={i} near={false} />)}
     </>
   );
 }
@@ -128,11 +131,11 @@ export function ReefHaloBack(props: RigProps) {
 /** In front: the near half of the ring, the near fish and the bubble splash. */
 export function ReefHaloFront(props: RigProps) {
   const { t, kick, lod, cue } = props;
-  useMomentCue(() => { 'worklet'; return lod === 'still' ? -1 : momentAt(t.value, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350).p; }, cue ? () => cue('flip') : undefined);
+  useMomentCue(() => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('flip') : undefined);
   return (
     <>
       <Ring box={props.box} half="front" />
-      {FISH.map((_, i) => <Fish key={i} {...props} i={i} near />)}
+      {FISH.map((_, i) => <Fish key={i} {...props} i={i} near={lod === 'lite' ? 'both' : true} />)}
       {lod === 'full' && SPLASH.map(j => <Splash key={j} {...props} j={j} />)}
     </>
   );

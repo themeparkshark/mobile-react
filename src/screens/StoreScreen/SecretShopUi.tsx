@@ -1,10 +1,10 @@
-import { memo, useContext, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useContext, useEffect, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import { FxPauseContext } from '../../fx/FxStage';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { BRAND, FONT, GameIcon, showGameDialog } from '../../ui';
+import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './shopUi';
 
 /**
@@ -13,29 +13,84 @@ import { MAX_FONT } from './shopUi';
 
 /**
  * The grown-up gate in front of the VIP paywall from the Secret Shop (kids UX
- * round 1): a sum a 7-year-old can't do at a glance, four equal choices. A
- * wrong answer just closes; nothing scolds.
+ * rounds 1-2): a two-digit times a one-digit sum, typed on a number pad (no
+ * choices to guess from). A wrong answer closes kindly and the gate rests for
+ * 30 seconds; nothing scolds.
  */
-export function grownUpQuestion(seed: number): { a: number; b: number; choices: number[]; answer: number } {
-  const a = 6 + (seed % 4);
-  const b = 7 + (Math.floor(seed / 4) % 3);
-  const answer = a * b;
-  const offsets = [0, -a, b, 10];
-  const rotate = seed % 4;
-  const choices = offsets.map((_, i) => answer + offsets[(i + rotate) % 4]);
-  return { a, b, choices, answer };
+export function grownUpQuestion(seed: number): { a: number; b: number; answer: number } {
+  const a = 12 + (seed % 8);
+  const b = 3 + (Math.floor(seed / 8) % 7);
+  return { a, b, answer: a * b };
 }
 
-export async function askGrownUp(seed = Math.floor(Math.random() * 1000)): Promise<boolean> {
-  const q = grownUpQuestion(seed);
-  const picked = await showGameDialog({
-    title: 'Ask a grown-up',
-    icon: 'member',
-    message: `Grown-ups: what is ${q.a} × ${q.b}?`,
-    equalChoices: true,
-    buttons: [...q.choices.map(n => ({ text: String(n) })), { text: 'Not now', style: 'cancel' as const }],
-  });
-  return picked != null && picked < q.choices.length && q.choices[picked] === q.answer;
+export const GATE_REST_MS = 30_000;
+let gateRestUntil = 0;
+type GateRequest = { resolve: (ok: boolean) => void; seed: number };
+let showGate: ((r: GateRequest | null) => void) | null = null;
+
+/** Opens the gate (mounted by GrownUpGateHost) and resolves true only on the right answer. */
+export function askGrownUp(seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
+  if (!showGate) return Promise.resolve(false);
+  return new Promise(resolve => showGate!({ resolve, seed: now < gateRestUntil ? -1 : seed }));
+}
+
+/** Judges a typed answer; a wrong one rests the gate. Exported for tests. */
+export function judgeGate(typed: string, seed: number, now = Date.now()): boolean {
+  const ok = typed !== '' && Number(typed) === grownUpQuestion(seed).answer;
+  if (!ok) gateRestUntil = now + GATE_REST_MS;
+  return ok;
+}
+
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
+
+/** The gate's dialog. Mounted once by the Secret Shop. */
+export function GrownUpGateHost() {
+  const [req, setReq] = useState<GateRequest | null>(null);
+  const [typed, setTyped] = useState('');
+  useEffect(() => { showGate = r => { setTyped(''); setReq(r); }; return () => { showGate = null; }; }, []);
+  if (!req) return null;
+  const resting = req.seed < 0;
+  const q = resting ? null : grownUpQuestion(req.seed);
+  const close = (ok: boolean) => { req.resolve(ok); setReq(null); };
+  const press = (k: typeof KEYS[number]) => {
+    if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
+    if (k === 'ok') { close(judgeGate(typed, req.seed)); return; }
+    setTyped(t => (t.length < 3 ? t + k : t));
+  };
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
+      <View style={styles.gateScrim}>
+        <View style={styles.gateCard} accessibilityViewIsModal>
+          <GameIcon name="member" size={40} />
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateTitle}>Ask a grown-up</Text>
+          {resting ? (
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody}>Let's try again in a little while.</Text>
+          ) : (
+            <>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateBody} accessibilityLabel={`Grown-ups: what is ${q!.a} times ${q!.b}?`}>
+                Grown-ups: what is {q!.a} × {q!.b}?
+              </Text>
+              <View style={styles.gateAnswer} accessible accessibilityLabel={typed ? `Answer ${typed}` : 'No answer yet'}>
+                <Text style={styles.gateAnswerText}>{typed || ' '}</Text>
+              </View>
+              <View style={styles.pad}>
+                {KEYS.map(k => (
+                  <Pressable key={k} onPress={() => press(k)} style={({ pressed }) => [styles.key, k === 'ok' && styles.keyOk, pressed && { opacity: 0.7 }]}
+                    accessibilityRole="button" accessibilityLabel={k === 'del' ? 'Delete' : k === 'ok' ? 'Done' : k}
+                    disabled={k === 'ok' && !typed}>
+                    {k === 'del' ? <GameIcon name="back" size={22} /> : <Text style={[styles.keyText, k === 'ok' && styles.keyOkText]}>{k === 'ok' ? 'OK' : k}</Text>}
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+          <Pressable onPress={() => close(false)} style={styles.gateCancel} accessibilityRole="button" hitSlop={8}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.gateCancelText}>{resting ? 'OK' : 'Not now'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 /** From the Secret Shop to VIP: through the grown-up gate. */
@@ -67,6 +122,8 @@ export const SECRET_PREVIEW_COPY = {
   body: 'VIP members can buy these. Every piece you buy is yours forever.',
 } as const;
 
+const STAR = require('../../../assets/fx/spark.webp');
+
 /** Fixed star spots (fractions of the box) so every render and capture match. */
 const MOTES = [
   [0.06, 0.12, 3], [0.18, 0.32, 2], [0.31, 0.08, 2.5], [0.44, 0.22, 2], [0.57, 0.06, 3], [0.68, 0.3, 2],
@@ -82,7 +139,8 @@ function Mote({ i, still }: { i: number; still: boolean }) {
     return () => cancelAnimation(glow);
   }, [still]);
   const style = useAnimatedStyle(() => ({ opacity: 0.25 + 0.75 * glow.value, transform: [{ scale: 0.7 + 0.5 * glow.value }] }));
-  return <Animated.View style={[styles.mote, { left: `${x * 100}%`, top: `${y * 100}%`, width: r * 2, height: r * 2, borderRadius: r }, style]} />;
+  // Drawn twinkle stars (the pipeline's spark star), never flat dots (art panel round 2).
+  return <Animated.Image source={STAR} style={[styles.mote, { left: `${x * 100}%`, top: `${y * 100}%`, width: r * 4, height: r * 4 }, style]} />;
 }
 
 /** Twinkling star motes over the midnight sky. */
@@ -107,5 +165,21 @@ const styles = StyleSheet.create({
   bannerCta: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 999,
     backgroundColor: SECRET_THEME.violet, borderWidth: 2, borderColor: SECRET_THEME.border },
   bannerCtaText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
-  mote: { position: 'absolute', backgroundColor: '#fff6d8' },
+  mote: { position: 'absolute' },
+  gateScrim: { flex: 1, backgroundColor: 'rgba(10,6,40,0.75)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  gateCard: { width: '100%', maxWidth: 340, alignItems: 'center', gap: 10, padding: 18, borderRadius: 24, backgroundColor: SECRET_THEME.panel,
+    borderWidth: 3, borderColor: SECRET_THEME.border },
+  gateTitle: { fontFamily: FONT.display, fontSize: 24, color: SECRET_THEME.ink },
+  gateBody: { fontFamily: FONT.body, fontSize: 18, color: SECRET_THEME.inkSoft, textAlign: 'center' },
+  gateAnswer: { minWidth: 120, minHeight: 48, borderRadius: 14, backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.violet,
+    alignItems: 'center', justifyContent: 'center' },
+  gateAnswerText: { fontFamily: FONT.display, fontSize: 28, color: '#ffffff' },
+  pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, width: 3 * 72 + 2 * 8 },
+  key: { width: 72, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: SECRET_THEME.card,
+    borderWidth: 2, borderColor: SECRET_THEME.border },
+  keyOk: { backgroundColor: SECRET_THEME.violet },
+  keyText: { fontFamily: FONT.display, fontSize: 24, color: '#ffffff' },
+  keyOkText: { fontSize: 20 },
+  gateCancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
+  gateCancelText: { fontFamily: FONT.display, fontSize: 17, color: SECRET_THEME.inkSoft },
 });

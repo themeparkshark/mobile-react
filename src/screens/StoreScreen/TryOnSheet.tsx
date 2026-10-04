@@ -65,6 +65,10 @@ const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
 const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
 const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
+/** In a scene the shark stands a little smaller, feet on the plaza (art panel round 2). */
+const SCENE_SHARK = { transform: [{ scale: 0.84 }], transformOrigin: '50% 92%' } as const;
+/** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
+const SHEET_SETTLE_MS = 450;
 
 type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
@@ -183,6 +187,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const [landed, setLanded] = useState(0);
   // VIP lapsed mid-sheet (a members_only 403): a kind note, and a short hold so a double tap can't open the paywall.
   const [lapsed, setLapsed] = useState(false);
+  // A worn scene plays behind the stage, outside the Playercard: taps and the unlock reach it through here.
+  const [scenePlay, setScenePlay] = useState<{ n: number; kind: 'tap' | 'unlock' } | null>(null);
+  const onFxPlay = useCallback((kind: 'tap' | 'unlock') => setScenePlay(p => ({ n: (p?.n ?? 0) + 1, kind })), []);
   const [hold, setHold] = useState(false);
   const [coins, setCoins] = useState(0);
   const [balanceAfter, setBalanceAfter] = useState<number | null>(null);
@@ -443,14 +450,16 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 </View>
                 <View style={[styles.stage, { height: stageH }]}>
                   <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone={secret ? 'night' : 'sky'} still={still}
-                    backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} /> : undefined}
+                    backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} play={scenePlay} startDelay={SHEET_SETTLE_MS} /> : undefined}
                     sky={secret ? SECRET_THEME.sky : undefined} plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}>
                     <LandFlash color={glow} still={still} trigger={landed} />
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
                         <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow}
-                          popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping} style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE}
-                          fxAnnounce={secret} fxPlay={secret ? landed : 0} fxTapToPlay />
+                          popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
+                          style={[secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE, stage.scene && SCENE_SHARK]}
+                          fxPlay={secret ? landed : 0} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
+                          onFxPlay={stage.scene ? onFxPlay : undefined} />
                       ) : (
                         <View style={styles.flatArt}><TileArt item={item} size={170} thumb={false} /></View>
                       )}
@@ -551,6 +560,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <WishHeart on={wished} size={26} />
                   </Pressable>
                 )}
+                {cta.action === 'vip' && secretItem ? (
+                  // Not the gold Buy face: this door leads to a grown-up, not to buying (kids UX round 2).
+                  <Pressable onPress={press} disabled={hold} style={({ pressed }) => [styles.grownUp, { width: PRIMARY_W }, pressed && { opacity: 0.8 }]}
+                    accessibilityRole="button" accessibilityLabel="Ask a grown-up about VIP">
+                    <GameIcon name="lock" size={24} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.grownUpText}>{cta.label.toUpperCase()}</Text>
+                  </Pressable>
+                ) : (
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? (secretItem ? 'lock' : 'member') : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
@@ -558,6 +575,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
+                )}
                 {secondary && (
                   <Pressable onPress={secondary.onPress} disabled={!row.secondaryEnabled} accessibilityState={{ disabled: !row.secondaryEnabled }}
                     style={[styles.secondary, !row.secondaryEnabled && { opacity: 0.45 }]} accessibilityRole="button" hitSlop={6}>
@@ -629,6 +647,9 @@ const styles = StyleSheet.create({
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
   switchText: { fontFamily: FONT.display, fontSize: 15, color: S.ink },
   wishHint: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
+  grownUp: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18,
+    backgroundColor: SECRET_THEME.violet, borderWidth: 3, borderColor: SECRET_THEME.border },
+  grownUpText: { fontFamily: FONT.display, fontSize: 20, color: '#ffffff' },
   lockPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
     backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.violet },
   lockPriceText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },

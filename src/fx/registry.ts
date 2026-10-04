@@ -36,6 +36,16 @@ export const FX_BLURB: Record<FxKey, string> = {
   ghost_lantern: 'A friendly ghost peeks out to say hi.',
 };
 
+/** Each rig's moment: its cue name and how long it lasts (ms). Taps wait until 60% of it has played. */
+export const FX_MOMENT: Record<FxKey, { cue: string; ms: number }> = {
+  jetpack: { cue: 'boost', ms: 6000 * 0.2 },
+  plasma_blade: { cue: 'swing', ms: 4500 * 0.22 },
+  reef_halo: { cue: 'flip', ms: 6500 * 0.14 },
+  saucer: { cue: 'beam', ms: 5000 * 0.42 },
+  midway_fireworks: { cue: 'finale', ms: 9000 * 0.32 },
+  ghost_lantern: { cue: 'peek', ms: 6000 * 0.4 },
+};
+
 /** Rigs that also move the shark itself. */
 export const FX_FLOATS: Partial<Record<FxKey, number>> = { jetpack: 1 };
 
@@ -49,7 +59,7 @@ export const FX_SIDES: Record<FxKey, readonly ('back' | 'front' | 'scene')[]> = 
   reef_halo: ['back', 'front'],
   saucer: ['front'],
   midway_fireworks: ['scene'],
-  ghost_lantern: ['front'],
+  ghost_lantern: ['back', 'front'],
 };
 
 /** Outfit slots that can carry a rig, back to front (the same order as OUTFIT_LAYER_ORDER). */

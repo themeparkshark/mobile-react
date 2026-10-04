@@ -22,17 +22,25 @@ export const STILL_T = 1100;
  */
 export function swingAt(t: number, kick: number): number {
   'worklet';
-  const { p, cycle } = momentAt(t, kick, SWING_PERIOD, SWING_LENGTH, 350);
-  if (p < 0) return 0;
-  const dir = cycle > 0 && cycle % 3 === 2 ? -0.55 : 1;
-  // 0-0.1 wind-up (+8 deg), 0.1-0.24 slash, 0.24-1 settle with overshoot.
-  if (p < 0.1) return dir * -SLASH_DEG * 0.15 * Math.sin((p / 0.1) * Math.PI / 2);
+  const m = momentAt(t, kick, SWING_PERIOD, SWING_LENGTH, 350);
+  if (m.p < 0) return 0;
+  // Always outward, away from the face. Every third swing is a quick double slash (the variant).
+  const double = m.cycle > 0 && m.cycle % 3 === 2;
+  if (!double) return slashCurve(m.p);
+  return m.p < 0.5 ? slashCurve(m.p * 2) : 0.7 * slashCurve((m.p - 0.5) * 2);
+}
+
+/** One slash: 0-0.1 wind-up (a few degrees back), 0.1-0.24 the slash out, then a springy settle. */
+export function slashCurve(p: number): number {
+  'worklet';
+  if (p < 0.1) return -SLASH_DEG * 0.15 * Math.sin((p / 0.1) * Math.PI / 2);
   if (p < 0.24) {
     const k = (p - 0.1) / 0.14;
-    return dir * (-SLASH_DEG * 0.15 + (SLASH_DEG + SLASH_DEG * 0.15) * (1 - Math.pow(1 - k, 3)));
+    return -SLASH_DEG * 0.15 + (SLASH_DEG + SLASH_DEG * 0.15) * (1 - Math.pow(1 - k, 3));
   }
   const k = (p - 0.24) / 0.76;
-  return dir * SLASH_DEG * Math.cos(k * Math.PI * 1.5) * Math.exp(-3.2 * k);
+  // The overshoot back stays small (under 5 degrees), so the blade never sweeps over the face.
+  return SLASH_DEG * Math.cos(k * Math.PI * 1.5) * Math.exp(-3.6 * k);
 }
 
 /** 0..1 how fast the blade is moving right now (trail strength). */
@@ -93,11 +101,22 @@ function Mote({ t, kick, box }: RigProps) {
   return <Animated.Image source={GLOW} style={[styles.abs, { width: size, height: size }, style]} />;
 }
 
+/** The blade lights the shark: a cyan wash on the near side that flares with each slash (game feel round 2). */
+function BladeLight({ t, kick, box }: RigProps) {
+  const size = box.w * 0.42;
+  const axis = bladeAxis(box);
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.16 + 0.04 * Math.sin((t.value / 1600) * Math.PI * 2) + 0.34 * speedAt(t.value, kick.value),
+  }));
+  return <Animated.Image source={GLOW} style={[styles.abs, { left: axis.gx - size * 0.3, top: axis.gy - size * 0.7, width: size, height: size,
+    tintColor: '#7fe8ff' }, style]} />;
+}
+
 /** In front of the shark: the glow, the swing trail, the blade, a tip spark and a light mote. */
 export function PlasmaBladeFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
   const still = lod === 'still';
-  useMomentCue(() => { 'worklet'; return still ? -1 : momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350).p; }, cue ? () => cue('swing') : undefined);
+  useMomentCue(() => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('swing') : undefined);
   const glow = useAnimatedStyle(() => {
     const v = still ? STILL_T : t.value;
     const s = swingAt(v, kick.value);
@@ -114,6 +133,7 @@ export function PlasmaBladeFront(props: RigProps) {
       {lod === 'full' && TRAIL.map(i => <Trail key={i} {...props} i={i} />)}
       <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} style={blade} />
       {lod === 'full' && <TipSpark {...props} />}
+      {lod === 'full' && <BladeLight {...props} />}
       {lod === 'full' && <Mote {...props} />}
     </>
   );

@@ -1,7 +1,6 @@
 import { Image } from 'expo-image';
 import { StyleSheet } from 'react-native';
 import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Polygon, Stop } from 'react-native-svg';
 import { RigProps, useMomentCue } from '../FxStage';
 import { FX_GEOMETRY, momentAt, partLayout, phaseOf } from '../registry';
 
@@ -9,6 +8,8 @@ const G = FX_GEOMETRY.rigs.saucer.ufo;
 const UFO = require('../../../assets/fx/ufo.webp');
 const GLOW = require('../../../assets/fx/glow.webp');
 const SPARK = require('../../../assets/fx/spark.webp');
+/** The drawn tractor beam (pipeline art): soft cone, a lip only at the top, its own sparkles. */
+const BEAM = require('../../../assets/fx/beam.webp');
 /** Rim lights on ufo.webp (part fractions), left to right. */
 export const RIM_LIGHTS = [
   { x: 0.174, y: 0.783, color: '#ff6b6b' },
@@ -21,8 +22,8 @@ export const BEAM_PERIOD = 5000;
 export const BEAM_LENGTH = 0.42;
 /** Reduce Motion: frozen with the beam on and the star halfway up (its signature moment). */
 export const STILL_P = 0.5;
-/** The beam leans toward the shark's head. */
-const BEAM_TILT = 24;
+/** The beam leans down toward the back of the shark's head. */
+const BEAM_TILT = 34;
 
 /** 0..1 beam strength: fades on, holds, fades off. */
 export function beamOf(p: number): number {
@@ -53,7 +54,7 @@ function Light({ t, i, size }: { t: SharedValue<number>; i: number; size: number
 export function SaucerFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
   const still = lod === 'still';
-  useMomentCue(() => { 'worklet'; return still ? -1 : beamP(t, kick, false); }, cue ? () => cue('beam') : undefined);
+  useMomentCue(() => { 'worklet'; if (still) return -1; const m = momentAt(t.value, kick.value, BEAM_PERIOD, BEAM_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('beam') : undefined);
   const l = partLayout(box, G, G.aspect);
   const drift = useAnimatedStyle(() => {
     const p = still ? 0 : phaseOf(t.value, 4200) * Math.PI * 2;
@@ -70,7 +71,7 @@ export function SaucerFront(props: RigProps) {
   const beam = useAnimatedStyle(() => ({ opacity: beamOf(beamP(t, kick, still)) * 0.9 }));
   const beamW = l.width * 0.95;
   const beamH = l.height * 2.1;
-  const star = l.width * 0.3;
+  const star = l.width * 0.45;
   const lift = useAnimatedStyle(() => {
     const p = beamP(t, kick, still);
     const k = p < 0.12 ? -1 : (p - 0.12) / 0.7;
@@ -85,17 +86,7 @@ export function SaucerFront(props: RigProps) {
       height: l.height, transformOrigin: l.origin }, drift]}>
       <Animated.View style={[styles.abs, { left: (l.width - beamW) / 2, top: l.height * 0.7, width: beamW, height: beamH,
           transformOrigin: '50% 0%', transform: [{ rotate: `${BEAM_TILT}deg` }] }, beam]}>
-          <Svg width={beamW} height={beamH}>
-            <Defs>
-              <LinearGradient id="saucerBeam" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#d6fdff" stopOpacity={0.95} />
-                <Stop offset="1" stopColor="#7be3ff" stopOpacity={0.05} />
-              </LinearGradient>
-            </Defs>
-            {/* A drawn beam: charcoal-edged cone, like the rest of the art. */}
-            <Polygon points={`${beamW * 0.36},0 ${beamW * 0.64},0 ${beamW * 0.98},${beamH} ${beamW * 0.02},${beamH}`} fill="url(#saucerBeam)"
-              stroke="#2a3550" strokeOpacity={0.45} strokeWidth={2} />
-          </Svg>
+          <Image source={BEAM} style={StyleSheet.absoluteFill} contentFit="fill" cachePolicy="memory" />
           <Animated.Image source={SPARK} style={[styles.abs, { left: beamW / 2 - star / 2, top: 0, width: star, height: star }, lift]} />
         </Animated.View>
       <Image source={UFO} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />

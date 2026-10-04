@@ -161,25 +161,39 @@ test('wornFx: animated pieces replace their paper layer, scenes replace the back
   assert.deepEqual(plain(fx.wornFx({ hand_item: piece(5, 5, 'midway_fireworks'), head_item: piece(6, 1, 'warp') })).rigs, []);
 });
 
-test('the grown-up gate: a real sum, four distinct choices, the answer among them', () => {
-  const ui = loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
-    react: { memo: f => f, useContext: () => false, useEffect: () => undefined },
-    'react-native': { Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
-    'react-native-reanimated': { __esModule: true, default: { View: 'AView' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
+function loadSecretUi() {
+  return loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
+    react: { memo: f => f, useContext: () => false, useEffect: () => undefined, useState: v => [v, () => undefined] },
+    'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
+    'react-native-reanimated': { __esModule: true, default: { View: 'AView', Image: 'AImage' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
       useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withDelay: () => 0, withRepeat: () => 0, withTiming: () => 0 },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../../RootNavigation': { navigate: () => undefined },
     '../../fx/FxStage': { FxPauseContext: {} },
-    '../../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon', showGameDialog: async () => null },
+    '../../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' },
     './shopUi': { MAX_FONT: 1.3 },
   });
-  for (let seed = 0; seed < 48; seed++) {
+}
+
+test('the grown-up gate: a typed answer to a 2-digit times 1-digit sum, and a 30 s rest after a wrong one', async () => {
+  const ui = loadSecretUi();
+  for (let seed = 0; seed < 56; seed++) {
     const q = ui.grownUpQuestion(seed);
+    assert.ok(q.a >= 12 && q.a <= 19 && q.b >= 3 && q.b <= 9, 'not a times table a young kid knows by heart');
     assert.equal(q.answer, q.a * q.b);
-    assert.ok(q.a >= 6 && q.b >= 7, 'not a sum a young kid knows by heart');
-    assert.equal(new Set(q.choices).size, 4);
-    assert.ok(q.choices.includes(q.answer));
   }
+  const q = ui.grownUpQuestion(5);
+  assert.equal(ui.judgeGate(String(q.answer), 5, 1000), true);
+  assert.equal(ui.judgeGate('', 5, 1000), false, 'an empty answer never passes');
+  assert.equal(ui.judgeGate(String(q.answer + 1), 5, 2000), false);
+  // After a wrong answer the gate rests: no host is mounted here, so ask resolves false either way;
+  // the rest window itself is pinned by GATE_REST_MS.
+  assert.equal(ui.GATE_REST_MS, 30000);
+  assert.equal(await ui.askGrownUp(5), false, 'no gate mounted: never opens the paywall');
+  const code = src('src/screens/StoreScreen/SecretShopUi.tsx');
+  assert.doesNotMatch(code, /showGameDialog/, 'no multiple choice to guess from');
+  assert.match(code, /const KEYS = \['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'\] as const;/);
+  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /\{secret && <GrownUpGateHost \/>\}/);
 });
 
 test('the Playercard draws rigs in place of their paper and keeps the shark on its layers', () => {
@@ -262,6 +276,7 @@ test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(tryOn, /vipLocked \? 'Try it on as much as you like!' : "Once it's yours, it's yours forever\."/, 'the kid-fair promise on every Secret try-on');
   assert.match(tryOn, /case 'vip': onClose\(\); if \(secretItem\) void openVipWithGrownUp\(\);/, 'the paywall is behind a grown-up');
+  assert.match(tryOn, /cta\.action === 'vip' && secretItem \? \(\s*\/\/ Not the gold Buy face/, 'the grown-up button is violet, not the Buy face');
   assert.match(tryOn, /vipLocked: vipLocked && !secretItem/, 'non-members can heart Secret pieces');
   assert.match(tryOn, /Your VIP ended, so this one is locked\. Your coins are safe\./);
   assert.equal(shelves.tryOnCta(base).label, 'VIP only: see VIP', 'legacy VIP gear keeps its copy');
@@ -309,17 +324,7 @@ test('non-members window-shop: the Profile tile opens the Secret Shop when the f
   assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: RootNavigation\.navigate\('Membership'\)\)\);/);
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(shelves, /\{secret && !vip && <SecretPreviewBanner \/>\}/);
-  const ui = loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
-    react: { memo: f => f, useContext: () => false, useEffect: () => undefined },
-    'react-native': { Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
-    'react-native-reanimated': { __esModule: true, default: { View: 'AView' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
-      useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withDelay: () => 0, withRepeat: () => 0, withTiming: () => 0 },
-    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
-    '../../RootNavigation': { navigate: () => undefined },
-    '../../fx/FxStage': { FxPauseContext: {} },
-    '../../ui': { BRAND: { goldLip: '#c98a00', navy: '#0a2350' }, FONT: { display: 'Shark', body: 'Body' }, GameIcon: 'GameIcon', showGameDialog: async () => null },
-    './shopUi': { MAX_FONT: 1.3 },
-  });
+  const ui = loadSecretUi();
   assert.match(ui.SECRET_PREVIEW_COPY.body, /yours forever/);
   assert.doesNotMatch(ui.SECRET_PREVIEW_COPY.body + ui.SECRET_PREVIEW_COPY.title, /hurry|last chance|only \d|left!/i, 'calm copy, no pressure');
 });

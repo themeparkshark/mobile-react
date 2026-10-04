@@ -55,7 +55,7 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
 }
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
+import { GrownUpGateHost, SecretPreviewBanner, StarMotes } from './SecretShopUi';
 import { FxPauseContext } from '../../fx/FxStage';
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
@@ -89,7 +89,12 @@ const SectionPills = memo(function SectionPills({ section, offset, still, single
   single?: boolean }) {
   const now = useShopNow(offset);
   if (section.type === 'daily') return <TimerPill pill={dailyPill(section, now)} still={still} />;
-  if (section.type === 'featured') return <TimerPill pill={featuredPill(section, now)} still={still} />;
+  if (section.type === 'featured') {
+    const pill = featuredPill(section, now);
+    // The Secret Vault flips at midnight: say "tomorrow", and leave "tonight" to Tonight's Pick alone (kids UX round 2).
+    if (single && pill.label === 'New tonight') return <TimerPill pill={{ ...pill, label: 'New Vault tomorrow', urgent: false }} still={still} icon="moon" />;
+    return <TimerPill pill={pill} still={still} />;
+  }
   if (single) return <View style={styles.pills}><TimerPill pill={eventEndPill(section, now)} still={still} icon="pumpkin" /></View>;
   const drop = eventDropPill(section, now);
   return (
@@ -232,6 +237,8 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
     <View style={[styles.event, { backgroundColor: secret ? SECRET_THEME.panel : accent }, secret && { borderColor: SECRET_THEME.border }]}>
       {/* The Secret Shop keeps its midnight: the season glows up from the bottom instead of a flat colour. */}
       {secret && <LinearGradient pointerEvents="none" colors={[SECRET_THEME.panel, `${accent}cc`]} locations={[0.15, 1]} style={StyleSheet.absoluteFill} />}
+      {/* Halloween: a drawn moon and two friendly bats in the corner (pipeline art). */}
+      {secret && section.event_key === 'halloween' && <Image source={MOON_BATS} style={styles.moonBats} contentFit="contain" />}
       {secret ? null : section.art_url ? (
         <ImageBackground source={{ uri: section.art_url }} resizeMode="cover" style={styles.eventArt}>
           <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0)', accent]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
@@ -338,7 +345,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       {/* Kicker row: the label and the timer pill share one line above the stage, never on the hat. */}
       <View style={styles.heroKickerRow} pointerEvents="none">
         <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>{secret ? 'THE VAULT' : "THIS WEEK'S STAR"}</Text>
-        <SectionPills section={section} offset={offset} still={still} />
+        <SectionPills section={section} offset={offset} still={still} single={secret} />
       </View>
       <View style={styles.heroText} pointerEvents="box-none">
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroName} numberOfLines={2}>{itemDisplayName(item)}</Text>
@@ -715,19 +722,32 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   // never blurs the screen). One bitmask, recomputed on the UI thread, crosses to JS only
   // when a shelf comes into or leaves view (performance panel round 1).
   const [visibleMask, setVisibleMask] = useState(-1);
-  const viewH = Dimensions.get('window').height;
+  // The scroll view's own height (measured), not the window's.
+  const viewH = useSharedValue(Dimensions.get('window').height);
   useAnimatedReaction(() => {
     const list = tops.value;
     let mask = 0;
     for (let i = 0; i < list.length; i++) {
       const top = list[i];
       const bottom = i + 1 < list.length ? list[i + 1] : Number.POSITIVE_INFINITY;
-      if (top < shelfY.value + viewH && bottom > shelfY.value) mask |= 1 << i;
+      if (top < shelfY.value + viewH.value && bottom > shelfY.value) mask |= 1 << i;
     }
     return list.length ? mask : -1;
   }, (mask, prev) => { if (mask !== prev) runOnJS(setVisibleMask)(mask); });
+  // Idle step-down: 20 s with no touch or scroll and the shelf tiles rest (the Vault hero keeps
+  // playing); the next touch wakes them, and each plays its moment again (performance round 2).
+  const [idle, setIdle] = useState(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wake = useCallback(() => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    setIdle(false);
+    idleTimer.current = setTimeout(() => setIdle(true), 20_000);
+  }, []);
+  useEffect(() => { wake(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [wake]);
+  useEffect(() => { if (!open) wake(); }, [open]);
   const pausedFor = (key: string) => {
     if (open) return true;
+    if (idle && key !== 'hero') return true;
     const i = chips.findIndex(c => c.key === key);
     return i >= 0 && visibleMask !== -1 && (visibleMask & (1 << i)) === 0;
   };
@@ -746,6 +766,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         {!secret && <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />}
         <View style={{ flex: 1 }}>
         <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+          onLayout={e => { viewH.value = e.nativeEvent.layout.height; }} onScrollBeginDrag={wake} onTouchStart={wake}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
           {today.fallback && (
@@ -839,6 +860,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
         bridged={handoff} onDone={finishReveal} onShown={revealShown} />}
+      {secret && <GrownUpGateHost />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
@@ -851,6 +873,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
 const S = SHOP_SURFACE;
 const secretPanel = { backgroundColor: SECRET_THEME.panel, borderColor: SECRET_THEME.border };
+const MOON_BATS = require('../../../assets/fx/moonbats.webp');
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
@@ -866,6 +889,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6 },
   headerTitle: { fontFamily: FONT.display, fontSize: 22, color: S.ink, letterSpacing: 0.5 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  moonBats: { position: 'absolute', top: 10, right: 12, width: 96, height: 91 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: GRID_PAD, paddingTop: 14 },
   event: { marginHorizontal: 10, borderRadius: 22, paddingBottom: 14, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden', ...SHADOW.card },
   eventArt: { position: 'absolute', top: 0, left: 0, right: 0, height: Math.round((SCREEN_W - 20) * 0.4) },

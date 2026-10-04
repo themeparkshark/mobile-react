@@ -5,10 +5,11 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { FxPauseContext } from '../../fx/FxStage';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, cancelAnimation,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
@@ -149,12 +150,20 @@ export const PieceChip = memo(function PieceChip({ piece, state, size = 58, sele
 });
 
 /** One diagonal sheen sweep (Epic tiles, the "complete the look" CTA). Runs once, never loops off screen. */
-export function Sheen({ still, delay = 300, width = 140 }: { still: boolean; delay?: number; width?: number }) {
+export function Sheen({ still, delay = 300, width = 140, every }: { still: boolean; delay?: number; width?: number;
+  /** Sweep again every this many ms (Secret tiles: a slow shimmer along the gold), paused with the shelf. */
+  every?: number }) {
   const x = useSharedValue(-1);
+  const paused = useContext(FxPauseContext);
   useEffect(() => {
-    if (still) return;
-    x.value = withDelay(delay, withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }));
-  }, [still]);
+    if (still || (every && paused)) { cancelAnimation(x); return; }
+    const sweep = withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) });
+    x.value = -1;
+    x.value = every
+      ? withDelay(delay, withRepeat(withSequence(sweep, withTiming(1, { duration: every - 900 }), withTiming(-1, { duration: 0 })), -1))
+      : withDelay(delay, sweep);
+    return () => cancelAnimation(x);
+  }, [still, paused]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value * width }, { rotate: '20deg' }] }));
   if (still) return null;
   return (

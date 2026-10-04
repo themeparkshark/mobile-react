@@ -6,6 +6,8 @@
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=guest    the shop as a non-member (preview banner, locked prices)
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=tryon-<fx_key>[-guest]  the try-on sheet open on one piece
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=night2   the next night (Midway Fireworks in Tonight Only)
+ *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=gate     the grown-up gate over the non-member shop
+ *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=lapse    a member's try-on whose buy finds VIP gone (needs the stub API's 403)
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=stage    your shark on the Dressing Room stage, one hero at a time (tap: next)
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=gallery  all six heroes on six sharks
  *   EXPO_PUBLIC_SECRET_SHOP_PREVIEW=still    the gallery under Reduce Motion (the rest poses)
@@ -28,6 +30,7 @@ import type { PlayerType } from '../../models/player-type';
 import type { ShopItem, ShopSection, ShopToday } from '../../models/shop-today';
 import { FONT } from '../../ui';
 import ShopShelves from './ShopShelves';
+import { askGrownUp } from './SecretShopUi';
 
 const uri = (asset: number) => RNImage.resolveAssetSource(asset).uri;
 const type = (id: number, name: string) => ({ id, name, image_url: '' });
@@ -97,16 +100,28 @@ function fixtureToday(night = 1): ShopToday {
   };
 }
 
-function AuthFixture({ member, children }: { member: boolean; children: React.ReactNode }) {
-  const player = useMemo(() => fixturePlayer(member), [member]);
-  const auth = useMemo(() => ({ player, isReady: true, refreshPlayer: async () => player, setPlayer: () => undefined }) as unknown as AuthContextType, [player]);
+function AuthFixture({ member, lapseOnRefresh = false, children }: { member: boolean; lapseOnRefresh?: boolean; children: React.ReactNode }) {
+  const [player, setPlayer] = useState(() => fixturePlayer(member));
+  // 'lapse': the first refresh after a buy finds VIP gone (the stub API answers the buy with members_only).
+  const refreshPlayer = async () => {
+    if (!lapseOnRefresh) return player;
+    const next = fixturePlayer(false);
+    setPlayer(next);
+    return next;
+  };
+  const auth = useMemo(() => ({ player, isReady: true, refreshPlayer, setPlayer: () => undefined }) as unknown as AuthContextType, [player]);
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
 }
 
-function Shop({ member, focus, night = 1 }: { member: boolean; focus: number | null; night?: number }) {
+function Shop({ member, focus, night = 1, gate = false, lapse = false }: { member: boolean; focus: number | null; night?: number; gate?: boolean; lapse?: boolean }) {
   const [today, setToday] = useState<ShopToday | null>(() => fixtureToday(night));
+  useEffect(() => {
+    if (!gate) return;
+    const t = setTimeout(() => { void askGrownUp(42); }, 900);
+    return () => clearTimeout(t);
+  }, [gate]);
   return (
-    <AuthFixture member={member}>
+    <AuthFixture member={member} lapseOnRefresh={lapse}>
       <View style={{ flex: 1, backgroundColor: SECRET_THEME.floor }}>
         <Topbar purple>
           <TopbarColumn stretch={false}><BackButton onPress={() => undefined} /></TopbarColumn>
@@ -200,6 +215,8 @@ function PreviewBody({ mode }: { mode: string }) {
     return <Shop member={!tryOn[2]} focus={hero?.id ?? null} night={hero?.fx === 'midway_fireworks' ? 2 : 1} />;
   }
   if (mode === 'night2') return <Shop member focus={null} night={2} />;
+  if (mode === 'gate') return <Shop member={false} focus={null} gate />;
+  if (mode === 'lapse') return <Shop member focus={9002} lapse />;
   return <Shop member={mode !== 'guest'} focus={null} />;
 }
 

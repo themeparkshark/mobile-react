@@ -1,9 +1,8 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Reanimated from 'react-native-reanimated';
-import { FxFloat, FxRigLayers, FxScene, useFloatShadowStyle, useFxEquipSound, useFxMomentCue, wornFx } from '../fx/FxLayers';
+import { FxFloat, FxRigLayers, FxScene, FxShadow, useFxEquipSound, useFxMomentCue, wornFx } from '../fx/FxLayers';
 import { useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
-import { FxLod } from '../fx/registry';
+import { FX_MOMENT, FxLod } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
@@ -76,6 +75,8 @@ export default function Playercard({
   fxAnnounce = false,
   fxPlay = 0,
   fxTapToPlay = false,
+  fxStartDelay = 0,
+  onFxPlay,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -109,6 +110,10 @@ export default function Playercard({
   readonly fxPlay?: number;
   /** A tap on the shark replays its rigs' moments (stages with no item taps). */
   readonly fxTapToPlay?: boolean;
+  /** Hold the first moment this long (ms): the try-on waits for its sheet to finish sliding in. */
+  readonly fxStartDelay?: number;
+  /** Called when the moments replay (a tap or fxPlay), for a scene drawn outside this card (the try-on backdrop). */
+  readonly onFxPlay?: (kind: 'tap' | 'unlock') => void;
 }) {
   const fx = useMemo(() => wornFx(inventory), [inventory]);
   // Reduce Motion is read here, so no screen can forget it (performance panel round 1).
@@ -116,15 +121,40 @@ export default function Playercard({
   const lod: FxLod = still || reduced ? 'still' : fxLod;
   // Only a look with something to draw runs a clock (a scene off stage draws nothing here).
   const fxRunning = useFxRunning(lod) && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
-  const fxClock = useFxClock(fxRunning);
+  const fxClock = useFxClock(fxRunning, -fxStartDelay);
   const fxKick = useFxKick();
   const [stageH, setStageH] = useState(0);
-  const floatShadow = useFloatShadowStyle(fx, fxClock, fxKick, stageH);
   const sounds = fxSound ?? popLayers;
   useFxEquipSound(fx, sounds, fxAnnounce);
-  const fxCue = useFxMomentCue(sounds);
-  const playFx = useCallback(() => { if (fx.any) fxKick.value = fxClock.value; }, [fx.any]);
-  useEffect(() => { if (fxPlay) playFx(); }, [fxPlay]);
+  const { cue: fxCue, touch: fxTouch, play: fxPlayCue } = useFxMomentCue(sounds);
+  // A tap replays the worn pieces' moments with their cues (taps during the first 60% of a
+  // moment are ignored, so spam-taps never freeze a pose). A buy replays them as a Secret
+  // unlock: after the landing settles, twice, sound without a second haptic (game feel round 2).
+  const lastTap = useRef(-1e9);
+  const momentMs = Math.max(0, ...fx.rigs.map(r => FX_MOMENT[r.key].ms), fx.scene ? FX_MOMENT[fx.scene].ms : 0);
+  const playFx = useCallback((kind: 'tap' | 'unlock' = 'tap') => {
+    onFxPlay?.(kind);
+    if (!fx.any || !fxRunning) return;
+    const now = Date.now();
+    if (kind === 'tap' && now - lastTap.current < momentMs * 0.6) return;
+    lastTap.current = now;
+    fxTouch();
+    const keys = [...fx.rigs.map(r => r.key), ...(fx.scene && showBackground ? [fx.scene] : [])];
+    const cue = keys.length ? FX_MOMENT[keys[0]].cue : null;
+    if (kind === 'tap') {
+      fxKick.value = fxClock.value;
+      if (cue) fxPlayCue(cue, true);
+    } else {
+      fxKick.value = fxClock.value + 450;
+      unlockTimers.current.push(setTimeout(() => { if (cue) fxPlayCue(cue, false); }, 450));
+      unlockTimers.current.push(setTimeout(() => { fxKick.value = fxClock.value; if (cue) fxPlayCue(cue, false); }, 450 + momentMs * 0.75));
+    }
+  }, [fx, fxRunning, momentMs, showBackground, onFxPlay]);
+  const unlockTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => unlockTimers.current.forEach(clearTimeout), []);
+  const lookKey = [fx.scene, ...fx.rigs.map(r => r.key)].join(',');
+  useEffect(() => { fxTouch(); }, [lookKey]);
+  useEffect(() => { if (fxPlay) playFx('unlock'); }, [fxPlay]);
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -136,7 +166,7 @@ export default function Playercard({
 
   useEffect(() => {
     // Reduce Motion (or a still preview): no idle bob at all.
-    if (still) { translate.setValue(0); return; }
+    if (still || reduced) { translate.setValue(0); return; }
     const bob = Animated.loop(
       Animated.sequence([
         Animated.timing(translate, {
@@ -153,7 +183,7 @@ export default function Playercard({
     );
     bob.start();
     return () => bob.stop();
-  }, [still]);
+  }, [still, reduced]);
 
   // Check if shark is "naked" (no wearable items)
   const isNaked = !inventory?.head_item && !inventory?.face_item &&
@@ -180,7 +210,7 @@ export default function Playercard({
   // Single tap handler: resolves which equipped item was tapped by zone
   const handleSharkTap = useCallback((e: GestureResponderEvent) => {
     // Any tap on a shark wearing Secret pieces replays their moments.
-    playFx();
+    playFx('tap');
     if (!onItemTap) return;
 
     const { locationX, locationY } = e.nativeEvent;
@@ -260,7 +290,7 @@ export default function Playercard({
           )
         )}
         {shadow && (
-          <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, floatShadow]}>
+          <FxShadow fx={fx} t={fxClock} kick={fxKick} height={stageH}>
           <Animated.View pointerEvents="none" style={[styles.shadow, shadowAt ? { left: shadowAt.left as never, top: shadowAt.top as never } : null, {
             opacity: translate.interpolate({ inputRange: [0, 10], outputRange: [0.55, 1] }),
             transform: [{ scaleX: translate.interpolate({ inputRange: [0, 10], outputRange: [0.82, 1] }) }],
@@ -277,7 +307,7 @@ export default function Playercard({
               <Ellipse cx="50" cy="10" rx="50" ry="10" fill={`url(#${contactId})`} />
             </Svg>
           </Animated.View>
-          </Reanimated.View>
+          </FxShadow>
         )}
         <Animated.View
           style={{
@@ -331,7 +361,7 @@ export default function Playercard({
                 pointerEvents="none" style={styles.chestPin} />
             ) : null}
             {/* Single tap overlay: uses coordinates to determine which equipped item */}
-            {(onItemTap || (fxTapToPlay && fx.any)) && (
+            {(onItemTap || (fxTapToPlay && (fx.any || !!onFxPlay))) && (
               <Pressable
                 onPress={handleSharkTap}
                 accessibilityLabel={onItemTap ? undefined : 'Your shark. Tap to see your Secret pieces move.'}

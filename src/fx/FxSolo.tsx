@@ -1,10 +1,12 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFxMomentCue } from './FxLayers';
 import { FxBox, useFxClock, useFxKick, useFxRunning } from './FxStage';
-import { FxKey, FxLod, coverBox, focusBox } from './registry';
-import { GhostLanternFront } from './rigs/GhostLantern';
+import { FX_KEYS, FX_MOMENT, FxKey, FxLod, coverBox, focusBox } from './registry';
+import { Image } from 'expo-image';
+import { CLASSIC_NO_EYE, SHARK_EYES } from '../helpers/wardrobe';
+import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
 import { JetpackFront } from './rigs/Jetpack';
 import { MidwayFireworksScene } from './rigs/MidwayFireworks';
 import { PlasmaBladeFront } from './rigs/PlasmaBlade';
@@ -19,16 +21,41 @@ import { SaucerFront } from './rigs/Saucer';
  */
 
 /** An animated scene as a stage backdrop (cover-fitted like any backdrop). */
-export const FxSceneBackdrop = memo(function FxSceneBackdrop({ fxKey, still, lod = 'full', sound = false }: {
+export const FxSceneBackdrop = memo(function FxSceneBackdrop({ fxKey, still, lod = 'full', sound = false, play, startDelay = 0 }: {
   readonly fxKey: FxKey; readonly still: boolean; readonly lod?: FxLod;
   /** Stages only: the finale's pop and haptic. */
   readonly sound?: boolean;
+  /** Replay requests from the stage (a tap on the shark, or the unlock after a buy). */
+  readonly play?: { n: number; kind: 'tap' | 'unlock' } | null;
+  /** Hold the first finale this long (the try-on sheet sliding in). */
+  readonly startDelay?: number;
 }) {
   const reduced = useReducedGameMotion();
   const level: FxLod = still || reduced ? 'still' : lod;
-  const t = useFxClock(useFxRunning(level));
+  const running = useFxRunning(level);
+  const t = useFxClock(running, -startDelay);
   const kick = useFxKick();
-  const cue = useFxMomentCue(sound);
+  const { cue, play: playCue, touch } = useFxMomentCue(sound);
+  const lastTap = useRef(-1e9);
+  useEffect(() => {
+    if (!play || !running) return;
+    const { ms, cue: name } = FX_MOMENT[fxKey];
+    if (play.kind === 'tap') {
+      if (Date.now() - lastTap.current < ms * 0.6) return;
+      lastTap.current = Date.now();
+      touch();
+      kick.value = t.value;
+      playCue(name, true);
+      return;
+    }
+    // The Secret unlock after a buy: after the landing settles, the finale twice, sound without a second haptic.
+    touch();
+    kick.value = t.value + 450;
+    const a = setTimeout(() => playCue(name, false), 450);
+    const b = setTimeout(() => { kick.value = t.value; playCue(name, false); }, 450 + ms * 0.75);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play?.n]);
   if (fxKey !== 'midway_fireworks') return null;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
@@ -51,7 +78,8 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
   const t = useFxClock(running);
   const kick = useFxKick();
   useEffect(() => {
-    if (running) kick.value = t.value;
+    // Staggered by piece, so tiles waking together read as a ripple, not one synchronized burst.
+    if (running) kick.value = t.value + (FX_KEYS.indexOf(fxKey) % 4) * 130;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
   const box = focusBox(fxKey, size);
@@ -64,7 +92,14 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
       {fxKey === 'plasma_blade' && <PlasmaBladeFront {...props} />}
       {fxKey === 'reef_halo' && <><ReefHaloBack {...props} /><ReefHaloFront {...props} /></>}
       {fxKey === 'saucer' && <SaucerFront {...props} />}
-      {fxKey === 'ghost_lantern' && <GhostLanternFront {...props} />}
+      {fxKey === 'ghost_lantern' && <><GhostLanternBack {...props} /><GhostLanternFront {...props} /></>}
+      {/* A scene is a backdrop: a small shark in front says "your shark goes here" (kids UX round 2). */}
+      {fxKey === 'midway_fireworks' && (
+        <View style={{ position: 'absolute', left: size * 0.26, top: size * 0.3, width: size * 0.5, height: size * 0.5 * (1530 / 1353) }}>
+          <Image source={CLASSIC_NO_EYE} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
+          <Image source={SHARK_EYES} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
+        </View>
+      )}
       {fxKey === 'midway_fireworks' && <MidwayFireworksScene {...props} box={{ x: 0, y: 0, w: size, h: size }} />}
     </View>
   );

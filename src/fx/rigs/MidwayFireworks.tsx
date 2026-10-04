@@ -60,7 +60,8 @@ function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
     const grow = 1 - Math.pow(1 - Math.min(1, b / 0.3), 3);
     const fall = Math.max(0, b - 0.3);
     return {
-      opacity: b < 0.5 ? 1 : 1 - (b - 0.5) / 0.5,
+      // Fades out by alpha while it is still bright (never lingers dim and grey).
+      opacity: b < 0.45 ? 1 : Math.max(0, 1 - (b - 0.45) / 0.3),
       transform: [{ translateY: fall * fall * box.h * 0.09 }, { scale: 0.15 + 0.85 * grow }, { scaleY: 1 + 0.18 * fall }, { rotate: `${b * 10}deg` }],
     };
   });
@@ -99,7 +100,7 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
  */
 export function MidwayFireworksScene(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
-  useMomentCue(() => { 'worklet'; return lod === 'still' ? -1 : momentAt(t.value, kick.value, FINALE_PERIOD, FINALE_LENGTH, 350).p; }, cue ? () => cue('finale') : undefined);
+  useMomentCue(() => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, FINALE_PERIOD, FINALE_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('finale') : undefined);
   const shells = lod === 'full' ? SHELLS.map((_, i) => i) : lod === 'lite' ? [0, 1, 2, 3] : [0, 1];
   return (
     <>

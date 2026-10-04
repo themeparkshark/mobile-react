@@ -5,7 +5,7 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import * as Haptics from '../helpers/haptics';
 import { FxBox, RigProps } from './FxStage';
 import { FxKey, FxLod, WornFx, coverBox, containBox, wornFx } from './registry';
-import { GhostLanternFront } from './rigs/GhostLantern';
+import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
 import { JetpackFront, jetpackFloat } from './rigs/Jetpack';
 import { MidwayFireworksScene } from './rigs/MidwayFireworks';
 import { PlasmaBladeFront, bladeLean } from './rigs/PlasmaBlade';
@@ -15,9 +15,9 @@ import { SaucerFront } from './rigs/Saucer';
 export type { WornFx } from './registry';
 export { wornFx };
 
-type Rig = (props: RigProps) => JSX.Element;
+type Rig = (props: RigProps) => JSX.Element | null;
 
-const BACK: Partial<Record<FxKey, Rig>> = { reef_halo: ReefHaloBack };
+const BACK: Partial<Record<FxKey, Rig>> = { reef_halo: ReefHaloBack, ghost_lantern: GhostLanternBack };
 const FRONT: Partial<Record<FxKey, Rig>> = {
   jetpack: JetpackFront,
   plasma_blade: PlasmaBladeFront,
@@ -59,8 +59,18 @@ export function FxScene({ fx, ...shared }: Shared & { fx: WornFx }) {
   );
 }
 
-/** Moves the shark for rigs that move it: the jetpack float and the blade's lean into a slash. */
-export function FxFloat({ fx, t, kick, height, children }: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number;
+/**
+ * Moves the shark for rigs that move it: the jetpack float and the blade's
+ * lean into a slash. Any other look gets a plain view, so no style is
+ * rebuilt per frame for nothing (performance panel round 2).
+ */
+export function FxFloat(props: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number; children: React.ReactNode }) {
+  const moves = props.fx.floats || props.fx.rigs.some(r => r.key === 'plasma_blade');
+  if (!moves) return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>{props.children}</View>;
+  return <MovingShark {...props} />;
+}
+
+function MovingShark({ fx, t, kick, height, children }: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number;
   children: React.ReactNode }) {
   const floats = fx.floats;
   const leans = fx.rigs.some(r => r.key === 'plasma_blade');
@@ -73,13 +83,20 @@ export function FxFloat({ fx, t, kick, height, children }: { fx: WornFx; t: Shar
   return <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { transformOrigin: '55% 85%' }, style]}>{children}</Animated.View>;
 }
 
-/** The contact shadow shrinks and fades as the shark rises. */
-export function useFloatShadowStyle(fx: WornFx, t: SharedValue<number>, kick: SharedValue<number>, height: number) {
-  return useAnimatedStyle(() => {
-    if (!fx.floats || height <= 0) return { opacity: 1, transform: [{ scale: 1 }] };
+/** Wraps the contact shadow: it shrinks and fades as a floating shark rises; a plain view otherwise. */
+export function FxShadow({ fx, t, kick, height, children }: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number;
+  children: React.ReactNode }) {
+  if (!fx.floats) return <View pointerEvents="none" style={StyleSheet.absoluteFill}>{children}</View>;
+  return <FloatShadow t={t} kick={kick} height={height}>{children}</FloatShadow>;
+}
+
+function FloatShadow({ t, kick, height, children }: { t: SharedValue<number>; kick: SharedValue<number>; height: number; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => {
+    if (height <= 0) return { opacity: 1 };
     const lift = -jetpackFloat(t.value, kick.value, height) / height; // about 0.05 .. 0.2
     return { opacity: Math.max(0.2, 0.85 - lift * 3.2), transform: [{ scale: Math.max(0.45, 1 - lift * 2.6) }] };
   });
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>{children}</Animated.View>;
 }
 
 type Cue = { file: number; rate: number; volume: number; haptic?: 'light' | 'medium' | 'rigid' | 'selection' };
@@ -125,11 +142,34 @@ export function useFxCuePlayer() {
   }, []);
 }
 
-/** The moment-cue callback for a stage, or undefined when the stage is silent. */
-export function useFxMomentCue(enabled: boolean): ((moment: string) => void) | undefined {
+/** How long after the last thing the player did a moment may still make a sound. */
+export const CUE_WINDOW_MS = 12_000;
+
+/**
+ * The moment-cue callback for a stage (undefined when the stage is silent),
+ * and `touch` to mark a player action. Cues sound only within 12 s of the
+ * stage opening, a tap, an equip or a buy; then moments keep moving in
+ * silence, so a Dressing Room left open never whooshes and buzzes forever
+ * (performance panel round 2).
+ */
+export function useFxMomentCue(enabled: boolean): {
+  cue: ((moment: string) => void) | undefined;
+  touch: () => void;
+  /** Play a moment's cue now (a tap or an unlock), with or without its haptic. */
+  play: (moment: string, haptic: boolean) => void;
+} {
   const play = useFxCuePlayer();
-  const cue = useCallback((moment: string) => play(FX_MOMENT_CUES[moment]), [play]);
-  return enabled ? cue : undefined;
+  const last = useRef(Date.now());
+  const touch = useCallback(() => { last.current = Date.now(); }, []);
+  const cue = useCallback((moment: string) => {
+    if (Date.now() - last.current <= CUE_WINDOW_MS) play(FX_MOMENT_CUES[moment]);
+  }, [play]);
+  const playNow = useCallback((moment: string, haptic: boolean) => {
+    if (!enabled) return;
+    const c = FX_MOMENT_CUES[moment];
+    play(c && !haptic ? { ...c, haptic: undefined } : c);
+  }, [play, enabled]);
+  return { cue: enabled ? cue : undefined, touch, play: playNow };
 }
 
 /**

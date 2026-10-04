@@ -1,5 +1,4 @@
 import { NavigationContext } from '@react-navigation/native';
-import { Image, type ImageSource } from 'expo-image';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { AppState, LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Animated, { SharedValue, runOnJS, useAnimatedReaction, useFrameCallback, useSharedValue } from 'react-native-reanimated';
@@ -115,27 +114,27 @@ export function FxBox({ children, measure, initial }: {
   );
 }
 
-/** A rig part placed by its spec, with an optional animated style on top. */
-export function FxPart({ source, box, spec, aspect = 1, style, tint, blur, opacity, fit = 'contain' }: {
-  readonly source: ImageSource | number;
+/**
+ * A rig part placed by its spec, with an optional animated style on top. The
+ * image itself animates (no wrapper view), so a fade never forces an
+ * offscreen pass on iOS (performance panel round 2).
+ */
+export function FxPart({ source, box, spec, aspect = 1, style, tint, opacity, fit = 'contain' }: {
+  readonly source: number;
   readonly box: PaperBox;
   readonly spec: PartSpec;
   readonly aspect?: number;
   readonly style?: object;
   readonly tint?: string;
-  readonly blur?: number;
   readonly opacity?: number;
   /** 'fill' stretches a soft glow sprite to the part's box. */
   readonly fit?: 'contain' | 'fill';
 }) {
   const l = partLayout(box, spec, aspect);
   return (
-    <Animated.View pointerEvents="none" style={[{
+    <Animated.Image source={source} resizeMode={fit === 'fill' ? 'stretch' : 'contain'} style={[{
       position: 'absolute', left: l.left, top: l.top, width: l.width, height: l.height,
-      transformOrigin: l.origin, transform: [{ rotate: `${l.rot}deg` }], opacity,
-    }, style]}>
-      <Image source={source} style={StyleSheet.absoluteFill} contentFit={fit} tintColor={tint} blurRadius={blur}
-        cachePolicy="memory" />
-    </Animated.View>
+      transformOrigin: l.origin, transform: [{ rotate: `${l.rot}deg` }], opacity, tintColor: tint,
+    }, style]} />
   );
 }
