@@ -130,7 +130,7 @@ export default function SocialPost({
             {/* Play */}
             <View style={styles.center} pointerEvents="none">
               <View style={[styles.play, featured && styles.playHero, hasWatched && styles.playWatched]}>
-                <GameIcon name="play" size={featured ? 34 : 22} />
+                <GameIcon name="play" size={featured ? 64 : 40} />
               </View>
             </View>
 
@@ -227,18 +227,13 @@ const styles = StyleSheet.create({
   watchedTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.35)' },
   center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   play: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: BRAND.gold,
-    borderWidth: 3,
-    borderColor: BRAND.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingLeft: 3,
+    shadowColor: BRAND.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
   },
-  playHero: { width: 72, height: 72, borderRadius: 36, borderWidth: 4 },
-  playWatched: { backgroundColor: BRAND.white },
+  playHero: {},
+  playWatched: { opacity: 0.85 },
   newBadge: {
     position: 'absolute',
     top: 7,

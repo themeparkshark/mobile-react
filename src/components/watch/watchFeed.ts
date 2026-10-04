@@ -170,8 +170,13 @@ export function allowPlayerNavigation(url: string, isTopFrame: boolean | undefin
   return /^https:\/\/[^/]+\/embed\//i.test(url);
 }
 
-/** Only these origins may be opened by the WebView at all. */
-export const PLAYER_ORIGIN_WHITELIST = ['https://themeparkshark.com', 'https://www.youtube-nocookie.com', 'https://www.youtube.com', 'about:*'];
+/**
+ * Deliberately '*'. react-native-webview hands any URL that fails
+ * originWhitelist to Linking.openURL, which would open Safari or the YouTube
+ * app (an ad click-through, a channel link) outside the kid-safe player. With
+ * '*', every navigation reaches allowPlayerNavigation, which blocks it in place.
+ */
+export const PLAYER_ORIGIN_WHITELIST = ['*'];
 
 /** "Today", "Yesterday", "3 days ago", "2 weeks ago" for the hero card. */
 export function postedAgo(video: SocialPostType, now: number = Date.now()): string | null {
