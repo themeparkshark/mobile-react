@@ -42,8 +42,8 @@ test('chip text: the full name on up to two lines, with a small detail line; nev
   assert.deepEqual({ ...fb.hauntChipParts({ name: 'The Robot City', status: null, posted_minutes: null }) }, { name: 'The Robot City', detail: null });
   assert.equal(fb.hauntChipParts({ name: 'X', status: 'OPERATING', posted_minutes: 25 }, true).detail, null, 'survived: name only');
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
-  assert.match(sprites, /<Text style=\{styles\.chipText\} numberOfLines=\{2\}>\{label\}<\/Text>/);
-  assert.match(sprites, /<Text style=\{styles\.chipDetail\} numberOfLines=\{1\}>\{chipDetail\}<\/Text>/);
+  assert.match(sprites, /<Text style=\{styles\.chipText\} numberOfLines=\{2\}>\{label \?\? ''\}<\/Text>/);
+  assert.match(sprites, /<Text style=\{\[styles\.chipDetail, !chipDetail && styles\.collapsed\]\} numberOfLines=\{1\}>\{chipDetail \?\? ''\}<\/Text>/);
   assert.doesNotMatch(sprites, /numberOfLines=\{1\}>\{label\}/, 'the name never ellipsizes on one line');
   // Two lines of the narrow font hold every haunt name in the art kit at the chip's width.
   const longest = 'The Cabin with the Creaky Book'.length;

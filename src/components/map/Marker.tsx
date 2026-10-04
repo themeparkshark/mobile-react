@@ -16,7 +16,7 @@ type LatLng = { readonly latitude: number | string; readonly longitude: number |
  * touches. Mounting, unmounting or swapping MapView children mid-list crashes
  * MapLibre (-[MLRNMapView insertReactSubview:atIndex:]).
  */
-export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel, hidden = false }: {
+export function Marker({ coordinate, anchor, onPress, onLongPress, children, accessibilityLabel, hidden = false, touchEnabled = true }: {
   readonly coordinate: LatLng;
   readonly anchor?: { x: number; y: number };
   readonly onPress?: () => void;
@@ -31,6 +31,11 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   readonly accessibilityLabel?: string;
   /** Mounted but not drawn and not tappable (a parked marker). */
   readonly hidden?: boolean;
+  /**
+   * With onPress: false keeps the same Pressable mounted but takes no touches
+   * (a hidden spot). Toggling it never swaps the element inside the MarkerView.
+   */
+  readonly touchEnabled?: boolean;
 }) {
   const lng = Number(coordinate.longitude);
   const lat = Number(coordinate.latitude);
@@ -38,7 +43,7 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   const last = useRef<[number, number]>([0, 0]);
   if (valid) last.current = [lng, lat];
   const off = hidden || !valid;
-  const tappable = !off && !!onPress;
+  const tappable = !off && !!onPress && touchEnabled;
   return (
     <MarkerView coordinate={last.current} anchor={anchor ?? { x: 0.5, y: 0.5 }} allowOverlap>
       <Pressable disabled={!tappable} onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6}

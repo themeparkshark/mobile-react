@@ -37,7 +37,7 @@ test('screen projection follows the map heading; the camera center is the player
   assert.deepEqual({ ...fb.cameraCenter({ latitude: 28.49, longitude: -81.4685 }, bounds) }, mid, 'panned away: the view center');
   assert.equal(fb.cameraCenter(null, null), null);
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
-  assert.match(sources, /chipX=\{chipCenter && chips\.has\(haunt\.key\) \? screenX\(at, chipCenter, zoom, heading, screenW\) : null\}/);
+  assert.match(sources, /chipX=\{chipCenter && chip \? screenX\(at, chipCenter, zoom, heading, screenW\) : null\}/);
   assert.match(sprites(), /chipShiftClear\(chipX, chipY \?\? Number\.NaN, chipSize\.w, chipSize\.h, screenW, huds\)/, 'clamped with the measured chip size');
   assert.match(sprites(), /transform: \[\{ translateX: shift \}\]/);
 });
@@ -89,6 +89,6 @@ test('off-screen spots draw the hidden stand-in (MapLibre iOS parks off-screen M
     'north of center is up');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /return !at \|\| onScreen\(at, chipCenter, zoom, heading, screenW, screenH, ON_SCREEN_SLACK\);/);
-  assert.match(sources, /\{encounterOnScreen && encounter/);
+  assert.match(sources, /<ShowWhen on=\{encounterOnScreen && !!encounter\}>/);
   assert.match(sources, /setInterval\(read, 600\)/);
 });
