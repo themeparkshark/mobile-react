@@ -223,3 +223,9 @@ test('face bitmaps come in a few pixel sizes, never the 1353 px art', () => {
   assert.equal(fl.faceBucket(144, 3), 480, 'the shark card');
   assert.equal(fl.faceBucket(1000, 3), 768, 'capped at the card portrait size');
 });
+
+test('r2 capture fixes: Up N is never clipped, the dock never overshoots', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /style=\{\{ position: 'absolute', top: -27, left: -18, width: 80, alignItems: 'center' \}\}/, 'the Up badge is wider than the rank column');
+  assert.match(board, /translateY: Math\.max\(0, 1 - shown\.value\)/, 'the dock never rises above its rest spot');
+});

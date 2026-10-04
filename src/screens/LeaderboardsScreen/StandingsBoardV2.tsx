@@ -382,10 +382,13 @@ function YouRow({ model, climb, climbId, passed, hidden, snapId, now, inPark, on
               <>
                 <RankBadge rank={me.rank} me />
                 {climbed && (
+                  // Wider than the rank column (r2 capture: "Up 129!" was clipped to "Up 1").
                   <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
-                    style={{ position: 'absolute', top: -26, paddingHorizontal: 6, height: 22, borderRadius: 11, justifyContent: 'center', backgroundColor: BRAND.green,
+                    style={{ position: 'absolute', top: -27, left: -18, width: 80, alignItems: 'center' }}>
+                    <View style={{ paddingHorizontal: 8, height: 24, borderRadius: 12, justifyContent: 'center', backgroundColor: BRAND.green,
                       borderWidth: 2, borderColor: BRAND.greenLip }}>
-                    <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.white }}>{`Up ${climb}!`}</Text>
+                      <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>{`Up ${climb}!`}</Text>
+                    </View>
                   </Animated.View>
                 )}
               </>
