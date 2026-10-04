@@ -123,10 +123,11 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <LinearGradient colors={plate} style={StyleSheet.absoluteFill} />
         {(badge.rarity === 4 || secret) && !owned && <Sheen still={still} width={width + 60} every={secret ? 4200 : undefined} />}
-        {/* Secret: an outlined violet-and-gold corner ribbon (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
+        {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
         {secret && (
-          <View style={styles.secretRibbon}>
-            <Text maxFontSizeMultiplier={1} style={styles.secretRibbonText}>SECRET</Text>
+          <View style={styles.secretTag}>
+            <GameIcon name="sparkle" size={12} />
+            <Text maxFontSizeMultiplier={1} style={styles.secretTagText}>SECRET</Text>
           </View>
         )}
       </View>
@@ -209,9 +210,10 @@ const styles = StyleSheet.create({
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
   rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
-  secretRibbon: { position: 'absolute', top: 14, left: -30, width: 120, paddingVertical: 2, alignItems: 'center',
-    backgroundColor: '#6a3fd1', borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#ffd34d', transform: [{ rotate: '-40deg' }] },
-  secretRibbonText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
+  // The Secret corner tag (DESIGN.md 6.5): violet with a gold keyline, in the corner of every Secret tile.
+  secretTag: { position: 'absolute', top: 0, left: 0, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 10,
+    height: 22, backgroundColor: '#6a3fd1', borderBottomRightRadius: 12, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#ffd34d' },
+  secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
   // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
   secretInk: { color: '#ffffff' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },

@@ -156,7 +156,8 @@ export function Sheen({ still, delay = 300, width = 140, every }: { still: boole
   const x = useSharedValue(-1);
   const paused = useContext(FxPauseContext);
   useEffect(() => {
-    if (still || (every && paused)) { cancelAnimation(x); return; }
+    // Paused or still: the band rests off the tile, never frozen across it.
+    if (still || (every && paused)) { cancelAnimation(x); x.value = -1; return; }
     const sweep = withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) });
     x.value = -1;
     x.value = every

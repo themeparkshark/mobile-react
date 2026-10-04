@@ -93,6 +93,7 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
       {fxKey === 'reef_halo' && <><ReefHaloBack {...props} /><ReefHaloFront {...props} /></>}
       {fxKey === 'saucer' && <SaucerFront {...props} />}
       {fxKey === 'ghost_lantern' && <><GhostLanternBack {...props} /><GhostLanternFront {...props} /></>}
+      {fxKey === 'midway_fireworks' && <MidwayFireworksScene {...props} box={{ x: 0, y: 0, w: size, h: size }} />}
       {/* A scene is a backdrop: a small shark in front says "your shark goes here" (kids UX round 2). */}
       {fxKey === 'midway_fireworks' && (
         <View style={{ position: 'absolute', left: size * 0.26, top: size * 0.3, width: size * 0.5, height: size * 0.5 * (1530 / 1353) }}>
@@ -100,7 +101,6 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
           <Image source={SHARK_EYES} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
         </View>
       )}
-      {fxKey === 'midway_fireworks' && <MidwayFireworksScene {...props} box={{ x: 0, y: 0, w: size, h: size }} />}
     </View>
   );
 });

@@ -130,7 +130,7 @@ export function PlasmaBladeFront(props: RigProps) {
   return (
     <>
       {/* A soft cyan glow sprite stretched along the blade (never a blurred copy). */}
-      <FxPart source={GLOW} box={box} spec={G} aspect={G.aspect} tint="#5fe2ff" fit="fill" style={glow} />
+      {lod !== 'lite' && <FxPart source={GLOW} box={box} spec={G} aspect={G.aspect} tint="#5fe2ff" fit="fill" style={glow} />}
       {lod === 'full' && TRAIL.map(i => <Trail key={i} {...props} i={i} />)}
       <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} style={blade} />
       {lod === 'full' && <TipSpark {...props} />}
