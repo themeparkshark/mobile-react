@@ -194,8 +194,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '36906b00f42582feb3d69e4f3fe5da8dfbe0e40b1ac9a1ec530579c86a9aae3b');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '5645eaea3d0ba189cb711f3d8773f6f3a999942bd602fd1cbed4c30e4c91f52f');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '80d41a0185c1ebe3e6bb202e17830150891f00f6136ad6fdf60a24a7bd7f464c');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '1b67fef46c5d8c6c6c3e757ffd82bc6513544e05ddc51e514c97ea0a99ccd7eb');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -481,6 +481,11 @@ test('R12: no refusal is silent (the app sends it to the server), gentle line, p
   for (const t of ['my brother kicks me under the table every time i order a churro lol', 'my dad hit me with a pool noodle at the resort pool and i fell in laughing',
     "my grandma beat me at Toy Story Mania again, she's a legend"]) assert.equal(model.isDisclosure(t), false, t);
   assert.equal(model.isDisclosure('my stepdad touches me and says its our secret lol'), true);
+  // A park tip is not grooming; a secret aimed at a person still is.
+  assert.equal(model.checkDraft('keep it a secret: the best photo spot is behind the carousel'), null);
+  assert.equal(model.checkDraft('keep it a secret from your mom'), 'grooming');
+  // Explicit "not wanting to be alive" is the narrow tier (the kid sees 988).
+  for (const t of ['i hate being alive', 'im so tired of being alive honestly', 'i wish i wasnt alive', 'i want to die', 'i dont want to live anymore']) assert.equal(model.isDistress(t), true, t);
   for (const composerFile of ['src/screens/threads/Composer.tsx', 'src/screens/ThreadScreen.tsx']) {
     assert.doesNotMatch(read(composerFile), /reportFilterHit/);
   }
