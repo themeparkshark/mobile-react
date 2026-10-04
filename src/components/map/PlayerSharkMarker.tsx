@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, runOnUI, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Marker } from './Marker';
-import { glideDurationMs, glideEaseWorklet, GLIDE_MIN_MS, type GlidePoint } from './glide';
+import { glideDurationMs, glideEaseWorklet, GLIDE_MIN_MS, nextFixGap, type GlidePoint } from './glide';
 import { catchUpStart, metersEastNorth, screenOffset, SWAP_SETTLE_MS } from './playerMotion';
 
 /** Room around the 100 x 110 shark box for its glide offset, wake and weak-signal ring (points). */
@@ -62,6 +62,7 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
   const activeRef = useRef(0);
   const pendingRef = useRef<Pending | null>(null);
   const lastTargetAt = useRef(0);
+  const fixGap = useRef(0);
   const lastTarget = useRef<GlidePoint | null>(target);
   // The shark's drawn position and each copy's point, in metres east/north of `origin`.
   const visE = useSharedValue(0), visN = useSharedValue(0);
@@ -87,7 +88,8 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
       next[hidden] = { latitude: target.latitude, longitude: target.longitude };
       return next;
     });
-    const ms = prev ? glideDurationMs(prev, target, since) : 0;
+    if (prev) fixGap.current = nextFixGap(fixGap.current, since);
+    const ms = prev ? glideDurationMs(prev, target, fixGap.current) : 0;
     const ppm = zoomPpm.value > 0 ? zoomPpm.value : 3;
     const maxM = PLAYER_MAX_GLIDE_PT / ppm;
     // How far the visible copy would have to draw the shark from its own point. Measured from that

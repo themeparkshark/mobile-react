@@ -4,7 +4,7 @@ import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, 
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
 import { courseDeg, facingFor, strideHalfMs, wakeTurn } from './map/playerMotion';
-import { glideDurationMs, glideMeters } from './map/glide';
+import { glideDurationMs, glideMeters, nextFixGap } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
@@ -61,8 +61,8 @@ const SHARK_GROUND = { x: 50, y: 100 } as const;
 const WEAK_RING_MAX_PT = 200;
 const WEAK_RING_MIN_PT = 110;
 const WEAK_RING_MIN_M = 40;
-/** The wake stays up this long after a real step (a walk sends a fix every 1 to 2 s). */
-const WAKE_HOLD_MS = 2200;
+/** The wake and stride stay up at least this long after a real step (then as long as the glide). */
+const WAKE_MIN_HOLD_MS = 800;
 /** At this accuracy (m) or worse the ring is at its widest and strongest. */
 const WEAK_RING_FULL_M = 150;
 
@@ -204,6 +204,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
   const lastFixAtRef = useRef(0);
+  const fixGapRef = useRef(0);
   const locationRef = useRef(location);
   locationRef.current = location;
   const headingRef = useRef(heading);
@@ -238,7 +239,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const distMeters = glideMeters(prev, location);
     const arrived = Date.now();
     const previousFixAt = lastFixAtRef.current;
-    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, arrived - previousFixAt);
+    if (previousFixAt > 0) fixGapRef.current = nextFixGap(fixGapRef.current, arrived - previousFixAt);
+    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, fixGapRef.current);
     lastFixAtRef.current = arrived;
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
@@ -251,10 +253,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const course = courseDeg(prev, location);
     if (walking && course !== null) travelCourse.value = course;
     if (walking) {
-      // Held across the gap to the next fix (about 1 to 2 s on a walk), so the wake never drops mid-walk.
-      const hold = Math.max(glideDuration + 600, WAKE_HOLD_MS);
+      // Up for exactly as long as the shark moves (its glide fills the expected gap to the next
+      // fix), so the wake and stride never run while the shark stands still.
+      const hold = Math.max(WAKE_MIN_HOLD_MS, glideDuration + 200);
       wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(hold, withTiming(0, { duration: 700 })));
-      runStride(distMeters / Math.max(0.5, sinceLastS), hold + 900);
+      runStride(distMeters / Math.max(0.5, sinceLastS), hold + 700);
     }
   }, [location?.latitude, location?.longitude]);
 

@@ -160,12 +160,14 @@ test('the shark glides 600 to 1000 ms between fixes, jumps only for a re-seat', 
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 40, 0)), 1000, 'capped at 1 s');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 400, 0)), 0, 'a re-seat jumps');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 0.1, 0)), 0, 'nothing to see');
-  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1.4, 0), 1100), 1000, 'a walk fills the gap to the next fix (max 1 s)');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1.4, 0), 1100), 1100, 'a walk fills the gap to the next fix');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 10, 0), 7000), 7000, 'park tier: 10 m over 7 s at walking pace');
+  assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1, 0), 7000), 2000, 'never slower than 0.5 m/s');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 1.4, 0), 300), 600, 'never shorter than a step');
   assert.equal(glide.glideDurationMs(HOME, offset(HOME, 400, 0), 1000), 0, 'a re-seat still jumps');
   const mid = glide.glidePoint(HOME, offset(HOME, 10, 0), 0.5);
   const d = pf.metersBetween(HOME, mid);
-  assert.ok(d > 5.5 && d < 7, `gentle ease-out: a little past halfway at half time (${d.toFixed(2)} m)`);
+  assert.ok(d > 5.2 && d < 6, `nearly linear: a little past halfway at half time (${d.toFixed(2)} m)`);
   const end = glide.glidePoint(HOME, offset(HOME, 10, 0), 1);
   assert.equal(end.latitude, offset(HOME, 10, 0).latitude);
   assert.equal(end.longitude, offset(HOME, 10, 0).longitude);
@@ -218,4 +220,27 @@ test('back from a silence (a ride roof, a tunnel): a vague first fix is waited o
   const vague = offset(HOME, 200, 0);
   const r = [0, 1, 2].map(i => f2.push({ ...vague, accuracy: 90, timestamp: t + i * 1000 }).kind);
   assert.deepEqual(r, ['reject', 'reject', 'publish']);
+});
+
+test('real fix rates (2.5 s on a map, 7 s in a park): the shark keeps moving through a walk', () => {
+  const read = f => require('node:fs').readFileSync(require('node:path').join(__dirname, '../..', f), 'utf8');
+  for (const gapMs of [2500, 7000]) {
+    const stepM = 1.4 * gapMs / 1000;
+    let est = 0;
+    let movingUntil = 0;
+    let longestStill = 0;
+    for (let i = 1; i <= 12; i++) {
+      const at = i * gapMs;
+      est = glide.nextFixGap(est, gapMs);
+      const ms = glide.glideDurationMs(HOME, offset(HOME, stepM, 0), est);
+      if (i > 2) longestStill = Math.max(longestStill, at - movingUntil);
+      movingUntil = Math.max(movingUntil, at + ms);
+    }
+    assert.ok(longestStill <= 300, `gap ${gapMs} ms: still for ${longestStill} ms mid-walk`);
+  }
+  assert.equal(glide.nextFixGap(2500, 60_000), 0.6 * 2500 + 0.4 * 8000, 'a silence never stretches the estimate past 8 s');
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const hold = Math\.max\(WAKE_MIN_HOLD_MS, glideDuration \+ 200\);/, 'wake and stride stop when the shark stops');
+  assert.match(map, /fixGapRef\.current = nextFixGap\(fixGapRef\.current, arrived - previousFixAt\)/);
+  assert.match(read('src/components/map/PlayerSharkMarker.tsx'), /glideDurationMs\(prev, target, fixGap\.current\)/);
 });

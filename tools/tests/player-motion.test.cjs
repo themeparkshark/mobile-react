@@ -200,9 +200,8 @@ test('the stride paces with the walk and stops when standing; the wake holds acr
   assert.equal(motion.strideHalfMs(0.2), 225);
   assert.ok(motion.strideHalfMs(1.4) < 225 && motion.strideHalfMs(1.4) > 140);
   const map = read('src/components/Map.tsx');
-  assert.match(map, /const WAKE_HOLD_MS = 2200;/);
-  assert.match(map, /const hold = Math\.max\(glideDuration \+ 600, WAKE_HOLD_MS\);/);
-  assert.match(map, /runStride\(distMeters \/ Math\.max\(0\.5, sinceLastS\), hold \+ 900\);/);
+  assert.match(map, /const WAKE_MIN_HOLD_MS = 800;/);
+  assert.match(map, /runStride\(distMeters \/ Math\.max\(0\.5, sinceLastS\), hold \+ 700\);/);
   assert.doesNotMatch(map, /stride\.value = withRepeat\(withSequence\(withTiming\(1, \{ duration: 170 \}\)/, 'no endless fixed-pace stride');
 });
 
