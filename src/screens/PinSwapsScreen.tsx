@@ -9,11 +9,11 @@
  * chat and no free text. Only the server decides what can be traded.
  */
 import { useIsFocused } from '@react-navigation/native';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, FadeIn, FadeInDown, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  cancelAnimation, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { vsprintf } from 'sprintf-js';
 import getPins from '../api/endpoints/me/pins';
@@ -25,8 +25,6 @@ import InformationModal from '../components/InformationModal';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
-import { queueHaptic } from '../gamekit/Haptics';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -37,32 +35,49 @@ import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, gameAlert, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SharkLoader, SPACE } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import EnamelPin from './pinTrading/EnamelPin';
-import { BoardPinCard, MAX_FONT, PageWash, type SlotRect, TRADE_SURFACE } from './pinTrading/PinTradeParts';
+import { type BoardBadge, BoardPinCard, MAX_FONT, PageWash, type SlotRect, TRADE_SURFACE } from './pinTrading/PinTradeParts';
 import {
   boardEntry, classifyTradeError, givablePins, holdLengthMs, isHolding, mergePins, PIN_TRADE_COPY as COPY, pinName, type TradePhase,
 } from './pinTrading/pinTradeModel';
 import SwapCelebration from './pinTrading/SwapCelebration';
 import TradeSheet from './pinTrading/TradeSheet';
+import { beat, preloadTradeAudio } from './pinTrading/tradeAudio';
 
 const CORK = require('../../assets/images/screens/pin-swaps/corkboard.png');
 const LANYARD = require('../../assets/images/screens/social/pin_swaps.png');
-const SND_SELECT = require('../../assets/sounds/pin_swap_select_pin.mp3');
-const SND_CONFIRM = require('../../assets/sounds/pin_swap_confirm.mp3');
-const SND_CANCEL = require('../../assets/sounds/purchase_item_cancel.mp3');
-const SND_OPEN = require('../../assets/sounds/modal_open.mp3');
-const SND_CLOSE = require('../../assets/sounds/modal_close.mp3');
-const SND_NOPE = require('../../assets/sounds/nope.mp3');
+const SHARK_HAPPY = require('../../assets/images/howto/shark-happy.webp');
+const SHARK_OOPS = require('../../assets/images/screens/redeem/so-close-shark.png');
 
 const COLUMNS = 3;
+/** Your pins load up front (all pages, capped) so the hold clock never runs while they load. */
+const MAX_PIN_PAGES = 10;
+/** "Yes, trade!" ignores taps for this long after it appears (a double tap can't skip the confirm). */
+const CONFIRM_GUARD_MS = 450;
 
 type Hold = { swap: PinSwapType; deadline: number; totalMs: number };
 type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect } };
+
+/** Board empty or failed to load: Alex's shark, a line and one action, sized for the cork panel. */
+function BoardState({ kind, onPress }: { kind: 'empty' | 'error'; onPress: () => void }) {
+  const empty = kind === 'empty';
+  const title = empty ? COPY.emptyTitle : COPY.networkTitle;
+  const message = empty ? COPY.emptyMessage : COPY.networkMessage;
+  return (
+    <View style={styles.boardState} accessible accessibilityLabel={`${title}. ${message}`}>
+      <Image source={empty ? SHARK_HAPPY : SHARK_OOPS} style={{ width: 124, height: 136 }} contentFit="contain" />
+      <View style={styles.boardStateCard}>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.boardStateTitle}>{title}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.boardStateBody}>{message}</Text>
+      </View>
+      <GameButton size="compact" icon="retry" label={empty ? COPY.emptyAction : COPY.tryAgain} onPress={onPress} />
+    </View>
+  );
+}
 
 export default function PinSwapsScreen() {
   const { hasPermission } = usePermissions();
   const signedIn = hasPermission(PermissionEnums.TradePins);
   const { labels, errors } = useCrumbs();
-  const { playSound } = useContext(SoundEffectContext);
   const still = useUiReducedMotion();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
@@ -76,15 +91,24 @@ export default function PinSwapsScreen() {
   const [pins, setPins] = useState<ItemType[]>([]);
   const [pinsLoading, setPinsLoading] = useState(false);
   const [pinsError, setPinsError] = useState(false);
+  const [pinsReady, setPinsReady] = useState(false);
   const [selected, setSelected] = useState<ItemType>();
   const [done, setDone] = useState<Done | null>(null);
+  const [lastGiven, setLastGiven] = useState<number | null>(null);
   const shine = useSharedValue(0);
+  const sheetFade = useSharedValue(1);
+  const sheetFadeStyle = useAnimatedStyle(() => ({ opacity: sheetFade.value }));
   const holdRef = useRef<Hold | null>(null);
   const slotsRef = useRef<{ get?: SlotRect; give?: SlotRect }>({});
+  const rootRef = useRef<View>(null);
+  const rootOffset = useRef({ x: 0, y: 0 });
   const phaseRef = useRef<TradePhase>('loading');
+  const selectedRef = useRef<ItemType | undefined>(undefined);
+  const confirmAt = useRef(0);
   const pinsPage = useRef({ next: 1, finished: false, loading: false, token: 0 });
   holdRef.current = hold;
   phaseRef.current = phase;
+  selectedRef.current = selected;
 
   const loadBoard = useCallback(async (mode: 'first' | 'refresh') => {
     if (mode === 'first') setBoardState('loading');
@@ -101,20 +125,27 @@ export default function PinSwapsScreen() {
     }
   }, []);
 
-  const loadPins = useCallback(async (reset: boolean) => {
+  /** One page of your tradeable pins. `all` keeps going until the last page (capped). */
+  const loadPins = useCallback(async (reset: boolean, all = false) => {
     const page = pinsPage.current;
-    if (reset) { page.next = 1; page.finished = false; page.token += 1; page.loading = false; setPins([]); }
+    if (reset) { page.next = 1; page.finished = false; page.token += 1; page.loading = false; }
     if (page.loading || page.finished) return;
     page.loading = true;
     const token = page.token;
     setPinsLoading(true);
     setPinsError(false);
     try {
-      const rows = await getPins(page.next);
-      if (token !== page.token) return;
-      page.next += 1;
-      if (rows.length === 0) page.finished = true;
-      setPins(prev => mergePins(prev, rows));
+      let collected: ItemType[] = [];
+      do {
+        const rows = await getPins(page.next);
+        if (token !== page.token) return;
+        page.next += 1;
+        if (rows.length === 0) page.finished = true;
+        collected = mergePins(collected, rows);
+        if (reset && page.next === 2) setPins(collected);
+        else setPins(prev => mergePins(prev, rows));
+      } while (all && !page.finished && page.next <= MAX_PIN_PAGES);
+      setPinsReady(true);
     } catch {
       if (token === page.token) setPinsError(true);
     } finally {
@@ -123,8 +154,11 @@ export default function PinSwapsScreen() {
   }, []);
 
   useEffect(() => {
-    if (signedIn) void loadBoard('first');
-  }, [signedIn, loadBoard]);
+    if (!signedIn) return;
+    preloadTradeAudio();
+    void loadBoard('first');
+    void loadPins(true, true);
+  }, [signedIn, loadBoard, loadPins]);
 
   // One shine for the whole board: a slow wave every few seconds while the board is in view.
   const boardActive = focused && !hold && !done && !still && boardState === 'ready';
@@ -132,131 +166,188 @@ export default function PinSwapsScreen() {
     cancelAnimation(shine);
     shine.value = 0;
     if (!boardActive) return;
-    shine.value = withDelay(500, withRepeat(withSequence(withTiming(1, { duration: 1700 }), withDelay(4300, withTiming(0, { duration: 0 }))), -1, false));
+    shine.value = withDelay(500, withRepeat(withSequence(withTiming(1, { duration: 1900 }), withDelay(4300, withTiming(0, { duration: 0 }))), -1, false));
     return () => cancelAnimation(shine);
   }, [boardActive, shine]);
 
   // Let the pin go back on the board if the player leaves mid-trade.
   useEffect(() => () => {
     const h = holdRef.current;
-    if (h && isHolding(phaseRef.current)) {
-      void unHoldPinSwap(h.swap.id).catch(() => undefined);
-    }
+    if (h && isHolding(phaseRef.current)) void unHoldPinSwap(h.swap.id).catch(() => undefined);
   }, []);
+
+  // iOS has no live regions: say the important sheet changes out loud.
+  useEffect(() => {
+    const line = phase === 'expired' ? `${COPY.expiredTitle}. ${COPY.expiredMessage}`
+      : phase === 'taken' ? `${COPY.takenTitle}. ${COPY.takenMessage}`
+        : phase === 'failed' ? `${COPY.failedTitle}. ${COPY.failedMessage}`
+          : phase === 'confirming' && selectedRef.current && holdRef.current
+            ? COPY.confirmMessage(pinName(selectedRef.current), pinName(holdRef.current.swap.pin.item)) : '';
+    if (line && hold) AccessibilityInfo.announceForAccessibility(line);
+  }, [phase, hold]);
 
   const showError = useCallback((error: unknown) => {
     const kind = classifyTradeError(error);
-    playSound(SND_NOPE);
-    queueHaptic('failBuzz', 2);
-    if (kind === 'taken') gameAlert(COPY.takenTitle, errors.pin_swap_unavailable || 'Someone else is trading for this pin right now.', undefined, { icon: 'lock' });
-    else if (kind === 'owned') gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'check' });
+    beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
+    if (kind === 'taken') gameAlert(COPY.takenTitle, errors.pin_swap_unavailable || COPY.takenMessage, undefined, { icon: 'lock' });
+    else if (kind === 'owned') gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
     else if (kind === 'network') gameAlert(COPY.networkTitle, COPY.networkMessage, undefined, { icon: 'info' });
     else gameAlert(COPY.genericTitle, COPY.genericMessage, undefined, { icon: 'info' });
     return kind;
-  }, [errors.pin_swap_unavailable, playSound]);
+  }, [errors.pin_swap_unavailable]);
 
-  const startHold = useCallback(async (swapId: number) => {
-    if (busyId != null || holdRef.current) return;
-    const swap = board.find(s => s.id === swapId);
+  const owned = useMemo(() => new Set(pins.map(p => p.id)), [pins]);
+  const badgeFor = useCallback((item: ItemType): BoardBadge => (
+    owned.has(item.id) ? 'owned' : item.id === lastGiven ? 'yours' : undefined
+  ), [owned, lastGiven]);
+
+  /** Hold a board pin (fresh from the board, or "Try again" on the same pin after it expired). */
+  const startHold = useCallback(async (swapId: number, again = false) => {
+    if (busyId != null || (holdRef.current && !again)) return;
+    const swap = again ? holdRef.current?.swap : board.find(s => s.id === swapId);
     if (!swap) return;
+    // No server call when the answer is already known: you own it, or you have nothing to give.
+    if (owned.has(swap.pin.item.id)) {
+      beat('ui.select');
+      gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
+      return;
+    }
+    if (pinsReady && !pinsLoading && !pinsError && pins.length === 0) {
+      beat('ui.select');
+      gameAlert(COPY.noPinsTitle, COPY.noPinsHint, undefined, { icon: 'chest' });
+      return;
+    }
     setBusyId(swapId);
-    playSound(SND_SELECT);
+    beat('ui.select', { volume: 0.9 });
     try {
       const held = await holdPinSwap(swapId);
       const totalMs = holdLengthMs(held.held_from, held.held_to);
-      setSelected(undefined);
+      if (!again) setSelected(undefined);
       setPhase('picking');
+      sheetFade.value = 1;
       setHold({ swap: { ...swap, held_from: held.held_from, held_to: held.held_to }, deadline: Date.now() + totalMs, totalMs });
-      playSound(SND_OPEN);
-      void loadPins(true);
+      if (pinsError || !pinsReady) void loadPins(true, true);
     } catch (error) {
-      const kind = showError(error);
-      if (kind === 'taken') void loadBoard('refresh');
+      if (again) {
+        setPhase('taken');
+        beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
+      } else {
+        const kind = showError(error);
+        if (kind === 'taken') void loadBoard('refresh');
+      }
     } finally {
       setBusyId(null);
     }
-  }, [board, busyId, loadBoard, loadPins, playSound, showError]);
+  }, [board, busyId, loadBoard, loadPins, owned, pins.length, pinsError, pinsLoading, pinsReady, showError]);
+
+  const onBoardPress = useCallback((swapId: number) => { void startHold(swapId); }, [startHold]);
+  const onHoldAgain = useCallback(() => {
+    const h = holdRef.current;
+    if (h) void startHold(h.swap.id, true);
+  }, [startHold]);
 
   const closeSheet = useCallback(() => {
     const h = holdRef.current;
     if (!h || phaseRef.current === 'sending') return;
-    const ended = phaseRef.current === 'expired';
-    if (!ended) void unHoldPinSwap(h.swap.id).catch(() => undefined);
-    playSound(SND_CLOSE);
+    const p = phaseRef.current;
+    if (isHolding(p)) void unHoldPinSwap(h.swap.id).catch(() => undefined);
+    beat('ui.modalClose', { volume: 0.7 });
     setHold(null);
     setSelected(undefined);
-    pinsPage.current.token += 1;
-    if (ended || phaseRef.current === 'failed') void loadBoard('refresh');
-  }, [loadBoard, playSound]);
+    if (p === 'expired' || p === 'failed' || p === 'taken') void loadBoard('refresh');
+  }, [loadBoard]);
 
   const onExpire = useCallback(() => {
     const h = holdRef.current;
     if (!h || phaseRef.current === 'sending') return;
     setPhase('expired');
-    playSound(SND_NOPE);
-    queueHaptic('warning', 2);
+    beat('fx.nope', { volume: 0.8 }, 'warning', 2);
     void unHoldPinSwap(h.swap.id).catch(() => undefined);
-  }, [playSound]);
+  }, []);
+
+  const onTick = useCallback((left: number) => {
+    // Soft coin ticks that climb as the last seconds run out.
+    beat('fx.coinTick', { volume: 0.5, pitch: (6 - left) * 1.5 });
+  }, []);
 
   const onSelect = useCallback((item: ItemType) => {
     if (phaseRef.current !== 'picking' && phaseRef.current !== 'confirming') return;
     setPhase('picking');
     setSelected(prev => (prev?.id === item.id ? prev : item));
-    playSound(SND_SELECT);
-    queueHaptic('tickSelection', 1);
-  }, [playSound]);
+    beat('ui.select', { volume: 0.8 }, 'tickSelection', 1);
+  }, []);
 
   const trade = useCallback(async () => {
     const h = holdRef.current;
-    if (!h || !selected) return;
+    const pick = selectedRef.current;
+    if (!h || !pick) return;
     if (phaseRef.current === 'picking') {
       // Step one of two: the sheet turns into "Give your X for the Y?" with the timer still running.
+      confirmAt.current = Date.now();
       setPhase('confirming');
-      playSound(SND_SELECT);
-      queueHaptic('tapLight', 1);
+      beat('ui.select', { volume: 0.9, pitch: 5 }, 'tapLight', 1);
       return;
     }
+    if (phaseRef.current === 'confirming' && Date.now() - confirmAt.current < CONFIRM_GUARD_MS) return;
     if (phaseRef.current !== 'confirming' && phaseRef.current !== 'failed') return;
     if (Date.now() >= h.deadline) { onExpire(); return; }
     setPhase('sending');
-    playSound(SND_CONFIRM);
+    beat('ui.confirm', { volume: 0.9 }, 'hitMedium', 2);
     try {
-      await acceptPinSwap(h.swap.id, selected.id);
-      setDone({ got: h.swap.pin.item, gave: selected, from: { ...slotsRef.current } });
-      // The sheet hands its two pins to the trade-complete moment, then fades under its sky.
-      setTimeout(() => { setHold(null); setSelected(undefined); }, 320);
-      setBoard(prev => prev.filter(s => s.id !== h.swap.id));
+      await acceptPinSwap(h.swap.id, pick.id);
+      const root = rootOffset.current;
+      const shift = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
+      setDone({ got: h.swap.pin.item, gave: pick, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
+      setLastGiven(pick.id);
+      // The sheet hands its two pins to the trade-complete moment and fades out in place
+      // (no slide, so nothing moves under the flying pins); it unmounts when the moment ends.
+      sheetFade.value = withTiming(0, { duration: 200 });
     } catch (error) {
       const kind = classifyTradeError(error);
-      playSound(SND_NOPE);
-      queueHaptic('failBuzz', 2);
-      if (kind === 'taken' || kind === 'owned') {
-        setPhase('expired');
-        showError(error);
-      } else setPhase('failed');
+      beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
+      setPhase(kind === 'taken' || kind === 'owned' ? 'taken' : 'failed');
     }
-  }, [onExpire, playSound, selected, showError]);
+  }, [onExpire]);
+
+  const onTradePress = useCallback(() => { void trade(); }, [trade]);
 
   const backToPicking = useCallback(() => {
     if (phaseRef.current !== 'confirming') return;
     setPhase('picking');
-    playSound(SND_CANCEL);
-  }, [playSound]);
+    beat('ui.modalClose', { volume: 0.6 });
+  }, []);
 
   const finishCelebration = useCallback(() => {
     setDone(null);
-    void loadBoard('refresh');
-  }, [loadBoard]);
+    setHold(null);
+    setSelected(undefined);
+    // Your pins changed (one out, one in); the board reloads after the fade, not under it.
+    setTimeout(() => {
+      void loadBoard('refresh');
+      void loadPins(true, true);
+    }, 240);
+  }, [loadBoard, loadPins]);
 
   const timerLabel = useCallback((clock: string, minutes: number, seconds: string) => {
     const template = labels.trade_expiration;
     return template ? vsprintf(template, [minutes, seconds]) : `Your trade will expire in ${clock}`;
   }, [labels.trade_expiration]);
 
+  const onRetryPins = useCallback(() => { void loadPins(true, true); }, [loadPins]);
+  const onMorePins = useCallback(() => { void loadPins(false); }, [loadPins]);
+  const onSlot = useCallback((which: 'get' | 'give', rect: SlotRect) => { slotsRef.current[which] = rect; }, []);
+  const onRootLayout = useCallback(() => {
+    rootRef.current?.measureInWindow((x, y) => { rootOffset.current = { x, y }; });
+  }, []);
+
   const givable = useMemo(() => (hold ? givablePins(pins, hold.swap.pin.item.id) : []), [pins, hold]);
   const pagePad = SPACE.lg;
   const panelInner = Math.min(width, 560) - pagePad * 2 - SPACE.md * 2 - OUTLINE.heavy * 2;
   const cellWidth = Math.floor((panelInner - SPACE.sm * (COLUMNS - 1)) / COLUMNS);
+  const cardHeight = Math.round(cellWidth * 0.72) + 62;
+  const rows = Math.ceil(board.length / COLUMNS);
+  const lagFor = (i: number) => (i % COLUMNS) * 0.07 + Math.floor(i / COLUMNS) * 0.1;
+  const lagSpan = lagFor((rows - 1) * COLUMNS + COLUMNS - 1);
   const stepPin = board[0]?.pin.item;
 
   // ---- Every hook is above this line. ----
@@ -286,7 +377,7 @@ export default function PinSwapsScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} ref={rootRef} onLayout={onRootLayout} collapsable={false}>
       {topbar}
       <View style={styles.body}>
         <PageWash />
@@ -300,7 +391,7 @@ export default function PinSwapsScreen() {
               <Image source={LANYARD} style={styles.heroArt} contentFit="contain" />
               <View style={{ flex: 1 }}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.eyebrow}>{COPY.boardEyebrow}</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroTitle}>{COPY.boardTitle}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.heroTitle}>{COPY.boardTitle}</Text>
               </View>
             </View>
             <View style={styles.steps} accessible accessibilityLabel={COPY.steps.map((s, i) => `${i + 1}. ${s.label}`).join('. ')}>
@@ -309,7 +400,7 @@ export default function PinSwapsScreen() {
                   <View style={styles.step}>
                     <View style={styles.stepArt}>
                       {i === 0 && stepPin
-                        ? <EnamelPin uri={stepPin.icon_url} size={34} tilt={-6} recyclingKey="step-pin" />
+                        ? <EnamelPin uri={stepPin.icon_url} size={34} tilt={-6} surface="none" recyclingKey="step-pin" />
                         : <GameIcon name={i === 0 ? 'star' : step.icon} size={32} />}
                     </View>
                     <Text maxFontSizeMultiplier={1.2} numberOfLines={2} style={styles.stepText}>{step.label}</Text>
@@ -322,12 +413,9 @@ export default function PinSwapsScreen() {
 
           <View style={styles.boardFrame}>
             <ImageBackground source={CORK} resizeMode="repeat" style={styles.cork} imageStyle={{ borderRadius: RADIUS.lg - 4 }}>
-              {boardState === 'loading' && <SharkLoader compact onRetry={() => void loadBoard('first')} style={styles.boardState} />}
-              {boardState === 'error' && <SharkLoader compact state="error" onRetry={() => void loadBoard('first')} style={styles.boardState} />}
-              {boardState === 'ready' && board.length === 0 && (
-                <SharkLoader compact state="empty" title={COPY.emptyTitle} message={COPY.emptyMessage}
-                  action={{ label: COPY.emptyAction, icon: 'retry', onPress: () => void loadBoard('refresh') }} style={styles.boardState} />
-              )}
+              {boardState === 'loading' && <SharkLoader onRetry={() => void loadBoard('first')} style={styles.loader} />}
+              {boardState === 'error' && <BoardState kind="error" onPress={() => void loadBoard('first')} />}
+              {boardState === 'ready' && board.length === 0 && <BoardState kind="empty" onPress={() => void loadBoard('refresh')} />}
               {boardState === 'ready' && board.length > 0 && (
                 <>
                   <View style={styles.countChip}>
@@ -336,9 +424,9 @@ export default function PinSwapsScreen() {
                   <View style={styles.grid}>
                     {board.map((swap, i) => (
                       <Animated.View key={swap.id} entering={still ? undefined : FadeIn.delay(60 + i * 45).duration(220)}>
-                        <BoardPinCard item={swap.pin.item} swapId={swap.id} width={cellWidth} shine={shine}
-                          lag={(i % COLUMNS) * 0.07 + Math.floor(i / COLUMNS) * 0.1} still={still}
-                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={startHold} />
+                        <BoardPinCard item={swap.pin.item} swapId={swap.id} width={cellWidth} height={cardHeight} shine={shine}
+                          lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}
+                          busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} />
                       </Animated.View>
                     ))}
                   </View>
@@ -350,12 +438,13 @@ export default function PinSwapsScreen() {
           {boardState === 'ready' && board.length > 0 && (
             <View style={styles.footer}>
               <GameButton size="compact" icon="retry" label={COPY.shuffle} accessibilityHint={COPY.shuffleHint}
-                onPress={() => { playSound(SND_SELECT); void loadBoard('refresh'); }} disabled={refreshing} />
+                onPress={() => { beat('ui.select', { volume: 0.7 }); void loadBoard('refresh'); }} disabled={refreshing} />
             </View>
           )}
         </ScrollView>
 
         {hold && (
+          <Animated.View style={[StyleSheet.absoluteFill, sheetFadeStyle]} pointerEvents={done ? 'none' : 'box-none'}>
           <TradeSheet
             swap={hold.swap}
             phase={phase}
@@ -366,26 +455,27 @@ export default function PinSwapsScreen() {
             pinsError={pinsError}
             selected={selected}
             still={still}
-            shine={undefined}
             timerLabel={timerLabel}
             tradeLabel={labels.trade_pin || 'Trade Pin'}
             onSelect={onSelect}
-            onTrade={() => void trade()}
+            onTrade={onTradePress}
             onClose={closeSheet}
-            onSlot={(which, rect) => { slotsRef.current[which] = rect; }}
-            handedOff={!!done}
             onBack={backToPicking}
+            onHoldAgain={onHoldAgain}
             onExpire={onExpire}
-            onRetryPins={() => void loadPins(true)}
-            onMorePins={() => void loadPins(false)}
+            onTick={onTick}
+            onRetryPins={onRetryPins}
+            onMorePins={onMorePins}
+            onSlot={onSlot}
+            handedOff={!!done}
           />
+          </Animated.View>
         )}
       </View>
       {done && <SwapCelebration got={done.got} gave={done.gave} from={done.from} still={still} onDone={finishCelebration} />}
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -411,8 +501,15 @@ const styles = StyleSheet.create({
   boardFrame: {
     borderRadius: RADIUS.lg, borderWidth: OUTLINE.heavy, borderColor: BRAND.white, backgroundColor: '#c8975a', ...SHADOW.lifted,
   },
-  cork: { padding: SPACE.md, borderRadius: RADIUS.lg - 4, overflow: 'hidden', minHeight: 320 },
-  boardState: { paddingVertical: SPACE.xxl },
+  cork: { padding: SPACE.md, borderRadius: RADIUS.lg - 4, overflow: 'hidden' },
+  loader: { paddingVertical: SPACE.xxl, minHeight: 300 },
+  boardState: { alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.xl },
+  boardStateCard: {
+    backgroundColor: BRAND.cream, borderRadius: RADIUS.md, borderWidth: OUTLINE.thin, borderColor: BRAND.creamDeep,
+    paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, alignItems: 'center', gap: SPACE.xs, maxWidth: 300, ...SHADOW.card,
+  },
+  boardStateTitle: { fontFamily: FONT.display, fontSize: 22, lineHeight: 27, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
+  boardStateBody: { fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: BRAND.navySoft, textAlign: 'center' },
   countChip: {
     alignSelf: 'center', backgroundColor: 'rgba(5,52,110,0.86)', borderRadius: RADIUS.pill, paddingHorizontal: SPACE.md, paddingVertical: 6,
     marginBottom: SPACE.md,

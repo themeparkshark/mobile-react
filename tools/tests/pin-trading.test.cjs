@@ -69,9 +69,12 @@ test('failed holds and trades become four kid-readable cases', () => {
 });
 
 test('every sheet phase has a clear status chip', () => {
-  const phases = ['loading', 'picking', 'confirming', 'sending', 'expired', 'failed'];
+  const phases = ['loading', 'picking', 'confirming', 'sending', 'expired', 'failed', 'taken'];
   const labels = phases.map(p => model.statusChip(p).label);
-  assert.equal(new Set(labels.slice(2)).size, 4, 'confirming, sending, expired and failed each read differently');
+  assert.equal(new Set(labels.slice(2)).size, 5, 'confirming, sending, expired, failed and taken each read differently');
+  assert.equal(model.statusChip('picking', true).label, 'Hurry!');
+  assert.equal(model.statusChip('picking', true).tone, 'red');
+  assert.equal(model.isHolding('taken'), false);
   assert.equal(model.statusChip('expired').tone, 'red');
   assert.equal(model.isHolding('picking'), true);
   assert.equal(model.isHolding('confirming'), true);
@@ -89,7 +92,7 @@ test('kid safety: signed-in only, no free text, no player identity', () => {
   const screen = read('src/screens/PinSwapsScreen.tsx');
   const files = ['src/screens/PinSwapsScreen.tsx', ...fs.readdirSync(path.join(root, 'src/screens/pinTrading')).map(f => `src/screens/pinTrading/${f}`)];
   assert.match(screen, /hasPermission\(PermissionEnums\.TradePins\)/, 'the screen itself checks the trade permission');
-  assert.ok(screen.indexOf('if (!signedIn)') > screen.lastIndexOf('useCallback('), 'every hook runs before the signed-out return');
+  assert.ok(screen.indexOf('if (!signedIn) {\n    return (') > screen.lastIndexOf('useCallback('), 'every hook runs before the signed-out return');
   for (const file of files) {
     const src = read(file);
     assert.doesNotMatch(src, /TextInput/, `${file}: no free text`);
@@ -106,5 +109,31 @@ test('leaving mid-trade lets the pin go back on the board; motion has a reduced 
   assert.match(screen, /isHolding\(phaseRef\.current\)[\s\S]{0,80}unHoldPinSwap/);
   assert.match(screen, /useUiReducedMotion\(\)/);
   const cele = read('src/screens/pinTrading/SwapCelebration.tsx');
-  assert.match(cele, /if \(still\) \{[\s\S]{0,120}queueHaptic\('success'/, 'reduced motion still plays the payoff sound and haptic');
+  assert.match(cele, /if \(still\) \{[\s\S]{0,80}beat\('ui\.complete', \{\}, 'success'/, 'reduced motion still plays the payoff sound and haptic');
+});
+
+test('two-line pin names break near the middle and never orphan "Pin"', () => {
+  assert.equal(model.balanceName('Honey Pin'), 'Honey Pin');
+  assert.equal(model.balanceName('Astronaut Shark Pin'), 'Astronaut\nShark Pin');
+  assert.equal(model.balanceName('Drink Around The World Pin'), 'Drink Around\nThe World Pin');
+  for (const name of ['Astronaut Shark Pin', 'Drink Around The World Pin', '100 Castle Celebration Pin', 'Shark Bike Year Open Pin']) {
+    const second = model.balanceName(name).split('\n')[1] ?? '';
+    assert.notEqual(second, 'Pin', name);
+  }
+});
+
+test('the sheet never drops a hold on a stray tap, and a double tap cannot skip the confirm', () => {
+  const sheet = read('src/screens/pinTrading/TradeSheet.tsx');
+  assert.match(sheet, /never closes the sheet/);
+  assert.doesNotMatch(sheet, /styles\.scrim\][^>]*>\s*<Pressable[^>]*onPress=/, 'the scrim has no onPress');
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  assert.match(screen, /CONFIRM_GUARD_MS = 4\d0/);
+  assert.match(screen, /Date\.now\(\) - confirmAt\.current < CONFIRM_GUARD_MS\) return/);
+});
+
+test('no hold is taken when the answer is already known (you own it, or you have no pins)', () => {
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  const hold = screen.indexOf('await holdPinSwap(');
+  assert.ok(screen.indexOf('owned.has(swap.pin.item.id)') < hold);
+  assert.ok(screen.indexOf('pins.length === 0') < hold);
 });

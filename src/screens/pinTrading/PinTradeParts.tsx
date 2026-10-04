@@ -8,14 +8,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
+  cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { queueHaptic } from '../../gamekit/Haptics';
 import type { ItemType } from '../../models/item-type';
 import { BRAND, FONT, GameIcon, MOTION, OUTLINE, RADIUS, SHADOW, SPACE } from '../../ui';
 import EnamelPin from './EnamelPin';
 import {
-  cardTilt, formatClock, HOLD_FINAL_S, pinName, pinTilt, secondsLeft, timerTone, type StatusChip,
+  balanceName, cardTilt, formatClock, HOLD_FINAL_S, HOLD_URGENT_S, pinName, pinTilt, secondsLeft, type StatusChip,
 } from './pinTradeModel';
 
 /** Trading surfaces (the shop v2 blue panels). Every ink here is AA on its surface. */
@@ -35,7 +36,7 @@ export const MAX_FONT = 1.3;
 const CHIP_TONE: Record<StatusChip['tone'], { bg: string; ink: string; border: string }> = {
   gold: { bg: BRAND.gold, ink: BRAND.navy, border: BRAND.goldLip },
   blue: { bg: BRAND.blueBright, ink: BRAND.white, border: BRAND.white },
-  red: { bg: BRAND.red, ink: BRAND.white, border: BRAND.redLip },
+  red: { bg: BRAND.red, ink: BRAND.white, border: BRAND.white },
   green: { bg: BRAND.green, ink: BRAND.white, border: BRAND.greenLip },
 };
 
@@ -50,14 +51,28 @@ export const StatusChipView = memo(function StatusChipView({ chip }: { chip: Sta
   );
 });
 
+/** A small ribbon across a card corner ("Got it", "From you"). */
+export function CornerRibbon({ label, tone = 'navy' }: { label: string; tone?: 'navy' | 'gold' | 'red' }) {
+  const bg = tone === 'gold' ? BRAND.gold : tone === 'red' ? BRAND.red : BRAND.navy;
+  const ink = tone === 'gold' ? BRAND.navy : BRAND.white;
+  return (
+    <View pointerEvents="none" style={[styles.ribbon, { backgroundColor: bg }]}>
+      <Text maxFontSizeMultiplier={1} style={[styles.ribbonText, { color: ink }]}>{label}</Text>
+    </View>
+  );
+}
+
+export type BoardBadge = 'owned' | 'yours' | undefined;
+
 /**
  * A board pin on its cream backer card, like the pin boards at the parks.
- * Press: the card dips, the pin lifts off the card (deeper shadow) and a light
- * haptic fires. The pin keeps its own tilt; the card tilts the other way.
+ * Press-in: a light haptic at once, the card dips and leans toward the
+ * finger, the pin lifts off the card (deeper shadow). The pin keeps its own
+ * tilt; the card tilts the other way.
  */
-export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, shine, lag, still, busy, onPress }: {
-  item: ItemType; swapId: number; width: number; shine?: SharedValue<number>; lag: number;
-  still: boolean; busy: boolean; onPress: (swapId: number) => void;
+export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress }: {
+  item: ItemType; swapId: number; width: number; height: number; shine?: SharedValue<number>; lag: number; lagSpan: number;
+  still: boolean; busy: boolean; badge?: BoardBadge; onPress: (swapId: number) => void;
 }) {
   const press = useSharedValue(0);
   const lift = useSharedValue(0);
@@ -65,131 +80,159 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, sh
     if (still) { lift.value = busy ? 1 : 0; return; }
     lift.value = withSpring(busy ? 1 : 0, MOTION.popSpring);
   }, [busy, still, lift]);
-  const card = `${cardTilt(swapId)}deg`;
+  const card = cardTilt(swapId);
   const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: card }, { scale: 1 - press.value * 0.04 }],
+    transform: [{ rotate: `${card + press.value * 2}deg` }, { scale: 1 - press.value * 0.06 }],
   }));
   const pinStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -lift.value * 6 - press.value * 3 }, { scale: 1 + lift.value * 0.06 + press.value * 0.03 }],
   }));
   const name = pinName(item);
-  const pinSize = Math.round(width * 0.74);
+  const pinSize = Math.round(width * 0.72);
+  const status = badge === 'owned' ? '. You already have this one' : badge === 'yours' ? '. You put this one up' : '';
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${name}. Up for trade`}
+      accessibilityLabel={`${name}. Up for trade${status}`}
       accessibilityHint="Holds this pin for you so you can trade for it"
       accessibilityState={{ busy }}
-      onPressIn={() => { if (!still) press.value = withTiming(1, { duration: MOTION.pressInMs }); }}
+      onPressIn={() => {
+        queueHaptic('tapLight', 1);
+        if (!still) press.value = withTiming(1, { duration: MOTION.pressInMs });
+      }}
       onPressOut={() => { press.value = still ? 0 : withTiming(0, { duration: MOTION.pressOutMs }); }}
-      onPress={() => { queueHaptic('tapLight', 1); onPress(swapId); }}
+      onPress={() => onPress(swapId)}
       disabled={busy}
       style={{ width, alignItems: 'center' }}
     >
-      <Animated.View style={[styles.backer, { width: width - SPACE.sm, paddingTop: SPACE.lg }, cardStyle]}>
-        <View style={styles.hole} />
+      <Animated.View style={[styles.backer, { width: width - SPACE.sm, height }, cardStyle]}>
+        <View style={styles.hole}><View style={styles.holeShade} /></View>
         <Animated.View style={pinStyle}>
-          <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(swapId)} shine={still ? undefined : shine} lag={lag} lift={lift}
-            recyclingKey={`board-${swapId}`} />
+          <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(swapId)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
+            lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
-        <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{name}</Text>
+        <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
+        {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} />}
       </Animated.View>
     </Pressable>
   );
 });
 
 /**
- * Hold timer: big Shark-font clock plus a draining bar. Calm is gold; under
- * 30 s the bar and clock turn red and the clock pulses; the last 5 s tick with
- * a light haptic. The bar drains on the UI thread; the clock re-renders once a
- * second inside this component only.
+ * Hold timer: a Shark-font clock and a draining bar. Calm is white on navy
+ * with a gold bar. At 30 s it fires one warning haptic and turns red: the
+ * clock sits on a white pill in brand red and pulses on each digit flip. The
+ * last 5 s tick (a soft haptic plus `onTick`). The bar drains on the UI
+ * thread (scaleX, no layout); the clock re-renders only when the second changes.
  */
-export function TradeTimer({ deadline, totalMs, frozen, still, label, onExpire }: {
+export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, still, label, onExpire, onTick, onUrgent }: {
   deadline: number; totalMs: number; frozen: boolean; still: boolean;
-  /** The CMS line ("Your trade will expire in %s:%s") already filled in by the caller's formatter. */
+  /** Fills the CMS line ("Your trade will expire in %s:%s"). */
   label: (clock: string, minutes: number, seconds: string) => string;
   onExpire: () => void;
+  /** The last few seconds: a soft audible tick. */
+  onTick?: (secondsLeft: number) => void;
+  /** Crossing into the last 30 seconds (once per hold). */
+  onUrgent?: () => void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const [left, setLeft] = useState(() => secondsLeft(deadline, Date.now()));
   const fired = useRef(false);
-  const lastTick = useRef(-1);
+  const warned = useRef(false);
   const fill = useSharedValue(Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs)));
   const pulse = useSharedValue(1);
-  // Frozen (trade sending): hold the last shown second instead of jumping anywhere.
-  const left = secondsLeft(deadline, now);
-  const tone = frozen ? 'calm' : timerTone(left);
+  const urgent = !frozen && left <= HOLD_URGENT_S;
 
   useEffect(() => {
     fired.current = false;
-    if (frozen) return;
-    const start = Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs));
-    fill.value = start;
+    warned.current = secondsLeft(deadline, Date.now()) <= HOLD_URGENT_S;
+    setLeft(secondsLeft(deadline, Date.now()));
+    if (frozen) { cancelAnimation(fill); return; }
+    fill.value = Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs));
     // A progress bar, not decoration: it drains under Reduce Motion too.
     fill.value = withTiming(0, { duration: Math.max(0, deadline - Date.now()), easing: Easing.linear, reduceMotion: ReduceMotion.Never });
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const id = setInterval(() => {
+      const next = secondsLeft(deadline, Date.now());
+      setLeft(prev => (prev === next ? prev : next));
+    }, 200);
     return () => { clearInterval(id); cancelAnimation(fill); };
   }, [deadline, totalMs, frozen, fill]);
 
   useEffect(() => {
     if (frozen) return;
-    if (left <= 0 && !fired.current) { fired.current = true; onExpire(); return; }
-    if (left > 0 && left <= HOLD_FINAL_S && lastTick.current !== left) {
-      lastTick.current = left;
-      queueHaptic('tickSelection', 1);
+    if (left <= 0) {
+      if (!fired.current) { fired.current = true; onExpire(); }
+      return;
     }
-  }, [left, frozen, onExpire]);
+    if (left <= HOLD_URGENT_S && !warned.current) {
+      warned.current = true;
+      queueHaptic('warning', 2);
+      onUrgent?.();
+    }
+    if (left <= HOLD_FINAL_S) {
+      queueHaptic('tickSelection', 1);
+      onTick?.(left);
+    }
+    // The pulse lands on the digit flip, not on its own clock.
+    if (left <= HOLD_URGENT_S && !still) {
+      pulse.value = withSequence(withTiming(1.12, { duration: 90, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 260 }));
+    }
+  }, [left]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    cancelAnimation(pulse);
-    if (tone === 'urgent' && !still) {
-      pulse.value = withRepeat(withSequence(withTiming(1.08, { duration: 260 }), withTiming(1, { duration: 740 })), -1, false);
-    } else pulse.value = 1;
-    return () => cancelAnimation(pulse);
-  }, [tone, still, pulse]);
-
-  const barStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+  const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.0001, fill.value) }] }));
   const clockStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const minutes = Math.floor(left / 60);
   const seconds = String(left % 60).padStart(2, '0');
   const clock = formatClock(left);
-  const urgent = tone !== 'calm';
   const line = label(clock, minutes, seconds);
 
   return (
-    <View accessible accessibilityRole="timer" accessibilityLabel={line} accessibilityLiveRegion={left <= 10 ? 'assertive' : 'none'}
-      style={styles.timer}>
+    <View accessible accessibilityRole="timer" accessibilityLabel={line} style={styles.timer}>
       <View style={styles.timerRow}>
         <GameIcon name="timer" size={30} />
         <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={2} style={styles.timerLine}>{line.replace(/\s*\d+:\d{2}\s*$/, '')}</Text>
-        <Animated.Text maxFontSizeMultiplier={1.2} style={[styles.timerClock, urgent && { color: '#ffd2cc' }, clockStyle]}>{clock}</Animated.Text>
+        <Animated.View style={[styles.clockPill, urgent && styles.clockPillUrgent, clockStyle]}>
+          <Text maxFontSizeMultiplier={1.2} style={[styles.timerClock, urgent && { color: BRAND.red }, frozen && { color: TRADE_SURFACE.inkGold }]}>{clock}</Text>
+        </Animated.View>
       </View>
       <View style={styles.track}>
-        <Animated.View style={[styles.bar, { backgroundColor: urgent ? BRAND.red : BRAND.gold }, barStyle]} />
+        {/* Anchored left: the bar is full width and scales from its left edge. */}
+        <Animated.View style={[styles.barAnchor, barStyle]}>
+          <View style={[styles.bar, { backgroundColor: urgent ? BRAND.red : BRAND.gold }]} />
+        </Animated.View>
       </View>
     </View>
   );
-}
+});
 
-/** "You get" / "You give" slot on the trade sheet. An empty give slot is a dashed outline with a quiet pin hint. */
 export type SlotRect = { x: number; y: number; size: number };
 
-export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey }: {
+/**
+ * "You get" / "You give" slot on the trade sheet. An empty give slot is a
+ * dashed outline. `stamp` greys the pin under a TIME'S UP or TAKEN stamp;
+ * `charging` makes it rise and wiggle while the trade is in flight.
+ */
+export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, shine, still, placeholder, onMeasure, hidden = false, measureKey, stamp, charging = false }: {
   caption: string; item?: ItemType; hidden?: boolean;
   /** Re-measure when this changes (the sheet grows or shrinks between phases). */
   measureKey?: string; tilt: number; size: number; shine?: SharedValue<number>; still: boolean; placeholder?: string;
-  /** Window-space centre of the pin, so the trade-complete moment starts exactly where the pin sits. */
+  /** Window-space centre and drawn size of the pin, so the trade-complete moment starts exactly where the pin sits. */
   onMeasure?: (rect: SlotRect) => void;
+  stamp?: string;
+  charging?: boolean;
 }) {
   const box = useRef<View>(null);
+  const pinSize = Math.round(size * 0.88);
   const measure = () => {
-    box.current?.measureInWindow((x, y, w, h) => onMeasure?.({ x: x + w / 2, y: y + h / 2, size: Math.round(size * 0.88) }));
+    box.current?.measureInWindow((x, y, w, h) => onMeasure?.({ x: x + w / 2, y: y + h / 2, size: pinSize }));
   };
   useEffect(() => {
     if (!onMeasure) return;
-    const id = setTimeout(measure, 450);
-    return () => clearTimeout(id);
+    const frame = requestAnimationFrame(measure);
+    const late = setTimeout(measure, 450);
+    return () => { cancelAnimationFrame(frame); clearTimeout(late); };
   }, [measureKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const pop = useSharedValue(item ? 1 : 0);
+  const wiggle = useSharedValue(0);
   const id = item?.id;
   useEffect(() => {
     if (!id) { pop.value = 0; return; }
@@ -197,43 +240,65 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
     pop.value = 0.6;
     pop.value = withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 });
   }, [id, still, pop]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }], opacity: Math.min(1, pop.value * 1.4) }));
+  useEffect(() => {
+    cancelAnimation(wiggle);
+    if (!charging || still) { wiggle.value = withTiming(0, { duration: 120 }); return; }
+    wiggle.value = withRepeat(withSequence(withTiming(1, { duration: 110 }), withTiming(-1, { duration: 220 }), withTiming(0, { duration: 110 })), -1, false);
+    return () => cancelAnimation(wiggle);
+  }, [charging, still, wiggle]);
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, pop.value * 1.4),
+    transform: [{ translateY: -Math.abs(wiggle.value) * 4 }, { rotate: `${wiggle.value * 4}deg` }, { scale: pop.value }],
+  }));
+  const label = item ? `${caption}: ${pinName(item)}${stamp ? `, ${stamp}` : ''}` : `${caption}: ${placeholder ?? 'nothing yet'}`;
   return (
-    <View style={styles.slotWrap} accessible accessibilityLabel={item ? `${caption}: ${pinName(item)}` : `${caption}: ${placeholder ?? 'nothing yet'}`}>
+    <View style={styles.slotWrap} accessible accessibilityLabel={label}>
       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotCaption}>{caption}</Text>
-      <View ref={box}
-        style={[styles.slot, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty]}>
+      <View ref={box} collapsable={false}
+        style={[styles.slot, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
         {item ? (
-          <Animated.View style={[style, hidden && { opacity: 0 }]}>
-            <EnamelPin uri={item.icon_url} size={Math.round(size * 0.88)} tilt={tilt} shine={still ? undefined : shine} recyclingKey={`slot-${item.id}`} />
-          </Animated.View>
+          <View style={{ opacity: hidden ? 0 : stamp ? 0.45 : 1 }}>
+            <Animated.View style={style}>
+              <EnamelPin uri={item.icon_url} size={pinSize} tilt={tilt} shine={still || stamp ? undefined : shine} surface="board"
+                transition={0} recyclingKey={`slot-${item.id}`} />
+            </Animated.View>
+          </View>
         ) : (
           <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>
         )}
+        {!!stamp && !!item && (
+          <View pointerEvents="none" style={styles.stamp}><Text maxFontSizeMultiplier={1} style={styles.stampText}>{stamp}</Text></View>
+        )}
       </View>
-      <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? pinName(item) : placeholder ?? ''}</Text>
+      <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? balanceName(pinName(item), 16) : placeholder ?? ''}</Text>
     </View>
   );
 });
 
-/** One of your pins in the picker: a sky well, gold ring and check when picked. */
+/** One of your pins in the picker: a cream tile like the board cards, a gold ring and check when picked. */
 export const PickPin = memo(function PickPin({ item, size, selected, still, onPress }: {
   item: ItemType; size: number; selected: boolean; still: boolean; onPress: (item: ItemType) => void;
 }) {
   const on = useSharedValue(selected ? 1 : 0);
+  const press = useSharedValue(0);
   useEffect(() => {
     on.value = still ? (selected ? 1 : 0) : withSpring(selected ? 1 : 0, { damping: 12, stiffness: 300, mass: 0.7 });
   }, [selected, still, on]);
+  const tileStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 - press.value * 0.08 }] }));
   const pinStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -on.value * 4 }, { scale: 1 + on.value * 0.08 }] }));
   const badge = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 0.4 + on.value * 0.6 }] }));
   const name = pinName(item);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{ selected }} hitSlop={2}
-      onPress={() => onPress(item)} style={[styles.pick, { width: size, height: size }, selected && styles.pickOn]}>
-      <Animated.View style={pinStyle}>
-        <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} recyclingKey={`mine-${item.id}`} />
+      onPressIn={() => { if (!still) press.value = withTiming(1, { duration: MOTION.pressInMs }); }}
+      onPressOut={() => { press.value = still ? 0 : withTiming(0, { duration: MOTION.pressOutMs }); }}
+      onPress={() => onPress(item)}>
+      <Animated.View style={[styles.pick, { width: size, height: size }, selected && styles.pickOn, tileStyle]}>
+        <Animated.View style={pinStyle}>
+          <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} surface="none" recyclingKey={`mine-${item.id}`} />
+        </Animated.View>
+        <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
       </Animated.View>
-      <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
     </Pressable>
   );
 });
@@ -249,22 +314,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thin,
   },
   chipText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, textTransform: 'uppercase', paddingTop: 2 },
+  ribbon: {
+    position: 'absolute', top: 10, right: -6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    transform: [{ rotate: '8deg' }], borderWidth: 2, borderColor: BRAND.white,
+  },
+  ribbonText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', paddingTop: 1 },
   backer: {
-    alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: RADIUS.md, borderWidth: OUTLINE.thin, borderColor: BRAND.creamDeep,
-    paddingBottom: SPACE.sm, paddingHorizontal: SPACE.xs, ...SHADOW.card,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.cream, borderRadius: RADIUS.md, borderWidth: OUTLINE.thin,
+    borderColor: BRAND.creamDeep, paddingTop: SPACE.md, paddingBottom: SPACE.xs, paddingHorizontal: SPACE.xs, ...SHADOW.card,
   },
   hole: {
-    position: 'absolute', top: 6, width: 14, height: 6, borderRadius: 3, backgroundColor: '#e7d4a0', borderWidth: 1, borderColor: '#d2bb7f',
+    position: 'absolute', top: 6, width: 18, height: 8, borderRadius: 4, backgroundColor: '#b58a4e', overflow: 'hidden',
+    borderWidth: 1, borderColor: '#d9c08a',
   },
+  holeShade: { position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: '#6e4a1c' },
   backerName: {
-    marginTop: SPACE.xs, fontFamily: FONT.body, fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center', minHeight: 32,
+    marginTop: SPACE.xs, fontFamily: FONT.body, fontSize: 14, lineHeight: 16, color: BRAND.navy, textAlign: 'center',
   },
   timer: { backgroundColor: TRADE_SURFACE.well, borderRadius: RADIUS.lg, paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm + 2, gap: SPACE.sm },
   timerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  timerClock: { fontFamily: FONT.display, fontSize: 34, lineHeight: 40, color: BRAND.white, fontVariant: ['tabular-nums'], minWidth: 78, textAlign: 'right', paddingTop: 4 },
+  clockPill: { borderRadius: RADIUS.pill, paddingHorizontal: SPACE.sm, minWidth: 88, alignItems: 'flex-end' },
+  clockPillUrgent: { backgroundColor: BRAND.white, alignItems: 'center' },
+  timerClock: { fontFamily: FONT.display, fontSize: 34, lineHeight: 40, color: BRAND.white, fontVariant: ['tabular-nums'], letterSpacing: 1.5, paddingTop: 4 },
   timerLine: { flex: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 19, color: TRADE_SURFACE.inkSoft },
   track: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
-  bar: { height: 10, borderRadius: 5 },
+  barAnchor: { ...StyleSheet.absoluteFillObject, transformOrigin: 'left' },
+  bar: { flex: 1, borderRadius: 5 },
   slotWrap: { alignItems: 'center', flex: 1 },
   slotCaption: { fontFamily: FONT.body, fontSize: 14, letterSpacing: 0.9, textTransform: 'uppercase', color: TRADE_SURFACE.inkGold, marginBottom: SPACE.xs },
   slot: {
@@ -272,11 +347,17 @@ const styles = StyleSheet.create({
     borderWidth: OUTLINE.thick, borderColor: BRAND.white, ...SHADOW.card,
   },
   slotEmpty: { backgroundColor: 'rgba(255,255,255,0.08)', borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.7)', shadowOpacity: 0, elevation: 0 },
+  slotDim: { backgroundColor: '#d9d4c4' },
   slotQuestion: { fontFamily: FONT.display, fontSize: 44, color: 'rgba(255,255,255,0.8)', paddingTop: 6 },
   slotName: { marginTop: SPACE.xs, fontFamily: FONT.body, fontSize: 15, lineHeight: 18, color: BRAND.white, textAlign: 'center', minHeight: 36, paddingHorizontal: 2 },
+  stamp: {
+    position: 'absolute', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 3, borderColor: BRAND.red,
+    backgroundColor: 'rgba(255,255,255,0.88)', transform: [{ rotate: '-12deg' }],
+  },
+  stampText: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 0.8, color: BRAND.red, textTransform: 'uppercase', paddingTop: 2 },
   pick: {
-    alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, backgroundColor: BRAND.sky,
-    borderWidth: OUTLINE.thick, borderColor: BRAND.white,
+    alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, backgroundColor: BRAND.cream,
+    borderWidth: OUTLINE.thick, borderColor: BRAND.creamDeep,
   },
   pickOn: { borderColor: BRAND.gold, backgroundColor: '#fff3c4', borderWidth: OUTLINE.heavy },
   pickBadge: { position: 'absolute', top: -8, right: -8 },
