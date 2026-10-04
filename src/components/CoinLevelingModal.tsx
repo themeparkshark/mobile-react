@@ -181,6 +181,12 @@ export default function CoinLevelingModal({
     successScale.setValue(1); successRotate.setValue(1);
   }, [reducedMotion]);
 
+  // Dev-only evidence driver (no-op in release builds). Every hook runs before the
+  // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
+  // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
+  const levelUpPress = useRef<() => void>(() => undefined);
+  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
+
   if (!rideCoin) return null;
 
   const currentLevel = rideCoin.current_level;
@@ -305,8 +311,7 @@ export default function CoinLevelingModal({
       upgradeBusy.current = false;
     }
   };
-  // Dev-only evidence driver (no-op in release builds).
-  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => { void handleLevelUp(); }, 2500);
+  levelUpPress.current = () => { void handleLevelUp(); };
 
 
   const handleClose = () => {
