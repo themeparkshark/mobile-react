@@ -50,6 +50,7 @@ export function useFrightCaptureFlow({ night, engine, location, moveDevLocation,
       return false;
     };
     const closeModals = async (rounds = 4) => {
+      await sleep(2500); // let the queued modal render before reading engine.modal
       for (let i = 0; i < rounds && live.current.engine.modal; i++) {
         log('modal', live.current.engine.modal?.kind ?? '');
         await sleep(6000);
