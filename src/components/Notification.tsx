@@ -16,15 +16,21 @@ import Animated, { FadeIn, ZoomIn, useAnimatedStyle, withTiming } from 'react-na
 import { useFriendActions } from '../hooks/useFriends';
 import { DEFAULT_PORTRAIT } from './Avatar';
 import type { NotificationType } from '../models/notification-type';
-import { actorOf, canAnswerInline, kidMessage, kindOf, KIND_LOOK, shortAgo, spokenAgo, type FriendStatus } from '../screens/social/socialModel';
+import { actorOf, canAnswerInline, kidMessage, kindOf, KIND_LOOK, leadName, rewardCoins, shortAgo, spokenAgo, type FriendStatus, type NotificationKind } from '../screens/social/socialModel';
 import { INK, Pill, kit, useSquash } from '../screens/social/SocialKit';
 import { Burst, useHop } from '../screens/social/SocialFx';
 import { SurfaceContext, takeJustFriended } from '../screens/social/socialStore';
-
-const REQUEST_STICKER = require('../../assets/images/screens/friends/request_sticker.png');
 import { BRAND, FONT, GameIcon, GameRichText } from '../ui';
+import { BADGE_ART } from './notificationBadgeArt';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { notificationMessage } from './notificationCopy';
+
+const REQUEST_STICKER = require('../../assets/images/screens/friends/request_sticker.png');
+
+const BADGE = 56;
+/** The art fills this much of the badge. The coin is a full disc, so it sits a little smaller to carry the same weight. */
+const BADGE_ART_SIZE = 40;
+const BADGE_ART_SIZE_BY_KIND: Partial<Record<NotificationKind, number>> = { park_coins: 34 };
 
 export const NOTIFICATION_ROW_HEIGHT = 104;
 
@@ -44,7 +50,6 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const reduced = useUiReducedMotion();
   const squash = useSquash();
   const actions = useFriendActions();
-  const [artFailed, setArtFailed] = useState(false);
   const [faceFailed, setFaceFailed] = useState(false);
   const [heartBack, setHeartBack] = useState<'idle' | 'sent'>('idle');
   // The Yes moment starts in the same render as the green card: the store's
@@ -59,13 +64,15 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   const answerable = leaving || canAnswerInline(notification, overrides);
   const answeredYes = kind === 'friend_request' && answer === 'friends';
   // A request answered Yes turns into a "new friend" row right where it is.
-  const look = KIND_LOOK[answeredYes ? 'friend_accepted' : kind];
+  const shownKind: NotificationKind = answeredYes ? 'friend_accepted' : kind;
+  const look = KIND_LOOK[shownKind];
   const stored = notificationMessage(notification.content?.message);
   const message = kidMessage(notification, stored, answer);
   const excerpt = notification.content?.excerpt;
   const hasRoute = !!notification.content?.route?.screen;
-  const storedArt = notification.content?.image ?? null;
-  const art = artFailed ? null : answeredYes && storedArt ? storedArt.replace('friend_request_received', 'friend_request_accepted') : storedArt;
+  const { lead, rest } = leadName(message, shownKind);
+  const coins = shownKind === 'compliment' ? rewardCoins(stored) : 0;
+  const artSize = BADGE_ART_SIZE_BY_KIND[shownKind] ?? BADGE_ART_SIZE;
   // The row only offers Yes/No while the request waits, so the answer starts from 'incoming'.
   if (answeredYes && actor !== null && burstFor.current !== notification.id && takeJustFriended(actor, surface)) {
     burstFor.current = notification.id;
@@ -79,9 +86,9 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
   return (
     <Animated.View style={styles.wrap}>
       <View style={[kit.card, styles.card, unread ? styles.cardUnread : styles.cardRead, answeredYes && styles.cardYes]}>
-        {unread && <View style={[styles.stripe, { backgroundColor: look.color }]} />}
         {/* Behind the face disc, inside the card: the burst never covers the new friend or the words. */}
         {burst && <Burst big={1.6} away style={{ left: 47, top: 44 }} onDone={endBurst} />}
+        {unread && <View style={[styles.stripe, { backgroundColor: look.color }]} />}
         <Pressable
           onPress={() => onOpen(notification)}
           onLongPress={() => onClear(notification)}
@@ -97,36 +104,41 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
           <Animated.View style={[styles.row, squash.style]}>
             {actorFace ? (
               <Animated.View style={[styles.faceWrap, hop]}>
-                <View style={[styles.badge, { backgroundColor: '#BFE5FF', borderBottomColor: look.lip }]}>
+                <View style={[styles.badge, { backgroundColor: BRAND.sky }]}>
                   <Image source={{ uri: actorFace }} placeholder={DEFAULT_PORTRAIT} placeholderContentFit="contain" style={styles.faceArt}
                     contentFit="cover" contentPosition="top" recyclingKey={`${notification.id}-face`} transition={120} onError={() => setFaceFailed(true)} />
                 </View>
                 {kind === 'friend_request' && !answeredYes
                   // A plain envelope that reads at sticker size.
                   ? <Image source={REQUEST_STICKER} style={styles.stickerArt} contentFit="contain" accessibilityIgnoresInvertColors />
-                  : <View style={[styles.sticker, { backgroundColor: look.color }]}><GameIcon name={look.icon} size={18} /></View>}
+                  : <View style={[styles.sticker, { backgroundColor: look.tint }]}><Image source={BADGE_ART[shownKind]} style={styles.stickerGlyph} contentFit="contain" /></View>}
               </Animated.View>
             ) : (
-              <View style={[styles.badge, { backgroundColor: look.color, borderBottomColor: look.lip }]}>
-                {art
-                  ? <Image source={{ uri: art }} style={styles.badgeArt} contentFit="cover" onError={() => setArtFailed(true)} recyclingKey={`${notification.id}-${answeredYes}`} transition={120} />
-                  : <GameIcon name={look.icon} size={34} />}
-              </View>
+              <Animated.View style={[styles.badge, { backgroundColor: look.tint }, hop]}>
+                <Image source={BADGE_ART[shownKind]} style={{ width: artSize, height: artSize }} contentFit="contain" accessibilityIgnoresInvertColors />
+              </Animated.View>
             )}
             <View style={styles.body}>
-              <GameRichText preset="bodySmall" style={[styles.message, !unread && styles.messageRead]} iconSize={17} numberOfLines={3}>
-                {message}
-              </GameRichText>
+              <Text style={[styles.message, !unread && styles.messageRead]} numberOfLines={3} maxFontSizeMultiplier={1.4}>
+                {!!lead && <Text style={styles.lead}>{`${lead} `}</Text>}
+                <GameRichText preset="bodySmall" style={[styles.message, styles.rest, !unread && styles.messageRead]} iconSize={17}>{rest.trimStart()}</GameRichText>
+              </Text>
               {!!excerpt && <Text style={styles.excerpt} numberOfLines={1} maxFontSizeMultiplier={1.3}>"{excerpt}"</Text>}
-              <View style={styles.metaRow}>
-                <View style={[styles.timeChip, unread && { backgroundColor: look.color }]}>
-                  <Text style={[styles.time, unread && styles.timeUnread]} maxFontSizeMultiplier={1.2}>{shortAgo(notification.created_at)}</Text>
-                </View>
+              <View style={[styles.metaRow, answerable && styles.metaRowAnswer]}>
+                {unread && <View style={[styles.newDot, { backgroundColor: look.color }]} />}
+                <Text style={[styles.time, unread && { color: look.lip }]} maxFontSizeMultiplier={1.2}>{shortAgo(notification.created_at)}</Text>
+                {coins > 0 && (
+                  // What they got, without reading: the coin and the number.
+                  <View style={styles.reward} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                    <GameIcon name="coin" size={20} />
+                    <Text style={styles.rewardText} maxFontSizeMultiplier={1.2}>+{coins}</Text>
+                  </View>
+                )}
               </View>
             </View>
             {hasRoute && !answerable && (
-              <View style={styles.chevron} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-                <GameIcon name="arrow" size={24} />
+              <View style={[styles.chevron, !unread && styles.chevronRead]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                <GameIcon name="arrow" size={20} />
               </View>
             )}
           </Animated.View>
@@ -170,34 +182,45 @@ export default memo(Notification, (a, b) => a.notification === b.notification &&
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingBottom: 10 },
-  card: { paddingRight: 8 },
-  cardUnread: { backgroundColor: '#FFF8E4' },
+  card: { paddingRight: 4 },
+  // Unread: cream with the full navy outline and lip. Read: white with a soft outline, so new rows pop.
+  cardUnread: { backgroundColor: BRAND.cream },
   cardYes: { backgroundColor: '#E5F8E9', borderColor: '#237A3B' },
-  cardRead: { backgroundColor: 'rgba(255,255,255,0.92)', borderColor: '#3D5F8C', borderBottomWidth: 4 },
-  stripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 7 },
+  cardRead: { backgroundColor: '#FFFFFF', borderColor: 'rgba(5,52,110,0.42)', borderBottomWidth: 4 },
+  stripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 6 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingLeft: 16, minHeight: 84 },
+  // One even ring, no lip: the fill is a perfect circle with the art dead centre.
   badge: {
-    width: 58, height: 58, borderRadius: 29, borderWidth: 3, borderBottomWidth: 5, borderColor: INK,
+    width: BADGE, height: BADGE, borderRadius: BADGE / 2, borderWidth: 2.5, borderColor: INK,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  badgeArt: { width: '100%', height: '100%' },
-  body: { flex: 1, marginLeft: 12, marginRight: 4 },
-  message: { fontSize: 17, lineHeight: 21, color: INK },
-  messageRead: { color: BRAND.navySoft },
+  body: { flex: 1, marginLeft: 12, marginRight: 2 },
+  message: { fontFamily: FONT.body, fontSize: 17, lineHeight: 21, color: INK },
+  rest: { color: '#2A4C79' },
+  messageRead: { color: '#3D5F8C' },
+  lead: { fontFamily: FONT.body, fontSize: 19, color: INK },
   excerpt: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navySoft, marginTop: 2 },
-  metaRow: { flexDirection: 'row', marginTop: 6 },
-  timeChip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2, backgroundColor: '#E6EEF7' },
-  time: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navySoft, includeFontPadding: false },
-  timeUnread: { color: '#FFFFFF' },
-  chevron: { width: 32, alignItems: 'center' },
-  answer: { flexDirection: 'row', gap: 10, paddingLeft: 86, paddingRight: 6, paddingBottom: 12 },
-  answered: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 86, paddingBottom: 12 },
-  faceWrap: { width: 62, height: 62 },
-  faceArt: { width: 52, height: 60 },
-  stickerArt: { position: 'absolute', right: -4, bottom: -4, width: 32, height: 32 },
-  sticker: {
-    position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, borderWidth: 2.5, borderColor: '#FFFFFF',
-    alignItems: 'center', justifyContent: 'center',
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  newDot: { width: 11, height: 11, borderRadius: 6, borderWidth: 1.5, borderColor: INK },
+  time: { fontFamily: FONT.body, fontSize: 15, color: '#55698A', includeFontPadding: false },
+  // The kit's arrow art, smaller than the old 24 pt button so it hints instead of shouting; quieter on read rows.
+  chevron: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  chevronRead: { opacity: 0.75 },
+  metaRowAnswer: { marginBottom: 4 },
+  reward: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4, height: 28, paddingLeft: 4, paddingRight: 10,
+    borderRadius: 14, backgroundColor: BRAND.goldLight, borderWidth: 2, borderColor: INK,
   },
+  rewardText: { fontFamily: FONT.display, fontSize: 16, color: INK, includeFontPadding: false },
+  answer: { flexDirection: 'row', gap: 10, paddingLeft: 82, paddingRight: 10, paddingBottom: 12 },
+  answered: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 82, paddingBottom: 12 },
+  faceWrap: { width: BADGE + 4, height: BADGE + 4 },
+  faceArt: { width: BADGE - 6, height: BADGE + 2 },
+  stickerArt: { position: 'absolute', right: -4, bottom: -4, width: 30, height: 30 },
+  sticker: {
+    position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: INK,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  stickerGlyph: { width: 20, height: 20 },
   answeredText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navySoft, textTransform: 'uppercase' },
 });

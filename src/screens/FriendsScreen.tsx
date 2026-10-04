@@ -33,14 +33,16 @@ import { BRAND, FONT } from '../ui/tokens';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import PlayerRow, { ROW_HEIGHT } from './social/PlayerRow';
 import SearchField from './social/SearchField';
-import { CountBadge, INK, LeavingRow, Pill, SectionHeader, SocialBackdrop, SocialError, kit, useSquash } from './social/SocialKit';
+import { CountBadge, INK, LeavingRow, Pill, SectionHeader, SocialError, kit, useSquash } from './social/SocialKit';
+import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { GrownUpGate } from './social/GrownUpGate';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
-const REQUEST_ART = require('../../assets/images/screens/friends/request_badge.png');
+// The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
+const REQUEST_ART = require('../../assets/images/screens/notifications/badges/friend_request.png');
 const ADD_ART = require('../../assets/images/screens/friends/add_friend.png');
 const NOOP = () => undefined;
 const APP_LINK = 'https://apps.apple.com/app/theme-park-shark/id6758812566';
@@ -76,7 +78,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
         <TopbarColumn><TopbarText>Friends</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
-      <SocialBackdrop>
+      <CleanScreenBackground underTopbar>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
         {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}
@@ -91,7 +93,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
             <SurfaceContext.Provider value="tab-find"><FindTabView active={tab === 'find'} onInvite={invite} /></SurfaceContext.Provider>
           </View>
         </View>
-      </SocialBackdrop>
+      </CleanScreenBackground>
     </>
   );
 }
@@ -146,7 +148,10 @@ function TabChip({ label, icon, image, active, badge, onPress }: { readonly labe
       accessibilityRole="tab" accessibilityState={{ selected: active }}
       accessibilityLabel={badge > 0 ? `${label}, ${badge} waiting` : label}>
       <Animated.View style={[styles.tab, active && styles.tabActive, squash.style]}>
-        {image ? <Image source={image} style={{ width: 30, height: 30 }} contentFit="contain" /> : <GameIcon name={icon} size={26} />}
+        {image
+          // A round disc like the heart's, so the three tabs match.
+          ? <View style={styles.tabDisc}><Image source={image} style={{ width: 24, height: 24 }} contentFit="contain" /></View>
+          : <GameIcon name={icon} size={26} />}
         <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.15}>{label}</Text>
       </Animated.View>
       <CountBadge count={badge} style={styles.tabBadge} />
@@ -186,7 +191,7 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
       ListHeaderComponent={header}
       ListFooterComponent={footer}
       ListEmptyComponent={empty}
-      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" /> : undefined}
+      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={CLEAN_SCREEN_ACCENT} /> : undefined}
       renderItem={({ item, index }) => {
         if (item.type === 'header') return <SectionHeader label={item.label} icon={item.icon} count={item.count} />;
         if (item.type === 'hint') return <Text style={styles.hint} maxFontSizeMultiplier={1.3}>{item.text}</Text>;
@@ -285,7 +290,7 @@ function FriendsTabView({ onReady, onFind, total }: { readonly onReady: () => vo
   const shown = results ?? friends;
   const rows = useMemo<Row[]>(() => shown.map(p => ({ type: 'player', key: `f${p.id}`, player: p, fallback: 'friends' })), [shown]);
 
-  if (load === 'loading') return <SharkLoader state="loading" tone="onBlue" title="Finding your friends" />;
+  if (load === 'loading') return <SharkLoader state="loading" title="Finding your friends" />;
   if (load === 'error') return <SocialError title="Friends didn't load" onRetry={() => { setLoad('loading'); first().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
 
   return (
@@ -298,7 +303,7 @@ function FriendsTabView({ onReady, onFind, total }: { readonly onReady: () => vo
         onEndReached={more}
         footer={paging === 'error'
           ? <View style={styles.footer}><Pill compact tone="white" icon="retry" label="Try again" onPress={more} /></View>
-          : paging === 'busy' ? <SharkLoader state="loading" tone="onBlue" compact /> : null}
+          : paging === 'busy' ? <SharkLoader state="loading" compact /> : null}
         empty={query
           ? <Empty title="No match" message={`No friend called "${query.trim()}"`} />
           : <Empty title="No friends yet" message="Add sharks you meet and they show up here." onFind={onFind} />}
@@ -364,7 +369,7 @@ function RequestsTabView({ onFind }: { readonly onFind: () => void }) {
     return out;
   }, [incoming, sent, overrides, away, settled, drop]);
 
-  if (load === 'loading') return <SharkLoader state="loading" tone="onBlue" title="Checking requests" />;
+  if (load === 'loading') return <SharkLoader state="loading" title="Checking requests" />;
   if (load === 'error') return <SocialError title="Requests didn't load" onRetry={() => { setLoad('loading'); fetchAll().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />;
 
   return (
@@ -473,14 +478,14 @@ function FindTabView({ active, onInvite }: { readonly active: boolean; readonly 
       {load === 'error' && !query
         ? <SocialError title="Couldn't load sharks you may know" onRetry={fetchSuggested} />
         : (load === 'loading' || load === 'idle') && !query
-          ? <SharkLoader state="loading" tone="onBlue" title="Looking for sharks" />
+          ? <SharkLoader state="loading" title="Looking for sharks" />
           : (
             <SocialList
               rows={rows}
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); getFriendSuggestions().then(setSuggested).catch(() => undefined).finally(() => setRefreshing(false)); }}
               header={cards || null}
-              footer={searching ? <SharkLoader state="loading" tone="onBlue" compact /> : null}
+              footer={searching ? <SharkLoader state="loading" compact /> : null}
               empty={searching ? null : query
                 ? (results ? <Empty title="No sharks found" message="Check the spelling, or ask your friend for their exact shark name." /> : null)
                 : <Empty title="Share your shark name!" message="Tell a friend your shark name, or tap Share, so they can add you." />}
@@ -531,16 +536,17 @@ const styles = StyleSheet.create({
   heroLabel: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navySoft, textTransform: 'uppercase' },
   tabs: { flexDirection: 'row', gap: 8, marginHorizontal: 14, marginTop: 12, marginBottom: 10 },
   tab: {
-    height: 58, borderRadius: 18, borderWidth: 3, borderBottomWidth: 5, borderColor: INK, backgroundColor: 'rgba(255,255,255,0.78)',
+    height: 58, borderRadius: 18, borderWidth: 3, borderBottomWidth: 5, borderColor: INK, backgroundColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 6,
   },
+  tabDisc: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: INK, backgroundColor: '#EFE6FF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   tabActive: { backgroundColor: BRAND.gold, borderBottomColor: BRAND.goldLip },
   tabText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navySoft, textTransform: 'uppercase', includeFontPadding: false },
   tabTextActive: { color: INK },
   tabBadge: { position: 'absolute', top: -8, right: -4 },
   pane: { ...StyleSheet.absoluteFillObject },
   hidden: { display: 'none' },
-  hint: { fontFamily: FONT.display, fontSize: 18, color: '#FFFFFF', textAlign: 'center', paddingTop: 24, textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  hint: { fontFamily: FONT.display, fontSize: 18, color: CLEAN_SCREEN_INK_SOFT, textAlign: 'center', paddingTop: 24 },
   footer: { alignItems: 'center', paddingVertical: 12 },
   empty: { alignItems: 'center', paddingHorizontal: 32, paddingTop: 36 },
   emptyArt: { width: 120, height: 120 },
@@ -554,6 +560,6 @@ const styles = StyleSheet.create({
   switchOn: { backgroundColor: '#4CC96A' },
   knob: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: INK },
   knobOn: { alignSelf: 'flex-end' },
-  emptyTitle: { fontFamily: FONT.display, fontSize: 24, color: '#FFFFFF', textTransform: 'uppercase', marginTop: 8, textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  emptyText: { fontFamily: FONT.body, fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginTop: 4, textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  emptyTitle: { fontFamily: FONT.display, fontSize: 24, color: CLEAN_SCREEN_INK, textTransform: 'uppercase', marginTop: 8 },
+  emptyText: { fontFamily: FONT.body, fontSize: 18, color: CLEAN_SCREEN_INK_SOFT, textAlign: 'center', marginTop: 4 },
 });

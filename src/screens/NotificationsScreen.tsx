@@ -1,6 +1,7 @@
 /**
- * The bell (Social v2): "New" on top, "Earlier" below, each row a coloured
- * picture badge, friend requests answered in place, one "Read all" button.
+ * The bell (Social v2), on the shared clean background: Today, This week,
+ * Earlier, then one section per older year, each newest first. Each row has a
+ * centred picture badge, friend requests answered in place, one "Read all" button.
  *
  * Read state lives here, keyed by id (FlashList recycles rows: a row that kept
  * its own read flag showed old rows as unread). Paging stops at the last page,
@@ -31,7 +32,8 @@ import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type InboxRow } from './social/socialModel';
-import { INK, LeavingRow, Pill, SectionHeader, SocialBackdrop, SocialError } from './social/SocialKit';
+import { LeavingRow, Pill, SectionHeader, SocialError } from './social/SocialKit';
+import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { SurfaceContext, useFriendOverrides } from './social/socialStore';
 
 /** Mark-all-read only makes sense when something is unread. */
@@ -40,6 +42,9 @@ export function showMarkAllRead(notifications: readonly { read_at?: string | nul
 }
 
 const REFOCUS_MS = 20_000;
+const HEADER_HEIGHT = 58;
+/** The first header also carries the Read all pill. */
+const HEADER_WITH_PILL_HEIGHT = 70;
 
 /** "All caught up": his bell rings twice every few seconds; reduced motion keeps it still. */
 function CaughtUp() {
@@ -233,8 +238,8 @@ export default function NotificationsScreen() {
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
       <SurfaceContext.Provider value="bell">
-      <SocialBackdrop>
-        {load === 'loading' && <SharkLoader state="loading" tone="onBlue" title="Checking your bell" />}
+      <CleanScreenBackground underTopbar>
+        {load === 'loading' && <SharkLoader state="loading" title="Checking your bell" />}
         {load === 'error' && (
           <SocialError title="Notifications didn't load"
             onRetry={() => { setLoad('loading'); loadFirst().then(() => setLoad('ready')).catch(() => setLoad('error')); }} />
@@ -247,20 +252,22 @@ export default function NotificationsScreen() {
               keyExtractor={row => row.key}
               getItemType={row => row.type}
               estimatedItemSize={NOTIFICATION_ROW_HEIGHT}
+              // Headers are about half a row tall; telling FlashList keeps the year sections from jumping while it measures.
+              overrideItemLayout={(layout, row) => { if (row.type === 'header') layout.size = row.key === firstHeader ? HEADER_WITH_PILL_HEIGHT : HEADER_HEIGHT; }}
               renderItem={renderItem}
-              contentContainerStyle={{ paddingTop: 4, paddingBottom: 120 }}
+              contentContainerStyle={{ paddingTop: 8, paddingBottom: 120 }}
               onEndReachedThreshold={0.6}
               onEndReached={more}
-              refreshControl={<RefreshControl refreshing={refreshing} tintColor="#FFFFFF"
+              refreshControl={<RefreshControl refreshing={refreshing} tintColor={CLEAN_SCREEN_ACCENT}
                 onRefresh={() => { setRefreshing(true); loadFirst().catch(() => undefined).finally(() => setRefreshing(false)); }} />}
               ListEmptyComponent={<CaughtUp />}
               ListFooterComponent={paging === 'error'
                 ? <View style={styles.footer}><Pill compact tone="white" icon="retry" label="Try again" onPress={more} /></View>
-                : paging === 'busy' ? <SharkLoader state="loading" tone="onBlue" compact /> : null}
+                : paging === 'busy' ? <SharkLoader state="loading" compact /> : null}
             />
           </>
         )}
-      </SocialBackdrop>
+      </CleanScreenBackground>
       </SurfaceContext.Provider>
     </>
   );
@@ -269,6 +276,6 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   footer: { alignItems: 'center', paddingVertical: 12 },
   empty: { alignItems: 'center', paddingHorizontal: 32, paddingTop: 90 },
-  emptyTitle: { fontFamily: FONT.display, fontSize: 28, color: '#FFFFFF', textTransform: 'uppercase', marginTop: 12, textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  emptyText: { fontFamily: FONT.body, fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginTop: 6, textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  emptyTitle: { fontFamily: FONT.display, fontSize: 28, color: CLEAN_SCREEN_INK, textTransform: 'uppercase', marginTop: 12 },
+  emptyText: { fontFamily: FONT.body, fontSize: 18, color: CLEAN_SCREEN_INK_SOFT, textAlign: 'center', marginTop: 6 },
 });
