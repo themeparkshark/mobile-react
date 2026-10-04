@@ -41,7 +41,7 @@ import { CROWN_ART } from './PodiumSpot';
 import SharkCard from './SharkCard';
 import StandingsShark from './StandingsShark';
 import { onStandingsDemo } from './standingsDemo';
-import { perfMark, StandingsPerfLog, STANDINGS_PERF_ON } from './standingsPerf';
+import { perfMark, StandingsPerfLog, startPerfScroll, STANDINGS_PERF_ON } from './standingsPerf';
 import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
@@ -471,10 +471,6 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       setSwitching(false);
       setRefreshing(false);
       void react(next);
-      // The next page is fetched while the kid looks at the podium, so the first fling never waits.
-      if (activeRef.current && next.nextOffset != null && next.rows.length <= (next.nextOffset ?? 0)) {
-        InteractionManager.runAfterInteractions(() => moreRef.current('idle'));
-      }
     }).catch(error => {
       if (id !== request.current) return;
       setRefreshing(false);
@@ -515,10 +511,18 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     loadMore(meId, board, parkId).then(next => {
       if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${next?.rows.length ?? 0} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
       if (next && id === request.current) setModel(next);
-    }).catch(() => undefined).finally(() => { fetchingMore.current = false; });
+    }).catch(() => { if (STANDINGS_PERF_ON) perfMark(`page-failed ${board} ${Date.now() - started}ms`); }).finally(() => { fetchingMore.current = false; });
   }, [model, meId, board, parkId]);
   const moreRef = useRef(more);
   moreRef.current = more;
+  // Page 2 is fetched while the kid looks at the podium (from the network or
+  // the warm cache alike), so the first fling never waits on the network.
+  const firstPageOnly = !!model && model.nextOffset != null && model.rows.length <= model.nextOffset;
+  useEffect(() => {
+    if (!active || !firstPageOnly) return undefined;
+    const task = InteractionManager.runAfterInteractions(() => moreRef.current('idle'));
+    return () => task.cancel();
+  }, [active, firstPageOnly]);
   // Outfit art for the podium and your row is fetched before it is drawn.
   useEffect(() => {
     if (!model) return;
@@ -551,6 +555,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   pendingRef.current = results ? closeResults : null;
   const cardRef = useRef<StandingsRowModel | null>(null);
   cardRef.current = podium[0] ?? null;
+  const meRef = useRef<StandingsRowModel | null>(null);
+  meRef.current = model?.me ?? null;
   const scrollRef = useRef(scrollToMe);
   scrollRef.current = scrollToMe;
   useEffect(() => onStandingsDemo(event => {
@@ -559,10 +565,19 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (event.type === 'park' && board === 'all_time') { chooseAllTimePark(event.parkId); setParkId(event.parkId); }
     if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
     if (event.type === 'card') setCard(cardRef.current);
+    if (event.type === 'myCard') setCard(meRef.current);
     if (event.type === 'refresh' && board === 'week') loadRef.current(true);
   }), [board]);
 
   const onScroll = useAnimatedScrollHandler(event => { scrollY.value = event.contentOffset.y; });
+  // Perf captures only (both perf flags set at bundle time): a scripted fling and drag on the active board.
+  useEffect(() => {
+    if (!active) return undefined;
+    return startPerfScroll(
+      (dy, animated) => list.current?.scrollToOffset({ offset: scrollY.value + dy, animated }),
+      () => list.current?.scrollToOffset({ offset: 0, animated: true }),
+    );
+  }, [active, scrollY]);
   useAnimatedReaction(() => scrollY.value < MINI_PODIUM_HEIGHT - 60, (onScreen, before) => {
     if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
   });

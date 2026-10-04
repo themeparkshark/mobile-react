@@ -246,8 +246,8 @@ export const ROW_HEIGHT = 64;
 export const DIVIDER_HEIGHT = 40;
 /** Placeholder rows shown at the end of the loaded rows while more exist. */
 export const SKELETON_ROWS = 3;
-/** Start loading the next page when the kid is this many rows from the last loaded one (about 1.5 screens). */
-export const PREFETCH_ROWS = 20;
+/** Start loading the next page when the kid is this many rows from the last loaded one (1,920 pt, about 2.5 screens). */
+export const PREFETCH_ROWS = 30;
 
 /**
  * The list under the podium. With more pages to come, grey rows hold the

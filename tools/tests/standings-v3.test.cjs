@@ -58,7 +58,7 @@ test('prefetch fires about two screens before the grey rows, not at the end', ()
   const at = model.firstSkeletonIndex(items);
   assert.equal(model.shouldPrefetch(at - model.PREFETCH_ROWS - 1, items), false);
   assert.equal(model.shouldPrefetch(at - model.PREFETCH_ROWS, items), true);
-  assert.ok(model.PREFETCH_ROWS * model.ROW_HEIGHT >= 1200, 'at least about two phone screens of rows ahead');
+  assert.ok(model.PREFETCH_ROWS * model.ROW_HEIGHT >= 1800, "at least two and a half phone screens of rows ahead");
   assert.equal(model.shouldPrefetch(999, model.listItems(model.boardModel(firstPage({ next_offset: null }), 'week', 5))), false);
 });
 
@@ -135,6 +135,7 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.match(board, /shouldPrefetch\(lastVisible\.current, itemsRef\.current\)\) moreRef\.current\('scroll'\)/);
   assert.match(board, /onEndReached=/, 'a fling past the prefetch point still loads');
   assert.match(board, /InteractionManager\.runAfterInteractions\(\(\) => moreRef\.current\('idle'\)\)/, 'page 2 is fetched while the kid looks at the podium');
+  assert.match(board, /\}, \[active, firstPageOnly\]\);/, 'also for a board served from the warm cache');
   assert.match(board, /item\.type === 'skeleton'\) return <SkeletonRow \/>/);
   const shark = read('src/screens/LeaderboardsScreen/StandingsShark.tsx');
   assert.match(shark, /recyclingKey=/, 'a recycled row never flashes the last face');

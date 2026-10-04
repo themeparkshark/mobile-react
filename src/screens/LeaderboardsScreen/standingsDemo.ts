@@ -4,7 +4,7 @@
  * recordings need no taps. Never active outside __DEV__.
  */
 type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly type: 'scrollMe' } | { readonly type: 'park'; readonly parkId: number | null }
-  | { readonly type: 'dismiss' } | { readonly type: 'card' } | { readonly type: 'refresh' };
+  | { readonly type: 'dismiss' } | { readonly type: 'card' } | { readonly type: 'myCard' } | { readonly type: 'refresh' };
 
 const listeners = new Set<(event: DemoEvent) => void>();
 
@@ -18,6 +18,9 @@ export function onStandingsDemo(listener: (event: DemoEvent) => void): () => voi
 const TOUR: readonly (readonly [number, DemoEvent])[] = [
   [5000, { type: 'dismiss' }],
   [8000, { type: 'scrollMe' }],
+  // v3: your own card carries the weekly goals that left the pinned row.
+  [10000, { type: 'myCard' }],
+  [11500, { type: 'dismiss' }],
   [12000, { type: 'tab', index: 1 }],
   [17000, { type: 'tab', index: 2 }],
   [22000, { type: 'park', parkId: 8 }],
