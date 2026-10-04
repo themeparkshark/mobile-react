@@ -25,7 +25,7 @@ import {
   type ViewToken,
 } from 'react-native';
 import Animated, {
-  Easing, FadeInRight, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
+  Easing, FadeIn, FadeInRight, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
   withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
 } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
@@ -165,10 +165,10 @@ const FONT_CAP = 1.25;
 export function RankBadge({ rank, me = false }: { readonly rank: number; readonly me?: boolean }) {
   const digits = String(rank).length;
   return (
-    <View style={{ minWidth: 32, height: 32, paddingHorizontal: digits > 2 ? 7 : 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    <View style={{ minWidth: 32, height: 32, paddingHorizontal: digits > 4 ? 8 : digits > 2 ? 7 : 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
       backgroundColor: me ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: me ? '#021c3d' : BRAND.blueLip }}>
       <Text maxFontSizeMultiplier={1.1} numberOfLines={1}
-        style={{ fontFamily: 'Shark', fontSize: digits <= 2 ? 16 : digits === 3 ? 14 : 13, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{rank}</Text>
+        style={{ fontFamily: 'Shark', fontSize: digits <= 2 ? 16 : digits === 3 ? 14 : digits === 4 ? 13 : 12, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{rank >= 10000 ? rank.toLocaleString('en-US') : rank}</Text>
     </View>
   );
 }
@@ -199,8 +199,14 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
         <View style={{ marginLeft: 8 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
         {row.isMe && step && (step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal') ? (
           // Your row: the name keeps its full width, the next step sits under it (r3: the name was squeezed to 7 letters).
-          <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center' }}>
-            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+          <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center', gap: 2 }}>
+            {/* Same 18 pt name as everyone, with your YOU chip (r5). */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+              <View style={{ paddingHorizontal: 6, height: 18, borderRadius: 9, justifyContent: 'center', backgroundColor: BRAND.navy }}>
+                <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.white }}>YOU</Text>
+              </View>
+            </View>
             <StepGlyphs compact plus={step.plus} target={step.target} metric={metric} kind={step.kind} icon={step.icon} />
           </View>
         ) : (
@@ -276,28 +282,30 @@ function Divider({ label }: { readonly label: string }) {
 function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
   readonly plus: number; readonly target: string; readonly metric: StandingsMetric; readonly kind: 'jump' | 'top10' | 'goal';
   readonly icon: 'crown' | 'trophy' | 'star' | 'up' | null;
-  /** On your own row in the list: a smaller chip that fits beside your name. */
+  /** On your own row in the list: a smaller pill under your name. */
   readonly compact?: boolean;
 }) {
-  const h = compact ? 20 : 24;
+  const h = compact ? 22 : 26;
   const f = compact ? 12 : 15;
+  const ic = compact ? 13 : 16;
   const gold = kind !== 'jump' || icon === 'crown';
+  // One pill, one phrase (r5): "+1 cart" on blue flows into the target on navy or gold.
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? 4 : 6, height: h + 2 }} importantForAccessibility="no-hide-descendants">
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: compact ? 6 : 8, height: h, borderRadius: h / 2, backgroundColor: BRAND.blueBright }}>
+    <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', height: h,
+      borderRadius: h / 2, overflow: 'hidden', borderWidth: 2, borderColor: gold ? BRAND.goldLip : BRAND.navy }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: compact ? 7 : 9, paddingRight: compact ? 5 : 7, height: '100%', backgroundColor: BRAND.blueBright }}>
         <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`+${plus}`}</Text>
-        <ScoreIcon metric={metric} size={compact ? 15 : 18} />
+        <ScoreIcon metric={metric} size={ic + 1} />
+        <GameIcon name="arrow" size={ic - 2} />
       </View>
-      <GameIcon name="arrow" size={compact ? 13 : 16} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: compact ? 6 : 8, height: h, borderRadius: h / 2,
-        backgroundColor: gold ? BRAND.gold : BRAND.navy, borderWidth: gold ? 2 : 0, borderColor: BRAND.goldLip }}>
-        {icon === 'crown' && <GameIcon name="crown" size={compact ? 13 : 16} />}
-        {icon === 'trophy' && <GameIcon name="trophy" size={compact ? 13 : 16} />}
-        {icon === 'star' && <GameIcon name="star" size={compact ? 13 : 16} />}
-        {icon === 'up' && <GameIcon name="arrow" size={compact ? 12 : 14} style={{ transform: [{ rotate: '-90deg' }] }} />}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: compact ? 6 : 8, paddingRight: compact ? 8 : 10, height: '100%', backgroundColor: gold ? BRAND.gold : BRAND.navy }}>
+        {icon === 'crown' && <GameIcon name="crown" size={ic} />}
+        {icon === 'trophy' && <GameIcon name="trophy" size={ic} />}
+        {icon === 'star' && <GameIcon name="star" size={ic} />}
+        {icon === 'up' && <GameIcon name="arrow" size={ic - 2} style={{ transform: [{ rotate: '-90deg' }] }} />}
         <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: gold ? BRAND.navy : BRAND.white, fontVariant: ['tabular-nums'] }}>{target}</Text>
-        {/* A far jump counts players passed: a shark says "players" without words (r3 kids UX). */}
-        {icon === 'up' && <GameIcon name="shark" size={compact ? 13 : 16} />}
+        {/* A far jump counts players passed: a shark says "players" without words. */}
+        {icon === 'up' && <GameIcon name="shark" size={ic} />}
       </View>
     </View>
   );
@@ -310,7 +318,9 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows }: {
+  /** The crown finale follows (you reached the podium): "Up N!" gets a light tick, the crown gets the success haptic. */
+  readonly finaleFollows: boolean;
   /** "Up N!" just landed: the podium finale may play. */
   readonly onClimbLanded: () => void;
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
@@ -333,6 +343,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
+  const { width: screenW } = useWindowDimensions();
   const me = model.me;
   const step = nextStep(model, inPark);
   const shown = useSharedValue(reduced ? 1 : 0);
@@ -360,19 +371,22 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       const done = setTimeout(onClimbDone, 1800);
       return () => clearTimeout(done);
     }
+    // Readable ticks (r5): 600 ms each, so a 7-year-old can read each name.
+    const TICK = 600;
     const timers = passed.map((_, i) => setTimeout(() => {
       setStep2(i);
       playSound(tapSound);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    }, 500 + i * 380));
+    }, 400 + i * TICK));
     timers.push(setTimeout(() => {
       setStep2(passed.length);
-      playSound(rewardSound);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      playSound(finaleFollows ? tapSound : rewardSound);
+      if (finaleFollows) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
       onClimbLanded();
-    }, 500 + passed.length * 380));
-    timers.push(setTimeout(onClimbDone, 500 + passed.length * 380 + 1800));
+    }, 400 + passed.length * TICK));
+    timers.push(setTimeout(onClimbDone, 400 + passed.length * TICK + 2400));
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climbId]);
@@ -401,7 +415,11 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       {/* The dock: rows fade out above it. It stops above the nav's raised icons
           (r2: a strip down to the screen edge erased them). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
-      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8, borderBottomLeftRadius: RADIUS.lg, borderBottomRightRadius: RADIUS.lg }}>
+      {/* Beside the raised compass, cream reaches the nav's top edge, so no half row shows
+          between dock and nav (r5). The middle stays open for the compass. */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, bottom: -(YOU_CARD_BOTTOM - 8), height: YOU_CARD_BOTTOM - 8, width: Math.max(0, screenW / 2 - 62), backgroundColor: BRAND.cream }} />
+      <View pointerEvents="none" style={{ position: 'absolute', right: 0, bottom: -(YOU_CARD_BOTTOM - 8), height: YOU_CARD_BOTTOM - 8, width: Math.max(0, screenW / 2 - 62), backgroundColor: BRAND.cream }} />
+      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8 }}>
         <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens your card' : 'Shows your row'}
           // GO RIDE sits inside this row, so VoiceOver reaches it as an action (r2 kids UX).
           accessibilityActions={joining && step.kind === 'join' && step.canRide ? [{ name: 'activate' }, { name: 'goRide', label: 'Go ride' }] : undefined}
@@ -412,7 +430,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
             backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: urgent ? BRAND.goldLip : BRAND.gold, ...SHADOW.lifted,
             transform: [{ scale: pressed ? 0.98 : 1 }],
           })}>
-          <View style={{ minWidth: 44, alignItems: 'center' }}>
+          <View style={{ minWidth: 44, alignItems: 'center', marginRight: shownRank && shownRank >= 10000 ? 6 : 0 }}>
             {shownRank ? (
               <>
                 <RankBadge rank={shownRank} me />
@@ -436,11 +454,12 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
               <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{shownScore}</Text>
             </View>
             {passing ? (
-              <Animated.View key={passing.key} entering={reduced ? undefined : FadeInRight.springify().damping(14)}
+              // A crisp 120 ms fade, never a long spring, so every frame of the name is readable (r5).
+              <Animated.View key={passing.key} entering={reduced ? undefined : FadeIn.duration(120)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 26 }}>
                 <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} />
-                <StandingsShark avatar={passing.avatar} size={20} />
-                <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</Text>
+                <StandingsShark avatar={passing.avatar} size={22} />
+                <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</Text>
               </Animated.View>
             ) : revealing ? (
               <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip }}>CLIMBING!</Text>
@@ -510,6 +529,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const [climbFrom, setClimbFrom] = useState<number | null>(null);
   // The new podium waits hidden while the Monday card and your climb play, then rises last (r3).
   const [podiumHold, setPodiumHold] = useState(false);
+  const landedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (landedTimer.current) clearTimeout(landedTimer.current); }, []);
   const [celebrate, setCelebrate] = useState(false);
   const [meJoined, setMeJoined] = useState(false);
   const [myRowVisible, setMyRowVisible] = useState(false);
@@ -566,7 +587,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     const showResults = next.board === 'week' && !!next.lastWeek && !next.lastWeek.seen
       && resultsShown !== `${meId}:${next.lastWeek.weekStart}`;
     const climbNow = up > 0
-      ? () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimbFrom(seen); setClimbing(true); setClimb(up); setClimbId(id => id + 1); }
+      ? () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 3)); setClimbFrom(seen); setClimbing(true); setClimb(up); setClimbId(id => id + 1); }
       : null;
     // The podium rise, its confetti and the overtake all wait for the Monday card,
     // so the best moment is never played behind it (r2 game feel).
@@ -725,6 +746,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   }, [model]);
   const layouts = useMemo(() => itemLayouts(items), [items]);
   const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
+  // The top three before you climbed (everyone but you, in order): shown dimmed during the hold.
+  const oldPodium = useMemo(() => {
+    const others = (model?.rows ?? []).filter(row => row.score > 0 && !row.isMe);
+    return [others[0] ?? null, others[1] ?? null, others[2] ?? null] as const;
+  }, [model]);
   const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
   const meOnPodium = podium.some(row => row?.isMe);
 
@@ -848,14 +874,14 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     <View style={{ height: HEADER_HEIGHT }}>
       {/* The podium fades as it scrolls under the ribbon, so no score pill floats alone. */}
       <Animated.View style={podiumFade}>
-        <MiniPodium podium={podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
-          waiting={podiumHold} quiet={climbId > 0}
+        <MiniPodium podium={podiumHold ? oldPodium : podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
+          dimmed={podiumHold}
           playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}:${podiumHold}`} onPress={onRow} />
       </Animated.View>
       <View style={{ marginTop: -2, height: 20, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
         backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />
     </View>
-  ), [podium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade, podiumHold, climbId]);
+  ), [podium, oldPodium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade, podiumHold]);
 
   const strip = (
     <View style={{ paddingTop: 10, paddingBottom: 6, minHeight: 56 }}>
@@ -951,7 +977,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       <YouRow model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
-        onClimbLanded={() => setTimeout(() => setPodiumHold(false), 250)}
+        finaleFollows={meJoined}
+        onClimbLanded={() => {
+          if (landedTimer.current) clearTimeout(landedTimer.current);
+          landedTimer.current = setTimeout(() => setPodiumHold(false), 250);
+        }}
         onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); setClimbFrom(null); setPodiumHold(false); }} />
       <SharkCard row={card} metric={model.metric} board={board} goals={card?.isMe ? model.goals : null} onClose={() => setCard(null)} />
       <LastWeekCard result={results ? model.lastWeek : null} me={model.me}

@@ -103,7 +103,7 @@ test('the one next step: top 10 if 3 or fewer away, a weekly goal if 2 or fewer,
   const at11 = { ...base, me: { rank: 11, score: 10 }, chase: chase(), rows: [{ rank: 10, score: 10 }] };
   assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', icon: 'trophy', text: '1 more ride to make the top 10!' });
   const leap = { ...base, me: { rank: 30, score: 5 }, chase: chase({ name: 'p1029', passes: 1, targetRank: 29 }), rows: [{ rank: 10, score: 7 }] };
-  assert.equal(model.nextStep(leap).kind, 'jump', 'one ride passes someone; the top 10 is 3 away');
+  assert.equal(model.nextStep(leap).kind, 'top10', 'r5 milestone rule: the top 10 within 3 beats a 1-ride jump');
   const block = { ...base, me: { rank: 130, score: 21 }, chase: chase({ name: 'dinoking', tied: true, passes: 23, targetRank: 107 }), rows: [{ rank: 10, score: 37 }] };
   const tie = model.nextStep(block);
   assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', icon: null, text: '1 more ride jumps you past 23 players!' });
@@ -261,10 +261,9 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
 test('r4: podium finale after the climb, your name keeps its width, far jumps show players, stale pages dropped', () => {
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
-  assert.match(podium, /if \(waiting\) \{ p1\.value = 0; p2\.value = 0; p3\.value = 0; return; \}/, 'the new podium waits hidden');
-  assert.match(podium, /if \(!quiet\) \{/, 'no second sound and haptic after the climb');
+  assert.match(podium, /if \(dimmed\) \{ p1\.value = 1; p2\.value = 1; p3\.value = 1; return; \}/, 'r5: the old top three stand dimmed during the hold');
   assert.match(board, /setPodiumHold\(!!climbNow && changed\);/, 'the podium holds through the overtake');
-  assert.match(board, /onClimbLanded=\{\(\) => setTimeout\(\(\) => setPodiumHold\(false\), 250\)\}/, 'then rises as the finale');
+  assert.match(board, /landedTimer\.current = setTimeout\(\(\) => setPodiumHold\(false\), 250\);/, 'then rises as the finale');
   assert.match(board, /the next step sits under it/, 'your row: step chip under your name');
   assert.match(board, /\{icon === 'up' && <GameIcon name="shark"/, 'a far jump counts players');
   assert.match(board, /if \(modelRef\.current !== base\) return;/, 'a page for a replaced board is dropped');
@@ -273,4 +272,39 @@ test('r4: podium finale after the climb, your name keeps its width, far jumps sh
   assert.match(store, /const key = `\$\{keyOf\(meId, board, parkId\)\}:\$\{from\.build \?\? '-'\}:\$\{offset\}`;/, 'pages deduped per build and offset');
   assert.match(store, /i < 12 && model\.nextOffset != null && model\.rows\.length < previous\.rows\.length/, 'a refresh refetches up to the kid\'s place');
   assert.match(store, /return previous;/, 'a failed refetch keeps the board the kid had');
+});
+
+test('r5: milestone rule for #13, confetti that renders and stops, crown gets the only success haptic, readable ticker, cold-open tab', () => {
+  const base = { board: 'week', metric: 'ride_wins' };
+  const chase = (over = {}) => ({ name: 'p12', toPass: 2, tied: false, passes: 1, targetRank: 12, rank: 12, ...over });
+  // #13: two rides from #12, three from the top 10: the milestone wins.
+  const near = model.nextStep({ ...base, me: { rank: 13, score: 35 }, chase: chase(), rows: [{ rank: 10, score: 37 }] });
+  assert.deepEqual(plain([near.kind, near.plus, near.target]), ['top10', 3, 'TOP 10']);
+  // #13 with the top 10 five rides away: the jump.
+  const far = model.nextStep({ ...base, me: { rank: 13, score: 30 }, chase: chase(), rows: [{ rank: 10, score: 34 }] });
+  assert.deepEqual(plain([far.kind, far.target]), ['jump', '#12']);
+  // Two milestones: the closer wins; a tie goes to the top 10.
+  const tie = model.nextStep({ ...base, me: { rank: 12, score: 7 }, chase: chase({ toPass: 1 }), rows: [{ rank: 10, score: 7 }],
+    goals: [{ at: 8, xp: 25, reached: false }] });
+  assert.equal(tie.kind, 'top10', 'both 1 away: the top 10');
+  const goalCloser = model.nextStep({ ...base, me: { rank: 12, score: 7 }, chase: chase({ toPass: 1 }), rows: [{ rank: 10, score: 8 }],
+    goals: [{ at: 8, xp: 25, reached: false }] });
+  assert.equal(goalCloser.kind, 'goal', 'goal 1 away beats the top 10 2 away');
+
+  const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
+  assert.doesNotMatch(podium, /ParticleField|gamekit\/Particles/, 'no shared particle stage on the podium');
+  assert.match(podium, /const done = setTimeout\(\(\) => setLive\(false\), 1550\);/, 'the confetti unmounts after its burst: nothing runs when idle');
+  assert.match(podium, /playSound\(revealSound\);\s+void Haptics\.notificationAsync\(Haptics\.NotificationFeedbackType\.Success\)/, 'the crown gets the reveal sound and success haptic');
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /if \(finaleFollows\) void Haptics\.impactAsync\(Haptics\.ImpactFeedbackStyle\.Medium\)/, '"Up N!" is a tick when the crown follows');
+  assert.match(board, /podium=\{podiumHold \? oldPodium : podium\}/, 'the hold shows the old top three');
+  assert.match(board, /const TICK = 600;/, 'readable ticks');
+  assert.match(board, /entering=\{reduced \? undefined : FadeIn\.duration\(120\)\}/, 'a crisp fade, no long spring');
+  assert.match(board, /if \(landedTimer\.current\) clearTimeout\(landedTimer\.current\);/, 'the 250 ms timer is cleared');
+  assert.match(board, /One pill, one phrase/, 'the step is one pill');
+  assert.match(board, /Same 18 pt name as everyone, with your YOU chip/);
+  assert.match(board, /screenW \/ 2 - 62/, 'cream beside the compass closes the dock gap');
+  const screen = read('src/screens/LeaderboardScreen.tsx');
+  assert.match(screen, /\{width > 0 && ready && <Animated\.View/, 'the pill waits for the default board');
+  assert.match(screen, /The first placement after a cold open snaps/);
 });

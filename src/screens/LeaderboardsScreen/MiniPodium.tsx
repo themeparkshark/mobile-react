@@ -10,11 +10,10 @@
  */
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { memo, useContext, useEffect, useRef } from 'react';
+import { memo, useContext, useEffect, useState } from 'react';
 import { Image as RNImage, Pressable, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { ParticleField, type ParticleHandle } from '../../gamekit/Particles';
 import { BRAND, GameIcon, RADIUS } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CROWN_ART, RANK_RING } from './PodiumSpot';
@@ -29,7 +28,56 @@ const revealSound = require('../../../assets/sounds/reveal.mp3');
 export const MINI_PODIUM_HEIGHT = 236;
 // Barrel tops only (the painted digits sit lower and stay hidden).
 const BARREL_SHOWN = 100;
-const CONFETTI = [BRAND.gold, BRAND.goldLight, BRAND.white, BRAND.skyDeep, '#ff8a3d'];
+const CONFETTI_COLORS = [BRAND.gold, BRAND.goldLight, BRAND.white, BRAND.skyDeep, '#ff8a3d', '#ff5d8f'];
+
+const PIECES = Array.from({ length: 18 }, (_, i) => ({
+  // Fixed per piece (no per-frame randomness): direction, spin, color.
+  angle: -Math.PI / 2 + ((i / 17) - 0.5) * 2.4,
+  speed: 0.75 + ((i * 37) % 10) / 20,
+  spin: (i % 2 ? 1 : -1) * (300 + ((i * 53) % 240)),
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  w: 7 + (i % 3) * 2,
+}));
+
+function ConfettiPiece({ piece, t, originX, originY }: { readonly piece: typeof PIECES[number]; readonly t: SharedValue<number>; readonly originX: number; readonly originY: number }) {
+  const style = useAnimatedStyle(() => {
+    const d = t.value;
+    const dist = 150 * piece.speed * d;
+    return {
+      opacity: d < 0.8 ? 1 : (1 - d) * 5,
+      transform: [
+        { translateX: originX + Math.cos(piece.angle) * dist },
+        { translateY: originY + Math.sin(piece.angle) * dist + 260 * d * d },
+        { rotate: `${piece.spin * d}deg` },
+      ],
+    };
+  });
+  return <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: piece.w, height: piece.w * 0.55, borderRadius: 1.5, backgroundColor: piece.color }, style]} />;
+}
+
+/**
+ * Standings' own confetti (r5): 18 pieces on Reanimated, about 1.5 s, then it
+ * unmounts. Nothing runs when idle (the shared particle stage cost about 4 s of
+ * dropped UI frames here and did not always draw).
+ */
+function ConfettiBurst({ fireKey, x, y }: { readonly fireKey: number; readonly x: number; readonly y: number }) {
+  const t = useSharedValue(0);
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!fireKey) return undefined;
+    setLive(true);
+    t.value = 0;
+    t.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
+    const done = setTimeout(() => setLive(false), 1550);
+    return () => clearTimeout(done);
+  }, [fireKey, t]);
+  if (!live) return null;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}>
+      {PIECES.map((piece, i) => <ConfettiPiece key={i} piece={piece} t={t} originX={x} originY={y} />)}
+    </View>
+  );
+}
 
 /** The board's unit icon: the ride cart for rides won this week, Alex's ride coin for All-Time. */
 export function ScoreIcon({ metric, size }: { readonly metric: StandingsMetric; readonly size: number }) {
@@ -90,11 +138,9 @@ function Spot({ rank, row, metric, progress, onPress }: {
   );
 }
 
-function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, waiting = false, quiet = false }: {
-  /** The new top three wait hidden (the Monday card or your climb plays first), then rise as the finale. */
-  readonly waiting?: boolean;
-  /** Your climb already played the sound and haptic: the finale adds only the confetti. */
-  readonly quiet?: boolean;
+function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, dimmed = false }: {
+  /** While the Monday card and your climb play, the old top three stand dimmed (r5), then the new podium rises. */
+  readonly dimmed?: boolean;
   readonly podium: readonly [StandingsRowModel | null, StandingsRowModel | null, StandingsRowModel | null];
   readonly metric: StandingsMetric;
   /** The top three changed since your last look: play the rise. */
@@ -107,14 +153,14 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, wai
   const reduced = useUiReducedMotion();
   const { width } = useWindowDimensions();
   const { playSound } = useContext(SoundEffectContext);
-  const particles = useRef<ParticleHandle>(null);
+  const [confetti, setConfetti] = useState(0);
   const p1 = useSharedValue(reduced ? 1 : 0);
   const p2 = useSharedValue(reduced ? 1 : 0);
   const p3 = useSharedValue(reduced ? 1 : 0);
 
   useEffect(() => {
     if (reduced) { p1.value = 1; p2.value = 1; p3.value = 1; return; }
-    if (waiting) { p1.value = 0; p2.value = 0; p3.value = 0; return; }
+    if (dimmed) { p1.value = 1; p2.value = 1; p3.value = 1; return; }
     if (!celebrate) {
       [p1, p2, p3].forEach(p => { p.value = 0.6; p.value = withTiming(1, { duration: 150 }); });
       return;
@@ -125,18 +171,17 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, wai
     p2.value = rise(140);
     p1.value = rise(320);
     if (meJoined) {
+      // The crown landing: the reveal sound, the only success haptic and the confetti (r5).
       const timer = setTimeout(() => {
-        if (!quiet) {
-          playSound(revealSound);
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-        }
-        particles.current?.burst({ x: width / 2, y: 70, preset: 'confetti', count: 26, colors: CONFETTI, speed: 1 });
+        playSound(revealSound);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        setConfetti(n => n + 1);
       }, 620);
       return () => clearTimeout(timer);
     }
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playKey, reduced, waiting]);
+  }, [playKey, reduced, dimmed]);
 
   return (
     <View style={{ height: MINI_PODIUM_HEIGHT, width }}>
@@ -148,16 +193,13 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, wai
       </View>
       <View pointerEvents="box-none" style={{
         position: 'absolute', left: 0, right: 0, bottom: 42, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',
+        opacity: dimmed ? 0.45 : 1,
       }}>
         <Spot rank={2} row={podium[1]} metric={metric} progress={p2} onPress={onPress} />
         <Spot rank={1} row={podium[0]} metric={metric} progress={p1} onPress={onPress} />
         <Spot rank={3} row={podium[2]} metric={metric} progress={p3} onPress={onPress} />
       </View>
-      {!reduced && meJoined && (
-        <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width, height: MINI_PODIUM_HEIGHT }}>
-          <ParticleField ref={particles} width={width} height={MINI_PODIUM_HEIGHT} pointerEvents="none" />
-        </View>
-      )}
+      {!reduced && <ConfettiBurst fireKey={confetti} x={width / 2} y={70} />}
     </View>
   );
 }

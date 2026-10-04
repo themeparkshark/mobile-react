@@ -371,8 +371,8 @@ export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
 /**
  * The pinned row's one next step (v3 r2). Glyph first for a 6 year old
  * (+1 cart, an arrow, the target), the sentence for readers and VoiceOver.
- * The closest reward wins: the top 10 when 3 or fewer away, then a weekly
- * goal when 2 or fewer away, else the next jump (a whole tie block at once).
+ * Milestones win: the top 10 when 3 or fewer away, or a weekly goal when 2
+ * or fewer away; otherwise the next jump (a whole tie block at once).
  * Never names who beat you; never a dead-end button away from a park.
  */
 export type NextStep =
@@ -420,7 +420,10 @@ export function nextStep(
     target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
     text: landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
       : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
-  options.sort((x, y) => x.plus - y.plus || x.order - y.order);
+  // Milestones first (r5): the top 10 within 3, or a weekly goal within 2, beats any jump
+  // (#13 two rides from #12 but three from the top 10 sees TOP 10). Between two
+  // milestones the closer wins, ties go to the top 10; with none, the jump.
+  options.sort((x, y) => (x.kind === 'jump' ? 1 : 0) - (y.kind === 'jump' ? 1 : 0) || x.plus - y.plus || x.order - y.order);
   const { order: _order, ...best } = options[0];
   return best;
 }

@@ -31,8 +31,10 @@ const whooshSound = require('../../assets/sounds/whoosh.mp3');
  * Three tabs on a blue rail (four when the Home Hunt board is on); a white
  * pill springs under the chosen one. A dot on Home Hunt means unclaimed results.
  */
-function StandingsTabs({ tabs, active, onChange, dot }: {
+function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
   readonly tabs: readonly (StandingsTabSpec | StandingsV2Tab)[]; readonly active: number; readonly onChange: (index: number) => void; readonly dot: boolean;
+  /** The default board is known: show the pill (it lands in place, no slide). */
+  readonly ready?: boolean;
 }) {
   const size = standingsTabSizing(tabs.length);
   const reduced = useUiReducedMotion();
@@ -44,9 +46,12 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   // One shared position drives the pill and every label's color, so a label is
   // navy exactly while the white pill is under it (never white on white mid-slide).
   const pillX = useSharedValue(active);
+  const placed = useRef(ready);
   useEffect(() => {
+    // The first placement after a cold open snaps; only a kid's tap slides.
+    if (!placed.current) { if (ready) { placed.current = true; pillX.value = active; } return; }
     pillX.value = reduced ? active : withSpring(active, { damping: 17, stiffness: 230 });
-  }, [active, reduced, pillX]);
+  }, [active, reduced, pillX, ready]);
   const pill = useAnimatedStyle(() => ({
     width: segment,
     transform: [{ translateX: pillX.value * segment }],
@@ -68,7 +73,7 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
       flexDirection: 'row', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 4, borderRadius: 18,
       backgroundColor: 'rgba(5,52,110,0.35)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
     }}>
-      {width > 0 && <Animated.View style={[{
+      {width > 0 && ready && <Animated.View style={[{
         position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 14, backgroundColor: BRAND.white,
         borderBottomWidth: 3, borderBottomColor: BRAND.sky,
       }, pill]} />}
@@ -85,7 +90,7 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
           </Pressable>
         );
       })}
-      {width > 0 && (
+      {width > 0 && ready && (
         <Animated.View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
           style={[{ position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 14, overflow: 'hidden' }, pill]}>
           <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: contentWidth, flexDirection: 'row' }, inner]}>
@@ -143,6 +148,14 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
   };
   const [activeTab, setActiveTab] = useState(smartTab);
   const touched = useRef(!!tabParam);
+  // Cold open with nothing cached (r5): the pill waits (up to 1.2 s) for the default board,
+  // so it never slides on its own after the kid has started looking.
+  const [tabReady, setTabReady] = useState(() => !!tabParam || !!defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null));
+  useEffect(() => {
+    if (tabReady) return undefined;
+    const t = setTimeout(() => setTabReady(true), 1200);
+    return () => clearTimeout(t);
+  }, [tabReady]);
   const { playSound } = useContext(SoundEffectContext);
   const resultsWaiting = usePresentationBadges('standings').length > 0;
   useEffect(() => {
@@ -152,7 +165,8 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
       void Promise.all([loadBoard(meId, 'week', null), loadBoard(meId, 'friends', null)]).then(([week, friends]) => {
         const pick = defaultStandingsTab(week, friends);
         if (live && pick && !touched.current) setActiveTab(Math.max(0, standingsV2Tabs(false).findIndex(tab => tab.key === pick)));
-      }).catch(() => undefined);
+        if (live) setTabReady(true);
+      }).catch(() => { if (live) setTabReady(true); });
     }
     void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
     // The other boards load in the background so the first switch is instant.
@@ -173,8 +187,9 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
 
   return (
     <StandingsShell>
-      <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
+      <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} ready={tabReady} onChange={index => {
         touched.current = true;
+        setTabReady(true);
         if (activeTab !== index) playSound(whooshSound);
         setActiveTab(index);
       }} />
