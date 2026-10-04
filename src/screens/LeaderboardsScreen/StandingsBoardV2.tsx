@@ -689,6 +689,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
     if (event.type === 'card') setCard(cardRef.current);
     if (event.type === 'myCard') setCard(meRef.current);
+    if (event.type === 'scrollBy') list.current?.scrollToOffset({ offset: Math.max(0, scrollY.value + event.dy), animated: true });
     if (event.type === 'refresh' && board === 'week') loadRef.current(true);
   }), [board]);
 

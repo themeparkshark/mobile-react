@@ -4,7 +4,8 @@
  * recordings need no taps. Never active outside __DEV__.
  */
 type DemoEvent = { readonly type: 'tab'; readonly index: number } | { readonly type: 'scrollMe' } | { readonly type: 'park'; readonly parkId: number | null }
-  | { readonly type: 'dismiss' } | { readonly type: 'card' } | { readonly type: 'myCard' } | { readonly type: 'refresh' };
+  | { readonly type: 'dismiss' } | { readonly type: 'card' } | { readonly type: 'myCard' } | { readonly type: 'refresh' }
+  | { readonly type: 'scrollBy'; readonly dy: number };
 
 const listeners = new Set<(event: DemoEvent) => void>();
 
@@ -17,17 +18,22 @@ export function onStandingsDemo(listener: (event: DemoEvent) => void): () => voi
 
 const TOUR: readonly (readonly [number, DemoEvent])[] = [
   [5000, { type: 'dismiss' }],
-  [8000, { type: 'scrollMe' }],
-  // v3: your own card carries the weekly goals that left the pinned row.
-  [10000, { type: 'myCard' }],
-  [11500, { type: 'dismiss' }],
-  [12000, { type: 'tab', index: 1 }],
-  [17000, { type: 'tab', index: 2 }],
-  [22000, { type: 'park', parkId: 8 }],
-  [26000, { type: 'scrollMe' }],
-  [29000, { type: 'card' }],
-  [33000, { type: 'dismiss' }],
-  [35000, { type: 'tab', index: 0 }],
+  // This Week: a stranger's safe card, then show my row and my card (goals).
+  [6000, { type: 'tab', index: 0 }],
+  [7500, { type: 'card' }],
+  [9500, { type: 'dismiss' }],
+  [10500, { type: 'scrollMe' }],
+  [13000, { type: 'myCard' }],
+  [15500, { type: 'dismiss' }],
+  // Scroll up from Your spot into the grey rows: a held page lands, nothing jumps.
+  [16500, { type: 'scrollBy', dy: -700 }],
+  [18500, { type: 'scrollBy', dy: -700 }],
+  [21000, { type: 'tab', index: 1 }],
+  [25000, { type: 'tab', index: 2 }],
+  [29000, { type: 'park', parkId: 8 }],
+  [32000, { type: 'card' }],
+  [34500, { type: 'dismiss' }],
+  [36000, { type: 'tab', index: 0 }],
   // A second climb in the same session (the capture script adds rides meanwhile).
   [42000, { type: 'refresh' }],
 ];
