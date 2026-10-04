@@ -159,3 +159,27 @@ test('fixed map art (gym, swords, community centre, boss, encounter) fades under
   assert.match(fright, /const encounterUnderButton = useUnderButton\('encounter'\);/);
   assert.match(fright, /encounterShown && !!encounter && !encounterUnderButton/);
 });
+
+test('every map marker pins its overflow extents (envelope), so iOS never re-places it at the map corner', () => {
+  const marker = read('src/components/map/Marker.tsx');
+  assert.match(marker, /export const ENVELOPE = 320;/);
+  assert.match(marker, /<View pointerEvents="none" collapsable=\{false\} style=\{ENVELOPE_TOP_LEFT\} \/>/);
+  assert.match(marker, /<View pointerEvents="none" collapsable=\{false\} style=\{ENVELOPE_BOTTOM_RIGHT\} \/>/);
+  assert.match(marker, /left: -ENVELOPE, top: -ENVELOPE, width: 1, height: 1/);
+  assert.match(marker, /right: -ENVELOPE, bottom: -ENVELOPE, width: 1, height: 1/);
+  // The envelope is inside the one Pressable child (the MarkerView keeps exactly one child).
+  const body = marker.slice(marker.indexOf('<MarkerView'), marker.indexOf('</MarkerView>'));
+  assert.equal((body.match(/<Pressable/g) || []).length, 1);
+  assert.ok(body.indexOf('ENVELOPE_TOP_LEFT') < body.indexOf('</Pressable>'));
+  // The water ambience marker keeps one box size whether or not it draws.
+  const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.match(task, /<View style=\{styles\.waterBox\}>/);
+  assert.match(task, /waterBox: \{ width: 110, height: 70 \}/);
+  // Every chip and selected card fits inside the envelope (tag candidates reach at most ~210 pt out).
+  const { ENVELOPE } = { ENVELOPE: 320 };
+  const L = require('./helpers/ts-module.cjs').loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+  const s = require('./helpers/ts-module.cjs').loadTs('src/components/map/declutter/solver.ts');
+  for (const c of s.tagCandidates(L.RIDE_BODY, 200, 100)) {
+    assert.ok(c.x > -ENVELOPE && c.y > -ENVELOPE && c.x + 200 < ENVELOPE && c.y + 100 < ENVELOPE, c.side);
+  }
+});

@@ -1,6 +1,6 @@
 import { MarkerView } from '@maplibre/maplibre-react-native';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Pressable, type LayoutChangeEvent } from 'react-native';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { soakLog, SOAK_TRACE } from './declutter/soakLog';
 
 type LatLng = { readonly latitude: number | string; readonly longitude: number | string };
@@ -66,12 +66,35 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
         accessibilityRole={tappable ? 'button' : undefined} accessibilityLabel={tappable ? accessibilityLabel : undefined}
         accessibilityElementsHidden={off} importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>
         {children}
+        {/* The envelope: two invisible points far outside the art fix the marker's overflow extents. */}
+        <View pointerEvents="none" collapsable={false} style={ENVELOPE_TOP_LEFT} />
+        <View pointerEvents="none" collapsable={false} style={ENVELOPE_BOTTOM_RIGHT} />
       </Pressable>
     </MarkerView>
   );
 }
 
 const HIDDEN = { opacity: 0 } as const;
+/**
+ * Every marker's layout metrics stay constant, so iOS never blinks it to the map's top-left corner.
+ *
+ * On iOS a MarkerView is an MLRNPointAnnotation that MapLibre owns and places by centre. Under the
+ * new architecture's interop, any commit that changes the marker's layout metrics (frame OR overflow
+ * inset) runs RCTViewComponentView updateLayoutMetrics, which writes frame (0, 0, w, h) onto that
+ * view: the map's top-left corner, until MapLibre's next map frame. Overflow insets include
+ * transforms, and Reanimated writes animated transforms into the shadow tree on every commit, so
+ * a bobbing coin, a chip sliding to its side, a pop or a recede changed the inset and sent the
+ * marker to the corner (the soak's one-frame blips; whole groups at once on a busy commit).
+ *
+ * The envelope pins the overflow extents: two 1 pt transparent views ENVELOPE pt outside the box on
+ * each side. Everything a marker animates (chips and leaders, the selected card, bobs, bursts,
+ * pulses) stays inside it, so the extents never change. Unlike a big clipping box, the native view
+ * (the tap target MapLibre hit-tests) keeps the art's own size: taps beside a marker still reach the
+ * map and its neighbours. JS only: ships over the air on the current binary.
+ */
+export const ENVELOPE = 320;
+const ENVELOPE_TOP_LEFT = { position: 'absolute', left: -ENVELOPE, top: -ENVELOPE, width: 1, height: 1 } as const;
+const ENVELOPE_BOTTOM_RIGHT = { position: 'absolute', right: -ENVELOPE, bottom: -ENVELOPE, width: 1, height: 1 } as const;
 const CENTER = { x: 0.5, y: 0.5 } as const;
 /** A thousandth of a point on a 96 pt marker: invisible, but a different prop value. */
 const ANCHOR_NUDGE = 1e-5;

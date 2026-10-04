@@ -443,7 +443,8 @@ function TaskMarker({
   return (<>
     {/* Always mounted (hidden without a water scene): the island's two map markers never come and go. */}
     <Marker coordinate={waterSpot ?? { latitude, longitude }} hidden={parked || !(waterKind && waterSpot)} anchor={{ x: 0.5, y: 0.63 }}>
-      {waterKind && waterSpot && !parked ? <WaterAmbience kind={waterKind} /> : <View style={styles.parkedBox} />}
+      {/* Same box size either way, so the marker's layout never changes (no corner blink). */}
+      <View style={styles.waterBox}>{waterKind && waterSpot && !parked ? <WaterAmbience kind={waterKind} /> : null}</View>
     </Marker>
     <Marker
       coordinate={{ latitude, longitude }}
@@ -551,7 +552,7 @@ export default memo(TaskMarker);
 const PARKED_PLACEMENT: Placement = { visible: false, scale: 1, folded: 0, foldedInto: null, tag: null, reason: 'offscreen' };
 
 const styles = StyleSheet.create({
-  parkedBox: { width: 1, height: 1 },
+  waterBox: { width: 110, height: 70 },
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
   goalBadge: { backgroundColor: BRAND.gold,
