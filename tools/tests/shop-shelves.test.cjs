@@ -639,7 +639,7 @@ test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss 
   assert.match(close, /setOpen\(null\);/);
   // The sheet hides its modal, then reports closed from onDismiss (with a guard and the Android path).
   assert.match(sheet, /<Modal visible=\{!leaving\}[^>]*onDismiss=\{finishClose\}/);
-  assert.match(sheet, /Platform\.OS === 'ios' \? 300 : 0/);
+  assert.match(sheet, /Platform\.OS === 'ios' \? 200 : 0/);
   assert.equal(/runOnJS\(onClose\)/.test(sheet), false, 'every slide-out goes through leave()');
 });
 
@@ -775,11 +775,11 @@ test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle sh
   assert.match(sheet, /backgroundColor: REVEAL_NAVY \}, duskStyle\]/);
   assert.match(shelvesCode, /\{handoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY \}\]\} \/>\}/);
   assert.match(shelvesCode, /onShown=\{revealShown\}/);
-  assert.match(shelvesCode, /const revealShown = useCallback\(\(\) => \{[^}]*setHandoff\(false\);/);
+  assert.match(shelvesCode, /const revealShown = useCallback\(\(\) => \{[^}]*coverHandoff\(false\);/);
   // The cover goes up as the sheet starts to hide (not after it is gone).
   assert.match(sheet, /onLeavingRef\.current\?\.\(\);\s*setLeaving\(true\);/);
   assert.match(shelvesCode, /onLeaving=\{leavingTryOn\}/);
-  assert.match(shelvesCode, /setTimeout\(\(\) => setHandoff\(false\), 1500\)/, 'the cover can never stick');
+  assert.match(shelvesCode, /setTimeout\(\(\) => coverHandoff\(false\), 1500\)/, 'the cover can never stick');
   assert.match(reveal, /onShow=\{onShown\}/);
   assert.match(reveal, /backgroundColor: REVEAL_NAVY/);
 });
@@ -825,6 +825,7 @@ test('polish 3: the hand-off covers the whole screen, the reveal shows at once, 
   assert.match(screen, /onHandoff=\{setShopHandoff\}/);
   assert.match(screen, /\{shopHandoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY, zIndex: 50 \}\]\} \/>\}/);
   assert.match(code, /bridged=\{handoff\}/);
+  assert.match(code, /const coverHandoff = useCallback\(\(on: boolean\) => \{ setHandoff\(on\); handoffRef\.current\?\.\(on\); \}/, 'both covers flip in one tick');
   assert.match(reveal, /entering=\{still \|\| bridged \? undefined : FadeIn\.duration\(260\)\}/);
   assert.match(code, /if \(shownRef\.current !== revealSlug\) holdReveal\(\); \}, 1200\)/, 'watchdog remounts a reveal iOS dropped');
 });

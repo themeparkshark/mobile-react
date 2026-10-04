@@ -541,19 +541,20 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   openRef.current = open;
   const handoffRef = useRef(onHandoff);
   handoffRef.current = onHandoff;
-  useEffect(() => { handoffRef.current?.(handoff); }, [handoff]);
+  // The screen's cover and ours flip in the same tick (no frame with the header showing).
+  const coverHandoff = useCallback((on: boolean) => { setHandoff(on); handoffRef.current?.(on); }, []);
   const leavingTryOn = useCallback(() => {
     if (!rewardPendingFor(revealsRef.current, openRef.current?.item.shop?.set?.slug)) return;
-    setHandoff(true);
-    setTimeout(() => setHandoff(false), 1500);
-  }, []);
+    coverHandoff(true);
+    setTimeout(() => coverHandoff(false), 1500);
+  }, [coverHandoff]);
   const closeTryOn = useCallback(() => {
     setOpen(null);
   }, []);
   // iOS can drop a modal presented while another is still leaving: if the reveal hasn't shown
   // within 1.2 s of mounting, remount it once the gate reopens (the reward is never lost).
   const shownRef = useRef<string | null>(null);
-  const revealShown = useCallback(() => { shownRef.current = revealsRef.current[0]?.reward.slug ?? null; setHandoff(false); }, []);
+  const revealShown = useCallback(() => { shownRef.current = revealsRef.current[0]?.reward.slug ?? null; coverHandoff(false); }, [coverHandoff]);
   const revealSlug = reveals[0]?.reward.slug ?? null;
   const revealMounted = !!revealSlug && !open && revealGate;
   useEffect(() => {
@@ -819,7 +820,7 @@ const styles = StyleSheet.create({
   jumpChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   // Same box as every chip; the active one scales (no layout change, the row never shifts).
-  jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }], ...SHADOW.card },
+  jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }] },
   heroStage: { position: 'absolute', left: HERO_L.stage.left, top: HERO_L.stage.top, height: HERO_L.stage.height, width: HERO_L.stage.width },
   heroKickerRow: { position: 'absolute', left: 0, right: 0, top: 0, height: HERO.kickerH, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },
