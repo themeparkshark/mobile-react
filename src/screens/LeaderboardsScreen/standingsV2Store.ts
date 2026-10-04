@@ -12,14 +12,18 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import allParks from '../../api/endpoints/parks/allParks';
-import { getStandings, type StandingsBoardKey } from '../../api/endpoints/me/standings';
+import { Image as ExpoImage } from 'expo-image';
+import { getStandings, getStandingsPage, type StandingsBoardKey } from '../../api/endpoints/me/standings';
+import { outfitLayerUrls } from '../../helpers/wardrobe';
+import type { InventoryType } from '../../models/inventory-type';
 import type { ParkType } from '../../models/park-type';
 import { standingsGeneration, standingsSession } from './standingsCache';
-import { boardModel, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel } from './standingsV2Model';
+import { boardModel, mergePage, mergeRefresh, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel, type StandingsRowModel } from './standingsV2Model';
 
 const FRESH_MS = 45_000;
 const boards = new Map<string, { model: StandingsBoardModel; at: number }>();
 const inFlight = new Map<string, Promise<StandingsBoardModel>>();
+const pagesInFlight = new Map<string, Promise<StandingsBoardModel>>();
 let generation = standingsGeneration();
 let owner: number | null = null;
 let session = standingsSession();
@@ -55,14 +59,54 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
   if (running) return running;
   const request = getStandings(board, board === 'all_time' ? parkId ?? null : null)
     .then(dto => {
-      const model = boardModel(dto, board, meId);
+      // A refresh keeps the pages already scrolled through (no jump back to the top 50).
+      const model = mergeRefresh(boardModel(dto, board, meId), boards.get(key)?.model);
       // A sign-out while this was in flight must not repopulate the cache.
       if (owner === meId) boards.set(key, { model, at: Date.now() });
+      prefetchFaces(model.rows.slice(0, 12));
       return model;
     })
     .finally(() => { inFlight.delete(key); });
   inFlight.set(key, request);
   return request;
+}
+
+/**
+ * Infinite scroll: fetch the page after the rows this board has and merge it
+ * into the cached board, so a tab switch keeps the place. One request per
+ * board at a time. Resolves to the board unchanged when there is nothing more.
+ */
+export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined): Promise<StandingsBoardModel | null> {
+  sync(meId);
+  const key = keyOf(meId, board, parkId);
+  const current = boards.get(key);
+  if (!current || current.model.nextOffset == null) return Promise.resolve(current?.model ?? null);
+  const running = pagesInFlight.get(key);
+  if (running) return running;
+  const offset = current.model.nextOffset;
+  const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset)
+    .then(page => {
+      const latest = boards.get(key);
+      // The board was refreshed, reset or signed out meanwhile: drop this page.
+      if (!latest || owner !== meId || latest.model.nextOffset !== offset) return latest?.model ?? current.model;
+      const model = mergePage(latest.model, page, meId);
+      boards.set(key, { model, at: latest.at });
+      prefetchFaces(model.rows.slice(-(page.rows?.length ?? 0)));
+      return model;
+    })
+    .finally(() => { pagesInFlight.delete(key); });
+  pagesInFlight.set(key, request);
+  return request;
+}
+
+/** Outfit layers for rows about to scroll in, so a face is decoded before its row shows. */
+function prefetchFaces(rows: readonly StandingsRowModel[]): void {
+  const urls = new Set<string>();
+  rows.forEach(row => {
+    const inv = row.avatar.inventory as InventoryType | null | undefined;
+    [...outfitLayerUrls(inv), inv?.skin_item?.no_eye_url, inv?.background_item?.paper_url].forEach(url => { if (url) urls.add(url); });
+  });
+  if (urls.size) void ExpoImage.prefetch([...urls], 'memory-disk').catch(() => undefined);
 }
 
 /** Warm boards so a tab or park switch is instant. Only fetches what is missing or stale. Failures are ignored. */
@@ -125,6 +169,7 @@ export async function podiumChanged(meId: number | null, model: StandingsBoardMo
 export function resetStandingsV2Cache(): void {
   boards.clear();
   inFlight.clear();
+  pagesInFlight.clear();
   chosenPark = null;
   owner = null;
 }

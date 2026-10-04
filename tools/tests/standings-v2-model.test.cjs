@@ -153,7 +153,7 @@ test('wiring: kid-safe taps, per-player cache reset on sign-out, win marks stand
   assert.match(board, /board === 'friends' && !row\.isMe\) RootNavigation\.navigate\('Player'/, 'only friends open a profile');
   assert.match(board, /setCard\(row\)/, 'public rows open the safe shark card');
   assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /navigate\('Player'/);
-  assert.match(board, /getItemLayout/);
+  assert.match(board, /overrideItemLayout=/, 'v3: FlashList with exact fixed row sizes');
   assert.match(board, /onViewableItemsChanged/);
   assert.match(board, /announceForAccessibility/);
   assert.doesNotMatch(board, /You \$\{scoreSummary/, 'no "You X of Y" pill');
@@ -225,7 +225,7 @@ test('round 5: your row visibility from geometry, the goal note held while the w
 
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /list\.current\?\.recordInteraction\(\);/, 'an activated board wakes its list');
-  assert.match(board, /windowSize=\{active \? 9 : 3\}/);
+  assert.match(board, /drawDistance=\{active \? ROW_HEIGHT \* 12 : ROW_HEIGHT \* 3\}/, 'v3: a hidden tab draws only near its viewport');
   const screen = read('src/screens/LeaderboardScreen.tsx');
   assert.match(screen, /translateX: -pillX\.value \* segment/, 'a navy label row is clipped to the pill and follows its edge');
   assert.match(screen, /overflow: 'hidden' \}, pill\]/);

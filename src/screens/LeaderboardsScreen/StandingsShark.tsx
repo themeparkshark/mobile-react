@@ -1,14 +1,16 @@
 /**
  * A player's shark on the Standings boards. A worn outfit (or, on the Friends
- * board, a photo) draws through <Avatar>; a player with no outfit gets one of
+ * board, a photo) draws through the list-tuned Face below; a player with no outfit gets one of
  * Alex's eight real shark colors, picked by player id, so the podium and the
  * list read as different players at a glance (ART_RULES 1: real art only).
  */
-import { memo, useContext } from 'react';
+import { Image as ExpoImage } from 'expo-image';
+import { memo, useContext, useState } from 'react';
 import { Image, View } from 'react-native';
-import Avatar from '../../components/Avatar';
+import { DEFAULT_PORTRAIT } from '../../components/Avatar';
+import config from '../../config';
 import { AuthContext } from '../../context/AuthProvider';
-import { liveOutfitFor, outfitLayerUrls, sharkBaseLayers } from '../../helpers/wardrobe';
+import { hasDressedShark, liveOutfitFor, outfitLayerUrls, sharkBaseLayers } from '../../helpers/wardrobe';
 import type { InventoryType } from '../../models/inventory-type';
 import type { PlayerType } from '../../models/player-type';
 import { BRAND } from '../../ui';
@@ -37,6 +39,41 @@ export function wearsOwnLook(inventory: InventoryType | null | undefined): boole
   const skin = inventory.skin_item as (InventoryType['skin_item'] & { cost?: number | null }) | null | undefined;
   return !!skin?.no_eye_url && Number(skin.cost ?? 0) > 0;
 }
+
+/**
+ * The dressed shark (or a friend's photo) for one row: the same layers and
+ * geometry as Avatar (size sm), without its badges, tuned for a scrolling
+ * list. Faces stay decoded in memory (memory-disk), a recycled row never
+ * flashes the previous player's face (recyclingKey), and there is no fade.
+ */
+const Face = memo(function Face({ id, photo, inventory }: {
+  readonly id: number; readonly photo: string | null; readonly inventory: InventoryType | null;
+}) {
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const s = AVATAR_PX;
+  // Same rule as <Avatar>: a worn outfit wins over a photo.
+  const usePhoto = !!photo && photo !== failedPhoto && !hasDressedShark(inventory);
+  const layers = usePhoto ? [] : [
+    ...(inventory?.background_item?.paper_url ? [{ uri: inventory.background_item.paper_url }] : []),
+    ...sharkBaseLayers(inventory),
+    ...outfitLayerUrls(inventory).map(uri => ({ uri })),
+  ];
+  return (
+    <View style={{ width: s, height: s, borderWidth: 1, borderColor: config.lightBlue, overflow: 'hidden', borderRadius: s / 2 }}>
+      {usePhoto ? (
+        <ExpoImage source={{ uri: photo as string }} placeholder={DEFAULT_PORTRAIT} recyclingKey={`p${id}`} cachePolicy="memory-disk" transition={0}
+          onError={() => setFailedPhoto(photo)} contentFit="contain" style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }} />
+      ) : (
+        <View style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}>
+          {layers.map((source, index) => (
+            <ExpoImage key={index} source={source} recyclingKey={`${id}:${index}`} cachePolicy="memory-disk" transition={0}
+              contentFit="contain" style={{ width: '100%', height: '100%', position: 'absolute' }} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
 
 function StandingsShark({ avatar, size, muted = false, ring }: {
   readonly avatar: StandingsRowModel['avatar'];
@@ -68,7 +105,7 @@ function StandingsShark({ avatar, size, muted = false, ring }: {
         </View>
       ) : dressed ? (
         <View style={{ width: AVATAR_PX, height: AVATAR_PX, transform: [{ scale: size / AVATAR_PX }] }}>
-          <Avatar player={player} size="sm" />
+          <Face id={avatar.id} photo={avatar.avatar_url} inventory={outfit} />
         </View>
       ) : (
         // RN Image: bundled art decodes from the in-memory cache, so a tab switch never paints a blank face.

@@ -10,7 +10,7 @@
  * Ties go to whoever reached the number first.
  */
 import type { GameIconName } from '../../ui/iconNames';
-import type { StandingsBoardDto, StandingsBoardKey, StandingsRowDto } from '../../api/endpoints/me/standings';
+import type { StandingsBoardDto, StandingsBoardKey, StandingsPageDto, StandingsRowDto } from '../../api/endpoints/me/standings';
 
 export type StandingsV2TabKey = StandingsBoardKey | 'hunt';
 
@@ -110,6 +110,8 @@ export interface StandingsBoardModel {
   readonly lastWeek: LastWeekResult | null;
   /** A flagged win this week: the kid sees "Your rides are being checked" with their real count. */
   readonly review: { readonly rides: number; readonly benched: boolean } | null;
+  /** Infinite scroll (v3): where the next page starts; null when every row is here. */
+  readonly nextOffset: number | null;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -168,7 +170,64 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
     chase,
     goals,
     lastWeek,
+    nextOffset: nextOffsetOf(dto?.next_offset),
   };
+}
+
+/** A next_offset the list can use: a whole number above 0, else null (older servers send none). */
+function nextOffsetOf(value: unknown): number | null {
+  const n = Number(value);
+  return value != null && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Appends one infinite-scroll page. Rows are keyed by player, so a page that
+ * overlaps (the board moved between requests) never shows anyone twice, and a
+ * player who climbed keeps their newest rank. Rows from the "Your spot" block
+ * that are now in the list leave that block.
+ */
+export function mergePage(model: StandingsBoardModel, page: Partial<StandingsPageDto> | null | undefined, meId?: number | null): StandingsBoardModel {
+  const incoming = (Array.isArray(page?.rows) ? page!.rows : [])
+    .map(row => rowModel(row, meId)).filter((row): row is StandingsRowModel => row !== null);
+  const byId = new Map<number, StandingsRowModel>();
+  [...model.rows, ...incoming].forEach(row => byId.set(row.id, row));
+  const rows = sortRows([...byId.values()]);
+  const next = page && 'next_offset' in page ? nextOffsetOf(page.next_offset) : model.nextOffset;
+  return {
+    ...model,
+    rows,
+    aroundMe: model.aroundMe.filter(row => !byId.has(row.id)),
+    playersCount: page?.players_count != null ? num(page.players_count, model.playersCount) : model.playersCount,
+    // A page that came back empty ends the list even if the server said more.
+    nextOffset: incoming.length ? next : null,
+  };
+}
+
+/**
+ * A background refresh brings a new first page. Pages the kid already
+ * scrolled through stay (no jump, no lost place); only players the new first
+ * page does not have are kept from the old rows.
+ */
+export function mergeRefresh(fresh: StandingsBoardModel, previous: StandingsBoardModel | null | undefined): StandingsBoardModel {
+  if (!previous || previous.board !== fresh.board || previous.parkId !== fresh.parkId || previous.rows.length <= fresh.rows.length) return fresh;
+  const have = new Set(fresh.rows.map(row => row.id));
+  const lastRank = fresh.rows.reduce((max, row) => Math.max(max, row.rank ?? 0), 0);
+  const kept = previous.rows.filter(row => !have.has(row.id) && (row.rank == null || row.rank > lastRank));
+  if (!kept.length) return fresh;
+  const rows = sortRows([...fresh.rows, ...kept.map(row => (row.isMe && fresh.me ? { ...row, ...fresh.me, key: row.key } : row))]);
+  return {
+    ...fresh,
+    rows,
+    aroundMe: fresh.aroundMe.filter(row => !rows.some(r => r.id === row.id)),
+    nextOffset: previous.nextOffset == null ? null : Math.max(previous.nextOffset, fresh.nextOffset ?? 0),
+  };
+}
+
+/** Ranked rows first by rank, then unranked rows (friends at 0) in the order they came. */
+function sortRows(rows: readonly StandingsRowModel[]): StandingsRowModel[] {
+  return rows.map((row, i) => ({ row, i }))
+    .sort((a, b) => (a.row.rank ?? Infinity) - (b.row.rank ?? Infinity) || a.i - b.i)
+    .map(entry => entry.row);
 }
 
 /** Top three places (by position) and everyone below. */
@@ -179,31 +238,62 @@ export function splitPodium<T>(rows: readonly T[]): { readonly podium: readonly 
 /** The list under the podium, as fixed-height items: rows, the "Not riding yet" divider, and the gap before your rows. */
 export type ListItem =
   | { readonly type: 'row'; readonly key: string; readonly row: StandingsRowModel; readonly muted: boolean }
-  | { readonly type: 'divider'; readonly key: string; readonly label: string };
+  | { readonly type: 'divider'; readonly key: string; readonly label: string }
+  /** A grey placeholder row where the next page will land: same height, so nothing jumps when it fills. */
+  | { readonly type: 'skeleton'; readonly key: string };
 
 export const ROW_HEIGHT = 64;
 export const DIVIDER_HEIGHT = 40;
+/** Placeholder rows shown at the end of the loaded rows while more exist. */
+export const SKELETON_ROWS = 3;
+/** Start loading the next page when the kid is this many rows from the last loaded one (about 1.5 screens). */
+export const PREFETCH_ROWS = 20;
 
-export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'aroundMe'>): readonly ListItem[] {
+/**
+ * The list under the podium. With more pages to come, grey rows hold the
+ * place where they will land (before the "Your spot" block), so the next page
+ * fills in without moving anything.
+ */
+export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'aroundMe'> & { readonly nextOffset?: number | null }): readonly ListItem[] {
   const scored = model.rows.filter(row => row.score > 0);
   const resting = model.board === 'friends' ? model.rows.filter(row => row.score <= 0) : [];
+  const more = model.nextOffset != null;
   const items: ListItem[] = scored.slice(3).map(row => ({ type: 'row', key: row.key, row, muted: false }));
-  if (model.aroundMe.length) {
+  // Friends at 0 come last on the server too, so placeholders go after them.
+  if (more && !resting.length) for (let i = 0; i < SKELETON_ROWS; i++) items.push({ type: 'skeleton', key: `skeleton-${i}` });
+  const shown = new Set(model.rows.map(row => row.id));
+  const around = model.aroundMe.filter(row => !shown.has(row.id));
+  if (around.length) {
     items.push({ type: 'divider', key: 'gap', label: 'Your spot' });
-    model.aroundMe.forEach(row => items.push({ type: 'row', key: `near-${row.key}`, row, muted: false }));
+    around.forEach(row => items.push({ type: 'row', key: `near-${row.key}`, row, muted: false }));
   }
   if (resting.length) {
     items.push({ type: 'divider', key: 'resting', label: 'Not riding yet' });
     resting.forEach(row => items.push({ type: 'row', key: row.key, row, muted: true }));
+    if (more) for (let i = 0; i < SKELETON_ROWS; i++) items.push({ type: 'skeleton', key: `skeleton-${i}` });
   }
   return items;
 }
 
-/** FlatList getItemLayout for the fixed-height items. */
+/** Index of the first placeholder row, or -1 when every row is loaded. */
+export function firstSkeletonIndex(items: readonly ListItem[]): number {
+  return items.findIndex(item => item.type === 'skeleton');
+}
+
+/**
+ * Whether to ask for the next page: the kid can see a row within
+ * PREFETCH_ROWS of the placeholders, so the page lands before they reach them.
+ */
+export function shouldPrefetch(lastVisibleIndex: number, items: readonly ListItem[]): boolean {
+  const at = firstSkeletonIndex(items);
+  return at >= 0 && lastVisibleIndex >= at - PREFETCH_ROWS;
+}
+
+/** List row heights for the fixed-height items. */
 export function itemLayouts(items: readonly ListItem[]): readonly { readonly length: number; readonly offset: number }[] {
   let offset = 0;
   return items.map(item => {
-    const length = item.type === 'row' ? ROW_HEIGHT : DIVIDER_HEIGHT;
+    const length = item.type === 'divider' ? DIVIDER_HEIGHT : ROW_HEIGHT;
     const layout = { length, offset };
     offset += length;
     return layout;
@@ -225,7 +315,7 @@ export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
  *   tied     "Tied! zmaize got there first."  (+ "1 more ride passes them")
  *   leader   "You're #1! Hold the top spot."
  */
-export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review'] }): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
+export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review']; readonly rows?: StandingsBoardModel['rows'] }): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
   const score = model.me?.score ?? 0;
   if (model.review?.benched && model.board !== 'all_time') {
     // Benched (two impossible hops): reassure, one number, no blame.
@@ -239,10 +329,23 @@ export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'm
     return { state: 'tied', text: `Tied! ${model.chase.name} got there first.`, sub: `1 more ${unitWord(model.metric, 1)} passes them` };
   }
   if (model.chase) {
+    // Outside the top 10 and 3 rides or fewer from it: the milestone is the bigger brag ("I made the top 10!").
+    const top10 = topTenGap(model);
+    if (top10 != null && top10 <= 3) {
+      return { state: 'chasing', text: `${top10} more ${unitWord(model.metric, top10)} to make the top 10`, sub: null };
+    }
     const n = model.chase.toPass;
     return { state: 'chasing', text: `${n} more ${unitWord(model.metric, n)} to pass ${model.chase.name}`, sub: null };
   }
   return { state: 'leader', text: model.board === 'all_time' ? "You're #1! Top collector." : "You're #1! Hold the top spot.", sub: null };
+}
+
+/** How many more you need to take 10th place (ties go to whoever got there first), or null when you are in the top 10 or #10 is not loaded. */
+export function topTenGap(model: Pick<StandingsBoardModel, 'me'> & { readonly rows?: StandingsBoardModel['rows'] }): number | null {
+  const rank = model.me?.rank;
+  if (rank == null || rank <= 10 || !model.rows) return null;
+  const tenth = model.rows.find(row => row.rank === 10);
+  return tenth ? Math.max(1, tenth.score - (model.me?.score ?? 0) + 1) : null;
 }
 
 /** The number on the chase chip: "+1" to join, "+N" to pass, nothing for leaders or rides under review. */
@@ -295,6 +398,15 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
     : urgency === 'last_day' ? 'Last day!' : `${daysLeft} days left`;
   const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `Last chance, ${hours} hours ${minutes} minutes left this week`;
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
+}
+
+/**
+ * The week's one-line clock for the board's single pill: "3 days left",
+ * "Last day!" or "Last chance! 2h 10m". Replaces v2's seven day dots.
+ */
+export function weekLeft(endsAt: string | null | undefined, now: number): { readonly label: string; readonly urgency: WeekUrgency; readonly spoken: string } {
+  const week = weekDots(endsAt, now);
+  return { label: week.label, urgency: week.urgency, spoken: week.spoken };
 }
 
 /** How many places you climbed since your last look (positive = up). 0 when unknown. */

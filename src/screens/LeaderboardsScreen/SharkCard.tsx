@@ -1,6 +1,6 @@
 /**
  * The kid-safe card a public Standings row opens: the shark, the username,
- * the rank and the number. No photo, no parks, no profile (PROPOSAL kid
+ * the rank and the number. Your own row adds your weekly goals (v3). No photo, no parks, no profile (PROPOSAL kid
  * safety). Friends board rows open the full profile instead.
  */
 import { Modal, Pressable, Text, View } from 'react-native';
@@ -9,12 +9,41 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, textPreset } from '../../u
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { ScoreIcon } from './MiniPodium';
 import StandingsShark from './StandingsShark';
-import { unitWord, type StandingsMetric, type StandingsRowModel } from './standingsV2Model';
+import { unitWord, type StandingsMetric, type StandingsRowModel, type WeekGoal } from './standingsV2Model';
 
-export default function SharkCard({ row, metric, board, onClose }: {
+/**
+ * Your weekly goals (3, 8, 15 rides): moved here from the pinned row in v3,
+ * so the board shows one number and the extras wait for a tap on your row.
+ */
+function WeekGoals({ goals }: { readonly goals: readonly WeekGoal[] }) {
+  const reached = goals.filter(g => g.reached).length;
+  const next = goals.find(g => !g.reached);
+  return (
+    <View accessible accessibilityLabel={`Weekly goals: ${reached} of ${goals.length} reached.${next ? ` Next goal ${next.at} rides for ${next.xp} XP.` : ' All done!'}`}
+      style={{ marginTop: 12, alignItems: 'center' }}>
+      <Text style={[textPreset('label'), { color: BRAND.navySoft }]}>WEEKLY GOALS</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+        {goals.map(goal => (
+          <View key={goal.at} style={{ alignItems: 'center', minWidth: 62, paddingVertical: 6, paddingHorizontal: 8, borderRadius: RADIUS.md,
+            backgroundColor: goal.reached ? BRAND.gold : BRAND.white, borderWidth: 2, borderBottomWidth: 4, borderColor: goal.reached ? BRAND.goldLip : 'rgba(5,52,110,0.18)' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              {goal.reached ? <GameIcon name="check" size={16} /> : <GameIcon name="ride" size={16} />}
+              <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>{goal.at}</Text>
+            </View>
+            <Text style={{ fontFamily: 'Shark', fontSize: 12, color: goal.reached ? BRAND.navy : BRAND.navySoft }}>{`+${goal.xp} XP`}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export default function SharkCard({ row, metric, board, goals = null, onClose }: {
   readonly row: StandingsRowModel | null;
   readonly metric: StandingsMetric;
   readonly board: 'week' | 'friends' | 'all_time';
+  /** Your own card on a weekly board: the goals that left the pinned row. */
+  readonly goals?: readonly WeekGoal[] | null;
   readonly onClose: () => void;
 }) {
   const reduced = useUiReducedMotion();
@@ -45,6 +74,7 @@ export default function SharkCard({ row, metric, board, onClose }: {
             <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, marginTop: 8, textAlign: 'center' }]}>
               {`${row.score} ${unitWord(metric, row.score)} ${when}`}
             </Text>
+            {row.isMe && board !== 'all_time' && !!goals?.length && <WeekGoals goals={goals} />}
             <GameButton label="Nice!" size="compact" onPress={onClose} style={{ marginTop: 14 }} />
           </Animated.View>
         </Animated.View>
