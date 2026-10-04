@@ -623,5 +623,5 @@ test('swaps are retired: rare finds are earned on the map, spares stay a count, 
   assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Catch one on the map too!');
   assert.match(card, /item\.foundInWorld === false \? 'Swapped in'/);
   // A missing find gets one big way to the map in the slot the Swap button used.
-  assert.match(card, /!item\.found && \([\s\S]{0,40}<GameButton label="Find it on the map" icon="map" onPress=\{onFind\}/);
+  assert.match(card, /\(!item\.found \|\| item\.foundInWorld === false\) && \([\s\S]{0,120}'Catch one on the map' : 'Find it on the map'\} icon="map" onPress=\{onFind\}/);
 });
