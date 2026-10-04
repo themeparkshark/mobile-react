@@ -21,6 +21,7 @@ function SocialPost({
   watched,
   featured = false,
   newest = true,
+  pendingSave = false,
   onPress,
 }: {
   readonly socialPost: SocialPostType;
@@ -28,6 +29,8 @@ function SocialPost({
   readonly featured?: boolean;
   /** The hero is the newest video, or the newest one still worth coins. */
   readonly newest?: boolean;
+  /** Watched, but the coins are not saved yet: a tap saves, no rewatch. */
+  readonly pendingSave?: boolean;
   readonly onPress: (post: SocialPostType) => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -43,7 +46,7 @@ function SocialPost({
       onPressIn={() => press(0.96)}
       onPressOut={() => press(1)}
       accessibilityRole="button"
-      accessibilityLabel={`${socialPost.title}. ${watched ? 'Watched' : `Earn ${COIN_REWARD} coins`}${isNew ? '. New' : ''}`}
+      accessibilityLabel={`${socialPost.title}. ${watched ? 'Watched' : pendingSave ? `Tap to save ${COIN_REWARD} coins` : `Earn ${COIN_REWARD} coins`}${isNew ? '. New' : ''}`}
       style={featured ? styles.heroOuter : styles.gridOuter}
     >
       <Animated.View style={[styles.card, featured && styles.heroCard, { transform: [{ scale }] }]}>
@@ -84,7 +87,7 @@ function SocialPost({
             <View style={[styles.chip, styles.coinChip]}>
               <Image source={COIN_ART} style={featured ? styles.coinHero : styles.coinSmall} contentFit="contain" />
               <Text style={[styles.chipText, featured && styles.chipTextHero]}>
-                +{COIN_REWARD}{featured ? ' coins' : ''}
+                {pendingSave ? `Tap to save +${COIN_REWARD}` : `+${COIN_REWARD}`}
               </Text>
             </View>
           )}
@@ -105,7 +108,12 @@ function SocialPost({
           </Text>
           {featured && (
             <View style={{ marginTop: 10 }} pointerEvents="none">
-              <GameButton label={watched ? 'Watch again' : `Watch now · +${COIN_REWARD}`} icon="play" fullWidth haptics={false} />
+              <GameButton
+                label={watched ? 'Watch again' : pendingSave ? `Tap to save +${COIN_REWARD}` : `Watch now · +${COIN_REWARD}`}
+                icon={pendingSave ? 'retry' : 'play'}
+                fullWidth
+                haptics={false}
+              />
             </View>
           )}
         </View>

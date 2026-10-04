@@ -85,7 +85,7 @@ test('the Watch page refetches on focus and the card plays in-app, not in a brow
   // One player and one reward dialog for the page; cards are presentational,
   // so a recycled cell never carries another video's watched or reward state.
   assert.match(screen, /<YouTubePlayerModal\b/);
-  assert.match(screen, /extraData=\{localWatched\}/);
+  assert.match(screen, /extraData=\{\[localWatched, unsaved\]\}/);
   const card = read('src/components/SocialPost.tsx');
   assert.match(card, /isNewVideo\(/);
   assert.doesNotMatch(card, /useState/);
@@ -210,4 +210,13 @@ test('round 6: Later releases the held hero and meter, Try again during a quiet 
   assert.match(screen, /heroPop\.setValue\(0\.92\)/);
   // Saves that land together are shown as one reward.
   assert.match(screen, /if \(savesInFlight\.current > 0 && !playerOpen\.current && !dialogOpen\.current\) return;/);
+});
+
+test('round 7: reduced motion skips the hero pop and slide, the pop is set before paint, an unsaved video says Tap to save', () => {
+  const screen = read('src/screens/WatchScreen.tsx');
+  assert.match(screen, /if \(!reducedMotion\) LayoutAnimation\.configureNext/);
+  assert.match(screen, /useLayoutEffect\(\(\) => \{\n    const id = featuredVideo\?\.id/);
+  assert.match(screen, /if \(unsavedRef\.current\.some\(p => p\.id === post\.id\)\) \{/);
+  const card = read('src/components/SocialPost.tsx');
+  assert.match(card, /Tap to save \+\$\{COIN_REWARD\}/);
 });
