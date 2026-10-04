@@ -9,6 +9,26 @@ export function minWatchMs(isShort: boolean | undefined): number {
 }
 
 /** Coins are earned by time actually playing (ads and pauses excluded), or by finishing. */
+/**
+ * Up next for the player: unwatched videos first (newest first), then the
+ * rest, never the one playing. `watched` is the page's view of each video.
+ */
+export function upNextFor(
+  current: SocialPostType,
+  videos: readonly SocialPostType[],
+  watched: (post: SocialPostType) => boolean,
+  limit = 6,
+): SocialPostType[] {
+  const rest = videos.filter(v => v.id !== current.id).map(v => ({ ...v, has_watched: watched(v) }));
+  return [...rest.filter(v => !v.has_watched), ...rest.filter(v => v.has_watched)].slice(0, limit);
+}
+
+/** Only a 403 means "already paid"; offline and server errors keep the coins on offer. */
+export function viewFailureKind(error: unknown): 'already-paid' | 'retry' {
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
+  return status === 403 ? 'already-paid' : 'retry';
+}
+
 export function earnedView(playedMs: number, ended: boolean, isShort: boolean | undefined): boolean {
   return ended || playedMs >= minWatchMs(isShort);
 }
@@ -100,7 +120,6 @@ export function playerHtml(videoId: string): string {
 </head><body><div id="p"></div><script>
 var VID=${JSON.stringify(videoId)},player=null,readySent=false;
 function post(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}
-window.onerror=function(){post({type:'error',code:'script'});};
 window.onYouTubeIframeAPIReady=function(){
  player=new YT.Player('p',{host:${JSON.stringify(PLAYER_HOST)},videoId:VID,width:'100%',height:'100%',playerVars:${vars},
   events:{

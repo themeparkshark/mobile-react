@@ -1,9 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { forwardRef, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { SoundEffectContext, type SoundEffectContextType } from '../../context/SoundEffectProvider';
+import type { SocialPostType } from '../../models/social-post-type';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader } from '../../ui';
 import {
   allowPlayerNavigation,
@@ -13,82 +15,141 @@ import {
   PLAYER_ORIGIN_WHITELIST,
   PLAYING,
   playerHtml,
+  postedAgo,
+  videoIdOf,
 } from './watchFeed';
 
 export type PlayerResult = { readonly playedMs: number; readonly ended: boolean };
+
+const COIN = require('../../../assets/images/coingold.png');
+
+/**
+ * The WebView in its own memoized component: the coin bar ticking in the
+ * parent never re-renders it, and its callbacks are stable.
+ */
+const PlayerWeb = memo(forwardRef<WebView, { readonly videoId: string; readonly onMessage: (e: WebViewMessageEvent) => void }>(
+  function PlayerWeb({ videoId, onMessage }, ref) {
+    const source = useMemo(() => ({ html: playerHtml(videoId), baseUrl: EMBED_BASE_URL }), [videoId]);
+    const shouldStart = useCallback(
+      (req: { url: string; isTopFrame?: boolean }) => allowPlayerNavigation(req.url, req.isTopFrame),
+      [],
+    );
+    return (
+      <WebView
+        ref={ref}
+        source={source}
+        style={styles.web}
+        originWhitelist={PLAYER_ORIGIN_WHITELIST}
+        onShouldStartLoadWithRequest={shouldStart}
+        onMessage={onMessage}
+        allowsInlineMediaPlayback
+        allowsFullscreenVideo
+        mediaPlaybackRequiresUserAction={false}
+        allowsLinkPreview={false}
+        setSupportMultipleWindows={false}
+        javaScriptCanOpenWindowsAutomatically={false}
+        // No cookies kept between videos (a cold player load each open is the accepted cost).
+        incognito
+        sharedCookiesEnabled={false}
+        thirdPartyCookiesEnabled={false}
+        scrollEnabled={false}
+        bounces={false}
+      />
+    );
+  },
+));
 
 /**
  * In-app YouTube player for the Watch page.
  *
  * Kid safety: youtube-nocookie host, rel=0, no comments (embeds have none),
- * the top frame can never leave the player page, frames are limited to the
- * YouTube embed, no cookies are kept, and an end-screen or card tap that
- * tries to switch videos is put back on the chosen one. The finished screen
- * is covered by our own "That's a wrap" card, so the end-screen grid of
- * suggestions never shows.
+ * the top frame can never leave the player page and a blocked link is never
+ * handed to Safari, frames are limited to the YouTube embed, no cookies are
+ * kept, and an end-screen or card tap that tries to switch videos is put
+ * back on the chosen one. When a video ends, our wrap card covers YouTube's
+ * suggestion grid and offers the next Theme Park Shark video instead.
  *
  * Coins: only time actually playing counts (ads, pauses and buffering do
  * not), shown as a filling coin bar; finishing always counts.
  */
 export default function YouTubePlayerModal({
-  videoId,
-  title,
-  subtitle,
-  isShort = false,
-  rewardCoins = 0,
+  video,
+  watched,
+  coins,
+  upNext,
+  onSwitch,
   onClose,
 }: {
-  readonly videoId: string | null;
-  readonly title: string;
-  readonly subtitle?: string | null;
-  readonly isShort?: boolean;
-  /** Coins still to earn on this video; 0 when already watched. */
-  readonly rewardCoins?: number;
+  readonly video: SocialPostType | null;
+  /** Already paid for this video (no coin bar). */
+  readonly watched: boolean;
+  readonly coins: number;
+  /** Other videos from our own feed, unwatched first. */
+  readonly upNext: readonly SocialPostType[];
+  readonly onSwitch: (next: SocialPostType, result: PlayerResult) => void;
   readonly onClose: (result: PlayerResult) => void;
 }) {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const webRef = useRef<WebView>(null);
+  const videoId = video ? videoIdOf(video) : null;
+  const isShort = Boolean(video?.is_short);
+  const rewardCoins = watched ? 0 : coins;
+  const goalMs = minWatchMs(isShort);
+
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState(false);
   const [playedMs, setPlayedMs] = useState(0);
   const playingSince = useRef<number | null>(null);
   const banked = useRef(0);
-  const unlockedBuzzed = useRef(false);
-  const goalMs = minWatchMs(isShort);
+  const unlockFired = useRef(false);
+  const pop = useRef(new Animated.Value(1)).current;
+  const check = useRef(new Animated.Value(0)).current;
 
   // A fresh video starts from zero.
   useEffect(() => {
     setReady(false);
     setFailed(false);
     setEnded(false);
+    setPlaying(false);
     setNotice(null);
+    setWaiting(false);
     setPlayedMs(0);
     playingSince.current = null;
     banked.current = 0;
-    unlockedBuzzed.current = false;
-  }, [videoId]);
+    unlockFired.current = false;
+    check.setValue(0);
+  }, [videoId, check]);
 
   const totalPlayed = useCallback(
     () => banked.current + (playingSince.current !== null ? Date.now() - playingSince.current : 0),
     [],
   );
 
-  // Tick the coin bar only while the video is actually playing.
-  const [playing, setPlaying] = useState(false);
+  const unlocked = ended || playedMs >= goalMs;
+
+  // The bar only ticks while playing, and stops for good once unlocked.
   useEffect(() => {
-    if (!playing || rewardCoins <= 0) return;
+    if (!playing || rewardCoins <= 0 || unlocked) return;
     const id = setInterval(() => setPlayedMs(totalPlayed()), 250);
     return () => clearInterval(id);
-  }, [playing, rewardCoins, totalPlayed]);
+  }, [playing, rewardCoins, unlocked, totalPlayed]);
 
-  const unlocked = ended || playedMs >= goalMs;
+  // The unlock moment: coin pops, check springs in, a coin sound and a haptic.
   useEffect(() => {
-    if (unlocked && rewardCoins > 0 && !unlockedBuzzed.current) {
-      unlockedBuzzed.current = true;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }, [unlocked, rewardCoins]);
+    if (!unlocked || rewardCoins <= 0 || unlockFired.current) return;
+    unlockFired.current = true;
+    playSound(require('../../../assets/sounds/coin.mp3'));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.sequence([
+      Animated.timing(pop, { toValue: 1.35, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.spring(pop, { toValue: 1, friction: 4, tension: 220, useNativeDriver: true }),
+    ]).start();
+    Animated.spring(check, { toValue: 1, friction: 5, tension: 200, useNativeDriver: true }).start();
+  }, [unlocked, rewardCoins, playSound, pop, check]);
 
   useEffect(() => {
     if (!notice) return;
@@ -96,16 +157,24 @@ export default function YouTubePlayerModal({
     return () => clearTimeout(id);
   }, [notice]);
 
-  const stopClock = () => {
+  // Ready but not playing for a while (an ad, or a slow start): say so, so a
+  // still coin bar does not read as broken.
+  useEffect(() => {
+    if (!ready || playing || ended || failed) { setWaiting(false); return; }
+    const id = setTimeout(() => setWaiting(true), 3500);
+    return () => clearTimeout(id);
+  }, [ready, playing, ended, failed]);
+
+  const stopClock = useCallback(() => {
     if (playingSince.current !== null) {
       banked.current += Date.now() - playingSince.current;
       playingSince.current = null;
     }
     setPlaying(false);
     setPlayedMs(banked.current);
-  };
+  }, []);
 
-  const onMessage = (e: WebViewMessageEvent) => {
+  const onMessage = useCallback((e: WebViewMessageEvent) => {
     const msg = parsePlayerMessage(e.nativeEvent.data);
     if (!msg) return;
     switch (msg.type) {
@@ -134,17 +203,14 @@ export default function YouTubePlayerModal({
         setFailed(true);
         break;
     }
-  };
+  }, [stopClock]);
 
-  const source = useMemo(
-    () => (videoId ? { html: playerHtml(videoId), baseUrl: EMBED_BASE_URL } : null),
-    [videoId],
-  );
+  const result = (): PlayerResult => ({ playedMs: totalPlayed(), ended });
 
   const close = () => {
-    const result = { playedMs: totalPlayed(), ended };
+    const r = result();
     stopClock();
-    onClose(result);
+    onClose(r);
   };
 
   const replay = () => {
@@ -152,11 +218,19 @@ export default function YouTubePlayerModal({
     webRef.current?.injectJavaScript('window.tpsReplay&&window.tpsReplay();true;');
   };
 
+  const next = upNext[0] ?? null;
+  const switchTo = (post: SocialPostType) => {
+    const r = result();
+    stopClock();
+    onSwitch(post, r);
+  };
+
   const progress = Math.min(1, playedMs / goalMs);
+  const earnedHere = rewardCoins > 0 && unlocked;
 
   return (
     <Modal
-      visible={videoId !== null}
+      visible={video !== null}
       animationType="slide"
       presentationStyle="fullScreen"
       supportedOrientations={['portrait', 'landscape']}
@@ -176,66 +250,55 @@ export default function YouTubePlayerModal({
             >
               <GameIcon name="close" size={22} />
             </Pressable>
-            <View style={styles.brand}>
-              <GameIcon name="shark" size={24} />
-              <Text style={styles.brandText}>Theme Park Shark TV</Text>
-            </View>
-            <View style={{ width: 44 }} />
           </View>
 
-          <View style={styles.stage}>
+          <ScrollView contentContainerStyle={styles.scroll} bounces={false} showsVerticalScrollIndicator={false}>
             <View style={isShort ? styles.frameShort : styles.frameWide}>
-              {source && (
-                <WebView
-                  ref={webRef}
-                  source={source}
-                  style={styles.web}
-                  originWhitelist={PLAYER_ORIGIN_WHITELIST}
-                  onShouldStartLoadWithRequest={req => allowPlayerNavigation(req.url, req.isTopFrame)}
-                  onMessage={onMessage}
-                  allowsInlineMediaPlayback
-                  allowsFullscreenVideo
-                  mediaPlaybackRequiresUserAction={false}
-                  allowsLinkPreview={false}
-                  setSupportMultipleWindows={false}
-                  javaScriptCanOpenWindowsAutomatically={false}
-                  incognito
-                  sharedCookiesEnabled={false}
-                  thirdPartyCookiesEnabled={false}
-                  scrollEnabled={false}
-                  bounces={false}
-                />
-              )}
+              {videoId && <PlayerWeb ref={webRef} videoId={videoId} onMessage={onMessage} />}
               {!ready && !failed && (
                 <View style={styles.cover} pointerEvents="none">
                   <SharkLoader tone="onBlue" compact />
                 </View>
               )}
               {ended && !failed && (
-                <View style={[styles.cover, styles.coverCard]}>
-                  <Text style={styles.coverTitle}>That's a wrap!</Text>
-                  <View style={styles.coverButtons}>
-                    <GameButton label="Done" icon="check" fullWidth onPress={close} />
+                <View style={[styles.cover, styles.wrap]}>
+                  <Image source={COIN} style={styles.wrapCoin} contentFit="contain" />
+                  <Text style={styles.wrapTitle}>{earnedHere ? `+${rewardCoins} earned!` : "That's a wrap!"}</Text>
+                  <View style={styles.wrapButtons}>
+                    {next ? (
+                      <GameButton
+                        label={next.has_watched ? 'Next video' : `Next video · +${coins}`}
+                        icon="play"
+                        fullWidth
+                        onPress={() => switchTo(next)}
+                      />
+                    ) : (
+                      <GameButton label="Done" icon="check" fullWidth onPress={close} />
+                    )}
                     <GameButton label="Watch again" icon="retry" variant="secondary" size="compact" fullWidth onPress={replay} />
                   </View>
                 </View>
               )}
               {failed && (
-                <View style={[styles.cover, styles.coverCard]}>
-                  <Text style={styles.coverTitle}>This video can't play right now</Text>
-                  <GameButton label="Back to videos" size="compact" onPress={close} />
+                <View style={[styles.cover, styles.wrap]}>
+                  <GameIcon name="info" size={40} />
+                  <Text style={styles.wrapTitle}>This video can't play right now</Text>
+                  <View style={styles.wrapButtons}>
+                    <GameButton label="Back to videos" fullWidth onPress={close} />
+                  </View>
                 </View>
               )}
               {notice && (
                 <View style={styles.notice} pointerEvents="none">
+                  <GameIcon name="lock" size={16} />
                   <Text style={styles.noticeText}>{notice}</Text>
                 </View>
               )}
             </View>
 
             <View style={styles.info}>
-              <Text numberOfLines={3} style={styles.title}>{title}</Text>
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              <Text numberOfLines={isShort ? 2 : 3} style={styles.title}>{video?.title}</Text>
+              {video && postedAgo(video) ? <Text style={styles.subtitle}>{postedAgo(video)}</Text> : null}
 
               {rewardCoins > 0 && (
                 <View
@@ -243,20 +306,56 @@ export default function YouTubePlayerModal({
                   accessible
                   accessibilityLabel={unlocked ? `${rewardCoins} coins unlocked` : `Keep watching to earn ${rewardCoins} coins`}
                 >
-                  <Image source={require('../../../assets/images/coingold.png')} style={styles.coinIcon} contentFit="contain" />
+                  <Animated.View style={{ transform: [{ scale: pop }] }}>
+                    <Image source={COIN} style={styles.coinIcon} contentFit="contain" />
+                  </Animated.View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.coinText}>
-                      {unlocked ? `+${rewardCoins} coins unlocked!` : `Keep watching to earn +${rewardCoins}`}
+                      {unlocked ? `+${rewardCoins} unlocked!` : waiting ? 'Video starting…' : `Keep watching · +${rewardCoins}`}
                     </Text>
                     <View style={styles.track}>
                       <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }, unlocked && styles.fillDone]} />
                     </View>
                   </View>
-                  {unlocked && <GameIcon name="check" size={22} />}
+                  <Animated.View style={{ transform: [{ scale: check }] }}>
+                    <GameIcon name="check" size={24} />
+                  </Animated.View>
                 </View>
               )}
+
+              {upNext.length > 0 && (
+                <>
+                  <Text style={styles.upNext}>Up next</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
+                    {upNext.map(post => (
+                      <Pressable
+                        key={post.id}
+                        onPress={() => switchTo(post)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Play ${post.title}`}
+                        style={({ pressed }) => [styles.nextCard, pressed && { transform: [{ scale: 0.96 }] }]}
+                      >
+                        <Image
+                          source={post.thumbnail_url ?? post.image_url}
+                          style={styles.nextThumb}
+                          contentFit="cover"
+                          transition={150}
+                          cachePolicy="memory-disk"
+                        />
+                        {!post.has_watched && (
+                          <View style={styles.nextCoin}>
+                            <Image source={COIN} style={{ width: 14, height: 14 }} contentFit="contain" />
+                            <Text style={styles.nextCoinText}>+{coins}</Text>
+                          </View>
+                        )}
+                        <Text numberOfLines={2} style={styles.nextTitle}>{post.title}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
             </View>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </SafeAreaProvider>
     </Modal>
@@ -265,7 +364,7 @@ export default function YouTubePlayerModal({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BRAND.navy },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6 },
   closeButton: {
     width: 44,
     height: 44,
@@ -276,29 +375,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  brandText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, textTransform: 'uppercase', letterSpacing: 1 },
-  stage: { flex: 1, justifyContent: 'center' },
+  scroll: { paddingBottom: 24 },
   frameWide: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
-  frameShort: { flex: 1, aspectRatio: 9 / 16, alignSelf: 'center', backgroundColor: '#000', borderRadius: 16, overflow: 'hidden' },
+  // Capped so the title and coin bar always fit under a vertical Short.
+  frameShort: { height: 440, maxWidth: '100%', aspectRatio: 9 / 16, alignSelf: 'center', backgroundColor: '#000', borderRadius: 16, overflow: 'hidden' },
   web: { flex: 1, backgroundColor: '#000' },
   cover: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.blue },
-  coverCard: { gap: 14, paddingHorizontal: 20 },
-  coverTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.white, textTransform: 'uppercase', textAlign: 'center' },
-  coverButtons: { width: '100%', maxWidth: 280, gap: 10 },
+  wrap: { gap: 10, paddingHorizontal: 20 },
+  wrapCoin: { width: 56, height: 56 },
+  wrapTitle: { fontFamily: FONT.display, fontSize: 28, color: BRAND.white, textTransform: 'uppercase', textAlign: 'center' },
+  wrapButtons: { width: '100%', maxWidth: 300, gap: 8 },
   notice: {
     position: 'absolute',
     top: 10,
     alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: BRAND.white,
     borderColor: BRAND.navy,
     borderWidth: 2,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   noticeText: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navy },
-  info: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, gap: 6 },
+  info: { paddingHorizontal: 16, paddingTop: 14, gap: 6 },
   title: { fontFamily: FONT.body, fontSize: 20, lineHeight: 23, color: BRAND.white },
   subtitle: { fontFamily: FONT.body, fontSize: 15, color: BRAND.sky },
   coinPill: {
@@ -320,4 +422,31 @@ const styles = StyleSheet.create({
   track: { marginTop: 5, height: 10, borderRadius: 5, backgroundColor: BRAND.creamDeep, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 5, backgroundColor: BRAND.gold },
   fillDone: { backgroundColor: BRAND.green },
+  upNext: { marginTop: 14, fontFamily: FONT.display, fontSize: 17, color: BRAND.goldLight, textTransform: 'uppercase', letterSpacing: 0.6 },
+  nextCard: {
+    width: 168,
+    backgroundColor: BRAND.white,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderBottomWidth: 5,
+    borderColor: BRAND.navySoft,
+    overflow: 'hidden',
+  },
+  nextThumb: { width: '100%', aspectRatio: 16 / 9, backgroundColor: BRAND.sky },
+  nextCoin: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: BRAND.gold,
+    borderColor: BRAND.navy,
+    borderWidth: 2,
+    borderRadius: 999,
+    paddingLeft: 2,
+    paddingRight: 7,
+  },
+  nextCoinText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.navy },
+  nextTitle: { fontFamily: FONT.body, fontSize: 13, lineHeight: 15, color: BRAND.navy, paddingHorizontal: 7, paddingVertical: 6, minHeight: 42 },
 });
