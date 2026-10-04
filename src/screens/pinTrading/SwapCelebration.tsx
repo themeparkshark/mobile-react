@@ -68,9 +68,11 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const landed = useRef(still);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const bigSize = Math.min(190, width * 0.47);
+  // Short phones (SE): a smaller pin and a higher stage, so the copy and Awesome! never overlap.
+  const compact = height < 740;
+  const bigSize = Math.min(compact ? 150 : 190, width * 0.47);
   const cx = width / 2;
-  const cy = Math.max(height * 0.43, insets.top + 150 + bigSize / 2);
+  const cy = compact ? Math.max(height * 0.36, insets.top + 120 + bigSize / 2) : Math.max(height * 0.43, insets.top + 150 + bigSize / 2);
   const startSize = Math.min(120, width * 0.3);
 
   const g0 = from?.get ?? { x: cx - 100, y: cy + 80, size: startSize };
@@ -286,7 +288,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
           <LinearGradient colors={['rgba(4,18,46,0)', 'rgba(4,18,46,0.75)', 'rgba(4,18,46,0.9)']} locations={[0, 0.25, 1]} style={StyleSheet.absoluteFill} />
         </Animated.View>
         <Animated.View style={[styles.copy, { top: cy + bigSize * 0.72 }, textStyle]} pointerEvents="none">
-          <Text maxFontSizeMultiplier={1.15} style={[textPreset('hero', 'onBlue'), styles.title]}>{COPY.doneTitle}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[textPreset('hero', 'onBlue'), styles.title, compact && { fontSize: 38, lineHeight: 44 }]}>{COPY.doneTitle}</Text>
           <View style={styles.subPill}>
             <Text maxFontSizeMultiplier={1.25} style={styles.sub}>{COPY.doneMessage(name)}</Text>
           </View>
@@ -305,7 +307,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
           <View style={styles.sharkFloor} />
         </Animated.View>
       </Pressable>
-      <Animated.View style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + SPACE.xl }, buttonStyle]}>
+      <Animated.View style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + (compact ? SPACE.sm : SPACE.xl) }, buttonStyle]}>
         <GameButton label={COPY.doneAction} icon="check" onPress={onDone} />
       </Animated.View>
     </Animated.View>
