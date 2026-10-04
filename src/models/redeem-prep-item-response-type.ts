@@ -76,6 +76,9 @@ export interface RedeemPrepItemResponseType {
       readonly quality?: 'good' | 'great' | 'frame_it' | string | null;
       readonly golden_hour?: boolean;
       readonly bonus_xp?: number;
+      /** Ride Photo v2 (newer servers): the best grade before this catch, and whether this photo beat it. */
+      readonly previous_best?: 'good' | 'great' | 'frame_it' | string | null;
+      readonly new_best?: boolean;
     } | null;
   };
 }

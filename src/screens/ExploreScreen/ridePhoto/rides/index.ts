@@ -4,6 +4,7 @@ import { buildCoaster } from './coaster';
 import { buildFlume } from './flume';
 import { buildTeacups } from './teacups';
 import type { BuildCtx, RideStage, SceneArt } from './stage';
+import { paintGull } from './backdrop';
 
 export * from './catalog';
 export type { RideStage, BuildCtx, SceneArt, CamRig, Box, PaintState } from './stage';
@@ -24,7 +25,8 @@ export function buildStage(kind: RideKind, ctx: BuildCtx): RideStage {
  * The photo at pass time t: only the crop, at `scale` pixels per point, drawn by
  * the same paint the live scene uses (no camera rig, no telegraph).
  */
-export function drawStagePhoto(stage: RideStage, art: SceneArt, t: number, scale: number, blurry = false): SkImage | null {
+export function drawStagePhoto(stage: RideStage, art: SceneArt, t: number, scale: number, blurry = false,
+  gull?: { ms: number; dir: number; leadMs: number } | null): SkImage | null {
   const { crop } = stage;
   const pw = Math.max(1, Math.round(crop.w * scale)), ph = Math.max(1, Math.round(crop.h * scale));
   const surface = Skia.Surface.MakeOffscreen(pw, ph) ?? Skia.Surface.Make(pw, ph);
@@ -56,6 +58,8 @@ export function drawStagePhoto(stage: RideStage, art: SceneArt, t: number, scale
     stage.front?.(canvas, state, stage.data, art);
     if (stage.emissive) stage.emissive(canvas, state, stage.data, art);
   }
+  // R6: a photobombing gull is in the photo exactly where it was at the shot.
+  if (gull) paintGull(canvas, gull.ms, gull.dir, stage.box, stage.width, 0.35, gull.leadMs);
   surface.flush();
   const shot = surface.makeImageSnapshot();
   return shot.makeNonTextureImage?.() ?? shot;

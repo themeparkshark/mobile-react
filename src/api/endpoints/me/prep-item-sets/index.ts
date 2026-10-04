@@ -227,6 +227,8 @@ export interface PrepItemSetItem {
   gate?: SetItemGate | null;
   /** Exchange cost for this item's rarity (authored sets). */
   exchange_cost?: number | null;
+  /** Ride Photo v2: the best photo grade stored for this item (newer servers; absent on older ones). */
+  best_photo_grade?: 'good' | 'great' | 'frame_it' | string | null;
 }
 
 export async function getPrepItemSet(slug: string, location?: LocationType): Promise<PrepItemSetDetailResponse['data']> {

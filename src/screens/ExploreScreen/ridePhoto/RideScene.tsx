@@ -4,7 +4,10 @@ import {
   createPicture, vec, type SkPicture,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import type { Transforms3d } from '@shopify/react-native-skia';
 import { gradeMatrix } from './rides/stage';
+import { paintGull } from './rides/backdrop';
+import { GULL_LEAD_MS } from '../ridePhoto';
 import type { RideStage, SceneArt } from './rides';
 
 /**
@@ -31,7 +34,7 @@ function starPath(r: number) {
 const LAMP_COLORS = ['#ff4d4d', '#ffd23f', '#3ee07a'] as const;
 
 function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, ghostT, ghost, riderIn, rock, carVis, nudgeBlink,
-  golden = false, staticOnly = false }: {
+  golden = false, staticOnly = false, frameLock, gullMs, gullDir }: {
   readonly stage: RideStage;
   readonly art: SceneArt;
   /** 0..1 of the pass. */
@@ -55,6 +58,11 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
   readonly nudgeBlink: SharedValue<number>;
   readonly golden?: boolean;
   readonly staticOnly?: boolean;
+  /** v2: holds the flash frame still in the viewfinder while the scene sways (inverse drift and roll). */
+  readonly frameLock?: SharedValue<Transforms3d>;
+  /** R6: the gameplay gull, wall ms from its crossing of the window (NaN when no gull this pass), and its direction. */
+  readonly gullMs?: SharedValue<number>;
+  readonly gullDir?: SharedValue<number>;
 }) {
   const { width, height, box, cam, data, paint, emissive } = stage;
   const grade = useMemo(() => gradeMatrix(stage.sky, golden), [stage.sky, golden]);
@@ -72,10 +80,12 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
   }, [stage, art]);
   const { front } = stage;
   const over = useDerivedValue(() => {
-    if (!front) return EMPTY;
+    const g = gullMs ? gullMs.value : NaN;
+    if (!front && !Number.isFinite(g)) return EMPTY;
     const recorder = Skia.PictureRecorder();
     const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, width, height));
-    front(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: carVis.value, ghost: false, photo: false }, data, art);
+    if (front) front(canvas, { t: t.value, clock: clock.value, rock: 0, riderIn: 1, alpha: carVis.value, ghost: false, photo: false }, data, art);
+    if (Number.isFinite(g)) paintGull(canvas, g, gullDir ? gullDir.value : 1, box, width, 0.5 + 0.5 * Math.sin(clock.value * 15), GULL_LEAD_MS);
     return recorder.finishRecordingAsPicture();
   }, [stage, art]);
   const glow = useDerivedValue(() => {
@@ -143,6 +153,8 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
   }, [box]);
 
   const star = useMemo(() => starPath(9), []);
+  const identity = useDerivedValue<Transforms3d>(() => []);
+  const lock = frameLock ?? identity;
   const show = staticOnly ? 0 : 1;
 
   return (
@@ -157,7 +169,9 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
           <LinearGradient start={vec(cam.lens.x, cam.lens.y)} end={vec(cx, cy)}
             colors={['rgba(255,247,200,0.95)', 'rgba(255,240,170,0.12)']} />
         </Path>
-        <RoundedRect x={box.x} y={box.y} width={box.w} height={box.h} r={14} color="rgba(255,244,190,0.6)" opacity={windowOpacity} />
+        <Group transform={lock}>
+          <RoundedRect x={box.x} y={box.y} width={box.w} height={box.h} r={14} color="rgba(255,244,190,0.6)" opacity={windowOpacity} />
+        </Group>
         {/* The camera on its pole, under the sky's grade like every sprite */}
         {/* A hung camera's gantry beam (static per stage, never bound to a shared value) */}
         <RoundedRect x={cam.beam?.x ?? 0} y={cam.beam?.y ?? 0} width={cam.beam?.w ?? 0} height={cam.beam?.h ?? 0} r={4} color="#fff5e1" />
@@ -193,6 +207,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
             <Circle cx={lamp.x - cam.lampR * 0.3} cy={lamp.y - cam.lampR * 0.35} r={cam.lampR * 0.28} color="rgba(255,255,255,0.75)" opacity={lampOn[i]} />
           </Group>
         ))}
+        <Group transform={lock}>
         <Group transform={bracketScale}>
           <Path path={brackets} style="stroke" strokeWidth={10} color="#ffffff" strokeCap="round" strokeJoin="round" opacity={bracketOpacity} />
           <Path path={brackets} style="stroke" strokeWidth={5.5} color={bracketColor} strokeCap="round" strokeJoin="round" />
@@ -201,6 +216,7 @@ function RideScene({ stage, art, t, clock, approach, ready, flash, dim, lit, gho
         <Group transform={starScale}>
           <Path path={star} style="stroke" strokeWidth={3} color="#c98a00" strokeJoin="round" />
           <Path path={star} color="#ffffff" />
+        </Group>
         </Group>
         {/* The hold: a deep navy vignette (55% centre, 80% edges), never a grey wash */}
         <Rect x={0} y={0} width={width} height={height} opacity={dimOpacity}>

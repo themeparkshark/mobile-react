@@ -26,15 +26,18 @@ export function pickupFix(latest: (Fix & { readonly timestamp: number }) | null 
 export type CatchResult =
   | { readonly kind: 'caught'; readonly data: RedeemPrepItemResponseType['data'] }
   | { readonly kind: 'gone'; readonly line: string }
-  | { readonly kind: 'failed'; readonly line: string };
+  | { readonly kind: 'failed'; readonly line: string; readonly ridesLeft?: number | null };
 
 type Redeem = (id: number, pivotId: number, latitude?: number, longitude?: number, details?: RedeemCatchDetails) => Promise<RedeemPrepItemResponseType>;
 
-function errorStatus(error: unknown): { status: number | null; serverError: string | null } {
-  const response = (error as { response?: { status?: number; data?: { error?: unknown } } } | null)?.response;
+function errorStatus(error: unknown): { status: number | null; serverError: string | null; ridesLeft: number | null } {
+  const response = (error as { response?: { status?: number; data?: { error?: unknown; photo?: { rides_left?: unknown } } } } | null)?.response;
   const serverError = response?.data?.error;
+  const ridesLeft = response?.data?.photo?.rides_left;
   return { status: typeof response?.status === 'number' ? response.status : null,
-    serverError: typeof serverError === 'string' ? serverError : null };
+    serverError: typeof serverError === 'string' ? serverError : null,
+    // Ride Photo (Legendary): rides left after a ride-by (CONTRACT.md 3.5), for the catch reveal's escape.
+    ridesLeft: typeof ridesLeft === 'number' && Number.isFinite(ridesLeft) ? ridesLeft : null };
 }
 
 export async function catchFind(redeem: Redeem, itemId: number, pivotId: number,
@@ -45,8 +48,8 @@ export async function catchFind(redeem: Redeem, itemId: number, pivotId: number,
     if (!response?.data) return { kind: 'failed', line: catchErrorLine(null, null) };
     return { kind: 'caught', data: response.data };
   } catch (error) {
-    const { status, serverError } = errorStatus(error);
+    const { status, serverError, ridesLeft } = errorStatus(error);
     const line = catchErrorLine(status, serverError);
-    return status === 410 ? { kind: 'gone', line } : { kind: 'failed', line };
+    return status === 410 ? { kind: 'gone', line } : ridesLeft != null ? { kind: 'failed', line, ridesLeft } : { kind: 'failed', line };
   }
 }

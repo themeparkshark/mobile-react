@@ -63,23 +63,23 @@ export function rideSpec(rarity: number | null | undefined): RideSpec {
 }
 
 /**
- * Timing windows in milliseconds at the frame (half widths). Frame It! stays
- * tight on every rarity so mastery matters; Good is generous on the easy rides
- * (ages 6 to 8 spread about ±150 to 200 ms) and tightens with rarity, which also
- * adds speed, track shape and lighting.
+ * Timing windows in milliseconds at the frame (half widths). Ride Photo v2 (Dustin, Oct 4: "not hard
+ * enough"): every tier is tighter than v1, and the training wheels come off with rarity. Uncommon stays
+ * the fair tutorial tier: ages 6 to 8 spread about +-150 to 200 ms, so its Good window still covers
+ * +-200 ms plus the coyote frame. Misses still grow Good and Great 20% each (to +60%), never Frame It!.
  *
- * | Rarity    | Frame It! | Great | Good | Good total (with the coyote frame) |
- * |-----------|-----------|-------|------|------------------------------------|
- * | Uncommon  | ±40       | ±110  | ±250 | about 533 ms                       |
- * | Rare      | ±35       | ±95   | ±225 | about 483 ms                       |
- * | Epic      | ±35       | ±85   | ±190 | about 413 ms                       |
- * | Legendary | ±35       | ±80   | ±150 | about 333 ms                       |
+ * | Rarity    | Frame It! | Great | Good | Good total (with the coyote frame) | v1 Good |
+ * |-----------|-----------|-------|------|------------------------------------|---------|
+ * | Uncommon  | +-40      | +-95  | +-200| about 433 ms                       | +-250   |
+ * | Rare      | +-35      | +-80  | +-170| about 373 ms                       | +-225   |
+ * | Epic      | +-30      | +-70  | +-145| about 323 ms                       | +-190   |
+ * | Legendary | +-30      | +-60  | +-120| about 273 ms                       | +-150   |
  */
 export const GRADE_WINDOWS_BY_TIER: Readonly<Record<2 | 3 | 4 | 5, { frame_it: number; great: number; good: number }>> = {
-  2: { frame_it: 40, great: 110, good: 250 },
-  3: { frame_it: 35, great: 95, good: 225 },
-  4: { frame_it: 35, great: 85, good: 190 },
-  5: { frame_it: 35, great: 80, good: 150 },
+  2: { frame_it: 40, great: 95, good: 200 },
+  3: { frame_it: 35, great: 80, good: 170 },
+  4: { frame_it: 30, great: 70, good: 145 },
+  5: { frame_it: 30, great: 60, good: 120 },
 };
 /** The strictest table (Legendary), kept for callers that do not pass a rarity. */
 export const GRADE_WINDOWS_MS = GRADE_WINDOWS_BY_TIER[5];
@@ -213,8 +213,8 @@ export const GRADE_RANK: Readonly<Record<PhotoGrade, number>> = { blurry: 0, goo
 export const GRADE_LABEL: Readonly<Record<PhotoGrade, string>> = {
   blurry: 'Blurry!', good: 'Good!', great: 'Great!', frame_it: 'Frame It!',
 };
-/** Suggested bonus XP (the server decides; CONTRACT.md App requests). */
-export const GRADE_BONUS_XP: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 0, great: 10, frame_it: 25 };
+/** Mirror of the server's bonus XP (config home_hunt.ride_photo.bonus_xp). The server decides; this only feeds dev previews. */
+export const GRADE_BONUS_XP: Readonly<Record<PhotoGrade, number>> = { blurry: 0, good: 0, great: 5, frame_it: 15 };
 
 export function isGoodShot(grade: PhotoGrade): boolean {
   'worklet';
@@ -327,4 +327,294 @@ export function createPrimeGate<At>() {
     },
     cancel() { pending = null; },
   };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ride Photo v2: skill. The telegraph thins out with rarity, the camera sways like
+// a ride vehicle, and the car's approach changes speed from pass to pass. Every
+// rule is pure (and a worklet where the UI thread reads it), so tests pin it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Telegraph {
+  /** Ready pips, ms before the car reaches the frame (with their pitch in semitones). */
+  readonly pips: readonly { readonly atMs: number; readonly semitones: number }[];
+  /**
+   * The green lamp (and green brackets) light this far before arrival. On Uncommon a kid can react to
+   * green and still land Great. From Rare up green lights on arrival (a confirmation, not a cue): the
+   * shot is read from the car, or from the rhythm of the pips.
+   */
+  readonly greenLeadMs: number;
+  /** Rare: the pips land on the car's real arrival. Epic: on its nominal arrival, so a surge breaks the beat and the car is the truth. */
+  readonly pipsOn: 'arrival' | 'nominal';
+  /** The shutter ring and the brackets: close in all the way, fade out 300 ms before arrival (Epic), or never close (Legendary). */
+  readonly ring: 'full' | 'fade' | 'none';
+  /** Legendary: only the red lamp lights (no yellow, no green before the shot). */
+  readonly redOnly: boolean;
+}
+/**
+ * Rare and Epic: a rhythm a young kid can feel. Two pips 400 ms apart (150 bpm; ages 6 to 8 keep a beat
+ * best at 400 to 600 ms), then tap on the silent third beat (arrival).
+ */
+export const RHYTHM_PIPS = [{ atMs: 800, semitones: 0 }, { atMs: 400, semitones: 3 }] as const;
+const TELEGRAPH: Readonly<Record<2 | 3 | 4 | 5, Telegraph>> = {
+  2: { pips: READY_PIPS, greenLeadMs: 200, pipsOn: 'arrival', ring: 'full', redOnly: false },
+  3: { pips: RHYTHM_PIPS, greenLeadMs: 0, pipsOn: 'arrival', ring: 'full', redOnly: false },
+  4: { pips: RHYTHM_PIPS, greenLeadMs: 0, pipsOn: 'nominal', ring: 'fade', redOnly: false },
+  5: { pips: [], greenLeadMs: 0, pipsOn: 'arrival', ring: 'none', redOnly: true },
+};
+/** The Epic ring is gone this long before arrival: the last stretch is read from the car. */
+export const RING_FADE_MS = 300;
+/**
+ * The telegraph for a pass. A Legendary's last ride is a mercy ride: the full Uncommon telegraph comes
+ * back (with no sway and a steady car), so the rarest find never rides off from a child who is trying.
+ */
+export function telegraphFor(rarity: number | null | undefined, mercy = false): Telegraph {
+  const tier = Math.max(2, Math.min(5, Math.round(Number(rarity) || 2))) as 2 | 3 | 4 | 5;
+  return mercy ? TELEGRAPH[2] : TELEGRAPH[tier];
+}
+
+/** The last ride of a ride that can leave (Legendary ride 3 of 3). */
+export function isMercyRide(spec: RideSpec, passesSoFar: number): boolean {
+  return spec.maxRides != null && passesSoFar >= spec.maxRides - 1;
+}
+
+/**
+ * The ready lamp at `ms` before arrival (negative is after): 0 off, 1 red, 2 yellow, 3 green, 4 a gold "ready"
+ * glow. Legendary (redOnly) never shows red, yellow or green, which kids learned as wait and go: only the
+ * gold glow, which means "a shot is live", not "now". Worklet.
+ */
+export function readyLamp(ms: number, greenLeadMs: number, redOnly = false): 0 | 1 | 2 | 3 | 4 {
+  'worklet';
+  if (ms > 1000) return 0;
+  if (redOnly) return ms > -160 ? 4 : 0;
+  if (ms > 600) return 1;
+  if (ms > greenLeadMs) return 2;
+  if (ms > -160) return 3;
+  return 0;
+}
+
+export interface Sway {
+  /** Peak sideways drift, points. */
+  readonly amp: number;
+  /** Peak roll, degrees. */
+  readonly rollDeg: number;
+}
+/**
+ * The viewfinder rides along like a ride vehicle. Slow (0.3 to 1 Hz), small (at most 11 pt and 1.2 deg),
+ * never a shake: no motion-sickness extremes. Uncommon stays still (the tutorial tier). Reduce Motion: none.
+ */
+const SWAY: Readonly<Record<2 | 3 | 4 | 5, Sway>> = {
+  2: { amp: 0, rollDeg: 0 },
+  3: { amp: 8, rollDeg: 0.6 },
+  4: { amp: 20, rollDeg: 1.0 },
+  5: { amp: 28, rollDeg: 1.3 },
+};
+/**
+ * R6: the camera is a real obstacle on Epic (20 pt) and Legendary (28 pt), still a slow tracking pan
+ * (0.3 Hz) and never a shake. Legendary adds one seeded bump (LEGENDARY_BUMP) just before arrival.
+ */
+export const SWAY_MAX = { amp: 28, rollDeg: 1.3, hz: 1 } as const;
+export function swayFor(rarity: number | null | undefined, reducedMotion = false, mercy = false): Sway {
+  if (reducedMotion || mercy) return { amp: 0, rollDeg: 0 };
+  const tier = Math.max(2, Math.min(5, Math.round(Number(rarity) || 2))) as 2 | 3 | 4 | 5;
+  return SWAY[tier];
+}
+/** The sway offset at scene time `sec`, scaled by `on` (0..1, ramps in after the hop). Worklet. */
+export function swayAt(sway: Sway, sec: number, on = 1): { x: number; y: number; rollDeg: number } {
+  'worklet';
+  const k = Math.max(0, Math.min(1, on));
+  const tau = Math.PI * 2;
+  // A slow sideways tracking pan (0.3 Hz) with a little bob; the vertical stays small (the track runs across).
+  const x = sway.amp * k * (0.8 * Math.sin(tau * 0.3 * sec) + 0.2 * Math.sin(tau * 0.83 * sec + 1.3));
+  const y = sway.amp * 0.3 * k * Math.sin(tau * 0.55 * sec + 0.7);
+  const rollDeg = sway.rollDeg * k * Math.sin(tau * 0.26 * sec + 2);
+  return { x, y, rollDeg };
+}
+/**
+ * Legendary only: one seeded 10 pt camera bump per pass, kicking in 300 to 600 ms (car distance) before
+ * arrival, like the vehicle hitting a seam. It moves the scene under the locked frame, so it shifts when
+ * the car meets the frame (graded through swayShiftMs like the sway). Never on the mercy ride or under
+ * Reduce Motion.
+ */
+export const LEGENDARY_BUMP = { amp: 10, leadMs: [300, 600] as const, kickMs: 70, settleMs: 300 } as const;
+export interface Bump { readonly leadMs: number; readonly dir: 1 | -1 }
+export function bumpFor(rarity: number | null | undefined, seed: number, pass: number, reducedMotion = false, mercy = false): Bump | null {
+  const tier = Math.round(Number(rarity) || 2);
+  if (tier < 5 || reducedMotion || mercy) return null;
+  const [lo, hi] = LEGENDARY_BUMP.leadMs;
+  return { leadMs: Math.round(lo + (hi - lo) * unitHash(seed, 5000 + pass)), dir: unitHash(seed, 5300 + pass) < 0.5 ? -1 : 1 };
+}
+/** The bump's offset for its progress value `v` (-0.35..1, animated kick then a damped settle). Worklet. */
+export function bumpAt(v: number, dir: number): { x: number; y: number } {
+  'worklet';
+  return { x: LEGENDARY_BUMP.amp * v * dir, y: -LEGENDARY_BUMP.amp * 0.45 * v };
+}
+
+/**
+ * R6 gull photobomb: Rare and up, 1 pass in 4 (seeded, so a ride replays the same and RIDE AGAIN does not).
+ * The gull crosses the frame centred within 150 ms of the car's arrival and is in the frame for
+ * GULL_IN_FRAME_MS; a shot while it is in the frame caps at Good ("Photobombed!"). It flies in from the
+ * edge GULL_LEAD_MS ahead so a kid sees it coming and can time around it. Never on the mercy ride, never
+ * under Reduce Motion, never on the first-ride freeze pass.
+ */
+export const GULL_CHANCE = 0.25;
+export const GULL_CENTER_MS = 150;
+export const GULL_IN_FRAME_MS = 160;
+export const GULL_LEAD_MS = 600;
+export interface Gull { readonly centerMs: number; readonly dir: 1 | -1 }
+export function gullFor(rarity: number | null | undefined, seed: number, pass: number,
+  opts: { reducedMotion?: boolean; mercy?: boolean; freeze?: boolean } = {}): Gull | null {
+  const tier = Math.round(Number(rarity) || 2);
+  if (tier < 3 || opts.reducedMotion || opts.mercy || opts.freeze) return null;
+  if (unitHash(seed, 7000 + pass) >= GULL_CHANCE) return null;
+  const centerMs = Math.round(-GULL_CENTER_MS + 2 * GULL_CENTER_MS * unitHash(seed, 7100 + pass));
+  return { centerMs, dir: unitHash(seed, 7200 + pass) < 0.5 ? -1 : 1 };
+}
+/** True when a shot `msFromCrossing` (wall ms from the gull's frame crossing) has the gull in the frame. Worklet. */
+export function gullInFrame(msFromCrossing: number): boolean {
+  'worklet';
+  return Math.abs(msFromCrossing) <= GULL_IN_FRAME_MS / 2;
+}
+/** A photobombed shot caps at Good; a Blurry stays Blurry. Worklet. */
+export function photobombCap(grade: PhotoGrade): PhotoGrade {
+  'worklet';
+  return grade === 'great' || grade === 'frame_it' ? 'good' : grade;
+}
+
+/**
+ * R6 "Uncommon grows up": the green lamp leads the tap by 200 ms for a kid's first 10 Uncommon catches,
+ * then by 120 ms (still a real green, a tighter read).
+ */
+export const UNCOMMON_GROWN_AFTER = 10;
+export const UNCOMMON_GROWN_LEAD_MS = 120;
+export function uncommonGreenLead(catches: number): number {
+  return catches >= UNCOMMON_GROWN_AFTER ? UNCOMMON_GROWN_LEAD_MS : TELEGRAPH[2].greenLeadMs;
+}
+
+/** How much to scale the scene so a swayed and rolled scene never uncovers its edges. */
+export function swayOverscan(sway: Sway, width: number, height: number): number {
+  if (sway.amp === 0 && sway.rollDeg === 0) return 1;
+  const w = Math.max(1, width), h = Math.max(1, height);
+  // Cover the drift on each axis separately (wide pan, small bob) plus the roll's corners.
+  const rad = (sway.rollDeg * Math.PI) / 180;
+  const sx = (w * Math.cos(rad) + h * Math.sin(rad) + 2 * (sway.amp + 4)) / w;
+  const sy = (h * Math.cos(rad) + w * Math.sin(rad) + 2 * (sway.amp * 0.3 + 4)) / h;
+  return Math.max(sx, sy);
+}
+
+/**
+ * One pass's approach. The time to the frame is `k` times the nominal (the car dawdles or rushes) and
+ * it reaches the frame at `r` times its nominal speed (a burst, or easing in), on smooth Hermite curves,
+ * so the car never stops, jumps or reverses. Uncommon is always steady, and so is the first pass on
+ * Rare (where the first-ride freeze lives). Fairness bounds: k in [0.8, 1.5], r in [0.85, 1.4]; a long k with a
+ * high r reads as a fake-out (the car eases off mid-approach, then bursts into the frame), never a stop.
+ */
+export interface PassPlan {
+  readonly fromT: number;
+  readonly tFrame: number;
+  /** Wall-clock ms from the pass start to the car at the frame. */
+  readonly d1: number;
+  /** Wall-clock ms from the frame to the end of the pass. */
+  readonly d2: number;
+  readonly k: number;
+  readonly r: number;
+}
+const SURGE: Readonly<Record<2 | 3 | 4 | 5, { k: [number, number]; r: [number, number] }>> = {
+  2: { k: [1, 1], r: [1, 1] },
+  3: { k: [0.9, 1.15], r: [0.9, 1.2] },
+  4: { k: [0.85, 1.35], r: [0.85, 1.3] },
+  5: { k: [0.85, 1.5], r: [0.9, 1.4] },
+};
+export const SURGE_BOUNDS = { k: [0.8, 1.5], r: [0.85, 1.4] } as const;
+
+/** A small deterministic hash to 0..1 (the same find and pass always ride the same way). */
+export function unitHash(a: number, b: number): number {
+  let h = (Math.imul((a | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b | 0) + 0x632be5ab, 0xc2b2ae35)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+export function passPlan(input: { rarity: number | null | undefined; seed: number; pass: number; fromT: number; tFrame: number;
+  passMs: number; steady?: boolean }): PassPlan {
+  // (steady: the Legendary mercy ride, and Reduce Motion's parked car)
+  const tier = Math.max(2, Math.min(5, Math.round(Number(input.rarity) || 2))) as 2 | 3 | 4 | 5;
+  const fromT = Math.min(input.fromT, input.tFrame);
+  const n1 = Math.max(1, (input.tFrame - fromT) * input.passMs);
+  const d2 = Math.max(1, (1 - input.tFrame) * input.passMs);
+  const range = SURGE[tier];
+  const steady = input.steady || tier === 2 || (tier === 3 && input.pass === 0) || input.fromT >= input.tFrame;
+  const k = steady ? 1 : range.k[0] + (range.k[1] - range.k[0]) * unitHash(input.seed, input.pass * 2 + 1);
+  const r = steady ? 1 : range.r[0] + (range.r[1] - range.r[0]) * unitHash(input.seed, input.pass * 2 + 2);
+  return { fromT, tFrame: input.tFrame, d1: n1 * k, d2, k, r };
+}
+
+/** Hermite with h(0)=0, h(1)=1 and end slopes s0, s1. Worklet. */
+function hermite(x: number, s0: number, s1: number): number {
+  'worklet';
+  const x2 = x * x, x3 = x2 * x;
+  return (x3 - 2 * x2 + x) * s0 + (-2 * x3 + 3 * x2) + (x3 - x2) * s1;
+}
+
+/** Pass time t at `ms` of wall clock into the pass. Monotonic. Worklet. */
+export function planT(plan: PassPlan, ms: number): number {
+  'worklet';
+  if (ms <= 0) return plan.fromT;
+  if (ms < plan.d1) {
+    // Normalised slopes: start at nominal speed (k), arrive at r times nominal (r * k).
+    return plan.fromT + (plan.tFrame - plan.fromT) * hermite(ms / plan.d1, plan.k, plan.r * plan.k);
+  }
+  const x = Math.min(1, (ms - plan.d1) / plan.d2);
+  return plan.tFrame + (1 - plan.tFrame) * hermite(x, plan.r, 1);
+}
+
+/** Wall-clock ms into the pass at pass time t (the inverse of planT, by bisection). Worklet. */
+export function planMs(plan: PassPlan, t: number): number {
+  'worklet';
+  let lo = 0, hi = plan.d1 + plan.d2;
+  if (t <= plan.fromT) return 0;
+  if (t >= 1) return hi;
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    if (planT(plan, mid) < t) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** The withTiming easing for a pass (normalised wall time to normalised progress from fromT to 1). */
+export function planEasing(plan: PassPlan): (x: number) => number {
+  const total = plan.d1 + plan.d2;
+  const span = Math.max(1e-6, 1 - plan.fromT);
+  return (x: number) => {
+    'worklet';
+    return (planT(plan, x * total) - plan.fromT) / span;
+  };
+}
+
+
+/**
+ * The moving camera matters: the flash frame is locked to the viewfinder while the scene sways under it,
+ * so the car meets the frame early or late by the sway. A tap's offset is corrected by how far the scene
+ * has drifted along the car's path at that instant (drift / the car's speed at the frame), capped.
+ * `vx` is the car's horizontal speed at the frame in points per ms at nominal speed; `r` the pass's
+ * arrival speed factor. Worklet.
+ */
+export const SWAY_SHIFT_CAP_MS = 120;
+export function swayShiftMs(swayX: number, vx: number, r: number): number {
+  'worklet';
+  const v = vx * r;
+  if (!Number.isFinite(v) || Math.abs(v) < 0.04) return 0;
+  const shift = swayX / v;
+  return Math.max(-SWAY_SHIFT_CAP_MS, Math.min(SWAY_SHIFT_CAP_MS, shift));
+}
+
+/**
+ * The car's distance to the frame, in nominal ms (pass time, not the wall clock). The brackets, the
+ * shutter ring and the lamps follow this, so they close as fast as the car really comes: during a
+ * dawdle they slow, in a burst they snap. Reading them is reading the car. Worklet.
+ */
+export function distanceMs(tFrame: number, t: number, passMs: number): number {
+  'worklet';
+  return (tFrame - t) * passMs;
 }

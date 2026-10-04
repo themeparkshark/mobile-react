@@ -578,6 +578,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     setRodeOff(current => new Set(current).add(pivotId));
     callbacks.current.onCatchUnavailable?.();
   }, []);
+  // A Legendary rode by and the kid chose RIDE AGAIN: the same find's next ride opens like a tap on it.
+  const onRideAgainStable = useCallback((item: PrepItemType, pivotId: number) => {
+    if (callbacks.current.catchRequest) return;
+    catchRef.current?.primeRide(item, findPoints.current.get(pivotId) ?? null);
+    callbacks.current.onPrepItemNearby(item, pivotId, 'tap');
+  }, []);
   const onDoneStable = useCallback((caught: boolean) => {
     setCatchRequest(null);
     callbacks.current.onCatchDone?.(caught);
@@ -682,7 +688,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
-        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable}
+        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable} onRideAgain={onRideAgainStable}
         warm={warmFinds} onCascade={setCascadeOn} />
 
 

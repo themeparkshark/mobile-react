@@ -164,7 +164,8 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
   assert.match(moment, /catchStyleFor\(item\.rarity\) === 'ride_photo'/, 'gated: Ride Photo only when the server enables it');
   assert.match(moment, /pointerEvents="box-none"/);
   const ridePhoto = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(ridePhoto, /shotOffsetMs\(t\.value \* passMs, arrivalMs\)/);
+  // v2: graded on the pass's own wall clock (a surging approach), never pass time x passMs.
+  assert.match(ridePhoto, /shotOffsetMs\(planMs\(plan\.value, t\.value\), plan\.value\.d1\)/);
   for (const file of ['src/screens/ExploreScreen/ridePhoto.ts', 'src/screens/ExploreScreen/findPresentation.ts',
     'src/screens/ExploreScreen/HomeHuntChip.tsx', 'src/screens/ExploreScreen/HomeCatchMoment.tsx',
     'src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx']) {
@@ -173,14 +174,14 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
 });
 
 test('round 2: grading is in ms at the touch minus 50 ms, with a coyote frame, the same for every rarity', () => {
-  assert.deepEqual(plain(ride.GRADE_WINDOWS_MS), { frame_it: 35, great: 80, good: 150 });
+  assert.deepEqual(plain(ride.GRADE_WINDOWS_MS), { frame_it: 30, great: 60, good: 120 });
   // A tap exactly on the visual centre lands 50 ms late on the clock and still grades Frame It!.
   const arrival = 1600;
   assert.equal(ride.gradeOffset(ride.shotOffsetMs(arrival + 50, arrival)).grade, 'frame_it');
-  assert.equal(ride.gradeOffset(35 + 16).grade, 'frame_it', 'one frame of grace');
-  assert.equal(ride.gradeOffset(70).grade, 'great');
-  assert.equal(ride.gradeOffset(-150).grade, 'good');
-  const early = ride.gradeOffset(-200);
+  assert.equal(ride.gradeOffset(30 + 16).grade, 'frame_it', 'one frame of grace');
+  assert.equal(ride.gradeOffset(50).grade, 'great');
+  assert.equal(ride.gradeOffset(-120).grade, 'good');
+  const early = ride.gradeOffset(-170);
   assert.equal(early.grade, 'blurry');
   assert.equal(early.direction, 'early');
   assert.equal(early.soClose, true, 'inside 1.5x the Good window');
@@ -236,13 +237,14 @@ test('round 2: the map steps back during a catch and the catch never reads GPS o
 
 test('round 3: per-rarity windows (Frame It! stays tight, Good is generous on easy rides)', () => {
   assert.deepEqual(plain(ride.GRADE_WINDOWS_BY_TIER), {
-    2: { frame_it: 40, great: 110, good: 250 }, 3: { frame_it: 35, great: 95, good: 225 },
-    4: { frame_it: 35, great: 85, good: 190 }, 5: { frame_it: 35, great: 80, good: 150 },
+    2: { frame_it: 40, great: 95, good: 200 }, 3: { frame_it: 35, great: 80, good: 170 },
+    4: { frame_it: 30, great: 70, good: 145 }, 5: { frame_it: 30, great: 60, good: 120 },
   });
-  // Ages 6 to 8: at least 450 ms total of Good or better on Uncommon and Rare.
-  for (const rarity of [2, 3]) {
+  // v2 (harder): ages 6 to 8 spread about +-150 to 200 ms, so Uncommon still covers +-200 ms with the
+  // coyote frame (over 400 ms total) and Rare over 340 ms; misses still grow them.
+  for (const [rarity, floor] of [[2, 400], [3, 340]]) {
     const w = ride.gradeWindows(rarity);
-    assert.ok(2 * (w.good + ride.COYOTE_MS) >= 450, `rarity ${rarity}`);
+    assert.ok(2 * (w.good + ride.COYOTE_MS) >= floor, `rarity ${rarity}`);
     assert.equal(ride.gradeOffset(w.good + 10, 0, rarity).grade, 'good');
   }
   assert.equal(ride.gradeOffset(200, 0, 2).grade, 'good');
@@ -279,7 +281,7 @@ test('round 3: full screen, close outside the gesture, sharp photo, one hand-off
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   const gestureEnd = src.indexOf('</GestureDetector>');
   assert.ok(src.indexOf('accessibilityLabel="Close the camera"') > gestureEnd, 'close sits outside the shutter gesture');
-  assert.match(src, /drawStagePhoto\(stage, images, atT, \(PHOTO_W \/ crop\.w\) \* PixelRatio\.get\(\), blurry\)/, "photo at device resolution x1.0 (R4)");
+  assert.match(src, /drawStagePhoto\(stage, images, atT, \(PHOTO_W \/ crop\.w\) \* PixelRatio\.get\(\), blurry, gull\)/, "photo at device resolution x1.0 (R4)");
   assert.match(read('src/components/Wrapper.tsx'), /catchShown\.value/);
   assert.match(read('src/components/Topbar.tsx'), /catchShown\.value/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /chromeHidden=\{catchOpen\}/);
@@ -375,7 +377,7 @@ test('round 4: open-second decoupling and sound sync', () => {
   assert.doesNotMatch(src, /shutterGold/, 'one shutter sound for every grade');
   assert.match(src, /runOnJS\(shutterNow\)\(\);\s*runOnJS\(onShot\)/, 'the click gets its own JS turn first');
   assert.match(src, /requestAnimationFrame\(\(\) => \{\s*const image = takePhoto/, 'the photo renders a frame later');
-  assert.match(src, /READY_PIPS\.forEach\(\(step, i\) =>/, 'pips scheduled on the pass clock');
+  assert.match(src, /tele\.pips\.forEach\(\(step, i\) =>/, 'pips scheduled on the pass clock (v2: per-tier, per-pass telegraph)');
   assert.match(src, /catchSound\('notYet'/, 'not-yet has its own sound');
   assert.match(src, /image\.dispose\(\)/);
   const sun = read('src/gamekit/fx/ShaderFx.tsx');
@@ -596,8 +598,9 @@ test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
   assert.match(src, /develop\.value = withTiming\(1, \{ duration: 160/);
   assert.match(src, /stampIn\.value = withDelay\(150,/, 'the plate lands after the colour');
   assert.match(src, /burst\.value = withDelay\(150,/);
-  assert.match(src, /PRINT_FLIGHT_MS, \(\) => catchSound\('badge'\)/, 'the badge thunk is on the flight clock');
-  assert.match(src, /translateX: shake\.value \}, \{ scale: shake\.value === 0 \? 1 : overscan \}/, 'the shake is overscanned');
+  // v2 R3: the flight-clock timer ran 17 to 134 ms early in Release captures; the thunk now plays on the real landing.
+  assert.match(src, /const markLanded = useCallback\(\(uiMs: number\) => \{\s*catchSound\('badge'\);/, 'the badge thunk plays on the real landing');
+  assert.match(src, /translateX: shake\.value \+ s\.x \}[\s\S]{0,160}\(shake\.value === 0 \? 1 : overscan\) \* \(1 \+ \(swayScale - 1\) \* swayOn\.value\)/, 'the shake and the sway are overscanned');
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(moment, /if \(!warm \|\| window\.width === 0 \|\| rewardBusy\) return;/, 'no stage builds during a reward');
   assert.match(moment, /READY_RIDES\.flatMap\(kind => \(\['day', 'sunset', 'night'\]/, 'every ride kind and sky is warmed at launch idle');
