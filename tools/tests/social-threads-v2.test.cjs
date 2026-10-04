@@ -188,8 +188,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '40a1fedd5ab6feb7810161fa60bdfe104727821b02b0448871a983de73bd5ddf');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '8f26cdd2da794e843f228e311113551c5d8e416accb9e160ce097e1c4511c806');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'f5e0a472103e35257c027b1d8acc4d50c1994ab2a7dfeac965fb7121b8c16f53');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '54ec492e244f9e5466c5170f958091baf0523fff161551651d552f97460a19cb');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -233,4 +233,33 @@ test('R3: invisible characters, keycaps and foreign digits cannot hide anything;
   for (const ok of ['The parade starts at 3:30 and 5:30 and 7:30', 'Wait times: 45, 30, 60, 90 min', '$12.99 for a churro', 'Character meetups are the best']) {
     assert.equal(model.checkDraft(ok), null, ok);
   }
+});
+
+test('R4: phone tricks, accents and grooming openers are caught; scores, waits and school trips pass', () => {
+  for (const t of ['7145550199 in case u need it', '714\u2014555\u20140199', '714\u2022555\u20220199', '714,555,0199', '5 55 01 99 thats my line']) assert.equal(model.checkDraft(t), 'personal_info', t);
+  for (const t of ['h\u00f3w \u00f3ld \u00e1r\u00e8 \u00fc', 'what age r u', 'wanna meet?', 'cuantos a\u00f1os tienes']) assert.equal(model.checkDraft(t), 'grooming', t);
+  for (const t of ['New high score 4827193 on Toy Story Mania!!', 'Wait times today 20 35 50 15 10', 'My school is going to Disneyland for grad night']) assert.equal(model.checkDraft(t), null, t);
+});
+
+test('R4: location-now over-blocks are not reported toward the pause', async () => {
+  const sent = [];
+  const send = async (code) => { sent.push(code); return { paused: false, paused_until: null }; };
+  assert.equal(model.checkDraft('im at the castle now'), 'grooming');
+  await model.reportBlockedDraft('grooming', 'im at the castle now', { current: null }, send);
+  assert.deepEqual(plain(sent), []);
+  await model.reportBlockedDraft('grooming', 'what age r u', { current: null }, send);
+  assert.deepEqual(plain(sent), ['grooming']);
+});
+
+test('R4: composer and reply bar ask for the pause before typing, debounce the hint, show the review line, neutral empty border', () => {
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /fetchPostingStatus\(\)/);
+  assert.match(composer, /setTimeout\(\(\) => setHintText\(text\), HINT_DEBOUNCE_MS\)/);
+  assert.match(composer, /reviewPending/);
+  assert.doesNotMatch(composer, /problem === 'empty' && \{ borderColor: BRAND\.red \}/);
+  const screen = read('src/screens/ThreadScreen.tsx');
+  assert.match(screen, /fetchPostingStatus\(\)/);
+  assert.match(screen, /HINT_DEBOUNCE_MS/);
+  assert.match(read('src/screens/threads/ThreadCard.tsx'), /thread\.review === 'pending'/);
+  assert.equal(model.HINT_DEBOUNCE_MS, 250);
 });

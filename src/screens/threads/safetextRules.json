@@ -1,8 +1,8 @@
 {
   "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted.",
   "vars": {
-    "CHAT": "snap|snp|snapchat|sc|insta|instagram|the gram|gram|kik|discord|disc|telegram|whatsapp|whats app|wa|messenger|wechat|dms",
-    "APPS": "snap|snp|snapchat|sc|insta|instagram|ig|the gram|kik|discord|telegram|whatsapp|whats app|messenger|tiktok|tik tok|tt|youtube|yt|twitch|roblox|rblx|rbx|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter|steam|pinterest|bereal|threads|bird app|the bird app|x app",
+    "CHAT": "snap|snp|snapchat|sc|insta|instagram|the gram|gram|kik|discord|disc|telegram|whatsapp|whats app|wa|messenger|wechat|dms|signal|skype|viber|imessage|groupme",
+    "APPS": "snap|snp|snapchat|sc|insta|instagram|ig|the gram|kik|discord|telegram|whatsapp|whats app|messenger|tiktok|tik tok|tt|youtube|yt|twitch|roblox|rblx|rbx|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter|steam|pinterest|bereal|threads|bird app|the bird app|x app|signal|skype|viber|line|imessage|zoom|groupme",
     "HANDLE": "(?=[a-z0-9_.#]*[a-z])(?=[a-z0-9_.#]*[0-9_#])[a-z0-9_.#]{4,}",
     "MAIL": "gmail|g mail|yahoo|hotmail|outlook|icloud|aol|proton|protonmail",
     "SPOT": "cart|stand|fountain|castle|entrance|gate|bench|tree|statue|carousel|shop|store|booth|restroom|bathroom|bathrooms|stage|exit|kiosk|wall|sign|dragon|lagoon|bridge"
@@ -12,12 +12,12 @@
     "\\b(i|we|my\\s+family)\\s+(live|lives|stay|stays)\\s+(at|on|near|by)\\b",
     "\\bhouse\\s+on\\s+[a-z]+",
     "\\b(my|our)\\s+(phone|cell|number|numbr|num|digits)\\b",
-    "\\b(text|txt|dm|pm|msg|message|facetime|ft|email|snap|snp|hmu|hit\\s+me\\s+up)\\s+me\\b",
+    "\\b(text|txt|dm|pm|msg|message|facetime|ft|email|snap|snp|hmu|skype|signal|whatsapp|hit\\s+me\\s+up)\\s+me\\b",
     "\\bhmu\\b",
     "\\badd\\s+me\\b(?!\\s+to\\s+the\\s+list)",
     "\\b(follow|friend|find)\\s+me\\s+on\\b",
     "\\b(my|our)\\s+(last\\s+name|teacher\\s?s?\\s+name|real\\s+name)\\b",
-    "\\b(my|our)\\s+school\\s+(is|name|called)\\b",
+    "\\b(my|our)\\s+school\\s+(is\\s+(called|named)|name\\s+is|s\\s+name|is\\s+[a-z]+\\s+(elementary|middle|high|academy))\\b|\\b(my|our)\\s+school\\s+is\\s+[a-z]+\\s*$",
     "\\bi\\s+go\\s+to\\s+[a-z ]{0,30}\\s+(school|elementary|middle|academy)\\b",
     "\\b(zip\\s*code|password)\\b",
     "(^|\\s)@[a-z0-9_.]{3,}",
@@ -41,7 +41,11 @@
     "\\b(look\\s+me\\s+up|reach\\s+me|slide\\s+into\\s+my|in\\s+my\\s+dms|my\\s+dms|ur\\s+dms|your\\s+dms)\\b",
     "\\bdms\\b",
     "\\b(whisper|message|msg|pm|dm)\\s+me\\s+privately|\\bask\\s+me\\s+privately|\\bprivately\\b",
-    "\\b(ur|your)\\s+(last|full|real)\\s+name\\b"
+    "\\b(ur|your)\\s+(last|full|real)\\s+name\\b",
+    "\\b({APPS})\\s+(display\\s+)?name\\s+(is)?",
+    "\\b(follows?|subscribe\\s+to)\\s+{HANDLE}",
+    "\\b(venmo|cash\\s?app|paypal|zelle)\\s+(u|you)\\b",
+    "\\b(dame|pasame|p[aá]same)\\s+tu\\s+(n[uú]mero|snap|insta|whats|celular|tel[eé]fono)"
   ],
   "grooming": [
     "\\bhow\\s+old\\s+(are|r)\\s+(you|u|ya)\\b",
@@ -77,7 +81,6 @@
     "\\bfind\\s+me\\s+(at|by|near)\\b",
     "\\b(see|find)\\s+me\\s+(at|by|near)\\b",
     "\\b(see|find)\\s+(you|u)\\s+(at|by|near)\\s+\\d",
-    "\\b(i\\s?m|i\\s+am)\\s+(at|by|near)\\s+the\\s+[a-z ]{2,30}\\s+(now|rn|right\\s+now)\\b",
     "\\b(come|meet|find|join|wait|say\\s+hi|ride\\s+with)\\b.{0,40}\\b(i\\s?m|i\\s+am|ill\\s+be)\\s+(at|by|near|in\\s+front\\s+of)\\s+the\\b|\\b(i\\s?m|i\\s+am|ill\\s+be)\\s+(at|by|near|in\\s+front\\s+of)\\s+the\\b.{0,40}\\b(come|meet|find\\s+me|join\\s+me|say\\s+hi)\\b",
     "\\b(robux|v\\s?bucks|vbux|free\\s+gift\\s?card|free\\s+gifts?\\s+(for|if)|give\\s+(u|you)\\s+a\\s+gift|free\\s+skins?)\\b",
     "\\bif\\s+(you|u)\\s+(come|dm|visit|add|meet|text)\\b",
@@ -102,7 +105,33 @@
     "\\b(ill|i\\s+will)\\s+be\\s+the\\s+one\\s+(in|with|wearing)\\b",
     "\\bfree\\s+(fastpass|fast\\s+pass|lightning\\s+lane|annual\\s+pass|pass|passes|codes?|disney\\s*plus|disney|rbx|robux)\\b",
     "\\bwhisper\\s+me\\b",
-    "\\b(i\\s?ll|i\\s+will)\\s+give\\s+(u|you)\\b.{0,30}\\bif\\b"
+    "\\b(i\\s?ll|i\\s+will)\\s+give\\s+(u|you)\\b.{0,30}\\bif\\b",
+    "\\bwhat\\s+age\\s+(are|r)\\s+(u|you)",
+    "\\bhow\\s+young\\b",
+    "\\b(when\\s?s|when\\s+is)\\s+(ur|your)\\s+(bday|birthday|b\\s?day)",
+    "\\b(r|are)\\s+(u|you)\\s+(over|under)\\s+\\d+",
+    "\\b(u|you)\\s+in\\s+(middle|high|elementary)\\s+school",
+    "\\bwhich\\s+(elementary|middle|high)\\b",
+    "\\b(ur|your)\\s+(teacher|teachers|mom|moms|dad|dads)\\s+name",
+    "\\bshow\\s+me\\s+what\\s+(u|you)\\s+look\\s+like",
+    "\\b(drop|post|dm)\\s+(me\\s+)?(a\\s+)?(selfie|pic|photo)",
+    "\\bbetween\\s+us\\b",
+    "\\b(dont|do\\s+not)\\s+(show|tell)\\s+(ur|your)\\s+(mom|dad|mum|parents)",
+    "\\b(ur|your)\\s+(parents|mom|dad)\\s+(dont|doesnt)\\s+(need|have)\\s+to\\s+know",
+    "\\b(ur|your)\\s+parents\\s+(go\\s+to\\s+sleep|asleep|strict)",
+    "\\bkeep\\s+(ur|your)\\s+secrets",
+    "\\bwanna\\s+meet\\b",
+    "\\b(we|u|you)\\s+should\\s+meet",
+    "\\bcan\\s+we\\s+meet",
+    "\\b(chill|hang)\\s+together",
+    "\\bpick\\s+(u|you)\\s+up",
+    "\\b(i\\s?m|we\\s?re)\\s+staying\\s+at",
+    "\\bwhich\\s+(state|city|town)\\s+(r|are)\\s+(u|you)\\s+from",
+    "\\bwhat\\s+(neighborhood|area|street)\\s+do\\s+(u|you)\\s+live",
+    "\\bcu[aá]ntos\\s+a[nñ]os",
+    "\\bd[oó]nde\\s+vives",
+    "\\b(minecoins|robux|vbucks|v\\s?bucks)\\b.{0,40}\\b(follow|add|dm|friend)",
+    "\\b(follow|add|dm|friend)\\w*\\b.{0,40}\\b(minecoins|robux|vbucks)\\b"
   ],
   "number_words": {
     "zero": "0",
@@ -121,7 +150,16 @@
     "too": "2",
     "for": "4",
     "ate": "8",
-    "o": "0"
+    "o": "0",
+    "sevn": "7",
+    "sevin": "7",
+    "fiv": "5",
+    "fyve": "5",
+    "nin": "9",
+    "nien": "9",
+    "wun": "1",
+    "zer0": "0",
+    "fore": "4"
   },
   "ambiguous_number_words": [
     "oh",
@@ -294,7 +332,11 @@
     "meetmeat",
     "meetmeby",
     "where(do|d)(u|you)live",
-    "areualone|ruhomealone"
+    "areualone|ruhomealone",
+    "what(school|grade)",
+    "sendpics?",
+    "sendmeapic",
+    "wannameet"
   ],
   "invisible_ranges": [
     [
@@ -367,22 +409,18 @@
     "hrs",
     "hour",
     "hours",
-    "pm",
-    "am",
     "pts",
     "points",
     "coins",
     "xp",
     "inches",
     "inch",
-    "in",
     "ft",
     "feet",
     "mph",
     "km",
     "miles",
     "percent",
-    "times",
     "rides",
     "pins",
     "stamps",
@@ -395,6 +433,56 @@
   "despaced_personal": [
     "whats(ur|your)(snap|number|numbr|insta|address|discord)",
     "(snap|snp|text|txt)meat",
-    "givemeur(number|snap|insta|address)"
+    "givemeur(number|snap|insta|address)",
+    "(snap|snp|text|txt|dm|pm|msg|hmu|skype)me"
+  ],
+  "location_now": [
+    "\\b(i\\s?m|i\\s+am)\\s+(at|by|near)\\s+the\\s+[a-z ]{2,30}\\s+(now|rn|right\\s+now)\\b"
+  ],
+  "mean_phrases": [
+    "unalive",
+    "kill\\s+(ur|your)\\s?self",
+    "kill\\s+urself",
+    "(nobody|no\\s+one)\\s+likes\\s+(u|you)",
+    "just\\s+leave\\s+forever",
+    "go\\s+die"
+  ],
+  "self_harm": [
+    "unalive",
+    "kill\\s+(ur|your|my)\\s?self",
+    "kill\\s+urself",
+    "kys",
+    "want\\s+to\\s+die",
+    "wanna\\s+die",
+    "end\\s+my\\s+life",
+    "hurt\\s+myself",
+    "cut\\s+myself",
+    "suicide"
+  ],
+  "run_exempt_after": [
+    "score",
+    "high score",
+    "points",
+    "wait",
+    "waits",
+    "wait times",
+    "times",
+    "scores",
+    "prices",
+    "price",
+    "ages"
+  ],
+  "phone_cues": [
+    "call",
+    "text",
+    "txt",
+    "number",
+    "digits",
+    "line",
+    "cell",
+    "area code",
+    "reach",
+    "phone",
+    "num"
   ]
 }

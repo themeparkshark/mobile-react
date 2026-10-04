@@ -13,4 +13,6 @@ export interface CommentType {
   readonly hidden?: 'removed' | 'deleted' | 'blocked' | 'reported' | null;
   readonly thread_id?: number;
   readonly parent_id?: number | null;
+  /** Held for a quick safety look: only the author sees it. */
+  readonly review?: 'pending' | null;
 }

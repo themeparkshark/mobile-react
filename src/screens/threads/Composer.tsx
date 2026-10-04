@@ -38,7 +38,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { postThread, editThread, reportFilterHit } from '../../api/endpoints/social';
+import { postThread, editThread, fetchPostingStatus, reportFilterHit } from '../../api/endpoints/social';
 import Avatar from '../../components/Avatar';
 import RewardBurst from '../../components/RewardBurst';
 import { AuthContext } from '../../context/AuthProvider';
@@ -56,6 +56,9 @@ import {
   POST_MAX,
   TOPICS,
   checkDraft,
+  HINT_DEBOUNCE_MS,
+  REVIEW_LINE,
+  pauseLine,
   reportBlockedDraft,
   errorLine,
   topicFor,
@@ -150,10 +153,25 @@ export default function Composer({
   }, [text, topic, toTeam, visible, editing, phase, player?.id]);
 
   const problem = useMemo(() => checkDraft(text, POST_MAX), [text]);
+  // The live hint follows the text after a short pause, so a long post never lags while typing.
+  const [hintText, setHintText] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setHintText(text), HINT_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [text]);
+  const hintProblem = useMemo(() => checkDraft(hintText, POST_MAX), [hintText]);
+  // A kid on a posting break learns it before typing, not after.
+  const [pausedLine, setPausedLine] = useState<string | null>(null);
+  useEffect(() => {
+    if (!visible) return;
+    setPausedLine(null);
+    fetchPostingStatus().then((s) => setPausedLine(s.paused ? pauseLine(s.paused_until) : null)).catch(() => undefined);
+  }, [visible]);
+  const [reviewPending, setReviewPending] = useState(false);
   const reportedDraft = useRef<string | null>(null);
-  const showProblem = problem && problem !== 'empty' ? DRAFT_LINES[problem] : null;
-  const line = serverLine ?? showProblem;
-  const canPost = !problem && phase === 'write';
+  const showProblem = hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null;
+  const line = serverLine ?? pausedLine ?? showProblem;
+  const canPost = !problem && phase === 'write' && !pausedLine;
   const def = topicFor(topic);
   const left = POST_MAX - text.trim().length;
 
@@ -199,6 +217,7 @@ export default function Composer({
       const thread = editing
         ? await editThread(editing.id, content)
         : await postThread({ content, topic, team: toTeam && playerTeam ? playerTeam : null });
+      setReviewPending(thread.review === 'pending');
       setPhase('done');
       playSound(SUCCESS, { volume: 0.7 });
       void Haptics.notificationAsync('success');
@@ -315,7 +334,7 @@ export default function Composer({
             )}
 
             {/* The card the post will look like. */}
-            <Animated.View style={[card.shell, styles.preview, touched && problem === 'empty' && { borderColor: BRAND.red }, wiggleStyle]}>
+            <Animated.View style={[card.shell, styles.preview, touched && problem === 'empty' && { borderColor: BRAND.gold }, wiggleStyle]}>
               <View style={styles.previewHead}>
                 <Avatar player={player as ThreadType['player']} size="sm" />
                 <View style={{ flex: 1 }}>
@@ -370,8 +389,9 @@ export default function Composer({
               <View style={styles.doneGlow} />
             <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
               <View style={styles.doneRibbon}>
-                <Text style={styles.doneText}>{editing ? 'Saved!' : 'Posted!'}</Text>
+                <Text style={styles.doneText}>{reviewPending ? 'Quick look!' : editing ? 'Saved!' : 'Posted!'}</Text>
               </View>
+              {reviewPending && <Text style={styles.doneSub}>{REVIEW_LINE}</Text>}
             </Animated.View>
           </View>
         )}
@@ -444,4 +464,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   doneText: { fontFamily: 'Shark', fontSize: 34, color: '#7a3d00', marginTop: 4 },
+  doneSub: { fontFamily: 'Knockout', fontSize: 20, color: BRAND.white, marginTop: 10, textAlign: 'center', paddingHorizontal: 30 },
 });

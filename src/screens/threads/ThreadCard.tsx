@@ -15,7 +15,7 @@ import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CommentChip, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, card } from './socialLook';
-import { timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
+import { REVIEW_LINE, timeAgo, timeAgoSpoken, type TopicKey } from './socialModel';
 import useReactions from './useReactions';
 
 function ThreadCard({
@@ -85,6 +85,12 @@ function ThreadCard({
             </View>
           </View>
 
+          {thread.review === 'pending' && (
+            <View style={styles.review} accessibilityLiveRegion="polite">
+              <GameIcon name="timer" size={18} />
+              <Text style={styles.reviewText}>{REVIEW_LINE}</Text>
+            </View>
+          )}
           <RichText style={styles.text} numberOfLines={6}>{text}</RichText>
 
           {photo ? <Image source={photo} recyclingKey={`t${thread.id}`} style={styles.photo} contentFit="cover" transition={150} /> : null}
@@ -129,6 +135,8 @@ const styles = StyleSheet.create({
   name: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, marginTop: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   time: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft },
+  review: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff1c2', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6, alignSelf: 'flex-start' },
+  reviewText: { fontFamily: 'Knockout', fontSize: 15, color: '#7a3d00' },
   text: { fontFamily: 'Knockout', fontSize: 21, lineHeight: 26, color: '#10233f' },
   photo: { width: '100%', aspectRatio: 4 / 3, borderRadius: 16, marginTop: 10, backgroundColor: '#dbefff' },
   actions: {
