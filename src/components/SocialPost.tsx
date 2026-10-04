@@ -2,11 +2,11 @@ import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
 import { useContext, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import view from '../api/endpoints/social-posts/view';
 import { SocialPostType } from '../models/social-post-type';
 import { AuthContext } from '../context/AuthProvider';
-import { BRAND, FONT, GameButton, GameIcon } from '../ui';
+import { BRAND, FONT, GameButton, GameDialog, GameIcon } from '../ui';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -41,7 +41,6 @@ export default function SocialPost({
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { refreshPlayer } = useContext(AuthContext);
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const rewardScale = useRef(new Animated.Value(0)).current;
   const coinBounce = useRef(new Animated.Value(0)).current;
 
   const videoId = videoIdOf(socialPost);
@@ -54,10 +53,7 @@ export default function SocialPost({
 
   const showRewardModal = (coins: number) => {
     setReward(coins);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    rewardScale.setValue(0);
     coinBounce.setValue(0);
-    Animated.spring(rewardScale, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }).start();
     Animated.loop(
       Animated.sequence([
         Animated.timing(coinBounce, { toValue: -12, duration: 300, useNativeDriver: true }),
@@ -70,16 +66,18 @@ export default function SocialPost({
   const recordView = async () => {
     if (hasWatched) return;
     const id = socialPost.id;
+    let paid: number;
     try {
-      const { coins } = await view(socialPost);
-      setWatchedId(id);
-      await refreshPlayer(); // Update coin count in header
-      const paid = coins ?? COIN_REWARD;
-      if (paid > 0) showRewardModal(paid);
+      paid = (await view(socialPost)).coins ?? COIN_REWARD;
     } catch {
       // Already paid (403) or offline: mark it so the card stops promising coins.
       setWatchedId(id);
+      return;
     }
+    setWatchedId(id);
+    if (paid > 0) showRewardModal(paid);
+    // The header coin count catches up; a slow /me never hides the reward.
+    refreshPlayer().catch(() => undefined);
   };
 
   const handlePress = async () => {
@@ -195,18 +193,18 @@ export default function SocialPost({
       />
 
       {/* The one reward moment (the server's matching banner is suppressed). */}
-      <Modal visible={reward !== null} transparent animationType="fade" onRequestClose={() => setReward(null)}>
-        <Pressable style={styles.scrim} onPress={() => setReward(null)} accessibilityLabel="Close">
-          <Animated.View style={[styles.rewardCard, { transform: [{ scale: rewardScale }] }]}>
-            <Animated.View style={{ transform: [{ translateY: coinBounce }] }}>
-              <Image source={COIN} style={{ width: 72, height: 72, marginBottom: 10 }} contentFit="contain" />
-            </Animated.View>
-            <Text style={styles.rewardTitle}>+{reward ?? COIN_REWARD} Coins!</Text>
-            <Text style={styles.rewardText}>Thanks for watching! They're in your coin count.</Text>
-            <GameButton label="Awesome!" onPress={() => setReward(null)} fullWidth />
-          </Animated.View>
-        </Pressable>
-      </Modal>
+      <GameDialog
+        visible={reward !== null}
+        title={`+${reward ?? COIN_REWARD} Coins!`}
+        message="Thanks for watching! They're in your coin count."
+        buttons={[{ text: 'Awesome!' }]}
+        haptic="success"
+        onAnswer={() => setReward(null)}
+      >
+        <Animated.View style={{ alignItems: 'center', transform: [{ translateY: coinBounce }] }}>
+          <Image source={COIN} style={{ width: 72, height: 72 }} contentFit="contain" />
+        </Animated.View>
+      </GameDialog>
     </>
   );
 }
@@ -282,18 +280,4 @@ const styles = StyleSheet.create({
   title: { fontFamily: FONT.body, fontSize: 15, lineHeight: 18, color: BRAND.navy },
   kicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.blueBright, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
   heroTitle: { fontFamily: FONT.body, fontSize: 21, lineHeight: 24, color: BRAND.navy },
-  scrim: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: BRAND.scrim },
-  rewardCard: {
-    backgroundColor: BRAND.cream,
-    borderRadius: 26,
-    borderWidth: 4,
-    borderBottomWidth: 7,
-    borderColor: BRAND.navy,
-    padding: 24,
-    marginHorizontal: 40,
-    alignItems: 'center',
-    minWidth: 260,
-  },
-  rewardTitle: { fontFamily: FONT.display, fontSize: 28, color: BRAND.navy, textTransform: 'uppercase', marginBottom: 6 },
-  rewardText: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft, textAlign: 'center', marginBottom: 16 },
 });

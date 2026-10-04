@@ -215,8 +215,8 @@ export default function YouTubePlayerModal({
                 <View style={[styles.cover, styles.coverCard]}>
                   <Text style={styles.coverTitle}>That's a wrap!</Text>
                   <View style={styles.coverButtons}>
-                    <GameButton label="Watch again" icon="retry" variant="secondary" size="compact" onPress={replay} />
-                    <GameButton label="Done" icon="check" size="compact" onPress={close} />
+                    <GameButton label="Done" icon="check" fullWidth onPress={close} />
+                    <GameButton label="Watch again" icon="retry" variant="secondary" size="compact" fullWidth onPress={replay} />
                   </View>
                 </View>
               )}
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   cover: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.blue },
   coverCard: { gap: 14, paddingHorizontal: 20 },
   coverTitle: { fontFamily: FONT.display, fontSize: 22, color: BRAND.white, textTransform: 'uppercase', textAlign: 'center' },
-  coverButtons: { flexDirection: 'row', gap: 12 },
+  coverButtons: { width: '100%', maxWidth: 280, gap: 10 },
   notice: {
     position: 'absolute',
     top: 10,
