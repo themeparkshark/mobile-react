@@ -184,7 +184,7 @@ test('guest invite: bright card over the live map, sign-in inside, no gym promis
 test('a notification row renders server copy through the icon-safe text and draws its arrow as art', () => {
   const source = fs.readFileSync(path.join(root, 'src/components/Notification.tsx'), 'utf8');
   assert.match(source, /const stored = notificationMessage\(notification\.content\?\.message\)/);
-  assert.match(source, /<GameRichText[^>]*>\s*\{message\}/);
+  assert.match(source, /<GameRichText[^>]*>\s*\{(message|rest\.trimStart\(\))\}/);
   assert.doesNotMatch(source, /<Text[^>]*>\s*\{notification\.content\?\.message/);
   assert.match(source, /<GameIcon name="arrow"/);
   assert.doesNotMatch(source, /›/);

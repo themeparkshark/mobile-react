@@ -1,5 +1,5 @@
 /**
- * Social v2 chrome, in the Stamp Book's language: Alex's shark-camo ocean,
+ * Social v2 chrome, in the Stamp Book's language: the shared clean page,
  * chunky cards with a navy outline and a darker bottom lip, a gloss band, and
  * pill buttons that squash on press (UI thread springs; instant with reduced
  * motion). Every touch target is at least 44 pt and every label at least 14 pt.
@@ -11,25 +11,13 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, w
 import GameIcon from '../../ui/GameIcon';
 import type { GameIconName } from '../../ui/iconNames';
 import { BRAND, FONT } from '../../ui/tokens';
+import { CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../../components/CleanScreenBackground';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 
 export const INK = '#05346E';
 export const CARD = '#FFFFFF';
-export const CARD_NEW = '#FFF8E4';
-export const PAGE_DIM = 'rgba(7,104,185,0.28)';
 
 const PRESS_SPRING = { damping: 14, stiffness: 420, mass: 0.6 } as const;
-
-/** The ocean page every social screen sits on. */
-export function SocialBackdrop({ children }: { readonly children: ReactNode }) {
-  return (
-    <View style={kit.page}>
-      <Image source={require('../../../assets/images/shark_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: PAGE_DIM }]} />
-      {children}
-    </View>
-  );
-}
 
 /** Press feedback for anything tappable: squash to 0.96 and spring back. */
 export function useSquash() {
@@ -120,17 +108,17 @@ export const SectionHeader = memo(function SectionHeader({ label, count, icon, r
   return (
     <View style={kit.sectionHead}>
       <View style={kit.sectionLeft} accessibilityRole="header" accessible accessibilityLabel={count ? `${label}, ${count}` : label}>
-        {icon && <GameIcon name={icon} size={26} />}
+        {icon && <GameIcon name={icon} size={22} />}
         <Text style={kit.sectionText} maxFontSizeMultiplier={1.2}>{label}</Text>
         {count != null && count > 0 && <BouncyCount count={count} />}
       </View>
+      <View style={kit.sectionRule} />
       {right}
     </View>
   );
 });
 
 export const kit = StyleSheet.create({
-  page: { flex: 1, marginTop: -8, backgroundColor: BRAND.blue },
   card: {
     backgroundColor: CARD,
     borderRadius: 20,
@@ -149,12 +137,10 @@ export const kit = StyleSheet.create({
   },
   badgeText: { fontFamily: FONT.display, fontSize: 14, color: '#FFFFFF', includeFontPadding: false },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 14, paddingTop: 14, paddingBottom: 8, minHeight: 58 },
-  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionText: {
-    fontFamily: FONT.display, fontSize: 20, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5,
-    textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
-  },
-  sectionCount: { backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2, borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
+  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  sectionRule: { flex: 1, height: 2, borderRadius: 1, marginHorizontal: 12, backgroundColor: 'rgba(5,52,110,0.12)' },
+  sectionText: { fontFamily: FONT.display, fontSize: 18, color: CLEAN_SCREEN_INK, textTransform: 'uppercase', letterSpacing: 0.5, includeFontPadding: false },
+  sectionCount: { backgroundColor: BRAND.red, borderRadius: 999, minWidth: 24, alignItems: 'center', paddingHorizontal: 7, paddingVertical: 1 },
   sectionCountText: { fontFamily: FONT.display, fontSize: 14, color: '#FFFFFF' },
 });
 
@@ -182,14 +168,8 @@ const kitError = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 60 },
   art: { width: 150, height: 150 },
   sticker: { position: 'absolute', right: 0, top: 4, width: 48, height: 48 },
-  title: {
-    fontFamily: FONT.display, fontSize: 26, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', marginTop: 10,
-    textShadowColor: INK, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
-  },
-  text: {
-    fontFamily: FONT.body, fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginTop: 4,
-    textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
-  },
+  title: { fontFamily: FONT.display, fontSize: 26, color: CLEAN_SCREEN_INK, textAlign: 'center', textTransform: 'uppercase', marginTop: 10 },
+  text: { fontFamily: FONT.body, fontSize: 18, color: CLEAN_SCREEN_INK_SOFT, textAlign: 'center', marginTop: 4 },
 });
 
 /** A header count that ticks with a little bounce when it changes. */

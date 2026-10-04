@@ -51,7 +51,7 @@ test('kind comes from the server, or from the stored row on older servers', () =
   assert.equal(legacy('Finn replied to your thread.'), 'reply');
   assert.equal(legacy('Kraken is attacking!'), 'news');
   assert.equal(model.kindOf(row({ content: { message: 'You have reached 4 park coins', image: 'https://x/images/park_coin_milestone_reached.png' } })), 'park_coins');
-  for (const kind of Object.keys(model.KIND_LOOK)) assert.ok(model.KIND_LOOK[kind].icon, kind);
+  for (const kind of Object.keys(model.KIND_LOOK)) assert.ok(model.KIND_LOOK[kind].tint && model.KIND_LOOK[kind].color, kind);
 });
 
 test('friend rows speak kid: short, warm, the name first', () => {
@@ -84,6 +84,55 @@ test('Today, This week, Earlier: strictly newest first, and unread counts on the
   assert.equal(shape(model.sectionize(items, new Set(), now)), '[Today 1] b a [This week 0] wk [Earlier 1] old');
   assert.equal(shape(model.sectionize(items, new Set(['a']), now)), '[Today 0] b a [This week 0] wk [Earlier 1] old', 'a row read here stays in place');
   assert.equal(shape(model.sectionize([], new Set(), now)), '');
+});
+
+test('older years get their own header, so the list always reads newest first (Dustin: Mar 27, Feb 13 ... Jun 1, Apr 25)', () => {
+  const now = Date.parse('2026-10-04T12:00:00');
+  // Server order is created_at desc already; the client re-sorts anyway (paged merges).
+  const items = [
+    row({ id: 'jun25', created_at: '2025-06-01T20:50:57Z' }), row({ id: 'mar26', created_at: '2026-03-27T22:54:22Z' }),
+    row({ id: 'feb26', created_at: '2026-02-13T10:02:25Z' }), row({ id: 'apr25', created_at: '2025-04-25T13:43:32Z' }),
+    row({ id: 'dec24', created_at: '2024-12-27T22:07:23Z' }),
+  ];
+  const shape = rows => rows.map(r => (r.type === 'header' ? `[${r.label}]` : r.item.id)).join(' ');
+  assert.equal(shape(model.sectionize(items, new Set(), now)), '[Earlier] mar26 feb26 [2025] jun25 apr25 [2024] dec24');
+  assert.equal(shape(model.sectionize([row({ id: 'bad', created_at: 'not a date' })], new Set(), now)), '[Earlier] bad', 'a bad date never makes a 1970 section');
+  assert.equal(shape(model.sectionize([row({ id: 'bad', created_at: '' }), row({ id: 'y24', created_at: '2024-05-01T10:00:00Z' })], new Set(), now)), '[Earlier] bad [2024] y24', 'Earlier always sits above the years');
+  assert.equal(model.rewardCoins('finn complimented your outfit and sent you 5 Coins!'), 5);
+  assert.equal(model.rewardCoins('You have reached 50 park coins for Epic Universe!'), 0, 'a milestone is not a gift');
+  assert.equal(model.shortAgo('2025-06-01T20:50:57Z', now), 'Jun 1, 2025', 'another year names the year');
+  assert.match(model.shortAgo('2026-03-27T22:54:22Z', now), /^Mar 2[78]$/, 'this year stays short');
+});
+
+test('the player name leads a row in bold, system rows stay whole', () => {
+  assert.deepEqual(plain(model.leadName('finn replied to your thread.', 'reply')), { lead: 'finn', rest: ' replied to your thread.' });
+  assert.deepEqual(plain(model.leadName('You and finn are friends now!', 'friend_request')), { lead: '', rest: 'You and finn are friends now!' });
+  assert.deepEqual(plain(model.leadName('You have reached 50 park coins!', 'park_coins')), { lead: '', rest: 'You have reached 50 park coins!' });
+  assert.deepEqual(plain(model.leadName('[icon:coin] bonus', 'compliment')), { lead: '', rest: '[icon:coin] bonus' });
+});
+
+test('every notification badge is bundled, centred art on an even ring (no server tile, no lip crescent)', () => {
+  const src = read('src/components/Notification.tsx') + read('src/components/notificationBadgeArt.ts');
+  assert.match(read('src/context/NotificationProvider.tsx'), /warmBadgeArt\(\)/, 'the bell art is decoded before the bell opens');
+  for (const kind of Object.keys(model.KIND_LOOK)) {
+    assert.match(src, new RegExp(`\\b${kind}: (require|ICON_SOURCES)`), `${kind} has bundled badge art`);
+    assert.ok(model.KIND_LOOK[kind].tint, `${kind} has a soft badge fill`);
+  }
+  const badge = /\n  badge: \{([^}]*)\}/.exec(src)[1];
+  assert.doesNotMatch(badge, /borderBottomWidth/, 'one even ring: a thicker bottom border showed as a coloured crescent');
+  assert.doesNotMatch(src, /content\?\.image/, 'the off-centre server tiles are never drawn');
+  for (const kind of ['compliment', 'park_coins', 'reply', 'friend_request', 'friend_accepted']) {
+    assert.ok(fs.existsSync(path.join(root, `assets/images/screens/notifications/badges/${kind}.png`)), kind);
+  }
+});
+
+test('Notifications and Friends sit on the shared clean background, not the water art', () => {
+  for (const file of ['src/screens/NotificationsScreen.tsx', 'src/screens/FriendsScreen.tsx']) {
+    const src = read(file);
+    assert.match(src, /<CleanScreenBackground>/, file);
+    assert.doesNotMatch(src, /shark_background|SocialBackdrop|tone="onBlue"/, file);
+  }
+  assert.match(read('src/components/CleanScreenBackground.tsx'), /CLEAN_SCREEN_BG = '#EAF3FB'/);
 });
 
 test('paging never duplicates a row that shifted pages', () => {
