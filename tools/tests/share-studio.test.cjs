@@ -250,3 +250,167 @@ test('outlined text is sized once: a single line fits its box, never grows, neve
   const src = fs.readFileSync(pathMod.join(repo, 'src/share/Outlined.tsx'), 'utf8');
   assert.doesNotMatch(src, /adjustsFontSizeToFit/, 'no outline copy may fit itself');
 });
+
+/* ---------------- Round 2 (after the r2 fast-track panel) ---------------- */
+
+test('a home area never reaches a card: no board label in the standings payload, and area names are scrubbed everywhere', () => {
+  const types = fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8');
+  assert.doesNotMatch(types.split('readonly standings')[1].split(';')[0], /boardLabel/);
+  for (const area of ['Tampa Area', 'Phoenix Region', 'Your Area', 'Orange County', 'Kissimmee Area']) {
+    for (const sample of FLEX_SAMPLES) {
+      const c = copy.flexCopy(sample.kind, poison({ ...sample.payload, boardLabel: area }, `${area}`));
+      const text = c.a11y.toLowerCase();
+      assert.ok(!/\b(area|region|county)\b/.test(text), `${sample.name} printed "${area}": ${c.a11y}`);
+    }
+  }
+  const c = copy.flexCopy('standings', { boardLabel: 'Tampa Area', tierLabel: 'Podium', rank: 2, points: 1840 });
+  assert.equal(c.title, '2nd Place!');
+  assert.equal(c.kicker, 'My Home Hunt Week');
+  const modal = fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8');
+  assert.doesNotMatch(modal, /boardLabel|board_label[^\n]*FlexShareButton/);
+});
+
+test('possessives and the names the fast-track panel caught are scrubbed', () => {
+  for (const [input, out] of [
+    ["Universal's Coin", 'Coin'], ["Disney's Hollywood Studios Star", 'Star'], ["Hagrid's Ride", 'Ride'],
+    ['Gringotts Gold', 'Gold'], ['Spider-Man Mask', 'Mask'], ['Mario Kart Champ', 'Champ'],
+    ['Epic Universe Coin', 'Coin'], ["Walt Disney World's Best", 'Best'], ['Stardust Racers Pin', 'Pin'],
+    ['Knotts Berry Farm Pass', 'Pass'], ['Simpsons Donut', 'Donut'],
+  ]) assert.equal(copy.cleanName(input), out, input);
+  for (const keep of ['Mummy Dog', 'Sand Castle', 'Pirate King', 'Churro Champ', 'Snack Boss']) assert.equal(copy.cleanName(keep), keep);
+});
+
+test('the percent-of-players line only appears for kinds the server can count', () => {
+  assert.deepEqual([...copy.OWNED_KINDS].sort(), ['coin_level', 'crowned', 'find', 'set_complete', 'stamp']);
+  for (const kind of ['title', 'fright_badge', 'ride_coin', 'boss_win', 'fright_lifetime']) {
+    const sample = FLEX_SAMPLES.find(item => item.kind === kind);
+    const c = copy.flexCopy(kind, { ...sample.payload, ownedPct: 0.02 });
+    assert.doesNotMatch(c.a11y, /% of players|OF PLAYERS/, kind);
+  }
+  assert.match(copy.flexCopy('crowned', { coinUrl: 'x', ownedPct: 0.02 }).a11y, /Only 2% of players/);
+});
+
+test('Park Day prints its number once; every kind with a giant number keeps it out of the title and the brag line', () => {
+  const pd = copy.flexCopy('park_day', { coinsCaught: 7, newCoins: 3, coinUrls: [] });
+  assert.equal(pd.big, '7');
+  assert.equal((pd.a11y.match(/\b7\b/g) || []).length, 1, pd.a11y);
+  for (const sample of FLEX_SAMPLES) {
+    const c = copy.flexCopy(sample.kind, sample.payload);
+    if (!c.big || !/\d/.test(c.big)) continue;
+    const n = c.big.match(/\d+/)[0];
+    assert.ok(!new RegExp(`\\b${n}\\b`).test(c.title) || sample.kind === 'coin_level' || sample.kind === 'standings', `${sample.name} title repeats ${n}: ${c.title}`);
+    assert.ok(!new RegExp(`\\b${n}\\b`).test(c.stat), `${sample.name} stat repeats ${n}: ${c.stat}`);
+  }
+});
+
+test('event titles carry no year and finds do not say their rarity twice', () => {
+  assert.equal(copy.flexCopy('fright_night', { cardTitle: 'Fin-ister Nights 2026', headline: 'x', haunts: 4 }).title, 'Fin-ister Nights');
+  assert.equal(copy.flexCopy('find', { itemName: 'Legendary Golden Churro', artUrl: 'x', rarity: 5 }).title, 'Golden Churro');
+});
+
+test('the coin level-up Share button matches the reveal rule (level 5+), and modal buttons are off in release', () => {
+  const sheet = fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8');
+  assert.match(sheet, /nextLevel >= 5 && nextLevel < 10/);
+  assert.match(sheet, /<ShareStudioHost portal \/>/);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8'), /<ShareStudioHost portal \/>/);
+  const index = fs.readFileSync(pathMod.join(repo, 'src/share/index.ts'), 'utf8');
+  assert.match(index, /SHARE_IN_MODALS: boolean = __DEV__ && process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS === '1'/);
+  const { SHARE_IN_MODALS } = loadTs('src/share/index.ts', {
+    './store': {}, './FlexShareButton': {}, './ShareStudioHost': {}, './FlexCard': {}, './copy': {}, '../api/endpoints/me/share': {}, './types': {},
+  });
+  assert.equal(SHARE_IN_MODALS, false, 'release builds (__DEV__ false) keep the modal buttons hidden');
+});
+
+test('the newest mounted host shows requests; unmounting a modal hands them back to Root', () => {
+  store.__resetFlexQueue();
+  const early = store.registerFlexHost(true); // a modal can mount before Root's host
+  const root = store.registerFlexHost();
+  assert.equal(store.topFlexHost(), early, 'a portal outranks Root even when it mounted first');
+  store.unregisterFlexHost(early);
+  assert.equal(store.topFlexHost(), root);
+  const modal = store.registerFlexHost(true);
+  assert.equal(store.topFlexHost(), modal);
+  store.unregisterFlexHost(modal);
+  assert.equal(store.topFlexHost(), root);
+  store.unregisterFlexHost(root);
+  assert.equal(store.topFlexHost(), null);
+});
+
+test('a sheet that never shows is dropped after the watchdog, so the queue never wedges', () => {
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /SHOW_WATCHDOG_MS = 1500/);
+  assert.match(host, /onShow=\{onShow\}[\s\S]*onShow=\{onShow\}/, 'both the sheet and the reveal report onShow');
+  assert.match(host, /if \(shown\.current\) return;[\s\S]*finishFlex\(request\.id\)/);
+  assert.match(host, /\[spin, slam, burst[^\]]*\]\.forEach\(value => cancelAnimation\(value\)\)/);
+});
+
+test('the card link and QR carry a per-kind campaign and nothing about the player', () => {
+  const link = loadTs('src/share/link.ts');
+  assert.equal(link.shareUrl('find'), 'https://themeparkshark.com/app?c=flex_find');
+  for (const kind of FLEX_KINDS) assert.match(link.shareUrl(kind), /^https:\/\/themeparkshark\.com\/app\?c=flex_[a-z_]+$/);
+  const { QR_BY_KIND } = loadTs('src/share/qr.ts');
+  for (const kind of FLEX_KINDS) assert.ok(fs.existsSync(pathMod.join(repo, 'src/share', QR_BY_KIND[kind])), kind);
+});
+
+test('the reveal counts up to the giant number and scales its burst by rarity', () => {
+  const host = loadTs('src/share/reveal.ts');
+  assert.equal(host.countTarget('LV 7'), 7);
+  assert.equal(host.countTarget('12/12'), 12);
+  assert.equal(host.countTarget('KO!'), null);
+  assert.equal(host.revealIntensity('crowned', null), 'big');
+  assert.equal(host.revealIntensity('find', 5), 'big');
+  assert.equal(host.revealIntensity('find', 3), 'medium');
+  assert.equal(host.revealIntensity('streak', null), 'small');
+});
+
+/* ---------------- Round 3 ---------------- */
+test('the count-up starts at 1, never 0, and ends on the number', () => {
+  const r0 = loadTs('src/share/reveal.ts');
+  const r = { countSteps: n => JSON.parse(JSON.stringify(r0.countSteps(n))) };
+  assert.deepEqual(r.countSteps(10), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(r.countSteps(3), [1, 2, 3]);
+  const big = r.countSteps(1840);
+  assert.equal(big[0] > 0, true); assert.equal(big[big.length - 1], 1840); assert.ok(big.length <= 10);
+  assert.deepEqual(r.countSteps(0), []); assert.deepEqual(r.countSteps(null), []);
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.match(host, /useState<number \| null>\(null\)/);
+  assert.match(host, /opacity: bigIn\.value/);
+});
+
+test('second place never holds a "#1" finger; the crowned card drops the trophy prop for the crest', () => {
+  for (const rank of [2, 3, undefined]) assert.notEqual(copy.flexCopy('standings', { tierLabel: 'Podium', rank, percentile: 10 }).prop, 'foam-finger', String(rank));
+  assert.equal(copy.flexCopy('standings', { tierLabel: 'Champion', rank: 1 }).prop, 'foam-finger');
+  assert.equal(copy.flexCopy('crowned', { coinUrl: 'x' }).prop, null);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/FlexHero.tsx'), 'utf8'), /crest/);
+});
+
+test('cities, lowercase areas and leftover region numbers never print; catalog names survive', () => {
+  for (const t of ['tampa area', 'TAMPA AREA', 'Tampa', 'Phoenix', 'Winter Park', 'Orlando', 'Anaheim', 'Kissimmee', 'Busch Gardens Tampa', 'Galaxys Edge'])
+    assert.equal(copy.cleanName(t), '', t);
+  assert.equal(copy.cleanName('Region 5 Champ'), 'Champ');
+  assert.equal(copy.cleanName('Orlando Hero'), 'Hero');
+  const catalog = JSON.parse(fs.readFileSync(pathMod.join(repo, '../../tps-prime-time-audit/next-wave/home-hunt-v3/catalog.json'), 'utf8'));
+  for (const name of [...catalog.items.map(i => i.name), ...catalog.sets.map(s => s.name)]) assert.equal(copy.cleanName(name), name, name);
+  for (const city of ['Tampa', 'Phoenix', 'Winter Park']) {
+    for (const sample of FLEX_SAMPLES) {
+      const c = copy.flexCopy(sample.kind, poison(sample.payload, `${city} Legend`));
+      assert.ok(!c.a11y.includes(city), `${sample.name} printed ${city}`);
+    }
+  }
+});
+
+test('art is warmed per kind when a share-eligible screen or a share asks, never at launch', () => {
+  store.__resetFlexQueue();
+  assert.deepEqual([...store.warmKinds()], []);
+  store.shareFlex('park_day', { coinsCaught: 1, coinUrls: [] }, { surface: 'park_day' });
+  assert.deepEqual([...store.warmKinds()], ['park_day']);
+  store.warmFlex('coin_level'); store.warmFlex('coin_level');
+  assert.deepEqual([...store.warmKinds()].sort(), ['coin_level', 'park_day']);
+  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.doesNotMatch(host, /setTimeout\(\(\) => setPhase\('warm'\), 3000\)/);
+});
+
+test('the coin sheet Share icon carries a word and the stamp payload must say whether its art has a shark', () => {
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
+});

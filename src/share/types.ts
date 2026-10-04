@@ -18,6 +18,12 @@ export interface FlexBase {
   readonly ownedPct?: number | null;
   /** Override the shark. Default: the signed-in player's live look. */
   readonly inventory?: InventoryType | null;
+  /**
+   * Ask the server for the percent-of-players line (GET /me/flex/rarity): the item id,
+   * stamp slug, set slug or coin level. Only find, stamp, set_complete, coin_level and
+   * crowned have server data; other kinds never show the line.
+   */
+  readonly ownedRef?: string | number | null;
 }
 
 export interface FlexPayloads {
@@ -25,6 +31,8 @@ export interface FlexPayloads {
   readonly find: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly setName?: string;
     readonly goldenHour?: boolean; readonly dailyRare?: boolean; readonly caughtCount?: number;
+    /** Set progress after this find ("4 of 6"). */
+    readonly setFound?: number; readonly setTotal?: number;
   };
   readonly ride_photo: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput;
@@ -38,9 +46,14 @@ export interface FlexPayloads {
     readonly bossName: string; readonly artUrl: FlexArt; readonly difficulty: 'normal' | 'hard' | 'shark';
     readonly title?: string; readonly bouts?: number; readonly mvp?: boolean;
   };
-  readonly stamp: FlexBase & { readonly name: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly how?: string; readonly title?: string };
+  readonly stamp: FlexBase & {
+    readonly name: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly how?: string; readonly title?: string;
+    /** Required: does the stamp art already show the shark? Then the card leaves the player's shark out. */
+    readonly artHasShark: boolean;
+  };
   readonly coin_level: FlexBase & { readonly coinUrl: FlexArt; readonly level: number; readonly tierName?: string; readonly tierIndex?: number; readonly timesCollected?: number };
-  readonly standings: FlexBase & { readonly boardLabel: string; readonly tierLabel: string; readonly rank?: number; readonly percentile?: number; readonly points?: number };
+  /** Home Hunt weekly result. No board or area label: the server's board name is the player's home area. */
+  readonly standings: FlexBase & { readonly tierLabel: string; readonly rank?: number; readonly percentile?: number; readonly points?: number };
   readonly fright_night: FlexBase & {
     readonly cardTitle: string; readonly headline: string; readonly nightNumber?: number; readonly haunts: number;
     readonly minutesInLine?: number; readonly badgeUrls?: readonly (FlexArt | null)[]; readonly statLines?: readonly string[];
@@ -86,7 +99,12 @@ export interface FlexRequest<K extends FlexKind = FlexKind> {
 }
 
 /** The category frames (one Alex-style frame family per category). */
-export type FrameKey = 'royal' | 'collection' | 'photo' | 'boss' | 'passport' | 'coins' | 'standings' | 'fright' | 'streak' | 'progress';
+export type FrameKey =
+  | 'royal' | 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'golden' | 'photo' | 'boss' | 'passport'
+  | 'coins' | 'standings' | 'fright' | 'streak' | 'progress';
+
+/** A real Alex (or shipped production) prop the player's shark holds, per category. */
+export type PropKey = 'trophy' | 'magnifier' | 'treasure' | 'foam-finger' | 'compass' | 'coins' | 'lantern' | 'flame' | 'xp' | 'photos';
 
 /** Everything the card prints, worked out from the payload by flexCopy(). */
 export interface FlexCopy {
@@ -96,8 +114,10 @@ export interface FlexCopy {
   readonly kicker: string;
   /** The thing's name. */
   readonly title: string;
-  /** Optional big number on the stat plate ("12/12", "LV 10", "#3"). */
+  /** The giant brag number, the card's hero stat ("12/12", "LV 10", "#2", "3%"). */
   readonly big: string | null;
+  /** Small caps caption under the giant number ("OF PLAYERS", "HAUNTS"). */
+  readonly bigLabel: string | null;
   /** The brag line. */
   readonly stat: string;
   /** Second, smaller brag line (or null). */
@@ -105,6 +125,10 @@ export interface FlexCopy {
   /** Bottom call to action. */
   readonly cta: string;
   readonly frame: FrameKey;
+  /** Prop the player's shark holds; null for none. */
+  readonly prop: PropKey | null;
+  /** Leave the player's shark off (the hero already has one). */
+  readonly hideShark: boolean;
   /** Rarity for the chip and gems, null when the kind has none. */
   readonly rarity: FlexRarity | null;
   /** Accessibility label for the whole card. */
