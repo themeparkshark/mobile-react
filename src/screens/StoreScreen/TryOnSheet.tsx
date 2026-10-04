@@ -459,7 +459,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                         <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow}
                           popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
                           style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
-                          fxPlay={secret ? landed : 0} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
+                          fxPlay={secret ? landed : 0} fxHold={secret && HOLD_PHASES.has(phase)} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
                           onFxPlay={stage.scene ? onFxPlay : undefined} />
                       ) : (
                         <View style={styles.flatArt}><TileArt item={item} size={170} thumb={false} /></View>
@@ -608,6 +608,9 @@ const S = SHOP_SURFACE;
  * Secret NEW!: hidden through the dim, then it pops in at full colour with the burst
  * (0 to 1.15 to 1), never fading up grey under the dim (art panel round 5).
  */
+/** From the confirm tap to the landing, no timer moment competes with the buy (game feel round 6). */
+const HOLD_PHASES = new Set(['checking', 'confirm', 'buying', 'landing']);
+
 const NEW_POP = new Keyframe({
   // Full colour from the first frame: it grows from nothing, it never fades up grey.
   0: { opacity: 1, transform: [{ scale: 0 }] },

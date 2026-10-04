@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FxFloat, FxRigLayers, FxScene, FxSceneLight, FxShadow, useFxMomentCue, wornFx } from '../fx/FxLayers';
 import { useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
-import { FX_MOMENT, FxLod } from '../fx/registry';
+import { FX_MOMENT, FxLod, NO_KICK } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
@@ -76,6 +76,7 @@ export default function Playercard({
   fxSound,
   fxAnnounce = false,
   fxPlay = 0,
+  fxHold = false,
   fxTapToPlay = false,
   fxStartDelay = 0,
   onFxPlay,
@@ -111,6 +112,8 @@ export default function Playercard({
   readonly fxAnnounce?: boolean;
   /** Change this number to replay the worn rigs' moments now (the Secret unlock after a buy). */
   readonly fxPlay?: number;
+  /** Hold every timer moment (the shop's confirm and buy): the next thing the piece does is the unlock. */
+  readonly fxHold?: boolean;
   /** A tap on the shark replays its rigs' moments (stages with no item taps). */
   readonly fxTapToPlay?: boolean;
   /** Hold the first moment this long (ms): the try-on waits for its sheet to finish sliding in. */
@@ -195,6 +198,23 @@ export default function Playercard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookKey]);
   useEffect(() => { if (fxPlay) playFx('unlock'); }, [fxPlay]);
+  // A hold keeps a kick due 1.5 s out (momentAt holds timer moments while a kick is pending), refreshed
+  // until the unlock replaces it. A hold that ends with no buy clears the kick, so nothing plays then.
+  const fxPlayRef = useRef(fxPlay);
+  useEffect(() => {
+    if (!fxHold) return;
+    const startPlay = fxPlayRef.current = fxPlay;
+    // Once the unlock has played, its kick stands.
+    const push = () => { if (fxPlayRef.current === startPlay) fxKick.value = fxClock.value + 1500; };
+    push();
+    const timer = setInterval(push, 500);
+    return () => {
+      clearInterval(timer);
+      if (fxPlayRef.current === startPlay) fxKick.value = NO_KICK;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fxHold]);
+  fxPlayRef.current = fxPlay;
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;
   // Layers present on the first frame never pop; only ones put on later do.

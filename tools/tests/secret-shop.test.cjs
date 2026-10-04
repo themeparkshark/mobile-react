@@ -251,10 +251,15 @@ test('rig performance budget: at most 24 animated views at full LOD per rig', ()
     assert.ok(pooled + fixed <= 24, `${key}: ${pooled + fixed}`);
   }
   const fireworks = src('src/fx/rigs/MidwayFireworks.tsx');
-  // 7 shells x (rocket + flash + burst) + backdrop = 22 at full; lite builds no rocket or flash styles at all.
+  // Full: 7 bursts + 7 rockets + 4 bloom glows + 4 white-hot fade copies = 22 animated views (steady shells
+  // only carry the glow and the white copy); lite builds no rocket, glow or white copy at all.
   const shells = (fireworks.match(/finale: 0(\.\d+)?, flash/g) || []).length + geometry.rigs.midway_fireworks.bursts.length;
   assert.equal(shells, 7);
-  assert.ok(shells * 3 + 1 <= 24, `fireworks: ${shells * 3 + 1}`);
+  const steady = geometry.rigs.midway_fireworks.bursts.length;
+  assert.match(fireworks, /lod === 'full' && s\.finale === undefined && <BurstWhite/);
+  assert.match(fireworks, /\{s\.finale === undefined && <Animated\.Image source=\{GLOW\}/);
+  const views = shells * 2 + steady * 2;
+  assert.ok(views <= 24, `fireworks: ${views} animated views at full`);
   assert.match(fireworks, /\{lod === 'full' && shells\.map\(i => <ShellExtras/);
   // Lite (tile) budgets: the halo and the lantern keep one ghost/fish layer, never a hidden duplicate.
   const lantern = src('src/fx/rigs/GhostLantern.tsx');
@@ -395,4 +400,15 @@ test('scene backdrops play behind the try-on and hero instead of their still pap
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(shelves, /backdrop=\{stage\?\.scene \? <FxSceneBackdrop fxKey=\{stage\.scene\}/);
   assert.match(shelves, /fx_key: item\.fx_key \?\? null \}\], 'base'\)/, 'the Vault hero wears the live rig');
+});
+
+test('no timer moment competes with a Secret buy: the try-on holds them from the confirm tap to the unlock', () => {
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /fxHold=\{secret && HOLD_PHASES\.has\(phase\)\}/);
+  assert.match(sheet, /HOLD_PHASES = new Set\(\['checking', 'confirm', 'buying', 'landing'\]\)/);
+  const card = src('src/components/Playercard.tsx');
+  // The hold keeps a kick pending (momentAt holds timers within 2 s of one), and never overrides the unlock's kick.
+  assert.match(card, /if \(fxPlayRef\.current === startPlay\) fxKick\.value = fxClock\.value \+ 1500/);
+  assert.match(card, /if \(fxPlayRef\.current === startPlay\) fxKick\.value = NO_KICK/);
+  assert.equal(fx.momentAt(950, 950 + 1500, 6000, 0.2).p, -1);
 });

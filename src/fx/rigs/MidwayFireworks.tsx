@@ -80,7 +80,8 @@ function Burst({ t, kick, box, i, lod }: RigProps & { i: number }) {
   return (
     <>
       <FxPart source={ART[s.file]} box={box} spec={{ cx: s.cx, cy: s.cy, w: s.w }} style={style} />
-      {lod === 'full' && <BurstWhite t={t} kick={kick} box={box} s={s} />}
+      {/* Steady shells only: the finale's shells are small and quick (budget: 24 views at full). */}
+      {lod === 'full' && s.finale === undefined && <BurstWhite t={t} kick={kick} box={box} s={s} />}
     </>
   );
 }
@@ -115,8 +116,9 @@ function ShellExtras({ t, kick, box, i }: RigProps & { i: number }) {
       {/* The rocket: a drawn spark star rising, not a blurred streak (art panel round 3). */}
       <Animated.Image source={SPARK} style={[styles.abs, { left: box.x + s.cx * box.w - size * 1.5, top: box.y + s.cy * box.h - size * 1.5,
         width: size * 3, height: size * 3 }, rocket]} />
-      <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + s.cx * box.w - flashSize / 2, top: box.y + s.cy * box.h - flashSize / 2,
-        width: flashSize, height: flashSize, tintColor: s.flash }, flash]} />
+      {/* The finale lights the shark through SharkFlash; only the steady shells carry a bloom glow (view budget). */}
+      {s.finale === undefined && <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + s.cx * box.w - flashSize / 2, top: box.y + s.cy * box.h - flashSize / 2,
+        width: flashSize, height: flashSize, tintColor: s.flash }, flash]} />}
     </>
   );
 }
@@ -135,7 +137,7 @@ export function SceneFlashOnShark(props: RigProps) {
   );
 }
 
-/** Each burst's own colour: a 0.45 peak held about 120 ms, then a 250 ms fade, shifted toward its side. */
+/** Each burst's own colour: a 0.65 peak (game feel round 6) held about 120 ms, then a 250 ms fade, shifted toward its side. */
 const FLASH_HOLD = 0.07;
 const FLASH_FADE = 0.16;
 
@@ -153,7 +155,7 @@ function SharkFlash({ t, kick, box, gold }: RigProps & { gold: boolean }) {
       if (v > f) { f = v; cx = shells[i].cx; cy = shells[i].cy; }
     }
     // The wash sits on the side and top facing the burst.
-    return { opacity: 0.45 * f, transform: [{ translateX: (cx - 0.5) * box.w * 0.45 }, { translateY: (cy - 0.2) * box.h * 0.4 }] };
+    return { opacity: 0.65 * f, transform: [{ translateX: (cx - 0.5) * box.w * 0.45 }, { translateY: (cy - 0.2) * box.h * 0.4 }] };
   });
   return <Animated.Image source={GLOW} style={[styles.abs, { left: box.x + box.w * 0.52 - size / 2, top: box.y + box.h * 0.1,
     width: size, height: size, tintColor: gold ? '#ffc94a' : '#ff6fd0' }, style]} />;

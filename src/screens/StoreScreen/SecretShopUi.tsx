@@ -174,17 +174,9 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
     const k = burst.value;
     const s = 0.6 + 0.65 * k;
     return {
-      // A half-alpha gold on the dim reads brown, so the gold cuts out at full strength and a
-      // white-hot copy carries the last stretch: it goes out lighter, never muddier.
-      opacity: k <= 0 ? 0 : s <= 1.02 ? 1 : 0,
-      transform: [{ scale: s }, { rotate: `${k * 24}deg` }],
-    };
-  });
-  const burstWhiteStyle = useAnimatedStyle(() => {
-    const k = burst.value;
-    const s = 0.6 + 0.65 * k;
-    return {
-      opacity: k <= 0 || s <= 1.02 ? 0 : Math.max(0, 0.9 * (1.1 - s) / 0.08),
+      // Any partial alpha on the dim reads brown or grey (art panel rounds 5 and 6), so the burst
+      // stays solid gold to its 1.1 peak and pops out in one frame while the sparks fly on.
+      opacity: k <= 0 || s >= 1.1 ? 0 : 1,
       transform: [{ scale: s }, { rotate: `${k * 24}deg` }],
     };
   });
@@ -193,7 +185,6 @@ export function UnlockBeat({ trigger, still }: { trigger: number; still: boolean
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0830' }, dimStyle]} />
       <View pointerEvents="none" style={styles.burstAnchor}>
         <Animated.Image source={BURST} style={[{ width: 240, height: 236 }, burstStyle]} />
-        <Animated.Image source={BURST} style={[{ position: 'absolute', width: 240, height: 236, tintColor: '#fff8ea' }, burstWhiteStyle]} />
         {UNLOCK_SPARKS.map(i => <UnlockSpark key={i} i={i} burst={burst} />)}
       </View>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flare, flareStyle]} />
