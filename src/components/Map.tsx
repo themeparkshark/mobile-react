@@ -2,6 +2,8 @@ import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
+import { GlidingMarker } from './map/GlidingMarker';
+import { glideDurationMs, glideMeters } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
@@ -47,6 +49,18 @@ const FOLLOW_ZOOM = 17.6;
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
+/**
+ * The panned-away shark marker draws in a fixed box that clips (overflow hidden).
+ * The shark bobs and its wake drifts with Reanimated transforms, and Reanimated
+ * writes them into the shadow tree on every React commit. With overflow visible
+ * that changed the marker's overflow inset, so each commit (every GPS tick) sent
+ * the native marker a new layout, and the iOS interop re-placed it at its React
+ * origin, the map's top-left corner, until the next map frame. A clipped box has
+ * no overflow inset: the marker's layout never changes. Tall enough for the wake
+ * (it spills ~45 pt under the 110 pt shark box); the ground point stays 71.5 pt down.
+ */
+const SHARK_MARKER_CLIP = { width: 100, height: 156 } as const;
+const SHARK_MARKER_ANCHOR = { x: 0.5, y: 71.5 / SHARK_MARKER_CLIP.height } as const;
 
 /** Map points per metre at this zoom and latitude (MapLibre: 512-point world tiles). */
 export function pointsPerMeter(zoom: number, latitude: number): number {
@@ -166,22 +180,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       return;
     }
 
-    // Calculate distance to scale animation duration —
-    // short steps (walking) get a quick glide, longer jumps (GPS catch-up) get more time
+    // The camera eases with the same glide as the panned-away marker (map/glide.ts):
+    // 600 ms for a step, up to 1 s for a stride, a jump for a re-seat (out of the car).
     const prev = prevLocationRef.current;
-    const R = 6371e3;
-    const p1 = (prev.latitude * Math.PI) / 180;
-    const p2 = (location.latitude * Math.PI) / 180;
-    const dp = ((location.latitude - prev.latitude) * Math.PI) / 180;
-    const dl = ((location.longitude - prev.longitude) * Math.PI) / 180;
-    const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-    const distMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    // Duration scales with distance:
-    // ~500ms for small walking steps (1-3m) — keeps shark responsive
-    // ~1000ms for normal strides (5-10m) — smooth and natural
-    // ~1500ms max for GPS catch-up jumps — no jarring teleports
-    const glideDuration = Math.min(1500, Math.max(500, distMeters * 80));
+    const distMeters = glideMeters(prev, location);
+    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location);
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
     glideRef.current = glideDuration;
@@ -650,10 +653,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Both shark copies stay mounted and swap by opacity: remounting on every
             drag reloaded the outfit images and made the shark flash. */}
         {/* Always mounted: with no location it parks hidden (opacity 0, no touch) instead of
-            mounting mid-list when the first fix lands (MapLibre insertReactSubview crash class). */}
-        <Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location} anchor={{ x: 0.5, y: 0.65 }}>
-          <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
-        </Marker>
+            mounting mid-list when the first fix lands (MapLibre insertReactSubview crash class).
+            Panned away, it glides between fixes instead of jumping. */}
+        {/* The fixed, clipped box keeps the marker's layout identical on every commit while the
+            shark bobs: a changed layout made React re-place the native marker at the map's
+            top-left corner for a frame (the "hop"; see SHARK_MARKER_CLIP). */}
+        <GlidingMarker coordinate={location ?? FALLBACK_CENTER} hidden={!location} glide={!focusedOnPlayer && !reducedMotion}
+          anchor={SHARK_MARKER_ANCHOR}>
+          <View style={[styles.sharkMarkerClip, { opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }]}>{playerShark}</View>
+        </GlidingMarker>
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
@@ -746,6 +754,7 @@ const styles = StyleSheet.create({
   // The shark's ground point sits 65% down its 110px box; lift it so that
   // point lands exactly on the map center the camera is following.
   centerShark: { transform: [{ translateY: -16.5 }] },
+  sharkMarkerClip: { ...SHARK_MARKER_CLIP, overflow: 'hidden', alignItems: 'center' },
   sharkMarkerContainer: {
     width: 100,
     height: 110,

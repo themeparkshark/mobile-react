@@ -183,8 +183,8 @@ test('Map.tsx: both tints are background layers and no direct MapView child is m
 test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {
   const map = read('src/components/Map.tsx');
   const marker = read('src/components/map/Marker.tsx');
-  assert.equal((map.match(/<Marker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
-  assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<Marker/, 'no `{location && <Marker>}`');
+  assert.equal((map.match(/<GlidingMarker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
+  assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<(Gliding)?Marker/, 'no `{location && <Marker>}`');
   assert.doesNotMatch(map, /\{location \? \(\s*\n?\s*<Marker/);
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
   assert.match(marker, /hidden = false/);
