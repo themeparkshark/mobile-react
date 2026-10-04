@@ -139,10 +139,12 @@ test('the app classifies the panel probe set like the server: personal info and 
     for (const text of list) {
       // self_harm and personal_question are server holds, never app blocks.
       const blocked = model.checkDraft(text, 100000);
+      // Care first, like the server (R10).
       const got = want === 'self_harm' ? (model.isDistress(text) ? 'self_harm' : 'missed')
-        : (blocked ?? (model.isCareCheck(text) ? 'care_check' : model.needsReview(text) ? 'personal_question' : 'ok'));
+        : model.isCare(text) ? 'care_check'
+        : (blocked ?? (model.needsReview(text) ? 'personal_question' : 'ok'));
       // Mean words are the server's job; the composer only explains safety rules early.
-      const expected = want === 'mean' ? (model.isCareCheck(text) ? 'care_check' : model.needsReview(text) ? 'personal_question' : 'ok') : want;
+      const expected = want === 'mean' ? (model.needsReview(text) ? 'personal_question' : 'ok') : want;
       if (got !== expected) wrong.push(`${text} => ${got} (want ${expected})`);
     }
   }
@@ -191,8 +193,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '285f721f129e4fc063db98db90a78a3974324892bc4deb9e210950605c915d57');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'cae94db87534163009ef3537a7129e5b1557c9e5a4fd027581e53182b91e5f27');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '767436f566d9149d0be6483344121b230c904975b0fa3ef6bd65103a2634d7a6');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'a6ea5815813b4238515aaf37aaba1c91c75068aba7053d19f732b09b9644b7b8');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -419,4 +421,14 @@ test('R9: park hyperbole never shows the 988 line, structural self-harm wording 
   for (const t of ['honestly thinking about jumping in front of a train', 'no point in me waking up anymore', 'i feel like a waste of space']) assert.equal(model.isDistress(t) || model.isCareCheck(t), true, t);
   assert.match(read('src/screens/ThreadScreen.tsx'), /phrase === 'Trade in Pin Swap\?' \? 'Pin Swap\?' : phrase/);
   assert.notEqual(model.SAFE_CHAT_CATEGORIES.find((c) => c.key === 'collections').icon, 'pin', 'pin reads as a map marker');
+});
+
+test('R10: care-matching text is never stopped in the app (insults or a phone number in it), aimed-at-others is not care', () => {
+  for (const t of ['im a worthless idiot i should just jump', 'loser like me should not be here', 'text me 407 555 0199 before i do something to myself', 'stupid ugly me should just stop breathing']) {
+    assert.equal(model.isCare(t), true, t);
+    assert.equal(model.checkDraft(t), null, `${t} goes to the server to be held, never refused here`);
+  }
+  assert.equal(model.isAimedAtOthers('go unalive urself'), true);
+  assert.equal(model.isCare('go unalive urself'), false);
+  assert.equal(model.checkDraft('text me at 714 555 0199'), 'personal_info');
 });

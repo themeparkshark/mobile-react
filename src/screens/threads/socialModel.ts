@@ -439,6 +439,20 @@ export function isCareCheck(text: string): boolean {
   return matchesAny(CARE_WIDE, words);
 }
 
+/** Same as SafeText::isAimedAtOthers: self-harm words aimed at someone else ("go unalive urself"). */
+const MEAN_PHRASES = compile(RULES.mean_phrases);
+export function isAimedAtOthers(text: string): boolean {
+  if (!text.trim()) return false;
+  const words = wordForm(text);
+  if (/\b(kys|go\s+die|go\s+jump\s+off)\b/u.test(words)) return true;
+  return /\b(u|you|ur|your|urself|yourself|ya|yall)\b/u.test(words) && matchesAny(MEAN_PHRASES, forms(text));
+}
+
+/** Care-matching text (narrow or wide, about the author): never blocked in the app. */
+export function isCare(text: string): boolean {
+  return (isDistress(text) || isCareCheck(text)) && !isAimedAtOthers(text);
+}
+
 export const CARE_LINE = "It sounds like you're having a hard time. You matter. Please talk to a grown-up you trust, like a parent or teacher. If you feel unsafe right now, call or text 988.";
 
 /** Same as SafeText::needsReview: "u" plus a personal topic. The server holds it; the app does not block. */
@@ -468,6 +482,9 @@ export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
   const trimmed = text.trim();
   if (!trimmed) return 'empty';
   if (trimmed.length > max) return 'too_long';
+  // Care first, like the server: self-harm words about the author are never stopped here, even
+  // with a phone number or insults in them. The server holds them for a grown-up and alerts.
+  if (isCare(trimmed)) return null;
   if (hasContactDetails(trimmed)) return 'personal_info';
   if (isGrooming(trimmed)) return 'grooming';
   if (hasPersonalInfo(trimmed)) return 'personal_info';
