@@ -195,6 +195,7 @@ test('round 5: one reward bank survives a reopened player, shows the reward firs
   assert.match(screen, /nextBankDialog\(bank\.current, playerOpen\.current \|\| dialogOpen\.current\)/);
   assert.match(screen, /if \(retrying\.current \|\| unsaved\.length === 0\) return;/);
   assert.match(screen, /LayoutAnimation\.configureNext/);
+  assert.match(screen, /!showUnsaved && !settling/);
   // Legacy rows go through the same bank, so a failed save is never silent.
   assert.match(screen, /if \(!post\.has_watched\) save\(post\);/);
 });
