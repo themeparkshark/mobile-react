@@ -112,6 +112,8 @@ export interface StandingsBoardModel {
   readonly review: { readonly rides: number; readonly benched: boolean } | null;
   /** Infinite scroll (v3): where the next page starts; null when every row is here. */
   readonly nextOffset: number | null;
+  /** Rows the server sends per page (50 by default). */
+  readonly pageSize: number;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -171,6 +173,7 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
     goals,
     lastWeek,
     nextOffset: nextOffsetOf(dto?.next_offset),
+    pageSize: Math.max(3, num(dto?.page_size, 50)),
   };
 }
 
@@ -278,6 +281,11 @@ export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'a
 /** Index of the first placeholder row, or -1 when every row is loaded. */
 export function firstSkeletonIndex(items: readonly ListItem[]): number {
   return items.findIndex(item => item.type === 'skeleton');
+}
+
+/** Only the first page is here and more exist: page 2 can be fetched while the kid looks at the podium. */
+export function onlyFirstPage(model: Pick<StandingsBoardModel, 'nextOffset' | 'rows' | 'pageSize'>): boolean {
+  return model.nextOffset != null && model.rows.length <= model.pageSize;
 }
 
 /**

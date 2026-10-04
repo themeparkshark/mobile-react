@@ -37,6 +37,8 @@ test('a first page knows where the next page starts; older servers mean no pagin
   assert.equal(model.boardModel(firstPage({ next_offset: undefined }), 'week', 5).nextOffset, null, 'v2 servers send no next_offset');
   assert.equal(model.boardModel(firstPage({ next_offset: null }), 'week', 5).nextOffset, null);
   assert.equal(model.boardModel(firstPage({ next_offset: 'x' }), 'week', 5).nextOffset, null, 'junk never pages');
+  assert.equal(model.onlyFirstPage(m), true);
+  assert.equal(model.onlyFirstPage(model.mergePage(m, { rows: ranked(51, 100), next_offset: 100 }, 5)), false, 'page 2 on idle fetches once, not on every tab return');
 });
 
 test('grey rows hold the place where the next page lands, before the Your spot block', () => {

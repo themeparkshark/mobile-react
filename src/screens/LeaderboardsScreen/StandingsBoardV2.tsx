@@ -47,7 +47,7 @@ import {
   cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import {
-  DIVIDER_HEIGHT, firstSkeletonIndex, safeToInsert, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  DIVIDER_HEIGHT, firstSkeletonIndex, onlyFirstPage, safeToInsert, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -526,7 +526,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const setModelRef = useRef(setModel);
   // Page 2 is fetched while the kid looks at the podium (from the network or
   // the warm cache alike), so the first fling never waits on the network.
-  const firstPageOnly = !!model && model.nextOffset != null && model.rows.length <= model.nextOffset;
+  const firstPageOnly = !!model && onlyFirstPage(model);
   useEffect(() => {
     if (!active || !firstPageOnly) return undefined;
     const task = InteractionManager.runAfterInteractions(() => moreRef.current('idle'));
