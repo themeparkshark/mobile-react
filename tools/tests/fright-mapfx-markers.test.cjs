@@ -91,7 +91,7 @@ test('map GL sources are always mounted (lamps, crowd haze, guide line): off mea
 test('the player shark is one always-mounted Marker: parked hidden without a location, never mounted mid-list', () => {
   const map = read('src/components/Map.tsx');
   assert.doesNotMatch(map, /\{location && \(\s*<(Gliding)?Marker/);
-  assert.match(map, /<GlidingMarker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/);
+  assert.match(map, /<PlayerSharkMarker target=\{location \?\? null\}/);
   const marker = read('src/components/map/Marker.tsx');
   assert.match(marker, /hidden = false/);
 });

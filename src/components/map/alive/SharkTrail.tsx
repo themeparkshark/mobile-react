@@ -71,22 +71,29 @@ const styles = StyleSheet.create({
   box: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   sparkle: { position: 'absolute', width: 16, height: 16 },
   dot: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#fff6cf' },
-  wake: { position: 'absolute', bottom: -6, width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
+  wake: { position: 'absolute', bottom: 10, width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   wakeSparkle: { position: 'absolute', width: 17, height: 17, marginLeft: -8.5, marginTop: -8.5 },
 });
 
 /**
  * The shark's wake while it walks: gold sparkles spill from under its feet and
- * drift back down the screen, fading. Screen space (it rides with the shark),
- * so it reads at any zoom, where the ground trail above can sit under the
- * shark. `moving` eases to 1 on each step and back to 0 when the shark stops.
+ * drift away behind it, fading. Screen space (it rides with the shark), so it
+ * reads at any zoom, where the ground trail above can sit under the shark.
+ * `moving` eases to 1 on each real step and back to 0 when the shark stops, so
+ * a shark standing still has no wake. `trail` (radians, from the map) turns the
+ * wake to stream opposite the direction of travel; 0 streams down the screen.
  */
-export const SharkWake = memo(function SharkWake({ moving }: { readonly moving: SharedValue<number> }) {
+export const SharkWake = memo(function SharkWake({ moving, trail }: {
+  readonly moving: SharedValue<number>;
+  readonly trail?: SharedValue<number>;
+}) {
   const { clock, caps, running } = useMapAlive();
+  // Hooks before the early return (rules of hooks).
+  const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${trail ? trail.value : 0}rad` }] }), [trail]);
   if (!running || caps.trail <= 0) return null;
-  return <View pointerEvents="none" style={styles.wake}>
+  return <Animated.View pointerEvents="none" style={[styles.wake, turn]}>
     {Array.from({ length: Math.min(6, caps.trail) }, (_, k) => <WakeSparkle key={k} k={k} n={Math.min(6, caps.trail)} clock={clock} moving={moving} />)}
-  </View>;
+  </Animated.View>;
 });
 
 function WakeSparkle({ k, n, clock, moving }: { k: number; n: number; clock: SharedValue<number>; moving: SharedValue<number> }) {

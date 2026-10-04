@@ -2,10 +2,11 @@ import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
-import { GlidingMarker } from './map/GlidingMarker';
+import { PlayerSharkMarker } from './map/PlayerSharkMarker';
+import { courseDeg, wakeTurn } from './map/playerMotion';
 import { glideDurationMs, glideMeters } from './map/glide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
@@ -45,17 +46,17 @@ const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 /**
- * The panned-away shark marker draws in a fixed box that clips (overflow hidden).
- * The shark bobs and its wake drifts with Reanimated transforms, and Reanimated
- * writes them into the shadow tree on every React commit. With overflow visible
- * that changed the marker's overflow inset, so each commit (every GPS tick) sent
- * the native marker a new layout, and the iOS interop re-placed it at its React
- * origin, the map's top-left corner, until the next map frame. A clipped box has
- * no overflow inset: the marker's layout never changes. Tall enough for the wake
- * (it spills ~45 pt under the 110 pt shark box); the ground point stays 71.5 pt down.
+ * The shark's ground point (the middle of its blue ground ring) inside its
+ * 100 x 110 box: the player's location sits exactly here, on the map marker and
+ * at screen center while following.
  */
-const SHARK_MARKER_CLIP = { width: 100, height: 156 } as const;
-const SHARK_MARKER_ANCHOR = { x: 0.5, y: 71.5 / SHARK_MARKER_CLIP.height } as const;
+const SHARK_GROUND = { x: 50, y: 99 } as const;
+/** The weak-GPS ring: drawn at most this wide (points), scaled down to the fix's accuracy circle. */
+const WEAK_RING_MAX_PT = 200;
+const WEAK_RING_MIN_PT = 90;
+const WEAK_RING_MIN_M = 40;
+// Radial falloff texture (the weak-GPS glow pool).
+const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
 /** Map points per metre at this zoom and latitude (MapLibre: 512-point world tiles). */
 export function pointsPerMeter(zoom: number, latitude: number): number {
@@ -95,7 +96,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
   readonly fright?: FrightMapInput | null;
 }) {
-  const { location } = useContext(LocationContext);
+  const { location, gpsSignal } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
   const { player } = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
@@ -127,6 +128,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // thread. Loops stop on unmount; reduced motion holds the shark still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
   const wake = useSharedValue(0);
+  // The camera as the shark's UI-thread motion needs it: points per metre and bearing.
+  const zoomPpm = useSharedValue(0);
+  const mapBearing = useSharedValue(0);
+  // Travel course (compass degrees) of the last real step; the wake streams opposite it.
+  const travelCourse = useSharedValue(0);
+  const wakeTrail = useDerivedValue(() => wakeTurn(travelCourse.value, mapBearing.value));
   useEffect(() => {
     if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
@@ -140,6 +147,19 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }));
   const shadowStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 1 - 0.15 * idle.value }, { scaleY: 1 - 0.15 * idle.value }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.4 * glow.value }));
+  // Weak GPS: a soft ring the size of the fix's uncertainty breathes under the shark
+  // (the map's glow art, cool and faint). No words; it fades away once fixes are good.
+  const weak = useSharedValue(0);
+  const weakAccuracy = useSharedValue(WEAK_RING_MIN_M);
+  useEffect(() => {
+    weak.value = withTiming(gpsSignal?.weak ? 1 : 0, { duration: 700 });
+    if (gpsSignal?.accuracyMeters) weakAccuracy.value = withTiming(gpsSignal.accuracyMeters, { duration: 700 });
+  }, [gpsSignal?.weak, gpsSignal?.accuracyMeters, weak, weakAccuracy]);
+  const weakRingStyle = useAnimatedStyle(() => {
+    const ppm = zoomPpm.value > 0 ? zoomPpm.value : 3;
+    const size = Math.min(WEAK_RING_MAX_PT, Math.max(WEAK_RING_MIN_PT, 2 * weakAccuracy.value * ppm));
+    return { opacity: weak.value * (0.3 + 0.25 * glow.value), transform: [{ scale: (size / WEAK_RING_MAX_PT) * (0.95 + 0.07 * glow.value) }] };
+  });
 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
@@ -177,14 +197,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const prev = prevLocationRef.current;
     const distMeters = glideMeters(prev, location);
     const arrived = Date.now();
-    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, arrived - lastFixAtRef.current);
+    const previousFixAt = lastFixAtRef.current;
+    const glideDuration = reducedMotion ? 0 : glideDurationMs(prev, location, arrived - previousFixAt);
     lastFixAtRef.current = arrived;
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
     glideRef.current = glideDuration;
     pushCamera(glideDuration);
-    // A real step (not GPS wobble) stirs the shark's wake for the glide, then it settles.
-    if (distMeters >= 1 && distMeters < 60) {
+    // A real step (not GPS wobble or a slow drift of the estimate) stirs the shark's wake,
+    // turned to stream behind the travel direction, then it settles. Standing still: no wake.
+    const sinceLastS = (arrived - previousFixAt) / 1000;
+    const walking = distMeters >= 1 && distMeters < 60 && (previousFixAt === 0 || distMeters / Math.max(0.5, sinceLastS) >= 0.4);
+    const course = courseDeg(prev, location);
+    if (walking && course !== null) travelCourse.value = course;
+    if (walking) {
       wake.value = withSequence(withTiming(1, { duration: 200 }), withDelay(glideDuration + 600, withTiming(0, { duration: 700 })));
     }
   }, [location?.latitude, location?.longitude]);
@@ -300,6 +326,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
+  const ppmLat = location ? Math.round(location.latitude * 100) / 100 : null;
+  const noteCamera = (zoom: number, bearing: number) => {
+    if (Number.isFinite(zoom) && ppmLat !== null) zoomPpm.value = pointsPerMeter(zoom, ppmLat);
+    if (Number.isFinite(bearing)) mapBearing.value = bearing;
+  };
+  useEffect(() => { if (ppmLat !== null) zoomPpm.value = pointsPerMeter(cameraZoom, ppmLat); }, [cameraZoom, ppmLat, zoomPpm]);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
   useEffect(() => {
@@ -366,12 +398,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
   const playerShark = (
       <View style={styles.sharkMarkerContainer}>
+        {/* Weak GPS: always mounted (faded out when the signal is good). */}
+        <Reanimated.View pointerEvents="none" style={[styles.weakRing, weakRingStyle]}>
+          <Image source={GROUND_GLOW} tintColor="#5f9fd8" style={StyleSheet.absoluteFill} contentFit="fill" />
+        </Reanimated.View>
         {/* Animated glow ring */}
         <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
         {/* Inner blue ring (ground indicator) */}
         <View style={styles.groundRing} />
         {/* Wake: sparkles spill from under the shark while it walks. */}
-        <SharkWake moving={wake} />
+        <SharkWake moving={wake} trail={wakeTrail} />
         {/* Animated shadow — shrinks when shark bobs up */}
         <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}
@@ -470,10 +506,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           void mapViewRef.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
           }).catch(() => undefined); }}
+        onRegionIsChanging={(feature) => {
+          // The shark's UI-thread glide reads the live zoom and bearing.
+          noteCamera(Number(feature.properties?.zoomLevel), Number(feature.properties?.heading));
+        }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
+          noteCamera(zoom, Number(feature.properties?.heading));
           if (Number.isFinite(zoom)) {
             onZoomChange?.(zoom);
             setCameraZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
@@ -568,13 +609,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Always mounted: with no location it parks hidden (opacity 0, no touch) instead of
             mounting mid-list when the first fix lands (MapLibre insertReactSubview crash class).
             Panned away, it glides between fixes instead of jumping. */}
-        {/* The fixed, clipped box keeps the marker's layout identical on every commit while the
-            shark bobs: a changed layout made React re-place the native marker at the map's
-            top-left corner for a frame (the "hop"; see SHARK_MARKER_CLIP). */}
-        <GlidingMarker coordinate={location ?? FALLBACK_CENTER} hidden={!location} glide={!focusedOnPlayer && !reducedMotion}
-          anchor={SHARK_MARKER_ANCHOR}>
-          <View style={[styles.sharkMarkerClip, { opacity: focusedOnPlayer ? 0 : 1 }]}>{playerShark}</View>
-        </GlidingMarker>
+        {/* Moves on the UI thread at the display rate and never changes layout (PlayerSharkMarker). */}
+        <PlayerSharkMarker target={location ?? null} visible={!focusedOnPlayer} glide={!reducedMotion}
+          zoomPpm={zoomPpm} bearingDeg={mapBearing} groundX={SHARK_GROUND.x} groundY={SHARK_GROUND.y}>
+          {playerShark}
+        </PlayerSharkMarker>
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
@@ -655,10 +694,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // The shark's ground point sits 65% down its 110px box; lift it so that
-  // point lands exactly on the map center the camera is following.
-  centerShark: { transform: [{ translateY: -16.5 }] },
-  sharkMarkerClip: { ...SHARK_MARKER_CLIP, overflow: 'hidden', alignItems: 'center' },
+  // Lift the 110 pt box so its ground point (SHARK_GROUND, the ring's middle) lands
+  // exactly on the map center the camera is following.
+  centerShark: { transform: [{ translateY: 55 - SHARK_GROUND.y }] },
+  weakRing: { position: 'absolute', width: WEAK_RING_MAX_PT, height: WEAK_RING_MAX_PT,
+    left: SHARK_GROUND.x - WEAK_RING_MAX_PT / 2, top: SHARK_GROUND.y - WEAK_RING_MAX_PT / 2 },
   sharkMarkerContainer: {
     width: 100,
     height: 110,
