@@ -687,7 +687,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {debugOn && debugRects && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {[...debugRects.entries()].map(([id, { body, tag }]) => <View key={id}>
-          <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]} />
+          <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]}>
+            <Text style={styles.debugLabel} numberOfLines={2}>{id}</Text>
+          </View>
           {tag && <View style={[styles.debugTag, { left: tag.x, top: tag.y, width: tag.w, height: tag.h }]} />}
         </View>)}
       </View>}
@@ -749,6 +751,7 @@ function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonl
 const styles = StyleSheet.create({
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
+  debugLabel: { fontSize: 8, lineHeight: 9, color: '#ffffff', backgroundColor: 'rgba(160,0,150,0.8)', alignSelf: 'flex-start', paddingHorizontal: 1 },
   guideArrow: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, zIndex: 9 },
   recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },

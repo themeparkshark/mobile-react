@@ -123,3 +123,18 @@ test('ride timers share the find clock: round up, hours past 60 min, fade themse
   assert.match(body, /withTiming\(done \? 0 : 1/, 'fades out at zero from inside the timer');
   assert.doesNotMatch(src, /<View style=\{\[styles\.timerBadge/, 'the chip itself fades, not just its text');
 });
+
+test('the pointer line and the +N badge are always mounted and animate in (no pop)', () => {
+  const placed = read('src/components/map/declutter/Placed.tsx');
+  assert.doesNotMatch(placed, /\{leader && <Leader/, 'the leader never mounts on a condition');
+  assert.match(placed, /<Leader anchor=\{anchor\} leader=\{tag\?\.leader \?\? null\} reduced=\{reduced\} \/>/);
+  const leader = placed.slice(placed.indexOf('function Leader('), placed.indexOf('export function foldLabel'));
+  assert.doesNotMatch(leader, /return null/);
+  const badge = placed.slice(placed.indexOf('export function FoldBadge'), placed.indexOf('const styles'));
+  assert.doesNotMatch(badge, /return null/, 'the badge fades out, never unmounts');
+  assert.match(placed, /export const FOLD_POP_MS = 120;/);
+  assert.match(badge, /scale: reduced \? 1 : 0\.8 \+ 0\.2 \* k\.value/, 'scales in 0.8 to 1, none under Reduce Motion');
+  const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.match(task, /<FoldBadge count=\{folded\} style=\{styles\.clusterBadge\} \/>/);
+  assert.doesNotMatch(task, /folded > 0 && <View/);
+});

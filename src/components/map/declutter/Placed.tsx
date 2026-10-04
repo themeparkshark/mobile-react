@@ -105,10 +105,9 @@ export function TagSlot({ tag, anchor, width, height, fallback, children }: {
     o.value = withTiming(tag === null ? 0 : 1, { duration: FADE_MS });
   }, [at.x, at.y, tag === null, reduced, x, y, o]); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateX: x.value }, { translateY: y.value }] }));
-  const leader = tag?.leader ?? null;
   return (
     <>
-      {leader && <Leader anchor={anchor} {...leader} />}
+      <Leader anchor={anchor} leader={tag?.leader ?? null} reduced={reduced} />
       <Animated.View pointerEvents="none" style={[styles.slot, { left: anchor.x, top: anchor.y, width, height }, style]}>
         {children}
       </Animated.View>
@@ -116,15 +115,29 @@ export function TagSlot({ tag, anchor, width, height, fallback, children }: {
   );
 }
 
-function Leader({ anchor, x1, y1, x2, y2 }: { anchor: { x: number; y: number }; x1: number; y1: number; x2: number; y2: number }) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const length = Math.hypot(dx, dy);
-  if (length < 4) return null;
-  const angle = Math.atan2(dy, dx);
-  return <View pointerEvents="none" style={[styles.leader, {
-    left: anchor.x + (x1 + x2) / 2 - length / 2, top: anchor.y + (y1 + y2) / 2 - 1, width: length,
-    transform: [{ rotate: `${angle}rad` }],
-  }]} />;
+type LeaderLine = { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number };
+
+/**
+ * The pointer line from the art to a far chip. Always mounted: it draws in with
+ * the chip (fade and grow from the art end) and fades out where it was, so a chip
+ * changing slot never makes a line pop in or out.
+ */
+function Leader({ anchor, leader, reduced }: { anchor: { x: number; y: number }; leader: LeaderLine | null; reduced: boolean }) {
+  const shown = !!leader && Math.hypot(leader.x2 - leader.x1, leader.y2 - leader.y1) >= 4;
+  const last = useRef<LeaderLine>(leader ?? { x1: 0, y1: 0, x2: 0, y2: 0 });
+  if (shown) last.current = leader!;
+  const { x1, y1, x2, y2 } = last.current;
+  const k = useSharedValue(shown ? 1 : 0);
+  useEffect(() => {
+    k.value = reduced ? (shown ? 1 : 0) : withTiming(shown ? 1 : 0, { duration: shown ? TAG_MOVE_MS : FADE_MS });
+  }, [shown, reduced, k]);
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  // Grows out of the art end (x1, y1): scale about the line's left edge.
+  const style = useAnimatedStyle(() => ({ opacity: k.value, transform: [{ rotate: `${angle}rad` }, { scaleX: 0.4 + 0.6 * k.value }] }));
+  return <Animated.View pointerEvents="none" style={[styles.leader, {
+    left: anchor.x + x1, top: anchor.y + y1 - 1, width: Math.max(1, length), transformOrigin: 'left center',
+  } as ViewStyle, style]} />;
 }
 
 /** "+3", or "9+" past nine (a far zoom folds whole lands into one island). */
@@ -132,13 +145,26 @@ export function foldLabel(count: number): string {
   return count > 9 ? '9+' : `+${count}`;
 }
 
-/** "+N" for markers folded into this one (haunts; rides draw their own). */
+export const FOLD_POP_MS = 120;
+
+/**
+ * "+N" for markers folded into this one. Always mounted: it scales in from 0.8
+ * over 120 ms when markers fold in (no scale under Reduce Motion) and fades out
+ * keeping its last count, never popping.
+ */
 export function FoldBadge({ count, style }: { readonly count: number; readonly style?: ViewStyle }) {
-  if (count <= 0) return null;
+  const reduced = useReducedGameMotion();
+  const last = useRef(count);
+  if (count > 0) last.current = count;
+  const k = useSharedValue(count > 0 ? 1 : 0);
+  useEffect(() => {
+    k.value = withTiming(count > 0 ? 1 : 0, { duration: count > 0 ? FOLD_POP_MS : FADE_MS });
+  }, [count > 0, k]); // eslint-disable-line react-hooks/exhaustive-deps
+  const anim = useAnimatedStyle(() => ({ opacity: k.value, transform: [{ scale: reduced ? 1 : 0.8 + 0.2 * k.value }] }));
   return (
-    <View pointerEvents="none" style={[styles.fold, style]}>
-      <Text style={styles.foldText}>{foldLabel(count)}</Text>
-    </View>
+    <Animated.View pointerEvents="none" style={[styles.fold, style, anim]}>
+      <Text style={styles.foldText}>{foldLabel(Math.max(1, last.current))}</Text>
+    </Animated.View>
   );
 }
 
