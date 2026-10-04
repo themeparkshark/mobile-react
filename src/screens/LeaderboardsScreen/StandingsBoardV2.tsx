@@ -633,6 +633,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const jumpingUntil = useRef(0);
   const canInsert = useCallback(() => Date.now() >= jumpingUntil.current && safeToInsert(firstVisible.current, itemsRef.current), []);
   const apply = useCallback((next: StandingsBoardModel) => {
+    // (r3: React startTransition throws inside this RN build's renderer, so a page lands as a normal update.)
     setModel(next);
     // Only a page the kid can see becomes the cached board.
     commitBoard(meId, board, parkId, next);
@@ -664,7 +665,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
         heldPage.current = next;
         if (STANDINGS_PERF_ON) perfMark(`page-held ${board}`);
       }
-    }).catch(() => {
+    }).catch(error => {
+      if (STANDINGS_PERF_ON) perfMark(`page-error ${String((error as Error)?.message ?? error).slice(0, 160)}`);
       failures.current += 1;
       retryAt.current = Date.now() + Math.min(8000, 1000 * 2 ** (failures.current - 1));
       if (failures.current >= 3) setPageFailed(true);
