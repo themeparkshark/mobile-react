@@ -59,6 +59,23 @@ test('T2 one modal at a time: arrival order, the team pick first, never in quiet
   assert.match(read('src/components/fright/FrightLayer.tsx'), /visible=\{!!engine\.recapOffer && !engine\.modal\}/, 'exit card waits too');
 });
 
+test('T2 rank card first: a Case File found in line waits behind it; the finish rewards follow the rank; never yanks the modal on screen', () => {
+  const gate = { quiet: false, focused: true, foreground: true, blocked: false };
+  const rank = { id: 'rank:h:1', kind: 'rank', prompt: { key: 'h', name: 'H', reSwim: false, lastScore: null } };
+  let q = modals.pushModal([], { id: 'file:x', kind: 'case_file', file: { key: 'x' } });
+  q = modals.pushModal(q, { id: 'rewards:found:x', kind: 'rewards', rewards: [] });
+  q = modals.pushModal(q, rank);
+  q = modals.pushModal(q, { id: 'rewards:h:1', kind: 'rewards', rewards: [] });
+  assert.equal(q.map(m => m.id).join(','), 'rank:h:1,rewards:h:1,file:x,rewards:found:x');
+  assert.equal(modals.visibleModal(q, gate).id, 'rank:h:1');
+  // A Case File already on screen stays; the rank card is next.
+  let shown = modals.pushModal([], { id: 'file:y', kind: 'case_file', file: { key: 'y' } });
+  shown = modals.pushModal(shown, { id: 'rewards:found:y', kind: 'rewards', rewards: [] });
+  shown = modals.pushModal(shown, rank, 'file:y');
+  assert.equal(shown.map(m => m.id).join(','), 'file:y,rank:h:1,rewards:found:y');
+  assert.match(read('src/components/fright/useFrightEngine.ts'), /pushModal\(current, modal, showingModal\.current\)/);
+});
+
 test('T2 Case File reveal: flip from the silhouette to the front art, NEW stamp, year badge, title overlay; Reduce Motion fades', () => {
   const src = read('src/components/fright/CaseFileReveal.tsx');
   assert.match(src, /useReducedGameMotion/);

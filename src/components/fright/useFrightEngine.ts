@@ -170,7 +170,8 @@ export default function useFrightEngine(night: FrightNight, opts: {
   const [seenStore, setSeenStore] = useState<SeenStore | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [modals, setModals] = useState<FrightModal[]>([]);
-  const queueModal = useCallback((modal: FrightModal) => setModals(current => pushModal(current, modal)), []);
+  const showingModal = useRef<string | null>(null);
+  const queueModal = useCallback((modal: FrightModal) => setModals(current => pushModal(current, modal, showingModal.current)), []);
   const [toast, setToast] = useState<string | null>(null);
   const [tutorial, setTutorial] = useState<IntroPlan | 'replay'>(null);
   const [coach, setCoach] = useState<CoachState>(EMPTY_COACH);
@@ -625,6 +626,7 @@ export default function useFrightEngine(night: FrightNight, opts: {
   /* ---------- One modal at a time ---------- */
 
   const modal = visibleModal(modals, { quiet, focused, foreground, blocked: !!opts.blocked || sheetOpen || !!tutorial });
+  showingModal.current = modal?.id ?? null;
   const closeModal = useCallback(() => {
     setModals(current => {
       const shown = visibleModal(current, { quiet: false, focused: true, foreground: true, blocked: false });
