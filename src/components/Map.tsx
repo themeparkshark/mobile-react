@@ -49,7 +49,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, chromeHidden = false, fright = null, onUserPan }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -77,6 +77,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly chromeHidden?: boolean;
   /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
   readonly fright?: FrightMapInput | null;
+  /** A finger started moving the map. */
+  readonly onUserPan?: () => void;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -107,17 +109,17 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, frozen: ambientFrozen, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
-  // thread. Loops stop on unmount; reduced motion holds the shark still.
+  // thread. Loops stop on unmount; reduced motion, and a frozen map (a catch on top, a still capture), hold it still.
   const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
   const wake = useSharedValue(0);
   useEffect(() => {
-    if (reducedMotion || !screenFocused) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    if (reducedMotion || !screenFocused || ambientFrozen) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
     const ease = REasing.inOut(REasing.sin);
     idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
     sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
-  }, [reducedMotion, screenFocused, idle, sway, glow]);
+  }, [reducedMotion, screenFocused, ambientFrozen, idle, sway, glow]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -8 * idle.value }, { rotate: `${3 * sway.value}deg` }, { scale: 1 + 0.04 * idle.value }],
   }));
@@ -450,6 +452,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
           if (!feature.properties?.isUserInteraction) return;
+          onUserPan?.();
           // The moment a finger moves the map, stop following: the shark becomes a
           // map marker at its real spot (it is at screen center right now, so the
           // swap is invisible) and slides with the map. Waiting for the gesture to
