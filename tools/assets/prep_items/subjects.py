@@ -323,3 +323,37 @@ def subject(setkey, item):
         tier = TIER[rarity] if setkey in FOOD else TIER_GEAR[rarity]
         return f"{POSE[setkey]}: {R3[slug]}{colour}; {tier}; {NOT[setkey]}"
     return _subject_v2(setkey, item)
+
+
+# ---- Round 4: one shared legendary signature (crown + sparkles), bigger toffee shard.
+R4 = {
+    'churro_16': "churro rolled in toffee bits with one big jagged dark amber toffee shard, half as long as the churro, angled out from the side like a sail",
+}
+R4.update({
+    'churro_04': "churro coated in sparkly light-brown sugar crystals with a big pile of three golden-brown sugar cubes beside the cup, the pile as big as the cup",
+    'churro_20': "churro with a thick tan cookie butter swirl down its length and a small round glass jar of cookie butter with a spoon sticking out beside it, the jar as big as the cup, no label text",
+    'churro_40': "twisted spiral churro with bold saturated rainbow glaze bands in red, orange, yellow, green, blue and purple, tiny star sprinkles, a shooting star topper on the tip, and an iridescent sleeve, extra thick dark outline",
+})
+for n in range(31, 36):
+    R4[f'flashlight_{n}'] = ("Hollywood flashlight: a classic flashlight body wrapped with a film strip band, topped with a wide square stage-spotlight "
+                             "head with four flat barn-door flaps opened around the lens, NOT a projector")
+LEGEND_R4 = {
+    'churro_39': ("churro whose whole body is shiny solid gold glitter sugar, deep gold all over with bright gold highlights, in a white paper "
+                  "cup with a wide gold band, a gold crown on its tip, and four crisp four-point sparkles, same size as a normal churro"),
+    'pretzel_39': ("gleaming gold pretzel with shiny gold leaf, three small jewels in the knot, a small jewelled gold crown sitting on top of "
+                   "the knot, and four crisp four-point sparkles around it"),
+    'pretzel_40': ("pretzel made of faceted sparkling clear blue diamond crystal with gem facets, a small silver crown with blue gems on top "
+                   "of the knot, and four crisp four-point sparkles around it"),
+}
+_subject_v3 = subject
+
+
+def subject(setkey, item):
+    slug = item[0]
+    if slug in LEGEND_R4:
+        return f"{POSE[setkey]}: {LEGEND_R4[slug]}; {NOT[setkey]}"
+    if slug in R4:
+        if setkey == 'flashlights':
+            return f"{POSE[setkey]}: {R4[slug]}, main body colour {COLOURS[item[1].split()[0]]}; {TIER_GEAR[item[2]]}; {NOT[setkey]}"
+        return f"{POSE[setkey]}: {R4[slug]}; {TIER[item[2]]}; {NOT[setkey]}"
+    return _subject_v3(setkey, item)
