@@ -65,7 +65,7 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
       // When the board changed (a new build), those pages are fetched again from the
       // new build (up to 4 pages), so no rank is ever skipped or shown twice.
       const model = previous && previous.build && fresh.build && previous.build !== fresh.build && previous.rows.length > fresh.rows.length
-        ? await refetchPages(meId, board, parkId, fresh, previous.rows.length)
+        ? await refetchPages(meId, board, parkId, fresh, previous)
         : mergeRefresh(fresh, previous);
       // A sign-out while this was in flight must not repopulate the cache.
       if (owner === meId) boards.set(key, { model, at: Date.now() });
@@ -86,11 +86,12 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
  */
 export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, from: StandingsBoardModel): Promise<StandingsBoardModel | 'rebuilt' | null> {
   sync(meId);
-  const key = keyOf(meId, board, parkId);
   if (from.nextOffset == null) return Promise.resolve(null);
+  const offset = from.nextOffset;
+  // Deduped per board build and offset (r3 perf: a page fetched for an older board could undo a refresh).
+  const key = `${keyOf(meId, board, parkId)}:${from.build ?? '-'}:${offset}`;
   const running = pagesInFlight.get(key);
   if (running) return running;
-  const offset = from.nextOffset;
   const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset, from.build)
     .then(page => {
       if (owner !== meId) return null;
@@ -108,14 +109,16 @@ export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: 
 }
 
 /** Pages again from a new build, up to `rows` rows (at most 4 pages). Failures keep what loaded. */
-async function refetchPages(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, fresh: StandingsBoardModel, rows: number): Promise<StandingsBoardModel> {
+async function refetchPages(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, fresh: StandingsBoardModel, previous: StandingsBoardModel): Promise<StandingsBoardModel> {
   let model = fresh;
-  for (let i = 0; i < 4 && model.nextOffset != null && model.rows.length < rows; i++) {
+  // Up to where the kid was (at most 12 pages, 600 rows), so a refresh never cuts their place short (r3).
+  for (let i = 0; i < 12 && model.nextOffset != null && model.rows.length < previous.rows.length; i++) {
     try {
       const page = await getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, model.nextOffset, model.build);
       model = mergePage(model, page, meId);
     } catch {
-      break;
+      // A failed refetch keeps the board the kid had, never a shorter mixed one.
+      return previous;
     }
   }
   return model;

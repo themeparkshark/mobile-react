@@ -197,16 +197,22 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
             : <View style={{ opacity: 0.35 }}><ScoreIcon metric={metric} size={22} /></View>}
         </View>
         <View style={{ marginLeft: 8 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
+        {row.isMe && step && (step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal') ? (
+          // Your row: the name keeps its full width, the next step sits under it (r3: the name was squeezed to 7 letters).
+          <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center' }}>
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+            <StepGlyphs compact plus={step.plus} target={step.target} metric={metric} kind={step.kind} icon={step.icon} />
+          </View>
+        ) : (
         <View style={{ flex: 1, marginLeft: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text maxFontSizeMultiplier={FONT_CAP} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
-          {row.isMe && step && (step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal') ? (
-            <StepGlyphs compact plus={step.plus} target={step.target} metric={metric} kind={step.kind} icon={step.icon} />
-          ) : row.isMe && (
+          {row.isMe && (
             <View style={{ paddingHorizontal: 7, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.navy }}>
               <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>YOU</Text>
             </View>
           )}
         </View>
+        )}
         {!muted && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <ScoreIcon metric={metric} size={22} />
@@ -273,8 +279,8 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
   /** On your own row in the list: a smaller chip that fits beside your name. */
   readonly compact?: boolean;
 }) {
-  const h = compact ? 22 : 24;
-  const f = compact ? 13 : 15;
+  const h = compact ? 20 : 24;
+  const f = compact ? 12 : 15;
   const gold = kind !== 'jump' || icon === 'crown';
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? 4 : 6, height: h + 2 }} importantForAccessibility="no-hide-descendants">
@@ -290,6 +296,8 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
         {icon === 'star' && <GameIcon name="star" size={compact ? 13 : 16} />}
         {icon === 'up' && <GameIcon name="arrow" size={compact ? 12 : 14} style={{ transform: [{ rotate: '-90deg' }] }} />}
         <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: gold ? BRAND.navy : BRAND.white, fontVariant: ['tabular-nums'] }}>{target}</Text>
+        {/* A far jump counts players passed: a shark says "players" without words (r3 kids UX). */}
+        {icon === 'up' && <GameIcon name="shark" size={compact ? 13 : 16} />}
       </View>
     </View>
   );
@@ -302,7 +310,9 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbDone }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone }: {
+  /** "Up N!" just landed: the podium finale may play. */
+  readonly onClimbLanded: () => void;
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
   /** The rank you climbed from: shown until the last "Passed X" tick, so the reveal is never spoiled. */
   readonly climbFrom: number | null;
@@ -346,6 +356,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       playSound(rewardSound);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
+      onClimbLanded();
       const done = setTimeout(onClimbDone, 1800);
       return () => clearTimeout(done);
     }
@@ -359,6 +370,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       playSound(rewardSound);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
+      onClimbLanded();
     }, 500 + passed.length * 380));
     timers.push(setTimeout(onClimbDone, 500 + passed.length * 380 + 1800));
     return () => timers.forEach(clearTimeout);
@@ -485,6 +497,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   parkIdRef.current = parkId;
   const first = cachedBoard(meId, board, parkId);
   const [model, setModel] = useState<StandingsBoardModel | null>(first?.model ?? null);
+  const modelRef = useRef(model);
+  modelRef.current = model;
   const [status, setStatus] = useState<Status>(first ? 'ready' : 'loading');
   const [switching, setSwitching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -494,6 +508,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const [climbId, setClimbId] = useState(0);
   const [passed, setPassed] = useState<readonly StandingsRowModel[]>([]);
   const [climbFrom, setClimbFrom] = useState<number | null>(null);
+  // The new podium waits hidden while the Monday card and your climb play, then rises last (r3).
+  const [podiumHold, setPodiumHold] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [meJoined, setMeJoined] = useState(false);
   const [myRowVisible, setMyRowVisible] = useState(false);
@@ -554,8 +570,13 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       : null;
     // The podium rise, its confetti and the overtake all wait for the Monday card,
     // so the best moment is never played behind it (r2 game feel).
-    const celebrateNow = () => { setCelebrate(changed); setMeJoined(joined); climbNow?.(); };
-    if (showResults) { setCelebrate(false); setMeJoined(false); pendingClimb.current = celebrateNow; } else celebrateNow();
+    // Order: Monday card, then the overtake, then the podium rise and confetti as the finale.
+    const celebrateNow = () => {
+      setCelebrate(changed); setMeJoined(joined);
+      setPodiumHold(!!climbNow && changed);
+      climbNow?.();
+    };
+    if (showResults) { setCelebrate(false); setMeJoined(false); setPodiumHold(changed); pendingClimb.current = celebrateNow; } else celebrateNow();
     // The Monday card shows once: unseen on the server and not already shown this session.
     if (next.board === 'week' && next.lastWeek && !next.lastWeek.seen && resultsShown !== `${meId}:${next.lastWeek.weekStart}`) {
       resultsShown = `${meId}:${next.lastWeek.weekStart}`;
@@ -625,6 +646,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // A page that lands while the kid is down in the Your spot block would push
   // it down: it waits here until they scroll back up to the grey rows.
   const heldPage = useRef<StandingsBoardModel | null>(null);
+  // The board a held page was built on: it lands only if that board is still the one shown.
+  const heldBase = useRef<StandingsBoardModel | null>(null);
   // Failed pages back off (1 s, 2 s, 4 s, 8 s); after 3 the kid gets a button.
   const failures = useRef(0);
   const retryAt = useRef(0);
@@ -648,6 +671,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     const started = Date.now();
     const at = firstSkeletonIndex(itemsRef.current);
     const before = model.rows.length;
+    const base = model;
     if (STANDINGS_PERF_ON) perfMark(`page-request ${board} offset=${model.nextOffset} why=${why} rowsToEnd=${at - lastVisible.current}`);
     loadMore(meId, board, parkId, model).then(next => {
       if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${typeof next === "object" && next ? next.rows.length : String(next)} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
@@ -657,12 +681,15 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       // The board was rebuilt between pages: refresh (the store refetches the pages) rather than append.
       if (next === 'rebuilt') { loadRef.current(true); return; }
       if (!boardMatches(next, board, parkIdRef.current)) return;
+      // The board was replaced (a refresh) while this page loaded: it belongs to the old one.
+      if (modelRef.current !== base) return;
       if (canInsert()) {
         apply(next);
         // VoiceOver near the end hears that more players arrived.
         if (lastVisible.current >= at - 3) AccessibilityInfo.announceForAccessibility(`${Math.max(0, next.rows.length - before)} more players`);
       } else {
         heldPage.current = next;
+        heldBase.current = base;
         if (STANDINGS_PERF_ON) perfMark(`page-held ${board}`);
       }
     }).catch(error => {
@@ -770,7 +797,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (heldPage.current && canInsertRef.current()) {
       const held = heldPage.current;
       heldPage.current = null;
-      if (boardMatches(held, board, parkIdRef.current)) setModelRef.current(held);
+      if (boardMatches(held, board, parkIdRef.current) && heldBase.current === modelRef.current) setModelRef.current(held);
     }
     // About two and a half screens before the grey rows: fetch, so the page lands before the kid gets there.
     if (activeRef.current && Date.now() >= jumpingUntil.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
@@ -822,12 +849,13 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       {/* The podium fades as it scrolls under the ribbon, so no score pill floats alone. */}
       <Animated.View style={podiumFade}>
         <MiniPodium podium={podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
-          playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}`} onPress={onRow} />
+          waiting={podiumHold} quiet={climbId > 0}
+          playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}:${podiumHold}`} onPress={onRow} />
       </Animated.View>
       <View style={{ marginTop: -2, height: 20, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
         backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />
     </View>
-  ), [podium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade]);
+  ), [podium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade, podiumHold, climbId]);
 
   const strip = (
     <View style={{ paddingTop: 10, paddingBottom: 6, minHeight: 56 }}>
@@ -923,7 +951,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       <YouRow model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
-        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); setClimbFrom(null); }} />
+        onClimbLanded={() => setTimeout(() => setPodiumHold(false), 250)}
+        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); setClimbFrom(null); setPodiumHold(false); }} />
       <SharkCard row={card} metric={model.metric} board={board} goals={card?.isMe ? model.goals : null} onClose={() => setCard(null)} />
       <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
         onClose={closeResults} />

@@ -90,7 +90,11 @@ function Spot({ rank, row, metric, progress, onPress }: {
   );
 }
 
-function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress }: {
+function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, waiting = false, quiet = false }: {
+  /** The new top three wait hidden (the Monday card or your climb plays first), then rise as the finale. */
+  readonly waiting?: boolean;
+  /** Your climb already played the sound and haptic: the finale adds only the confetti. */
+  readonly quiet?: boolean;
   readonly podium: readonly [StandingsRowModel | null, StandingsRowModel | null, StandingsRowModel | null];
   readonly metric: StandingsMetric;
   /** The top three changed since your last look: play the rise. */
@@ -110,6 +114,7 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress }: {
 
   useEffect(() => {
     if (reduced) { p1.value = 1; p2.value = 1; p3.value = 1; return; }
+    if (waiting) { p1.value = 0; p2.value = 0; p3.value = 0; return; }
     if (!celebrate) {
       [p1, p2, p3].forEach(p => { p.value = 0.6; p.value = withTiming(1, { duration: 150 }); });
       return;
@@ -121,15 +126,17 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress }: {
     p1.value = rise(320);
     if (meJoined) {
       const timer = setTimeout(() => {
-        playSound(revealSound);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        if (!quiet) {
+          playSound(revealSound);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        }
         particles.current?.burst({ x: width / 2, y: 70, preset: 'confetti', count: 26, colors: CONFETTI, speed: 1 });
       }, 620);
       return () => clearTimeout(timer);
     }
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playKey, reduced]);
+  }, [playKey, reduced, waiting]);
 
   return (
     <View style={{ height: MINI_PODIUM_HEIGHT, width }}>

@@ -243,7 +243,7 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
   assert.doesNotMatch(board, /marginBottom: -40/, 'no strip down to the screen edge');
   assert.match(board, /opacity: Math\.min\(1, Math\.max\(0, shown\.value\) \* 4\)/, 'fades only in the last quarter: no ghosting');
   assert.match(board, /const shownRank = revealing && climbFrom \? climbFrom : me\?\.rank;/, 'the old rank until the last tick');
-  assert.match(board, /if \(showResults\) \{ setCelebrate\(false\); setMeJoined\(false\); pendingClimb\.current = celebrateNow; \}/, 'podium confetti waits for the Monday card');
+  assert.match(board, /if \(showResults\) \{ setCelebrate\(false\); setMeJoined\(false\); setPodiumHold\(changed\); pendingClimb\.current = celebrateNow; \}/, 'podium confetti waits for the Monday card');
   assert.match(board, /step=\{item\.row\.isMe \? myStep : null\}/, 'your own row carries the next step');
   assert.match(board, /\{ name: 'goRide', label: 'Go ride' \}/, 'GO RIDE is a VoiceOver action');
   assert.match(board, /request\.current \+= 1;\s+heldPage\.current = null;/, 'every load invalidates pages in flight');
@@ -256,4 +256,21 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', 8), true);
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', null), false, 'another park never lands');
   assert.equal(model.boardMatches({ board: 'week', parkId: null }, 'friends', null), false);
+});
+
+test('r4: podium finale after the climb, your name keeps its width, far jumps show players, stale pages dropped', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
+  assert.match(podium, /if \(waiting\) \{ p1\.value = 0; p2\.value = 0; p3\.value = 0; return; \}/, 'the new podium waits hidden');
+  assert.match(podium, /if \(!quiet\) \{/, 'no second sound and haptic after the climb');
+  assert.match(board, /setPodiumHold\(!!climbNow && changed\);/, 'the podium holds through the overtake');
+  assert.match(board, /onClimbLanded=\{\(\) => setTimeout\(\(\) => setPodiumHold\(false\), 250\)\}/, 'then rises as the finale');
+  assert.match(board, /the next step sits under it/, 'your row: step chip under your name');
+  assert.match(board, /\{icon === 'up' && <GameIcon name="shark"/, 'a far jump counts players');
+  assert.match(board, /if \(modelRef\.current !== base\) return;/, 'a page for a replaced board is dropped');
+  assert.match(board, /heldBase\.current === modelRef\.current/, 'a held page lands only on the board it was built on');
+  const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
+  assert.match(store, /const key = `\$\{keyOf\(meId, board, parkId\)\}:\$\{from\.build \?\? '-'\}:\$\{offset\}`;/, 'pages deduped per build and offset');
+  assert.match(store, /i < 12 && model\.nextOffset != null && model\.rows\.length < previous\.rows\.length/, 'a refresh refetches up to the kid\'s place');
+  assert.match(store, /return previous;/, 'a failed refetch keeps the board the kid had');
 });
