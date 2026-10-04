@@ -140,6 +140,8 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
   const fired = useRef(false);
   const warned = useRef(false);
   const later = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const said30 = useRef(false);
+  const said10 = useRef(false);
   useEffect(() => () => later.current.forEach(clearTimeout), []);
   const fill = useSharedValue(Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs)));
   const pulse = useSharedValue(1);
@@ -148,6 +150,8 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
   useEffect(() => {
     fired.current = false;
     warned.current = secondsLeft(deadline, Date.now()) <= HOLD_URGENT_S;
+    said30.current = false;
+    said10.current = false;
     setLeft(secondsLeft(deadline, Date.now()));
     if (frozen) { cancelAnimation(fill); return; }
     fill.value = Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs));
@@ -174,7 +178,9 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
       onTick?.(HOLD_URGENT_S);
       later.current.push(setTimeout(() => queueHaptic('warning', 2), HAPTIC_AFTER_AUDIO_MS));
     }
-    if (left === HOLD_URGENT_S || left === 10) AccessibilityInfo.announceForAccessibility(`${left} seconds left`);
+    // Announce when the clock crosses 30 s and 10 s (not only on an exact tick).
+    if (left <= 10 && !said10.current) { said10.current = true; said30.current = true; AccessibilityInfo.announceForAccessibility(`${left} seconds left`); }
+    else if (left <= HOLD_URGENT_S && !said30.current) { said30.current = true; AccessibilityInfo.announceForAccessibility(`${left} seconds left`); }
     if (left <= HOLD_FINAL_S) {
       onTick?.(left);
       if (left <= 3) later.current.push(setTimeout(() => queueHaptic('tickSelection', 1), HAPTIC_AFTER_AUDIO_MS));
@@ -268,7 +274,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
       <Animated.View ref={box as never} collapsable={false}
         style={[styles.slot, handStyle, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
         {item ? (
-          <View style={{ opacity: hidden ? 0 : stamp ? 0.62 : 1 }}>
+          <View style={{ opacity: hidden ? 0 : stamp ? 0.75 : 1 }}>
             <Animated.View style={style}>
               <EnamelPin uri={item.icon_url} size={pinSize} tilt={tilt} shine={still || stamp ? undefined : shine} surface="board"
                 transition={0} recyclingKey={`slot-${item.id}`} />
@@ -278,7 +284,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
           <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>
         )}
         {!!stamp && !!item && (
-          <View pointerEvents="none" style={styles.stamp}><Text maxFontSizeMultiplier={1} style={styles.stampText}>{stamp}</Text></View>
+          <View pointerEvents="none" style={[styles.stamp, { maxWidth: size + SPACE.md }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
         )}
       </Animated.View>
       <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? balanceName(pinName(item), 16) : placeholder ?? ''}</Text>

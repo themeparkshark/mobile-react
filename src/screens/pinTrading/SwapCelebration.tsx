@@ -77,7 +77,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const v0 = from?.give ?? { x: cx + 100, y: cy + 80, size: startSize };
   const mx = (g0.x + v0.x) / 2;
   // The pins meet at the top of the toss, high above the spotlight, then the new one slams down into it.
-  const my = Math.min((g0.y + v0.y) / 2 - 16, cy - 220);
+  // Clamped below the top bar so the exchange stays in the lit band of the screen.
+  const my = Math.max(insets.top + 64 + startSize / 2 + 12, Math.min((g0.y + v0.y) / 2 - 16, cy - 150));
   const arc = Math.min(110, Math.abs(v0.x - g0.x) * 0.45);
   const crossAt = (T.cross - T.travel) / (T.land - T.travel);
   /** Seeded per trade: which way the new pin spins in (the 10th trade is not a copy of the 1st). */
@@ -88,7 +89,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     if (landed.current) return;
     landed.current = true;
     timers.current.forEach(clearTimeout);
-    timers.current = [];
+    timers.current.length = 0;
     travel.value = 1;
     land.value = withTiming(1, { duration: 1, ...never });
     squash.value = withSequence(withTiming(1, { duration: 60 }), withSpring(0, { damping: 6, stiffness: 300, mass: 0.5 }));
@@ -110,9 +111,9 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     textIn.value = withDelay(T.title - T.land, withSpring(1, { damping: 14, stiffness: 220 }));
     // The land is the loudest beat: a deep firework thump, a clack, then the jingle.
     stopBeat(riser.current);
-    beat('fx.firework', { volume: 1, pitch: -5 }, 'comboHeavy', 3);
+    beat('fx.firework', { volume: 1, pitch: -5 }, 'comboHeavy', 4);
     beat('fx.hit', { volume: 1 });
-    beat('ui.complete', { volume: 1 }, 'success', 3);
+    beat('ui.complete', { volume: 1 });
   };
 
   useEffect(() => {
@@ -162,22 +163,25 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
       // Rising and slowing into the apex (ease-out), like a toss.
       const e = 1 - (1 - u) * (1 - u);
       x = g0.x + (mx - g0.x) * u;
-      y = g0.y + (my - g0.y) * e - Math.sin(u * Math.PI) * arc * 0.3;
+      // Meets a little above the burger, so both pins stay visible as they touch.
+      y = g0.y + (my - 18 - g0.y) * e - Math.sin(u * Math.PI) * arc * 0.3;
     } else {
       const u = (t - crossAt) / (1 - crossAt);
-      // Falling from the apex under gravity: fastest on the land frame.
-      const e = u * u;
+      // Falling from the apex, accelerating: fastest on the land frame, but visible on the way down.
+      const e = Math.pow(u, 1.6);
       x = mx + (cx - mx) * e;
       y = my + (cy - my) * e;
     }
     const popUp = lift.value;
+    const stretch = t > 0.85 && t < 1 ? (t - 0.85) / 0.15 : 0;
     const grow = g0.size * (1 + 0.15 * popUp) + (bigSize - g0.size * 1.15) * t * t;
     const sq = squash.value;
     return {
       transform: [
         { translateX: x - bigSize / 2 }, { translateY: y - bigSize / 2 - popUp * 10 * (1 - t) },
-        { scaleX: (grow / bigSize) * (1 + 0.18 * sq) }, { scaleY: (grow / bigSize) * (1 - 0.12 * sq) },
-        { rotate: `${spinDir * (Math.sin(Math.min(1, t) * Math.PI) * -14 + (t > crossAt ? (1 - t) * 40 : 0)) + popUp * (1 - t) * 6}deg` },
+        // A vertical stretch in the last frames of the fall, paid off by the squash on contact.
+        { scaleX: (grow / bigSize) * (1 + 0.18 * sq) * (1 - stretch * 0.08) }, { scaleY: (grow / bigSize) * (1 - 0.12 * sq) * (1 + stretch * 0.15) },
+        { rotate: `${spinDir * Math.sin(Math.min(1, t) * Math.PI) * -18 + popUp * (1 - t) * 6}deg` },
       ],
     };
   });
@@ -189,14 +193,15 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
       const u = t / crossAt;
       const e = 1 - (1 - u) * (1 - u);
       x = v0.x + (mx - v0.x) * u;
-      y = v0.y + (my - v0.y) * e + Math.sin(u * Math.PI) * arc * 0.3;
+      y = v0.y + (my + 18 - v0.y) * e + Math.sin(u * Math.PI) * arc * 0.3;
     } else {
       const u = (t - crossAt) / (1 - crossAt);
-      x = mx + (g0.x - mx) * u * 0.5;
-      y = my - u * u * (my + v0.size);
+      // Off to the board: down and away to the lower left, shrinking into it.
+      x = mx + (SPACE.xl - mx) * u;
+      y = my + 18 + (height * 0.72 - my) * u * u;
     }
     const popUp = lift.value;
-    const s = (v0.size / startSize) * (1 + 0.15 * popUp) * (t < crossAt ? 1 : 1 - (t - crossAt) * 1.1);
+    const s = (v0.size / startSize) * (1 + 0.15 * popUp) * (t < crossAt ? 1 : 1 - ((t - crossAt) / (1 - crossAt)) * 0.65);
     return {
       opacity: t >= 1 ? 0 : t < 0.8 ? 1 : 1 - (t - 0.8) / 0.2,
       transform: [{ translateX: x - startSize / 2 }, { translateY: y - startSize / 2 - popUp * 10 * (1 - t) }, { scale: s }, { rotate: `${t * 50}deg` }],
@@ -267,22 +272,25 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
               <EnamelPin uri={got.icon_url} size={bigSize} tilt={-4} shine={still ? undefined : shine} surface="panel" transition={0}
                 recyclingKey={`slot-${got.id}`} />
             </Animated.View>
+          </Animated.View>
+          {/* The cross hit draws over both pins, centred on the meeting point (siblings, never inside a moving pin). */}
           {!still && <Animated.View style={[styles.abs, { left: mx - 110, top: my - 110, width: 220, height: 220 }, flashStyle]}><Flash size={220} /></Animated.View>}
           {!still && <Sparks x={mx} y={my} hit={hit} seed={seed} />}
           {!still && (
             <Animated.View style={[styles.ring, { left: mx - 90, top: my - 90, width: 180, height: 180, borderRadius: 90 }, ringStyle]} />
           )}
 
-          </Animated.View>
-
         </Animated.View>
 
+        <Animated.View pointerEvents="none" style={[styles.copyShade, { top: cy + bigSize * 0.62 }, bgStyle]}>
+          <LinearGradient colors={['rgba(4,18,46,0)', 'rgba(4,18,46,0.75)', 'rgba(4,18,46,0.9)']} locations={[0, 0.25, 1]} style={StyleSheet.absoluteFill} />
+        </Animated.View>
         <Animated.View style={[styles.copy, { top: cy + bigSize * 0.72 }, textStyle]} pointerEvents="none">
           <Text maxFontSizeMultiplier={1.15} style={[textPreset('hero', 'onBlue'), styles.title]}>{COPY.doneTitle}</Text>
           <View style={styles.subPill}>
             <Text maxFontSizeMultiplier={1.25} style={styles.sub}>{COPY.doneMessage(name)}</Text>
           </View>
-          <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption}: ${COPY.doneGave(pinName(gave))}`}>
+          <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave))}`}>
             <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={34} surface="none" flat recyclingKey={`mine-${gave.id}`} /></View>
             <View style={{ flexShrink: 1 }}>
               <Text maxFontSizeMultiplier={1.2} style={styles.gaveCaption}>{COPY.gaveCaption}</Text>
@@ -291,9 +299,10 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
           </View>
           {tradeNumber >= 2 && <Text maxFontSizeMultiplier={1.2} style={styles.countLine}>{COPY.tradeCount(tradeNumber)}</Text>}
         </Animated.View>
-        <Animated.View pointerEvents="none" style={[styles.shark, { right: SPACE.lg, top: cy - bigSize * 1.12 }, sharkStyle]}>
-          <Image source={SHARK} style={{ width: 104, height: 116, transform: [{ scaleX: -1 }] }} contentFit="contain" />
-          <View style={{ alignSelf: 'center', marginTop: -10 }}><FloorShadow width={76} height={14} /></View>
+        {/* Alex's shark stands on the spotlight's floor beside the pin, looking at it. */}
+        <Animated.View pointerEvents="none" style={[styles.shark, { right: SPACE.lg, top: cy + bigSize * 0.5 - 98 }, sharkStyle]}>
+          <Image source={SHARK} style={{ width: 84, height: 94, transform: [{ scaleX: -1 }] }} contentFit="contain" />
+          <View style={styles.sharkFloor} />
         </Animated.View>
       </Pressable>
       <Animated.View style={[styles.cta, { bottom: Math.max(insets.bottom, SPACE.lg) + SPACE.xl }, buttonStyle]}>
@@ -448,15 +457,17 @@ const styles = StyleSheet.create({
     shadowColor: '#021c40', shadowOpacity: 0.35, shadowRadius: 6, shadowOffset: { width: 0, height: 3 },
   },
   newStampText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, letterSpacing: 0.6, textTransform: 'uppercase', paddingTop: 2 },
+  copyShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   copy: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center', gap: SPACE.sm },
   title: { textAlign: 'center', color: BRAND.white, fontSize: 46, lineHeight: 52 },
   subPill: { backgroundColor: 'rgba(5,52,110,0.9)', borderRadius: 999, paddingHorizontal: SPACE.lg, paddingVertical: 6, borderWidth: 2, borderColor: 'rgba(255,224,122,0.6)' },
   sub: { fontFamily: FONT.display, fontSize: 20, lineHeight: 25, color: '#ffe07a', textAlign: 'center', paddingTop: 2 },
-  gaveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: 300, alignSelf: 'center' },
+  gaveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: 270, alignSelf: 'center' },
   gaveCaption: { fontFamily: FONT.body, fontSize: 12, letterSpacing: 0.9, textTransform: 'uppercase', color: '#ffe07a' },
   countLine: { fontFamily: FONT.display, fontSize: 16, color: '#ffe07a', paddingTop: 2 },
   gaveChip: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.white },
   gaveLine: { flexShrink: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 20, color: '#e2f6ff' },
-  shark: { position: 'absolute' },
+  shark: { position: 'absolute', alignItems: 'center' },
+  sharkFloor: { width: 64, height: 10, borderRadius: 32, marginTop: -8, backgroundColor: 'rgba(1,12,34,0.45)' },
   cta: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center' },
 });

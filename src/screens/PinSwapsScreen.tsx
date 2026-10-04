@@ -34,7 +34,6 @@ import type { PinSwapType } from '../models/pin-swap-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, gameAlert, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, SharkLoader, SPACE } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import EnamelPin from './pinTrading/EnamelPin';
 import { type BoardBadge, BoardPinCard, MAX_FONT, PageWash, type SlotRect, TRADE_SURFACE } from './pinTrading/PinTradeParts';
 import {
   boardEntry, classifyTradeError, givablePins, holdLengthMs, isHolding, mergePins, PIN_TRADE_COPY as COPY, pinName, type TradePhase,
@@ -61,6 +60,17 @@ const CONFIRM_GUARD_MS = 450;
 type Hold = { swap: PinSwapType; deadline: number; totalMs: number };
 type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect } };
 
+/** Every page of your tradeable pins (capped), without touching state. */
+async function fetchAllPins(): Promise<ItemType[]> {
+  let all: ItemType[] = [];
+  for (let page = 1; page <= MAX_PIN_PAGES; page++) {
+    const rows = await getPins(page);
+    if (rows.length === 0) break;
+    all = mergePins(all, rows);
+  }
+  return all;
+}
+
 /** Board empty or failed to load: Alex's shark, a line and one action, sized for the cork panel. */
 function BoardState({ kind, onPress }: { kind: 'empty' | 'error'; onPress: () => void }) {
   const empty = kind === 'empty';
@@ -81,7 +91,7 @@ function BoardState({ kind, onPress }: { kind: 'empty' | 'error'; onPress: () =>
 export default function PinSwapsScreen() {
   const { hasPermission } = usePermissions();
   const signedIn = hasPermission(PermissionEnums.TradePins);
-  const { labels, errors } = useCrumbs();
+  const { labels } = useCrumbs();
   const still = useUiReducedMotion();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
@@ -152,7 +162,6 @@ export default function PinSwapsScreen() {
         page.next += 1;
         if (rows.length === 0) page.finished = true;
         collected = mergePins(collected, rows);
-        warmPinImages(rows.map(r => r.icon_url));
         if (reset && page.next === 2) setPins(collected);
         else setPins(prev => mergePins(prev, rows));
       } while (all && !page.finished && page.next <= MAX_PIN_PAGES);
@@ -204,12 +213,12 @@ export default function PinSwapsScreen() {
   const showError = useCallback((error: unknown) => {
     const kind = classifyTradeError(error);
     beat('fx.nope', { volume: 0.8 }, 'failBuzz', 2);
-    if (kind === 'taken') gameAlert(COPY.takenTitle, errors.pin_swap_unavailable || COPY.takenMessage, undefined, { icon: 'search' });
+    if (kind === 'taken') gameAlert(COPY.takenTitle, COPY.takenMessage, undefined, { icon: 'search' });
     else if (kind === 'owned') gameAlert(COPY.ownedTitle, COPY.ownedMessage, undefined, { icon: 'info' });
     else if (kind === 'network') gameAlert(COPY.networkTitle, COPY.networkMessage, undefined, { icon: 'info' });
     else gameAlert(COPY.genericTitle, COPY.genericMessage, undefined, { icon: 'info' });
     return kind;
-  }, [errors.pin_swap_unavailable]);
+  }, []);
 
   const owned = useMemo(() => new Set(pins.map(p => p.id)), [pins]);
   live.current = { board, busyId, owned, pinsCount: pins.length, pinsKnown: pinsReady && !pinsLoading && !pinsError, lastGiven };
@@ -286,13 +295,14 @@ export default function PinSwapsScreen() {
     if (!h || phaseRef.current === 'sending') return;
     setPhase('expired');
     // Gentle: a soft close and one warning tap, not a fail buzz (nothing was lost).
-    beat('fx.purchaseCancel', { volume: 0.6 }, 'warning', 2);
+    beat('fx.purchaseCancel', { volume: 0.6 });
     void unHoldPinSwap(h.swap.id).catch(() => undefined);
   }, []);
 
   const onTick = useCallback((left: number) => {
     // Soft coin ticks that climb as the last seconds run out.
-    beat('fx.coinTick', { volume: 0.35, pitch: (6 - left) * 0.8 });
+    // 30 s: one soft tick at its natural pitch; the last 5 s climb gently.
+    beat('fx.coinTick', { volume: 0.35, pitch: left > 5 ? 0 : (6 - left) * 0.8 });
   }, []);
 
   const onSelect = useCallback((item: ItemType) => {
@@ -338,12 +348,13 @@ export default function PinSwapsScreen() {
         beat('ui.modalClose', { volume: 0.6 });
         gameAlert(COPY.ownedTitle, COPY.ownedEndMessage, undefined, { icon: 'info' });
         void loadBoard('refresh');
+        void loadPins(true, true);
         return;
       }
       beat('fx.nope', { volume: 0.7 }, 'failBuzz', 2);
       setPhase(kind === 'taken' ? 'taken' : 'failed');
     }
-  }, [loadBoard, onExpire, showError]);
+  }, [loadBoard, loadPins, onExpire, showError]);
 
   const onTradePress = useCallback(() => { void trade(); }, [trade]);
 
@@ -363,12 +374,22 @@ export default function PinSwapsScreen() {
     // so the board never renders a pin you now own without its Got it ribbon.
     finishTimer.current = setTimeout(() => {
       setRefreshing(true);
-      void Promise.all([getPinSwaps(), loadPins(true, true)]).then(([swaps]) => {
-        setBoard(swaps.map(boardEntry));
-        setBoardState('ready');
-      }).catch(() => undefined).finally(() => setRefreshing(false));
+      void (async () => {
+        try {
+          const [swaps, mine] = await Promise.all([getPinSwaps(), fetchAllPins()]);
+          const urls = swaps.map(sw => sw.pin.item.icon_url);
+          warmPinImages(urls);
+          await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(r => setTimeout(r, 1500))]);
+          // One beat: the new board, its ribbons and your pins all land together.
+          pinsPage.current = { next: MAX_PIN_PAGES + 1, finished: true, loading: false, token: pinsPage.current.token + 1 };
+          setPins(mine);
+          setPinsReady(true);
+          setBoard(swaps.map(boardEntry));
+          setBoardState('ready');
+        } catch { /* keep the old board */ } finally { setRefreshing(false); }
+      })();
     }, 240);
-  }, [loadPins]);
+  }, []);
 
   const timerLabel = useCallback((clock: string, minutes: number, seconds: string) => {
     const template = labels.trade_expiration;
@@ -390,7 +411,6 @@ export default function PinSwapsScreen() {
   const rows = Math.ceil(board.length / COLUMNS);
   const lagFor = (i: number) => (i % COLUMNS) * 0.07 + Math.floor(i / COLUMNS) * 0.1;
   const lagSpan = lagFor((rows - 1) * COLUMNS + COLUMNS - 1);
-  const stepPin = board[0]?.pin.item;
 
   // ---- Every hook is above this line. ----
 
@@ -443,9 +463,7 @@ export default function PinSwapsScreen() {
                 <View key={step.label} style={styles.stepWrap}>
                   <View style={styles.step}>
                     <View style={styles.stepArt}>
-                      {i === 0 && stepPin
-                        ? <EnamelPin uri={stepPin.icon_url} size={34} tilt={-6} surface="none" recyclingKey="step-pin" />
-                        : <GameIcon name={i === 0 ? 'star' : step.icon} size={32} />}
+                      <GameIcon name={step.icon} size={32} />
                     </View>
                     <Text maxFontSizeMultiplier={1.2} numberOfLines={2} style={styles.stepText}>{step.label}</Text>
                   </View>

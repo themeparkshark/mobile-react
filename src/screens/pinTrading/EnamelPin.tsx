@@ -24,7 +24,7 @@ import {
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import { useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { usePinImage } from './pinImageCache';
 
 /** Shadow tint per surface: warm on cork and cream, navy on the blue panels. */
@@ -76,22 +76,27 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
   const box = size + pad * 2;
   const blur = Math.max(2, size * 0.045);
 
-  // Shine: a soft diagonal band whose gradient line slides across the pin.
+  // This pin's own sweep progress. It only changes while the band is on this pin (then parks at -1 once),
+  // so a sweep redraws one or two canvases at a time, not the whole board.
+  const local = useSharedValue(-1);
+  useAnimatedReaction(
+    () => (shine ? shine.value * (1 + lagSpan) - lag : -1),
+    p => {
+      const on = p > 0 && p < 1;
+      if (on) local.value = p;
+      else if (local.value !== -1) local.value = -1;
+    },
+    [lag, lagSpan],
+  );
   const shineStart = useDerivedValue(() => {
-    const p = shine ? shine.value * (1 + lagSpan) - lag : -1;
-    const t = p * 1.6 - 0.3;
+    const t = local.value * 1.6 - 0.3;
     return vec(pad + size * (t - 0.35), pad + size * (t - 0.35));
   });
   const shineEnd = useDerivedValue(() => {
-    const p = shine ? shine.value * (1 + lagSpan) - lag : -1;
-    const t = p * 1.6 - 0.3;
+    const t = local.value * 1.6 - 0.3;
     return vec(pad + size * (t + 0.05), pad + size * (t + 0.05));
   });
-  const shineOn = useDerivedValue(() => {
-    if (!shine) return 0;
-    const p = shine.value * (1 + lagSpan) - lag;
-    return p > 0 && p < 1 ? 1 : 0;
-  });
+  const shineOn = useDerivedValue(() => (local.value >= 0 ? 1 : 0));
   const shadowShift = useDerivedValue(() => {
     const l = lift ? lift.value : 0;
     return [{ translateX: size * (0.012 + l * 0.02) }, { translateY: size * (0.035 + l * 0.06) }];
