@@ -37,7 +37,7 @@ test('FrightMapSources never mounts or unmounts a Marker: no early return, no co
   assert.match(body, /<Marker key="fe"/, 'one encounter Marker, always mounted');
   // Opacity-only: no stand-in swap either. Every spot keeps its real sprite tree; hidden = ShowWhen opacity 0.
   assert.doesNotMatch(src, /HiddenSpot/, 'no HiddenSpot-vs-sprite swaps inside a Marker');
-  assert.match(body, /<ShowWhen on=\{on\}>/);
+  assert.match(body, /<ShowWhen box=\{[A-Z_]+\} on=\{on\}>/);
   assert.doesNotMatch(body, /\? <(HauntLantern|ReefCritters|ReefGlyph|SpotProps|EncounterSprite)\b/, 'no ternary picks a sprite type');
   assert.doesNotMatch(body, /: <(HauntLantern|ReefCritters|ReefGlyph|SpotProps|EncounterSprite)\b/);
   assert.doesNotMatch(body, /onPress=\{[^}]*\? \(\) =>/, 'onPress never toggles the Marker between Pressable and View');
@@ -96,7 +96,14 @@ test('GPS jump or resume: markers re-lay out and Skia canvases repaint on reveal
   assert.match(src, /\[on, zoom, mapRef, relayout\]/, 'a jump reads bounds at once');
   assert.match(src, /<RepaintContext\.Provider value=\{token\}>/);
   const repaint = read('src/components/map/fright/frightRepaint.tsx');
-  assert.match(repaint, /<Canvas \{\.\.\.props\} style=\{\[style, \{ width \}\]\}>/);
+  assert.match(repaint, /<Canvas \{\.\.\.props\}>/);
+  // The re-add is a 0.5 pt change of the constant marker box, only around a relayout.
+  assert.match(src, /style=\{\[styles\.box, \{ width: repaintWidth\(box\.w, token\), height: box\.h \}, on \? SHOWN_STYLE : HIDDEN_STYLE\]\}/);
+  assert.match(src, /if \(on && Date\.now\(\) - lastRelayout\.current < RELAYOUT_REVEAL_MS\) setToken/);
+  // Every ShowWhen has a constant box (no zoom-sized native frames).
+  const shows = src.match(/<ShowWhen [^>]*>/g) || [];
+  assert.equal(shows.length, 6);
+  for (const tag of shows) assert.match(tag, /^<ShowWhen box=\{(REEF|PROPS|HAUNT|LAGOON|RING|CRITTER)_BOX\}/, tag);
   assert.match(repaint, /<Group opacity=\{repaintOpacity\(token\)\}>\{children\}<\/Group>/);
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.doesNotMatch(sprites, /<Canvas[\s>]/, 'sprites draw through FrightCanvas');

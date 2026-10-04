@@ -276,3 +276,19 @@ test('ride chips: one chip per island, badge first, sized to its text', () => {
   assert.equal(L.rideTagKind({ badge: 'level', showTimer: false }), null);
   assert.ok(L.rideTagSize('limited', 'LIMITED · LEAVES OCT 31').w >= 150);
 });
+
+test('the reef the Fin-ister encounter swims at is drawn with it (fixed), never hidden under the encounter; other reefs unchanged', () => {
+  const host = { key: 'kelp', ...at(0, 0), radius: 40 };
+  const other = { key: 'bog', ...at(160, 250), radius: 40 };
+  const items = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host, other],
+    fixed: [{ id: 'encounter', ...at(0, 0), kind: 'encounter', radius: 40 }], nightMode: true });
+  const reefItem = id => items.find(i => i.id === `reef:${id}`);
+  assert.equal(reefItem('kelp').fixed, true);
+  assert.equal(reefItem('bog').fixed, undefined);
+  const out = s.solveLayout(items, frame());
+  assert.equal(out.get('reef:kelp').visible, true, 'host reef drawn');
+  assert.equal(out.get('encounter').visible, true, 'encounter drawn');
+  // Without an encounter the reef is an ordinary item.
+  const plain = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host], fixed: [], nightMode: true });
+  assert.equal(plain.find(i => i.id === 'reef:kelp').fixed, undefined);
+});

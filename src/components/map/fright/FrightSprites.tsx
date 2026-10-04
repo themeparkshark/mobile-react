@@ -213,6 +213,8 @@ const LH = 100;
 const LANTERN_FOOT = 36;
 /** The marker is wider than the facade so the name chip is never squeezed to the facade's width. */
 const LANTERN_W = 168;
+/** The haunt marker's box (constant: facade plus the reserved chip foot). */
+export const HAUNT_BOX = { w: LANTERN_W, h: LH + LANTERN_FOOT } as const;
 /** The facade's ground point (glow pool center) as a marker anchor. */
 export const HAUNT_ANCHOR = { x: 0.5, y: (LH - 18) / (LH + LANTERN_FOOT) };
 const HOUSE = Skia.Path.MakeFromSVGString('M14 36 L38 12 L62 36 L62 74 L14 74 Z')!;
@@ -453,6 +455,8 @@ const NO_LAYERS: FrightHauntLayers = { frame: [160, 160], base: null, windows: n
 const MAX_BATS = 2;
 const PW = 200;
 const PH = 150;
+/** The SpotProps canvas (constant). */
+export const PROPS_BOX = { w: PW, h: PH } as const;
 
 function Bat({ k, seed, clock, sheet, fw, fh, frames, animated, on = true }: {
   k: number; seed: number; clock: SharedValue<number>; sheet: SkImageType | null; fw: number; fh: number; frames: number; animated: boolean;

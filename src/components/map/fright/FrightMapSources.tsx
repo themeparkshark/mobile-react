@@ -7,7 +7,7 @@
  * nearest spots spend the tier's sprite budget.
  */
 import { BackgroundLayer, type MapViewRef } from '@maplibre/maplibre-react-native';
-import { AppState, useWindowDimensions, View } from 'react-native';
+import { AppState, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { HeadingContext } from '../../../context/LocationProvider';
 import { queueHaptic } from '../../../gamekit/Haptics';
@@ -26,8 +26,8 @@ import {
   windowWant, type Bounds,
 } from './frightBudget';
 import { bearingDeg, distanceMeters, offsetMeters, pointsPerMeter, validPoint } from './geo';
-import { EncounterCritter, EncounterRing, HAUNT_ANCHOR, LagoonGlow, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
-import { RepaintContext } from './frightRepaint';
+import { ENCOUNTER_CRITTER_PT, EncounterCritter, EncounterRing, HAUNT_ANCHOR, HAUNT_BOX, PROPS_BOX, LagoonGlow, HauntLantern, ReefCritters, ReefGlyph, SpotProps } from './FrightSprites';
+import { RepaintContext, repaintWidth } from './frightRepaint';
 import type { FrightMapInput } from './types';
 import { prefetchFrightImages } from './useFrightImage';
 import { useFrightState } from './useFrightState';
@@ -45,11 +45,22 @@ function sameBounds(a: Bounds | null, b: Bounds): boolean {
 }
 
 /** How often the view bounds are read while the mode is on (the panel's battery ask). */
+/**
+ * Constant native frames. On iOS every MarkerView size change re-adds the annotation (a
+ * one-frame blink), and the reef and ring canvases are sized by the zoom. Each fright marker
+ * child is a fixed box at the art's largest size, the canvas centred inside it.
+ */
+export const REEF_MAX_WANDER = 90;
+export const REEF_BOX = { w: REEF_MAX_WANDER * 2 + 90, h: Math.round(REEF_MAX_WANDER * 1.4 + 120) } as const;
+/** EncounterRing: max(2 x ring + 40, 140), ring capped at 120. */
+export const RING_BOX = { w: 280, h: 280 } as const;
+export const CRITTER_BOX = { w: ENCOUNTER_CRITTER_PT, h: ENCOUNTER_CRITTER_PT } as const;
+/** LagoonGlow: up to 360 pt wide, half as tall. */
+export const LAGOON_BOX = { w: 360, h: 180 } as const;
+
 export const BOUNDS_POLL_MS = 1500;
 /** A spot keeps its decoded art this long after it leaves the screen. */
 export const WARM_ART_MS = 60_000;
-/** When a revealed spot repaints its Skia (frightRepaint.tsx). */
-export const REPAINT_TICKS_MS = [0, 400, 1200, 2500, 4000] as const;
 
 function useViewBounds(mapRef: RefObject<MapViewRef | null>, on: boolean, zoom: number, relayout: number): Bounds | null {
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -320,7 +331,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const watch = !on || !player ? 0 : watchSide(distanceMeters(player, reef), reef.radius, bearingDeg(reef, player), heading);
         const ppm = pointsPerMeter(zoom, reef.latitude);
         // Capped at 90 pt: a reef canvas is (2 x wander + 90) points square at 3x, and four of them add up.
-        const wander = Math.max(18, Math.min(90, reef.radius * ppm * 0.8));
+        const wander = Math.max(18, Math.min(REEF_MAX_WANDER, reef.radius * ppm * 0.8));
         const n = critterAlloc[reef.key] ?? 0;
         const glyph = lod === 'glyph' || st.tier === 'calm';
         const slots = critterWant(reef.fx);
@@ -329,7 +340,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         return (
           <Marker key={`fr-${reef.key}`} coordinate={pin(reef)}>
             <PlacedSpot id={`reef:${reef.key}`}>
-              <ShowWhen on={on}>
+              <ShowWhen box={REEF_BOX} on={on}>
                 <ReefLod glyph={glyph}
                   critters={<ReefCritters reefKey={reef.key} assets={sheets} count={n > 0 ? n : Math.min(1, slots)} slots={slots}
                     wanderPts={wander} clock={alive.clock} animated={on && !glyph && animate && n > 0} full={st.tier === 'full'} watch={watch}
@@ -348,7 +359,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         const on = shown(spot.key) && !(st.tier === 'calm' && !props.includes('fog-thick'));
         return (
           <Marker key={`fp-${spot.key}`} coordinate={pin(spot)}>
-            <ShowWhen on={on}>
+            <ShowWhen box={PROPS_BOX} on={on}>
               <SpotProps spotKey={spot.key} props={props} bats={on ? bats : 0} movingAllowed={on ? movingNow : 0} clock={alive.clock}
                 animated={on && animate} lite={lite} intensity={visible} ambient={warm(spot.key) ? assets?.ambient ?? null : null}
                 mistUrl={warm(spot.key) ? assets?.fog_night?.ground_mist ?? null : null} />
@@ -369,7 +380,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
             touchEnabled={on && !!onHauntPress}
             accessibilityLabel={`${haunt.name}, haunt`}>
             <PlacedSpot id={`haunt:${haunt.key}`} anchor={HAUNT_GROUND} fold>
-              <ShowWhen on={on}>
+              <ShowWhen box={HAUNT_BOX} on={on}>
                 <HauntLantern spotKey={haunt.key} flicker={haunt.fx?.flicker} windows={Math.min(6, windowWant(haunt.fx))}
                   animatedWindows={on ? windowAlloc[haunt.key] ?? 0 : 0} clock={alive.clock} animated={on && animate}
                   rate={on && (windowAlloc[haunt.key] ?? 0) > 0 ? (lite ? 0.5 : 1) : 0} ghosts={!lite} doors
@@ -395,7 +406,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         return (
           <Marker key={`fg-${spot.key}`} coordinate={pin(spot)}>
             {/* Always mounted: no performance running = opacity 0, frame held. */}
-            <ShowWhen on={on}>
+            <ShowWhen box={LAGOON_BOX} on={on}>
               <LagoonGlow asset={glowAsset ?? LAGOON_PARKED} widthPts={glow?.widthPts ?? 80} clock={alive.clock} intensity={visible}
                 fps={on && alive.running && st.tier !== 'calm' ? (lite ? 6 : 10) : 0} />
             </ShowWhen>
@@ -404,7 +415,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
       })}
       <Marker key="fe" coordinate={pin(encounterShown && encounter ? encounter : encounterAt)}>
         {/* The ring is always mounted: no encounter = opacity 0, paused. */}
-        <ShowWhen on={encounterOnScreen && !!encounter}>
+        <ShowWhen box={RING_BOX} on={encounterOnScreen && !!encounter}>
           <EncounterRing ringPts={encounter ? Math.max(30, Math.min(120, encounter.radius * pointsPerMeter(zoom, encounter.latitude))) : 30}
             clock={alive.clock} animated={encounterOnScreen && !!encounter && animate}
             sparkToken={encounter ? tokens[`sparks:${encounter.key}`] ?? 0 : 0}
@@ -416,7 +427,7 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
         onPress={() => { if (encounterTapRef.current) onEncounterPressRef.current?.(encounterTapRef.current); }}
         touchEnabled={encounterOnScreen && !!encounter && !!onEncounterPress}
         accessibilityLabel={encounter ? `${encounter.name}, encounter` : 'Encounter'}>
-        <ShowWhen on={encounterOnScreen && !!encounter}>
+        <ShowWhen box={CRITTER_BOX} on={encounterOnScreen && !!encounter}>
           <EncounterCritter asset={encounter ? scareactorAsset(assets, encounterScareactor(assets, encounter)) : null}
             chaos={encounter ? encounterChaos(encounter) : false} clock={alive.clock}
             animated={encounterOnScreen && !!encounter && animate} full={st.tier === 'full'}
@@ -462,23 +473,31 @@ function PlacedSpot({ id, anchor, fold = false, children }: {
  * a swap of element types inside a Marker: the MapLibre and RN Skia crashes);
  * hidden is opacity 0 and takes no touches.
  */
-function ShowWhen({ on, children }: { readonly on: boolean; readonly children: ReactNode }) {
-  // A reveal (and a relayout after a GPS jump or resume) repaints the Skia inside: now, then
-  // as the camera settles and the art arrives (frightRepaint.tsx).
+function ShowWhen({ on, box, children }: { readonly on: boolean; readonly box: { readonly w: number; readonly h: number }; readonly children: ReactNode }) {
+  // After a GPS jump or resume, a spot whose native view MapLibre parked off screen comes back
+  // blank. A 0.5 pt box change re-adds that annotation (and repaints its Skia): only around a
+  // relayout, and for a spot revealed within 5 s of one. Ordinary pans and zooms never change it.
   const relayout = useContext(RelayoutContext);
   const [token, setToken] = useState(0);
+  const lastRelayout = useRef(0);
   useEffect(() => {
-    if (!on) return;
-    // Through 4 s: the camera may still be gliding, and a cold spot's art decodes after it shows.
-    const timers = REPAINT_TICKS_MS.map(ms => setTimeout(() => setToken(t => t + 1), ms));
-    return () => { for (const t of timers) clearTimeout(t); };
-  }, [on, relayout]);
+    if (relayout === 0) return;
+    lastRelayout.current = Date.now();
+    setToken(t => t + 1);
+  }, [relayout]);
+  useEffect(() => {
+    if (on && Date.now() - lastRelayout.current < RELAYOUT_REVEAL_MS) setToken(t => t + 1);
+  }, [on]);
   return (
-    <View pointerEvents={on ? 'box-none' : 'none'} style={on ? SHOWN_STYLE : HIDDEN_STYLE}>
+    <View pointerEvents={on ? 'box-none' : 'none'}
+      style={[styles.box, { width: repaintWidth(box.w, token), height: box.h }, on ? SHOWN_STYLE : HIDDEN_STYLE]}>
       <RepaintContext.Provider value={token}>{children}</RepaintContext.Provider>
     </View>
   );
 }
+/** A spot revealed this soon after a relayout still gets its re-add. */
+export const RELAYOUT_REVEAL_MS = 5000;
+const styles = StyleSheet.create({ box: { alignItems: 'center', justifyContent: 'center' } });
 const RelayoutContext = createContext(0);
 const SHOWN_STYLE = { opacity: 1 } as const;
 const HIDDEN_STYLE = { opacity: 0 } as const;

@@ -196,6 +196,13 @@ export function ridePriority(ride: RideLayoutInput, nightMode: boolean): number 
   return ride.near ? PRIORITY.rideNear : PRIORITY.ride;
 }
 
+/** Metres between two points (equirectangular; fine at park scale). */
+function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const dy = (a.latitude - b.latitude) * 111_320;
+  const dx = (a.longitude - b.longitude) * 111_320 * Math.cos(((a.latitude + b.latitude) / 2) * Math.PI / 180);
+  return Math.hypot(dx, dy);
+}
+
 export function buildParkLayout(input: ParkLayoutInput): LayoutItem[] {
   const items: LayoutItem[] = [];
   const { nightMode } = input;
@@ -229,10 +236,16 @@ export function buildParkLayout(input: ParkLayoutInput): LayoutItem[] {
       forceRecede: haunt.closed ? true : undefined,
     });
   }
+  // The Fin-ister encounter swims AT a reef: that reef's performers are its stage, drawn with it,
+  // never hidden under it (the encounter is fixed art, so a plain reef there always lost).
+  const encounters = (input.fixed ?? []).filter(item => item.kind === 'encounter');
+  const hostsEncounter = (reef: { latitude: number; longitude: number; radius: number }) =>
+    encounters.some(enc => metersBetween(enc, reef) <= reef.radius + 5);
   for (const reef of input.reefs ?? []) {
     const bodyFor = reefBody(reef.radius, reef.latitude);
     items.push({ id: reefLayoutId(reef.key), latitude: reef.latitude, longitude: reef.longitude,
-      priority: PRIORITY.reef, body: bodyFor(17.6), bodyFor, minZoom: REEF_MIN_ZOOM });
+      priority: PRIORITY.reef, body: bodyFor(17.6), bodyFor, minZoom: REEF_MIN_ZOOM,
+      ...(hostsEncounter(reef) ? { fixed: true } : {}) });
   }
   for (const fixed of input.fixed ?? []) {
     items.push({
