@@ -20,6 +20,6 @@ export const SECRET_THEME = {
   border: '#d9c6ff',
   gold: '#ffd34d',
   violet: '#8f6bff',
-  /** Secret tile plate: lilac to violet, navy ink stays AA (rarity plates are their own). */
-  tilePlate: ['#f3ecff', '#bba0ff'] as const,
+  /** Secret tile plate: midnight violet, so the animated piece glows on it; white ink (AA). */
+  tilePlate: ['#4a33a8', '#1f1558'] as const,
 } as const;

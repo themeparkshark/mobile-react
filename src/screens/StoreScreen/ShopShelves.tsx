@@ -56,6 +56,7 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { SECRET_THEME } from '../../fx/secretTheme';
 import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
+import { FxPauseContext } from '../../fx/FxStage';
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
 
@@ -83,10 +84,13 @@ const MINI_CARD_STYLE = { position: 'absolute' as const, left: 0, right: 0, top:
 type Open = { item: ShopItem; fullLook: boolean; bought: boolean; accent: string | null } | null;
 type OpenFn = (item: ShopItem, opts?: { fullLook?: boolean; bought?: boolean; accent?: string | null }) => void;
 
-const SectionPills = memo(function SectionPills({ section, offset, still }: { section: ShopSection; offset: number; still: boolean }) {
+const SectionPills = memo(function SectionPills({ section, offset, still, single = false }: { section: ShopSection; offset: number; still: boolean;
+  /** One honest pill per shelf (the Secret Shop: no "new drop" next to "ends", kids UX round 1). */
+  single?: boolean }) {
   const now = useShopNow(offset);
   if (section.type === 'daily') return <TimerPill pill={dailyPill(section, now)} still={still} />;
   if (section.type === 'featured') return <TimerPill pill={featuredPill(section, now)} still={still} />;
+  if (single) return <View style={styles.pills}><TimerPill pill={eventEndPill(section, now)} still={still} icon="pumpkin" /></View>;
   const drop = eventDropPill(section, now);
   return (
     <View style={styles.pills}>
@@ -222,11 +226,13 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
   onOpen: OpenFn; onWish: (item: ShopItem) => void; onTrySet: (set: ShopSetSummary) => void;
 }) {
   const accent = sectionAccent(section);
-  const ink = section.art_url ? '#ffffff' : inkOn(accent);
+  const ink = section.art_url || secret ? '#ffffff' : inkOn(accent);
   const openHere = useCallback((item: ShopItem) => onOpen(item, { accent }), [onOpen, accent]);
   return (
-    <View style={[styles.event, { backgroundColor: accent }]}>
-      {section.art_url ? (
+    <View style={[styles.event, { backgroundColor: secret ? SECRET_THEME.panel : accent }, secret && { borderColor: SECRET_THEME.border }]}>
+      {/* The Secret Shop keeps its midnight: the season glows up from the bottom instead of a flat colour. */}
+      {secret && <LinearGradient pointerEvents="none" colors={[SECRET_THEME.panel, `${accent}cc`]} locations={[0.15, 1]} style={StyleSheet.absoluteFill} />}
+      {secret ? null : section.art_url ? (
         <ImageBackground source={{ uri: section.art_url }} resizeMode="cover" style={styles.eventArt}>
           <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0)', accent]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
         </ImageBackground>
@@ -237,7 +243,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
         {section.subtitle && section.subtitle !== section.wave?.title ? (
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.eventSub, { color: ink }]} numberOfLines={2}>{section.subtitle}</Text>
         ) : null}
-        <SectionPills section={section} offset={offset} still={still} />
+        <SectionPills section={section} offset={offset} still={still} single={secret} />
         {section.next_wave && !secret && <View style={{ marginTop: 8 }}><TeaseChip tease={section.next_wave} label="NEXT" /></View>}
       </View>
       <Grid items={section.items} vip={vip} balance={balance} still={still} bought={bought} quiet={!!section.quiet_tiles} flipIn={flipIn}
@@ -316,10 +322,13 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       <LinearGradient colors={secret ? [...SECRET_THEME.sky] : [...NIGHT_SKY]} style={StyleSheet.absoluteFill} />
       {secret && <StarMotes still={still} />}
       <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
-        accessibilityLabel={`This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
+        accessibilityLabel={secret
+          ? `The Vault: ${itemDisplayName(item)}, moves on your shark. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.')
+            : `${formatCoins(item.cost)} Shark Coins${player?.is_subscribed ? '' : ', VIP members can buy'}. Tap to try it on.`}`
+          : `This week's star: ${itemDisplayName(item)}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.') : `${formatCoins(item.cost)} Shark Coins. Tap to try it on.`}`}>
         <View style={styles.heroStage}>
           <ShopStage rim={secret ? SECRET_THEME.gold : glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
-            plinth={secret ? 'secret' : 'house'}
+            plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}
             backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
             {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
@@ -346,6 +355,8 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
         {!owned && (
           <View style={styles.heroPrice}><GameIcon name="coins" size={18} />
             <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroPriceText}>{formatCoins(item.cost)}</Text>
+            {/* One marker everywhere: a lock on the price when only VIP members can buy it. */}
+            {secret && !player?.is_subscribed && <GameIcon name="lock" size={18} />}
             {badge.label ? (priceRow === 'inline' ? <View style={[styles.heroRarity, { backgroundColor: badge.labelColor }]}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroRarityText}>{badge.label}</Text></View>
               : <View style={[styles.heroRarityDot, { backgroundColor: badge.labelColor }]} />) : null}
@@ -689,7 +700,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
       ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star" }] : []),
       ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, fill: looks[i].fill, ring: looks[i].ring })),
       ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured' }] : []),
-      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? 'Tonight Only' : 'Daily' }] : []),
+      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? "Tonight's Pick" : 'Daily' }] : []),
     ];
   }, [chipSig]);
   const chipKeys = chips.map(c => c.key).join('|');
@@ -699,6 +710,27 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     syncTops();
   };
   useEffect(() => { syncTops(); }, [chipKeys]);
+
+  // Animated pieces run only on shelves you can see, and never under the try-on (a Modal
+  // never blurs the screen). One bitmask, recomputed on the UI thread, crosses to JS only
+  // when a shelf comes into or leaves view (performance panel round 1).
+  const [visibleMask, setVisibleMask] = useState(-1);
+  const viewH = Dimensions.get('window').height;
+  useAnimatedReaction(() => {
+    const list = tops.value;
+    let mask = 0;
+    for (let i = 0; i < list.length; i++) {
+      const top = list[i];
+      const bottom = i + 1 < list.length ? list[i + 1] : Number.POSITIVE_INFINITY;
+      if (top < shelfY.value + viewH && bottom > shelfY.value) mask |= 1 << i;
+    }
+    return list.length ? mask : -1;
+  }, (mask, prev) => { if (mask !== prev) runOnJS(setVisibleMask)(mask); });
+  const pausedFor = (key: string) => {
+    if (open) return true;
+    const i = chips.findIndex(c => c.key === key);
+    return i >= 0 && visibleMask !== -1 && (visibleMask & (1 << i)) === 0;
+  };
   const jump = useCallback((i: number) => {
     const key = chips[i]?.key;
     if (!key) return;
@@ -710,7 +742,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   return (
     <ShopProfile id="shelves">
       <View style={{ flex: 1 }}>
-        <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} floor={secret ? SECRET_THEME.floor : undefined} />
+        {/* The Secret Shop is four short shelves: no unlabeled icon row to decode (kids UX round 1). */}
+        {!secret && <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />}
         <View style={{ flex: 1 }}>
         <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
           onScroll={scrollHandler} scrollEventThrottle={16}
@@ -737,19 +770,23 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
             onLayout={e => { wrapY.current = e.nativeEvent.layout.y; syncTops(); }}>
             {featured && hero && (
               <Animated.View entering={enter(0)} onLayout={measure('hero')}>
+                <FxPauseContext.Provider value={pausedFor('hero')}>
                 <ShopProfile id="hero">
                   <Hero item={hero} set={heroSet} section={featured} offset={offset} still={still} todayItems={allItems}
                     tease={heroTease} onOpen={openItem} secret={secret} />
                 </ShopProfile>
+                </FxPauseContext.Provider>
               </Animated.View>
             )}
 
             {events.map((section, index) => (
               <Animated.View key={section.key} entering={enter(index + 1)} onLayout={measure(section.key)}>
+                <FxPauseContext.Provider value={pausedFor(section.key)}>
                 <ShopProfile id={`banner-${section.key}`}>
                   <EventBanner section={section} offset={offset} still={still} vip={vip} balance={balance} bought={bought} flipIn={firstOpenToday}
                     todayIds={todayIds} setsBySlug={setsBySlug} onOpen={openItem} onWish={wish} onTrySet={trySet} secret={secret} />
                 </ShopProfile>
+                </FxPauseContext.Provider>
               </Animated.View>
             ))}
 
@@ -762,8 +799,10 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
                 {featured.set_slugs.map(slug => setsBySlug.get(slug)).filter((s): s is ShopSetSummary => !!s).map(set => (
                   <SetCallout key={set.slug} set={set} todayIds={todayIds} onTry={trySet} />
                 ))}
+                <FxPauseContext.Provider value={pausedFor('featured')}>
                 <Grid items={featuredRest} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
                   width={secret ? SECRET_TILE_W : TILE_W} centered={secret} />
+                </FxPauseContext.Provider>
               </Animated.View>
             )}
 
@@ -772,13 +811,15 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
                 <View style={[styles.header, { overflow: 'hidden', borderTopLeftRadius: 19, borderTopRightRadius: 19 }]}>
                   {firstOpenToday && <Sheen still={still} delay={700} width={SCREEN_W} />}
                   <View style={{ flexShrink: 1, gap: 4 }}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>{secret ? 'TONIGHT ONLY' : 'DAILY'}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.headerTitle}>{secret ? "TONIGHT'S PICK" : 'DAILY'}</Text>
                     {dailyNew && <View style={styles.newChip}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.newChipText}>{dailyNew}</Text></View>}
                   </View>
                   <SectionPills section={daily} offset={offset} still={still} />
                 </View>
+                <FxPauseContext.Provider value={pausedFor('daily')}>
                 <Grid items={daily.items} vip={vip} balance={balance} still={still} bought={bought} flipIn={firstOpenToday} onOpen={openTile} onWish={wish}
                   width={secret ? SECRET_TILE_W : TILE_W} centered={secret} />
+                </FxPauseContext.Provider>
               </Animated.View>
             )}
           </Animated.View>

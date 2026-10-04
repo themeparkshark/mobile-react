@@ -741,7 +741,8 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
   for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
-  assert.match(code, /<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\}[^/]*\/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  // (The Secret Shop's four short shelves have no jump bar; the Shark Shop always does.)
+  assert.match(code, /\{!secret && <JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\}\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
   assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
   for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
 });
@@ -765,7 +766,7 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
 test('pre-launch 6: Checking uses the muted face', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
-  assert.match(sheet, /disabled=\{wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
 });
 
 test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle shelf)', () => {

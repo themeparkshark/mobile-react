@@ -7,21 +7,41 @@
   "rigs": {
     "jetpack": {
       "body": {
-        "file": "jetpack.png",
-        "aspect": 1.5238,
-        "cx": 0.83,
-        "cy": 0.43,
-        "w": 0.21,
+        "file": "jetpack.webp",
+        "aspect": 1.2387,
+        "cx": 0.785,
+        "cy": 0.42,
+        "w": 0.24,
         "ax": 0.5,
         "ay": 0.5,
-        "rot": 0
+        "rot": 0,
+        "nozzles": [
+          {
+            "x": 0.565,
+            "y": 0.94
+          },
+          {
+            "x": 0.82,
+            "y": 0.91
+          }
+        ]
       },
       "flame": {
-        "file": "flame.png",
+        "file": "flame.webp",
         "aspect": 2.4151,
-        "cx": 0.851,
-        "cy": 0.552,
-        "w": 0.078,
+        "cx": 0.8006,
+        "cy": 0.532,
+        "w": 0.07,
+        "ax": 0.5,
+        "ay": 0.04,
+        "rot": 0
+      },
+      "flame2": {
+        "file": "flame.webp",
+        "aspect": 2.4151,
+        "cx": 0.8618,
+        "cy": 0.524,
+        "w": 0.058,
         "ax": 0.5,
         "ay": 0.04,
         "rot": 0
@@ -29,7 +49,7 @@
     },
     "plasma_blade": {
       "blade": {
-        "file": "blade.png",
+        "file": "blade.webp",
         "aspect": 2.0317,
         "cx": 0.31,
         "cy": 0.515,
@@ -43,30 +63,32 @@
       "ring": {
         "cx": 0.6,
         "cy": 0.15,
-        "rx": 0.175,
-        "ry": 0.052,
+        "rx": 0.16,
+        "ry": 0.046,
         "tilt": -5,
-        "stroke": 0.012
+        "stroke": 0.012,
+        "aspect": 0.5651,
+        "scale": 1.02
       },
       "fishA": {
-        "file": "fish-yellow.png",
+        "file": "fish-yellow.webp",
         "aspect": 0.875,
         "w": 0.11
       },
       "fishB": {
-        "file": "fish-pink.png",
+        "file": "fish-pink.webp",
         "aspect": 0.8906,
         "w": 0.11
       },
       "fishC": {
-        "file": "fish-yellow.png",
+        "file": "fish-yellow.webp",
         "aspect": 0.875,
         "w": 0.095
       }
     },
     "saucer": {
       "ufo": {
-        "file": "ufo.png",
+        "file": "ufo.webp",
         "aspect": 0.776,
         "cx": 0.85,
         "cy": 0.255,
@@ -78,38 +100,38 @@
     },
     "midway_fireworks": {
       "backdrop": {
-        "file": "backdrop.jpg"
+        "file": "backdrop.webp"
       },
       "bursts": [
         {
-          "file": "burst-gold.png",
-          "cx": 0.2,
-          "cy": 0.13,
-          "w": 0.22
+          "file": "burst-gold.webp",
+          "cx": 0.26,
+          "cy": 0.17,
+          "w": 0.21
         },
         {
-          "file": "burst-pink.png",
-          "cx": 0.84,
-          "cy": 0.11,
-          "w": 0.2
+          "file": "burst-pink.webp",
+          "cx": 0.76,
+          "cy": 0.14,
+          "w": 0.19
         },
         {
-          "file": "burst-gold.png",
-          "cx": 0.56,
-          "cy": 0.06,
+          "file": "burst-gold.webp",
+          "cx": 0.52,
+          "cy": 0.09,
           "w": 0.13
         },
         {
-          "file": "burst-pink.png",
-          "cx": 0.1,
-          "cy": 0.33,
-          "w": 0.12
+          "file": "burst-pink.webp",
+          "cx": 0.2,
+          "cy": 0.36,
+          "w": 0.11
         }
       ]
     },
     "ghost_lantern": {
       "lantern": {
-        "file": "lantern.png",
+        "file": "lantern.webp",
         "aspect": 1.6623,
         "cx": 0.315,
         "cy": 0.49,
@@ -119,7 +141,7 @@
         "rot": 0
       },
       "ghost": {
-        "file": "ghost.png",
+        "file": "ghost.webp",
         "aspect": 0.9323,
         "w": 0.13
       }

@@ -2,8 +2,8 @@ import { NavigationContext } from '@react-navigation/native';
 import { Image, type ImageSource } from 'expo-image';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { AppState, LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import Animated, { SharedValue, useFrameCallback, useSharedValue } from 'react-native-reanimated';
-import { FxLod, PaperBox, PartSpec, partLayout } from './registry';
+import Animated, { SharedValue, runOnJS, useAnimatedReaction, useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import { FxLod, NO_KICK, PaperBox, PartSpec, partLayout } from './registry';
 
 /**
  * Shared plumbing for Secret Shop rigs (secret-shop/DESIGN.md 8.2).
@@ -17,12 +17,23 @@ import { FxLod, PaperBox, PartSpec, partLayout } from './registry';
 /** Props every rig layer gets. */
 export interface RigProps {
   readonly t: SharedValue<number>;
+  /** Clock time of the last tap on the stage: the rig replays its moment from there. */
+  readonly kick: SharedValue<number>;
   readonly box: PaperBox;
   readonly lod: FxLod;
+  /** Called (on JS) when a moment starts, for its sound and haptic. Only stages pass it. */
+  readonly cue?: (moment: string) => void;
 }
 
-/** True while the stage should animate: focused screen, app active, not still. */
+/**
+ * Pauses every rig below it: the shelves while the try-on sheet covers them
+ * (a Modal never blurs the screen), or a shelf scrolled out of view.
+ */
+export const FxPauseContext = createContext(false);
+
+/** True while the stage should animate: focused screen, app active, not paused, not still. */
 export function useFxRunning(lod: FxLod): boolean {
+  const paused = useContext(FxPauseContext);
   // Outside a navigator (share capture, tests) there is no focus to lose.
   const navigation = useContext(NavigationContext);
   const [focused, setFocused] = useState(() => navigation?.isFocused?.() ?? true);
@@ -37,7 +48,7 @@ export function useFxRunning(lod: FxLod): boolean {
     const sub = AppState.addEventListener('change', state => setActive(state === 'active'));
     return () => sub.remove();
   }, []);
-  return lod !== 'still' && focused && active;
+  return lod !== 'still' && focused && active && !paused;
 }
 
 /** The stage clock in ms. Starts at `start` so a still stage shows the rest pose. */
@@ -56,6 +67,22 @@ export function useFxClock(running: boolean, start = 0): SharedValue<number> {
   return t;
 }
 
+/** The stage's tap time (see RigProps.kick). */
+export function useFxKick(): SharedValue<number> {
+  return useSharedValue(NO_KICK);
+}
+
+/**
+ * Calls `onStart` on the JS thread when `progress` (a worklet returning -1
+ * when idle) enters a moment. Used for moment sounds and haptics, so they land
+ * on the frame the motion starts; nothing crosses threads in between.
+ */
+export function useMomentCue(progress: () => number, onStart: (() => void) | undefined) {
+  useAnimatedReaction(() => progress() >= 0, (on, was) => {
+    if (on && was === false && onStart) runOnJS(onStart)();
+  });
+}
+
 const ClockContext = createContext<SharedValue<number> | null>(null);
 
 /** Shares one clock between the back and front layers of a stage. */
@@ -67,12 +94,13 @@ export function useStageClock(): SharedValue<number> | null {
   return useContext(ClockContext);
 }
 
-/** Fills its parent, measures it, and hands children the box. */
-export function FxBox({ children, measure }: {
+/** Fills its parent, measures it, and hands children the box (a known size draws on the first frame). */
+export function FxBox({ children, measure, initial }: {
   readonly children: (size: { width: number; height: number }) => ReactNode;
   readonly measure?: (size: { width: number; height: number }) => void;
+  readonly initial?: { width: number; height: number };
 }) {
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(initial ?? null);
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (!size || Math.abs(size.width - width) > 0.5 || Math.abs(size.height - height) > 0.5) {
@@ -88,7 +116,7 @@ export function FxBox({ children, measure }: {
 }
 
 /** A rig part placed by its spec, with an optional animated style on top. */
-export function FxPart({ source, box, spec, aspect = 1, style, tint, blur, opacity }: {
+export function FxPart({ source, box, spec, aspect = 1, style, tint, blur, opacity, fit = 'contain' }: {
   readonly source: ImageSource | number;
   readonly box: PaperBox;
   readonly spec: PartSpec;
@@ -97,6 +125,8 @@ export function FxPart({ source, box, spec, aspect = 1, style, tint, blur, opaci
   readonly tint?: string;
   readonly blur?: number;
   readonly opacity?: number;
+  /** 'fill' stretches a soft glow sprite to the part's box. */
+  readonly fit?: 'contain' | 'fill';
 }) {
   const l = partLayout(box, spec, aspect);
   return (
@@ -104,7 +134,7 @@ export function FxPart({ source, box, spec, aspect = 1, style, tint, blur, opaci
       position: 'absolute', left: l.left, top: l.top, width: l.width, height: l.height,
       transformOrigin: l.origin, transform: [{ rotate: `${l.rot}deg` }], opacity,
     }, style]}>
-      <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" tintColor={tint} blurRadius={blur}
+      <Image source={source} style={StyleSheet.absoluteFill} contentFit={fit} tintColor={tint} blurRadius={blur}
         cachePolicy="memory" />
     </Animated.View>
   );

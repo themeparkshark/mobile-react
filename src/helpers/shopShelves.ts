@@ -380,7 +380,7 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
     return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };
   }
-  if (s.vipLocked && s.secret) return { label: 'Unlock with VIP', action: 'vip', note: 'VIP members can buy Secret Shop pieces. Try on anything you like.', look: 'go' };
+  if (s.vipLocked && s.secret) return { label: 'Ask a grown-up', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
   // Its own state: asking the server never shows "Yes, buy it!".
   if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };

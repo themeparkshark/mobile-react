@@ -159,6 +159,39 @@ export function focusBox(key: FxKey, size: number): PaperBox {
   return { x: size / 2 - f.cx * w, y: size / 2 - f.cy * h, w, h };
 }
 
+/** A stable 0..1 number for an integer (cycle jitter that captures can replay). */
+export function hash01(n: number): number {
+  'worklet';
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** No kick yet: far in the past. */
+export const NO_KICK = -1e9;
+
+/**
+ * A rig's "moment" (boost, swing, beam, peek...): -1 when idle, else 0..1
+ * through it. It fires `firstAt` ms after the stage starts, then once per
+ * `period` with up to `jitter` of the period shifted per cycle (seeded, so a
+ * capture replays exactly), and right away when the player taps (`kick` is
+ * the clock time of the tap). `cycle` tells variants apart (-1 for a tap).
+ */
+export function momentAt(t: number, kick: number, period: number, length: number, firstAt = 350, jitter = 0.25):
+  { p: number; cycle: number } {
+  'worklet';
+  const lengthMs = length * period;
+  const sinceKick = t - kick;
+  if (sinceKick >= 0 && sinceKick < lengthMs) return { p: sinceKick / lengthMs, cycle: -1 };
+  const local = t - firstAt;
+  if (local < 0) return { p: -1, cycle: 0 };
+  const cycle = Math.floor(local / period);
+  const start = cycle === 0 ? 0 : hash01(cycle) * jitter * period;
+  const d = local - cycle * period - start;
+  // A timer moment right after a tap moment is skipped (no double play).
+  if (d < 0 || d >= lengthMs || (sinceKick >= 0 && sinceKick < lengthMs + 600)) return { p: -1, cycle };
+  return { p: d / lengthMs, cycle };
+}
+
 /** Phase helpers shared by rigs and tests: 0..1 inside a looping period. */
 export function phaseOf(timeMs: number, periodMs: number, offset = 0): number {
   'worklet';

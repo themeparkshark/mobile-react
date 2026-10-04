@@ -21,8 +21,9 @@ const wardrobe = loadTs('src/helpers/wardrobe.ts');
 const fxRegistry = loadTs('src/fx/registry.ts');
 const fxStubs = {
   '../fx/FxLayers': { wornFx: fxRegistry.wornFx, FxFloat: 'FxFloat', FxRigLayers: 'FxRigLayers', FxScene: 'FxScene',
-    useFloatShadowStyle: () => ({}), useFxEquipSound: () => undefined },
-  '../fx/FxStage': { useFxClock: () => ({ value: 0 }), useFxRunning: () => false },
+    useFloatShadowStyle: () => ({}), useFxEquipSound: () => undefined, useFxMomentCue: () => undefined },
+  '../fx/FxStage': { useFxClock: () => ({ value: 0 }), useFxKick: () => ({ value: 0 }), useFxRunning: () => false },
+  '../hooks/useReducedGameMotion': { default: () => false },
   '../fx/registry': fxRegistry,
 };
 const CLASSIC = '../../assets/images/screens/inventory/classic-no-eye.png';

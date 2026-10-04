@@ -1,82 +1,130 @@
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { FxPart, RigProps } from '../FxStage';
-import { FX_GEOMETRY, partLayout, phaseOf, windowOf } from '../registry';
+import { FxPart, RigProps, useMomentCue } from '../FxStage';
+import { FX_GEOMETRY, momentAt, partLayout, phaseOf } from '../registry';
 
 const G = FX_GEOMETRY.rigs.plasma_blade.blade;
-const BLADE = require('../../../assets/fx/blade.png');
+const BLADE = require('../../../assets/fx/blade.webp');
+const GLOW = require('../../../assets/fx/glow.webp');
+const SPARK = require('../../../assets/fx/spark.webp');
 
 export const SWING_PERIOD = 4500;
-export const SWING_LENGTH = 0.2;
-const SWING_DEG = -34; // outward, away from the face
+export const SWING_LENGTH = 0.22;
+/** Outward, away from the face. */
+const SLASH_DEG = -52;
+/** Reduce Motion and the rest frame: the blade at its proudest, glowing. */
+export const STILL_T = 1100;
 
-/** Extra rotation of the blade at time t: a quick slash out and back every 4.5 s. */
-export function swingAt(t: number): number {
+/**
+ * Extra rotation of the blade at time t: a wind-up back, a fast outward slash,
+ * then a springy settle with one overshoot (game feel round 2). Every few
+ * swings it slashes the other way.
+ */
+export function swingAt(t: number, kick: number): number {
   'worklet';
-  const w = windowOf(phaseOf(t, SWING_PERIOD, 0.35), 0, SWING_LENGTH);
-  if (w < 0) return 0;
-  // Fast out (ease out), slower settle back.
-  const out = w < 0.35 ? Math.sin((w / 0.35) * Math.PI / 2) : Math.cos(((w - 0.35) / 0.65) * Math.PI / 2);
-  return SWING_DEG * out;
+  const { p, cycle } = momentAt(t, kick, SWING_PERIOD, SWING_LENGTH, 350);
+  if (p < 0) return 0;
+  const dir = cycle > 0 && cycle % 3 === 2 ? -0.55 : 1;
+  // 0-0.1 wind-up (+8 deg), 0.1-0.24 slash, 0.24-1 settle with overshoot.
+  if (p < 0.1) return dir * -SLASH_DEG * 0.15 * Math.sin((p / 0.1) * Math.PI / 2);
+  if (p < 0.24) {
+    const k = (p - 0.1) / 0.14;
+    return dir * (-SLASH_DEG * 0.15 + (SLASH_DEG + SLASH_DEG * 0.15) * (1 - Math.pow(1 - k, 3)));
+  }
+  const k = (p - 0.24) / 0.76;
+  return dir * SLASH_DEG * Math.cos(k * Math.PI * 1.5) * Math.exp(-3.2 * k);
+}
+
+/** 0..1 how fast the blade is moving right now (trail strength). */
+function speedAt(t: number, kick: number): number {
+  'worklet';
+  return Math.min(1, Math.abs(swingAt(t, kick) - swingAt(t - 24, kick)) / 7);
 }
 
 const TRAIL = [1, 2, 3];
 
-function Trail({ t, box, i }: RigProps & { i: number }) {
+function Trail({ t, kick, box, i }: RigProps & { i: number }) {
   const style = useAnimatedStyle(() => {
-    const now = swingAt(t.value);
-    const lag = swingAt(t.value - i * 34);
-    const moving = Math.abs(now - lag);
+    const lag = swingAt(t.value - i * 30, kick.value);
     return {
-      opacity: Math.min(1, moving / 6) * (0.5 - i * 0.13),
-      transform: [{ rotate: `${G.rot + lag}deg` }],
+      opacity: speedAt(t.value, kick.value) * (i === 1 ? 0.9 : i === 2 ? 0.55 : 0.3),
+      transform: [{ rotate: `${G.rot + lag}deg` }, { scaleX: 1.15 }],
     };
   });
-  return <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} tint="#7fe8ff" style={style} />;
+  // The first ghost is white-hot (reads on a light backdrop), the rest cyan.
+  return <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} tint={i === 1 ? '#ffffff' : '#1fb8e6'} style={style} />;
 }
 
-/** A light mote that runs from the hilt to the tip along the blade. */
-function Mote({ t, box }: RigProps) {
+/** The grip and blade length in stage pixels (computed on JS, read in worklets). */
+function bladeAxis(box: RigProps['box']) {
   const l = partLayout(box, G, G.aspect);
-  const size = Math.max(4, box.w * 0.016);
-  const gripX = l.left + (G.ax ?? 0.5) * l.width;
-  const gripY = l.top + (G.ay ?? 0.5) * l.height;
-  const length = l.height * 0.66;
+  return { gx: l.left + (G.ax ?? 0.5) * l.width, gy: l.top + (G.ay ?? 0.5) * l.height, len: l.height * 0.8 };
+}
+
+/** Where along the blade a point at `d` (0 hilt .. 1 tip) sits for a rotation. */
+function bladePoint(axis: { gx: number; gy: number; len: number }, d: number, deg: number) {
+  'worklet';
+  const a = (deg * Math.PI) / 180;
+  return { x: axis.gx + Math.sin(a) * axis.len * d, y: axis.gy - Math.cos(a) * axis.len * d };
+}
+
+/** A drawn spark that pops at the tip when the slash lands, and a light mote that runs up the blade. */
+function TipSpark({ t, kick, box }: RigProps) {
+  const size = box.w * 0.07;
+  const axis = bladeAxis(box);
+  const style = useAnimatedStyle(() => {
+    const { p } = momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350);
+    const w = p < 0.2 ? -1 : (p - 0.2) / 0.25;
+    if (w < 0 || w > 1) return { opacity: 0 };
+    const pt = bladePoint(axis, 1, G.rot + swingAt(t.value, kick.value));
+    return { opacity: 1 - w, transform: [{ translateX: pt.x - size / 2 }, { translateY: pt.y - size / 2 }, { scale: 0.4 + 0.9 * w }, { rotate: `${w * 90}deg` }] };
+  });
+  return <Animated.Image source={SPARK} style={[styles.abs, { width: size, height: size }, style]} />;
+}
+
+function Mote({ t, kick, box }: RigProps) {
+  const size = Math.max(5, box.w * 0.03);
+  const axis = bladeAxis(box);
   const style = useAnimatedStyle(() => {
     const p = phaseOf(t.value, 1600);
-    const angle = ((G.rot + swingAt(t.value)) * Math.PI) / 180;
-    const d = length * (0.12 + 0.88 * p);
-    return {
-      opacity: Math.sin(Math.PI * p),
-      transform: [{ translateX: Math.sin(angle) * d }, { translateY: -Math.cos(angle) * d }],
-    };
+    const pt = bladePoint(axis, 0.12 + 0.88 * p, G.rot + swingAt(t.value, kick.value));
+    return { opacity: Math.sin(Math.PI * p), transform: [{ translateX: pt.x - size / 2 }, { translateY: pt.y - size / 2 }] };
   });
-  return <Animated.View style={[styles.mote, { left: gripX - size / 2, top: gripY - size / 2, width: size, height: size,
-    borderRadius: size }, style]} />;
+  return <Animated.Image source={GLOW} style={[styles.abs, { width: size, height: size }, style]} />;
 }
 
-/** In front of the shark: the glow, the swing trail, the blade, and a light mote. */
-export function PlasmaBladeFront({ t, box, lod }: RigProps) {
+/** In front of the shark: the glow, the swing trail, the blade, a tip spark and a light mote. */
+export function PlasmaBladeFront(props: RigProps) {
+  const { t, kick, box, lod, cue } = props;
+  const still = lod === 'still';
+  useMomentCue(() => { 'worklet'; return still ? -1 : momentAt(t.value, kick.value, SWING_PERIOD, SWING_LENGTH, 350).p; }, cue ? () => cue('swing') : undefined);
   const glow = useAnimatedStyle(() => {
-    const v = t.value;
-    const s = swingAt(v);
+    const v = still ? STILL_T : t.value;
+    const s = swingAt(v, kick.value);
     return {
-      opacity: 0.5 + 0.25 * Math.sin((v / 1600) * Math.PI * 2) + Math.abs(s) / 90,
-      transform: [{ rotate: `${G.rot + s}deg` }, { scale: 1.12 }],
+      opacity: 0.5 + 0.2 * Math.sin((v / 1600) * Math.PI * 2) + 0.3 * speedAt(v, kick.value),
+      transform: [{ rotate: `${G.rot + s}deg` }, { scaleX: 1.7 }, { scaleY: 1.08 }],
     };
   });
-  const blade = useAnimatedStyle(() => ({ transform: [{ rotate: `${G.rot + swingAt(t.value)}deg` }] }));
+  const blade = useAnimatedStyle(() => ({ transform: [{ rotate: `${G.rot + swingAt(still ? STILL_T : t.value, kick.value)}deg` }] }));
   return (
     <>
-      <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} tint="#5fd8ff" blur={12} style={glow} />
-      {lod === 'full' && TRAIL.map(i => <Trail key={i} t={t} box={box} lod={lod} i={i} />)}
+      {/* A soft cyan glow sprite stretched along the blade (never a blurred copy). */}
+      <FxPart source={GLOW} box={box} spec={G} aspect={G.aspect} tint="#5fe2ff" fit="fill" style={glow} />
+      {lod === 'full' && TRAIL.map(i => <Trail key={i} {...props} i={i} />)}
       <FxPart source={BLADE} box={box} spec={G} aspect={G.aspect} style={blade} />
-      {lod === 'full' && <Mote t={t} box={box} lod={lod} />}
+      {lod === 'full' && <TipSpark {...props} />}
+      {lod === 'full' && <Mote {...props} />}
     </>
   );
 }
 
+/** The shark leans into the slash (a few degrees about its tail). */
+export function bladeLean(t: number, kick: number): number {
+  'worklet';
+  return swingAt(t, kick) * 0.07;
+}
+
 const styles = StyleSheet.create({
-  mote: { position: 'absolute', backgroundColor: '#ffffff', shadowColor: '#9ff0ff', shadowOpacity: 1, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 } },
+  abs: { position: 'absolute', left: 0, top: 0 },
 });

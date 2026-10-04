@@ -254,6 +254,8 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
 const PLINTH = {
   house: { side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' },
   secret: { side: '#4a2fa8', line: '#1d1052', band: '#6d4fd6', top: '#e9ddff' },
+  // A worn scene is the ground: no plinth floating on the plaza (art panel round 1).
+  none: { side: '', line: '', band: '', top: '' },
 } as const;
 
 export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, tone = 'sky', sky: paintSky = true, rays = false, still, children, plinth = 'house' }: {
@@ -284,7 +286,7 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
         </Defs>
         <Ellipse cx="50" cy="44" rx="46" ry="44" fill={`url(#${lightId})`} />
       </Svg>
-      <View pointerEvents="none" style={styles.plinthWrap}>
+      {plinth !== 'none' && <View pointerEvents="none" style={styles.plinthWrap}>
         <Svg width="100%" height="100%" viewBox="0 0 200 64">
           {/* Side band, then the top face. Dark slate outlines, flat cel fills. */}
           <Ellipse cx="100" cy="36" rx="94" ry="24" fill={PLINTH[plinth].side} stroke={PLINTH[plinth].line} strokeWidth={3} />
@@ -296,7 +298,7 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
           <Path d="M30 22 A70 13 0 0 1 120 12" fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" strokeOpacity={0.85} />
           <Path d="M134 13 L146 14" stroke="#ffffff" strokeWidth={4} strokeLinecap="round" />
         </Svg>
-      </View>
+      </View>}
       {children}
     </View>
   );

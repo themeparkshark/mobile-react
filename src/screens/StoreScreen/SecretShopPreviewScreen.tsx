@@ -34,12 +34,12 @@ const type = (id: number, name: string) => ({ id, name, image_url: '' });
 const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/images/coingold.png')) };
 
 const HEROES: { id: number; name: string; fx: FxKey; slot: number; rarity: number; cost: number; art: number; season?: string }[] = [
-  { id: 9001, name: 'Fin Jet Rocket Pack', fx: 'jetpack', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/jetpack.png') },
-  { id: 9002, name: 'Plasma Fin Blade', fx: 'plasma_blade', slot: 5, rarity: 4, cost: 280, art: require('../../../assets/fx/blade.png') },
-  { id: 9003, name: 'Reef Halo', fx: 'reef_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/fish-yellow.png') },
-  { id: 9004, name: 'Saucer Buddy', fx: 'saucer', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/ufo.png') },
-  { id: 9005, name: 'Midway Fireworks', fx: 'midway_fireworks', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/backdrop.jpg') },
-  { id: 9006, name: 'Ghost Lantern', fx: 'ghost_lantern', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/lantern.png'), season: 'halloween' },
+  { id: 9001, name: 'Fin Jet Rocket Pack', fx: 'jetpack', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/jetpack.webp') },
+  { id: 9002, name: 'Plasma Fin Blade', fx: 'plasma_blade', slot: 5, rarity: 4, cost: 280, art: require('../../../assets/fx/blade.webp') },
+  { id: 9003, name: 'Reef Halo', fx: 'reef_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/fish-yellow.webp') },
+  { id: 9004, name: 'Saucer Buddy', fx: 'saucer', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/ufo.webp') },
+  { id: 9005, name: 'Midway Fireworks', fx: 'midway_fireworks', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/backdrop.webp') },
+  { id: 9006, name: 'Ghost Lantern', fx: 'ghost_lantern', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/lantern.webp'), season: 'halloween' },
 ];
 const SLOT_NAMES: Record<number, string> = { 1: 'Head', 3: 'Neck', 5: 'Hand', 6: 'Background' };
 

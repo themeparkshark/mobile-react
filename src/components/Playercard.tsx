@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Reanimated from 'react-native-reanimated';
-import { FxFloat, FxRigLayers, FxScene, useFloatShadowStyle, useFxEquipSound, wornFx } from '../fx/FxLayers';
-import { useFxClock, useFxRunning } from '../fx/FxStage';
+import { FxFloat, FxRigLayers, FxScene, useFloatShadowStyle, useFxEquipSound, useFxMomentCue, wornFx } from '../fx/FxLayers';
+import { useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
 import { FxLod } from '../fx/registry';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
 let contactIds = 0;
@@ -72,6 +73,9 @@ export default function Playercard({
   shadowAt,
   fxLod = 'full',
   fxSound,
+  fxAnnounce = false,
+  fxPlay = 0,
+  fxTapToPlay = false,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
@@ -97,16 +101,30 @@ export default function Playercard({
    * small or recorded cards, 'still' for the rest pose. `still` forces 'still'.
    */
   readonly fxLod?: FxLod;
-  /** Play a rig's equip cue when it is put on here. Defaults to popLayers (the stages where pieces are worn). */
+  /** Rig sounds here: the equip cue when a piece goes on, and each moment's cue. Defaults to popLayers (the stages where pieces are worn). */
   readonly fxSound?: boolean;
+  /** The try-on: a piece already worn when the stage opens plays its equip cue too. */
+  readonly fxAnnounce?: boolean;
+  /** Change this number to replay the worn rigs' moments now (the Secret unlock after a buy). */
+  readonly fxPlay?: number;
+  /** A tap on the shark replays its rigs' moments (stages with no item taps). */
+  readonly fxTapToPlay?: boolean;
 }) {
   const fx = useMemo(() => wornFx(inventory), [inventory]);
-  const lod: FxLod = still ? 'still' : fxLod;
-  const fxRunning = useFxRunning(lod) && fx.any;
+  // Reduce Motion is read here, so no screen can forget it (performance panel round 1).
+  const reduced = useReducedGameMotion();
+  const lod: FxLod = still || reduced ? 'still' : fxLod;
+  // Only a look with something to draw runs a clock (a scene off stage draws nothing here).
+  const fxRunning = useFxRunning(lod) && (fx.rigs.length > 0 || (!!fx.scene && showBackground));
   const fxClock = useFxClock(fxRunning);
+  const fxKick = useFxKick();
   const [stageH, setStageH] = useState(0);
-  const floatShadow = useFloatShadowStyle(fx, fxClock, stageH);
-  useFxEquipSound(fx, fxSound ?? popLayers);
+  const floatShadow = useFloatShadowStyle(fx, fxClock, fxKick, stageH);
+  const sounds = fxSound ?? popLayers;
+  useFxEquipSound(fx, sounds, fxAnnounce);
+  const fxCue = useFxMomentCue(sounds);
+  const playFx = useCallback(() => { if (fx.any) fxKick.value = fxClock.value; }, [fx.any]);
+  useEffect(() => { if (fxPlay) playFx(); }, [fxPlay]);
   const translate = useRef(new Animated.Value(0)).current;
   const contactId = useRef(`contact-${++contactIds}`).current;
   // Layers present on the first frame never pop; only ones put on later do.
@@ -161,6 +179,8 @@ export default function Playercard({
 
   // Single tap handler: resolves which equipped item was tapped by zone
   const handleSharkTap = useCallback((e: GestureResponderEvent) => {
+    // Any tap on a shark wearing Secret pieces replays their moments.
+    playFx();
     if (!onItemTap) return;
 
     const { locationX, locationY } = e.nativeEvent;
@@ -179,7 +199,7 @@ export default function Playercard({
     if (isNaked) {
       triggerNakedBounce();
     }
-  }, [onItemTap, inventory, isNaked]);
+  }, [onItemTap, inventory, isNaked, playFx]);
 
   return (
     <View style={style}>
@@ -190,7 +210,7 @@ export default function Playercard({
           position: 'relative',
         }}
       >
-        {inventory?.background_item && showBackground && fx.scene && <FxScene fx={fx} t={fxClock} lod={lod} />}
+        {inventory?.background_item && showBackground && fx.scene && <FxScene fx={fx} t={fxClock} kick={fxKick} cue={fxCue} lod={lod} />}
         {inventory?.background_item && showBackground && !fx.scene && (
           <Image
             source={{
@@ -273,7 +293,7 @@ export default function Playercard({
             ],
           }}
         >
-          <FxFloat fx={fx} t={fxClock} height={stageH}>
+          <FxFloat fx={fx} t={fxClock} kick={fxKick} height={stageH}>
           <View
             onLayout={(e) => {
               containerSize.current = {
@@ -290,7 +310,7 @@ export default function Playercard({
             }}
           >
             {/* Secret Shop rigs that sit behind the shark (far side of a halo) */}
-            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="back" t={fxClock} lod={lod} />}
+            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="back" t={fxClock} kick={fxKick} lod={lod} />}
             {/* Shark body (worn skin or Alex's Classic) and eyes */}
             {sharkBaseLayers(inventory).map((source, index) => (
               <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain" />
@@ -304,16 +324,17 @@ export default function Playercard({
                 <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} popFrom={popFrom} drop={dropIn} />
               ) : null;
             })}
-            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="front" t={fxClock} lod={lod} />}
+            {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="front" t={fxClock} kick={fxKick} cue={fxCue} lod={lod} />}
             {/* Stage mode: the pin sits on the chest, riding the bob with the shark. */}
             {pinAnchor === 'body' && inventory?.pin_item?.icon_url ? (
               <Image key={`pin-${inventory.pin_item.id}`} source={{ uri: inventory.pin_item.icon_url }} contentFit="contain"
                 pointerEvents="none" style={styles.chestPin} />
             ) : null}
             {/* Single tap overlay: uses coordinates to determine which equipped item */}
-            {onItemTap && (
+            {(onItemTap || (fxTapToPlay && fx.any)) && (
               <Pressable
                 onPress={handleSharkTap}
+                accessibilityLabel={onItemTap ? undefined : 'Your shark. Tap to see your Secret pieces move.'}
                 style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
               />
             )}

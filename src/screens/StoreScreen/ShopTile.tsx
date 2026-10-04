@@ -107,7 +107,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   }, [justBought]);
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-10deg' }] }));
 
-  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked ? 'VIP only'
+  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked && secret ? `${formatCoins(item.cost)} Shark Coins, VIP members can buy` : vipLocked ? 'VIP only'
     : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
@@ -151,19 +151,23 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           </View>
         )}
       </View>
-      <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
+      <Text style={[styles.name, secret && styles.secretInk]} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
       <View style={styles.priceRow}>
         {owned ? (
           slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
         ) : vipLocked && secret ? (
-          // Secret pieces keep their price on show; the badge says who can buy (DESIGN.md 4.2).
-          <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> {formatCoins(item.cost)}</Text></>
+          // One price marker everywhere: the coin and the price, with a lock for non-members (kids UX round 1).
+          <>
+            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={styles.coin} contentFit="contain" /> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, styles.secretInk]}>{formatCoins(item.cost)} </Text>
+            <GameIcon name="lock" size={16} />
+          </>
         ) : vipLocked ? (
           <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> VIP</Text></>
         ) : (
           <>
             {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.45 }]} contentFit="contain" /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
           </>
         )}
       </View>
@@ -199,6 +203,8 @@ const styles = StyleSheet.create({
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
   rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
+  // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
+  secretInk: { color: '#ffffff' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
   coin: { width: 17, height: 17, marginRight: 3 },
   price: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },

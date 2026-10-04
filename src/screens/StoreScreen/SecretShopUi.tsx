@@ -1,16 +1,49 @@
-import { memo, useEffect } from 'react';
+import { memo, useContext, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
+import { FxPauseContext } from '../../fx/FxStage';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { BRAND, FONT, GameIcon } from '../../ui';
+import { BRAND, FONT, GameIcon, showGameDialog } from '../../ui';
 import { MAX_FONT } from './shopUi';
 
 /**
  * Secret Shop chrome (secret-shop/DESIGN.md 4.2 and 6).
  */
 
-/** Non-members: one calm line and a door to VIP. No countdown, no pressure. */
+/**
+ * The grown-up gate in front of the VIP paywall from the Secret Shop (kids UX
+ * round 1): a sum a 7-year-old can't do at a glance, four equal choices. A
+ * wrong answer just closes; nothing scolds.
+ */
+export function grownUpQuestion(seed: number): { a: number; b: number; choices: number[]; answer: number } {
+  const a = 6 + (seed % 4);
+  const b = 7 + (Math.floor(seed / 4) % 3);
+  const answer = a * b;
+  const offsets = [0, -a, b, 10];
+  const rotate = seed % 4;
+  const choices = offsets.map((_, i) => answer + offsets[(i + rotate) % 4]);
+  return { a, b, choices, answer };
+}
+
+export async function askGrownUp(seed = Math.floor(Math.random() * 1000)): Promise<boolean> {
+  const q = grownUpQuestion(seed);
+  const picked = await showGameDialog({
+    title: 'Ask a grown-up',
+    icon: 'member',
+    message: `Grown-ups: what is ${q.a} × ${q.b}?`,
+    equalChoices: true,
+    buttons: [...q.choices.map(n => ({ text: String(n) })), { text: 'Not now', style: 'cancel' as const }],
+  });
+  return picked != null && picked < q.choices.length && q.choices[picked] === q.answer;
+}
+
+/** From the Secret Shop to VIP: through the grown-up gate. */
+export async function openVipWithGrownUp(): Promise<void> {
+  if (await askGrownUp()) RootNavigation.navigate('Membership');
+}
+
+/** Non-members: one calm line and a door to VIP, behind the grown-up gate. No countdown, no pressure. */
 export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
   return (
     <View style={styles.banner} accessible accessibilityRole="summary"
@@ -20,17 +53,18 @@ export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerTitle}>{SECRET_PREVIEW_COPY.title}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerBody}>{SECRET_PREVIEW_COPY.body}</Text>
       </View>
-      <Pressable onPress={() => RootNavigation.navigate('Membership')} style={styles.bannerCta} hitSlop={6}
-        accessibilityRole="button" accessibilityLabel="Join VIP">
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerCtaText}>JOIN VIP</Text>
+      <Pressable onPress={() => { void openVipWithGrownUp(); }} style={styles.bannerCta} hitSlop={6}
+        accessibilityRole="button" accessibilityLabel="Ask a grown-up about VIP">
+        <GameIcon name="lock" size={18} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerCtaText}>GROWN-UPS</Text>
       </Pressable>
     </View>
   );
 });
 
 export const SECRET_PREVIEW_COPY = {
-  title: 'Try anything on',
-  body: 'VIP members can buy these. Every piece you buy is yours to keep.',
+  title: 'Try anything on!',
+  body: 'VIP members can buy these. Every piece you buy is yours forever.',
 } as const;
 
 /** Fixed star spots (fractions of the box) so every render and capture match. */
@@ -53,6 +87,9 @@ function Mote({ i, still }: { i: number; still: boolean }) {
 
 /** Twinkling star motes over the midnight sky. */
 export const StarMotes = memo(function StarMotes({ still }: { still: boolean }) {
+  // Paused with the shelves (try-on open, scrolled away).
+  const paused = useContext(FxPauseContext);
+  still = still || paused;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {MOTES.map((_, i) => <Mote key={i} i={i} still={still} />)}
@@ -66,8 +103,9 @@ const styles = StyleSheet.create({
   bannerIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: SECRET_THEME.well },
   bannerTitle: { fontFamily: FONT.display, fontSize: 18, color: SECRET_THEME.ink },
   bannerBody: { fontFamily: FONT.body, fontSize: 14, lineHeight: 18, color: SECRET_THEME.inkSoft },
-  bannerCta: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999, backgroundColor: SECRET_THEME.gold,
-    borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
-  bannerCtaText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },
+  // Violet, not the gold BUY face: this door leads to grown-ups, not to buying.
+  bannerCta: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 999,
+    backgroundColor: SECRET_THEME.violet, borderWidth: 2, borderColor: SECRET_THEME.border },
+  bannerCtaText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   mote: { position: 'absolute', backgroundColor: '#fff6d8' },
 });
