@@ -266,6 +266,100 @@
       ]
     },
     {
+      "key": "outfits",
+      "title": "Outfits",
+      "icon": "crown",
+      "phrases": [
+        {
+          "id": "outfits.01",
+          "text": "Love the outfit!"
+        },
+        {
+          "id": "outfits.02",
+          "text": "Matching Mickey ears!"
+        },
+        {
+          "id": "outfits.03",
+          "text": "Best costume ever!"
+        },
+        {
+          "id": "outfits.04",
+          "text": "Bounding is so fun!"
+        },
+        {
+          "id": "outfits.05",
+          "text": "Those ears are so cute!"
+        },
+        {
+          "id": "outfits.06",
+          "text": "Spirit jersey season!"
+        },
+        {
+          "id": "outfits.07",
+          "text": "Love the colors!"
+        },
+        {
+          "id": "outfits.08",
+          "text": "Park fit check!"
+        },
+        {
+          "id": "outfits.09",
+          "text": "So festive!"
+        },
+        {
+          "id": "outfits.10",
+          "text": "Halloween costume goals!"
+        }
+      ]
+    },
+    {
+      "key": "collections",
+      "title": "Collections",
+      "icon": "pin",
+      "phrases": [
+        {
+          "id": "collections.01",
+          "text": "New pin day!"
+        },
+        {
+          "id": "collections.02",
+          "text": "My bucket collection is growing!"
+        },
+        {
+          "id": "collections.03",
+          "text": "Got a new stamp!"
+        },
+        {
+          "id": "collections.04",
+          "text": "Rare find!"
+        },
+        {
+          "id": "collections.05",
+          "text": "Love this pin!"
+        },
+        {
+          "id": "collections.06",
+          "text": "Popcorn bucket goals!"
+        },
+        {
+          "id": "collections.07",
+          "text": "Collecting them all!"
+        },
+        {
+          "id": "collections.08",
+          "text": "My pin board is full!"
+        },
+        {
+          "id": "collections.09",
+          "text": "Best trade ever!"
+        },
+        {
+          "id": "collections.10",
+          "text": "Can't wait for the next one!"
+        }
+      ]
+    },
+    {
       "key": "waits",
       "title": "Wait times",
       "icon": "queue",
@@ -591,7 +685,7 @@
         },
         {
           "id": "replies.06",
-          "text": "Trade?"
+          "text": "Trade in Pin Swap?"
         },
         {
           "id": "replies.07",
@@ -628,6 +722,38 @@
         {
           "id": "replies.15",
           "text": "Great pic!"
+        },
+        {
+          "id": "replies.16",
+          "text": "Yes!"
+        },
+        {
+          "id": "replies.17",
+          "text": "Not really"
+        },
+        {
+          "id": "replies.18",
+          "text": "Not yet!"
+        },
+        {
+          "id": "replies.19",
+          "text": "Maybe!"
+        },
+        {
+          "id": "replies.20",
+          "text": "You did it!"
+        },
+        {
+          "id": "replies.21",
+          "text": "So proud of you!"
+        },
+        {
+          "id": "replies.22",
+          "text": "You got this!"
+        },
+        {
+          "id": "replies.23",
+          "text": "Way to go!"
         }
       ]
     }

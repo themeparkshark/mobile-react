@@ -4,7 +4,7 @@
  * into a Safe Chat post, so it publishes at once. Reactions stay on the post's reaction bar.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { fetchSafeChatPlaces } from '../../api/endpoints/social';
 import { BRAND, GameIcon, isGameIconName } from '../../ui';
@@ -64,10 +64,14 @@ export default function SafeChatPicker({
   const current = SAFE_CHAT_CATEGORIES.find((c) => c.key === category) ?? SAFE_CHAT_CATEGORIES[0];
   const phrase = phraseById(pick?.phrase);
   const slot = phrase ? phraseSlot(phrase.text) : null;
-  const choices = useMemo(
-    () => (slot === 'park' ? parks : places.filter((p) => p.kind === slot && p.park_id === parkId)),
-    [slot, parks, places, parkId],
-  );
+  // Search only filters our own list of places; the typed letters are never posted.
+  const [search, setSearch] = useState('');
+  useEffect(() => setSearch(''), [slot]);
+  const choices = useMemo(() => {
+    const list = slot === 'park' ? parks : places.filter((p) => p.kind === slot && (search.trim() ? true : p.park_id === parkId));
+    const q = search.trim().toLowerCase();
+    return q ? list.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 60) : list;
+  }, [slot, parks, places, parkId, search]);
 
   const choosePhrase = (id: string) => {
     if (pick?.phrase === id) {
@@ -106,7 +110,20 @@ export default function SafeChatPicker({
       {slot && (
         <Animated.View entering={reduced ? undefined : FadeIn} style={styles.slotBox}>
           <Text style={styles.slotTitle}>Pick {SLOT_WORD[slot]}</Text>
-          {slot !== 'park' && parks.length > 1 && (
+          {slot !== 'park' && (
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder={slot === 'food' ? 'Search snack spots' : 'Search rides'}
+              placeholderTextColor="#7d95b5"
+              style={styles.search}
+              autoCorrect={false}
+              maxLength={40}
+              accessibilityLabel={slot === 'food' ? 'Search snack spots' : 'Search rides'}
+              testID="safechat-search"
+            />
+          )}
+          {slot !== 'park' && parks.length > 1 && !search.trim() && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.parkRow} accessibilityLabel="Parks">
               {parks.map((p) => {
                 const on = p.park_id === parkId;
@@ -120,7 +137,7 @@ export default function SafeChatPicker({
           )}
           <ScrollView style={styles.placeScroll} nestedScrollEnabled contentContainerStyle={styles.places}>
             {choices.length === 0 ? (
-              <Text style={styles.empty}>Loading the parks...</Text>
+              <Text style={styles.empty}>{search.trim() ? 'No match. Try fewer letters!' : 'Loading the parks...'}</Text>
             ) : (
               choices.map((p) => {
                 const on = pick?.place === p.id;
@@ -133,7 +150,7 @@ export default function SafeChatPicker({
                     style={[styles.place, on && styles.placeOn]}
                     testID={`safechat-place-${p.id}`}
                   >
-                    <Text style={[styles.placeText, on && styles.placeTextOn]} numberOfLines={1}>{p.name}</Text>
+                    <Text style={[styles.placeText, on && styles.placeTextOn]} numberOfLines={2}>{p.name}</Text>
                   </PressScale>
                 );
               })
@@ -186,6 +203,7 @@ const styles = StyleSheet.create({
   phraseTextOn: { color: BRAND.white },
   slotBox: { backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy, padding: 10, gap: 8 },
   slotTitle: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 2 },
+  search: { minHeight: 44, borderRadius: 12, borderWidth: 2, borderColor: '#bcd8f5', backgroundColor: BRAND.white, paddingHorizontal: 12, fontFamily: 'Knockout', fontSize: 18, color: BRAND.navy },
   parkRow: { gap: 6 },
   park: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 999, borderWidth: 2, borderColor: '#bcd8f5', backgroundColor: BRAND.white, maxWidth: 220 },
   parkOn: { backgroundColor: BRAND.sky, borderColor: BRAND.blue },
