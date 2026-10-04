@@ -22,6 +22,24 @@ export const GLIDE_MIN_SPEED_MPS = 0.5;
 /** Gaps longer than this (a silence, the background) never stretch the expected gap. */
 export const FIX_GAP_CAP_MS = 8000;
 
+/** The one fix-cadence estimate a map shares between its camera and its shark marker. */
+export interface FixCadence { key: string; at: number; gap: number }
+export function newFixCadence(): FixCadence { return { key: '', at: 0, gap: 0 }; }
+
+/**
+ * Notes a fix (by a key such as "lat,lng") and returns the expected gap between
+ * fixes. Idempotent per key: the camera and the marker both call it for the same
+ * fix and get the same answer, whichever runs first.
+ */
+export function noteFixCadence(c: FixCadence, key: string, now: number): number {
+  if (c.key !== key) {
+    if (c.at > 0) c.gap = nextFixGap(c.gap, now - c.at);
+    c.key = key;
+    c.at = now;
+  }
+  return c.gap;
+}
+
 /** Running estimate of the time between fixes (ms): a smoothed average of real gaps. */
 export function nextFixGap(previousEstimate: number, sinceLastMs: number): number {
   if (!Number.isFinite(sinceLastMs) || sinceLastMs <= 0) return previousEstimate;

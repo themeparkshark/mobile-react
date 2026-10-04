@@ -191,6 +191,7 @@ test('a shark wearing lettering never mirrors (TPS tees, jerseys, hoodies, passe
   assert.equal(w.canMirrorShark(null), true);
   const map = read('src/components/Map.tsx');
   assert.match(map, /const sx = m\.mirrorOk\.value > 0 \?/);
+  assert.match(map, /const lean = m\.mirrorOk\.value > 0 \? 7 \* mid \* \(f >= 0 \? -1 : 1\) : 0;/, 'no moonwalk lean for a lettered outfit');
 });
 
 test('the stride paces with the walk and stops when standing; the wake holds across the gap between fixes', () => {
