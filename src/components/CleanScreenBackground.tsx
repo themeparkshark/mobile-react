@@ -5,9 +5,10 @@
  * screens stop sitting on the saturated water art. Cards, lists and loaders go
  * on top of it; text on it uses CLEAN_SCREEN_INK / CLEAN_SCREEN_INK_SOFT.
  *
- * Used by Notifications and Friends, and by Social (Shark Social). Put it
- * straight under <Topbar>: it tucks 8 pt under the bar's curved edge the same
- * way the production screens did, so no strip of the app background shows.
+ * Used by Notifications and Friends, and by Social (Shark Social). Directly
+ * under a <Topbar>, pass `underTopbar` so it tucks 8 pt under the bar's curved
+ * edge the way the production screens did. CLEAN carries the matching card,
+ * line and well colours for anything drawn on the page.
  */
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -22,9 +23,20 @@ export const CLEAN_SCREEN_INK_SOFT = BRAND.navySoft;
 /** Pull-to-refresh spinner and other small accents on the page. */
 export const CLEAN_SCREEN_ACCENT = BRAND.blueBright;
 
-export default function CleanScreenBackground({ children, underTopbar = true, style }: {
+export const CLEAN = {
+  /** The page. */
+  bg: CLEAN_SCREEN_BG,
+  /** Cards and pills on the page. */
+  card: '#ffffff',
+  /** Hairline borders and dividers. */
+  line: '#dbe4ee',
+  /** Quiet fills: inactive segments, input wells. */
+  well: '#e8eef5',
+} as const;
+
+export default function CleanScreenBackground({ children, underTopbar = false, style }: {
   readonly children?: ReactNode;
-  /** Tuck 8 pt under the Topbar's curve (default). Turn off when there is no Topbar above. */
+  /** Tuck 8 pt under the Topbar's curve when it sits directly under one. */
   readonly underTopbar?: boolean;
   readonly style?: StyleProp<ViewStyle>;
 }) {

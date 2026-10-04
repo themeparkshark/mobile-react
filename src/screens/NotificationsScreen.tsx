@@ -238,7 +238,7 @@ export default function NotificationsScreen() {
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
       <SurfaceContext.Provider value="bell">
-      <CleanScreenBackground>
+      <CleanScreenBackground underTopbar>
         {load === 'loading' && <SharkLoader state="loading" title="Checking your bell" />}
         {load === 'error' && (
           <SocialError title="Notifications didn't load"
