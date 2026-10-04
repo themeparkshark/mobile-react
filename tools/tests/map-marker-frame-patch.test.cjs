@@ -30,7 +30,7 @@ test('the panned-away shark marker has a fixed, clipped box so its layout never 
   const map = read('src/components/Map.tsx');
   assert.match(map, /const SHARK_MARKER_CLIP = \{ width: 100, height: 156 \} as const;/);
   assert.match(map, /sharkMarkerClip: \{ \.\.\.SHARK_MARKER_CLIP, overflow: 'hidden'/);
-  assert.match(map, /anchor=\{SHARK_MARKER_ANCHOR\}>\s*<View style=\{\[styles\.sharkMarkerClip, \{ opacity: focusedOnPlayer \? 0 : 1 \}\]\}>\{playerShark\}<\/View>/);
+  assert.match(map, /anchor=\{SHARK_MARKER_ANCHOR\}>\s*<View style=\{\[styles\.sharkMarkerClip, \{ opacity: focusedOnPlayer( \|\| !playerOnScreen)? \? 0 : 1 \}\]\}>\{playerShark\}<\/View>/);
   // The ground point (71.5 pt down the 110 pt shark box) stays on the coordinate.
   assert.match(map, /y: 71\.5 \/ SHARK_MARKER_CLIP\.height/);
 });

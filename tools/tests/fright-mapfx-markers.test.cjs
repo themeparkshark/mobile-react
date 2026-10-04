@@ -49,7 +49,7 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
   assert.match(map, /<FrightNightTint input=\{fright\} \/>/);
   const close = map.indexOf('</MapView>');
   const sources = map.lastIndexOf('<FrightMapSources', close);
-  const shark = map.lastIndexOf('<Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location}', close);
+  const shark = map.lastIndexOf('<GlidingMarker coordinate={location ?? FALLBACK_CENTER} hidden={!location}', close);
   assert.ok(shark > 0, 'the player shark is one always-mounted Marker');
   assert.ok(sources > shark && sources < close, 'fright markers come after every other MapView child');
   assert.equal(map.match(/<FrightMapSources/g).length, 1);
