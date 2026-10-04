@@ -184,10 +184,15 @@ export function useFxEquipSound(fx: WornFx, enabled: boolean, onOpen = false) {
   const seen = useRef<Set<string> | null>(onOpen ? new Set() : null);
   const keys = [fx.scene, ...fx.rigs.map(r => r.key)].filter((k): k is FxKey => !!k);
   const signature = keys.join(',');
+  // A piece that left the look a moment ago and comes back (the buy drop: the slot empties while the
+  // piece falls in) is not a new equip, so it plays no second cue on top of the landing and the unlock.
+  const gone = useRef(new Map<string, number>());
   useEffect(() => {
-    const now = new Set(keys);
+    const now = new Set<string>(keys);
+    const at = Date.now();
+    if (seen.current) for (const k of seen.current) if (!now.has(k)) gone.current.set(k, at);
     if (seen.current && enabled) {
-      const fresh = keys.find(k => !seen.current!.has(k));
+      const fresh = keys.find(k => !seen.current!.has(k) && at - (gone.current.get(k) ?? -1e9) > 3000);
       if (fresh) play(FX_EQUIP_SOUNDS[fresh]);
     }
     seen.current = now;
