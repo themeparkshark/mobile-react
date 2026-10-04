@@ -118,7 +118,9 @@ test('the player keeps no cookies, limits origins and covers the end screen', ()
   assert.match(player, /sharedCookiesEnabled=\{false\}/);
   assert.match(player, /That's a wrap!/);
   assert.match(player, /!ready && !failed/);
-  assert.ok(!feed.PLAYER_ORIGIN_WHITELIST.includes('*'));
+  // A narrower whitelist makes react-native-webview open the failing URL in Safari (Linking.openURL).
+  assert.deepEqual([...feed.PLAYER_ORIGIN_WHITELIST], ['*']);
+  assert.match(read('node_modules/react-native-webview/lib/WebViewShared.js'), /passesWhitelist\(compileWhitelist\(originWhitelist\),url\)\)\{_reactNative\.Linking\.canOpenURL/);
 });
 
 test('the Watch page sits on the clean background with a hero and per-video coin chips', () => {
