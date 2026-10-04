@@ -46,6 +46,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
   const flash = useSharedValue(0);
   const shine = useSharedValue(0);
   const bg = useSharedValue(still ? 1 : 0);
+  /** Landing squash: 1 -> 1.12 -> spring back to 1 (never through 0). */
+  const pop = useSharedValue(1);
   const startSize = Math.min(120, width * 0.3);
   const bigSize = Math.min(210, width * 0.52);
   const cx = width / 2;
@@ -67,13 +69,14 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
     swap.value = withTiming(1, { duration: T.land, easing: Easing.inOut(Easing.cubic) });
     hit.value = withDelay(T.cross, withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) }));
     flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 70 }), withTiming(0, { duration: 260 })));
-    land.value = withDelay(T.land, withSequence(withTiming(1.12, { duration: 120, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 260, mass: 0.6 })));
+    land.value = withDelay(T.land, withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }));
+    pop.value = withDelay(T.land, withSequence(withTiming(1.14, { duration: 110, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 260, mass: 0.6 })));
     shine.value = withDelay(T.land + 220, withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }));
     at(T.cross, () => { playSound(SND_POP, { volume: 0.8 }); queueHaptic('hitMedium', 2); });
     at(T.land, () => { playSound(SND_COMPLETE); queueHaptic('success', 3); });
     return () => {
       timers.forEach(clearTimeout);
-      [swap, hit, flash, land, shine, bg].forEach(v => cancelAnimation(v));
+      [swap, hit, flash, land, shine, bg, pop].forEach(v => cancelAnimation(v));
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -99,7 +102,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
       y = my + (cy - my) * u - Math.sin(u * Math.PI) * arc * 0.35;
     }
     const grow = g0.size + (bigSize - g0.size) * t * t;
-    const s = (grow / bigSize) * (land.value === 0 ? 1 : land.value);
+    const s = (grow / bigSize) * pop.value;
     return { transform: [{ translateX: x - bigSize / 2 }, { translateY: y - bigSize / 2 }, { scale: s }, { rotate: `${Math.sin(t * Math.PI) * -14}deg` }] };
   });
   // Your old pin: under to M, then up and away to the board, shrinking and fading.
@@ -128,7 +131,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone }: {
   const bgStyle = useAnimatedStyle(() => ({ opacity: bg.value }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.55, transform: [{ scale: 0.5 + flash.value * 0.7 }] }));
   const raysStyle = useAnimatedStyle(() => ({ opacity: land.value === 0 ? 0 : Math.min(1, land.value), transform: [{ scale: 0.6 + Math.min(1, land.value) * 0.4 }] }));
-  const textStyle = useAnimatedStyle(() => ({ opacity: land.value === 0 ? 0 : 1, transform: [{ translateY: land.value === 0 ? 14 : 0 }] }));
+  const textStyle = useAnimatedStyle(() => ({ opacity: land.value, transform: [{ translateY: (1 - land.value) * 16 }, { scale: 0.9 + land.value * 0.1 }] }));
 
   const confettiSeed = useMemo(() => got.id * 31 + gave.id, [got.id, gave.id]);
   const name = pinName(got);
