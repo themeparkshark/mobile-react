@@ -10,7 +10,8 @@ const { spawnSync } = require('node:child_process');
 const root = path.join(__dirname, '../..');
 const tsc = path.join(root, 'node_modules/typescript/bin/tsc');
 
-test('the app compiles: tsc --noEmit is clean', { skip: !fs.existsSync(tsc) && 'typescript not installed here', timeout: 300_000 }, () => {
+test('the app compiles: tsc --noEmit is clean', { timeout: 300_000 }, () => {
+  assert.ok(fs.existsSync(tsc), 'typescript is installed (a missing compiler fails, it never skips)');
   const run = spawnSync(process.execPath, [tsc, '--noEmit', '-p', root], { cwd: root, encoding: 'utf8' });
   assert.equal(run.status, 0, `tsc failed:\n${(run.stdout + run.stderr).split('\n').slice(0, 40).join('\n')}`);
 });

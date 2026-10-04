@@ -142,6 +142,11 @@ export const OFFSCREEN_KEEP = 0.4;
 
 /** The central part of fixed art that must stay clear of buttons: at most FIXED_CORE square. */
 export const FIXED_CORE = 120;
+/** Points of hysteresis at an inset edge for fixed art (shown keeps, hidden waits). */
+export const FIXED_KEEP = 6;
+function grow(r: Rect, by: number): Rect {
+  return { x: r.x - by, y: r.y - by, w: Math.max(0, r.w + 2 * by), h: Math.max(0, r.h + 2 * by) };
+}
 function coreOf(r: Rect): Rect {
   const w = Math.min(r.w, FIXED_CORE), h = Math.min(r.h, FIXED_CORE);
   return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
@@ -316,16 +321,25 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     const p = project(item.latitude, item.longitude, frame);
     points.set(item.id, p);
     if (item.tagObstacleOnly) { tagObstacles.push(at(itemBody, p.x, p.y)); continue; }
-    if (item.fixed || item.pinned) {
+    if (item.pinned) {
+      scales.set(item.id, 1);
+      place({ item, rect: at(itemBody, p.x, p.y), order: placed.length, p, folded: 0 });
+      continue;
+    }
+    if (item.fixed) {
+      // Fixed art (gym, boss, swords, the encounter and its host reef) beats other art, but it
+      // keeps the zoom limit and the screen rules: it hides below its zoom, when more than half
+      // is off screen, and it fades where its core (the central 120 pt: the critter, not its wide
+      // ring or mist) would sit under any inset (a button, the HUD row, the offline chip). Shown
+      // art stays until its core is FIXED_KEEP pt deep and hidden art waits until it is FIXED_KEEP
+      // pt clear, so GPS jitter at a button edge never blinks it.
+      if (item.minZoom !== undefined && frame.zoom < item.minZoom) { hidden.set(item.id, 'zoom'); continue; }
       const rect = at(itemBody, p.x, p.y);
-      // Fixed art (gym, boss, the encounter and its reef) beats other art, never a button: when its
-      // core (the central 120 pt, the critter rather than its wide ring or mist) reaches under a
-      // hard (share 0) inset it fades out instead of drawing beneath it. The selected ride still wins.
-      const core = coreOf(rect);
-      if (item.fixed && !item.pinned && insets.some(inset => (inset.share ?? DEFAULT_SHARE) === 0 && overlapArea(core, inset) > 0)) {
-        hidden.set(item.id, 'inset');
-        continue;
-      }
+      const wasShown = !!previous?.get(item.id)?.visible;
+      const inView = visibleShare(rect, frame);
+      if (inView <= 0 || inView < (wasShown ? OFFSCREEN_KEEP : OFFSCREEN_SHOW)) { hidden.set(item.id, 'offscreen'); continue; }
+      const core = grow(coreOf(rect), wasShown ? -FIXED_KEEP : FIXED_KEEP);
+      if (insets.some(inset => overlapArea(core, inset) > 0)) { hidden.set(item.id, 'inset'); continue; }
       scales.set(item.id, 1);
       place({ item, rect, order: placed.length, p, folded: 0 });
       continue;

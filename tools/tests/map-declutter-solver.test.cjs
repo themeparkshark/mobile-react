@@ -383,29 +383,74 @@ test('zooming out mid-gesture folds what now collides (fade only, no scale or ch
   assert.match(hook, /const fold = holding\.current && lastZoom\.current !== null && full\.zoom < lastZoom\.current - FOLD_DURING_ZOOM;/);
 });
 
-test('fixed art (encounter, gym, boss, the reef under the encounter) fades under a button instead of drawing beneath it (z15.8)', () => {
+test('fixed art (encounter, gym, boss, the reef under the encounter) fades under any inset instead of drawing beneath it (z15.8, z18.2)', () => {
   const f = frame({ zoom: 15.8 });
   const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
   const fixedAt = (id, y, x, extra = {}, k = mpp(15.8)) => ({ id, latitude: USF.latitude - ((y - 350) * k) / 111320,
     longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
     priority: L.PRIORITY.fixed, fixed: true, ...extra });
-  const enc = (y) => { const bodyFor = L.encounterBody(40, USF.latitude); return fixedAt('encounter', y, pill.x + 60, { body: bodyFor(15.8), bodyFor }); };
-  const half = L.encounterBody(40, USF.latitude)(15.8).h / 2;
-  // Centre 20 pt above the energy pill: its body reaches the button, so it fades (reason inset).
+  const encBody = L.encounterBody(40, USF.latitude);
+  const enc = (y, zoom = 15.8, x = pill.x + 60) => fixedAt('encounter', y, x, { body: encBody(zoom), bodyFor: encBody }, mpp(zoom));
+  // Centre 20 pt above the energy pill: its core reaches the button, so it fades (reason inset).
   const near = s.solveLayout([enc(pill.y + 6 - 20)], f, { insets: INSETS }).get('encounter');
   assert.equal(near.visible, false);
   assert.equal(near.reason, 'inset');
-  // Centre 140 pt above: its core is clear of the button, drawn (the wide ring may pass under it).
-  assert.ok(half >= 0);
-  // At z18.2 the encounter ring box is ~300 pt: a corner of the ring under the pill does not hide it.
-  const big = (() => { const bodyFor = L.encounterBody(40, USF.latitude); return fixedAt('encounter', pill.y + 6 - 100, pill.x - 30, { body: bodyFor(18.2), bodyFor }, mpp(18.2)); })();
-  assert.equal(s.solveLayout([big], frame({ zoom: 18.2 }), { insets: INSETS }).get('encounter').visible, true, 'ring corner under a button: still drawn');
+  // Centre 140 pt above: the core (half of FIXED_CORE = 60 pt) clears the gap line by 80 pt: drawn.
+  assert.ok(140 - s.FIXED_CORE / 2 > s.FIXED_KEEP, 'the 140 pt case is genuinely clear');
   assert.equal(s.solveLayout([enc(pill.y + 6 - 140)], f, { insets: INSETS }).get('encounter').visible, true);
-  // The HUD row (share 0.1) is not a button: fixed art still draws under it; the selected ride always draws.
-  assert.equal(s.solveLayout([fixedAt('gym', 40, 196.5, { body: L.GYM_BODY ?? { x: -40, y: -40, w: 80, h: 80 } })], f, { insets: INSETS }).get('gym').visible, true);
-  const selected = { ...rideAt('sel', 0, 0), pinned: true };
-  const pinnedUnder = { ...selected, latitude: enc(pill.y + 20).latitude, longitude: enc(pill.y + 20).longitude };
+  // z18.2: the ring box is ~300 pt; a ring edge under the pill does not hide it while the critter is clear.
+  const z18 = frame({ zoom: 18.2 });
+  assert.ok(encBody(18.2).h > 2 * 100, 'the ring reaches under the pill in this case');
+  assert.equal(s.solveLayout([enc(pill.y + 6 - 100, 18.2, pill.x - 30)], z18, { insets: INSETS }).get('encounter').visible, true);
+  // Any inset, not just buttons: the offline chip under the compass and the HUD row hide fixed art too.
+  const chip = { x: 393 - 16 - 44, y: 300, w: 44, h: 44, share: 0.35 };
+  const underChip = s.solveLayout([enc(322, 18.2, 393 - 16 - 22)], z18, { insets: [...INSETS, chip] }).get('encounter');
+  assert.equal(underChip.visible, false, 'the critter never draws under the offline chip');
+  assert.equal(underChip.reason, 'inset');
+  assert.equal(s.solveLayout([enc(322, 18.2, 393 - 16 - 22)], z18, { insets: INSETS }).get('encounter').visible, true, 'without the chip it draws');
+  const gym = fixedAt('gym', 40, 196.5, { body: L.GYM_BODY });
+  assert.equal(s.solveLayout([gym], f, { insets: INSETS }).get('gym').reason, 'inset', 'not under the HUD row either');
+  // The selected ride (pinned) always draws.
+  const pinnedUnder = { ...rideAt('sel', 0, 0), pinned: true, latitude: enc(pill.y + 20).latitude, longitude: enc(pill.y + 20).longitude };
   assert.equal(s.solveLayout([pinnedUnder], f, { insets: INSETS }).get('ride:sel').visible, true);
+});
+
+test('fixed art obeys the zoom limit and the half-off-screen rule, and never blinks at an inset edge under GPS jitter', () => {
+  const host = { key: 'kelp', ...at(0, 0, 15.8), radius: 40 };
+  const items = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host], fixed: [{ id: 'encounter', ...at(0, 0, 15.8), kind: 'encounter', radius: 40 }], nightMode: true });
+  const reef = items.find(i => i.id === 'reef:kelp');
+  assert.equal(reef.fixed, true);
+  assert.equal(s.solveLayout(items, frame({ zoom: 15.8 })).get('reef:kelp').reason, 'zoom', 'the host reef keeps its zoom limit: no empty box at z15.8');
+  assert.equal(s.solveLayout(items, frame({ zoom: 17.6 })).get('reef:kelp').visible, true);
+  // Half off screen: hidden like any marker.
+  const gymAt = dx => ({ id: 'gym', ...at(dx, 0), priority: L.PRIORITY.fixed, fixed: true, body: L.GYM_BODY });
+  assert.equal(s.solveLayout([gymAt(-205)], frame()).get('gym').reason, 'offscreen');
+  // GPS jitter: the gym walks 1 pt at a time across the energy pill's top edge and back; it changes
+  // state at most once each way (6 pt hysteresis), never flickering on a 1 to 3 pt wobble.
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  const k = mpp(17.6);
+  const gymY = y => ({ id: 'gym', latitude: USF.latitude - ((y - 350) * k) / 111320,
+    longitude: USF.longitude + ((pill.x + 75 - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+    priority: L.PRIORITY.fixed, fixed: true, body: L.GYM_BODY });
+  // Gym core: 90 x 100 body, core is the body (both under 120): bottom edge = anchor + 20.
+  const edgeY = pill.y - 20;
+  let prev = null, changes = 0, last = null;
+  const wobble = [-12, -10, -8, -6, -4, -2, 0, 2, 1, 3, 2, 4, 3, 5, 4, 6, 5, 7, 8, 10, 9, 10, 8, 6, 4, 2, 3, 1, 2, 0, -2, -1, -3, -2, -4, -6, -8, -10, -12];
+  for (const d of wobble) {
+    const out = s.solveLayout([gymY(edgeY + d)], frame(), { insets: INSETS, previous: prev, previousZoom: 17.6 });
+    const v = out.get('gym').visible;
+    if (last !== null && v !== last) changes++;
+    last = v; prev = out;
+  }
+  assert.equal(changes, 2, `exactly one hide and one show across the sweep (got ${changes})`);
+  // And a few points of jitter either side of the edge never changes state.
+  let p2 = s.solveLayout([gymY(edgeY - 10)], frame(), { insets: INSETS });
+  const start = p2.get('gym').visible;
+  assert.equal(start, true);
+  for (const d of [-1, 2, -3, 4, -2, 3, 5, -1]) {
+    p2 = s.solveLayout([gymY(edgeY + d)], frame(), { insets: INSETS, previous: p2, previousZoom: 17.6 });
+    assert.equal(p2.get('gym').visible, start, `jitter at ${d} pt`);
+  }
 });
 
 test('the reef the Fin-ister encounter swims at is drawn with it (fixed), never hidden under the encounter; other reefs unchanged', () => {
