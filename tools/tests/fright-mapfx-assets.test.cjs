@@ -155,7 +155,7 @@ test('ambient events: spaced by their gaps, a third due waits 2 to 5 s, never ov
 test('wiring: sprites read server art by slug, through the shared cache, with bundled fallbacks', () => {
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.match(sprites, /useRemoteImage\(asset\?\.sheet\)/);
-  assert.match(sprites, /image\.width\(\) \/ 2/, '@2x sheets draw at half size');
+  assert.match(sprites, /image\?\.width\(\) \?\? 0\) \/ 2/, '@2x sheets draw at half size');
   const sources = read('src/components/map/fright/FrightMapSources.tsx');
   assert.match(sources, /critterAsset\(assets, slug\)/);
   assert.match(sources, /hauntLayers\(assets, h\)/);

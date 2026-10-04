@@ -26,7 +26,7 @@ import { nightRecordFrom, parseNightRecord, recapTrigger, type NightRecord } fro
 import { canEnter, exitStep, finishDecision, localRun, minDoneAt, runStage, type ExitHold, type FinishMethod } from '../../services/fright/run';
 import { FRIGHT_KEYS, readJson, readKey, writeJson, writeKey } from '../../services/fright/storage';
 import {
-  coachDismiss, coachEnqueue, coachTick, coachWaitMs, EMPTY_COACH, introPlan, isChaosHour, markSeenLocal, mergeSeen,
+  COACH_LINES, coachDismiss, coachEnqueue, coachTick, coachWaitMs, EMPTY_COACH, introPlan, isChaosHour, markSeenLocal, mergeSeen,
   parseSeenStore, type CoachState, type FrightCoachKey, type FrightSeenKey, type IntroPlan, type SeenStore,
 } from '../../services/fright/tutorial';
 
@@ -38,6 +38,10 @@ export interface RankPrompt {
   readonly reSwim: boolean;
   /** The player's last score for this haunt (re-swim card asks "Still a four?"). */
   readonly lastScore: number | null;
+  /** XP the finish granted (shown on the rank stamp: "4 FINS · +25 XP"). */
+  readonly xp?: number | null;
+  /** The rank_first coach line, shown ON the first rank card of the season (not after it). */
+  readonly hint?: string | null;
 }
 
 export interface FrightEngine {
@@ -302,9 +306,12 @@ export default function useFrightEngine(night: FrightNight, opts: {
     applyResult(key, result);
     setLocalRun(null);
     const lastScore = result.run?.score ?? me?.runs.find(run => run.key === key)?.score ?? lastScores.current[key] ?? null;
-    setRank({ key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim, lastScore });
-    enqueueCoach('rank_first');
-  }, [spotByKey, applyResult, setLocalRun, enqueueCoach, me?.runs]);
+    const xp = (result.rewards ?? []).filter(reward => reward.kind === 'xp').reduce((sum, reward) => sum + (reward.amount ?? 0), 0);
+    // rank_first is a line on the first rank card itself (coach timing, panel r2 #9): marked seen as it shows.
+    const hint = seen.rank_first ? null : COACH_LINES.rank_first.line;
+    if (hint) markSeen('rank_first');
+    setRank({ key, name: spot?.name ?? 'that haunt', reSwim: !!result.run?.re_swim, lastScore, xp: xp || null, hint });
+  }, [spotByKey, applyResult, setLocalRun, me?.runs, seen, markSeen]);
 
   const afterFound = useCallback((key: string, result: FrightActionResult) => {
     applyResult(key, result, { found: true, side: null });

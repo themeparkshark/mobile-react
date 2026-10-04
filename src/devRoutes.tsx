@@ -31,6 +31,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkProjectPreview', getComponent: () => require('./screens/ExploreScreen/ParkProjectPreviewScreen').default },
       { name: 'TripGoalPreview', getComponent: () => require('./screens/ExploreScreen/TripGoalPreviewScreen').default },
       { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
+      { name: 'MapDeclutterPreview', getComponent: () => require('./components/map/declutter/preview/MapDeclutterPreview').default },
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'ShareStudioPreview', getComponent: () => require('./screens/ShareStudioPreviewScreen').default },
       { name: 'ShareModalEvidence', getComponent: () => require('./screens/ShareModalEvidenceScreen').default },
@@ -55,6 +56,7 @@ export function devInitialRoute(): string | null {
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [on(process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW), 'MapAlivePreview'],
+    [on(process.env.EXPO_PUBLIC_DECLUTTER_PREVIEW), 'MapDeclutterPreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MAP_PREVIEW), 'BossMapPreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MECHANICS_PREVIEW), 'BossMechanicsPreview'],
     [on(process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW), 'ShelfArrivalPreview'],

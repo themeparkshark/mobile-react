@@ -141,7 +141,9 @@ test('ghost sharks: fresh friends in range only, fading with age, nearest first,
 
 test('the night show is wired to the map: pill only in a free slot, layer over the anchor, our own sound', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const nightPill = !busyLiveSlot && !!nightShow\.show && \(nightShow\.phase === 'teaser' \|\| nightShow\.phase === 'live'\)/);
+  // The show joins the one HUD row; the status stack ranks it (live outranks Fin-ister, a teaser waits behind it).
+  assert.match(explore, /const nightPill = !!nightShow\.show && \(nightShow\.phase === 'teaser' \|\| nightShow\.phase === 'live'\)/);
+  assert.match(explore, /show: nightPill \? \(nightShow\.phase === 'live' \? 'live' : 'teaser'\) : null/);
   assert.match(explore, /<NightShowLayer show=\{nightShow\.show\} live=\{nightShow\.phase === 'live'\} \/>/);
   const layer = read('src/components/map/alive/NightShowLayer.tsx');
   assert.match(layer, /const on = live && running && slots > 0 && bursts\.length > 0/, 'Reduce Motion (calm) and a paused map draw nothing');

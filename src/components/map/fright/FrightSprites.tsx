@@ -16,12 +16,12 @@ import { hash01 } from '../alive/ambientBudget';
 import { CritterBody } from './CritterBody';
 import { critterPose, sheetPose } from './critters';
 import { BAT_FRAME, BAT_FRAMES, critterLook, EYES_FRAMES, EYES_H, EYES_W, FRIGHT_ART, MIST_H, MIST_W, NIGHT } from './frightArt';
-import { rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
+import { critterRows, rowIndex, sheetTiming, timelineLit, windowTimelines } from './frightAssets';
 import { flickerPlan, flickerProfile, silhouetteAt, silhouettePlan, windowLevel } from './flicker';
 import { hashString } from './random';
 import { useFrightImage, useRemoteImage } from './useFrightImage';
 import { frightIntro } from './useFrightState';
-import { chipShift, type FrightProp } from './frightBudget';
+import { chipShiftClear, type FrightProp, type HudRect } from './frightBudget';
 
 /* ── Sheet frames ─────────────────────────────────────────────────────── */
 
@@ -30,7 +30,7 @@ import { chipShift, type FrightProp } from './frightBudget';
  * the image is clipped to the frame and slid by the frame and row.
  */
 function SheetFrame({ image, fw, fh, frame, row, x, y, opacity }: {
-  image: SkImageType; fw: number; fh: number; frame: SharedValue<number>; row: SharedValue<number>;
+  image: SkImageType | null; fw: number; fh: number; frame: SharedValue<number>; row: SharedValue<number>;
   x: number; y: number; opacity?: SharedValue<number> | number;
 }) {
   const w = fw / 2;
@@ -40,7 +40,8 @@ function SheetFrame({ image, fw, fh, frame, row, x, y, opacity }: {
   return (
     <Group clip={clip} opacity={opacity}>
       <Group transform={slide}>
-        <SkImage image={image} x={0} y={0} width={image.width() / 2} height={image.height() / 2} fit="fill" />
+        {/* A null image (still loading) draws nothing; the node stays mounted either way. */}
+        <SkImage image={image} x={0} y={0} width={(image?.width() ?? 0) / 2} height={(image?.height() ?? 0) / 2} fit="fill" />
       </Group>
     </Group>
   );
@@ -68,7 +69,7 @@ export function SoftEllipse({ x, y, w, h, inner = 0.55, children }: {
 }
 
 /** Ground mist feathered to zero alpha on all four edges (never a hard band). */
-function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType; x: number; y: number; w: number; h: number; opacity: number }) {
+function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType | null; x: number; y: number; w: number; h: number; opacity: number }) {
   return (
     <SoftEllipse x={x} y={y} w={w} h={h} inner={0.35}>
       <SkImage image={image} x={x} y={y} width={w} height={h} fit="fill" opacity={opacity} />
@@ -80,16 +81,18 @@ function FeatheredMist({ image, x, y, w, h, opacity }: { image: SkImageType; x: 
 
 const NO_ROWS = [0, -1, -1];
 
-function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, index, cx, cy, animated, lite }: {
+function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, index, cx, cy, animated, lite, on = true }: {
   seed: number; clock: SharedValue<number>; wander: number; watch: number; jumpStart: SharedValue<number>;
   jumper: boolean; slug: string | null; asset: FrightSheetAsset | null; index: number; cx: number; cy: number;
   animated: boolean; lite: boolean;
+  /** Drawn or not (opacity): the slot stays mounted (see ReefCritters). */
+  on?: boolean;
 }) {
   const look = useMemo(() => critterLook(slug, index), [slug, index]);
   const sheet = useRemoteImage(asset?.sheet);
   const still = useMemo(() => critterPose(seed, 0, wander, watch, -1), [seed, wander, watch]);
   const timing = asset ? sheetTiming(asset) : { frames: 10, fps: 10 };
-  const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'lurk'), rowIndex(asset, 'jump')] : NO_ROWS), [asset]);
+  const rows = useMemo(() => (asset ? critterRows(asset) : NO_ROWS), [asset]);
   const useSheet = !!sheet && !!asset;
   const pose = useDerivedValue(() => {
     if (!animated) return still;
@@ -116,27 +119,35 @@ function Critter({ seed, clock, wander, watch, jumpStart, jumper, slug, asset, i
   const fw = asset?.frame[0] ?? 128;
   const fh = asset?.frame[1] ?? 128;
   return (
-    <Group>
+    <Group opacity={on ? 1 : 0}>
       <Group transform={shadow}><Oval x={-10} y={-3} width={20} height={6} color="rgba(10,6,30,0.35)" /></Group>
       <Group transform={body}>
-        {useSheet && sheet
-          // The sheet's cloud base is a wide flat plate: mask it to a round, soft cloud.
-          ? <SoftEllipse x={-fw / 4} y={-fh / 2} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
+        {/* Sheet and placeholder both mounted: the art cross-fades in when it loads. */}
+        <Group opacity={useSheet && sheet ? 1 : 0}>
+          <SoftEllipse x={-fw / 4} y={-fh / 2} w={fw / 2} h={fh / 2 + 2} inner={0.7}>
               <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 2} />
             </SoftEllipse>
-          : <CritterBody look={look} />}
+        </Group>
+        <Group opacity={useSheet && sheet ? 0 : 1}><CritterBody look={look} /></Group>
       </Group>
     </Group>
   );
 }
 
 /** Critters wandering a reef, over a still ground mist (fog is thicker at reefs). */
-export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets, count, wanderPts, clock, animated, lite, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
+export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets, count, slots, wanderPts, clock, animated, lite, watch, jumpToken, jumpIndex, intensity, mistUrl }: {
   readonly reefKey: string;
   readonly slugs: readonly string[];
   /** Each slug's sheet (null: placeholder). */
   readonly assets: readonly (FrightSheetAsset | null)[];
+  /** Critters drawn now. */
   readonly count: number;
+  /**
+   * Critter slots always mounted (the reef's most). Budget and motion changes
+   * only show or hide slots: mounting and unmounting Skia nodes that a moving
+   * clock still animates crashed RN Skia (JsiDomDeclarationNode::invalidateContext).
+   */
+  readonly slots: number;
   readonly wanderPts: number;
   readonly clock: SharedValue<number>;
   readonly animated: boolean;
@@ -163,13 +174,14 @@ export const ReefCritters = memo(function ReefCritters({ reefKey, slugs, assets,
   const mistH = Math.min(H * 0.6, MIST_H * (mistW / MIST_W) * 1.6);
   return (
     <Canvas style={{ width: W, height: H }} pointerEvents="none">
-      {mist && <FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
-      {Array.from({ length: count }, (_, i) => {
+      {<FeatheredMist image={mist} x={cx - mistW / 2} y={Math.max(0, cy - mistH * 0.6)} w={mistW} h={mistH} opacity={0.7 * intensity} />}
+      {/* Fixed at `slots` (the reef's most): the budget only shows or hides slots, never mounts them. */}
+      {Array.from({ length: slots }, (_, i) => {
         const k = slugs.length ? i % slugs.length : 0;
         return (
           <Critter key={i} seed={seed + i * 37} clock={clock} wander={wanderPts} watch={watch} jumpStart={jumpStart}
-            jumper={i === jumpIndex % Math.max(1, count)} slug={slugs[k] ?? null} asset={assets[k] ?? null} index={i}
-            cx={cx} cy={cy} animated={animated} lite={lite} />
+            jumper={i === jumpIndex % Math.max(1, Math.min(count, slots))} slug={slugs[k] ?? null} asset={assets[k] ?? null} index={i}
+            cx={cx} cy={cy} animated={animated && i < Math.min(count, slots)} lite={lite} on={i < Math.min(count, slots)} />
         );
       })}
     </Canvas>
@@ -185,9 +197,10 @@ export const ReefGlyph = memo(function ReefGlyph({ slug, staticUrl, intensity }:
   return (
     <Canvas style={{ width: 52, height: 52 }} pointerEvents="none">
       <Oval x={4} y={36} width={44} height={12} color={NIGHT.fog} opacity={0.45 * Math.max(0.4, intensity)} />
-      {still
-        ? <SoftEllipse x={6} y={2} w={40} h={41} inner={0.7}><SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" /></SoftEllipse>
-        : <Group transform={[{ translateX: 26 }, { translateY: 42 }, { scale: 0.9 }]}><CritterBody look={look} /></Group>}
+      <Group opacity={still ? 1 : 0}>
+        <SoftEllipse x={6} y={2} w={40} h={41} inner={0.7}><SkImage image={still} x={6} y={2} width={40} height={40} fit="contain" /></SoftEllipse>
+      </Group>
+      <Group opacity={still ? 0 : 1}><Group transform={[{ translateX: 26 }, { translateY: 42 }, { scale: 0.9 }]}><CritterBody look={look} /></Group></Group>
     </Canvas>
   );
 });
@@ -249,7 +262,7 @@ function PlaceholderFacade({ seed, flicker, windows, animatedWindows, clock, ani
         <PlaceholderWindow key={i} i={i} plan={plan} sil={sil} windows={n} clock={clock} animated={animated && i < animatedWindows} dim={dim} />
       ))}
       <Circle cx={47} cy={68} r={2.6} color={dim ? NIGHT.dusk : NIGHT.lantern} />
-      {done && <Path path={HOUSE} color={NIGHT.candy} style="stroke" strokeWidth={1.4} strokeJoin="round" />}
+      <Path path={HOUSE} color={NIGHT.candy} style="stroke" strokeWidth={1.4} strokeJoin="round" opacity={done ? 1 : 0} />
     </Group>
   );
 }
@@ -260,7 +273,7 @@ export const DOOR_HOLD_S = 1.8;
 const GHOST_FPS = 8;
 
 function LayerWindow({ i, image, fw, fh, x, y, toggles, clock, rate, dim }: {
-  i: number; image: SkImageType; fw: number; fh: number; x: number; y: number; toggles: number[];
+  i: number; image: SkImageType | null; fw: number; fh: number; x: number; y: number; toggles: number[];
   clock: SharedValue<number>; rate: number; dim: boolean;
 }) {
   const frame = useSharedValue(i);
@@ -271,7 +284,7 @@ function LayerWindow({ i, image, fw, fh, x, y, toggles, clock, rate, dim }: {
 
 /** The facade from the art layers: base, flickering windows, the ghost pass and the door creak. */
 function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostToken, doorToken, dim }: {
-  layers: FrightHauntLayers; base: SkImageType; seed: number; clock: SharedValue<number>;
+  layers: FrightHauntLayers; base: SkImageType | null; seed: number; clock: SharedValue<number>;
   /** Window flicker speed: 1 full, 0.5 lite, 0 static (all lit). */
   rate: number; ghosts: boolean; doors: boolean; ghostToken: number; doorToken: number; dim: boolean;
 }) {
@@ -280,9 +293,10 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
   const x = (LW - w) / 2;
   const y = 2;
   const windowsImg = useRemoteImage(layers.windows);
-  const ghostImg = useRemoteImage(ghosts ? layers.ghost : null);
+  const ghostImg = useRemoteImage(layers.ghost);
   const doorImg = useRemoteImage(layers.door);
-  const count = Math.max(0, Math.min(8, Math.floor(Number(layers.window_count) || (windowsImg ? windowsImg.width() / fw : 0))));
+  // From the manifest, never from the loaded image: the window nodes are mounted before the art arrives.
+  const count = Math.max(0, Math.min(8, Math.floor(Number(layers.window_count) || 0)));
   const timelines = useMemo(() => windowTimelines(seed, count), [seed, count]);
   const ghostAt = useSharedValue(-1000);
   const doorAt = useSharedValue(-1000);
@@ -290,6 +304,7 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
   useEffect(() => { if (doorToken > 0) doorAt.value = clock.value; }, [doorToken, clock, doorAt]);
   const ghostFrames = ghostImg ? Math.max(1, Math.round(ghostImg.width() / fw)) : 8;
   const ghostFrame = useDerivedValue(() => {
+    if (!ghosts) return -1; // paused: no clock read
     const age = clock.value - ghostAt.value;
     return age >= 0 && age < ghostFrames / GHOST_FPS ? Math.floor(age * GHOST_FPS) : -1;
   });
@@ -297,9 +312,10 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
   const ghostIdx = useDerivedValue(() => Math.max(0, ghostFrame.value));
   const doorFrames = doorImg ? Math.max(1, Math.round(doorImg.width() / fw)) : 6;
   const doorFrame = useDerivedValue(() => {
+    if (!doors) return 0; // paused: no clock read
     const age = clock.value - doorAt.value;
     const last = doorFrames - 1;
-    if (!doors || age < 0) return 0;
+    if (age < 0) return 0;
     if (age < DOOR_OPEN_S) return Math.floor((age / DOOR_OPEN_S) * last);
     if (age < DOOR_OPEN_S + DOOR_HOLD_S) return last;
     if (age < DOOR_OPEN_S * 2 + DOOR_HOLD_S) return last - Math.floor(((age - DOOR_OPEN_S - DOOR_HOLD_S) / DOOR_OPEN_S) * last);
@@ -311,11 +327,14 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
   return (
     <Group opacity={dim ? 0.55 : 1}>
       <SkImage image={base} x={x} y={y} width={w} height={fh / 2} fit="fill" />
-      {windowsImg && timelines.map((toggles, i) => (
+      {timelines.map((toggles, i) => (
         <LayerWindow key={i} i={i} image={windowsImg} fw={fw} fh={fh} x={x} y={y} toggles={toggles} clock={clock} rate={rate} dim={dim} />
       ))}
-      {ghostImg && ghosts && !dim && <SheetFrame image={ghostImg} fw={fw} fh={fh} frame={ghostIdx} row={zero} x={x} y={y} opacity={ghostShown} />}
-      {doorImg && <SheetFrame image={doorImg} fw={fw} fh={fh} frame={doorFrame} row={zero} x={x} y={y} opacity={doorGlow} />}
+      {/* Always mounted once the art is in: ghosts on or off only changes opacity (RN Skia unmount race). */}
+      <Group opacity={ghosts && !dim ? 1 : 0}>
+        <SheetFrame image={ghostImg} fw={fw} fh={fh} frame={ghostIdx} row={zero} x={x} y={y} opacity={ghostShown} />
+      </Group>
+      <SheetFrame image={doorImg} fw={fw} fh={fh} frame={doorFrame} row={zero} x={x} y={y} opacity={doorGlow} />
     </Group>
   );
 }
@@ -326,7 +345,7 @@ function LayeredFacade({ layers, base, seed, clock, rate, ghosts, doors, ghostTo
  * (the survived pin) once survived, dim when closed. During the intro cinematic the haunts light
  * one by one (120 ms apart).
  */
-export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label, chipX = null, screenW = 0, survivedPin = null }: {
+export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windows, animatedWindows, clock, animated, rate, ghosts, doors, ghostToken, doorToken, done, beads, dim, index, layers, iconUrl, intensity, reducedMotion, label, chipDetail = null, chipX = null, chipY = null, screenW = 0, huds = NO_HUDS, survivedPin = null }: {
   readonly spotKey: string;
   readonly flicker: string | null | undefined;
   readonly windows: number;
@@ -351,7 +370,13 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   readonly label: string | null;
   /** The facade's projected screen x (points), to keep the chip 12 pt inside the screen edges. */
   readonly chipX?: number | null;
+  /** The chip's projected top (points), to keep it clear of HUD rects beside it. */
+  readonly chipY?: number | null;
   readonly screenW?: number;
+  /** Small second chip line: "25 min", "Closed" (null: name only). */
+  readonly chipDetail?: string | null;
+  /** HUD rects the chip keeps clear of (the right rail). */
+  readonly huds?: readonly HudRect[];
   /** The survived pin art (assets.event_pins['ev-survived']); a gold check when missing. */
   readonly survivedPin?: string | null;
 }) {
@@ -373,8 +398,9 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
   });
   const showIcon = !base && !!iconUrl;
   // The chip's real width (measured), so the edge clamp never guesses from the label length.
-  const [chipW, setChipW] = useState(0);
-  const shift = chipX !== null && chipW > 0 ? chipShift(chipX, chipW, screenW) : 0;
+  const [chipSize, setChipSize] = useState({ w: 0, h: 0 });
+  const shift = chipX !== null && chipSize.w > 0
+    ? chipShiftClear(chipX, chipY ?? Number.NaN, chipSize.w, chipSize.h, screenW, huds) : 0;
   return (
     <View style={styles.lantern}>
       <Canvas style={{ width: LW, height: LH }} pointerEvents="none">
@@ -382,42 +408,55 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
           <Circle cx={LW / 2} cy={LH - 18} r={36} opacity={glow}>
             <RadialGradient c={vec(LW / 2, LH - 18)} r={36} colors={[glowColor, `${glowColor}00`]} />
           </Circle>
-          {done && <Circle cx={LW / 2} cy={LH / 2} r={36} color={NIGHT.candy} opacity={0.35 * Math.max(0.5, intensity)}><BlurMask blur={8} style="normal" /></Circle>}
-          {base && layers
-            ? <LayeredFacade layers={layers} base={base} seed={seed} clock={clock} rate={animated ? rate : 0} ghosts={ghosts && animated}
-                doors={doors && animated} ghostToken={ghostToken} doorToken={doorToken} dim={dim} />
-            : !showIcon && <PlaceholderFacade seed={seed} flicker={flicker} windows={windows} animatedWindows={animatedWindows}
-                clock={clock} animated={animated} dim={dim} done={done} />}
+          <Circle cx={LW / 2} cy={LH / 2} r={36} color={NIGHT.candy} opacity={done ? 0.35 * Math.max(0.5, intensity) : 0}><BlurMask blur={8} style="normal" /></Circle>
+          {/* Both facades stay mounted (layers come with the payload); the art cross-fades in when it loads. */}
+            <Group opacity={layers && base ? 1 : 0}>
+              <LayeredFacade layers={layers ?? NO_LAYERS} base={base} seed={seed} clock={clock} rate={animated && base ? rate : 0} ghosts={ghosts && animated && !!base}
+                doors={doors && animated && !!base} ghostToken={ghostToken} doorToken={doorToken} dim={dim} />
+            </Group>
+          <Group opacity={!base && !showIcon ? 1 : 0}>
+            <PlaceholderFacade seed={seed} flicker={flicker} windows={windows} animatedWindows={animatedWindows}
+              clock={clock} animated={animated && !base && !showIcon} dim={dim} done={done} />
+          </Group>
         </Group>
       </Canvas>
-      {showIcon && (
-        <Image source={{ uri: iconUrl! }} style={[styles.icon, dim && styles.iconDim]} contentFit="contain" cachePolicy="memory-disk" transition={0} />
-      )}
-      {done && (
-        <View style={styles.survived} pointerEvents="none" accessibilityLabel={beads > 1 ? `Survived ${beads} times tonight` : 'Survived'}>
-          {survivedPin
-            ? <Image source={{ uri: survivedPin }} style={styles.survivedPin} contentFit="contain" cachePolicy="memory-disk" transition={0} />
-            : null}
-          <View style={styles.check}><Text style={styles.checkText}>✓</Text></View>
-        </View>
-      )}
-      {label && (
-        <View style={[styles.chip, dim && styles.chipDim, done && styles.chipDone, shift ? { transform: [{ translateX: shift }] } : null]}
-          onLayout={event => { const w = Math.round(event.nativeEvent.layout.width); if (Math.abs(w - chipW) > 1) setChipW(w); }}>
-          <Text style={styles.chipText} numberOfLines={1}>{label}</Text>
-        </View>
-      )}
+      {/* Opacity-only inside the Marker: icon, survived badge and chip are always mounted. */}
+      <Image source={iconUrl ? { uri: iconUrl } : null} style={[styles.icon, dim && styles.iconDim, !showIcon && styles.gone]}
+        contentFit="contain" cachePolicy="memory-disk" transition={0} />
+      <View style={[styles.survived, !done && styles.gone]} pointerEvents="none"
+        accessibilityElementsHidden={!done} accessibilityLabel={beads > 1 ? `Survived ${beads} times tonight` : 'Survived'}>
+        <Image source={survivedPin ? { uri: survivedPin } : null} style={[styles.survivedPin, !survivedPin && styles.gone]}
+          contentFit="contain" cachePolicy="memory-disk" transition={0} />
+        <View style={styles.check}><Text style={styles.checkText}>✓</Text></View>
+      </View>
+      <View style={[styles.chip, dim && styles.chipDim, done && styles.chipDone, !label && styles.gone, shift ? { transform: [{ translateX: shift }] } : null]}
+        onLayout={event => {
+          const w = Math.round(event.nativeEvent.layout.width);
+          const h = Math.round(event.nativeEvent.layout.height);
+          if (Math.abs(w - chipSize.w) > 1 || Math.abs(h - chipSize.h) > 1) setChipSize({ w, h });
+        }}>
+        {/* The full name (up to 2 lines, never cut at normal widths), then a small detail line. */}
+        <Text style={styles.chipText} numberOfLines={2}>{label ?? ''}</Text>
+        <Text style={[styles.chipDetail, !chipDetail && styles.collapsed]} numberOfLines={1}>{chipDetail ?? ''}</Text>
+      </View>
     </View>
   );
 });
 
+const NO_HUDS: readonly HudRect[] = [];
+/** Stand-in layers for a haunt without facade art: the layered facade stays mounted, drawing nothing. */
+const NO_LAYERS: FrightHauntLayers = { frame: [160, 160], base: null, windows: null, window_count: 0, ghost: null, door: null };
+
 /* ── Spot props ───────────────────────────────────────────────────────── */
 
+/** Bats a prop spot can show (FrightMapSources allocates at most 2). */
+const MAX_BATS = 2;
 const PW = 200;
 const PH = 150;
 
-function Bat({ k, seed, clock, sheet, fw, fh, frames, animated }: {
+function Bat({ k, seed, clock, sheet, fw, fh, frames, animated, on = true }: {
   k: number; seed: number; clock: SharedValue<number>; sheet: SkImageType | null; fw: number; fh: number; frames: number; animated: boolean;
+  on?: boolean;
 }) {
   const speed = 0.35 + hash01(seed + k * 7) * 0.25;
   const phase = hash01(seed + k * 7 + 1) * 6.283;
@@ -431,11 +470,10 @@ function Bat({ k, seed, clock, sheet, fw, fh, frames, animated }: {
   const transform = useDerivedValue(() => [{ translateX: state.value.x }, { translateY: state.value.y }, { scaleX: s * state.value.dir }, { scaleY: s }]);
   const offset = useDerivedValue(() => [{ translateX: -fw / 2 - state.value.frame * fw }, { translateY: -fh / 2 }]);
   const clip = useMemo(() => Skia.XYWHRect(-fw / 2, -fh / 2, fw, fh), [fw, fh]);
-  if (!sheet) return null;
   return (
-    <Group transform={transform}>
+    <Group transform={transform} opacity={on && sheet ? 1 : 0}>
       <Group clip={clip}>
-        <Group transform={offset}><SkImage image={sheet} x={0} y={0} width={sheet.width()} height={sheet.height()} fit="fill" /></Group>
+        <Group transform={offset}><SkImage image={sheet} x={0} y={0} width={sheet?.width() ?? 0} height={sheet?.height() ?? 0} fit="fill" /></Group>
       </Group>
     </Group>
   );
@@ -456,23 +494,27 @@ function Eyes({ seed, clock, sheet, bush, animated }: { seed: number; clock: Sha
     return [{ translateX: -frame * EYES_W / 2 }];
   });
   const clip = useMemo(() => Skia.XYWHRect(0, 0, EYES_W / 2, EYES_H / 2), []);
-  if (!sheet) return null;
   return (
-    <Group transform={[{ translateX: 30 }, { translateY: 112 }]}>
-      {bush
-        ? <SkImage image={bush} x={-14} y={-8} width={48} height={26.5} fit="fill" />
-        : <Oval x={-10} y={-6} width={40} height={22} color="#20323A" />}
+    <Group transform={[{ translateX: 30 }, { translateY: 112 }]} opacity={sheet ? 1 : 0}>
+      <Oval x={-10} y={-6} width={40} height={22} color="#20323A" opacity={bush ? 0 : 1} />
+      <SkImage image={bush} x={-14} y={-8} width={48} height={26.5} fit="fill" />
       <Group clip={clip}><Group transform={offset}><SkImage image={sheet} x={0} y={0} width={EYES_W * EYES_FRAMES / 2} height={EYES_H / 2} fit="fill" /></Group></Group>
     </Group>
   );
 }
+
+function SparksSlot({ seed, clock, on }: { seed: number; clock: SharedValue<number>; on: boolean }) {
+  return <Group opacity={on ? 1 : 0}><SkidSparks seed={seed} clock={clock} animated={on} /></Group>;
+}
+
+const NO_AMBIENT: FrightAmbientAsset = { file: null, frame: [96, 96], rows: [1] };
 
 const PUMPKIN = Skia.Path.MakeFromSVGString('M-11 0 C-15 -10 -9 -20 0 -18 C9 -20 15 -10 11 0 C7 4 -7 4 -11 0 Z')!;
 const FACE = Skia.Path.MakeFromSVGString('M-6 -10 L-3 -13 L0 -10 Z M0 -10 L3 -13 L6 -10 Z M-6 -5 Q0 -1 6 -5')!;
 
 /** A sheet prop looping one row at `fps` (still on frame 0 when not animated). */
 function LoopProp({ image, asset, row, fps, x, y, clock, animated }: {
-  image: SkImageType; asset: FrightAmbientAsset; row: number; fps: number; x: number; y: number; clock: SharedValue<number>; animated: boolean;
+  image: SkImageType | null; asset: FrightAmbientAsset; row: number; fps: number; x: number; y: number; clock: SharedValue<number>; animated: boolean;
 }) {
   const [fw, fh] = asset.frame ?? [96, 96];
   const frames = asset.rows?.[row] ?? 1;
@@ -485,25 +527,31 @@ function Pumpkin({ clock, animated, art, asset }: { clock: SharedValue<number>; 
   const turn = useDerivedValue(() => (animated ? Math.cos(clock.value * 0.7) : 1));
   const body = useDerivedValue(() => [{ translateX: 160 }, { translateY: 130 }, { scaleX: 0.55 + 0.45 * Math.abs(turn.value) }]);
   const face = useDerivedValue(() => Math.max(0, turn.value));
-  if (art && asset?.frame) {
-    // Row 2 is the candle-flicker loop at 8 fps (row 1, the head turn, is left for a later pass).
-    return <LoopProp image={art} asset={asset} row={1} fps={8} x={160 - asset.frame[0] / 4} y={130 - asset.frame[1] / 2} clock={clock} animated={animated} />;
-  }
+  // Art and placeholder both mounted; the art cross-fades in when it loads.
+  // Row 2 is the candle-flicker loop at 8 fps (row 1, the head turn, is left for a later pass).
+  const hasArt = !!art && !!asset?.frame;
+  const frame = asset?.frame ?? [96, 96];
   return (
-    <Group transform={body}>
-      <Path path={PUMPKIN} color={NIGHT.pumpkin} />
-      <Path path={PUMPKIN} color={NIGHT.ink} style="stroke" strokeWidth={1.6} />
-      <Rect x={-1.5} y={-22} width={3} height={5} color="#4F8A3A" />
-      <Path path={FACE} color={NIGHT.candy} style="stroke" strokeWidth={1.6} strokeCap="round" opacity={face} />
+    <Group>
+      <Group opacity={hasArt ? 1 : 0}>
+        <LoopProp image={art} asset={asset ?? NO_AMBIENT} row={1} fps={8} x={160 - frame[0] / 4} y={130 - frame[1] / 2} clock={clock} animated={animated && hasArt} />
+      </Group>
+      <Group transform={body} opacity={hasArt ? 0 : 1}>
+        <Path path={PUMPKIN} color={NIGHT.pumpkin} />
+        <Path path={PUMPKIN} color={NIGHT.ink} style="stroke" strokeWidth={1.6} />
+        <Rect x={-1.5} y={-22} width={3} height={5} color="#4F8A3A" />
+        <Path path={FACE} color={NIGHT.candy} style="stroke" strokeWidth={1.6} strokeCap="round" opacity={face} />
+      </Group>
     </Group>
   );
 }
 
-function SkidSparks({ seed, clock }: { seed: number; clock: SharedValue<number> }) {
+function SkidSparks({ seed, clock, animated }: { seed: number; clock: SharedValue<number>; animated: boolean }) {
   // Ambient sparks every 3 to 6 minutes (MAP_FX_SPEC), 1.5 s across.
   const every = 180 + hash01(seed + 9) * 180;
   const run = 1.5;
   const p = useDerivedValue(() => {
+    if (!animated) return -1; // paused: no clock read
     const c = (clock.value + hash01(seed + 11) * every) % every;
     return c < run ? c / run : -1;
   });
@@ -526,14 +574,18 @@ function HangingLantern({ seed, clock, animated, art, asset }: { seed: number; c
     const stutter = ((t + hash01(seed) * 9) % 9) < 0.25 ? 0.25 : 1;
     return (0.5 + 0.1 * Math.sin(t * 5.3)) * stutter;
   });
-  if (art && asset?.frame) {
-    return <LoopProp image={art} asset={asset} row={0} fps={6} x={100 - asset.frame[0] / 4} y={4} clock={clock} animated={animated} />;
-  }
+  const hasArt = !!art && !!asset?.frame;
+  const frame = asset?.frame ?? [96, 96];
   return (
     <Group>
+      <Group opacity={hasArt ? 1 : 0}>
+        <LoopProp image={art} asset={asset ?? NO_AMBIENT} row={0} fps={6} x={100 - frame[0] / 4} y={4} clock={clock} animated={animated && hasArt} />
+      </Group>
+      <Group opacity={hasArt ? 0 : 1}>
       <Circle cx={100} cy={26} r={16} opacity={glow}><RadialGradient c={vec(100, 26)} r={16} colors={[NIGHT.lantern, `${NIGHT.lantern}00`]} /></Circle>
       <Rect x={96} y={20} width={8} height={11} color={NIGHT.candy} />
       <Rect x={96} y={20} width={8} height={11} color={NIGHT.ink} style="stroke" strokeWidth={1.3} />
+      </Group>
     </Group>
   );
 }
@@ -554,7 +606,7 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
   readonly mistUrl: string | null;
 }) {
   const batAsset = ambient?.bat ?? null;
-  const batSheet = useFrightImage(bats > 0 ? batAsset?.file : null, bats > 0 ? FRIGHT_ART.bats : null);
+  const batSheet = useFrightImage(props.includes('bats') ? batAsset?.file : null, props.includes('bats') ? FRIGHT_ART.bats : null);
   const eyesSheet = useFrightImage(props.includes('eyes') ? ambient?.eyes?.file : null, props.includes('eyes') ? FRIGHT_ART.eyes : null);
   const bush = useRemoteImage(props.includes('eyes') ? ambient?.bush?.file : null);
   const jack = useRemoteImage(props.includes('pumpkin') ? ambient?.['jack-o-lantern']?.file : null);
@@ -567,17 +619,33 @@ export const SpotProps = memo(function SpotProps({ spotKey, props, bats, movingA
   const batFrames = batAsset?.rows?.[0] ?? BAT_FRAMES;
   return (
     <Canvas style={{ width: PW, height: PH }} pointerEvents="none">
-      {mist && <FeatheredMist image={mist} x={4} y={PH - 74} w={PW - 8} h={70} opacity={0.65 * intensity} />}
-      {props.includes('eyes') && <Eyes seed={seed} clock={clock} sheet={eyesSheet} bush={bush} animated={take(true)} />}
-      {props.includes('pumpkin') && <Pumpkin clock={clock} animated={take(false)} art={jack} asset={ambient?.['jack-o-lantern'] ?? null} />}
-      {props.includes('lantern') && <HangingLantern seed={seed} clock={clock} animated={take(true)} art={lantern} asset={ambient?.lantern ?? null} />}
-      {props.includes('skid-fins') && take(false) && <SkidSparks seed={seed} clock={clock} />}
-      {animated && !lite && Array.from({ length: bats }, (_, k) => (
-        <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames} animated />
+      {/* Fixed Skia trees: every prop node is mounted; the spot's props, budget, tier and motion only
+          show or hide them (RN Skia unmount race under a moving map). */}
+      <Group opacity={props.includes('fog-thick') ? 1 : 0}>
+        <FeatheredMist image={mist} x={4} y={PH - 74} w={PW - 8} h={70} opacity={0.65 * intensity} />
+      </Group>
+      <Group opacity={props.includes('eyes') ? 1 : 0}>
+        <Eyes seed={seed} clock={clock} sheet={eyesSheet} bush={bush} animated={props.includes('eyes') && take(true)} />
+      </Group>
+      <Group opacity={props.includes('pumpkin') ? 1 : 0}>
+        <Pumpkin clock={clock} animated={props.includes('pumpkin') && take(false)} art={jack} asset={ambient?.['jack-o-lantern'] ?? null} />
+      </Group>
+      <Group opacity={props.includes('lantern') ? 1 : 0}>
+        <HangingLantern seed={seed} clock={clock} animated={props.includes('lantern') && take(true)} art={lantern} asset={ambient?.lantern ?? null} />
+      </Group>
+      <SparksSlot seed={seed} clock={clock} on={props.includes('skid-fins') && take(false)} />
+      {Array.from({ length: MAX_BATS }, (_, k) => (
+        <Bat key={k} k={k} seed={seed} clock={clock} sheet={batSheet} fw={batFrame[0]} fh={batFrame[1]} frames={batFrames}
+          animated={props.includes('bats') && animated && !lite && k < bats} on={props.includes('bats') && animated && !lite && k < bats} />
       ))}
     </Canvas>
   );
 });
+
+const ENCOUNTER_LOOKS = ['chuckles', 'riptide'] as const;
+
+/** Trail dots always mounted (tier changes only show or hide them). */
+const MAX_TRAIL = 6;
 
 /* ── Encounter ────────────────────────────────────────────────────────── */
 
@@ -599,7 +667,7 @@ export const EncounterSprite = memo(function EncounterSprite({ critter, asset, c
   const S = Math.round(Math.max(ringPts * 2 + 60, 120));
   const c = S / 2;
   const look = useMemo(() => critterLook(critter), [critter]);
-  const sheet = useRemoteImage(animated ? asset?.sheet : null);
+  const sheet = useRemoteImage(asset?.sheet);
   const still = useRemoteImage(asset?.static);
   const spawn = useSharedValue(clock.value);
   const rows = useMemo(() => (asset ? [rowIndex(asset, 'idle'), rowIndex(asset, 'appear'), rowIndex(asset, 'chaos-hour')] : [0, -1, -1]), [asset]);
@@ -612,8 +680,9 @@ export const EncounterSprite = memo(function EncounterSprite({ critter, asset, c
     return { x: c + Math.cos(a) * ringPts * 0.35, y: c + Math.sin(a) * ringPts * 0.25 };
   };
   const pose = useDerivedValue(() => {
-    const age = clock.value - spawn.value;
     const idle = rows[0] >= 0 ? rows[0] : 0;
+    if (!animated) return { row: idle, frame: 0 }; // paused: no clock read
+    const age = clock.value - spawn.value;
     const frame = Math.floor(clock.value * fps) % frames;
     if (rows[1] >= 0 && age >= 0 && age < frames / fps) return { row: rows[1], frame: Math.floor(age * fps) };
     if (!lite && rows[2] >= 0 && (chaos || age < 20)) return { row: rows[2], frame };
@@ -631,24 +700,27 @@ export const EncounterSprite = memo(function EncounterSprite({ critter, asset, c
     <Canvas style={{ width: S, height: S }} pointerEvents="none">
       <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} style="stroke" strokeWidth={3} opacity={ringO} />
       <Circle cx={c} cy={c} r={ringR} color={NIGHT.candy} opacity={0.08} />
-      {animated && Array.from({ length: trail }, (_, j) => <TrailDot key={j} j={j} at={at} />)}
+      {Array.from({ length: MAX_TRAIL }, (_, j) => <TrailDot key={j} j={j} at={at} on={animated && j < trail} />)}
       <Group transform={body}>
-        {sheet && animated
-          ? <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 4 - 8} />
-          : still
-            ? <SkImage image={still} x={-fw / 4} y={-fh / 4 - 8} width={fw / 2} height={fh / 2} fit="contain" />
-            : <Group transform={[{ translateY: 10 }, { scale: 1.1 }]}><CritterBody look={look} /></Group>}
+        {/* Every look stays mounted; only one is opaque (sheet while animated, else still, else placeholder). */}
+        <SheetFrame image={sheet} fw={fw} fh={fh} frame={frame} row={row} x={-fw / 4} y={-fh / 4 - 8} opacity={sheet && animated ? 1 : 0} />
+        <SkImage image={still} x={-fw / 4} y={-fh / 4 - 8} width={fw / 2} height={fh / 2} fit="contain" opacity={!(sheet && animated) && still ? 1 : 0} />
+        {ENCOUNTER_LOOKS.map(name => (
+          <Group key={name} transform={[{ translateY: 10 }, { scale: 1.1 }]} opacity={!(sheet && animated) && !still && critter === name ? 1 : 0}>
+            <CritterBody look={critterLook(name)} />
+          </Group>
+        ))}
       </Group>
     </Canvas>
   );
 });
 
-function TrailDot({ j, at }: { j: number; at: (lag: number) => { x: number; y: number } }) {
+function TrailDot({ j, at, on }: { j: number; at: (lag: number) => { x: number; y: number }; on: boolean }) {
   const c = useDerivedValue(() => {
     const p = at(0.12 * (j + 1));
     return vec(p.x, p.y + 20);
   });
-  return <Circle c={c} r={3 - j * 0.35} color={NIGHT.candy} opacity={0.7 - j * 0.1} />;
+  return <Circle c={c} r={3 - j * 0.35} color={NIGHT.candy} opacity={on ? 0.7 - j * 0.1 : 0} />;
 }
 
 const styles = StyleSheet.create({
@@ -656,8 +728,12 @@ const styles = StyleSheet.create({
   lantern: { width: LANTERN_W, height: LH + LANTERN_FOOT, alignItems: 'center' },
   chip: { maxWidth: LANTERN_W, marginTop: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 9,
     backgroundColor: 'rgba(30,24,56,0.92)', borderWidth: 1.5, borderColor: NIGHT.lantern },
+  gone: { opacity: 0 },
+  // Stays mounted, takes no space.
+  collapsed: { display: 'none' },
   chipDim: { borderColor: NIGHT.dusk, opacity: 0.85 },
-  chipText: { fontFamily: 'Knockout', fontSize: 11, color: NIGHT.moon },
+  chipText: { fontFamily: 'Knockout', fontSize: 10.5, lineHeight: 12, color: NIGHT.moon, textAlign: 'center' },
+  chipDetail: { fontFamily: 'Knockout', fontSize: 9, lineHeight: 10.5, color: NIGHT.lantern, textAlign: 'center' },
   icon: { position: 'absolute', top: 10, width: 64, height: 64 },
   iconDim: { opacity: 0.5 },
   // Survived: the pin at the facade's top right with a check badge (replaces the old "1" bead).

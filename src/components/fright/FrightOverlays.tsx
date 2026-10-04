@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FrightCaseFileDrop } from '../../api/endpoints/fright';
 import { COPY } from '../../services/fright/copy';
+import { overlayRightInset } from '../../services/fright/layout';
 import { NIGHT } from '../../services/fright/theme';
 import { COACH_LINES, type FrightCoachKey } from '../../services/fright/tutorial';
 import { GameIcon } from '../../ui';
@@ -45,30 +46,6 @@ export function FrightCoachMark({ coach, onClose, top = 120 }: { readonly coach:
   );
 }
 
-export function CaseFileReveal({ file, onClose }: { readonly file: FrightCaseFileDrop | null; readonly onClose: () => void }) {
-  const scale = useRef(new Animated.Value(0.6)).current;
-  useEffect(() => {
-    if (!file) return;
-    scale.setValue(0.6);
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
-  }, [file, scale]);
-  if (!file) return null;
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.center} onPress={onClose} accessibilityLabel="Close the Case File">
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <NightCard style={styles.file}>
-            <Text style={styles.kicker}>{file.new ? 'NEW CASE FILE' : 'CASE FILE'} · {file.year_label}</Text>
-            <Text style={styles.fileTitle} accessibilityRole="header">{file.title}</Text>
-            <Text style={styles.fileBody}>{file.body}</Text>
-            <NightButton label="Into the Lantern" onPress={onClose} style={{ marginTop: 12 }} />
-          </NightCard>
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
-}
-
 /** The exit moment (mode turns off): a gentle card leading to the Marquee. */
 export function FrightExitCard({ visible, onOpen, onClose }: { readonly visible: boolean; readonly onOpen: () => void; readonly onClose: () => void }) {
   if (!visible) return null;
@@ -89,10 +66,11 @@ export function FrightExitCard({ visible, onOpen, onClose }: { readonly visible:
 }
 
 const styles = StyleSheet.create({
-  toast: { position: 'absolute', left: 16, right: 16, zIndex: 60, backgroundColor: NIGHT.midnight, borderRadius: 16,
+  // Right edge stops left of the map's right rail (overlayRightInset).
+  toast: { position: 'absolute', left: 16, right: overlayRightInset(), zIndex: 60, backgroundColor: NIGHT.midnight, borderRadius: 16,
     borderWidth: 2, borderColor: NIGHT.fog, paddingVertical: 10, paddingHorizontal: 14 },
   toastText: { fontFamily: 'Knockout', fontSize: 16, color: NIGHT.moon, textAlign: 'center' },
-  coach: { position: 'absolute', left: 16, right: 16, zIndex: 59, alignItems: 'center' },
+  coach: { position: 'absolute', left: 16, right: overlayRightInset(), zIndex: 59, alignItems: 'center' },
   pointerUp: { width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 12, borderLeftColor: 'transparent',
     borderRightColor: 'transparent', borderBottomColor: NIGHT.lantern },
   coachBody: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: NIGHT.haunt, borderRadius: 16, borderWidth: 3,

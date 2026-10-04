@@ -6,7 +6,7 @@
  * the map glides under it. Calm (Reduce Motion) and a
  * paused map leave no trail.
  */
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Marker } from '../Marker';
@@ -60,12 +60,28 @@ export const SharkTrail = memo(function SharkTrail({ latitude, longitude }: {
       Math.max(500, oldest + TRAIL_LIFE_MS - Date.now() + 50));
     return () => clearTimeout(timer);
   }, [points]);
+  // A fixed pool of marker slots (keyed by slot, never by sparkle): each new sparkle takes
+  // the slot of the one it replaces, so walking never mounts, unmounts or reorders MapView
+  // children (MapLibre's -[MLRNMapView insertReactSubview:atIndex:] crash). Only the
+  // content changes. Before the first fix the pool waits until the map knows where we are.
+  const park = latitude !== null && longitude !== null ? { latitude, longitude } : null;
+  const parked = useRef(park); if (park && !parked.current) parked.current = park;
+  if (!parked.current) return null;
+  const bySlot = new Map(points.map(point => [point.id % TRAIL_SLOTS, point]));
   return <>
-    {points.map(point => (
-      <Marker key={point.id} coordinate={point}><TrailSparkle seed={point.id} /></Marker>
-    ))}
+    {Array.from({ length: TRAIL_SLOTS }, (_, slot) => {
+      const point = bySlot.get(slot);
+      return (
+        <Marker key={`trail-${slot}`} coordinate={point ?? parked.current!}>
+          {point ? <TrailSparkle key={point.id} seed={point.id} /> : <View style={styles.box} />}
+        </Marker>
+      );
+    })}
   </>;
 });
+
+/** Trail sparkles on the map at most (ALIVE_CAPS full trail). */
+export const TRAIL_SLOTS = 8;
 
 const styles = StyleSheet.create({
   box: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },

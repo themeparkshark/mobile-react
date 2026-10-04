@@ -9,7 +9,8 @@ import { StyleSheet, View } from 'react-native';
 import type { FrightNight } from '../../hooks/useFrightNight';
 import { overlayTop } from '../../services/fright/layout';
 import FrightSheet from './FrightSheet';
-import { CaseFileReveal, FrightCoachMark, FrightExitCard, FrightToast } from './FrightOverlays';
+import CaseFileReveal from './CaseFileReveal';
+import { FrightCoachMark, FrightExitCard, FrightToast } from './FrightOverlays';
 import MarqueeRecap from './MarqueeRecap';
 import RankCard from './RankCard';
 import FrightTutorial from './tutorial/FrightTutorial';
@@ -33,7 +34,7 @@ export default function FrightLayer({ night, engine, top = 132 }: {
       </View>
       {night.modeOn && <FrightSheet night={night} engine={engine} />}
       <RankCard prompt={engine.rank} onSubmit={engine.submitRank} onClose={engine.closeRank} />
-      <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} />
+      <CaseFileReveal file={engine.caseFile} onClose={engine.closeCaseFile} eventSlug={night.tonight?.event?.slug ?? null} />
       <FrightExitCard visible={!!engine.recapOffer}
         onOpen={() => engine.recapOffer && engine.openMarquee(engine.recapOffer.slug, engine.recapOffer.nightOn)}
         onClose={engine.dismissRecapOffer} />

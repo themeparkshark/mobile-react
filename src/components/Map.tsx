@@ -16,12 +16,16 @@ import { WaterGlints } from './map/alive/WaterGlints';
 import { SharkTrail, SharkWake } from './map/alive/SharkTrail';
 import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
-import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput } from './map/fright';
+import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { GRAB_TAG_SIZE, grabTagCenter } from '../screens/ExploreScreen/homeMapLayout';
 import { useFocusEffect } from '@react-navigation/native';
 import { hasDressedShark, outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
+import { DeclutterContext } from './map/declutter/Placed';
+import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
+import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
+import { isOffline, onConnectivityChange } from '../services/connectivity';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -42,6 +46,10 @@ const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
+/** One empty collection (a stable prop: always-mounted sources show nothing without re-sending a shape). */
+const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+// Radial falloff texture: soft round shadows and light pools with no hard edge.
+const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
 
 /** The GRAB ZONE tag's slot inside the grab-zone box (a 2r square), centred on its spot on the circle. */
 function grabTagSlotPosition(radius: number, angleDeg: number) {
@@ -55,7 +63,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
   return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null, extraControls, fright = null, declutter = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -88,6 +96,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly extraControls?: ReactNode;
   /** Fin-ister Nights map takeover (src/components/map/fright); null is off. */
   readonly fright?: FrightMapInput | null;
+  /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
+  readonly declutter?: MapDeclutterInput | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -234,7 +244,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }), [window.height, window.width]);
 
   // Trees, bushes and ripples are planted as icons for what's on screen.
-  const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
   const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
   const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(EMPTY);
@@ -295,6 +304,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
   const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
+  // The right-rail controls, so fright haunt chips keep clear of them.
+  const [rail, setRail] = useState<HudRect | null>(null);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
   useEffect(() => {
@@ -359,6 +370,52 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }],
   };
 
+  // Declutter: the shark is an obstacle for chips (never for art you walk up to),
+  // and the map's own button column is an inset no marker draws under.
+  const declutterPlayer = useMemo<LayoutItem[]>(() => declutter && location ? [{ id: 'player', latitude: location.latitude,
+    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }] : [],
+  [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasExtraControls = !!extraControls;
+  // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it
+  // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner:
+  // 44 pt, 16 pt from the right, 43 % down the window) while it shows.
+  const [offline, setOffline] = useState(isOffline());
+  useEffect(() => onConnectivityChange(setOffline), []);
+  const [viewTop, setViewTop] = useState<number | null>(null);
+  const windowHeight = window.height;
+  const frightOn = !!fright?.active;
+  const declutterControls = useMemo<InsetRect[]>(() => {
+    if (!declutter || !viewSize) return [];
+    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + (hasExtraControls ? 62 : 0) + 12 }];
+    if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
+    if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
+    return out;
+  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, hasExtraControls, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
+  const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null }> | null>(null);
+  const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
+  const feedDeclutter = useMapDeclutter(declutter, viewSize, declutterPlayer, declutterControls, debugOn ? setDebugRects : undefined);
+  // iOS draws a marker view whose point is off screen at the top-left corner: the
+  // panned-away shark hides while its spot is off screen (checked as the map moves).
+  const [playerOnScreen, setPlayerOnScreen] = useState(true);
+  const checkPlayer = useCallback((bounds: unknown) => {
+    const loc = locationRef.current;
+    const b = bounds as number[][] | undefined;
+    if (!loc || !Array.isArray(b) || b.length < 2) return;
+    const [[east, north], [west, south]] = b;
+    const pad = Math.abs(north - south) * 0.04;
+    const inside = loc.latitude <= north + pad && loc.latitude >= south - pad &&
+      (west <= east ? loc.longitude >= west - pad && loc.longitude <= east + pad : loc.longitude >= west - pad || loc.longitude <= east + pad);
+    setPlayerOnScreen(current => (current === inside ? current : inside));
+  }, []);
+  const lastMoveFeed = useRef(0);
+  const declutterSeeded = useRef(false);
+  useEffect(() => {
+    if (!declutter || declutterSeeded.current || !location) return;
+    declutterSeeded.current = true;
+    feedDeclutter({ latitude: location.latitude, longitude: location.longitude, zoom: FOLLOW_ZOOM, bearing: 0 });
+  }, [declutter, location, feedDeclutter]);
+
   const rangeRadius = pickupRange && location
     ? Math.max(24, Math.min(600, pickupRange.meters * pointsPerMeter(cameraZoom, location.latitude))) : 0;
   const playerShark = (
@@ -376,16 +433,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </View>
         ) : (
           <>
-            {/* Animated glow ring */}
-            <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
-            {/* Inner blue ring (ground indicator) */}
-            <View style={styles.groundRing} />
+            {/* A soft pool of light breathes under the shark, over a soft round ground shadow (one radial texture each). */}
+            <Reanimated.View style={[styles.outerGlowRing, glowStyle]}>
+              {/* By day the light pool is half as strong (the navy core carries the shadow). */}
+              <Image source={GROUND_GLOW} tintColor="#7cc6f5" style={[StyleSheet.absoluteFill, { opacity: light.lamps >= 0.05 ? 1 : 0.5 }]} contentFit="fill" />
+            </Reanimated.View>
+            <Image source={GROUND_GLOW} tintColor="#05143c" style={styles.groundRing} contentFit="fill" />
           </>
         )}
         {/* Wake: sparkles spill from under the shark while it walks. */}
         <SharkWake moving={wake} />
-        {/* Animated shadow — shrinks when shark bobs up */}
-        <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
+        {/* Contact shadow: tightens as the shark bobs up */}
+        <Reanimated.View style={[styles.shadowDisc, shadowStyle]}>
+          <Image source={GROUND_GLOW} tintColor="#05143c" style={StyleSheet.absoluteFill} contentFit="fill" />
+        </Reanimated.View>
         {/* Directional indicator — only visible in heading mode */}
         {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
@@ -427,7 +488,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         position: 'relative',
         flex: 1,
       }}
-      onLayout={event => setViewSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
+      onLayout={event => {
+        const size = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
+        setViewSize(size);
+        rootRef.current?.measureInWindow((_x, y) => { if (Number.isFinite(y)) setViewTop(y); });
+      }}
     >
       {/* Map controls */}
       <View
@@ -437,6 +502,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
+        }}
+        onLayout={event => {
+          const { x, y, width, height } = event.nativeEvent.layout;
+          setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
+            ? prev : { x, y, width, height }));
         }}
       >
         {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
@@ -452,6 +522,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {extraControls}
       </View>
 
+      {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
+      <DeclutterContext.Provider value={declutter?.store ?? null}>
       <MapView
         ref={mapViewRef}
         style={StyleSheet.absoluteFill}
@@ -478,10 +550,25 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           void mapViewRef.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
           }).catch(() => undefined); }}
+        onRegionIsChanging={(feature) => {
+          // While the map moves: held declutter passes (markers on screen stay put, art reaching the
+          // HUD fades first), and the panned-away shark hides before iOS parks it in the corner.
+          // Camera eases (following the walk, a tap-to-focus) get the same held passes, less often.
+          const now = Date.now();
+          if (now - lastMoveFeed.current < (feature.properties?.isUserInteraction ? 100 : 200)) return;
+          lastMoveFeed.current = now;
+          const [lng, lat] = feature.geometry?.coordinates ?? [];
+          feedDeclutter({ latitude: Number(lat), longitude: Number(lng), zoom: Number(feature.properties?.zoomLevel),
+            bearing: Number(feature.properties?.heading ?? 0) }, true);
+          checkPlayer(feature.properties?.visibleBounds);
+        }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
+          const [centerLng, centerLat] = feature.geometry?.coordinates ?? [];
+          feedDeclutter({ latitude: Number(centerLat), longitude: Number(centerLng), zoom, bearing: Number(feature.properties?.heading ?? 0) });
+          checkPlayer(feature.properties?.visibleBounds);
           if (Number.isFinite(zoom)) {
             onZoomChange?.(zoom);
             setCameraZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
@@ -531,8 +618,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Fin-ister Nights night tint: always mounted (opacity 0 when off) so it never inserts mid-list. */}
         <FrightNightTint input={fright} />
         {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
-        {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
-          <ShapeSource id="tps-lamps" shape={lampPoints}>
+        {/* Always mounted (empty when off): a source mounting mid-list as lamps come and go with the
+            zoom crashed MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]). */}
+        {(
+          <ShapeSource id="tps-lamps" shape={light.lamps >= 0.05 ? lampPoints : EMPTY}>
             <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
               circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
               circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
@@ -542,8 +631,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </ShapeSource>
         )}
         {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
-        {crowdHaze && crowdHaze.features.length > 0 && (
-          <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
+        {(
+          <ShapeSource id="tps-crowd-haze" shape={crowdHaze ?? EMPTY}>
             <HeatmapLayer id="tps-crowd-haze" style={{
               heatmapWeight: ['get', 'w'],
               heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.5, 19, 0.9],
@@ -557,8 +646,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             }} />
           </ShapeSource>
         )}
-        {guideTarget && location && pathShown && (
-          <ShapeSource id="tps-guide" shape={guideLine(location, guideTarget)}>
+        {(
+          <ShapeSource id="tps-guide" shape={guideTarget && location && pathShown ? guideLine(location, guideTarget) : EMPTY}>
             <LineLayer id="tps-guide-casing" style={{ lineColor: BRAND.navy, lineWidth: 7, lineCap: 'round', lineOpacity: 0.85 }} />
             <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
           </ShapeSource>
@@ -573,19 +662,26 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             drag reloaded the outfit images and made the shark flash. */}
         {location && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
-            <View style={{ opacity: focusedOnPlayer ? 0 : 1 }}>{playerShark}</View>
+            <View style={{ opacity: focusedOnPlayer || !playerOnScreen ? 0 : 1 }}>{playerShark}</View>
           </Marker>
         )}
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} />}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
+      </DeclutterContext.Provider>
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
       {fright && viewSize && <FrightMapLayer input={fright} width={viewSize.width} height={viewSize.height} zoom={cameraZoom} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
+      {debugOn && debugRects && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {[...debugRects.entries()].map(([id, { body, tag }]) => <View key={id}>
+          <View style={[styles.debugBody, { left: body.x, top: body.y, width: body.w, height: body.h }]} />
+          {tag && <View style={[styles.debugTag, { left: tag.x, top: tag.y, width: tag.w, height: tag.h }]} />}
+        </View>)}
+      </View>}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
       <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
         onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
@@ -639,6 +735,8 @@ function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonl
 }
 
 const styles = StyleSheet.create({
+  debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
+  debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
   guideArrow: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, zIndex: 9 },
   recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
@@ -674,33 +772,31 @@ const styles = StyleSheet.create({
   grabZoneTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
   grabZoneText: { fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.5, color: BRAND.blue },
   grabZoneTextReady: { color: BRAND.navy },
+  // Player shark on the park map: a soft round shadow on the ground, not a
+  // hard bar. A faint light pool breathes under it (the glow loop), the core
+  // shadow is a feathered ellipse (the blur is the view's own shadow).
+  // Player shark on the park map: a soft round shadow on the ground, not a
+  // hard bar (each is the radial glow texture, tinted).
   outerGlowRing: {
     position: 'absolute',
-    bottom: 0,
-    width: 72,
-    height: 22,
-    borderRadius: 30,
-    backgroundColor: 'rgba(33, 150, 243, 0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(33, 150, 243, 0.25)',
+    bottom: -6,
+    width: 92,
+    height: 34,
+    opacity: 0.35,
   },
   groundRing: {
     position: 'absolute',
-    bottom: 3,
-    width: 55,
-    height: 17,
-    borderRadius: 23,
-    backgroundColor: 'rgba(33, 150, 243, 0.35)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(33, 150, 243, 0.7)',
+    bottom: -2,
+    width: 70,
+    height: 24,
+    opacity: 0.55,
   },
   shadowDisc: {
     position: 'absolute',
-    bottom: 6,
-    width: 36,
-    height: 12,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    bottom: 3,
+    width: 40,
+    height: 14,
+    opacity: 0.5,
   },
   sharkDirectionCone: {
     position: 'absolute',
