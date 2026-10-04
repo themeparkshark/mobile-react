@@ -16,15 +16,16 @@
  * The shine is driven by one shared 0..1 value per screen (`shine`), offset
  * per pin with `lag`; `lagSpan` is the largest lag in the group, so every
  * band has fully left its pin by the time the shared value reaches 1. While
- * the shared value rests, nothing redraws.
+ * the shared value rests (the screen sets it once per sweep, not every frame), nothing redraws.
  */
 import {
-  BlendColor, Blur, Canvas, Circle, Group, Image as SkiaImage, LinearGradient, RadialGradient, Rect, useImage, vec,
+  BlendColor, Blur, Canvas, Circle, Group, Image as SkiaImage, LinearGradient, RadialGradient, Rect, vec,
 } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import { usePinImage } from './pinImageCache';
 
 /** Shadow tint per surface: warm on cork and cream, navy on the blue panels. */
 const SHADOW_TINT = { board: '#4a2c0e', panel: '#021c40' } as const;
@@ -50,13 +51,15 @@ type Props = {
   readonly transition?: number;
   readonly recyclingKey?: string;
   readonly style?: StyleProp<ViewStyle>;
+  /** Always a plain image (static tiles that gain nothing from light). */
+  readonly flat?: boolean;
 };
 
 /** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
 const FLAT_BELOW = 48;
 
 function EnamelPin(props: Props) {
-  if (props.size < FLAT_BELOW) {
+  if (props.flat || props.size < FLAT_BELOW) {
     const { uri, size, tilt = 0, recyclingKey, style } = props;
     return (
       <View style={[{ width: size, height: size, transform: [{ rotate: `${tilt}deg` }] }, style]} pointerEvents="none">
@@ -68,7 +71,7 @@ function EnamelPin(props: Props) {
 }
 
 function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
-  const image = useImage(uri);
+  const image = usePinImage(uri);
   const pad = Math.round(size * PAD);
   const box = size + pad * 2;
   const blur = Math.max(2, size * 0.045);
@@ -115,7 +118,7 @@ function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surfac
             {/* Resting gloss: a long soft falloff from the upper-left face. */}
             <Rect x={0} y={0} width={box} height={box} blendMode="srcATop">
               <LinearGradient start={vec(pad, pad)} end={vec(pad + size * 0.62, pad + size * 0.62)}
-                colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0)']} positions={[0, 0.45, 1]} />
+                colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.07)', 'rgba(255,255,255,0)']} positions={[0, 0.45, 1]} />
             </Rect>
             {/* One small specular dot near the upper-left rim. */}
             <Circle cx={pad + size * 0.27} cy={pad + size * 0.22} r={size * 0.11} blendMode="srcATop">

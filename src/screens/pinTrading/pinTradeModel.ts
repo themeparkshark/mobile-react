@@ -115,7 +115,7 @@ export const PIN_TRADE_COPY = {
   emptyAction: 'Check again',
   get: 'You get',
   give: 'You give',
-  pickPrompt: 'Pick one of your pins',
+  pickPrompt: 'Your pins',
   pickFirst: 'Tap one of your pins',
   yourPin: 'Your pin',
   noPinsTitle: 'No pins to trade yet',
@@ -136,7 +136,8 @@ export const PIN_TRADE_COPY = {
   doneTitle: 'Pin traded!',
   doneMessage: (got: string) => `You got the ${got}!`,
   doneAction: 'Awesome!',
-  doneGave: (gave: string) => `Your ${gave} is on the board for another fan.`,
+  doneGave: (gave: string) => `Your ${gave} went on the board for another fan.`,
+  tradeCount: (n: number) => `Trade #${n} today!`,
   gaveCaption: 'You gave',
   newStamp: 'New!',
   gotIt: 'Got it',
@@ -148,6 +149,7 @@ export const PIN_TRADE_COPY = {
   yoursTitle: 'That one is yours',
   yoursMessage: 'You just put this pin on the board. Pick a different one!',
   ownedMessage: "Pick a pin you don't have yet.",
+  ownedEndMessage: 'This pin is already in your collection. Pick a different one on the board!',
   networkTitle: 'No connection',
   networkMessage: 'Check your connection and try again.',
   genericTitle: 'Something went wrong',
@@ -171,8 +173,8 @@ export function statusChip(phase: TradePhase, hurry = false): StatusChip {
     case 'confirming': return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'Ready to trade', icon: 'swap', tone: 'blue' };
     case 'sending': return { label: 'Trading', icon: 'swap', tone: 'blue' };
     case 'expired': return { label: "Time's up", icon: 'timer', tone: 'red' };
-    case 'failed': return { label: 'Not traded', icon: 'close', tone: 'red' };
-    case 'taken': return { label: 'Taken', icon: 'lock', tone: 'red' };
+    case 'failed': return { label: 'Not traded', icon: 'retry', tone: 'red' };
+    case 'taken': return { label: 'Taken', icon: 'search', tone: 'red' };
     default: return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'On hold for you', icon: 'lock', tone: 'gold' };
   }
 }

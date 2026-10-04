@@ -6,7 +6,7 @@
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
@@ -52,11 +52,12 @@ export const StatusChipView = memo(function StatusChipView({ chip }: { chip: Sta
 });
 
 /** A small ribbon across a card corner ("Got it", "From you"). */
-export function CornerRibbon({ label, tone = 'navy' }: { label: string; tone?: 'navy' | 'gold' | 'red' }) {
+export function CornerRibbon({ label, tone = 'navy', check = false }: { label: string; tone?: 'navy' | 'gold' | 'red'; check?: boolean }) {
   const bg = tone === 'gold' ? BRAND.gold : tone === 'red' ? BRAND.red : BRAND.navy;
   const ink = tone === 'gold' ? BRAND.navy : BRAND.white;
   return (
     <View pointerEvents="none" style={[styles.ribbon, { backgroundColor: bg }]}>
+      {check && <GameIcon name="check" size={14} />}
       <Text maxFontSizeMultiplier={1} style={[styles.ribbonText, { color: ink }]}>{label}</Text>
     </View>
   );
@@ -107,12 +108,12 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, he
     >
       <Animated.View style={[styles.backer, { width: width - SPACE.sm, height }, cardStyle]}>
         <View style={styles.hole}><View style={styles.holeShade} /></View>
-        <Animated.View style={pinStyle}>
+        <Animated.View style={[pinStyle, badge ? { opacity: 0.7 } : null]}>
           <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(swapId)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
             lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
         <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
-        {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} />}
+        {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} check={badge === 'owned'} />}
       </Animated.View>
     </Pressable>
   );
@@ -138,6 +139,8 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
   const [left, setLeft] = useState(() => secondsLeft(deadline, Date.now()));
   const fired = useRef(false);
   const warned = useRef(false);
+  const later = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => later.current.forEach(clearTimeout), []);
   const fill = useSharedValue(Math.max(0, Math.min(1, (deadline - Date.now()) / totalMs)));
   const pulse = useSharedValue(1);
   const urgent = !frozen && left <= HOLD_URGENT_S;
@@ -168,14 +171,16 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
     if (left <= HOLD_URGENT_S) onUrgent?.();
     if (left <= HOLD_URGENT_S && !warned.current) {
       warned.current = true;
-      setTimeout(() => queueHaptic('warning', 2), HAPTIC_AFTER_AUDIO_MS);
+      onTick?.(HOLD_URGENT_S);
+      later.current.push(setTimeout(() => queueHaptic('warning', 2), HAPTIC_AFTER_AUDIO_MS));
     }
+    if (left === HOLD_URGENT_S || left === 10) AccessibilityInfo.announceForAccessibility(`${left} seconds left`);
     if (left <= HOLD_FINAL_S) {
       onTick?.(left);
-      setTimeout(() => queueHaptic('tickSelection', 1), HAPTIC_AFTER_AUDIO_MS);
+      if (left <= 3) later.current.push(setTimeout(() => queueHaptic('tickSelection', 1), HAPTIC_AFTER_AUDIO_MS));
     }
-    // The pulse lands on the digit flip, not on its own clock.
-    if (left <= HOLD_URGENT_S && !still) {
+    // Calm red until the last 10 s; then the pulse lands on each digit flip.
+    if (left <= 10 && !still) {
       pulse.value = withSequence(withTiming(1.12, { duration: 90, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 260 }));
     }
   }, [left]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -248,6 +253,10 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
     wiggle.value = withRepeat(withSequence(withTiming(1, { duration: 110 }), withTiming(-1, { duration: 220 }), withTiming(0, { duration: 110 })), -1, false);
     return () => cancelAnimation(wiggle);
   }, [charging, still, wiggle]);
+  const hand = useSharedValue(0);
+  useEffect(() => { hand.value = hidden ? withTiming(1, { duration: 160 }) : 0; }, [hidden, hand]);
+  // The pin lifts out of its card; the card itself settles back and fades.
+  const handStyle = useAnimatedStyle(() => ({ opacity: 1 - hand.value * 0.7, transform: [{ scale: 1 - hand.value * 0.1 }] }));
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, pop.value * 1.4),
     transform: [{ translateY: -Math.abs(wiggle.value) * 4 }, { rotate: `${wiggle.value * 4}deg` }, { scale: pop.value }],
@@ -256,8 +265,8 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
   return (
     <View style={styles.slotWrap} accessible accessibilityLabel={label}>
       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotCaption}>{caption}</Text>
-      <View ref={box} collapsable={false}
-        style={[styles.slot, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
+      <Animated.View ref={box as never} collapsable={false}
+        style={[styles.slot, handStyle, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
         {item ? (
           <View style={{ opacity: hidden ? 0 : stamp ? 0.62 : 1 }}>
             <Animated.View style={style}>
@@ -271,7 +280,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
         {!!stamp && !!item && (
           <View pointerEvents="none" style={styles.stamp}><Text maxFontSizeMultiplier={1} style={styles.stampText}>{stamp}</Text></View>
         )}
-      </View>
+      </Animated.View>
       <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? balanceName(pinName(item), 16) : placeholder ?? ''}</Text>
     </View>
   );
@@ -297,7 +306,7 @@ export const PickPin = memo(function PickPin({ item, size, selected, still, onPr
       onPress={() => onPress(item)}>
       <Animated.View style={[styles.pick, { width: size, height: size }, selected && styles.pickOn, tileStyle]}>
         <Animated.View style={pinStyle}>
-          <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} surface="none" recyclingKey={`mine-${item.id}`} />
+          <EnamelPin uri={item.icon_url} size={Math.round(size * 0.74)} tilt={pinTilt(item.id, 5)} surface="none" flat recyclingKey={`mine-${item.id}`} />
         </Animated.View>
         <Animated.View style={[styles.pickBadge, badge]} pointerEvents="none"><GameIcon name="check" size={24} /></Animated.View>
       </Animated.View>
@@ -317,6 +326,7 @@ const styles = StyleSheet.create({
   },
   chipText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, textTransform: 'uppercase', paddingTop: 2 },
   ribbon: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
     position: 'absolute', top: 10, right: -6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
     transform: [{ rotate: '8deg' }], borderWidth: 2, borderColor: BRAND.white,
   },

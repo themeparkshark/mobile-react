@@ -137,3 +137,25 @@ test('no hold is taken when the answer is already known (you own it, or you have
   assert.ok(screen.indexOf('owned.has(swap.pin.item.id)') < hold);
   assert.ok(screen.indexOf('pins.length === 0') < hold);
 });
+
+test('r3 panel: From you cards are not held, VoiceOver stays in the sheet, owned-at-trade ends the trade', () => {
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  const hold = screen.indexOf('await holdPinSwap(');
+  assert.ok(screen.indexOf('swap.pin.item.id === now.lastGiven') < hold, 'your own just-posted pin never starts a hold');
+  assert.match(screen, /accessibilityViewIsModal=\{!done\}/);
+  assert.match(screen, /importantForAccessibility=\{hold \|\| done \? 'no-hide-descendants' : 'auto'\}/);
+  const start = screen.indexOf("if (kind === 'owned') {");
+  const owned = screen.slice(start, screen.indexOf('return;', start));
+  assert.match(owned, /unHoldPinSwap/);
+  assert.match(owned, /setHold\(null\)/);
+  assert.doesNotMatch(owned, /failBuzz/);
+});
+
+test('r3 panel: the resting board never writes the shine value, and pins share one decoded image', () => {
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  assert.match(screen, /setInterval\(sweep, 6200\)/);
+  assert.doesNotMatch(screen, /withRepeat\(withSequence\(withTiming\(1, \{ duration: 1900 \}\)/);
+  const pin = read('src/screens/pinTrading/EnamelPin.tsx');
+  assert.match(pin, /usePinImage\(uri\)/);
+  assert.doesNotMatch(pin, /\buseImage\(/);
+});
