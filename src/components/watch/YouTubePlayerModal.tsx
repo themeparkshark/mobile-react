@@ -13,6 +13,7 @@ import {
   minWatchMs,
   parsePlayerMessage,
   PLAYER_ORIGIN_WHITELIST,
+  PAUSED,
   PLAYING,
   playerHtml,
   postedAgo,
@@ -102,12 +103,14 @@ export default function YouTubePlayerModal({
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [playedMs, setPlayedMs] = useState(0);
   const playingSince = useRef<number | null>(null);
   const banked = useRef(0);
   const unlockFired = useRef(false);
   const pop = useRef(new Animated.Value(1)).current;
   const check = useRef(new Animated.Value(0)).current;
+  const wrapIn = useRef(new Animated.Value(0)).current;
 
   // A fresh video starts from zero.
   useEffect(() => {
@@ -117,6 +120,7 @@ export default function YouTubePlayerModal({
     setPlaying(false);
     setNotice(null);
     setWaiting(false);
+    setPaused(false);
     setPlayedMs(0);
     playingSince.current = null;
     banked.current = 0;
@@ -157,13 +161,13 @@ export default function YouTubePlayerModal({
     return () => clearTimeout(id);
   }, [notice]);
 
-  // Ready but not playing for a while (an ad, or a slow start): say so, so a
-  // still coin bar does not read as broken.
+  // Ready but not playing for a while and not paused by the kid (an ad, or a
+  // slow start): say so, so a still coin bar does not read as broken.
   useEffect(() => {
-    if (!ready || playing || ended || failed) { setWaiting(false); return; }
+    if (!ready || playing || paused || ended || failed) { setWaiting(false); return; }
     const id = setTimeout(() => setWaiting(true), 3500);
     return () => clearTimeout(id);
-  }, [ready, playing, ended, failed]);
+  }, [ready, playing, paused, ended, failed]);
 
   const stopClock = useCallback(() => {
     if (playingSince.current !== null) {
@@ -186,14 +190,18 @@ export default function YouTubePlayerModal({
         if (msg.state === PLAYING) {
           if (playingSince.current === null) playingSince.current = Date.now();
           setPlaying(true);
+          setPaused(false);
           setEnded(false);
         } else {
           stopClock();
+          setPaused(msg.state === PAUSED);
         }
         break;
       case 'ended':
         stopClock();
         setEnded(true);
+        wrapIn.setValue(0);
+        Animated.spring(wrapIn, { toValue: 1, friction: 5, tension: 160, useNativeDriver: true }).start();
         break;
       case 'blocked':
         setNotice('Staying on this video');
@@ -203,7 +211,7 @@ export default function YouTubePlayerModal({
         setFailed(true);
         break;
     }
-  }, [stopClock]);
+  }, [stopClock, wrapIn]);
 
   const result = (): PlayerResult => ({ playedMs: totalPlayed(), ended });
 
@@ -262,8 +270,10 @@ export default function YouTubePlayerModal({
               )}
               {ended && !failed && (
                 <View style={[styles.cover, styles.wrap]}>
-                  <Image source={COIN} style={styles.wrapCoin} contentFit="contain" />
-                  <Text style={styles.wrapTitle}>{earnedHere ? `+${rewardCoins} earned!` : "That's a wrap!"}</Text>
+                  <Animated.View style={{ alignItems: 'center', gap: 8, opacity: wrapIn, transform: [{ scale: wrapIn.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>
+                    <Image source={COIN} style={styles.wrapCoin} contentFit="contain" />
+                    <Text style={styles.wrapTitle}>{earnedHere ? `+${rewardCoins} earned!` : "That's a wrap!"}</Text>
+                  </Animated.View>
                   <View style={styles.wrapButtons}>
                     {next ? (
                       <GameButton
@@ -275,7 +285,7 @@ export default function YouTubePlayerModal({
                     ) : (
                       <GameButton label="Done" icon="check" fullWidth onPress={close} />
                     )}
-                    <GameButton label="Watch again" icon="retry" variant="secondary" size="compact" fullWidth onPress={replay} />
+                    <GameButton label="Watch again" icon="retry" variant="ghost" tone="onBlue" fullWidth onPress={replay} />
                   </View>
                 </View>
               )}
@@ -311,7 +321,7 @@ export default function YouTubePlayerModal({
                   </Animated.View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.coinText}>
-                      {unlocked ? `+${rewardCoins} unlocked!` : waiting ? 'Video starting…' : `Keep watching · +${rewardCoins}`}
+                      {unlocked ? `+${rewardCoins} unlocked!` : waiting ? 'Video starting…' : paused ? `Paused · +${rewardCoins}` : `Keep watching · +${rewardCoins}`}
                     </Text>
                     <View style={styles.track}>
                       <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }, unlocked && styles.fillDone]} />
@@ -344,7 +354,7 @@ export default function YouTubePlayerModal({
                         />
                         {!post.has_watched && (
                           <View style={styles.nextCoin}>
-                            <Image source={COIN} style={{ width: 14, height: 14 }} contentFit="contain" />
+                            <Image source={COIN} style={{ width: 18, height: 18 }} contentFit="contain" />
                             <Text style={styles.nextCoinText}>+{coins}</Text>
                           </View>
                         )}
@@ -447,6 +457,6 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
     paddingRight: 7,
   },
-  nextCoinText: { fontFamily: FONT.display, fontSize: 11, color: BRAND.navy },
+  nextCoinText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
   nextTitle: { fontFamily: FONT.body, fontSize: 13, lineHeight: 15, color: BRAND.navy, paddingHorizontal: 7, paddingVertical: 6, minHeight: 42 },
 });

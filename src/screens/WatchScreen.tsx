@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import view from '../api/endpoints/social-posts/view';
@@ -28,6 +28,7 @@ export default function WatchScreen() {
   const mounted = useRef(true);
   const inFlight = useRef<Promise<void> | null>(null);
   const lastFetch = useRef(0);
+  const retryRef = useRef<(quiet: boolean) => void>(() => undefined);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -42,6 +43,7 @@ export default function WatchScreen() {
       if (!mounted.current) return;
       setVideos(sortNewestFirst(data));
       setFailed(false);
+      retryRef.current(true);
       lastFetch.current = Date.now();
     } catch {
       // Keep whatever is on screen; an empty first load shows the retry hint.
@@ -74,8 +76,13 @@ export default function WatchScreen() {
   const [playing, setPlaying] = useState<SocialPostType | null>(null);
   const [localWatched, setLocalWatched] = useState<ReadonlySet<number>>(new Set());
   const [rewardTotal, setRewardTotal] = useState<number | null>(null);
-  const [saveFailed, setSaveFailed] = useState<SocialPostType | null>(null);
-  const pendingCoins = useRef(0);
+  // Earned views the server has not confirmed yet (offline or 5xx). Kept until
+  // a retry succeeds, so "Later" never throws a watched video away.
+  const [unsaved, setUnsaved] = useState<readonly SocialPostType[]>([]);
+  const [showUnsaved, setShowUnsaved] = useState(false);
+  const playerOpen = useRef(false);
+  // Saves started while the player is open; the reward waits for all of them.
+  const inFlightSaves = useRef<Promise<number | null>[]>([]);
   const isWatched = useCallback(
     (post: SocialPostType) => post.has_watched || localWatched.has(post.id),
     [localWatched],
@@ -84,18 +91,20 @@ export default function WatchScreen() {
   const markWatched = (post: SocialPostType) =>
     setLocalWatched(prev => (prev.has(post.id) ? prev : new Set(prev).add(post.id)));
 
-  /** Pays for one video. Returns the coins granted (0 if already paid or failed). */
-  const record = async (post: SocialPostType): Promise<number> => {
+  /** Pays for one video. Returns the coins granted, 0 if already paid, null if not saved. */
+  const record = async (post: SocialPostType): Promise<number | null> => {
     try {
       const paid = (await view(post)).coins ?? COIN_REWARD;
       markWatched(post);
+      setUnsaved(prev => prev.filter(p => p.id !== post.id));
       return paid;
     } catch (error) {
       if (viewFailureKind(error) === 'already-paid') {
         markWatched(post);
+        setUnsaved(prev => prev.filter(p => p.id !== post.id));
       } else {
-        // Offline or server trouble: keep the +25 on offer and let them retry.
-        setSaveFailed(post);
+        setUnsaved(prev => (prev.some(p => p.id === post.id) ? prev : [...prev, post]));
+        return null;
       }
       return 0;
     }
@@ -109,54 +118,74 @@ export default function WatchScreen() {
     refreshPlayer().catch(() => undefined); // header coin count catches up
   };
 
-  /** Settles the video that was playing; coins are banked until the player closes. */
-  const settle = async (post: SocialPostType, result: PlayerResult) => {
+  /** Starts saving the video that was playing; the reward is shown when the player closes. */
+  const settle = (post: SocialPostType, result: PlayerResult) => {
     if (isWatched(post) || !earnedView(result.playedMs, result.ended, post.is_short)) return;
-    pendingCoins.current += await record(post);
+    inFlightSaves.current.push(record(post));
   };
 
   const openVideo = useCallback((post: SocialPostType) => {
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (videoIdOf(post)) {
-      pendingCoins.current = 0;
+      inFlightSaves.current = [];
+      playerOpen.current = true;
       setPlaying(post);
       return;
     }
     // Very old rows without a YouTube id: open the link, then pay as before.
     void WebBrowser.openBrowserAsync(post.permalink).then(async () => {
-      if (!post.has_watched) showReward(await record(post));
+      if (!post.has_watched) showReward((await record(post)) ?? 0);
     });
   }, [playSound]);
 
   const switchVideo = (next: SocialPostType, result: PlayerResult) => {
     const current = playing;
     setPlaying(next);
-    if (current) void settle(current, result);
+    if (current) settle(current, result);
   };
 
   const closePlayer = (result: PlayerResult) => {
     const current = playing;
     setPlaying(null);
+    playerOpen.current = false;
+    if (current) settle(current, result);
+    const saves = inFlightSaves.current;
+    inFlightSaves.current = [];
     void (async () => {
-      if (current) await settle(current, result);
-      const total = pendingCoins.current;
-      pendingCoins.current = 0;
-      // Let the player sheet finish sliding away first (iOS drops a modal
-      // presented during another one's dismissal).
-      if (total > 0) setTimeout(() => showReward(total), 450);
+      const results = await Promise.all(saves);
+      const total = results.reduce<number>((sum, coins) => sum + (coins ?? 0), 0);
+      const anyUnsaved = results.some(coins => coins === null);
+      // Dialogs wait for the player sheet to finish sliding away (iOS drops a
+      // modal presented during another one's dismissal).
+      setTimeout(() => {
+        if (total > 0) showReward(total);
+        else if (anyUnsaved) setShowUnsaved(true);
+      }, 450);
     })();
   };
 
-  const retrySave = async () => {
-    const post = saveFailed;
-    setSaveFailed(null);
-    if (post) showReward(await record(post));
-  };
+  /** Retries every unsaved view; one dialog for whatever lands. */
+  const retryUnsaved = useCallback(async (quiet: boolean) => {
+    if (unsaved.length === 0) return;
+    const results = await Promise.all(unsaved.map(post => record(post)));
+    const total = results.reduce<number>((sum, c) => sum + (c ?? 0), 0);
+    if (playerOpen.current) return;
+    if (total > 0) showReward(total);
+    else if (!quiet && results.some(c => c === null)) setShowUnsaved(true);
+  // record and showReward only use stable setters, context and refs.
+  }, [unsaved]);
 
-  // The newest video is the hero; the rest sit in a two-column grid.
-  const featuredVideo = videos.length > 0 ? videos[0] : null;
-  const gridVideos = videos.length > 1 ? videos.slice(1) : [];
+  retryRef.current = quiet => { void retryUnsaved(quiet); };
+
+  // The hero is the newest video still worth coins (the newest overall once
+  // everything is watched); the rest sit in a two-column grid, newest first.
+  const featuredVideo = videos.find(v => !isWatched(v)) ?? videos[0] ?? null;
+  const gridVideos = featuredVideo ? videos.filter(v => v.id !== featuredVideo.id) : [];
+  const upNext = useMemo(
+    () => (playing ? upNextFor(playing, videos, isWatched) : []),
+    [playing, videos, isWatched],
+  );
   const watchedCount = videos.filter(isWatched).length;
   const toEarn = videos.length - watchedCount;
 
@@ -198,18 +227,13 @@ export default function WatchScreen() {
                       <Text style={styles.bannerTitle}>
                         {toEarn === 0 ? 'All caught up!' : `Watch & earn +${COIN_REWARD} each`}
                       </Text>
-                      <View style={styles.meterRow}>
-                        <View style={styles.meter}>
-                          <View style={[styles.meterFill, toEarn === 0 && styles.meterDone, { width: `${Math.round((watchedCount / videos.length) * 100)}%` }]} />
-                        </View>
-                        <Text style={styles.meterText}>{watchedCount}/{videos.length}</Text>
-                      </View>
+                      <WatchMeter watched={watchedCount} total={videos.length} />
                     </View>
                     {toEarn === 0 && <GameIcon name="check" size={28} />}
                   </View>
                 )}
 
-                {featuredVideo && <SocialPost socialPost={featuredVideo} featured watched={isWatched(featuredVideo)} onPress={openVideo} />}
+                {featuredVideo && <SocialPost socialPost={featuredVideo} featured newest={featuredVideo.id === videos[0]?.id} watched={isWatched(featuredVideo)} onPress={openVideo} />}
 
                 {gridVideos.length > 0 && (
                   <View style={styles.sectionRow}>
@@ -242,7 +266,7 @@ export default function WatchScreen() {
         video={playing}
         watched={playing ? isWatched(playing) : false}
         coins={COIN_REWARD}
-        upNext={playing ? upNextFor(playing, videos, isWatched) : []}
+        upNext={upNext}
         onSwitch={switchVideo}
         onClose={closePlayer}
       />
@@ -259,19 +283,54 @@ export default function WatchScreen() {
       </GameDialog>
 
       <GameDialog
-        visible={saveFailed !== null}
+        visible={showUnsaved && unsaved.length > 0}
         title="Coins not saved yet"
-        message="Check your connection, then try again."
+        message="Check your connection, then try again. Your watch still counts."
         icon="retry"
         buttons={[{ text: 'Later', style: 'cancel' }, { text: 'Try again' }]}
-        onAnswer={index => { if (index === 1) void retrySave(); else setSaveFailed(null); }}
+        onAnswer={index => { setShowUnsaved(false); if (index === 1) void retryUnsaved(false); }}
       />
     </Wrapper>
   );
 }
 
-/** The coin pops in and the number counts up to what was paid. */
+/** Watched/total meter; it springs forward and sparkles when a video is earned. */
+function WatchMeter({ watched, total }: { readonly watched: number; readonly total: number }) {
+  const ratio = total > 0 ? watched / total : 0;
+  const fill = useRef(new Animated.Value(ratio)).current;
+  const sparkle = useRef(new Animated.Value(0)).current;
+  const last = useRef(watched);
+  useEffect(() => {
+    Animated.spring(fill, { toValue: ratio, friction: 7, tension: 60, useNativeDriver: false }).start();
+    if (watched > last.current) {
+      sparkle.setValue(0);
+      Animated.sequence([
+        Animated.timing(sparkle, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.delay(500),
+        Animated.timing(sparkle, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }
+    last.current = watched;
+  }, [ratio, watched, fill, sparkle]);
+  const done = total > 0 && watched >= total;
+  return (
+    <View style={styles.meterRow} accessible accessibilityLabel={`${watched} of ${total} videos watched`}>
+      <View style={styles.meter}>
+        <Animated.View
+          style={[styles.meterFill, done && styles.meterDone, { width: fill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}
+        />
+      </View>
+      <Text style={styles.meterText}>{watched}/{total}</Text>
+      <Animated.View pointerEvents="none" style={[styles.sparkle, { opacity: sparkle, transform: [{ scale: sparkle.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1.2] }) }] }]}>
+        <GameIcon name="sparkle" size={22} />
+      </Animated.View>
+    </View>
+  );
+}
+
+/** The coin pops in and the number counts up to what was paid, with a coin sound at the end. */
 function CoinCountUp({ total }: { readonly total: number }) {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [shown, setShown] = useState(0);
   const pop = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
@@ -280,10 +339,13 @@ function CoinCountUp({ total }: { readonly total: number }) {
     const id = setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / 700);
       setShown(Math.round(total * t));
-      if (t >= 1) clearInterval(id);
+      if (t >= 1) {
+        clearInterval(id);
+        playSound(require('../../assets/sounds/coin.mp3'));
+      }
     }, 40);
     return () => clearInterval(id);
-  }, [total, pop]);
+  }, [total, pop, playSound]);
   return (
     <View style={styles.countWrap} accessible accessibilityLabel={`${total} coins added`}>
       <Animated.View style={{ transform: [{ scale: pop }] }}>
@@ -317,6 +379,7 @@ const styles = StyleSheet.create({
   meterFill: { height: '100%', borderRadius: 6, backgroundColor: BRAND.gold },
   meterDone: { backgroundColor: BRAND.green },
   meterText: { fontFamily: FONT.display, fontSize: 15, color: CLEAN_SCREEN_INK },
+  sparkle: { position: 'absolute', right: 30, top: -10 },
   countWrap: { alignItems: 'center', gap: 2, paddingVertical: 4 },
   countText: { fontFamily: FONT.display, fontSize: 40, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 6, paddingBottom: 2 },

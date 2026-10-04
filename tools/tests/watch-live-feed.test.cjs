@@ -128,7 +128,7 @@ test('the player keeps no cookies, limits origins and covers the end screen', ()
 test('the Watch page sits on the clean background with a hero and per-video coin chips', () => {
   const screen = read('src/screens/WatchScreen.tsx');
   assert.match(screen, /<CleanScreenBackground underTopbar>/);
-  assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured watched=/);
+  assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured newest=/);
   assert.match(screen, /All caught up!/);
   const card = read('src/components/SocialPost.tsx');
   assert.match(card, /styles\.coinChip/);
@@ -164,4 +164,17 @@ test('the coin bar stops ticking at unlock and the WebView is memoized away from
   assert.match(player, /const PlayerWeb = memo\(/);
   assert.match(player, /Up next/);
   assert.match(player, /Next video/);
+});
+
+test('round 4: unsaved views queue and retry, the reward waits for every save, a pause says Paused', () => {
+  const screen = read('src/screens/WatchScreen.tsx');
+  assert.match(screen, /const results = await Promise\.all\(saves\)/);
+  assert.match(screen, /setUnsaved\(prev => \(prev\.some\(p => p\.id === post\.id\) \? prev : \[\.\.\.prev, post\]\)\)/);
+  assert.match(screen, /retryRef\.current\(true\)/);
+  // The hero is the newest video still worth coins.
+  assert.match(screen, /videos\.find\(v => !isWatched\(v\)\) \?\? videos\[0\]/);
+  const player = read('src/components/watch/YouTubePlayerModal.tsx');
+  assert.match(player, /setPaused\(msg\.state === PAUSED\)/);
+  assert.match(player, /if \(!ready \|\| playing \|\| paused \|\| ended \|\| failed\)/);
+  assert.equal(feed.PAUSED, 2);
 });

@@ -159,6 +159,7 @@ export function parsePlayerMessage(data: string): PlayerMessage | null {
 
 /** YouTube player states. */
 export const PLAYING = 1;
+export const PAUSED = 2;
 
 /** Hosts the player's own frames come from. Nothing else may load a frame. */
 const FRAME_HOSTS = ['www.youtube-nocookie.com', 'www.youtube.com'];
