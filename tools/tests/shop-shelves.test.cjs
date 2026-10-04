@@ -304,7 +304,7 @@ test('round 6 S2: Checking is its own state and never says "Yes, buy it!"', () =
   const checking = shelves.tryOnCta({ ...base6, phase: 'checking' });
   assert.equal(checking.label, 'Checking…');
   assert.equal(checking.action, 'none');
-  assert.equal(checking.look, 'busy');
+  assert.equal(checking.look, 'checking', 'the muted face, pulsing: busy, never tappable');
   for (const extra of [{}, { short: 50 }, { paused: true }, { finishes: true }]) {
     assert.equal(shelves.tryOnCta({ ...base6, ...extra, phase: 'checking' }).label, 'Checking…');
   }
@@ -462,7 +462,7 @@ test('round 6 S5: fallback polls every 15 to 30 s and Buy shows "Opening soon"',
   // A buy already in flight is never relabelled; owned and wear states are untouched.
   assert.equal(shelves.tryOnCta({ ...base6, phase: 'buying', paused: true }).label, 'Yes, buy it!');
   assert.equal(shelves.tryOnCta({ ...base6, owned: true, phase: 'bought', paused: true }).label, 'Wear it now');
-  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /today\.fallback[\s\S]{0,300}fallbackPollMs/);
+  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /startFallbackPoll\(\{[\s\S]{0,700}fallbackPollMs/);
 });
 
 test('round 6 S6: a recovered set-completing buy queues the reveal, or says "Set complete!"', () => {
@@ -628,9 +628,129 @@ test('round 6: copy never uses em dashes (new files too)', () => {
   }
 });
 
-test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss', () => {
+test('round 6 capture fix: the set reveal waits for the try-on modal to dismiss (iOS onDismiss, no idle timer)', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /closeTryOn = useCallback\(\(\) => \{ holdReveal\(\); setOpen\(null\); \}/);
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(code, /onClose=\{closeTryOn\}/);
   assert.match(code, /reveal && !open && revealGate/);
+  assert.match(code, /closeTryOn = useCallback\(\(\) => \{ setOpen\(null\); \}/, 'no fixed hold after the try-on');
+  // The sheet hides its modal, then reports closed from onDismiss (with a guard and the Android path).
+  assert.match(sheet, /<Modal visible=\{!leaving\}[^>]*onDismiss=\{finishClose\}/);
+  assert.match(sheet, /Platform\.OS === 'ios' \? 500 : 0/);
+  assert.equal(/runOnJS\(onClose\)/.test(sheet), false, 'every slide-out goes through leave()');
+});
+
+// ---- Round 6 pre-launch (panel SHIP fixes) ----
+
+function fakeClock() {
+  let now = 0; let id = 0; const timers = new Map();
+  return {
+    set: (fn, ms) => { const t = ++id; timers.set(t, { at: now + ms, fn }); return t; },
+    clear: t => { timers.delete(t); },
+    pending: () => timers.size,
+    async advance(ms) {
+      now += ms;
+      for (const [t, { at, fn }] of [...timers]) if (at <= now) { timers.delete(t); fn(); }
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    },
+  };
+}
+
+test('pre-launch 1: fallback poll cancels cleanly, even with a refresh in flight', async () => {
+  const clock = fakeClock();
+  let resolve;
+  let calls = 0;
+  const stop = shelves.startFallbackPoll({
+    refresh: () => { calls++; return new Promise(r => { resolve = r; }); },
+    delayMs: () => 20_000, setTimer: clock.set, clearTimer: clock.clear,
+  });
+  assert.equal(clock.pending(), 1);
+  await clock.advance(20_000);
+  assert.equal(calls, 1, 'one request');
+  stop(); // the kid leaves while the request is in flight
+  resolve('miss');
+  await clock.advance(0);
+  assert.equal(clock.pending(), 0, 'nothing re-arms after cancel');
+  await clock.advance(120_000);
+  assert.equal(calls, 1);
+});
+
+test('pre-launch 1: fallback poll stops after repeated misses, and at once on a 404', async () => {
+  const clock = fakeClock();
+  const stops = [];
+  let calls = 0;
+  shelves.startFallbackPoll({ refresh: async () => { calls++; return 'miss'; }, delayMs: () => 15_000, maxMisses: 3,
+    onStop: why => stops.push(why), setTimer: clock.set, clearTimer: clock.clear });
+  for (let i = 0; i < 6; i++) await clock.advance(15_000);
+  assert.equal(calls, 3);
+  assert.deepEqual(stops, ['misses']);
+  assert.equal(clock.pending(), 0);
+
+  const gone = fakeClock();
+  const why = [];
+  let n = 0;
+  shelves.startFallbackPoll({ refresh: async () => { n++; return 'gone'; }, delayMs: () => 15_000,
+    onStop: w => why.push(w), setTimer: gone.set, clearTimer: gone.clear });
+  for (let i = 0; i < 4; i++) await gone.advance(15_000);
+  assert.equal(n, 1, 'the kill switch stops it after one answer');
+  assert.deepEqual(why, ['gone']);
+
+  // A good answer resets the miss count; a thrown error counts as a miss.
+  const mixed = fakeClock();
+  const answers = ['miss', 'miss', 'ok', 'miss', 'miss'];
+  let k = 0; const ended = [];
+  shelves.startFallbackPoll({ refresh: () => (k === 4 ? (k++, Promise.reject(new Error('net'))) : Promise.resolve(answers[k++] ?? 'miss')),
+    delayMs: () => 1000, maxMisses: 3, onStop: w => ended.push(w), setTimer: mixed.set, clearTimer: mixed.clear });
+  for (let i = 0; i < 10; i++) await mixed.advance(1000);
+  assert.equal(k, 6, 'miss, miss, ok (reset), miss, error, miss: stops on the third miss in a row');
+  assert.deepEqual(ended, ['misses']);
+});
+
+test('pre-launch 1: polling pauses off screen and in the background', () => {
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(code, /useIsFocused\(\)/);
+  assert.match(code, /AppState\.addEventListener\('change'/);
+  assert.match(code, /const awake = focused && appActive;/);
+  assert.match(code, /if \(!today\.fallback \|\| !awake \|\| pollStopped\) return;/);
+  assert.match(code, /if \(!fresh\) return 'gone';/, 'a 404 (null) stops the poll');
+  // The reset reload is cancelled on cleanup and capped too.
+  assert.match(code, /if \(!ok && !cancelled && attempt < 8\)/);
+  assert.equal(/\.finally\(poll\)/.test(code), false, 'the leaking self re-arm is gone');
+});
+
+test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
+  const tops = [0, 420, 1100, 1700];
+  assert.equal(shelves.activeShelf(tops, 0), 0);
+  assert.equal(shelves.activeShelf(tops, 395), 0);
+  assert.equal(shelves.activeShelf(tops, 400), 1);
+  assert.equal(shelves.activeShelf(tops, 1200), 2);
+  assert.equal(shelves.activeShelf(tops, 9000), 3);
+  assert.equal(shelves.activeShelf([], 300), 0);
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  // Alex-style icons from the UI kit only, one chip per shelf, sticky above the scroll.
+  const names = require('node:fs').readFileSync(path.join(root, 'src/ui/iconNames.ts'), 'utf8');
+  for (const icon of ['star', 'gift', 'crown', 'timer']) {
+    assert.match(code, new RegExp(`icon: '${icon}' as const`));
+    assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
+  }
+  assert.match(code, /<JumpBar chips=\{chips\} active=\{activeChip\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
+  for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
+});
+
+test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the next-week placeholder', () => {
+  const code = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(code, /colors=\{\[SHOP_SURFACE\.card, SHOP_SURFACE\.panel\]\}/);
+  assert.match(code, /tone="night"/);
+  assert.equal(/'#dff3ff', '#9fd6f8'/.test(code), false, 'no pale hero gradient');
+  assert.match(code, /heroName: \{[^}]*color: S\.ink \}/);
+  assert.match(code, /heroKicker: \{[^}]*color: S\.inkGold/);
+  assert.match(code, /const heroTease = !today\.fallback && \(today\.next_featured\?\.title \|\| today\.next_featured\?\.set_name\) \? today\.next_featured : null;/);
+  assert.match(code, /tease=\{heroTease\}/);
+});
+
+test('pre-launch 6: Checking uses the muted face', () => {
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+  assert.match(sheet, /disabled=\{wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
 });

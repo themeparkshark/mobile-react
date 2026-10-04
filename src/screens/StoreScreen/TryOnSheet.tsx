@@ -19,7 +19,7 @@
  */
 import * as Haptics from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -209,18 +209,34 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   });
   const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
 
-  // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe).
+  // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe), then hides the
+  // modal and reports closed only once iOS has finished dismissing it (onDismiss), so the shelf
+  // can present the Set Complete reveal at once instead of waiting on a fixed timer.
   const drag = useSharedValue(0);
+  const [leaving, setLeaving] = useState(false);
+  const closedRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const finishClose = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    onCloseRef.current();
+  }, []);
+  const leave = useCallback(() => {
+    setLeaving(true);
+    // Android has no onDismiss; on iOS this is only a guard in case it never fires.
+    setTimeout(finishClose, Platform.OS === 'ios' ? 500 : 0);
+  }, [finishClose]);
   const closeAnimated = useCallback(() => {
-    if (still) { onClose(); return; }
-    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(onClose)(); });
-  }, [still, onClose]);
+    if (still) { leave(); return; }
+    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(leave)(); });
+  }, [still, leave]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
-      if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(onClose)());
+      if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(leave)());
       else drag.value = withSpring(0, { damping: 18 });
     });
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
@@ -351,7 +367,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const confirming = phase === 'confirm' || phase === 'buying';
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={closeAnimated} statusBarTranslucent>
+    <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View entering={FadeIn.duration(still ? 120 : 160)} style={styles.scrim}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
@@ -463,7 +479,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
                   <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? 'member' : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
-                    loading={cta.look === 'busy'} muted={cta.look === 'paused'} disabled={wear === 'spinning' || cta.look === 'paused'} />
+                    loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
+                    disabled={wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
                 {secondary && (

@@ -368,9 +368,9 @@ export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' 
 /**
  * The try-on's one primary button and its message, for every state (the label cross-fades).
  * look: 'go' is the normal face, 'busy' pulses while the shop answers, 'paused' is the quiet
- * "Opening soon" face that can't be tapped.
+ * "Opening soon" face that can't be tapped, 'checking' is that muted face pulsing (busy, not tappable).
  */
-export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' } {
+export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' | 'checking' } {
   if (s.owned) {
     if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.', look: 'go' };
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
@@ -378,7 +378,7 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   }
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
   // Its own state: asking the server never shows "Yes, buy it!".
-  if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'busy' };
+  if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };
   // Confirmed not charged: Try again goes back to the confirm step (two taps, never a silent buy).
   if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t go through. You weren’t charged.', look: 'go' };
   // Never a silent re-buy: "Check again" only asks the server what happened.
@@ -477,6 +477,51 @@ export function createSerialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
     tail = run.catch(() => undefined);
     return run;
   };
+}
+
+/**
+ * Fallback polling (today is still building). One timer at a time; it stops for good when the
+ * screen goes away (cancel), after maxMisses failed or empty answers in a row, or at once when the
+ * server says the shop is gone (404, the kill switch). Timers are injectable for tests.
+ */
+export function startFallbackPoll(o: {
+  refresh: () => Promise<'ok' | 'miss' | 'gone'>;
+  delayMs: () => number;
+  maxMisses?: number;
+  onStop?: (why: 'gone' | 'misses') => void;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (t: unknown) => void;
+}): () => void {
+  const setT = o.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const clearT = o.clearTimer ?? ((t: unknown) => clearTimeout(t as ReturnType<typeof setTimeout>));
+  const max = o.maxMisses ?? 20;
+  let cancelled = false;
+  let misses = 0;
+  let timer: unknown = null;
+  const arm = () => {
+    if (cancelled) return;
+    timer = setT(() => {
+      timer = null;
+      if (cancelled) return;
+      o.refresh().catch(() => 'miss' as const).then(result => {
+        if (cancelled) return;
+        if (result === 'gone') { o.onStop?.('gone'); return; }
+        misses = result === 'ok' ? 0 : misses + 1;
+        if (misses >= max) { o.onStop?.('misses'); return; }
+        arm();
+      });
+    }, o.delayMs());
+  };
+  arm();
+  return () => { cancelled = true; if (timer != null) clearT(timer); timer = null; };
+}
+
+/** The shelf the jump bar highlights: the last one whose top has passed under the bar. */
+export function activeShelf(tops: number[], scrollY: number, lead = 24): number {
+  'worklet';
+  let active = 0;
+  for (let i = 0; i < tops.length; i++) if (tops[i] - lead <= scrollY) active = i;
+  return active;
 }
 
 /** Fallback polling: every 15 to 30 s (jittered so phones don't all ask at once). */
