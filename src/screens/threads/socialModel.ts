@@ -439,6 +439,20 @@ export function isCareCheck(text: string): boolean {
   return matchesAny(CARE_WIDE, words);
 }
 
+/** Same as SafeText::isDisclosure: a kid telling us someone hurts them or makes them keep a secret. */
+const DISCLOSURE = compile(RULES.disclosure);
+export function isDisclosure(text: string): boolean {
+  return text.trim() !== '' && matchesAny(DISCLOSURE, forms(text));
+}
+
+/** What a kid sees after telling us about abuse or a secret: warm, with Childhelp and 911. Same as the server. */
+export const DISCLOSURE_LINE = 'Thank you for telling us. You did the right thing. Please tell a grown-up you trust, like a teacher or school counselor. You can call or text Childhelp at 1-800-422-4453 anytime. If you are in danger right now, call 911.';
+
+/** Held for care or safety: calm, never confetti. */
+export function isCareHold(review: string | null | undefined): boolean {
+  return review === 'care' || review === 'safety';
+}
+
 /** Same as SafeText::isAimedAtOthers: self-harm words aimed at someone else ("go unalive urself"). */
 const MEAN_PHRASES = compile(RULES.mean_phrases);
 export function isAimedAtOthers(text: string): boolean {
@@ -482,9 +496,10 @@ export function checkDraft(text: string, max = POST_MAX): DraftProblem | null {
   const trimmed = text.trim();
   if (!trimmed) return 'empty';
   if (trimmed.length > max) return 'too_long';
-  // Care first, like the server: self-harm words about the author are never stopped here, even
-  // with a phone number or insults in them. The server holds them for a grown-up and alerts.
-  if (isCare(trimmed)) return null;
+  // Disclosure and care first, like the server: a kid telling us someone hurts them, or self-harm
+  // words about the author, are never stopped here, even with a phone number, insults or "secret"
+  // in them. The server holds them for a grown-up and alerts at once.
+  if (isDisclosure(trimmed) || isCare(trimmed)) return null;
   if (hasContactDetails(trimmed)) return 'personal_info';
   if (isGrooming(trimmed)) return 'grooming';
   if (hasPersonalInfo(trimmed)) return 'personal_info';
@@ -535,6 +550,7 @@ export const REVIEW_LINE = "Posting... we're giving it a quick look.";
 
 /** The line under a held post or reply, for its author. */
 export function reviewLine(review: string | null | undefined): string | null {
+  if (review === 'safety') return DISCLOSURE_LINE;
   if (review === 'care') return CARE_LINE;
   if (review === 'person') return PERSON_LINE;
   return review === 'pending' ? REVIEW_LINE : null;

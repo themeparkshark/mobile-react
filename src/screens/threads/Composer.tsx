@@ -57,6 +57,9 @@ import {
   POST_MAX,
   TOPICS,
   categoryForTopic,
+  DISCLOSURE_LINE,
+  isCareHold,
+  isDisclosure,
   phraseById,
   phraseLabel,
   checkDraft,
@@ -174,6 +177,7 @@ export default function Composer({
   const hintProblem = useMemo(() => checkDraft(hintText, POST_MAX), [hintText]);
   // Self-harm words never block: a kind line now, and the server holds the post for a grown-up.
   const care = useMemo(() => isDistress(hintText), [hintText]);
+  const disclosure = useMemo(() => isDisclosure(hintText), [hintText]);
   // A kid on a posting break learns it before typing, not after.
   const [pausedLine, setPausedLine] = useState<string | null>(null);
   useEffect(() => {
@@ -200,7 +204,7 @@ export default function Composer({
   }, [visible, editing]);
   const reportedDraft = useRef<string | null>(null);
   const showProblem = hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null;
-  const line = serverLine ?? pausedLine ?? showProblem ?? (care ? CARE_LINE : null);
+  const line = serverLine ?? pausedLine ?? showProblem ?? (disclosure ? DISCLOSURE_LINE : care ? CARE_LINE : null);
   const canPost = phase === 'write' && !pausedLine && (safeMode ? safeText !== null : !quick && !hintProblem);
   const def = topicFor(topic);
   const left = POST_MAX - text.trim().length;
@@ -254,13 +258,17 @@ export default function Composer({
           : await postThread({ content, ...where });
       setHeld(thread.review ?? null);
       setPhase('done');
-      playSound(SUCCESS, { volume: 0.7 });
-      void Haptics.notificationAsync('success');
-      if (!reduced) burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+      // A care or safety hold is a calm moment: no confetti, no chime, no success buzz.
+      if (!isCareHold(thread.review)) {
+        playSound(SUCCESS, { volume: 0.7 });
+        void Haptics.notificationAsync('success');
+        if (!reduced) burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+      }
       if (!editing && !safeMode) AsyncStorage.removeItem(draftKey(player?.id)).catch(() => undefined);
+      // Give a kid time to read the care or safety line before the screen closes.
       doneTimer.current = setTimeout(() => {
         onPosted({ ...thread, player: thread.player ?? (player as ThreadType['player']) }, Boolean(editing));
-      }, reduced ? 700 : 1150);
+      }, isCareHold(thread.review) ? 6000 : reduced ? 700 : 1150);
     } catch (error) {
       setPhase('write');
       setServerLine(errorLine(error));
@@ -432,7 +440,7 @@ export default function Composer({
                 ) : (
                   <View style={styles.lineWrap}>
                     <GameIcon name="heart" size={18} />
-                    <Text style={styles.kind}>{freeTextBy === 'person' && !editing ? FREE_TEXT_LINE : 'Be kind. No real names or addresses.'}</Text>
+                    <Text style={styles.kind}>{freeTextBy === 'person' ? FREE_TEXT_LINE : 'Be kind. No real names or addresses.'}</Text>
                   </View>
                 )}
                 {!safeMode && left < 60 && <Text style={[styles.left, left < 0 && { color: BRAND.red }]}>{left}</Text>}
@@ -455,12 +463,12 @@ export default function Composer({
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             {/* Its own moment: the form fades behind a navy scrim, the shark and ribbon sit dead center. */}
             <Animated.View entering={FadeIn.duration(180)} style={[StyleSheet.absoluteFill, styles.doneScrim]} />
-            <RewardBurst progress={burst} x={width / 2} y={height * 0.5} />
+            {!isCareHold(held) && <RewardBurst progress={burst} x={width / 2} y={height * 0.5} />}
             <Animated.View entering={reduced ? FadeIn : ZoomIn.springify().damping(10)} style={[styles.doneWrap, { top: height * 0.5 - 110 }]}>
-              <View style={styles.doneGlow} />
+              {!isCareHold(held) && <View style={styles.doneGlow} />}
             <Image source={SHARK} style={styles.doneShark} contentFit="contain" />
               <View style={styles.doneRibbon}>
-                <Text style={styles.doneText}>{held === 'care' ? 'We hear you' : held === 'person' ? 'Grown-up check' : held ? 'Quick look!' : editing ? 'Saved!' : 'Posted!'}</Text>
+                <Text style={styles.doneText}>{held === 'safety' ? 'Thank you' : held === 'care' ? 'We hear you' : held === 'person' ? 'Grown-up check' : held ? 'Quick look!' : editing ? 'Saved!' : 'Posted!'}</Text>
               </View>
               {held && <Text style={styles.doneSub}>{reviewLine(held)}</Text>}
             </Animated.View>

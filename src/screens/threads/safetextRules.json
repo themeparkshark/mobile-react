@@ -1,11 +1,12 @@
 {
-  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted. R5: distress (self-harm about the author) and review_you + review_topics / review_phrases (hold for a person) are not blocks; see SafeText::isDistress and ::needsReview. tens/teens turn number words like 'fifty five' into digits. R6: review_exempt phrases are removed before the review check (park talk like 'what age can you ride'). R7: care_me/care_words/care_window is the broad care net (a first-person word within care_window words of a death or self-harm word; care_exempt phrases are removed first). review_exempt now swaps only the topic noun inside the phrase. R8: care_wide_* is the wide care check (Dustin-facing; on the live forum it refuses kindly too): care_me within care_wide_window words of care_wide_words, or any care_wide_extra phrase, after care_exempt. R9: care_a_exempt phrases are removed before the Tier A care net only (they stay in the wide check).",
+  "_doc": "Kid-safe text rules shared by the server (SafeText.php) and the app (socialModel.ts). Keep the two copies identical: backend resources/safetext/rules.json and app src/screens/threads/safetextRules.json. Patterns are case-insensitive regex without delimiters, run on several normalised forms of the text. {CHAT}, {APPS}, {HANDLE}, {MAIL}, {SPOT} are substituted. R5: distress (self-harm about the author) and review_you + review_topics / review_phrases (hold for a person) are not blocks; see SafeText::isDistress and ::needsReview. tens/teens turn number words like 'fifty five' into digits. R6: review_exempt phrases are removed before the review check (park talk like 'what age can you ride'). R7: care_me/care_words/care_window is the broad care net (a first-person word within care_window words of a death or self-harm word; care_exempt phrases are removed first). review_exempt now swaps only the topic noun inside the phrase. R8: care_wide_* is the wide care check (Dustin-facing; on the live forum it refuses kindly too): care_me within care_wide_window words of care_wide_words, or any care_wide_extra phrase, after care_exempt. R9: care_a_exempt phrases are removed before the Tier A care net only (they stay in the wide check). R11: disclosure is a first-person abuse or secret disclosure (checked before grooming, contact and mean): never refused silently, never public, URGENT to a person; disclosure_who lists the people a kid may name.",
   "vars": {
     "CHAT": "snap|snp|snapchat|sc|insta|instagram|the gram|gram|kik|discord|disc|telegram|whatsapp|whats app|wa|messenger|wechat|dms|signal|skype|viber|imessage|groupme",
     "APPS": "snap|snp|snapchat|sc|insta|instagram|ig|the gram|kik|discord|telegram|whatsapp|whats app|messenger|tiktok|tik tok|tt|youtube|yt|twitch|roblox|rblx|rbx|fortnite|minecraft|xbox|psn|playstation|gamertag|facebook|fb|twitter|steam|pinterest|bereal|threads|bird app|the bird app|x app|signal|skype|viber|line|imessage|zoom|groupme",
     "HANDLE": "(?=[a-z0-9_.#]*[a-z])(?=[a-z0-9_.#]*[0-9_#])[a-z0-9_.#]{4,}",
     "MAIL": "gmail|g mail|yahoo|hotmail|outlook|icloud|aol|proton|protonmail",
-    "SPOT": "cart|stand|fountain|castle|entrance|gate|bench|tree|statue|carousel|shop|store|booth|restroom|bathroom|bathrooms|stage|exit|kiosk|wall|sign|dragon|lagoon|bridge"
+    "SPOT": "cart|stand|fountain|castle|entrance|gate|bench|tree|statue|carousel|shop|store|booth|restroom|bathroom|bathrooms|stage|exit|kiosk|wall|sign|dragon|lagoon|bridge",
+    "WHO": "(step\\s?dad|step\\s?mom|stepfather|stepmother|dad|mom|mum|father|mother|uncle|aunt|grandpa|grandma|brother|sister|cousin|coach|teacher|babysitter|nanny|neighbor|neighbour|tutor|pastor|priest|boyfriend|girlfriends?|moms\\s+boyfriend|dads\\s+girlfriend|family\\s+friend)"
   },
   "personal": [
     "\\b(my|our)\\s+(home\\s+)?(address|addy)\\b",
@@ -161,7 +162,9 @@
     "\\bhow\\s+many\\s+birthdays\\b",
     "\\bsneak\\s+(away|out)\\b",
     "\\bcome\\s+by\\s+(ur|your)self\\b",
-    "\\bnot\\s+like\\s+other\\s+(kids|girls|boys)\\b"
+    "\\bnot\\s+like\\s+other\\s+(kids|girls|boys)\\b",
+    "\\b(im|i\\s+am)\\s+(sitting|standing|waiting|at|by)\\b.{0,40}\\bwho\\s+wants\\s+to\\s+(come|meet|join)\\b",
+    "\\b(im|i\\s+am)\\s+(sitting|standing|waiting)\\s+(by\\s+my\\s?self|alone)\\b.{0,40}\\b(come|join|find)\\b"
   ],
   "number_words": {
     "zero": "0",
@@ -481,7 +484,15 @@
     "\\b(go\\s+)?(hang|drown)\\s+(ur|your)\\s?self\\b",
     "\\b(u|you)\\s+should\\s+(go\\s+)?(drown|disappear)\\b",
     "\\b(nobody|no\\s+one)\\s+would\\s+care\\s+if\\s+(u|you)\\s+died\\b",
-    "\\bhope\\s+(u|you)\\s+(fall|die|get\\s+hurt|crash)\\b"
+    "\\bhope\\s+(u|you)\\s+(fall|die|get\\s+hurt|crash)\\b",
+    "\\b(u|you)\\s+should\\s+(just\\s+)?(go\\s+)?(end|off|unalive)\\s+(ur|your)\\s?self\\b",
+    "\\beveryone\\s+hates\\s+(u|you)\\b",
+    "\\bleave\\s+the\\s+(forum|chat|app|group)\\s+forever\\b",
+    "\\b(ur|youre|you\\s+are|your)\\s+so\\s+fat\\b",
+    "\\b(disgusting|gross)\\s+freak\\b",
+    "\\b(ur|youre|you\\s+are)\\s+a\\s+(freak|loser|weirdo|creep)\\b",
+    "\\b(ur|your|yo)\\s+(mom|mama|dad)\\s+is\\s+so\\s+(poor|fat|ugly|dumb|stupid)\\b",
+    "\\b(ur|your)\\s+(outfit|clothes|hair|face)\\s+(is|are)\\s+(trash|garbage|ugly)\\b"
   ],
   "self_harm": [
     "unalive",
@@ -499,7 +510,8 @@
     "\\b(go\\s+)?(hang|drown)\\s+(ur|your)\\s?self\\b",
     "\\b(u|you)\\s+should\\s+(go\\s+)?(drown|disappear)\\b",
     "\\b(nobody|no\\s+one)\\s+would\\s+care\\s+if\\s+(u|you)\\s+died\\b",
-    "\\bhope\\s+(u|you)\\s+(fall|die|get\\s+hurt|crash)\\b"
+    "\\bhope\\s+(u|you)\\s+(fall|die|get\\s+hurt|crash)\\b",
+    "\\b(u|you)\\s+should\\s+(just\\s+)?(go\\s+)?(end|off|unalive)\\s+(ur|your)\\s?self\\b"
   ],
   "run_exempt_after": [
     "score",
@@ -634,7 +646,11 @@
     "\\bque\\s+escuela\\b",
     "\\bno\\s+le\\s+digas\\b",
     "\\bsol[oa]\\s+en\\s+casa\\b",
-    "\\b(at|to)\\s+my\\s+(place|house|room|hotel|car)\\b"
+    "\\b(at|to)\\s+my\\s+(place|house|room|hotel|car)\\b",
+    "\\bby\\s+(ur|your)\\s?self\\b",
+    "\\b(anybody|anyone|somebody)\\s+(home|watching)\\b",
+    "\\bsomewhere\\s+private\\b",
+    "\\bwhere\\s+(the\\s+)?(mods|moderators|grown\\s?ups|adults|parents)\\s+(cant|wont|can\\s+not|will\\s+not)\\s+see\\b"
   ],
   "tens": {
     "twenty": "2",
@@ -675,7 +691,7 @@
     "\\bdead\\s+(tired|serious)\\b",
     "\\b(almost|nearly)\\s+(die|died)\\b",
     "\\b(phone|phones|battery|batteries|ipad|tablet|switch|car|fish|goldfish|hamster|pet)\\s+(died|is\\s+dead|was\\s+dead|went\\s+dead)\\b",
-    "\\b(would|could)\\s+die\\s+for\\s+(a|an|some|the|that|this)\\b",
+    "\\b(would|could)\\s+die\\s+for\\s+(a|an|some|the|that|this|one|another|more|\\d+)\\b",
     "\\bdead\\s+mans?\\b",
     "\\bpills?\\s+for\\s+(my\\s+)?(allergies|allergy|headache|cold|motion\\s+sickness|tummy|stomach)\\b",
     "\\bgoodbye\\s+to\\s+(the\\s+)?([a-z']+\\s+){0,4}(ride|rides|show|land|parade|mountain|coaster|attraction|park|hotel|castle)\\b",
@@ -742,7 +758,14 @@
     "\\b(wont|will\\s+not|dont)\\s+need\\s+(them|it|anything)\\s+(soon|anymore|much\\s+longer)\\b",
     "\\b(tylenol|advil|pills|bottle)\\b.{0,30}\\b(under\\s+my\\s+pillow|saved|hidden|stash)\\b",
     "\\btell\\s+my\\s+(mom|dad|mum|family|parents)\\s+(im|i\\s+am)\\s+sorry\\b",
-    "\\b(fall\\s+asleep|lie\\s+down|lay\\s+down)\\b.{0,40}\\b(and\\s+stay|never\\s+get\\s+up|never\\s+wake|forever)\\b"
+    "\\b(fall\\s+asleep|lie\\s+down|lay\\s+down)\\b.{0,40}\\b(and\\s+stay|never\\s+get\\s+up|never\\s+wake|forever)\\b",
+    "\\b(giving|give|gave)\\s+(away\\s+)?(all\\s+)?(of\\s+)?my\\s+(stuff|things|pins|toys|games|clothes|collection|plushies|cards|buckets|ears)\\b(.{0,15}\\baway\\b)?",
+    "\\b(wont|will\\s+not|dont|wont\\s+be\\s+needing)\\s+need(ing)?\\s+(them|it|this|these|my\\s+\\w+|anything)\\b(\\s+(soon|anymore|much\\s+longer|where\\s+im\\s+going|after\\s+\\w+))?\\s*$",
+    "\\bi\\s+wont\\s+need\\s+(them|it|these|anything)\\b",
+    "\\bleave\\s+this\\s+earth\\b",
+    "\\bregret\\s+having\\s+me\\b",
+    "\\b(been\\s+)?cutting\\s+(again|myself)\\b",
+    "\\b(hid|hidden|hiding|hide)\\s+(a\\s+)?(knife|blade|razor|pills|rope|gun)\\b"
   ],
   "care_wide_exempt": [
     "\\b(is|was|are|were)\\s+killing\\s+me\\b",
@@ -764,7 +787,7 @@
     "\\bkilled\\s+me\\b(\\s+\\w+){0,5}\\s+(drop|lol|lmao|haha|so\\s+fun|insane)\\b",
     "\\b(almost|nearly)\\s+killed\\s+me\\b",
     "\\bmom\\s+is\\s+(gonna|going\\s+to)\\s+kill\\s+me\\b",
-    "\\b(would|could|id)\\s+die\\s+for\\s+(a|an|some|the|that|this)\\b",
+    "\\b(would|could|id)\\s+die\\s+for\\s+(a|an|some|the|that|this|one|another|more|\\d+)\\b",
     "\\bscared\\s+me\\s+to\\s+death\\b",
     "\\b(im|i\\s+am)\\s+so\\s+dead\\b",
     "\\bdie\\s+happy\\b",
@@ -780,11 +803,26 @@
     "\\bedge\\s+of\\s+the\\s+world\\b",
     "\\bjumped\\s+(when|so\\s+high|up)\\b",
     "\\bjumped\\s+off\\s+the\\s+(boat|seat|bed|couch|bench)\\b",
-    "\\bjumped\\s+off\\s+the\\s+[a-z]+\\s+seat\\b"
+    "\\bjumped\\s+off\\s+the\\s+[a-z]+\\s+seat\\b",
+    "\\bchanged\\s+my\\s+life\\b"
   ],
   "care_a_exempt": [
     "\\bscared\\s+me\\s+to\\s+death\\b",
     "\\b(im|i\\s+am)\\s+so\\s+dead\\b",
     "\\bdie\\s+happy\\b"
+  ],
+  "disclosure": [
+    "\\b(my|our)\\s+{WHO}\\b.{0,60}\\b(touch\\w*|hits?|hitting|hurts?|hurting|beats?|beating|punch\\w*|kicks?|kicking|slaps?|slapping|chokes?|choking|burns?|burning)\\s+me\\b",
+    "\\b(my|our)\\s+{WHO}\\b.{0,60}\\b(locks?|locked|locking)\\s+me\\s+(in|up|out\\s+of\\s+the\\s+house)\\b",
+    "\\b(my|our)\\s+{WHO}\\b.{0,60}\\b(with\\s+(his|her|a)\\s+belt|sit\\s+on\\s+(his|her)\\s+lap)\\b",
+    "\\b(touch\\w*)\\s+me\\b.{0,60}\\b(secret|dont\\s+tell|not\\s+to\\s+tell)\\b",
+    "\\b(says?|said|told\\s+me|tells\\s+me|asked\\s+me|asks\\s+me|wants?\\s+me|makes?\\s+me)\\b.{0,40}\\b(our\\s+(little\\s+)?secret|(keep|keeping)\\s+(it|this|that)\\s+(a\\s+)?secret)\\b",
+    "\\b(keep|keeping)\\s+(it|this|that)\\s+(a\\s+)?secret\\s+(what|that)\\s+(he|she|they)\\b",
+    "\\b(says?|said|told\\s+me|tells\\s+me)\\b.{0,20}\\b(dont|do\\s+not|not\\s+to)\\s+tell\\s+(my|anyone|anybody|nobody|no\\s+one)\\b",
+    "\\bif\\s+i\\s+tell\\b.{0,50}\\b(hurt|kill|beat|hit|get\\s+(me\\s+)?in\\s+trouble|take\\s+(me|my))\\b",
+    "\\b(dont|do\\s+not)\\s+feel\\s+safe\\s+(at\\s+home|around|with|in\\s+my)\\b",
+    "\\b(keeps?|keep)\\s+asking\\s+me\\s+for\\s+(pics|pictures|photos|nudes|selfies)\\b",
+    "\\bmakes?\\s+me\\s+(do\\s+(stuff|things)|touch|sit\\s+on)\\b|\\bmade\\s+me\\s+(do\\s+(stuff|things)|touch)\\b",
+    "\\b(someone|somebody|a\\s+man|a\\s+guy|a\\s+lady|a\\s+woman|an\\s+older\\s+(kid|boy|girl|guy|man))\\b.{0,60}\\b(touch\\w*\\s+me|took\\s+(a\\s+)?(my\\s+)?(picture|pic|photo)s?\\s+of\\s+me|keep\\s+it\\s+(a\\s+)?secret)\\b"
   ]
 }

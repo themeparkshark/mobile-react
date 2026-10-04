@@ -140,7 +140,8 @@ test('the app classifies the panel probe set like the server: personal info and 
       // self_harm and personal_question are server holds, never app blocks.
       const blocked = model.checkDraft(text, 100000);
       // Care first, like the server (R10).
-      const got = want === 'self_harm' ? (model.isDistress(text) ? 'self_harm' : 'missed')
+      const got = want === 'self_harm' ? (model.isDistress(text) && !model.isDisclosure(text) ? 'self_harm' : 'missed')
+        : model.isDisclosure(text) ? 'disclosure'
         : model.isCare(text) ? 'care_check'
         : (blocked ?? (model.needsReview(text) ? 'personal_question' : 'ok'));
       // Mean words are the server's job; the composer only explains safety rules early.
@@ -193,8 +194,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), '767436f566d9149d0be6483344121b230c904975b0fa3ef6bd65103a2634d7a6');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'a6ea5815813b4238515aaf37aaba1c91c75068aba7053d19f732b09b9644b7b8');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), 'b997bada93fb9948616f7d184a41444b51f5598c69c09043ae3adda4413a27f7');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), '5645eaea3d0ba189cb711f3d8773f6f3a999942bd602fd1cbed4c30e4c91f52f');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -431,4 +432,21 @@ test('R10: care-matching text is never stopped in the app (insults or a phone nu
   assert.equal(model.isAimedAtOthers('go unalive urself'), true);
   assert.equal(model.isCare('go unalive urself'), false);
   assert.equal(model.checkDraft('text me at 714 555 0199'), 'personal_info');
+});
+
+test('R11: disclosures reach the server (never blocked here) with the Childhelp line, care holds are calm, edit footer is honest', () => {
+  for (const t of ['my stepdad touches me and says its our secret', 'someone online keeps asking me for pics and says its our little secret', 'my coach makes me sit on his lap and says dont tell my parents']) {
+    assert.equal(model.isDisclosure(t), true, t);
+    assert.equal(model.checkDraft(t), null, `${t} goes to the server`);
+  }
+  assert.equal(model.checkDraft('giving all my pins away, text 407 555 0166 to get them, i wont need them'), null);
+  assert.equal(model.isDistress('i would die for one more churro'), false);
+  assert.match(model.DISCLOSURE_LINE, /1-800-422-4453/);
+  assert.match(model.DISCLOSURE_LINE, /911/);
+  assert.equal(model.reviewLine('safety'), model.DISCLOSURE_LINE);
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.match(composer, /if \(!isCareHold\(thread\.review\)\) \{\s*playSound\(SUCCESS/);
+  assert.match(composer, /\{!isCareHold\(held\) && <RewardBurst/);
+  assert.match(composer, /\{freeTextBy === 'person' \? FREE_TEXT_LINE/);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /if \(!isCareHold\(created\.review\)\) \{\s*playSound\(SEND/);
 });

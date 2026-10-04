@@ -14,5 +14,5 @@ export interface CommentType {
   readonly thread_id?: number;
   readonly parent_id?: number | null;
   /** Held for a quick safety look: only the author sees it. */
-  readonly review?: 'pending' | 'person' | 'care' | null;
+  readonly review?: 'pending' | 'person' | 'care' | 'safety' | null;
 }

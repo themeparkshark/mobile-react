@@ -38,7 +38,7 @@ import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
 import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
-import { CARE_LINE, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
+import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
 import { buildRows, hiddenLine, type Row } from './threads/socialRows';
@@ -268,6 +268,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   }, [text]);
   const hintProblem = useMemo(() => checkDraft(hintText, REPLY_MAX), [hintText]);
   const care = useMemo(() => isDistress(hintText), [hintText]);
+  const disclosure = useMemo(() => isDisclosure(hintText), [hintText]);
   const [pausedLine, setPausedLine] = useState<string | null>(null);
   useEffect(() => {
     if (!player) return;
@@ -284,7 +285,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
   const sheetText = composeSafeChat(sheetPick, places);
   const reportedDraft = useRef<string | null>(null);
 
-  const shownLine = line ?? pausedLine ?? (hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null) ?? (care ? CARE_LINE : null);
+  const shownLine = line ?? pausedLine ?? (hintProblem && hintProblem !== 'empty' ? DRAFT_LINES[hintProblem] : null) ?? (disclosure ? DISCLOSURE_LINE : care ? CARE_LINE : null);
   const sendOff = Boolean(pausedLine) || sending || quickProblem === 'empty';
 
   const send = async (safe?: SafeChatPick) => {
@@ -312,8 +313,11 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     const answered = replyTo && replyTo.parent_id ? replyTo.id : null;
     try {
       const created = await postComment(thread.id, safe ? { safeChat: safe } : words, parent, answered);
-      playSound(SEND, { volume: 0.6 });
-      void Haptics.notificationAsync('success');
+      // A care or safety hold is calm: no whoosh, no success buzz.
+      if (!isCareHold(created.review)) {
+        playSound(SEND, { volume: 0.6 });
+        void Haptics.notificationAsync('success');
+      }
       const mineCreated: CommentType = { ...created, player: created.player ?? (player as CommentType['player']), children: created.children ?? [], children_count: 0 };
       // Trust where the server put it (a retried send returns the reply already saved).
       const group = created.parent_id ?? parent;
