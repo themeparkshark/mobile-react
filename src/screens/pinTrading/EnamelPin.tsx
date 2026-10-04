@@ -52,7 +52,22 @@ type Props = {
   readonly style?: StyleProp<ViewStyle>;
 };
 
-function EnamelPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
+/** Under this size the light and shadow are too small to see: a plain image (and no Skia canvas). */
+const FLAT_BELOW = 48;
+
+function EnamelPin(props: Props) {
+  if (props.size < FLAT_BELOW) {
+    const { uri, size, tilt = 0, recyclingKey, style } = props;
+    return (
+      <View style={[{ width: size, height: size, transform: [{ rotate: `${tilt}deg` }] }, style]} pointerEvents="none">
+        <Image source={uri} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" transition={0} recyclingKey={recyclingKey} />
+      </View>
+    );
+  }
+  return <LitPin {...props} />;
+}
+
+function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
   const image = useImage(uri);
   const pad = Math.round(size * PAD);
   const box = size + pad * 2;
