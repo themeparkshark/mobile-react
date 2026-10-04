@@ -5,7 +5,7 @@
  * Top to bottom: the whole-book count (and today's rare), the set cards
  * (rings, a pill only when a set has news, "My hunt", a gift when a reward
  * waits), the gold ribbon set header with the one count ring and two icon
- * buttons (hunt this set, odds), a special-timing chip and the spares meter,
+ * buttons (hunt this set, odds), a special-timing chip and the spare count,
  * the reward track (icon nodes, tap a glowing node to claim), and a 4-column
  * grid of sticker slots. Tap a slot for the big item card.
  *
@@ -22,7 +22,7 @@ import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
-  claimSetMilestone, claimSetRewards, claimStarterRewards, clearPrepItemSetFocus, equipSetTitle, exchangeSetDuplicates,
+  claimSetMilestone, claimSetRewards, claimStarterRewards, clearPrepItemSetFocus, equipSetTitle,
   focusPrepItemSet, getPrepItemSet, type PrepItemSetDetailResponse, type PrepItemSetItem, type PrepItemSetListItem,
 } from '../api/endpoints/me/prep-item-sets';
 import { getHomeHuntDex, getHomeHuntDexSet } from '../api/endpoints/me/homeHuntDex';
@@ -54,7 +54,7 @@ import { getEventShelf, type EventCard, type EventShelf } from './SetCollection/
 import { ItemTile } from './SetCollection/DexTile';
 import { TilePanel } from './SetCollection/dexLook';
 import {
-  buildBook, buildItems, hasClaimable, initialSlug, mergeStable, refreshEveryMs, spawnIcon, swapGoal, swapProgress, tabStatus,
+  buildBook, buildItems, hasClaimable, initialSlug, mergeStable, refreshEveryMs, spawnIcon, tabStatus,
   type DexBook, type DexItem, type DexReward, type DexSet,
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
@@ -384,33 +384,6 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     }
   }, [set, busy, preview, loadSets]);
 
-  const exchange = useCallback(async () => {
-    if (!set || !selectedItem || busy) return;
-    const target = selectedItem.id;
-    setBusy('exchange');
-    setError(null);
-    try {
-      if (preview) {
-        setDetail(current => current && {
-          ...current, spares: Math.max(0, current.spares - selectedItem.exchangeCost),
-          items: current.items.map(item => item.id === target ? { ...item, found: true, caught: 1, foundInWorld: false, isNew: true } : item),
-        });
-      } else {
-        await exchangeSetDuplicates(set.slug, target);
-        await reloadAll();
-      }
-      setSelectedItem(current => current ? { ...current, found: true, isNew: true, foundInWorld: false, caught: Math.max(1, current.caught) } : current);
-      playSfx('fx.reveal', 0.8);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    } catch {
-      setError('That swap did not go through. Try again.');
-      playSfx('fx.nopeShort', 0.6);
-      await reloadAll();
-    } finally {
-      setBusy(null);
-    }
-  }, [set, selectedItem, busy, preview, reloadAll]);
-
   const openItem = useCallback((item: DexItem) => {
     // Layered: a tap, then a pluck pitched by rarity for a find you own.
     playSfx('ui.tap', 0.55);
@@ -497,7 +470,6 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     }
     revealTimer.current = setTimeout(() => listRef.current?.scrollToOffset({ offset, animated: !reduced }), 350);
   };
-  const goal = swapGoal(items ?? [], spares, detail?.raw.progress.exchange_cost ?? 4);
   const cell = Math.floor((width - SIDE * 2 - CELL_GAP * (COLUMNS - 1)) / COLUMNS);
   const status = set ? tabStatus(set) : null;
   // The chip under the header shows special timing, live or not ("Sunset to 9 PM" with the live dot meaning on now).
@@ -522,8 +494,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             onFocus={set.status === 'active' || set.status === 'resting' ? () => void toggleFocus() : null} />
           <View style={styles.chips}>
             {special && <StatusChip text={special.text} icon={spawnIcon(special.text)} />}
-            <SparesMeter spares={spares} cost={goal.cost} ready={goal.ready} extra={goal.extra} anyMissing={goal.anyMissing}
-              onPress={() => { playSfx('ui.tap', 0.5); setSparesOpen(true); }} />
+            {spares > 0 && <SparesMeter spares={spares} onPress={() => { playSfx('ui.tap', 0.5); setSparesOpen(true); }} />}
           </View>
           <View onLayout={event => { trackBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height; revealClaim(); }}>
           <RewardTrack set={set} busyId={busy} onClaim={reward => void claim(reward)}
@@ -600,7 +571,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
               <View style={{ paddingHorizontal: CELL_GAP / 2 }}>
                 {typeof entry === 'number'
                   ? <TilePanel rarity={1} found={false} style={{ width: cell, height: cell, marginBottom: 46, opacity: 0.5 }} />
-                  : <ItemTile item={entry} width={cell} swapReady={swapProgress(entry, spares).ready} onPress={openItem} />}
+                  : <ItemTile item={entry} width={cell} onPress={openItem} />}
               </View>
             )}
           />
@@ -609,8 +580,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         )}
       </View>
 
-      <ItemCard item={selectedItem} set={set} spares={spares} onClose={closeItem} error={error} onFind={goToMap}
-        exchanging={busy === 'exchange'} onExchange={set && set.status !== 'retired' ? () => void exchange() : null}
+      <ItemCard item={selectedItem} set={set} onClose={closeItem} error={error} onFind={goToMap}
         onShare={preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1' ? null : () => {
           playSfx('ui.tap', 0.5);
           setGiftItem(selectedItem);
@@ -630,7 +600,12 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         </View>
       </Modal>
 
-      <SparesSheet visible={sparesOpen} items={items ?? []} cost={goal.cost} onClose={() => setSparesOpen(false)} />
+      <SparesSheet visible={sparesOpen} items={items ?? []} onClose={() => setSparesOpen(false)}
+        onShare={preview && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW !== '1' ? null : item => {
+          playSfx('ui.tap', 0.5);
+          setSparesOpen(false);
+          setGiftItem(item);
+        }} />
       {/* The build-up rides in its own window, or inside the wearable sheet when the claim came from there
           (iOS shows one modal at a time, so a second window would never cover the sheet). */}
       <Modal visible={claimWaiting && !picking} transparent animationType="none" statusBarTranslucent>
@@ -715,35 +690,41 @@ function BookSkeleton({ cell }: { readonly cell: number }) {
   );
 }
 
-/** One picture with the real price: N spare copies (one stack, "xN") swap for one new find. */
-function SparesSheet({ visible, items, cost, onClose }: {
-  readonly visible: boolean; readonly items: readonly DexItem[]; readonly cost: number; readonly onClose: () => void;
+/** What spares are: extra copies of finds already owned. They never swap for a missing item; rare finds are earned on the map. */
+function SparesSheet({ visible, items, onClose, onShare }: {
+  readonly visible: boolean; readonly items: readonly DexItem[]; readonly onClose: () => void;
+  readonly onShare: ((item: DexItem) => void) | null;
 }) {
-  const spare = items.find(item => item.found && item.spares > 0) ?? items.find(item => item.found) ?? null;
-  const missing = items.filter(item => !item.found).sort((a, b) => a.exchangeCost - b.exchangeCost)[0] ?? null;
+  const spare = [...items].filter(item => item.found && item.spares > 0).sort((a, b) => b.spares - a.spares)[0] ?? null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sparesCard} accessibilityViewIsModal>
-          <Text style={styles.sparesTitle} accessibilityRole="header">Spares swap for new finds!</Text>
-          <View style={styles.sparesRow} accessible accessibilityLabel={`${cost} spare copies swap for 1 new find`}>
-            <View style={styles.sparesStack}>
-              {[2, 1, 0].map(offset => (
-                <TilePanel key={offset} rarity={spare?.rarity ?? 1} found
-                  style={[styles.sparesTile, { position: offset ? 'absolute' : 'relative', left: offset * 6, top: -offset * 6 }]}>
-                  {spare && <Image source={itemArt(spare)} style={styles.sparesArt} contentFit="contain" />}
-                </TilePanel>
-              ))}
-              <View style={styles.sparesTimes}><Text style={styles.sparesTimesText}>x{cost}</Text></View>
+          <Text style={styles.sparesTitle} accessibilityRole="header">Spares are extra copies</Text>
+          {spare && (
+            <View style={styles.sparesRow} accessible accessibilityLabel={`${spare.spares} extra ${spare.name}`}>
+              <View style={styles.sparesStack}>
+                {[2, 1, 0].map(offset => (
+                  <TilePanel key={offset} rarity={spare.rarity} found
+                    style={[styles.sparesTile, { position: offset ? 'absolute' : 'relative', left: offset * 6, top: -offset * 6 }]}>
+                    <Image source={itemArt(spare)} style={styles.sparesArt} contentFit="contain" />
+                  </TilePanel>
+                ))}
+                <View style={styles.sparesTimes}><Text style={styles.sparesTimesText}>+{spare.spares}</Text></View>
+              </View>
+              <Text style={styles.sparesName} numberOfLines={2}>{spare.name}{'\n'}{spare.spares} extra</Text>
             </View>
-            <GameIcon name="swap" size={44} />
-            <TilePanel rarity={missing?.rarity ?? 2} found style={styles.sparesTile}>
-              {missing && <Image source={itemArt(missing)} style={styles.sparesArt} contentFit="contain" />}
-              <View style={styles.sparesNew}><GameIcon name="new" size={30} /></View>
-            </TilePanel>
+          )}
+          {spare && onShare && <Text style={styles.sparesBody}>Share one with a friend who still needs it!</Text>}
+          <View style={styles.sparesMap}>
+            <GameIcon name="map" size={30} />
+            <Text style={styles.sparesMapText}>New finds only come from the map</Text>
           </View>
-          <GameButton label="Got it" icon="check" onPress={onClose} style={{ marginTop: 16 }} />
+          {spare && onShare && (
+            <GameButton label="Share a spare" icon="heart" variant="secondary" onPress={() => onShare(spare)} fullWidth style={{ marginTop: 14 }} />
+          )}
+          <GameButton label="Got it" icon="check" onPress={onClose} style={{ marginTop: 12 }} />
         </View>
       </View>
     </Modal>
@@ -775,7 +756,10 @@ const styles = StyleSheet.create({
   sparesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
   sparesTile: { width: 70, height: 70, justifyContent: 'center' },
   sparesArt: { width: 52, height: 52 },
-  sparesNew: { position: 'absolute', bottom: 0, left: 0 },
+  sparesBody: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.white, textAlign: 'center', marginTop: 14 },
+  sparesName: { fontFamily: 'Shark', fontSize: 17, lineHeight: 21, color: BRAND.white, flexShrink: 1, marginLeft: 6 },
+  sparesMap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  sparesMapText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, flexShrink: 1 },
   sparesStack: { width: 84, height: 84, justifyContent: 'flex-end' },
   sparesTimes: {
     position: 'absolute', right: -6, bottom: -6, minWidth: 40, height: 30, paddingHorizontal: 6, borderRadius: 15,

@@ -378,9 +378,6 @@ export default function PrepItemRedeemModal({
   const starter = setProgress?.starter_milestone;
   const rewardReady = !!(starter?.is_unlocked && !starter.rewards_claimed)
     || !!(setProgress?.is_complete && !setProgress.rewards_claimed);
-  const spareReady = !pickupOutcome?.is_new_variant && !pickupOutcome?.replayed
-    && !setProgress?.is_complete && !!setProgress?.exchange_cost
-    && (setProgress?.spare_count ?? 0) >= setProgress.exchange_cost;
   const progressLabel = pickupOutcome?.replayed
     ? 'PICKUP CONFIRMED'
     : pickupOutcome?.is_new_variant
@@ -809,25 +806,15 @@ export default function PrepItemRedeemModal({
                               ? 'FULL SET REWARD READY!' : 'TRIP PREP REWARD READY!'}
                           </Text>
                         )}
-                        {!pickupOutcome?.is_new_variant && !pickupOutcome?.replayed
-                          && setProgress.spare_count != null && !!setProgress.exchange_cost && (
-                          <Text style={{ fontFamily: 'Knockout', color: '#FFE078', fontSize: 15,
-                            textAlign: 'center', marginTop: 6 }}>
-                            {spareReady ? 'SPARE EXCHANGE READY!'
-                              : `${setProgress.spare_count}/${setProgress.exchange_cost} spares toward a missing find`}
-                          </Text>
-                        )}
                         {onViewSet && (
                           <Pressable accessibilityRole="button"
-                            accessibilityLabel={rewardReady ? 'Open set book to claim reward'
-                              : spareReady ? 'Open set book to exchange spares' : 'Open set book'}
+                            accessibilityLabel={rewardReady ? 'Open set book to claim reward' : 'Open set book'}
                             onPress={handleViewSet}
                             style={{ alignSelf: 'center', marginTop: 8, paddingHorizontal: 12,
                               paddingVertical: 5, borderRadius: 8, backgroundColor: '#FFC842',
                               borderWidth: 2, borderColor: '#5A3307' }}>
                             <Text style={{ fontFamily: 'Shark', color: '#163C5C', fontSize: 16 }}>
-                              {rewardReady ? 'CLAIM IN SET BOOK ›'
-                                : spareReady ? 'EXCHANGE IN SET BOOK ›' : 'VIEW SET BOOK ›'}
+                              {rewardReady ? 'CLAIM IN SET BOOK ›' : 'VIEW SET BOOK ›'}
                             </Text>
                           </Pressable>
                         )}

@@ -151,12 +151,8 @@ test('items: found in color with a caught count, missing as silhouettes with a r
   assert.equal(items[1].found, false);
   assert.equal(items[1].exchangeCost, 12);
   assert.equal(items[1].canExchange, false);
-  assert.deepEqual(plain(dex.swapProgress(items[1], 5)), { have: 5, need: 12, ready: false });
   assert.equal(items[2].spawnHint, 'Rainy days only.', 'an item gate wins');
   assert.equal(items[1].spawnHint, 'After sunset', 'then the set gate');
-  assert.equal(items[2].canExchange, true);
-  assert.deepEqual(plain(dex.swapProgress(items[2], 5)), { have: 4, need: 4, ready: true });
-  assert.equal(dex.swapProgress(items[0], 99).ready, false, 'a found item is never a swap');
   assert.equal(dex.caughtLine(items[3]), 'Swapped in. Catch one on the map too!');
   assert.equal(dex.caughtLine(items[1]), 'Not caught yet');
   assert.equal(dex.caughtLine(items[0]), 'Caught 3 times');
@@ -236,7 +232,7 @@ test('the book screen: Alex chrome, icon rewards, 4-column FlashList, stable til
   for (const cue of ["'fx.reward'", "'ui.select'", "'ui.tap'", "'fx.reveal'"]) assert.ok(screen.includes(cue), cue);
   assert.match(screen, /Haptics\.notificationAsync/);
   for (const call of ['claimSetRewards(set.slug)', 'claimStarterRewards(set.slug, itemId)', 'claimSetMilestone(set.slug, reward.claim.key, itemId)',
-    'exchangeSetDuplicates(set.slug, target)', 'focusPrepItemSet(set.slug)', 'equipSetTitle(set.slug']) assert.ok(screen.includes(call), call);
+    'focusPrepItemSet(set.slug)', 'equipSetTitle(set.slug']) assert.ok(screen.includes(call), call);
   const api = read('src/api/endpoints/me/homeHuntDex.ts');
   assert.match(api, /'\/me\/home-hunt\/dex'/);
   assert.match(api, /status === 404/);
@@ -286,7 +282,7 @@ test('rarity: the app-wide design-system palette, navy ink on light chips, gems 
   assert.match(tile, /item\.rarity >= 5 && item\.found/, 'Legendary shimmer');
   assert.match(tile, /item\.caught > 1 &&/, 'count badge only from two');
   assert.match(tile, /\{item\.name\}<\/Text>/, 'names on tiles');
-  assert.match(tile, /swapReady &&/, 'swap badge');
+  assert.doesNotMatch(tile, /swapReady|name="swap"/, 'no swap badge: swaps are retired');
 });
 
 test('VoiceOver and Reduce Motion: modals expose every control, reveal guards early taps', () => {
@@ -342,13 +338,10 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
   const parts = read('src/screens/SetCollection/DexParts.tsx');
   const look = read('src/screens/SetCollection/dexLook.tsx');
-  // Swap: a goal meter, the real price in the explainer, a trade icon.
-  const goal = plain(dex.swapGoal([{ found: true, exchangeCost: 4 }, { found: false, exchangeCost: 8 }, { found: false, exchangeCost: 12 }], 5));
-  assert.deepEqual(goal, { cost: 8, have: 5, extra: 0, ready: false, anyMissing: true });
-  assert.equal(dex.swapGoal([{ found: false, exchangeCost: 8 }], 14).extra, 6);
-  assert.match(screen, /cost=\{goal\.cost\}/);
-  assert.match(screen, /x\{cost\}/, 'the explainer shows the real price');
-  for (const src of [tile, card, parts]) assert.doesNotMatch(src, /name="retry"/, 'trade icon, never refresh');
+  // Spares: a plain count, and the sheet shows the real stack ("xN"), never a price.
+  assert.equal(dex.swapGoal, undefined);
+  assert.match(screen, /\+\{spare\.spares\}/, "the sheet shows the real spare count, never the tile's xN");
+  for (const src of [tile, card, parts]) assert.doesNotMatch(src, /name="retry"/, 'never a refresh icon');
   // Recycled FlashList cells drop per-item state.
   assert.match(tile, /setArtFailed\(false\);\s*setFlipping\(false\);/);
   assert.match(tile, /if \(timer\) clearTimeout\(timer\)/);
@@ -360,8 +353,9 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.match(screen, /reuse = light && dex != null/);
   // The item card scrolls and scales on small phones.
   assert.match(card, /<ScrollView style=\{\{ maxHeight: height \* 0\.78 \}\}/);
-  // Swap flips in place with a stamp.
-  assert.match(card, /Swapped!/);
+  // Swaps are retired: no flip-in stamp, but items swapped in earlier keep their chip.
+  assert.doesNotMatch(card, /Swapped!/);
+  assert.match(card, /'Swapped in'/);
   // One unclipped gem: each diamond in its own box.
   assert.match(look, /const box = Math\.ceil\(\(gem \+ 4\) \* 1\.45\)/);
   assert.match(tile, /count: \{\s*position: 'absolute', bottom: 5, right: 4/, 'the count badge never covers the gems');
@@ -426,9 +420,8 @@ test('round 4: instant book, menu above the map, swap slot, grades, shimmer, tit
   assert.match(menu, /rgba\(5,52,110,0\.86\)/);
   assert.match(menu, /intensity: 32 \* scrim\.value/);
   assert.doesNotMatch(menu, /isRight|row-reverse/, 'the unused right-side layout is gone');
-  // The swap slot keeps its height; the burst draws behind the art.
-  assert.match(card, /swappedSlot/);
-  assert.match(card, /height: 58/);
+  // The burst draws behind the art.
+  assert.doesNotMatch(card, /swappedSlot/);
   assert.ok(card.indexOf('<StarBurst') < card.indexOf('{photo ? ('), 'burst behind the art');
   // Done panel: a white title plaque, a navy track.
   assert.match(parts, /styles\.titleButton/);
@@ -473,7 +466,6 @@ test('round 6: plurals, collect hold, no empty page, straight push, claim answer
   assert.doesNotMatch(parts, /\{spares\} spares/);
   assert.match(parts, /suffix=\{spares === 1 \? ' spare' : ' spares'\}/);
   assert.match(parts, /function AnimatedCount/);
-  assert.match(read('src/screens/SetCollection/DexItemCard.tsx'), /spareWord\(cost, 'spare', 'spares'\)/);
   const reveal = read('src/screens/SetCollection/DexReveal.tsx');
   assert.match(reveal, /function onCountsDone/);
   assert.match(reveal, /later\(closeWithFade, 470\)/, 'pop plus a 350 ms hold after the totals land');
@@ -605,4 +597,31 @@ test('round 7b: a full-set claim on an authored set shows WEAR IT for its wearab
   assert.equal(legacy.wear, null, 'a legacy claim grants no item: no card');
   const authored = model.claimOutcome({ rewards_granted: { item: { id: 49, name: 'Churro Blue T-Shirt', item_type_id: 4 } } });
   assert.deepEqual(plain(authored.wear), { itemId: 49, itemTypeId: 4, name: 'Churro Blue T-Shirt' });
+});
+
+test('swaps are retired: rare finds are earned on the map, spares stay a count, swapped-in items stay owned', () => {
+  const screen = read('src/screens/SetCollectionScreen.tsx');
+  const card = read('src/screens/SetCollection/DexItemCard.tsx');
+  const tile = read('src/screens/SetCollection/DexTile.tsx');
+  const parts = read('src/screens/SetCollection/DexParts.tsx');
+  const modal = read('src/components/PrepItemRedeemModal.tsx');
+  const api = read('src/api/endpoints/me/prep-item-sets/index.ts');
+  // No client path to the retired endpoint, and no swap button, plate, meter or badge.
+  assert.doesNotMatch(api, /\/exchange`/);
+  assert.doesNotMatch(screen, /exchangeSetDuplicates|onExchange|swapGoal|swapProgress/);
+  assert.equal(dex.swapProgress, undefined);
+  for (const src of [card, tile, parts]) {
+    assert.doesNotMatch(src, /Swap!|Swap ready|spares to swap|swapReady|SwapReady|name="swap"/);
+  }
+  // The pickup card never sends a kid toward a spare exchange.
+  assert.doesNotMatch(modal, /EXCHANGE|spares toward|exchange_cost/);
+  // Spares: a count chip only when there are any, and the sheet explains sharing, not trading.
+  assert.match(screen, /\{spares > 0 && <SparesMeter spares=\{spares\}/);
+  assert.match(screen, /Spares are extra copies/);
+  assert.doesNotMatch(screen, /swap for new finds/i);
+  // Items swapped in while swaps were live keep the label.
+  assert.equal(dex.caughtLine({ found: true, foundInWorld: false, caught: 1 }), 'Swapped in. Catch one on the map too!');
+  assert.match(card, /item\.foundInWorld === false \? 'Swapped in'/);
+  // A missing find gets one big way to the map in the slot the Swap button used.
+  assert.match(card, /!item\.found && \([\s\S]{0,40}<GameButton label="Find it on the map" icon="map" onPress=\{onFind\}/);
 });
