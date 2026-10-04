@@ -65,8 +65,9 @@ export function seeded(seed: number, salt = 0): number {
 
 /**
  * Which ride this find takes. With only a few rides built, variety wins over theme:
- * - the set's ride gets x2 (it used to be x4, which made it every other catch)
- * - the last ride never repeats; the one before it gets x0.5
+ * - the set's ride gets x1.5 (it used to be x4, which made it every other catch)
+ * - the last ride never repeats; the one before it gets x1.2, so a kid sometimes rides back instead of
+ *   always continuing the cycle (50 to 65% of picks continue it, asserted in the test)
  * - a ride missing from the last 3 catches is due and is picked outright, so every ride shows up within
  *   any 4 catches in a row
  * - Legendary leans to the wildest rides (x1.5), never so much it breaks the rules above
@@ -95,10 +96,10 @@ export function pickRide(opts: {
   const themedReady = themed ? (ready.includes(themed) ? themed : RIDES[themed].fallback) : null;
   const weights = ready.map(kind => {
     let w = 1;
-    if (kind === themedReady) w *= 2;
+    if (kind === themedReady) w *= 1.5;
     if (tier >= 5) w *= RIDES[kind].thrill === 3 ? 1.5 : RIDES[kind].thrill === 1 ? 0.75 : 1;
     if (kind === last) w = 0;
-    else if (kind === beforeLast) w *= 0.5;
+    else if (kind === beforeLast) w *= 1.2;
     return w;
   });
   const total = weights.reduce((sum, w) => sum + w, 0);

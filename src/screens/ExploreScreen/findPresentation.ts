@@ -70,10 +70,13 @@ export function findLook(rarity: number | null | undefined, inRange: boolean): F
   };
 }
 
-/** "Golden Crisp Churro · walk closer · 70 m": one line, the find's name first. */
+/**
+ * "70 m away · Golden Crisp Churro": the distance first, so a long name is what truncates (the line is one
+ * line, cut at the tail). "Walk closer · name" while the distance is unknown.
+ */
 export function peekLine(name: string | null | undefined, distance: number | null): string {
   const far = distance != null && Number.isFinite(distance) ? formatFindDistance(distance) : '';
-  return [name?.trim() || null, 'walk closer', far || null].filter(Boolean).join(' · ');
+  return [far ? `${far} away` : 'Walk closer', name?.trim() || null].filter(Boolean).join(' · ');
 }
 
 /** "Walk closer · 65 m", or just "Walk closer" while the distance is unknown. */

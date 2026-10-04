@@ -28,3 +28,30 @@ export const FLUME_SHAPE: Shape = [
   [0.66, 0.82], [0.74, 0.86], [0.88, 0.87], [1.3, 0.87],
 ];
 export const FLUME_MAX_PITCH = (44 * Math.PI) / 180;
+
+/**
+ * Seeded track profiles: the part of each track after the camera moment varies per find, so nine seeds do not
+ * share one silhouette. The station, lift, drop and camera moment never change (fair timing on every profile).
+ */
+export const COASTER_RUNOUTS: readonly Shape[] = [
+  [[0.6, 0.78], [0.76, 0.64], [0.92, 0.72], [1.25, 0.72]],
+  [[0.62, 0.8], [0.71, 0.62], [0.8, 0.78], [0.9, 0.62], [1.0, 0.74], [1.25, 0.72]],
+  [[0.64, 0.84], [0.82, 0.8], [0.96, 0.6], [1.25, 0.5]],
+];
+export const FLUME_TAILS: readonly Shape[] = [
+  [[0.88, 0.87], [1.3, 0.87]],
+  [[0.86, 0.87], [0.97, 0.83], [1.08, 0.88], [1.3, 0.86]],
+  [[0.86, 0.88], [0.98, 0.84], [1.12, 0.76], [1.3, 0.72]],
+];
+
+/** The coaster shape for a track with run-out profile `profile` (points after the camera moment replaced). */
+export function coasterShape(track: RideTrack, profile: number): Shape {
+  const base = COASTER_SHAPES[track];
+  const cut = COASTER_FRAME_AT[track] + 0.06;
+  return [...base.filter(([x]) => x <= cut), ...COASTER_RUNOUTS[((profile % 3) + 3) % 3]];
+}
+
+/** The flume shape with tail profile `profile` (after the pool). */
+export function flumeShape(profile: number): Shape {
+  return [...FLUME_SHAPE.filter(([x]) => x <= 0.75), ...FLUME_TAILS[((profile % 3) + 3) % 3]];
+}

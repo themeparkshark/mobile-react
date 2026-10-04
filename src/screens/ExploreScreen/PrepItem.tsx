@@ -271,8 +271,10 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         ? <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>
         : <View style={[styles.newDot, chromeless && styles.chromeOff]} />)}
       {inRange && showFinger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
-      {!inRange && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
-      <View style={[styles.timePill, (chromeless || !tag) && styles.chromeOff]}>
+      {!inRange && !far && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
+      {/* Hangs right under its own art (and badge), so it never reads as the next find's. */}
+      <View style={[styles.timePill, inRange ? styles.tagNear : styles.tagFar, (chromeless || !tag) && styles.chromeOff]}>
+        {far ? <Image source={FOOTSTEPS} style={styles.tagSteps} contentFit="contain" transition={0} /> : null}
         {leavingSoon && <GameIcon name="timer" size={12} />}<Text style={styles.timeText}>{tag}</Text>
       </View>
     </View>
@@ -323,7 +325,11 @@ const styles = StyleSheet.create({
   // Under the find's lower-left corner: clear of the camera badge (bottom right) and the timer pill.
   fingerBelow: { top: B / 2 + A / 2 - 20, left: B / 2 - A / 2 - 30 },
   footsteps: { position: 'absolute', bottom: 18, width: 18, height: 22, opacity: 0.9 },
-  timePill: { position: 'absolute', bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
+  // Far art is drawn at 0.6x, so its tag sits higher; near, the tag clears the camera badge.
+  tagFar: { top: B / 2 + A * 0.3 + 4 },
+  tagNear: { top: B / 2 + A / 2 + 7 },
+  tagSteps: { width: 10, height: 12 },
+  timePill: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(5,52,110,0.88)',
     borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
   timeText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 13 },
 });

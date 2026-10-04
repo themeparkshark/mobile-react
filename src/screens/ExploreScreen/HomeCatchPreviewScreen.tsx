@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, LogBox, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Canvas, Group, Picture, Skia, createPicture } from '@shopify/react-native-skia';
+import { Canvas, Group, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
 import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Map, { type MapProjector } from '../../components/Map';
 import { LocationContext } from '../../context/LocationProvider';
@@ -15,9 +15,9 @@ import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
 import type { FingerSide } from './PrepItem';
 import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
-import HomeHuntChip, { type HuntChipMessage } from './HomeHuntChip';
+import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { bannerCovers } from './findEdges';
+import { bannerCovers, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import { peekLine, walkCloserLine } from './findPresentation';
 import HomeHudChips from './HomeHudChips';
 import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
@@ -101,6 +101,9 @@ function SeedSheet({ kind }: { kind: RideKind }) {
       stage.emissive?.(canvas, state, stage.data, art);
       const cam = stage.cam;
       const paint = Skia.Paint();
+      // The photo crop, outlined so the sheet shows what the print frames.
+      const outline = Skia.Paint(); outline.setStyle(PaintStyle.Stroke); outline.setStrokeWidth(4); outline.setColor(Skia.Color('#ff3b6b'));
+      canvas.drawRect(Skia.XYWHRect(stage.crop.x, stage.crop.y, stage.crop.w, stage.crop.h), outline);
       if (cam.beam) { paint.setColor(Skia.Color('#fff5e1')); canvas.drawRect(Skia.XYWHRect(cam.beam.x, cam.beam.y, cam.beam.w, cam.beam.h), paint); }
       if (art.cameraPole) canvas.drawImageRect(art.cameraPole, Skia.XYWHRect(0, 0, art.cameraPole.width(), art.cameraPole.height()), Skia.XYWHRect(cam.pole.x, cam.pole.y, cam.pole.w, cam.pole.h), paint);
       if (art.camera) {
@@ -183,6 +186,11 @@ function HomeCatchPreview() {
       }
     }
     setEdges(next);
+    const shark = await toLocal(origin.latitude, origin.longitude);
+    // The shark is map content, and its idle pose drifts between captures: the budget tool skips its box.
+    if (shark) { chromeRect.current = { ...chromeRect.current, shark: sharkFootprint(shark) }; writeChromeRect(); }
+    setFootprints([...points.current.entries()].map(([pivot, p]) => findFootprint(p, pivot === items[nearestInRange]?.pivot_id))
+      .concat(shark ? [sharkFootprint(shark)] : []));
     // Same finger rule as the app: away from the shark, under the find when it sits below the shark.
     const nextSides: Record<number, FingerSide> = {};
     points.current.forEach((point, pivot) => {
@@ -225,13 +233,26 @@ function HomeCatchPreview() {
     if (!fixture) return;
     if (!fixture.inRange) {
       const distance = Math.hypot(fixture.north, fixture.east);
-      setChip({ key: `far-${item.pivot_id}-${Date.now()}`, text: peekLine(item.name, distance), ttlMs: 4000 });
+      setChip({ key: `far-${item.pivot_id}-${Date.now()}`, text: peekLine(item.name, distance), ttlMs: 5000 });
       return;
     }
     void state.startCatch(item);
   }, []);
   const onEdgePress = useCallback((entry: EdgeFind) => setChip({ key: `e-${Date.now()}`, text: walkCloserLine(entry.distance) }), []);
   const [step, setStep] = useState(0);
+  const chromeRect = useRef<Record<string, unknown>>({});
+  const writeChromeRect = () => {
+    if (STILL) void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}map-chrome.json`, JSON.stringify(chromeRect.current)).catch(() => undefined);
+  };
+  // As in the app: the chip row and the peek keep clear of finds; edge tokens centre below the row.
+  const [footprints, setFootprints] = useState<readonly Rect[]>([]);
+  const [hudWidth, setHudWidth] = useState(0);
+  const obstacles = footprints.concat(edges.map(edge => {
+    const at = edgeArrowPlacement(edge.point, size, { top: 12 + 30 + 8 + 24, bottom: 190, side: 30 });
+    return { x: at.x - 28, y: at.y - 28, w: 56, h: 56 };
+  }));
+  const hudTop = hudWidth > 0 ? hudRowTop(obstacles, 12, hudWidth) : 12;
+  const slotBottom = chip && size.width > 0 ? peekBottom(obstacles, size, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
   // 'still-peek': a far find tapped, its one-line peek held for the capture.
   useEffect(() => {
     if (EXP !== 'still-peek') return;
@@ -303,11 +324,11 @@ function HomeCatchPreview() {
         setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height });
         container.current?.measureInWindow((x, y, w, h) => {
           // The map area for the chrome budget: this view (the status HUD is above it, the tab bar below).
-          if (STILL) void FileSystem.writeAsStringAsync(`${FileSystem.documentDirectory}map-chrome.json`,
-            JSON.stringify({ x, y, w, h, screenW: Dimensions.get("window").width })).catch(() => undefined);
+          chromeRect.current = { ...chromeRect.current, x, y, w, h, screenW: Dimensions.get('window').width };
+          writeChromeRect();
         });
       }}>
-      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientFrozen={catchOpen || STILL} chromeHidden={catchOpen || BARE}
+      <Map controlsTop={12} projector={projector} snapshotter={snapshotter} ambientFrozen={catchOpen || STILL} chromeHidden={catchOpen || BARE} onUserPan={() => setChip(null)}
         onZoomChange={() => {
           void measure();
           if (!mapStill) setTimeout(() => void snapshotter.current?.().then(uri => uri && setMapStill(uri)), 600);
@@ -316,21 +337,21 @@ function HomeCatchPreview() {
           <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
             animated={!STILL && index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
-            chromeless={cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
+            chromeless={BARE || cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
       <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
-        <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} />
+        <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} insetTop={12 + 30 + 8 + 24} />
       </Animated.View>
-      {!request && <Animated.View style={[styles.bottom, chromeFade, BARE && styles.hidden]} pointerEvents="box-none">
+      {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, chromeFade, BARE && styles.hidden]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
       </Animated.View>}
       <Animated.View style={[StyleSheet.absoluteFill, chromeFade, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <QuickAccessMenu position="left" />
         <RadialStatsMenu />
         {/* As in the app: the top HUD row (free-Ticket countdown, park story). */}
-        <HomeHudChips top={12} findsUntilTicket={2} onTicketPress={line => setChip({ key: `t-${Date.now()}`, text: line, ttlMs: 4000 })}
+        <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={2} onTicketPress={line => setChip({ key: `t-${Date.now()}`, text: line, ttlMs: 5000 })}
           parkStory={{ title: 'Park story', points: 3, goal: 10, onPress: () => undefined }} />
       </Animated.View>
       <HomeCatchMoment ref={catchRef} request={request} stageItem={rideSpec(stageItem.rarity).style === 'ride_photo' ? stageItem : null}

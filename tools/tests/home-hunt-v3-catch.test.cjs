@@ -389,9 +389,9 @@ test('round 6 variety: themed x2, no repeats, the one before at half, every ride
   assert.deepEqual(plain(ready), ['coaster', 'flume', 'teacups']);
   // A fresh player still leans to the set's ride (fallbacks: Parade Day to teacups, Spooky Snacks to the coaster).
   const count = (opts, kind) => Array.from({ length: 2000 }, (_, seed) => rides.pickRide({ ...opts, seed })).filter(k => k === kind).length;
-  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 850);
-  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 850);
-  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 850);
+  assert.ok(count({ setName: 'Sweet Treats', rarity: 3 }, 'teacups') > 780);
+  assert.ok(count({ setName: 'Parade Day', rarity: 3 }, 'teacups') > 780);
+  assert.ok(count({ setName: 'Spooky Snacks', rarity: 3 }, 'coaster') > 780);
   for (let seed = 0; seed < 200; seed++) {
     for (const last of ready) assert.notEqual(rides.pickRide({ setName: 'Sweet Treats', rarity: 3, seed, recent: [last] }), last);
   }
@@ -399,15 +399,18 @@ test('round 6 variety: themed x2, no repeats, the one before at half, every ride
   // 10,000 seeded catches per set and rarity, feeding the picker its own history.
   for (const set of ['Snack Stand', 'Sweet Treats', 'Ride Day Gear', 'Spooky Snacks', 'Parade Day', 'Night Glow', 'Churro Cart', 'Souvenir Shop', null]) {
     for (const rarity of [2, 3, 4, 5]) {
-      const recent = []; const counts = {}; const lastSeen = {};
+      const recent = []; const counts = {}; const lastSeen = {}; let cycle = 0, pairs = 0;
       for (let i = 0; i < 10000; i++) {
         const k = rides.pickRide({ setName: set, rarity, seed: i * 7919 + 13, recent });
+        if (recent.length >= 2) { pairs++; if (k !== recent[0] && k !== recent[1]) cycle++; }
         counts[k] = (counts[k] || 0) + 1;
         recent.unshift(k); recent.length = Math.min(recent.length, 4);
         lastSeen[k] = i;
         if (i >= 3) for (const r of ready) assert.ok(i - (lastSeen[r] ?? -1) <= 3, `${set} ${rarity}: ${r} missing from 4 catches in a row`);
       }
       for (const r of ready) assert.ok(counts[r] / 10000 <= 0.4, `${set} ${rarity}: ${r} at ${counts[r] / 100}%`);
+      // Surprise: not a strict round robin. 50 to 65% of picks continue the cycle.
+      assert.ok(cycle / pairs >= 0.5 && cycle / pairs <= 0.65, `${set} ${rarity}: cycle continuation ${(cycle / pairs * 100).toFixed(1)}%`);
     }
   }
 });
@@ -542,7 +545,8 @@ test('round 5: How to Play hand-off glides to the nearest find and pulses it onc
 test('round 5: kid clarity: hand points down at the disc, miss chip shows the ride vehicle', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.doesNotMatch(src, /rotate: '-60deg'/);
-  assert.match(src, /handArt: \{ width: 36, height: 46 \}/);
+  assert.match(src, /handArt: \{ width: 44, height: 40 \}/);
+  assert.match(src, /fin-pointer\.webp/, "the hint pointer is Alex's own fins");
   assert.match(src, /VEHICLE_ICON\[stage\.kind\]/);
   assert.match(src, /setPlateLeft\(/, 'the plate sits opposite the vehicle');
 });
@@ -552,7 +556,7 @@ test('round 5: floating cards leave while the quick menu is open (opacity 0, no 
   assert.match(fade, /useQuickMenuOpen/);
   assert.match(fade, /withTiming\(menuOpen \? 0 : 1, \{ duration: reduced \? 0 : 150 \}\)/);
   assert.match(fade, /menuOpen \? 'none' : 'box-none'/);
-  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /style=\{\[styles\.bottomSlot, \{ bottom: slotBottom \}, cardFade\.style\]\} pointerEvents=\{cardFade\.pointerEvents\}/);
   const preview = read('src/screens/ExploreScreen/HomeHuntPreviewScreen.tsx');
   assert.match(preview, /cardFade\.style, BARE && \{ opacity: 0 \}\]\} pointerEvents=\{cardFade\.pointerEvents\}>\s*<HomeFocusCard/);
 });
@@ -618,4 +622,22 @@ test('ship fixes: the real print landing is logged (D2), stamp row is honest', (
   assert.match(moment, /New ride!<\/Text>\s*\{newRide\.stamps\.filter\(stamp => stamp\.state !== 'soon'\)/, 'New ride!, then the 3 stamps');
   assert.doesNotMatch(moment, /name="lock"/, 'no locks in the row');
   assert.doesNotMatch(moment, /rideChip: \{[^}]*backgroundColor: '#ffcf3b'/, 'no yellow progress-bar fill');
+});
+
+test('post-ship: every seeded track profile keeps the car on its rail and the timed part unchanged', () => {
+  const shapes = loadTs('src/screens/ExploreScreen/ridePhoto/rides/shapes.ts');
+  const W = 402, H = 680;
+  for (const t of ['family', 'hill', 'dark', 'launch']) {
+    const timed = plain(shapes.COASTER_SHAPES[t]).filter(([x]) => x <= shapes.COASTER_FRAME_AT[t] + 0.06);
+    for (let p = 0; p < 3; p++) {
+      const shape = plain(shapes.coasterShape(t, p));
+      assert.deepEqual(shape.slice(0, timed.length), timed, 'station, lift, drop and the camera moment never change');
+      const lut = track.buildLut(shape, W, { top: Math.max(130, H * 0.3), height: H * 0.6 }, 0.47 * W, 160, shapes.COASTER_MAX_PITCH);
+      assert.ok(lut.clampError < (6 * Math.PI) / 180, `coaster ${t} profile ${p}`);
+    }
+  }
+  for (let p = 0; p < 3; p++) {
+    const lut = track.buildLut(shapes.flumeShape(p), W, { top: 160, height: H * 0.66 }, 0.73 * W, 200, shapes.FLUME_MAX_PITCH);
+    assert.ok(lut.clampError < (6 * Math.PI) / 180, `flume profile ${p}`);
+  }
 });

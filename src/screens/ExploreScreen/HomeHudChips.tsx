@@ -1,10 +1,13 @@
 import { memo } from 'react';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BRAND, GameIcon } from '../../ui';
+import { BRAND } from '../../ui';
 import { ticketLine } from './homeFindCopy';
 
+const HIT = { top: 8, bottom: 8, left: 4, right: 4 };
 const TICKET = require('../../../assets/images/ticket-icon.png');
+/** Alex's paper-and-pencil (ui_home slice47): a story, not a currency. */
+const STORY = require('../../../assets/images/home/story-chip.webp');
 
 export interface ParkStoryChip {
   readonly title: string;
@@ -15,10 +18,12 @@ export interface ParkStoryChip {
 
 /**
  * The home map's top HUD row: small chips only, never a card. The free-Ticket countdown (a ticket and
- * three pips; tap for the line) and the park story (a sparkle and n/goal; tap opens the story).
+ * three pips; tap for the line) and the park story (a paper-and-pencil and n/goal; tap opens the story).
  */
-function HomeHudChips({ top, findsUntilTicket, ticketsCapped = false, onTicketPress, parkStory = null }: {
+function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, onTicketPress, parkStory = null }: {
   readonly top: number;
+  /** The row's width, so the map can keep finds out from under it. */
+  readonly onWidth?: (width: number) => void;
   readonly findsUntilTicket: number | null | undefined;
   readonly ticketsCapped?: boolean;
   readonly onTicketPress: (line: string) => void;
@@ -28,9 +33,9 @@ function HomeHudChips({ top, findsUntilTicket, ticketsCapped = false, onTicketPr
   const remaining = findsUntilTicket == null ? 3 : Math.max(1, Math.min(3, Math.round(findsUntilTicket)));
   if (!line && !parkStory) return null;
   return (
-    <View style={[styles.row, { top }]} pointerEvents="box-none">
+    <View style={[styles.row, { top }]} pointerEvents="box-none" onLayout={event => onWidth?.(Math.round(event.nativeEvent.layout.width))}>
       {line && (
-        <Pressable accessibilityRole="button" accessibilityLabel={line} onPress={() => onTicketPress(line)} hitSlop={8}
+        <Pressable accessibilityRole="button" accessibilityLabel={line} onPress={() => onTicketPress(line)} hitSlop={HIT}
           style={styles.chip}>
           <Image source={TICKET} style={styles.ticket} contentFit="contain" />
           <View style={styles.pips}>
@@ -39,9 +44,9 @@ function HomeHudChips({ top, findsUntilTicket, ticketsCapped = false, onTicketPr
         </Pressable>
       )}
       {parkStory && (
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={parkStory.onPress} style={styles.chip}
+        <Pressable accessibilityRole="button" hitSlop={HIT} onPress={parkStory.onPress} style={styles.chip}
           accessibilityLabel={`Park story: ${parkStory.title}. ${parkStory.points} of ${parkStory.goal} signals. Open story.`}>
-          <GameIcon name="sparkle" size={18} />
+          <Image source={STORY} style={styles.story} contentFit="contain" />
           <Text style={styles.text}>{parkStory.points}/{parkStory.goal}</Text>
         </Pressable>
       )}
@@ -52,10 +57,12 @@ function HomeHudChips({ top, findsUntilTicket, ticketsCapped = false, onTicketPr
 export default memo(HomeHudChips);
 
 const styles = StyleSheet.create({
-  row: { position: 'absolute', left: 12, zIndex: 20, flexDirection: 'row', gap: 6 },
+  // 10 pt apart so the two chips' hit slops (8 pt each) never overlap.
+  row: { position: 'absolute', left: 12, zIndex: 20, flexDirection: 'row', gap: 10 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 30, paddingLeft: 5, paddingRight: 9, borderRadius: 15,
     backgroundColor: 'rgba(5,52,110,0.9)', borderWidth: 2, borderColor: BRAND.white },
   ticket: { width: 24, height: 20 },
+  story: { width: 22, height: 20 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.35)' },
   pipOn: { backgroundColor: BRAND.gold },

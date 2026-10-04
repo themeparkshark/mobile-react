@@ -2,7 +2,7 @@ import { PaintStyle, Skia, StrokeCap, StrokeJoin, createPicture, type SkCanvas }
 import { rideProgress, type RideTrack } from '../../ridePhoto';
 import { buildLut, sampleTrack, tAtProgress, uAtX, type TrackLut } from '../rideTrack';
 import { drawHedge, drawSeason, drawSky, paintExtras, drawFarProps } from './backdrop';
-import { COASTER_FRAME_AT, COASTER_MAX_PITCH, COASTER_SHAPES, COASTER_STATION_X } from './shapes';
+import { COASTER_FRAME_AT, COASTER_MAX_PITCH, COASTER_STATION_X, coasterShape } from './shapes';
 import {
   cameraRig, drawBulb, drawImg, drawRider, gradeMatrix, photoCrop, spritePaint,
   type BuildCtx, type PaintState, type RideData, type RideStage, type SceneArt,
@@ -22,7 +22,6 @@ export const SEAT = { x: 0.393, y: 0.5 };
 export const RAIL_AT = 0.842;
 
 // Shapes, frame positions and the pitch clamp live in shapes.ts (tested: no car ever sits off its rail).
-const SHAPES = COASTER_SHAPES;
 const FRAME_AT = COASTER_FRAME_AT;
 const STATION_X = COASTER_STATION_X;
 
@@ -38,7 +37,9 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
   const { width, height, top, spec, tier, variant, art } = ctx;
   const track: RideTrack = spec.track;
   const band = { top: Math.max(top + 70, height * 0.3), height: height * 0.6 };
-  const lut = buildLut(SHAPES[track], width, band, (FRAME_AT[track] + (variant.frameShift - 0.6) * 0.04) * width, 160, COASTER_MAX_PITCH);
+  // A seeded run-out profile after the camera moment (the timed part never changes).
+  const profile = Math.floor(seeded(variant.seed, 71) * 3);
+  const lut = buildLut(coasterShape(track, profile), width, band, (FRAME_AT[track] + (variant.frameShift - 0.6) * 0.04) * width, 160, COASTER_MAX_PITCH);
   const progress = (t: number) => rideProgress(track, t);
   const uFrame = uAtX(lut, lut.frameX);
   const frameT = tAtProgress(progress, uFrame);
@@ -61,7 +62,7 @@ export function buildCoaster(ctx: BuildCtx): RideStage {
 
   const backdrop = createPicture((canvas: SkCanvas) => {
     drawSky(canvas, width, height, variant, art);
-    drawFarProps(canvas, crop, variant);
+    drawFarProps(canvas, crop, variant, lut, [cam, cam.pole, box]);
     drawLattice(canvas, lut, height, grade);
     const hedgeTop = drawHedge(canvas, width, height, variant, art);
     drawStation(canvas, station.x, station.y, car.w, height, grade);
