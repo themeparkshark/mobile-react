@@ -781,3 +781,12 @@ test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle sh
   assert.match(reveal, /onShow=\{onShown\}/);
   assert.match(reveal, /backgroundColor: REVEAL_NAVY/);
 });
+
+test('Reduce Motion: shop modals mount with no entering animation (a skipped one left the try-on invisible and blocking taps)', () => {
+  for (const file of ['src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/WishlistSheet.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx']) {
+    const code = src(file);
+    for (const m of code.matchAll(/entering=\{([^}]*)\}/g)) {
+      assert.match(m[1], /^still \? undefined :|^undefined$/, `${file}: ${m[1]}`);
+    }
+  }
+});

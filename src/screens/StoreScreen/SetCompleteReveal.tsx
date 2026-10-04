@@ -141,7 +141,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onDone} onShow={onShown} statusBarTranslucent>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
-      <Animated.View entering={FadeIn.duration(still ? 120 : 260)} style={styles.fill}>
+      <Animated.View entering={still ? undefined : FadeIn.duration(260)} style={styles.fill}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>

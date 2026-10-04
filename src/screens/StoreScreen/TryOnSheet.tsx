@@ -382,10 +382,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   return (
     <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Animated.View entering={FadeIn.duration(still ? 120 : 160)} style={styles.scrim}>
+        <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
-          <Animated.View entering={still ? FadeIn.duration(120) : SlideInDown.springify().damping(18).stiffness(180)}
+          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
             style={[styles.sheet, { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>
               <View>

@@ -48,9 +48,9 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
   const alerts = wishStore.alerts();
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View entering={FadeIn.duration(140)} style={styles.scrim}>
+      <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close wishlist" />
-        <Animated.View entering={still ? FadeIn.duration(120) : SlideInDown.springify().damping(18)}
+        <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18)}
           style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
           <View style={styles.head}>
             <WishHeart on size={24} />
