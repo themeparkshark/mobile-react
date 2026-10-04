@@ -213,7 +213,8 @@ test('final round: weird-report reason, server rules promise, unblock confirm, p
   assert.match(screen, /onLongPress=\{\(\) => onMenu\(comment\)\}/);
   assert.match(screen, /hitSlop=\{14\}/);
   const composer = read('src/screens/threads/Composer.tsx');
-  assert.match(composer, /const compactTopics = keyboard > 0/);
+  // Topics are gone (Dustin): nothing to fold while the keyboard is up.
+  assert.doesNotMatch(composer, /compactTopics/);
   assert.match(composer, /styles\.headerFade/);
 });
 
@@ -381,7 +382,6 @@ test('R7: Safe Chat is the default way to post and reply, built only from our ph
   assert.equal(model.categoryForTopic('rides'), 'rides');
   assert.equal(model.categoryForTopic('snacks'), 'food');
   assert.equal(model.categoryForTopic(null), 'cheers');
-  assert.match(composer, /const compactTopics = keyboard > 0 \|\| safeMode/);
 });
 
 test('R7: the shared Safe Chat phrases match the server copy', () => {
@@ -449,4 +449,19 @@ test('R11: disclosures reach the server (never blocked here) with the Childhelp 
   assert.match(composer, /\{!isCareHold\(held\) && <RewardBurst/);
   assert.match(composer, /\{freeTextBy === 'person' \? FREE_TEXT_LINE/);
   assert.match(read('src/screens/ThreadScreen.tsx'), /if \(!isCareHold\(created\.review\)\) \{\s*playSound\(SEND/);
+});
+
+test('Clean Social: shared clean background, no topic chips, badges or picker, More sheet runs actions after it hides', () => {
+  const bg = read('src/components/CleanScreenBackground.tsx');
+  assert.match(bg, /bg: '#f0f4f8'/);
+  const social = read('src/screens/SocialScreen.tsx');
+  assert.match(social, /<CleanScreenBackground style=\{styles\.body\}>/);
+  assert.doesNotMatch(social, /WATER|accessibilityLabel="Topics"|All topics|TOPICS\.map|topicChip/);
+  assert.match(social, /runAfterShortcuts\(\(\) => \{ WebBrowser\.openBrowserAsync\(urls\.shop\)\.catch\(\(\) => \{ void Linking\.openURL\(urls\.shop\); \}\); \}\)/);
+  assert.match(social, /onModalHide=\{\(\) => \{\s*const action = afterShortcutsHide\.current;/);
+  assert.equal((social.match(/runAfterShortcuts\(\(\) =>/g) || []).length, 5, 'all five shortcuts wait for the sheet');
+  for (const f of ['src/screens/threads/ThreadCard.tsx', 'src/screens/ThreadScreen.tsx']) assert.doesNotMatch(read(f), /TopicBadge|WATER/, f);
+  const composer = read('src/screens/threads/Composer.tsx');
+  assert.doesNotMatch(composer, /What's it about\?|TOPICS\.map|topicArt|WATER/);
+  assert.match(read('src/screens/threads/socialLook.tsx'), /borderColor: '#dbe4ee'/);
 });

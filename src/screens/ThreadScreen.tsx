@@ -37,7 +37,8 @@ import Composer from './threads/Composer';
 import PostMenu, { type MenuTarget } from './threads/PostMenu';
 import SafeChatPicker, { useSafeChatPlaces } from './threads/SafeChatPicker';
 import { emitSocial } from './threads/socialEvents';
-import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, TopicBadge, WATER, card } from './threads/socialLook';
+import { CLEAN } from '../components/CleanScreenBackground';
+import { CommentChip, GoldPill, OfficialAvatar, OfficialName, PressScale, ReactionBar, card } from './threads/socialLook';
 import { CARE_LINE, DISCLOSURE_LINE, isCareHold, isDisclosure, composeSafeChat, phraseById, phraseLabel, DRAFT_LINES, QUICK_REPLIES, QUICK_REPLY_IDS, REPLY_MAX, type SafeChatPick, checkDraft, errorLine, HINT_DEBOUNCE_MS, isDistress, pauseLine, quickDraftProblem, reviewLine, reportBlockedDraft, mergePage, timeAgo, timeAgoSpoken } from './threads/socialModel';
 import useReactions from './threads/useReactions';
 import useKeyboardInset from './threads/useKeyboardInset';
@@ -133,7 +134,6 @@ function PostHeader({ thread, onMenu, onEdit }: { readonly thread: ThreadType; r
           {official ? <OfficialName size={20} /> : <Text style={styles.postName} numberOfLines={1}>{name}</Text>}
           <View style={styles.postMeta}>
             <Text style={styles.postTime}>{timeAgo(thread.created_at)}</Text>
-            <TopicBadge topic={thread.topic} size="md" />
             {team && (
               <View style={[styles.teamFlag, { borderColor: team.color, backgroundColor: `${team.color}22` }]}>
                 <Image source={team.badge} style={{ width: 16, height: 16 }} contentFit="contain" />
@@ -372,8 +372,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
     return (
       <View style={styles.root}>
         <Topbar><TopbarColumn stretch={false}><BackButton /></TopbarColumn><TopbarColumn><TopbarText>Post</TopbarText></TopbarColumn><TopbarColumn stretch={false} /></Topbar>
-        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <SharkLoader state="empty" tone="onBlue" title="This post is gone" message="It was deleted or hidden." action={{ label: 'Back to Social', onPress: () => RootNavigation.goBack() }} style={{ marginTop: 120, paddingHorizontal: 24 }} />
+        <SharkLoader state="empty" tone="onLight" title="This post is gone" message="It was deleted or hidden." action={{ label: 'Back to Social', onPress: () => RootNavigation.goBack() }} style={{ marginTop: 120, paddingHorizontal: 24 }} />
       </View>
     );
   }
@@ -386,11 +385,10 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
         <TopbarColumn stretch={false} />
       </Topbar>
       <View style={{ flex: 1 }}>
-        <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
         {/* The body reaches the bottom of the window, so the keyboard's own height is the exact padding. */}
         <View style={{ flex: 1, paddingBottom: keyboard }}>
           {!thread ? (
-            <SharkLoader state={status === 'error' ? 'error' : 'loading'} tone="onBlue" onRetry={() => { setStatus('loading'); void loadThread(); void loadComments(1); }} style={{ marginTop: 80 }} />
+            <SharkLoader state={status === 'error' ? 'error' : 'loading'} tone="onLight" onRetry={() => { setStatus('loading'); void loadThread(); void loadComments(1); }} style={{ marginTop: 80 }} />
           ) : (
             <FlashList
               ref={listRef}
@@ -411,8 +409,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                 </View>
               }
               ListEmptyComponent={
-                commentsState === 'loading' ? <SharkLoader compact tone="onBlue" style={{ marginTop: 16 }} />
-                  : commentsState === 'error' ? <SharkLoader compact state="error" tone="onBlue" onRetry={() => { setCommentsState('loading'); void loadComments(1); }} style={{ marginTop: 16 }} />
+                commentsState === 'loading' ? <SharkLoader compact tone="onLight" style={{ marginTop: 16 }} />
+                  : commentsState === 'error' ? <SharkLoader compact state="error" tone="onLight" onRetry={() => { setCommentsState('loading'); void loadComments(1); }} style={{ marginTop: 16 }} />
                     : (
                       <View style={styles.noReplies}>
                         <Text style={styles.noRepliesTitle}>No replies yet</Text>
@@ -599,7 +597,7 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BRAND.blue },
+  root: { flex: 1, backgroundColor: CLEAN.bg },
   post: { marginHorizontal: 14, padding: 14 },
   postHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   postName: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, marginTop: 2 },
@@ -619,13 +617,13 @@ const styles = StyleSheet.create({
   dotBig: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.navySoft },
   repliesHead: { flexDirection: 'row', marginHorizontal: 14, marginTop: 14, marginBottom: 8 },
   noReplies: { alignItems: 'center', marginTop: 18, gap: 2 },
-  noRepliesTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  noRepliesLine: { fontFamily: 'Knockout', fontSize: 18, color: '#dbefff' },
+  noRepliesTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
+  noRepliesLine: { fontFamily: 'Knockout', fontSize: 18, color: BRAND.navySoft },
   bubbleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 14, paddingVertical: 4 },
   indent: { paddingLeft: 52 },
   miniAvatar: { width: 38, height: 38, borderRadius: 19, overflow: 'hidden', marginTop: 4 },
   avatarScale: { width: 50, height: 50, transform: [{ scale: 0.76 }], marginLeft: -6, marginTop: -6 },
-  bubble: { backgroundColor: BRAND.white, borderRadius: 18, borderTopLeftRadius: 6, borderWidth: 2, borderColor: '#bcd8f5', paddingHorizontal: 12, paddingVertical: 8 },
+  bubble: { backgroundColor: BRAND.white, borderRadius: 18, borderTopLeftRadius: 6, borderWidth: 1.5, borderColor: CLEAN.line, paddingHorizontal: 12, paddingVertical: 8 },
   bubbleMine: { backgroundColor: '#fff8e4', borderColor: '#f0d488' },
   bubbleHighlight: { borderColor: BRAND.gold, borderWidth: 3 },
   bubbleHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
@@ -633,11 +631,11 @@ const styles = StyleSheet.create({
   bubbleTime: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   bubbleReview: { fontFamily: 'Knockout', fontSize: 14, color: '#7a3d00', marginTop: 2 },
   bubbleText: { fontFamily: 'Knockout', fontSize: 19, lineHeight: 24, color: '#10233f' },
-  ghost: { flex: 1, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 12, paddingVertical: 8 },
-  ghostText: { fontFamily: 'Knockout', fontSize: 16, color: '#dbefff' },
-  moreReplies: { marginLeft: 66, marginVertical: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
-  moreRepliesText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white, marginTop: 2 },
-  replyBar: { backgroundColor: BRAND.cream, borderTopWidth: 3, borderTopColor: BRAND.navy, paddingHorizontal: 10, paddingTop: 8, gap: 6 },
+  ghost: { flex: 1, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#b9c7d6', paddingHorizontal: 12, paddingVertical: 8 },
+  ghostText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft },
+  moreReplies: { marginLeft: 66, marginVertical: 4, alignSelf: 'flex-start', backgroundColor: CLEAN.card, borderWidth: 1.5, borderColor: CLEAN.line, borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
+  moreRepliesText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 2 },
+  replyBar: { backgroundColor: CLEAN.card, borderTopWidth: 1.5, borderTopColor: CLEAN.line, paddingHorizontal: 10, paddingTop: 8, gap: 6 },
   replyInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 },
   replyLine: { flex: 1, fontFamily: 'Knockout', fontSize: 16, color: BRAND.redLip },
   replyingTo: { flex: 1, fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, marginTop: 2 },
@@ -649,17 +647,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 999,
     backgroundColor: BRAND.white,
-    borderWidth: 2,
-    borderBottomWidth: 4,
-    borderColor: '#0a4f9c',
+    borderWidth: 1.5,
+    borderColor: CLEAN.line,
   },
   quickText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 3 },
-  quickSafe: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
+  quickSafe: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip, borderBottomWidth: 3 },
   safeChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   sheetScrim: { flex: 1, justifyContent: 'flex-end', backgroundColor: BRAND.scrim },
-  sheet: { backgroundColor: BRAND.blue, borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 3, borderColor: BRAND.navy, padding: 14, gap: 12 },
+  sheet: { backgroundColor: CLEAN.bg, borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 14, gap: 12 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, marginTop: 4, flex: 1 },
+  sheetTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 4, flex: 1 },
   sheetPreview: { padding: 12, minHeight: 56, justifyContent: 'center' },
   sheetPreviewText: { fontFamily: 'Knockout', fontSize: 21, color: '#10233f' },
   sheetPreviewEmpty: { color: '#7d95b5' },
@@ -670,8 +667,8 @@ const styles = StyleSheet.create({
     color: '#10233f',
     backgroundColor: BRAND.white,
     borderRadius: 22,
-    borderWidth: 2,
-    borderColor: '#bcd8f5',
+    borderWidth: 1.5,
+    borderColor: CLEAN.line,
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
