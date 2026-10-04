@@ -69,3 +69,9 @@ export function facingFor(course: number, bearingDeg: number, previous: number):
   if (x < -0.25) return 1;
   return previous;
 }
+
+/** Half a stride (ms) at a walking speed: a 0.8 m/s stroll 225 ms, 2 m/s or faster 140 ms. */
+export function strideHalfMs(speedMps: number): number {
+  const s = Number.isFinite(speedMps) ? Math.min(2, Math.max(0.8, speedMps)) : 1.2;
+  return Math.round(225 - ((s - 0.8) / 1.2) * 85);
+}

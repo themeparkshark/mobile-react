@@ -192,3 +192,23 @@ export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_mem
     labelColor: ui.label ?? '#123e65',
   };
 }
+
+/**
+ * Worn items whose art carries lettering, a logo or a number, so a mirrored
+ * shark would read backwards (TPS tees, jerseys, hoodies, passes, "I Love
+ * Whip"...). Matched on the item name; tools/tests/player-motion.test.cjs
+ * checks it against the wardrobe catalog.
+ */
+export const LETTERED_ITEM = /t-?shirt|shirt|jersey|hoodie|sweater|long sleeve|letterman|\bpass\b|\btps\b|i love|greetings|jpland|\b\d{3,}\b|construction update|dookie|good sharks|oogity|space ranger|space captain|super shark|super suit/i;
+
+/**
+ * True when the dressed shark can be drawn mirrored (facing right): nothing
+ * worn has lettering. Hand-held props just swap hands, which reads fine.
+ */
+export function canMirrorShark(inventory: InventoryType | null | undefined): boolean {
+  if (!inventory) return true;
+  return OUTFIT_LAYER_ORDER.every((slot) => {
+    const item = inventory[slot];
+    return !item?.paper_url || !LETTERED_ITEM.test(item.name ?? '');
+  });
+}

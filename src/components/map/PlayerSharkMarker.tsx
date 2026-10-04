@@ -90,8 +90,11 @@ export function PlayerSharkMarker({ target, visible, glide, zoomPpm, bearingDeg,
     const ms = prev ? glideDurationMs(prev, target, since) : 0;
     const ppm = zoomPpm.value > 0 ? zoomPpm.value : 3;
     const maxM = PLAYER_MAX_GLIDE_PT / ppm;
-    const stepM = prev ? Math.hypot(...metersEastNorth(prev, target)) : 0;
-    const mode: Pending['mode'] = !glide || !prev ? 'jump' : ms > 0 && stepM * ppm <= PLAYER_MAX_GLIDE_PT ? 'glide' : 'catch-up';
+    // How far the visible copy would have to draw the shark from its own point. Measured from that
+    // point (not the last fix), so a burst of fixes faster than the swap can never outgrow the clip box.
+    const active = activeRef.current;
+    const reachM = Math.hypot(tE - (active === 0 ? a0E.value : a1E.value), tN - (active === 0 ? a0N.value : a1N.value));
+    const mode: Pending['mode'] = !glide || !prev ? 'jump' : ms > 0 && reachM * ppm <= PLAYER_MAX_GLIDE_PT ? 'glide' : 'catch-up';
     const [startE, startN] = catchUpStart(tE, tN, visE.value, visN.value, maxM);
     pendingRef.current = { slot: hidden, e: tE, n: tN, mode, startE, startN, ms: Math.max(GLIDE_MIN_MS, ms) };
     runOnUI((slot: number, e: number, n: number, glideMs: number, glides: boolean) => {
