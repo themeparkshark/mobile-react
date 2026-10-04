@@ -23,6 +23,27 @@ export function upNextFor(
   return [...rest.filter(v => !v.has_watched), ...rest.filter(v => v.has_watched)].slice(0, limit);
 }
 
+/**
+ * Coins and save failures waiting to be shown. Every save, whenever it lands
+ * (a switch, a close, a quiet retry), adds to the bank; the bank is shown
+ * only when no player or dialog is up, so nothing is dropped or stacked.
+ */
+export type RewardBank = { readonly coins: number; readonly unsaved: boolean };
+
+export const EMPTY_BANK: RewardBank = { coins: 0, unsaved: false };
+
+export function bankResult(bank: RewardBank, result: number | null): RewardBank {
+  return result === null ? { ...bank, unsaved: true } : { ...bank, coins: bank.coins + result };
+}
+
+/** What to show next: the reward first, then the "not saved" note. */
+export function nextBankDialog(bank: RewardBank, busy: boolean): 'reward' | 'unsaved' | null {
+  if (busy) return null;
+  if (bank.coins > 0) return 'reward';
+  if (bank.unsaved) return 'unsaved';
+  return null;
+}
+
 /** Only a 403 means "already paid"; offline and server errors keep the coins on offer. */
 export function viewFailureKind(error: unknown): 'already-paid' | 'retry' {
   const status = (error as { response?: { status?: number } } | null)?.response?.status;

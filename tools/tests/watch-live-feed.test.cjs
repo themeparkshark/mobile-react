@@ -168,13 +168,33 @@ test('the coin bar stops ticking at unlock and the WebView is memoized away from
 
 test('round 4: unsaved views queue and retry, the reward waits for every save, a pause says Paused', () => {
   const screen = read('src/screens/WatchScreen.tsx');
-  assert.match(screen, /const results = await Promise\.all\(saves\)/);
+  assert.match(screen, /bank\.current = bankResult\(bank\.current, result\)/);
   assert.match(screen, /setUnsaved\(prev => \(prev\.some\(p => p\.id === post\.id\) \? prev : \[\.\.\.prev, post\]\)\)/);
   assert.match(screen, /retryRef\.current\(true\)/);
   // The hero is the newest video still worth coins.
-  assert.match(screen, /videos\.find\(v => !isWatched\(v\)\) \?\? videos\[0\]/);
+  assert.match(screen, /videos\.find\(v => !v\.has_watched && !heroWatched\.has\(v\.id\)\) \?\? videos\[0\]/);
   const player = read('src/components/watch/YouTubePlayerModal.tsx');
   assert.match(player, /setPaused\(msg\.state === PAUSED\)/);
   assert.match(player, /if \(!ready \|\| playing \|\| paused \|\| ended \|\| failed\)/);
   assert.equal(feed.PAUSED, 2);
+});
+
+test('round 5: one reward bank survives a reopened player, shows the reward first, then the not-saved note', () => {
+  let bank = feed.EMPTY_BANK;
+  bank = feed.bankResult(bank, 25);
+  bank = feed.bankResult(bank, null);
+  bank = feed.bankResult(bank, 25);
+  assert.equal(bank.coins, 50);
+  assert.equal(bank.unsaved, true);
+  // Nothing shows while a player or dialog is up; the bank is kept.
+  assert.equal(feed.nextBankDialog(bank, true), null);
+  assert.equal(feed.nextBankDialog(bank, false), 'reward');
+  assert.equal(feed.nextBankDialog({ coins: 0, unsaved: true }, false), 'unsaved');
+  assert.equal(feed.nextBankDialog(feed.EMPTY_BANK, false), null);
+  const screen = read('src/screens/WatchScreen.tsx');
+  assert.match(screen, /nextBankDialog\(bank\.current, playerOpen\.current \|\| dialogOpen\.current\)/);
+  assert.match(screen, /if \(retrying\.current \|\| unsaved\.length === 0\) return;/);
+  assert.match(screen, /LayoutAnimation\.configureNext/);
+  // Legacy rows go through the same bank, so a failed save is never silent.
+  assert.match(screen, /if \(!post\.has_watched\) save\(post\);/);
 });
