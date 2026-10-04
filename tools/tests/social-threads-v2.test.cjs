@@ -191,8 +191,8 @@ test('a reply to a reply notifies the kid who was answered', () => {
 test('the safety rule table and probe set are byte-identical to the server copies (pinned hashes)', () => {
   const crypto = require('node:crypto');
   const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safetextRules.json'), 'f10c59b4b3b5d9a8a0143fbabf2b1b0228107970d251391648a2e16a9115c656');
-  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'ab0d4dd2d1ebe112bbd0bf6b18420fd5481c6d45cfd066d516b6eaa2c02d4b5d');
+  assert.equal(hash('src/screens/threads/safetextRules.json'), '285f721f129e4fc063db98db90a78a3974324892bc4deb9e210950605c915d57');
+  assert.equal(hash('tools/tests/fixtures/safetext_cases.json'), 'cae94db87534163009ef3537a7129e5b1557c9e5a4fd027581e53182b91e5f27');
 });
 
 test('final round: weird-report reason, server rules promise, unblock confirm, prefetch, fresh post stays on top, light reply actions', () => {
@@ -383,7 +383,7 @@ test('R7: Safe Chat is the default way to post and reply, built only from our ph
 
 test('R7: the shared Safe Chat phrases match the server copy', () => {
   const hash = (file) => require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
-  assert.equal(hash('src/screens/threads/safeChatPhrases.json'), '059ed6a4c4d66c7ab8cac6d6b05265a5e8323cd366312fb1afe73de43bbf5560');
+  assert.equal(hash('src/screens/threads/safeChatPhrases.json'), '77097ee282352b91f7022add6176adad7e1b087845aeb7de3a4cb166284f7d95');
 });
 
 test('R7: the care net and the exemption fix match the server', () => {
@@ -411,4 +411,12 @@ test('R8: outfits and collections phrases, warm and answer replies, Pin Swap wor
     assert.equal(model.isCareCheck(t), false, t);
     assert.equal(model.isDistress(t), false, t);
   }
+});
+
+test('R9: park hyperbole never shows the 988 line, structural self-harm wording is caught, Pin Swap chip label', () => {
+  for (const t of ['Space Mountain scared me to death lol', "I'm so dead, I spent all my money on pins", "I'm starving, where's the best pizza in Epcot?", "I'd die happy if I met Stitch today"]) assert.equal(model.isDistress(t), false, t);
+  for (const t of ['im thinking about killing myself', 'im going to walk into traffic', 'id be better dead']) assert.equal(model.isDistress(t), true, t);
+  for (const t of ['honestly thinking about jumping in front of a train', 'no point in me waking up anymore', 'i feel like a waste of space']) assert.equal(model.isDistress(t) || model.isCareCheck(t), true, t);
+  assert.match(read('src/screens/ThreadScreen.tsx'), /phrase === 'Trade in Pin Swap\?' \? 'Pin Swap\?' : phrase/);
+  assert.notEqual(model.SAFE_CHAT_CATEGORIES.find((c) => c.key === 'collections').icon, 'pin', 'pin reads as a map marker');
 });

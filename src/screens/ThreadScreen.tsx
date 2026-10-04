@@ -486,7 +486,8 @@ export default function ThreadScreen({ route }: NativeStackScreenProps<ParamList
                       style={styles.quick}
                       accessibilityLabel={`Reply ${phrase}`}
                     >
-                      <Text style={styles.quickText}>{phrase}</Text>
+                      {/* The chip reads short; the phrase posted is still "Trade in Pin Swap?". */}
+                      <Text style={styles.quickText}>{phrase === 'Trade in Pin Swap?' ? 'Pin Swap?' : phrase}</Text>
                     </PressScale>
                   ))}
                 </ScrollView>

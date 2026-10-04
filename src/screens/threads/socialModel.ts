@@ -173,6 +173,7 @@ const CARE_WIDE = compile([
   ...RULES.care_wide_extra,
 ]);
 const CARE_WIDE_EXEMPT = compile(RULES.care_wide_exempt).map((re) => new RegExp(re.source, 'giu'));
+const CARE_A_EXEMPT = compile(RULES.care_a_exempt).map((re) => new RegExp(re.source, 'giu'));
 const TENS: Record<string, string> = RULES.tens;
 const TEENS: Record<string, string> = RULES.teens;
 const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
@@ -427,7 +428,7 @@ export function isDistress(text: string): boolean {
   if (text.trim() === '') return false;
   if (matchesAny(DISTRESS, forms(text))) return true;
   // The broad care net: "i" / "me" / "my" within a few words of a death or self-harm word.
-  const words = [wordForm(text, false), wordForm(text)].map((w) => CARE_EXEMPT.reduce((acc, re) => acc.replace(re, ' '), w));
+  const words = [wordForm(text, false), wordForm(text)].map((w) => [...CARE_EXEMPT, ...CARE_A_EXEMPT].reduce((acc, re) => acc.replace(re, ' '), w));
   return matchesAny(CARE_NEAR, words);
 }
 
