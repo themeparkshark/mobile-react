@@ -251,7 +251,7 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
   assert.match(board, /if \(next === 'rebuilt'\) \{ loadRef\.current\(true\); return; \}/, 'a rebuilt board refreshes, never appends');
   const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
   assert.match(store, /if \(!boardMatches\(model, board, parkId\)\) return;/, 'commitBoard refuses another park');
-  assert.match(store, /await refetchPages\(meId, board, parkId, fresh, previous\.rows\.length\)/, 'a new build refetches the scrolled pages');
+  assert.match(store, /await refetchPages\(meId, board, parkId, fresh, previous\)/, "a new build refetches the scrolled pages");
   assert.match(read('src/screens/LeaderboardsScreen/faceLayers.ts'), /if \(urgent\) waiting\.unshift\(go\)/, 'faces on screen decode first');
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', 8), true);
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', null), false, 'another park never lands');
