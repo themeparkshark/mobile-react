@@ -169,3 +169,19 @@ test('r4 panel: the cross flash, sparks and ring are siblings of the flying pin,
   assert.equal((between.match(/<\/Animated\.View>/g) || []).length, 2, 'both the bob layer and the pin wrapper close before the flash');
   assert.match(cele, /insets\.top \+ 64/, 'the toss apex stays below the top bar');
 });
+
+test('r5 panel: the land runs off the flight clock, and the kid paths stay calm', () => {
+  const cele = read('src/screens/pinTrading/SwapCelebration.tsx');
+  assert.match(cele, /withTiming\(1, \{ duration: T\.land - T\.travel, easing: Easing\.linear \}, finished => \{\s*if \(finished\) runOnJS\(runLandRef\)\(\);/);
+  assert.match(cele, /useAnimatedReaction\(\(\) => travel\.value >= crossAt/);
+  assert.doesNotMatch(cele, /setTimeout\(runLand, T\.land\)/, 'no JS timer lands the pin on time');
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  const expire = screen.slice(screen.indexOf('const onExpire'), screen.indexOf('const onTick'));
+  assert.doesNotMatch(expire, /'warning'|'failBuzz'/, 'no haptic when time runs out');
+  assert.match(screen, /pitch: left > 5 \? 0 :/, 'the 30 s tick plays at its natural pitch');
+  assert.match(screen, /gameAlert\(COPY\.takenTitle, COPY\.takenMessage/);
+  assert.match(screen, /fetchAllPins\(\)\.catch\(\(\) => null\)/, 'a failed pin page never leaves the board stale');
+  const timer = read('src/screens/pinTrading/PinTradeParts.tsx');
+  assert.match(timer, /said30\.current/);
+  assert.match(timer, /said10\.current/);
+});

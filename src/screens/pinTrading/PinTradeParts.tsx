@@ -52,12 +52,12 @@ export const StatusChipView = memo(function StatusChipView({ chip }: { chip: Sta
 });
 
 /** A small ribbon across a card corner ("Got it", "From you"). */
-export function CornerRibbon({ label, tone = 'navy', check = false }: { label: string; tone?: 'navy' | 'gold' | 'red'; check?: boolean }) {
+export function CornerRibbon({ label, tone = 'navy', icon }: { label: string; tone?: 'navy' | 'gold' | 'red'; icon?: 'check' | 'arrow' }) {
   const bg = tone === 'gold' ? BRAND.gold : tone === 'red' ? BRAND.red : BRAND.navy;
   const ink = tone === 'gold' ? BRAND.navy : BRAND.white;
   return (
     <View pointerEvents="none" style={[styles.ribbon, { backgroundColor: bg }]}>
-      {check && <GameIcon name="check" size={14} />}
+      {icon && <GameIcon name={icon} size={14} style={icon === 'arrow' ? { transform: [{ rotate: '-90deg' }] } : undefined} />}
       <Text maxFontSizeMultiplier={1} style={[styles.ribbonText, { color: ink }]}>{label}</Text>
     </View>
   );
@@ -113,7 +113,7 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, he
             lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
         <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
-        {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} check={badge === 'owned'} />}
+        {badge && <CornerRibbon label={badge === 'owned' ? 'Got it' : 'From you'} tone={badge === 'owned' ? 'navy' : 'gold'} icon={badge === 'owned' ? 'check' : 'arrow'} />}
       </Animated.View>
     </Pressable>
   );
@@ -176,7 +176,6 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
     if (left <= HOLD_URGENT_S && !warned.current) {
       warned.current = true;
       onTick?.(HOLD_URGENT_S);
-      later.current.push(setTimeout(() => queueHaptic('warning', 2), HAPTIC_AFTER_AUDIO_MS));
     }
     // Announce when the clock crosses 30 s and 10 s (not only on an exact tick).
     if (left <= 10 && !said10.current) { said10.current = true; said30.current = true; AccessibilityInfo.announceForAccessibility(`${left} seconds left`); }
@@ -284,7 +283,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
           <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>
         )}
         {!!stamp && !!item && (
-          <View pointerEvents="none" style={[styles.stamp, { maxWidth: size + SPACE.md }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
+          <View pointerEvents="none" style={[styles.stamp, { maxWidth: (size + SPACE.xl) * 0.7, bottom: SPACE.sm }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
         )}
       </Animated.View>
       <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? balanceName(pinName(item), 16) : placeholder ?? ''}</Text>
@@ -365,14 +364,14 @@ const styles = StyleSheet.create({
     borderWidth: OUTLINE.thick, borderColor: BRAND.white, ...SHADOW.card,
   },
   slotEmpty: { backgroundColor: 'rgba(255,255,255,0.08)', borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.7)', shadowOpacity: 0, elevation: 0 },
-  slotDim: { backgroundColor: '#cfc8b4' },
+  slotDim: { backgroundColor: '#e6e0cf' },
   slotQuestion: { fontFamily: FONT.display, fontSize: 44, color: 'rgba(255,255,255,0.8)', paddingTop: 6 },
   slotName: { marginTop: SPACE.xs, fontFamily: FONT.body, fontSize: 15, lineHeight: 18, color: BRAND.white, textAlign: 'center', minHeight: 36, paddingHorizontal: 2 },
   stamp: {
-    position: 'absolute', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 3, borderColor: BRAND.red,
-    backgroundColor: 'rgba(255,255,255,0.88)', transform: [{ rotate: '-12deg' }],
+    position: 'absolute', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 3, borderColor: BRAND.red,
+    transform: [{ rotate: '-10deg' }],
   },
-  stampText: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 0.8, color: BRAND.red, textTransform: 'uppercase', paddingTop: 2 },
+  stampText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.8, color: BRAND.red, textTransform: 'uppercase', paddingTop: 2, textShadowColor: 'rgba(255,255,255,0.9)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 0 } },
   pick: {
     alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, backgroundColor: BRAND.cream,
     borderWidth: OUTLINE.thick, borderColor: BRAND.creamDeep,
