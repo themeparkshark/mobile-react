@@ -470,22 +470,23 @@ test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame
   assert.doesNotMatch(fixture, /Fin Jet/);
 });
 
-test('the reef halo is seen from above: far half high and behind the head, near half low and in front', () => {
+test('the reef halo sits off to the back of the head at a jaunty angle, seen from above', () => {
   const r = geometry.rigs.reef_halo.ring;
-  assert.ok(r.tilt > 0, 'tilts with the head (down toward the back), never leaning forward toward the snout');
-  // Against the base shark's crown (classic-no-eye.png: the head top is y 0.184 at x 0.40..0.50).
+  // Dustin, October 5: off to the side, not centred; resting on the back of the head like a tilted cap.
+  assert.ok(r.cx > 0.55 && r.cx < 0.66, `toward the back of the head (cx ${r.cx}), not centred on the crown`);
+  assert.ok(r.tilt >= 12 && r.tilt <= 24, 'a jaunty tilt down toward the back, never leaning forward toward the snout');
+  // Against the base shark (classic-no-eye.png): the head top is y 0.208 at x 0.60 and 0.242 at x 0.65.
   const [W, H] = geometry.canvas;
   const halfH = (2 * r.rx * W * r.scale * r.aspect) / 2 / H;
-  assert.ok(r.cy - halfH < 0.184 - 0.05, 'the far edge rides above the crown');
-  assert.ok(r.cy + halfH > 0.184, 'the near edge crosses in front of the head top');
-  assert.ok(Math.abs(r.cx - 0.47) < 0.05, 'centred on the crown, not the back');
-  // The fish ride the drawn ring: their orbit is as open as the ring art.
+  assert.ok(r.cy - halfH < 0.208 - 0.04, 'the far edge rides above and behind the head');
+  assert.ok(r.cy + halfH > 0.208, 'the near edge crosses in front of the head');
   const ringRy = (r.rx * W * r.aspect * 0.9) / H;
   assert.ok(Math.abs(r.ry - ringRy) < 0.012, `orbit ry ${r.ry} vs ring ${ringRy.toFixed(3)}`);
   const halo = src('src/fx/rigs/ReefHalo.tsx');
   assert.match(halo, /const show = near === 'both' \? true : near \? p\.depth > 0 : p\.depth <= 0;/, 'near fish in front, far fish behind');
-  assert.match(halo, /depth: Math\.sin\(angle\),/);
   assert.match(halo, /y: r\.cy \+ ex \* Math\.sin\(tilt\) \+ ey \* Math\.cos\(tilt\),/, 'near (depth > 0) is lower on screen');
+  // The halo is a head item: nothing else can stack in its slot.
+  assert.equal(fx.FX_SLOT.reef_halo, 'head_item');
 });
 
 function loadJetpack() {
