@@ -403,7 +403,12 @@ export default function PinSwapsScreen() {
 
   const onTradePress = useCallback(() => { void trade(); }, [trade]);
 
-  const onCelebrationStart = useCallback(() => { sheetFade.value = withTiming(0, { duration: 200 }); }, [sheetFade]);
+  // The sheet's pins hide only once the moment's flying copies are on screen (never a frame with neither).
+  const [handed, setHanded] = useState(false);
+  const onCelebrationStart = useCallback(() => {
+    setHanded(true);
+    sheetFade.value = withTiming(0, { duration: 200 });
+  }, [sheetFade]);
 
   const backToPicking = useCallback(() => {
     if (phaseRef.current !== 'confirming') return;
@@ -412,6 +417,7 @@ export default function PinSwapsScreen() {
   }, []);
 
   const finishCelebration = useCallback(() => {
+    setHanded(false);
     const traded = tradedSlot.current;
     tradedSlot.current = null;
     if (traded) {
@@ -591,7 +597,7 @@ export default function PinSwapsScreen() {
             onRetryPins={onRetryPins}
             onMorePins={onMorePins}
             onSlot={onSlot}
-            handedOff={!!done}
+            handedOff={handed}
           />
           </Animated.View>
         )}
