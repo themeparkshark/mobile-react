@@ -222,49 +222,44 @@ export const HAPTIC_AFTER_AUDIO_MS = 50;
 /** A board card: a swap plus a stable on-screen key, so a refreshed board never remounts or moves cards. */
 export type BoardCard = PinSwapType & { readonly key: string };
 
+let cardKeys = 0;
+/** Keys come from a counter, never from swap ids, so two cards can never share a key. */
+function nextKey(): string {
+  cardKeys += 1;
+  return `c${cardKeys}`;
+}
+
 export function toCards(swaps: readonly PinSwapType[]): BoardCard[] {
-  return swaps.map(swap => ({ ...boardEntry(swap), key: `s${swap.id}` }));
+  return swaps.map(swap => ({ ...boardEntry(swap), key: nextKey() }));
 }
 
 /**
- * Reconcile the board with a fresh server list without moving cards on screen.
- * - A card still on the server keeps its slot (and its key).
- * - A card gone from the server (the one you just traded for, or a pin someone else took) has its
- *   slot filled in place by a new server pin; the slot that showed `preferItemId` (your just-posted
- *   pin, shown locally) takes the server copy of that pin first.
- * - Extra new server pins are added at the end; slots with nothing to fill are dropped from the end.
- * The server's random order is ignored for cards already on screen.
+ * Reconcile the board with a fresh server draw without moving cards on screen.
+ *
+ * The server sends a random 15 of all active swaps, so "missing from this draw" does NOT mean
+ * "gone": every card on screen stays in its slot. Only the swaps in `removed` (the one you just
+ * traded for, or one a hold proved was taken) leave the board, and each such slot is filled in place
+ * by a pin from the draw that is not already on the board. Your just-posted pin (`preferItemId`) is
+ * kept wherever it sits. If there is nothing to fill a removed slot with, that card stays hidden
+ * by being dropped (only then do later cards close up). New pins are appended up to `max`.
  */
-export function mergeBoard(current: readonly BoardCard[], server: readonly PinSwapType[], preferItemId?: number | null): BoardCard[] {
-  const byId = new Map(server.map(swap => [swap.id, swap]));
-  const used = new Set<number>();
-  const slots: (BoardCard | null)[] = current.map(card => {
-    const fresh = byId.get(card.id);
-    if (!fresh) return null;
-    used.add(fresh.id);
-    return { ...boardEntry(fresh), key: card.key };
-  });
-  const take = (wantItem?: number | null): PinSwapType | undefined => {
-    const pick = server.find(swap => !used.has(swap.id) && (wantItem == null || swap.pin.item.id === wantItem));
-    if (pick) used.add(pick.id);
-    return pick;
-  };
-  // Your posted pin's slot first, so it keeps showing the same pin.
-  slots.forEach((slot, i) => {
-    if (slot || preferItemId == null || current[i].pin.item.id !== preferItemId) return;
-    const pick = take(preferItemId);
-    if (pick) slots[i] = { ...boardEntry(pick), key: current[i].key };
-  });
-  slots.forEach((slot, i) => {
-    if (slot) return;
-    const pick = take();
-    if (pick) slots[i] = { ...boardEntry(pick), key: current[i].key };
-  });
-  // Keep your posted pin on screen even if this random draw did not include it.
-  slots.forEach((slot, i) => {
-    if (!slot && preferItemId != null && current[i].pin.item.id === preferItemId) slots[i] = current[i];
-  });
-  const kept = slots.filter((slot): slot is BoardCard => slot !== null);
-  for (const swap of server) if (!used.has(swap.id)) kept.push({ ...boardEntry(swap), key: `s${swap.id}` });
-  return kept;
+export function mergeBoard(
+  current: readonly BoardCard[], server: readonly PinSwapType[], removed: readonly number[] = [], max = 15,
+): BoardCard[] {
+  const gone = new Set(removed);
+  const onBoard = new Set(current.filter(card => !gone.has(card.id)).map(card => card.id));
+  const fresh = new Map(server.map(swap => [swap.id, swap]));
+  const spare = server.filter(swap => !onBoard.has(swap.id) && !gone.has(swap.id));
+  const out: BoardCard[] = [];
+  for (const card of current) {
+    if (!gone.has(card.id)) {
+      const update = fresh.get(card.id);
+      out.push(update ? { ...boardEntry(update), key: card.key } : card);
+      continue;
+    }
+    const fill = spare.shift();
+    if (fill) out.push({ ...boardEntry(fill), key: card.key });
+  }
+  while (out.length < max && spare.length) out.push({ ...boardEntry(spare.shift()!), key: nextKey() });
+  return out;
 }

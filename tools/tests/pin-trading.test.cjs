@@ -186,25 +186,38 @@ test('r5 panel: the land runs off the flight clock, and the kid paths stay calm'
   assert.match(timer, /said10\.current/);
 });
 
-test('push: a refreshed board never moves cards on screen; only the traded or gone slot changes', () => {
+test('push: a refreshed board never moves cards on screen; only traded or taken slots change', () => {
+  const item_ = id => ({ id, name: `Pin ${id}`, icon_url: `u${id}` });
   const sw = (id, item) => ({ id, pin: { id: item, item: item_(item) }, held_from: null, held_to: null });
-  function item_(id) { return { id, name: `Pin ${id}`, icon_url: `u${id}` }; }
   const current = model.toCards([sw(1, 11), sw(2, 12), sw(3, 13), sw(4, 14)]);
-  // You traded for #2: its slot shows your pin (item 99) locally with a negative id.
+  const keys = current.map(c => c.key);
+  // You traded for #2: its slot shows your pin locally (negative id).
   current[1] = { id: -99, pin: { id: -99, item: item_(99) }, held_from: '', held_to: '', key: current[1].key };
-  // The server returns a new random order, with your posted pin as swap 7 and a new pin 8; #3 was taken.
-  const server = [sw(8, 18), sw(4, 14), sw(7, 99), sw(1, 11)];
-  const next = model.mergeBoard(current, server, 99);
-  assert.deepEqual(plain(next.map(c => c.key)), ['s1', 's2', 's3', 's4'], 'every slot keeps its key (no remount, no move)');
-  assert.deepEqual(plain(next.map(c => c.id)), [1, 7, 8, 4], 'your pin takes the traded slot; the taken slot gets the new pin');
-  // Nothing new: a gone slot at the end is dropped, cards before it stay put.
-  const shrink = model.mergeBoard(model.toCards([sw(1, 11), sw(2, 12)]), [sw(1, 11)], null);
-  assert.deepEqual(plain(shrink.map(c => c.id)), [1]);
-  // Extra server pins append after the cards on screen.
-  const grow = model.mergeBoard(model.toCards([sw(1, 11)]), [sw(5, 15), sw(1, 11)], null);
-  assert.deepEqual(plain(grow.map(c => c.id)), [1, 5]);
+  // A random draw that misses #3 and #4 (they are still active, just not drawn) and brings new pins.
+  const draw = [sw(8, 18), sw(7, 99), sw(1, 11)];
+  const next = model.mergeBoard(current, draw, []);
+  assert.deepEqual(plain(next.slice(0, 4).map(c => c.key)), keys, 'every slot keeps its key');
+  assert.deepEqual(plain(next.slice(0, 4).map(c => c.id)), [1, -99, 3, 4], 'missing from a draw is not gone; your pin stays');
+  // A hold proved #3 was taken: only that slot changes, in place.
+  const taken = model.mergeBoard(current, draw, [3]);
+  assert.deepEqual(plain(taken.slice(0, 4).map(c => c.id)), [1, -99, 8, 4]);
+  assert.equal(taken[2].key, keys[2]);
+  // Keys are never duplicated, however many refreshes run.
+  let board = model.toCards([sw(1, 11), sw(2, 12)]);
+  for (let i = 0; i < 20; i++) board = model.mergeBoard(board, [sw(5, 15), sw(1, 11), sw(6, 16)], i % 2 ? [2] : []);
+  assert.equal(new Set(board.map(c => c.key)).size, board.length);
+  assert.equal(new Set(board.map(c => c.id)).size, board.length);
+  // Large pool (the production case): 200 random draws of 15 from 60 never move or replace a card on screen.
+  const pool = Array.from({ length: 60 }, (_, i) => sw(100 + i, 200 + i));
+  let b = model.toCards(pool.slice(0, 15));
+  const before = b.map(c => `${c.key}:${c.id}`);
+  for (let i = 0; i < 200; i++) {
+    const drawN = [...pool].sort(() => Math.random() - 0.5).slice(0, 15);
+    b = model.mergeBoard(b, drawN, []);
+  }
+  assert.deepEqual(plain(b.map(c => `${c.key}:${c.id}`)), plain(before));
   const screen = read('src/screens/PinSwapsScreen.tsx');
-  assert.match(screen, /setBoard\(mergeBoard\(boardRef\.current, swaps, live\.current\.lastGiven\)\)/);
+  assert.match(screen, /setBoard\(mergeBoard\(boardRef\.current, swaps, \[\]\)\)/);
   assert.match(screen, /key=\{swap\.key\}/);
 });
 
@@ -218,6 +231,8 @@ test('push: the slam starts on the contact frame on the UI thread, the moment is
   const screen = read('src/screens/PinSwapsScreen.tsx');
   assert.match(screen, /armed=\{!!done\}/);
   assert.match(screen, /phase === 'confirming' \|\| phase === 'sending'/);
+  assert.match(screen, /from=\{celeFrom\}/, 'the pre-armed moment already knows where the slots are');
+  assert.match(cele, /exiting=\{armed \? FadeOut/, 'an unplayed pre-armed moment never flashes on unmount');
   const cache = read('src/screens/pinTrading/pinImageCache.ts');
   assert.match(cache, /Skia\.Surface\.Make\(dw, dh\)/);
   assert.match(cache, /makeNonTextureImage\(\)/);
