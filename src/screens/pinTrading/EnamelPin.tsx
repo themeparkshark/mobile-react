@@ -71,7 +71,7 @@ function EnamelPin(props: Props) {
 }
 
 function LitPin({ uri, size, tilt = 0, shine, lag = 0, lagSpan = 0, lift, surface = 'board', recyclingKey, style }: Props) {
-  const image = usePinImage(uri);
+  const image = usePinImage(uri, size);
   const pad = Math.round(size * PAD);
   const box = size + pad * 2;
   const blur = Math.max(2, size * 0.045);

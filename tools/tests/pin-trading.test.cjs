@@ -156,7 +156,7 @@ test('r3 panel: the resting board never writes the shine value, and pins share o
   assert.match(screen, /setInterval\(sweep, 6200\)/);
   assert.doesNotMatch(screen, /withRepeat\(withSequence\(withTiming\(1, \{ duration: 1900 \}\)/);
   const pin = read('src/screens/pinTrading/EnamelPin.tsx');
-  assert.match(pin, /usePinImage\(uri\)/);
+  assert.match(pin, /usePinImage\(uri, size\)/);
   assert.doesNotMatch(pin, /\buseImage\(/);
 });
 
@@ -172,8 +172,8 @@ test('r4 panel: the cross flash, sparks and ring are siblings of the flying pin,
 
 test('r5 panel: the land runs off the flight clock, and the kid paths stay calm', () => {
   const cele = read('src/screens/pinTrading/SwapCelebration.tsx');
-  assert.match(cele, /withTiming\(1, \{ duration: T\.land - T\.travel, easing: Easing\.linear \}, finished => \{\s*if \(finished\) runOnJS\(runLandRef\)\(\);/);
-  assert.match(cele, /useAnimatedReaction\(\(\) => travel\.value >= crossAt/);
+  assert.match(cele, /withTiming\(1, \{ duration: T\.land - T\.travel, easing: Easing\.linear \}, finished => \{\s*if \(!finished\) return;\s*slam\(\);\s*runOnJS\(runLandRef\)\(\);/);
+  assert.match(cele, /useAnimatedReaction\(\(\) => \(travel\.value >= 0\.93 \? 2 : travel\.value >= crossAt/);
   assert.doesNotMatch(cele, /setTimeout\(runLand, T\.land\)/, 'no JS timer lands the pin on time');
   const screen = read('src/screens/PinSwapsScreen.tsx');
   const expire = screen.slice(screen.indexOf('const onExpire'), screen.indexOf('const onTick'));
@@ -184,4 +184,50 @@ test('r5 panel: the land runs off the flight clock, and the kid paths stay calm'
   const timer = read('src/screens/pinTrading/PinTradeParts.tsx');
   assert.match(timer, /said30\.current/);
   assert.match(timer, /said10\.current/);
+});
+
+test('push: a refreshed board never moves cards on screen; only the traded or gone slot changes', () => {
+  const sw = (id, item) => ({ id, pin: { id: item, item: item_(item) }, held_from: null, held_to: null });
+  function item_(id) { return { id, name: `Pin ${id}`, icon_url: `u${id}` }; }
+  const current = model.toCards([sw(1, 11), sw(2, 12), sw(3, 13), sw(4, 14)]);
+  // You traded for #2: its slot shows your pin (item 99) locally with a negative id.
+  current[1] = { id: -99, pin: { id: -99, item: item_(99) }, held_from: '', held_to: '', key: current[1].key };
+  // The server returns a new random order, with your posted pin as swap 7 and a new pin 8; #3 was taken.
+  const server = [sw(8, 18), sw(4, 14), sw(7, 99), sw(1, 11)];
+  const next = model.mergeBoard(current, server, 99);
+  assert.deepEqual(plain(next.map(c => c.key)), ['s1', 's2', 's3', 's4'], 'every slot keeps its key (no remount, no move)');
+  assert.deepEqual(plain(next.map(c => c.id)), [1, 7, 8, 4], 'your pin takes the traded slot; the taken slot gets the new pin');
+  // Nothing new: a gone slot at the end is dropped, cards before it stay put.
+  const shrink = model.mergeBoard(model.toCards([sw(1, 11), sw(2, 12)]), [sw(1, 11)], null);
+  assert.deepEqual(plain(shrink.map(c => c.id)), [1]);
+  // Extra server pins append after the cards on screen.
+  const grow = model.mergeBoard(model.toCards([sw(1, 11)]), [sw(5, 15), sw(1, 11)], null);
+  assert.deepEqual(plain(grow.map(c => c.id)), [1, 5]);
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  assert.match(screen, /setBoard\(mergeBoard\(boardRef\.current, swaps, live\.current\.lastGiven\)\)/);
+  assert.match(screen, /key=\{swap\.key\}/);
+});
+
+test('push: the slam starts on the contact frame on the UI thread, the moment is pre-mounted, and art is decoded at drawn size', () => {
+  const cele = read('src/screens/pinTrading/SwapCelebration.tsx');
+  const slam = cele.slice(cele.indexOf('const slam = () => {'), cele.indexOf('const runLandRef'));
+  assert.match(slam, /'worklet';/);
+  assert.match(slam, /squash\.value = /);
+  assert.match(slam, /burst\.value = /);
+  assert.match(cele, /armed = true/);
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  assert.match(screen, /armed=\{!!done\}/);
+  assert.match(screen, /phase === 'confirming' \|\| phase === 'sending'/);
+  const cache = read('src/screens/pinTrading/pinImageCache.ts');
+  assert.match(cache, /Skia\.Surface\.Make\(dw, dh\)/);
+  assert.match(cache, /makeNonTextureImage\(\)/);
+});
+
+test('push: the timer says "Time left to trade", never "expire"', () => {
+  const crumbs = JSON.parse(read('src/api/defaults/crumbs.json'));
+  assert.equal(crumbs.labels.trade_expiration, 'Time left to trade %s:%s');
+  const screen = read('src/screens/PinSwapsScreen.tsx');
+  assert.match(screen, /COPY\.timeLeft/);
+  assert.doesNotMatch(screen, /labels\.trade_expiration/);
+  assert.equal(model.PIN_TRADE_COPY.timeLeft, 'Time left to trade');
 });

@@ -36,7 +36,7 @@ import { BRAND, FONT, gameAlert, GameButton, GameIcon, OUTLINE, RADIUS, SHADOW, 
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { type BoardBadge, BoardPinCard, MAX_FONT, PageWash, type SlotRect, TRADE_SURFACE } from './pinTrading/PinTradeParts';
 import {
-  boardEntry, classifyTradeError, givablePins, holdLengthMs, isHolding, mergePins, PIN_TRADE_COPY as COPY, pinName, type TradePhase,
+  boardEntry, type BoardCard, classifyTradeError, mergeBoard, toCards, givablePins, holdLengthMs, isHolding, mergePins, PIN_TRADE_COPY as COPY, pinName, type TradePhase,
 } from './pinTrading/pinTradeModel';
 import SwapCelebration from './pinTrading/SwapCelebration';
 import TradeSheet from './pinTrading/TradeSheet';
@@ -59,6 +59,13 @@ const CONFIRM_GUARD_MS = 450;
 
 type Hold = { swap: PinSwapType; deadline: number; totalMs: number };
 type Done = { got: ItemType; gave: ItemType; from: { get?: SlotRect; give?: SlotRect } };
+
+/** A stable number from a card key (for its tilt). */
+function keySeed(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 100000;
+  return h;
+}
 
 /** Every page of your tradeable pins (capped), without touching state. */
 async function fetchAllPins(): Promise<ItemType[]> {
@@ -96,7 +103,9 @@ export default function PinSwapsScreen() {
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
 
-  const [board, setBoard] = useState<PinSwapType[]>([]);
+  const [board, setBoard] = useState<BoardCard[]>([]);
+  const boardRef = useRef<BoardCard[]>([]);
+  boardRef.current = board;
   const [boardState, setBoardState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -123,21 +132,29 @@ export default function PinSwapsScreen() {
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** After the first load, cards don't fade in (a refreshed board lands in one beat). */
   const quietBoard = useRef(false);
+  /** The slot that just traded: it flips to your pin when the moment closes. */
+  const tradedSlot = useRef<{ swapId: number; gave: ItemType } | null>(null);
   const live = useRef({ board: [] as PinSwapType[], busyId: null as number | null, owned: new Set<number>(), pinsCount: 0, pinsKnown: false, lastGiven: null as number | null });
   holdRef.current = hold;
   phaseRef.current = phase;
   selectedRef.current = selected;
 
-  const loadBoard = useCallback(async (mode: 'first' | 'refresh') => {
+  /**
+   * 'first' and 'shuffle' (the New pins button) show the server's fresh set. 'refresh' (pull to refresh,
+   * after a pin was taken) reconciles quietly: cards on screen keep their slots, only gone pins change.
+   */
+  const loadBoard = useCallback(async (mode: 'first' | 'refresh' | 'shuffle') => {
     if (mode === 'first') setBoardState('loading');
     else setRefreshing(true);
     try {
       const swaps = await getPinSwaps();
       const urls = swaps.map(s => s.pin.item.icon_url);
-      warmPinImages(urls);
-      // Show the new board in one beat once its art is in, not card by card.
-      await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(r => setTimeout(r, 1500))]);
-      setBoard(swaps.map(boardEntry));
+      // Show the new board in one beat once the art it actually draws (Skia, at board size) is decoded.
+      await Promise.race([Promise.all([warmPinImages(urls), Image.prefetch(urls, 'memory-disk').catch(() => false)]), new Promise(r => setTimeout(r, 1500))]);
+      if (mode === 'refresh' && boardRef.current.length) {
+        quietBoard.current = true;
+        setBoard(mergeBoard(boardRef.current, swaps, live.current.lastGiven));
+      } else setBoard(toCards(swaps));
       setBoardState('ready');
     } catch {
       setBoardState(prev => (mode === 'refresh' && prev === 'ready' ? 'ready' : 'error'));
@@ -252,7 +269,9 @@ export default function PinSwapsScreen() {
       return;
     }
     setBusyId(swapId);
-    warmPinImages([swap.pin.item.icon_url]);
+    // The held pin appears large in the sheet and in the moment: decode those sizes now.
+    void warmPinImages([swap.pin.item.icon_url], 98);
+    void warmPinImages([swap.pin.item.icon_url], 190);
     beat('ui.select', { volume: 0.9 });
     try {
       const held = await holdPinSwap(swapId);
@@ -311,7 +330,8 @@ export default function PinSwapsScreen() {
   const onSelect = useCallback((item: ItemType) => {
     if (phaseRef.current !== 'picking' && phaseRef.current !== 'confirming') return;
     setPhase('picking');
-    warmPinImages([item.icon_url]);
+    void warmPinImages([item.icon_url], 98);
+    void warmPinImages([item.icon_url], 120);
     setSelected(prev => (prev?.id === item.id ? prev : item));
     beat('ui.select', { volume: 0.8 }, 'tickSelection', 1);
   }, []);
@@ -325,15 +345,15 @@ export default function PinSwapsScreen() {
     try {
       const [swaps, mine] = await Promise.all([getPinSwaps(), fetchAllPins().catch(() => null)]);
       const urls = swaps.map(sw => sw.pin.item.icon_url);
-      warmPinImages(urls);
-      await Promise.race([Image.prefetch(urls, 'memory-disk').catch(() => false), new Promise(res => setTimeout(res, 1500))]);
+      await Promise.race([Promise.all([warmPinImages(urls), Image.prefetch(urls, 'memory-disk').catch(() => false)]), new Promise(res => setTimeout(res, 1500))]);
       quietBoard.current = true;
       if (mine) {
         pinsPage.current = { next: MAX_PIN_PAGES + 1, finished: true, loading: false, token: pinsPage.current.token + 1 };
         setPins(mine);
         setPinsReady(true);
       } else void loadPins(true, true);
-      setBoard(swaps.map(boardEntry));
+      // Cards on screen never move: only the traded slot changes (it already shows your pin).
+      setBoard(mergeBoard(boardRef.current, swaps, live.current.lastGiven));
       setBoardState('ready');
     } catch { /* keep the old board */ } finally { setRefreshing(false); }
   }, [loadPins]);
@@ -360,10 +380,12 @@ export default function PinSwapsScreen() {
       const shift = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
       setDone({ got: h.swap.pin.item, gave: pick, from: { get: shift(slotsRef.current.get), give: shift(slotsRef.current.give) } });
       setLastGiven(pick.id);
+      // The traded card's slot now shows your pin (FROM YOU), in place, before the board refresh.
+      tradedSlot.current = { swapId: h.swap.id, gave: pick };
       // The sheet hands its two pins to the trade-complete moment; it fades out in place once the
       // moment is on screen (onCelebrationStart), so the board never shows bright in between.
       sessionTrades += 1;
-      warmPinImages([h.swap.pin.item.icon_url, pick.icon_url]);
+      void warmPinImages([h.swap.pin.item.icon_url], 190);
     } catch (error) {
       const kind = classifyTradeError(error);
       if (kind === 'owned') {
@@ -392,6 +414,14 @@ export default function PinSwapsScreen() {
   }, []);
 
   const finishCelebration = useCallback(() => {
+    const traded = tradedSlot.current;
+    tradedSlot.current = null;
+    if (traded) {
+      quietBoard.current = true;
+      setBoard(prev => prev.map(card => (card.id !== traded.swapId ? card : {
+        id: -traded.gave.id, pin: { id: -traded.gave.id, item: traded.gave }, held_from: '', held_to: '', key: card.key,
+      })));
+    }
     setDone(null);
     setHold(null);
     setSelected(undefined);
@@ -400,10 +430,9 @@ export default function PinSwapsScreen() {
     finishTimer.current = setTimeout(() => { void refreshAll(); }, 240);
   }, [refreshAll]);
 
-  const timerLabel = useCallback((clock: string, minutes: number, seconds: string) => {
-    const template = labels.trade_expiration;
-    return template ? vsprintf(template, [minutes, seconds]) : `Your trade will expire in ${clock}`;
-  }, [labels.trade_expiration]);
+  // Kid-friendly wording, owned by the app: the old crumb said "expire", a hard word for a 7-year-old.
+  // The server crumb (trade_expiration) is updated to match, but the app never shows the old line.
+  const timerLabel = useCallback((clock: string) => `${COPY.timeLeft} ${clock}`, []);
 
   const onRetryPins = useCallback(() => { void loadPins(true, true); }, [loadPins]);
   const onMorePins = useCallback(() => { void loadPins(false); }, [loadPins]);
@@ -420,6 +449,10 @@ export default function PinSwapsScreen() {
   const rows = Math.ceil(board.length / COLUMNS);
   const lagFor = (i: number) => (i % COLUMNS) * 0.07 + Math.floor(i / COLUMNS) * 0.1;
   const lagSpan = lagFor((rows - 1) * COLUMNS + COLUMNS - 1);
+
+  const preArm = !!hold && !!selected && (phase === 'confirming' || phase === 'sending');
+  const celeGot = done?.got ?? (preArm ? hold?.swap.pin.item : undefined);
+  const celeGave = done?.gave ?? (preArm ? selected : undefined);
 
   // ---- Every hook is above this line. ----
 
@@ -494,11 +527,10 @@ export default function PinSwapsScreen() {
                   </View>
                   <View style={styles.grid}>
                     {board.map((swap, i) => (
-                      <Animated.View key={swap.id}
+                      <Animated.View key={swap.key}
                         entering={still || quietBoard.current ? (badgeFor(swap.pin.item) === 'yours' && !still ? ZoomIn.springify().damping(12) : undefined) : FadeIn.delay(60 + i * 45).duration(220)}
-                        layout={still ? undefined : LinearTransition.springify().damping(18)}
                         style={done && hold?.swap.id === swap.id ? { opacity: 0 } : undefined}>
-                        <BoardPinCard item={swap.pin.item} swapId={swap.id} width={cellWidth} height={cardHeight} shine={shine}
+                        <BoardPinCard item={swap.pin.item} swapId={swap.id} tiltSeed={keySeed(swap.key)} width={cellWidth} height={cardHeight} shine={shine}
                           lag={lagFor(i)} lagSpan={lagSpan} still={still} badge={badgeFor(swap.pin.item)}
                           busy={busyId === swap.id || hold?.swap.id === swap.id} onPress={onBoardPress} />
                       </Animated.View>
@@ -512,7 +544,7 @@ export default function PinSwapsScreen() {
           {boardState === 'ready' && board.length > 0 && (
             <View style={styles.footer}>
               <GameButton size="compact" icon="retry" label={COPY.shuffle} accessibilityHint={COPY.shuffleHint}
-                onPress={() => { beat('ui.select', { volume: 0.7 }); void loadBoard('refresh'); }} disabled={refreshing} />
+                onPress={() => { beat('ui.select', { volume: 0.7 }); quietBoard.current = false; void loadBoard('shuffle'); }} disabled={refreshing} />
             </View>
           )}
         </ScrollView>
@@ -547,8 +579,11 @@ export default function PinSwapsScreen() {
           </Animated.View>
         )}
       </View>
-      {done && <SwapCelebration got={done.got} gave={done.gave} from={done.from} still={still} onDone={finishCelebration}
-        onStart={onCelebrationStart} tradeNumber={sessionTrades} />}
+      {/* Mounted (invisible, idle) while the player confirms, so its layers are built before the trade lands. */}
+      {celeGot && celeGave && (
+        <SwapCelebration key={`cele-${celeGot.id}-${celeGave.id}`} got={celeGot} gave={celeGave} from={done?.from} still={still}
+          armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} />
+      )}
     </View>
   );
 }

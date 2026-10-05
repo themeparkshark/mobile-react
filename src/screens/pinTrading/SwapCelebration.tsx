@@ -40,12 +40,17 @@ import { queueHaptic } from '../../gamekit/Haptics';
 const SHARK = require('../../../assets/images/howto/shark-happy.webp');
 const never = { reduceMotion: ReduceMotion.Never } as const;
 
-export default function SwapCelebration({ got, gave, from, still, onDone, onStart, tradeNumber = 1 }: {
+export default function SwapCelebration({ got, gave, from, still, onDone, onStart, tradeNumber = 1, armed = true }: {
   got: ItemType; gave: ItemType; still: boolean; onDone: () => void;
   /** Fired on the first frame the moment is drawn, so the sheet only fades out once this covers it. */
   onStart?: () => void;
-  /** Trades this session (2+ shows a "Trade #n today!" line). */
+  /** Trades this visit (2+ shows a "Trade #n this visit!" line). */
   tradeNumber?: number;
+  /**
+   * false: mounted ahead of time (while the player confirms), invisible and idle, so the moment's
+   * layers are already built when the trade goes through. true: play.
+   */
+  armed?: boolean;
   /** Where the two pins sat on the trade sheet (window space), so the moment starts right there. */
   from?: { get?: SlotRect; give?: SlotRect };
 }) {
@@ -89,10 +94,31 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const riser = useRef(0);
 
   const crossBeat = () => { if (!landed.current) beat('fx.firework', { volume: 0.4, pitch: 4 }, 'hitMedium', 2); };
-  // The cross sound fires when the pins actually meet on screen.
-  useAnimatedReaction(() => travel.value >= crossAt, (now, before) => {
-    if (now && before === false) runOnJS(crossBeat)();
+  const thumped = useRef(false);
+  /** The impact sound starts a hair before contact (audio output latency), so thump, haptic and squash land together. */
+  const thump = () => {
+    if (thumped.current) return;
+    thumped.current = true;
+    stopBeat(riser.current);
+    beat('fx.firework', { volume: 1, pitch: -5 }, 'comboHeavy', 4);
+    beat('fx.hit', { volume: 1 });
+  };
+  // Sound cues ride the flight's own clock on the UI thread.
+  useAnimatedReaction(() => (travel.value >= 0.93 ? 2 : travel.value >= crossAt ? 1 : 0), (now, before) => {
+    if (before === null || before === undefined || now === before) return;
+    if (now >= 1 && before < 1) runOnJS(crossBeat)();
+    if (now === 2) runOnJS(thump)();
   }, [crossAt]);
+
+  /** The contact frame, on the UI thread: squash, shake, rays, NEW!, confetti all start on the same frame the pin arrives. */
+  const slam = () => {
+    'worklet';
+    land.value = 1;
+    squash.value = withSequence(withTiming(1, { duration: 50 }), withSpring(0, { damping: 6, stiffness: 300, mass: 0.5 }));
+    shake.value = 0;
+    shake.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.quad) });
+    burst.value = withTiming(1, { duration: 1300, easing: Easing.linear });
+  };
   const runLandRef = () => runLand();
   const runLand = () => {
     if (landed.current) return;
@@ -100,11 +126,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     timers.current.forEach(clearTimeout);
     timers.current.length = 0;
     if (travel.value < 1) { cancelAnimation(travel); travel.value = 1; }
-    land.value = withTiming(1, { duration: 1, ...never });
-    squash.value = withSequence(withTiming(1, { duration: 60 }), withSpring(0, { damping: 6, stiffness: 300, mass: 0.5 }));
-    shake.value = 0;
-    shake.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.quad) });
-    burst.value = withTiming(1, { duration: 1300, easing: Easing.linear });
+    if (land.value < 1) slam();
     // Rays: a quick turn on the land, then a slow idle drift so the end card never looks frozen.
     spin.value = withSequence(withTiming(1, { duration: 2400, easing: Easing.out(Easing.cubic) }),
       withRepeat(withTiming(10, { duration: 60000, easing: Easing.linear }), -1, false));
@@ -118,16 +140,15 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     }, 8000));
     shine.value = withDelay(260, withRepeat(withSequence(withTiming(1, { duration: 850 }), withDelay(2400, withTiming(0, { duration: 0 }))), 3, false));
     textIn.value = withDelay(T.title - T.land, withSpring(1, { damping: 14, stiffness: 220 }));
-    // The land is the loudest beat: a deep firework thump, a clack, then the jingle.
-    stopBeat(riser.current);
-    beat('fx.firework', { volume: 1, pitch: -5 }, 'comboHeavy', 4);
-    beat('fx.hit', { volume: 1 });
+    // The land is the loudest beat: a deep firework thump, a clack (usually already fired at 93%), then the jingle.
+    thump();
     beat('ui.complete', { volume: 1 });
     // A light success tail after the heavy impact.
     timers.current.push(setTimeout(() => queueHaptic('success', 2), 180));
   };
 
   useEffect(() => {
+    if (!armed) return;
     AccessibilityInfo.announceForAccessibility(`${COPY.doneTitle} ${COPY.doneMessage(pinName(got))}`);
     const t = timers.current;
     if (still) {
@@ -142,18 +163,26 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     // The land fires from the flight's own completion on the UI thread, so it can never run ahead of
     // (or behind) the pin, however busy the JS thread is. A JS fallback only covers a cancelled flight.
     travel.value = withDelay(T.travel, withTiming(1, { duration: T.land - T.travel, easing: Easing.linear }, finished => {
-      if (finished) runOnJS(runLandRef)();
+      if (!finished) return;
+      slam();
+      runOnJS(runLandRef)();
     }));
     hit.value = withDelay(T.cross, withTiming(1, { duration: 380, easing: Easing.out(Easing.quad) }));
     // The cross flash holds full for 3 frames, then fades.
     flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 16 }), withDelay(34, withTiming(0, { duration: 140 }))));
     t.push(setTimeout(() => { riser.current = beat('fx.whooshRev', { volume: 0.9 }, 'tapLight', 1); }, 0));
-    t.push(setTimeout(runLand, T.land + 300));
+    // Fallback for a lost completion only: it never cuts a flight that is still running.
+    const fallback = (tries: number) => t.push(setTimeout(() => {
+      if (landed.current) return;
+      if (travel.value >= 1 || tries >= 4) runLand();
+      else fallback(tries + 1);
+    }, tries === 0 ? T.land + 300 : 150));
+    fallback(0);
     return () => {
       t.forEach(clearTimeout);
       [lift, travel, hit, flash, land, squash, shake, burst, shine, spin, bg, textIn, button, bob].forEach(v => cancelAnimation(v));
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [armed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Tap anywhere before the land: skip to it. */
   const skip = () => {
@@ -254,8 +283,10 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const glow = bigSize * 1.35;
 
   return (
-    <Animated.View entering={still ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : undefined}
-      exiting={FadeOut.duration(220).reduceMotion(ReduceMotion.Never)} style={[StyleSheet.absoluteFill, { zIndex: 50 }]} accessibilityViewIsModal>
+    <Animated.View entering={still && armed ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : undefined}
+      exiting={FadeOut.duration(220).reduceMotion(ReduceMotion.Never)}
+      style={[StyleSheet.absoluteFill, { zIndex: 50 }, !armed && { opacity: 0 }]} pointerEvents={armed ? 'auto' : 'none'}
+      accessibilityViewIsModal={armed} accessibilityElementsHidden={!armed} importantForAccessibility={armed ? 'auto' : 'no-hide-descendants'}>
       <Pressable style={StyleSheet.absoluteFill} onPress={skip} accessible={false} importantForAccessibility="no">
         {/* The board stays in the world, dimmed under a night-sky wash. */}
         <Animated.View style={[StyleSheet.absoluteFill, bgStyle]} pointerEvents="none">

@@ -71,8 +71,10 @@ export type BoardBadge = 'owned' | 'yours' | undefined;
  * finger, the pin lifts off the card (deeper shadow). The pin keeps its own
  * tilt; the card tilts the other way.
  */
-export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress }: {
-  item: ItemType; swapId: number; width: number; height: number; shine?: SharedValue<number>; lag: number; lagSpan: number;
+export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed = swapId, width, height, shine, lag, lagSpan, still, busy, badge, onPress }: {
+  item: ItemType; swapId: number;
+  /** Stable per slot, so a pin changing in place keeps the card's tilt. */
+  tiltSeed?: number; width: number; height: number; shine?: SharedValue<number>; lag: number; lagSpan: number;
   still: boolean; busy: boolean; badge?: BoardBadge; onPress: (swapId: number) => void;
 }) {
   const press = useSharedValue(0);
@@ -81,9 +83,19 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, he
     if (still) { lift.value = busy ? 1 : 0; return; }
     lift.value = withSpring(busy ? 1 : 0, MOTION.popSpring);
   }, [busy, still, lift]);
-  const card = cardTilt(swapId);
+  // A slot whose pin changes in place (your pin landing on the board) settles with a small bounce.
+  const settle = useSharedValue(1);
+  const firstItem = useRef(item.id);
+  useEffect(() => {
+    if (firstItem.current === item.id) return;
+    firstItem.current = item.id;
+    if (still) return;
+    settle.value = 0.86;
+    settle.value = withSpring(1, { damping: 9, stiffness: 260, mass: 0.6 });
+  }, [item.id, still, settle]);
+  const card = cardTilt(tiltSeed);
   const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${card + press.value * 2}deg` }, { scale: 1 - press.value * 0.06 }],
+    transform: [{ rotate: `${card + press.value * 2}deg` }, { scale: (1 - press.value * 0.06) * settle.value }],
   }));
   const pinStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -lift.value * 6 - press.value * 3 }, { scale: 1 + lift.value * 0.06 + press.value * 0.03 }],
@@ -109,7 +121,7 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, width, he
       <Animated.View style={[styles.backer, { width: width - SPACE.sm, height }, cardStyle]}>
         <View style={styles.hole}><View style={styles.holeShade} /></View>
         <Animated.View style={[pinStyle, badge ? { opacity: 0.7 } : null]}>
-          <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(swapId)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
+          <EnamelPin uri={item.icon_url} size={pinSize} tilt={pinTilt(tiltSeed)} shine={still ? undefined : shine} lag={lag} lagSpan={lagSpan}
             lift={lift} surface="board" recyclingKey={`board-${swapId}`} />
         </Animated.View>
         <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.backerName}>{balanceName(name)}</Text>
