@@ -9,7 +9,7 @@
  * Warm the board's images when it loads, and a pin's large size when it is held
  * or picked, so the moment starts with its pins in memory.
  */
-import { Skia, type SkImage } from '@shopify/react-native-skia';
+import { FilterMode, MipmapMode, Skia, type SkImage } from '@shopify/react-native-skia';
 import { useEffect, useState } from 'react';
 import { PixelRatio } from 'react-native';
 
@@ -49,7 +49,8 @@ function draw(src: SkImage, bucket: number): SkImage | null {
   if (!surface) return src;
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
-  surface.getCanvas().drawImageRect(src, Skia.XYWHRect(0, 0, w, h), Skia.XYWHRect(0, 0, dw, dh), paint);
+  // Filtered + mipmapped downscale, so thin outlines stay smooth (no nearest-neighbour jaggies).
+  surface.getCanvas().drawImageRectOptions(src, Skia.XYWHRect(0, 0, w, h), Skia.XYWHRect(0, 0, dw, dh), FilterMode.Linear, MipmapMode.Linear, paint);
   surface.flush();
   return surface.makeImageSnapshot().makeNonTextureImage();
 }

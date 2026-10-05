@@ -11,11 +11,10 @@
 import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Dimensions, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useSharedValue, withTiming, ZoomIn,
 } from 'react-native-reanimated';
-import { vsprintf } from 'sprintf-js';
 import getPins from '../api/endpoints/me/pins';
 import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
@@ -143,7 +142,7 @@ export default function PinSwapsScreen() {
    * 'first' and 'shuffle' (the New pins button) show the server's fresh set. 'refresh' (pull to refresh,
    * after a pin was taken) reconciles quietly: cards on screen keep their slots, only gone pins change.
    */
-  const loadBoard = useCallback(async (mode: 'first' | 'refresh' | 'shuffle') => {
+  const loadBoard = useCallback(async (mode: 'first' | 'refresh' | 'shuffle', removed: readonly number[] = []) => {
     if (mode === 'first') setBoardState('loading');
     else setRefreshing(true);
     try {
@@ -153,7 +152,7 @@ export default function PinSwapsScreen() {
       await Promise.race([Promise.all([warmPinImages(urls), Image.prefetch(urls, 'memory-disk').catch(() => false)]), new Promise(r => setTimeout(r, 1500))]);
       if (mode === 'refresh' && boardRef.current.length) {
         quietBoard.current = true;
-        setBoard(mergeBoard(boardRef.current, swaps, live.current.lastGiven));
+        setBoard(mergeBoard(boardRef.current, swaps, removed));
       } else setBoard(toCards(swaps));
       setBoardState('ready');
     } catch {
@@ -270,8 +269,7 @@ export default function PinSwapsScreen() {
     }
     setBusyId(swapId);
     // The held pin appears large in the sheet and in the moment: decode those sizes now.
-    void warmPinImages([swap.pin.item.icon_url], 98);
-    void warmPinImages([swap.pin.item.icon_url], 190);
+    void warmPinImages([swap.pin.item.icon_url], Dimensions.get('window').height < 740 ? 150 : 190);
     beat('ui.select', { volume: 0.9 });
     try {
       const held = await holdPinSwap(swapId);
@@ -288,7 +286,7 @@ export default function PinSwapsScreen() {
         beat('fx.nope', { volume: 0.6 }, 'failBuzz', 2);
       } else {
         showError(error);
-        if (!again && kind === 'taken') void loadBoard('refresh');
+        if (!again && kind === 'taken') void loadBoard('refresh', [swapId]);
       }
     } finally {
       setBusyId(null);
@@ -309,7 +307,7 @@ export default function PinSwapsScreen() {
     beat('ui.modalClose', { volume: 0.7 });
     setHold(null);
     setSelected(undefined);
-    if (p === 'expired' || p === 'failed' || p === 'taken') void loadBoard('refresh');
+    if (p === 'expired' || p === 'failed' || p === 'taken') void loadBoard('refresh', p === 'taken' ? [h.swap.id] : []);
   }, [loadBoard]);
 
   const onExpire = useCallback(() => {
@@ -330,8 +328,7 @@ export default function PinSwapsScreen() {
   const onSelect = useCallback((item: ItemType) => {
     if (phaseRef.current !== 'picking' && phaseRef.current !== 'confirming') return;
     setPhase('picking');
-    void warmPinImages([item.icon_url], 98);
-    void warmPinImages([item.icon_url], 120);
+
     setSelected(prev => (prev?.id === item.id ? prev : item));
     beat('ui.select', { volume: 0.8 }, 'tickSelection', 1);
   }, []);
@@ -353,7 +350,8 @@ export default function PinSwapsScreen() {
         setPinsReady(true);
       } else void loadPins(true, true);
       // Cards on screen never move: only the traded slot changes (it already shows your pin).
-      setBoard(mergeBoard(boardRef.current, swaps, live.current.lastGiven));
+      // Cards on screen never move: the traded slot already shows your pin (negative id), nothing else changes.
+      setBoard(mergeBoard(boardRef.current, swaps, []));
       setBoardState('ready');
     } catch { /* keep the old board */ } finally { setRefreshing(false); }
   }, [loadPins]);
@@ -385,7 +383,7 @@ export default function PinSwapsScreen() {
       // The sheet hands its two pins to the trade-complete moment; it fades out in place once the
       // moment is on screen (onCelebrationStart), so the board never shows bright in between.
       sessionTrades += 1;
-      void warmPinImages([h.swap.pin.item.icon_url], 190);
+      void warmPinImages([h.swap.pin.item.icon_url], Dimensions.get('window').height < 740 ? 150 : 190);
     } catch (error) {
       const kind = classifyTradeError(error);
       if (kind === 'owned') {
@@ -436,7 +434,14 @@ export default function PinSwapsScreen() {
 
   const onRetryPins = useCallback(() => { void loadPins(true, true); }, [loadPins]);
   const onMorePins = useCallback(() => { void loadPins(false); }, [loadPins]);
-  const onSlot = useCallback((which: 'get' | 'give', rect: SlotRect) => { slotsRef.current[which] = rect; }, []);
+  const [slotRects, setSlotRects] = useState<{ get?: SlotRect; give?: SlotRect }>({});
+  const onSlot = useCallback((which: 'get' | 'give', rect: SlotRect) => {
+    slotsRef.current[which] = rect;
+    setSlotRects(prev => (prev[which]?.x === rect.x && prev[which]?.y === rect.y && prev[which]?.size === rect.size ? prev : { ...prev, [which]: rect }));
+    // Decode the slot's pin at exactly the size the sheet draws it (any phone).
+    const url = which === 'get' ? holdRef.current?.swap.pin.item.icon_url : selectedRef.current?.icon_url;
+    void warmPinImages([url], rect.size);
+  }, []);
   const onRootLayout = useCallback(() => {
     rootRef.current?.measureInWindow((x, y) => { rootOffset.current = { x, y }; });
   }, []);
@@ -450,7 +455,19 @@ export default function PinSwapsScreen() {
   const lagFor = (i: number) => (i % COLUMNS) * 0.07 + Math.floor(i / COLUMNS) * 0.1;
   const lagSpan = lagFor((rows - 1) * COLUMNS + COLUMNS - 1);
 
-  const preArm = !!hold && !!selected && (phase === 'confirming' || phase === 'sending');
+  // The moment is built a beat after the confirm step appears (not on the tap itself), with the
+  // sheet's measured slot positions, so its first visible frame already has the pins in place.
+  const [armReady, setArmReady] = useState(false);
+  const confirmingNow = phase === 'confirming' || phase === 'sending';
+  useEffect(() => {
+    if (!confirmingNow) { setArmReady(false); return; }
+    const id = setTimeout(() => setArmReady(true), 260);
+    return () => clearTimeout(id);
+  }, [confirmingNow]);
+  const preArm = !!hold && !!selected && confirmingNow && (armReady || !!done);
+  const root = rootOffset.current;
+  const shiftRect = (r?: SlotRect) => (r ? { ...r, x: r.x - root.x, y: r.y - root.y } : undefined);
+  const celeFrom = done?.from ?? { get: shiftRect(slotRects.get), give: shiftRect(slotRects.give) };
   const celeGot = done?.got ?? (preArm ? hold?.swap.pin.item : undefined);
   const celeGave = done?.gave ?? (preArm ? selected : undefined);
 
@@ -581,7 +598,7 @@ export default function PinSwapsScreen() {
       </View>
       {/* Mounted (invisible, idle) while the player confirms, so its layers are built before the trade lands. */}
       {celeGot && celeGave && (
-        <SwapCelebration key={`cele-${celeGot.id}-${celeGave.id}`} got={celeGot} gave={celeGave} from={done?.from} still={still}
+        <SwapCelebration key={`cele-${celeGot.id}-${celeGave.id}`} got={celeGot} gave={celeGave} from={celeFrom} still={still}
           armed={!!done} onDone={finishCelebration} onStart={onCelebrationStart} tradeNumber={sessionTrades} />
       )}
     </View>

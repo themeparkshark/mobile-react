@@ -71,6 +71,9 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
   const button = useSharedValue(still ? 1 : 0);
   const bob = useSharedValue(0);
   const textIn = useSharedValue(still ? 1 : 0);
+  /** Visibility on the UI thread: flips in the same frame the flight starts, never before its positions are set. */
+  const shown = useSharedValue(armed ? 1 : 0);
+  const shownStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   const landed = useRef(still);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -149,6 +152,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
 
   useEffect(() => {
     if (!armed) return;
+    shown.value = 1;
     AccessibilityInfo.announceForAccessibility(`${COPY.doneTitle} ${COPY.doneMessage(pinName(got))}`);
     const t = timers.current;
     if (still) {
@@ -171,7 +175,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
     // The cross flash holds full for 3 frames, then fades.
     flash.value = withDelay(T.cross, withSequence(withTiming(1, { duration: 16 }), withDelay(34, withTiming(0, { duration: 140 }))));
     t.push(setTimeout(() => { riser.current = beat('fx.whooshRev', { volume: 0.9 }, 'tapLight', 1); }, 0));
-    // Fallback for a lost completion only: it never cuts a flight that is still running.
+    // Fallback for a lost completion only: it waits for the flight to finish (up to land + 900 ms)
+    // before forcing the land, so it never cuts a normally running flight.
     const fallback = (tries: number) => t.push(setTimeout(() => {
       if (landed.current) return;
       if (travel.value >= 1 || tries >= 4) runLand();
@@ -284,8 +289,8 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
 
   return (
     <Animated.View entering={still && armed ? FadeIn.duration(180).reduceMotion(ReduceMotion.Never) : undefined}
-      exiting={FadeOut.duration(220).reduceMotion(ReduceMotion.Never)}
-      style={[StyleSheet.absoluteFill, { zIndex: 50 }, !armed && { opacity: 0 }]} pointerEvents={armed ? 'auto' : 'none'}
+      exiting={armed ? FadeOut.duration(220).reduceMotion(ReduceMotion.Never) : undefined}
+      style={[StyleSheet.absoluteFill, { zIndex: 50 }, shownStyle]} pointerEvents={armed ? 'auto' : 'none'}
       accessibilityViewIsModal={armed} accessibilityElementsHidden={!armed} importantForAccessibility={armed ? 'auto' : 'no-hide-descendants'}>
       <Pressable style={StyleSheet.absoluteFill} onPress={skip} accessible={false} importantForAccessibility="no">
         {/* The board stays in the world, dimmed under a night-sky wash. */}
