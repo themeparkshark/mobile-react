@@ -462,10 +462,9 @@ test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame
   assert.doesNotMatch(rig, /glow\.webp|fx\/flame\.webp'|puff\.webp|#ffb43a|Math\.sin\(v \/ 41\)/, 'no generated flame, smoke, glow or orange light');
   assert.match(rig, /require\('\.\.\/\.\.\/\.\.\/assets\/fx\/jet-drop\.webp'\)/);
   for (const gone of ['flame.webp', 'puff.webp', 'jet-flame.webp']) assert.equal(fs.existsSync(path.join(root, 'assets/fx', gone)), false, gone);
-  // Weight: squash on the dip, stretch on the pop, hang time at the top of the bob.
   assert.match(rig, /export function jetpackBody\(/);
-  assert.match(rig, /return u \+ 0\.0557 \* \(Math\.cos\(2 \* Math\.PI \* u\) - 1\);/);
-  assert.match(src('src/fx/FxLayers.tsx'), /\{ scaleX: body\.sx \},\s*\{ scaleY: body\.sy \},/);
+
+
   const fixture = src('src/screens/StoreScreen/SecretShopPreviewScreen.tsx');
   assert.match(fixture, /\{ id: 436, name: 'Jetpack 3000', fx: 'jetpack', slot: 3, rarity: 3, cost: 140,/);
   assert.doesNotMatch(fixture, /Fin Jet/);
@@ -515,14 +514,40 @@ test("the jetpack never loses its flame: exactly one of Alex's drawings at every
   }
 });
 
-test('the hover bob is smooth (no kink at the midline) and hangs at the top', () => {
+test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boost every 8 to 11 s', () => {
   const jet = loadJetpack();
-  let maxStep = 0;
-  for (let t = 0; t < 2600 * 3; t += 5) maxStep = Math.max(maxStep, Math.abs(jet.hoverBob(t + 5) - jet.hoverBob(t)));
-  // A plain sine moves at most 2*pi*5/2600 = 0.0121 per 5 ms; the warp may be up to ~1.4x that, never a spike.
-  assert.ok(maxStep < 0.019, `max step ${maxStep}`);
-  let top = 0;
-  let bottom = 0;
-  for (let t = 0; t < 2600; t += 1) { const b = jet.hoverBob(t); if (b > 0.9) top++; if (b < -0.9) bottom++; }
-  assert.ok(top > bottom * 1.25, `hangs at the top (${top} ms) longer than the bottom (${bottom} ms)`);
+  const H = 460;
+  const NO = -1e9;
+  const dt = 1000 / 60;
+  let prevY = jet.jetpackFloat(0, NO, H);
+  let prevV = 0;
+  let maxV = 0;
+  let maxA = 0;
+  const starts = [];
+  let was = false;
+  for (let t = dt; t <= 60000; t += dt) {
+    const y = jet.jetpackFloat(t, NO, H);
+    const v = (y - prevY) / dt * 1000; // px per second
+    maxV = Math.max(maxV, Math.abs(v));
+    maxA = Math.max(maxA, Math.abs(v - prevV) / dt * 1000);
+    const on = jet.boostAt(t, NO) > 0;
+    if (on && !was) starts.push(t);
+    was = on; prevY = y; prevV = v;
+  }
+  // A 0.045 * 460 = 21 px lift over 0.96 s with smootherstep peaks under 45 px/s: a drift, never a jump.
+  assert.ok(maxV < 45, `max speed ${maxV.toFixed(1)} px/s`);
+  assert.ok(maxA < 200, `max acceleration ${maxA.toFixed(0)} px/s^2 (no snap)`);
+  const gaps = starts.slice(1).map((s, k) => s - starts[k]);
+  assert.ok(gaps.length >= 4 && gaps.every(g => g > 6500 && g < 11800), `boost gaps ${gaps.map(g => Math.round(g)).join(', ')}`);
+  assert.ok(new Set(gaps.map(g => Math.round(g / 100))).size > 1, 'not mechanical: the gaps vary');
+  // No squash or stretch on the shark.
+  const body = jet.jetpackBody(3000, NO);
+  assert.equal(body.sx, 1); assert.equal(body.sy, 1);
+  const layers = src('src/fx/FxLayers.tsx');
+  assert.doesNotMatch(layers, /scaleX: body\.sx/);
+  // Equip and unequip ease the lift in and out from wherever it is (never a snap), hooks before the early return.
+  assert.match(layers, /const lift = useFloatWeight\(props\.fx\.floats\);\s*const moves = lift\.active/);
+  assert.match(layers, /w\.value = withTiming\(floats \? 1 : 0, \{ duration: 700/);
+  // A tap or a buy never restarts a lift mid-air.
+  assert.match(src('src/components/Playercard.tsx'), /if \(kind === 'tap' && airborne\) return;/);
 });

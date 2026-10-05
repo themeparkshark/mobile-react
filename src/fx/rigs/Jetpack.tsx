@@ -38,65 +38,49 @@ const CYAN_LIGHT = '#bff9ff';
 /** One drawing every 80 ms (about 12 fps): the cadence of a hand-drawn loop. Faster on a boost. */
 export const FLAME_FRAME_MS = 80;
 
-/** Boost: every ~6 s (and on a tap) the shark dips, then pops up on a big flame. */
-export const BOOST_PERIOD = 6000;
-export const BOOST_LENGTH = 0.2;
+/**
+ * Boost: about every 9 s, a little randomly (8 to 11 s apart), and on a tap. Calm and floaty
+ * (Dustin, October 5: "how the shark jumps around"): the shark eases up on a bigger flame, hangs,
+ * and eases back down. No squash, no pop, no snap: zero velocity at both ends.
+ */
+export const BOOST_PERIOD = 9000;
+export const BOOST_LENGTH = 2400 / BOOST_PERIOD;
+export const BOOST_JITTER = 0.22;
 export const STILL_T = 800;
 
-/**
- * The boost curve, -0.35..1: a 100 ms squash down, a fast pop up, then a slow
- * drift back (game feel round 2: anticipation, kick, settle).
- */
+/** 0..1..0 with zero velocity and acceleration at both ends (smootherstep). */
+function smoother(k: number): number {
+  'worklet';
+  const x = Math.min(1, Math.max(0, k));
+  return x * x * x * (x * (x * 6 - 15) + 10);
+}
+
+/** The boost lift, 0..1: a 40% ease up, then a slower 60% ease back down. */
 export function boostCurve(p: number): number {
   'worklet';
-  if (p < 0) return 0;
-  if (p < 0.1) return -0.35 * Math.sin((p / 0.1) * Math.PI / 2);
-  if (p < 0.28) { const k = (p - 0.1) / 0.18; return -0.35 + 1.35 * (1 - Math.pow(1 - k, 3)); }
-  const k = (p - 0.28) / 0.72;
-  return 1 - k * k * (3 - 2 * k);
+  if (p < 0 || p >= 1) return 0;
+  return p < 0.4 ? smoother(p / 0.4) : 1 - smoother((p - 0.4) / 0.6);
 }
 
 export function boostAt(t: number, kick: number): number {
   'worklet';
-  return boostCurve(momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350).p);
+  return boostCurve(momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p);
 }
 
 /**
- * The bob's warped phase: a smooth time warp (no kink) that lingers about 35% longer at the
- * top and drops quicker through the bottom: weight, not a sine (game feel round 7).
+ * How high the shark floats at time t, in px of the stage height (negative is up). The gentle
+ * hover bob is the Playercard's own idle bob (the same on every look); the jetpack only adds a
+ * steady lift and the slow boost, so nothing ever jumps.
  */
-export function hoverPhase(t: number): number {
-  'worklet';
-  const u = ((t / 2600) % 1 + 1) % 1;
-  return u + 0.0557 * (Math.cos(2 * Math.PI * u) - 1);
-}
-
-/** The idle bob, -1..1 (1 is the top). */
-export function hoverBob(t: number): number {
-  'worklet';
-  return Math.sin(2 * Math.PI * hoverPhase(t));
-}
-
-/** How high the shark floats at time t, in px of the stage height (negative is up). */
 export function jetpackFloat(t: number, kick: number, height: number): number {
   'worklet';
-  return -height * (0.1 + 0.025 * hoverBob(t) + 0.07 * boostAt(t, kick));
+  return -height * (0.09 + 0.045 * boostAt(t, kick));
 }
 
-/**
- * Squash and stretch on the shark (game feel: weight). The dip squashes it wide, the pop
- * stretches it tall, and it lands with a small overshoot. Plus a lazy tilt with the bob.
- */
+/** A lazy lean with the boost (never a squash or stretch). */
 export function jetpackBody(t: number, kick: number): { sx: number; sy: number; rot: number } {
   'worklet';
-  const p = momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350).p;
-  let sx = 1;
-  let sy = 1;
-  if (p >= 0 && p < 0.1) { const k = Math.sin((p / 0.1) * Math.PI / 2); sx = 1 + 0.07 * k; sy = 1 - 0.08 * k; }
-  else if (p >= 0.1 && p < 0.3) { const k = Math.sin(((p - 0.1) / 0.2) * Math.PI); sx = 1 - 0.05 * k; sy = 1 + 0.07 * k; }
-  else if (p >= 0.3 && p < 0.55) { const k = Math.sin(((p - 0.3) / 0.25) * Math.PI); sx = 1 + 0.025 * k; sy = 1 - 0.03 * k; }
-  const b = boostCurve(p);
-  return { sx, sy, rot: 1.4 * Math.cos(2 * Math.PI * hoverPhase(t)) - 3 * Math.max(0, b) };
+  return { sx: 1, sy: 1, rot: 0.8 * Math.sin((t / 5400) * Math.PI * 2) - 1.5 * boostAt(t, kick) };
 }
 
 const SPARKS = [0, 1, 2, 3, 4, 5];
@@ -202,7 +186,7 @@ export function JetpackFloorLight({ t, kick, box, floorY }: Pick<RigProps, 't' |
     const lift = Math.min(1, Math.max(0, (-jetpackFloat(t.value, kick.value, box.h) / box.h - 0.075) / 0.17));
     const k = 1 - 0.2 * lift;
     // ...but the pop itself flashes the floor for 150 ms: the thrust hits, then eases off.
-    const p = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350).p;
+    const p = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
     const popMs = BOOST_PERIOD * BOOST_LENGTH;
     const since = p < 0 ? -1 : p * popMs - 0.1 * popMs;
     const flash = since >= 0 && since < 150 ? 0.3 * (1 - since / 150) : 0;
@@ -225,7 +209,7 @@ export function JetpackFloorLight({ t, kick, box, floorY }: Pick<RigProps, 't' |
 /** In front of the shark: the glow, the floor light, the side flame, the pack, the main flame and the droplets. */
 export function JetpackFront(props: RigProps) {
   const { t, kick, box, lod, cue } = props;
-  useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
+  useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
   return (
     <>
       <Flame {...props} spec={G.flame2} delay={40} frames={SIDE_FRAMES} keys={SIDE_KEYS} />

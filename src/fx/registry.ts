@@ -38,7 +38,7 @@ export const FX_BLURB: Record<FxKey, string> = {
 
 /** Each rig's moment: its cue name and how long it lasts (ms). Taps wait until 60% of it has played. */
 export const FX_MOMENT: Record<FxKey, { cue: string; ms: number }> = {
-  jetpack: { cue: 'boost', ms: 6000 * 0.2 },
+  jetpack: { cue: 'boost', ms: 2400 },
   plasma_blade: { cue: 'swing', ms: 4500 * 0.22 },
   reef_halo: { cue: 'flip', ms: 6500 * 0.14 },
   saucer: { cue: 'beam', ms: 5000 * 0.42 },

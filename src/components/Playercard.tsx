@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FxFloat, FxRigLayers, FxScene, FxSceneLight, FxShadow, useFxMomentCue, wornFx } from '../fx/FxLayers';
 import { FxBox, useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
-import { JetpackFloorLight } from '../fx/rigs/Jetpack';
+import { JetpackFloorLight, boostAt } from '../fx/rigs/Jetpack';
 import { FX_MOMENT, FxLod, NO_KICK, containBox } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
@@ -164,6 +164,10 @@ export default function Playercard({
     if (!fx.any || !fxRunning) return;
     // On the frame clock (the one the motion runs on), so a hitch never lets a tap in early.
     if (kind === 'tap' && fxClock.value - fxKick.value < momentMs * 0.6) return;
+    // The jetpack never restarts a lift mid-air (that would drop the shark): a tap or a buy
+    // during a boost just waits for it to settle (Dustin: no jumps, ever).
+    const airborne = fx.floats && boostAt(fxClock.value, fxKick.value) > 0;
+    if (kind === 'tap' && airborne) return;
     fxTouch();
     wakeFx();
     const keys = [...fx.rigs.map(r => r.key), ...(fx.scene && showBackground ? [fx.scene] : [])];
@@ -172,9 +176,13 @@ export default function Playercard({
       fxKick.value = fxClock.value;
       if (cue) fxPlayCue(cue, true);
     } else {
-      fxKick.value = fxClock.value + 450;
+      if (!airborne) fxKick.value = fxClock.value + 450;
       unlockTimers.current.push(setTimeout(() => { if (cue) fxPlayCue(cue, false); }, 450));
-      unlockTimers.current.push(setTimeout(() => { fxKick.value = fxClock.value; if (cue) fxPlayCue(cue, false); }, 450 + momentMs * 0.75));
+      // The second play waits for the first to finish on a floating shark (no mid-air restart).
+      unlockTimers.current.push(setTimeout(() => {
+        if (!(fx.floats && boostAt(fxClock.value, fxKick.value) > 0)) fxKick.value = fxClock.value;
+        if (cue) fxPlayCue(cue, false);
+      }, 450 + momentMs * (fx.floats ? 1.05 : 0.75)));
     }
   }, [fx, fxRunning, momentMs, showBackground, onFxPlay]);
   const unlockTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
