@@ -431,7 +431,7 @@ test('R6 gull photobomb: Rare and up, 1 pass in 4, crosses within 150 ms of arri
   assert.equal(ride.gullInFrame(-81), false);
   assert.deepEqual(['blurry', 'good', 'great', 'frame_it'].map(ride.photobombCap), ['blurry', 'good', 'good', 'good']);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /gullInFrame\(gullMs\.value\) && grade !== 'blurry'\) \{\s*bombed = true;\s*grade = photobombCap\(grade\);/);
+  assert.match(src, /gullInFrame\(gullMs\.value - INPUT_LATENCY_MS\) && grade !== 'blurry'\) \{\s*bombed = true;\s*grade = photobombCap\(grade\);/);
   assert.match(src, /Photobombed!/);
   assert.match(src, /gullFor\(item\?\.rarity, seed, passCount\.current, \{ reducedMotion: parkedMode \|\| reducedMotion, mercy, freeze: hintFreeze\.value \}\)/);
   // The scenery never sends a free gull any more (it would teach that a gull is harmless).

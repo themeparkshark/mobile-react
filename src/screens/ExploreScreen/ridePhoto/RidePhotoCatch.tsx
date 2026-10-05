@@ -28,7 +28,7 @@ import {
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
   passPlan, planEasing, planMs, readyLamp, swayAt, swayFor, swayOverscan, telegraphFor, type PassPlan,
   distanceMs, isMercyRide, swayShiftMs, RING_FADE_MS,
-  bumpAt, bumpCurve, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead, GRADE_RANK,
+  INPUT_LATENCY_MS, bumpAt, bumpCurve, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead, GRADE_RANK,
 } from '../ridePhoto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -1003,7 +1003,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       const result = gradeOffset(offset, misses.value, mercyOn.value ? 2 : rarity);
       grade = result.grade; direction = result.direction; soClose = result.soClose;
       // R6: a gull in the window photobombs the shot: it caps at Good (a Blurry stays Blurry).
-      if (Number.isFinite(gullMs.value) && gullInFrame(gullMs.value) && grade !== 'blurry') {
+      // (The touch lands INPUT_LATENCY_MS after what the kid saw, so the gull is judged where it was on screen.)
+      if (Number.isFinite(gullMs.value) && gullInFrame(gullMs.value - INPUT_LATENCY_MS) && grade !== 'blurry') {
         bombed = true;
         grade = photobombCap(grade);
       }
