@@ -18,10 +18,11 @@
  * ever changes, so there is no blank button frame.
  */
 import * as Haptics from 'expo-haptics';
+import { openMembership } from '../../components/GrownUpGate';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/registry';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { UnlockBeat, openVipWithGrownUp } from './SecretShopUi';
+import { UnlockBeat } from './SecretShopUi';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -409,8 +410,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     switch (cta.action) {
       case 'wear': void wearNow(); break;
       case 'close': closeAnimated(); break;
-      // The Secret Shop's door to VIP goes through a grown-up first (kids UX round 1).
-      case 'vip': onClose(); if (secretItem) void openVipWithGrownUp(); else RootNavigation.navigate('Membership'); break;
+      // The grown-up gate opens only after the sheet has slid away and its modal is gone.
+      case 'vip': afterHiddenRef.current = () => { void openMembership(); }; closeAnimated(); break;
       case 'recheck': void settleUnknown('recheck'); break;
       case 'none': break;
       case 'earn': onClose(); RootNavigation.navigate('Explore'); break;

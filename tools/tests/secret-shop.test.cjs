@@ -178,6 +178,9 @@ function loadSecretUi() {
       useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withDelay: () => 0, withRepeat: () => 0, withSequence: () => 0, withTiming: () => 0 },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../../RootNavigation': { navigate: () => undefined },
+    // The shared gate (components/GrownUpGate) loads through these.
+    '../RootNavigation': { navigate: () => undefined },
+    '../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' },
     '../../fx/FxStage': { FxPauseContext: {} },
     '../../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' },
     './shopUi': { MAX_FONT: 1.3 },
@@ -188,7 +191,7 @@ test('the grown-up gate: a typed answer to a 2-digit times 1-digit sum, and a 30
   const ui = loadSecretUi();
   for (let seed = 0; seed < 56; seed++) {
     const q = ui.grownUpQuestion(seed);
-    assert.ok(q.a >= 12 && q.a <= 19 && q.b >= 3 && q.b <= 9, 'not a times table a young kid knows by heart');
+    assert.ok(q.a >= 23 && q.a <= 89 && q.b >= 6 && q.b <= 9, 'not a sum a 9 or 10 year old does in their head');
     assert.equal(q.answer, q.a * q.b);
   }
   const q = ui.grownUpQuestion(5);
@@ -199,12 +202,14 @@ test('the grown-up gate: a typed answer to a 2-digit times 1-digit sum, and a 30
   // the rest window itself is pinned by GATE_REST_MS.
   assert.equal(ui.GATE_REST_MS, 30000);
   assert.equal(await ui.askGrownUp(5), false, 'no gate mounted: never opens the paywall');
-  const code = src('src/screens/StoreScreen/SecretShopUi.tsx');
+  // One app-wide gate (components/GrownUpGate), the same one every paywall door uses, mounted at the root.
+  const code = src('src/components/GrownUpGate.tsx');
   assert.doesNotMatch(code, /showGameDialog/, 'no multiple choice to guess from');
   assert.match(code, /const KEYS = \['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'\] as const;/);
   assert.match(code, /AsyncStorage\.setItem\(REST_KEY/, 'the rest survives a relaunch');
   assert.doesNotMatch(code, /name="back"/, 'the delete key is not the Back arrow');
-  assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /\{secret && <GrownUpGateHost \/>\}/);
+  assert.match(src('src/screens/StoreScreen/SecretShopUi.tsx'), /export \{ askGrownUp, grownUpQuestion, judgeGate, GATE_REST_MS \} from '\.\.\/\.\.\/components\/GrownUpGate';/);
+  assert.doesNotMatch(src('src/screens/StoreScreen/ShopShelves.tsx'), /<GrownUpGateHost/, 'no second host to fight the root one');
 });
 
 test('the Playercard draws rigs in place of their paper and keeps the shark on its layers', () => {
@@ -320,7 +325,7 @@ test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403
   assert.match(shelves.tryOnCta({ ...base, secret: true }).note, /VIP members can buy/);
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(tryOn, /vipLocked \? 'Try it on as much as you like!' : "Once it's yours, it's yours forever\."/, 'the kid-fair promise on every Secret try-on');
-  assert.match(tryOn, /case 'vip': onClose\(\); if \(secretItem\) void openVipWithGrownUp\(\);/, 'the paywall is behind a grown-up');
+  assert.match(tryOn, /case 'vip': afterHiddenRef\.current = \(\) => \{ void openMembership\(\); \}; closeAnimated\(\);/, 'the paywall is behind a grown-up, after the sheet hides');
   assert.match(tryOn, /cta\.action === 'vip' && secretItem \? \(\s*\/\/ Not the gold Buy face/, 'the grown-up button is violet, not the Buy face');
   assert.match(tryOn, /vipLocked: vipLocked && !secretItem/, 'non-members can heart Secret pieces');
   assert.match(tryOn, /Your VIP ended, so this one is locked\. Your coins are safe\./);
@@ -379,7 +384,7 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
 
 test('non-members window-shop: the Profile tile opens the Secret Shop when the flag is on', () => {
   const profile = src('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: RootNavigation\.navigate\('Membership'\)\)\);/);
+  assert.match(profile, /void loadSecretShopFlag\(\)\.then\(on => \(on\s*\? RootNavigation\.navigate\('Store', \{ store: store\.id \}\)\s*: void openMembership\(\)\)\);/);
   const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(shelves, /\{secret && !vip && <SecretPreviewBanner \/>\}/);
   const ui = loadSecretUi();

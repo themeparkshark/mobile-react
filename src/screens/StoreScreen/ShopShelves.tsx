@@ -55,7 +55,7 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
 }
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { GrownUpGateHost, SecretPreviewBanner, StarMotes } from './SecretShopUi';
+import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
 import { FxPauseContext } from '../../fx/FxStage';
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
@@ -860,7 +860,6 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
         bridged={handoff} onDone={finishReveal} onShown={revealShown} />}
-      {secret && <GrownUpGateHost />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
           message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."

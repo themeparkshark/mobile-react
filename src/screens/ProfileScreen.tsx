@@ -208,7 +208,7 @@ export default function ProfileScreen() {
         // Secret Shop v2: non-members window-shop (live previews and try-on) and join from there.
         void loadSecretShopFlag().then(on => (on
           ? RootNavigation.navigate('Store', { store: store.id })
-          : RootNavigation.navigate('Membership')));
+          : void openMembership()));
         return;
       }
       RootNavigation.navigate('Store', { store: store.id });
