@@ -13,24 +13,31 @@ export function paintStarFlash(canvas: SkCanvas, cx: number, cy: number, r: numb
   'worklet';
   if (f <= 0 || f >= 1) return;
   const alpha = f < 0.25 ? f / 0.25 : (1 - f) / 0.75;
-  const R = r * (0.45 + 0.75 * f), rIn = R * 0.38;
+  // Built at a fixed size (100) and scaled by the canvas, so the blur sigma never changes frame to frame.
+  const R = 100, rIn = R * 0.38;
   const path = Skia.Path.Make();
   for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 - Math.PI / 2 + f * 0.5;
+    const a = (i / 16) * Math.PI * 2 - Math.PI / 2;
     const rr = i % 2 === 0 ? R : rIn;
-    if (i === 0) path.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-    else path.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    if (i === 0) path.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    else path.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
   }
   path.close();
+  canvas.save();
+  canvas.translate(cx, cy);
+  canvas.rotate(f * 28, 0, 0);
+  const k = (r * (0.45 + 0.75 * f)) / R;
+  canvas.scale(k, k);
   const glow = Skia.Paint(); glow.setAntiAlias(true);
   glow.setColor(Skia.Color('#ffe27a')); glow.setAlphaf(0.75 * alpha);
-  glow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, R * 0.12, true));
+  glow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 12, true));
   canvas.drawPath(path, glow);
   const core = Skia.Paint(); core.setAntiAlias(true);
-  core.setShader(Skia.Shader.MakeRadialGradient(vec(cx, cy), R, [Skia.Color('#fffbe6'), Skia.Color('#ffd23f'), Skia.Color('rgba(255,210,63,0)')],
+  core.setShader(Skia.Shader.MakeRadialGradient(vec(0, 0), R, [Skia.Color('#fffbe6'), Skia.Color('#ffd23f'), Skia.Color('rgba(255,210,63,0)')],
     [0, 0.45, 1], TileMode.Clamp));
   core.setAlphaf(alpha);
   canvas.drawPath(path, core);
+  canvas.restore();
 }
 
 /** A firework about `size` across: a bright gold core, 12 tapered gold and white spokes, 8 glitter stars that hang. */

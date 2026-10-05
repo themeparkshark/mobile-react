@@ -28,7 +28,7 @@ import {
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
   passPlan, planEasing, planMs, readyLamp, swayAt, swayFor, swayOverscan, telegraphFor, type PassPlan,
   distanceMs, isMercyRide, swayShiftMs, RING_FADE_MS,
-  INPUT_LATENCY_MS, bumpAt, bumpCurve, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead, GRADE_RANK,
+  INPUT_LATENCY_MS, COYOTE_MS, bumpAt, bumpCurve, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead, GRADE_RANK,
 } from '../ridePhoto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -443,11 +443,14 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     }
     ready.value = readyLamp(ms, greenLead.value, redOnly.value);
     // R7: while the gull is in the window the lamp holds red (wait for it), with a little margin either side.
-    if (Number.isFinite(gullMs.value) && gullInFrame(gullMs.value) && ready.value > 0) ready.value = 1;
+    // (Red until the gull is clear by the input latency plus a frame: a tap made on any green is never bombed.)
+    if (Number.isFinite(gullMs.value) && (gullInFrame(gullMs.value) || gullInFrame(gullMs.value - INPUT_LATENCY_MS - COYOTE_MS))
+      && ready.value > 0) ready.value = 1;
     // The Legendary bump kicks once per pass at its seeded car distance (700 to 900 ms out), then drifts back
     // slowly, so the camera is still off when the car arrives. No buzz or clink (kids read any buzz as "now").
     // (Only once the car is rolling: a short first approach held at the station never bumps before it moves.)
-    if (bumpLead.value > 0 && ms <= bumpLead.value && t.value > plan.value.fromT + 1e-4) {
+    // (Wall clock, not car distance: a rushing car never brings the bump closer than its 700 ms.)
+    if (bumpLead.value > 0 && t.value > plan.value.fromT + 1e-4 && plan.value.d1 - planMs(plan.value, t.value) <= bumpLead.value) {
       bumpLead.value = -1;
       bumpV.value = 0;
       bumpV.value = withTiming(LEGENDARY_BUMP.totalMs, { duration: LEGENDARY_BUMP.totalMs, easing: Easing.linear });
@@ -622,7 +625,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     silentPasses.current = 0;
     passCount.current = 0;
     cancelAnimation(gullMs); gullMs.value = NaN; cancelAnimation(bumpV); bumpV.value = 0; bumpLead.value = -1;
-    firstPhoto.current = null; gullThisPass.current = false;
+    firstPhoto.current = null; gullThisPass.current = false; flyOn.value = false;
     // A stale landing guard can never land an old badge into this ride.
     if (landGuard.current) { clearTimeout(landGuard.current); landGuard.current = null; }
     landedOnce.current = true; flying.current = false;
@@ -733,7 +736,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       const freeNext = () => { const image = toFree.shift(); if (!image) return; image.dispose(); requestAnimationFrame(freeNext); };
       setTimeout(freeNext, 400);
       // A print still in flight (a slow hand-off frame under load) is never cancelled here: that dropped its landing.
-      if (!flying.current) { printIn.value = 0; fly.value = 0; }
+      if (!flying.current) { printIn.value = 0; fly.value = 0; flyOn.value = false; }
       open.value = 0; dim.value = 0; burst.value = 0; ghost.value = 0; iris.value = 0;
     });
   }, [closing]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1081,6 +1084,12 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const fadeCloseRef = useRef(fadeClose);
   fadeCloseRef.current = fadeClose;
   const flying = useRef(false);
+  /** R7: the flight's target and switch live on the UI thread; the start is one UI-thread call. */
+  const flyX = useSharedValue(0), flyY = useSharedValue(0), flyOn = useSharedValue(false);
+  const flyLogged = useSharedValue(false);
+  useAnimatedReaction(() => fly.value > 0 && flyOn.value, (moving, was) => {
+    if (moving && !was && !flyLogged.value) { flyLogged.value = true; runOnJS(catchMark)('print-fly-ui'); }
+  });
   const landGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (landGuard.current) clearTimeout(landGuard.current); }, []);
   const landedOnce = useRef(false);
@@ -1098,19 +1107,33 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     landedOnce.current = false;
     // The landing is guaranteed: if the flight's own callback never comes (cancelled), the badge still lands.
     if (landGuard.current) clearTimeout(landGuard.current);
-    landGuard.current = setTimeout(() => { if (!landedOnce.current) { catchMark('print-land-guard'); landOnce(Date.now()); } },
-      (reducedMotion ? 1 : PRINT_FLIGHT_MS) + 400);
-    // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
-    // the whoosh starts with it, and the landing calls back on the UI frame it lands.
-    const launch = () => {
-      fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
-        // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
+    // A graceful guard: if the flight's own landing has not come 200 ms late, the print finishes its arc into
+    // the badge in 150 ms (UI thread) and the badge lands then (never a still, grey map).
+    landGuard.current = setTimeout(() => {
+      if (landedOnce.current) return;
+      catchMark('print-land-guard');
+      runOnUI(() => {
+        'worklet';
+        flyOn.value = true;
+        fly.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) });
+        dim.value = withTiming(0, { duration: 150 });
+      })();
+      setTimeout(() => landOnce(Date.now()), 150);
+    }, (reducedMotion ? 1 : PRINT_FLIGHT_MS) + 200);
+    // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms; the
+    // target, the flight and the un-dim start together in one UI-thread call, and the landing calls back on
+    // the UI frame it lands (D2: badge-sound sync is measured against the real landing).
+    const target = { x: flyTarget.x, y: flyTarget.y };
+    const duration = reducedMotion ? 1 : PRINT_FLIGHT_MS;
+    runOnUI(() => {
+      'worklet';
+      flyX.value = target.x; flyY.value = target.y; flyOn.value = true; flyLogged.value = false;
+      fly.value = withTiming(1, { duration, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
         if (done) runOnJS(landOnce)(Date.now());
         else runOnJS(catchMark)('print-fly-cancelled');
       });
       dim.value = withTiming(0, { duration: 300 });
-    };
-    launch();
+    })();
     catchSound('whoosh', { volume: 0.6 });
     for (let i = 1; i <= 6; i++) later(i * 62, () => trailBurst(i / 7.5));
   }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1201,7 +1224,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const lift = printLift.value;
     const baseY = printTop + (heroTop - printTop) * lift;
     const start = { x: flyFrom.x, y: baseY + HERO_H / 2 };
-    const fly0 = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    const fly0 = flyOn.value ? flightPoint(start, { x: flyX.value, y: flyY.value }, f) : start;
     const k = toStrip.value;
     const p = k > 0 ? { x: start.x + (stripX.value - start.x) * k, y: start.y + (stripY.value - start.y) * k } : fly0;
     // Laid out at hero size: rest is 0.76, the reveal lifts to 1.0, the flight shrinks to the sticker (0.18).
@@ -1220,7 +1243,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const pairStyle = useAnimatedStyle(() => {
     const f = fly.value;
     const start = { x: flyFrom.x, y: printTop + (heroTop - printTop) * printLift.value + HERO_H / 2 };
-    const p = flyTarget ? flightPoint(start, flyTarget, f) : start;
+    const p = flyOn.value ? flightPoint(start, { x: flyX.value, y: flyY.value }, f) : start;
     const held = REST_SCALE + (1 - REST_SCALE) * printLift.value;
     const scale = held + (0.18 - held) * f;
     return {

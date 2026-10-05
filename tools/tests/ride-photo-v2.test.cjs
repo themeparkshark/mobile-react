@@ -403,7 +403,7 @@ test('R6 camera obstacle: Epic 20 pt, Legendary 28 pt plus one seeded 10 pt bump
   assert.equal(ride.swayShiftMs(38, 0.1, 1), ride.SWAY_SHIFT_CAP_MS);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(src, /bumpFor\(item\?\.rarity, seed, passCount\.current, parkedMode \|\| reducedMotion, mercy\)/);
-  assert.match(src, /if \(bumpLead\.value > 0 && ms <= bumpLead\.value && t\.value > plan\.value\.fromT \+ 1e-4\)/, 'fires on the car distance');
+  assert.match(src, /if \(bumpLead\.value > 0 && t\.value > plan\.value\.fromT \+ 1e-4 && plan\.value\.d1 - planMs\(plan\.value, t\.value\) <= bumpLead\.value\)/, 'R7: fires on the wall clock');
 });
 
 test('R6 gull photobomb: Rare and up, 1 pass in 4, crosses within 150 ms of arrival, caps at Good, seen coming', () => {
@@ -497,14 +497,28 @@ test('R6 real ride seed: RIDE AGAIN (rides used + 1) never replays the ride befo
 
 test('R6: the print always lands (a cancelled flight still lands the badge; the close never cancels a flight)', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /if \(!flying\.current\) \{ printIn\.value = 0; fly\.value = 0; \}/);
-  assert.match(src, /landGuard\.current = setTimeout\(\(\) => \{ if \(!landedOnce\.current\) \{ catchMark\('print-land-guard'\); landOnce\(Date\.now\(\)\); \} \}/);
+  assert.match(src, /if \(!flying\.current\) \{ printIn\.value = 0; fly\.value = 0; flyOn\.value = false; \}/);
+  // R7: graceful guard 200 ms late (the print finishes its arc in 150 ms), and the flight starts in one UI call.
+  assert.match(src, /catchMark\('print-land-guard'\);\s*runOnUI\(\(\) => \{\s*'worklet';\s*flyOn\.value = true;\s*fly\.value = withTiming\(1, \{ duration: 150/);
+  assert.match(src, /\(reducedMotion \? 1 : PRINT_FLIGHT_MS\) \+ 200\);/);
+  assert.match(src, /flyX\.value = target\.x; flyY\.value = target\.y; flyOn\.value = true;/);
+  assert.match(src, /runOnJS\(catchMark\)\('print-fly-ui'\)/);
+  assert.doesNotMatch(src, /flyTarget \? flightPoint/, 'styles never close over the target');
   assert.match(src, /if \(landedOnce\.current\) return;\s*landedOnce\.current = true;/, 'lands once');
 });
 
 test('R7 fairness: the gull teaches wait (red lamp, a free dodge), the bump is quiet and matters at arrival, the best Epic print', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /if \(Number\.isFinite\(gullMs\.value\) && gullInFrame\(gullMs\.value\) && ready\.value > 0\) ready\.value = 1;/, 'lamp red while the gull is in');
+  assert.match(src, /\(gullInFrame\(gullMs\.value\) \|\| gullInFrame\(gullMs\.value - INPUT_LATENCY_MS - COYOTE_MS\)\)\s*&& ready\.value > 0\) ready\.value = 1;/, 'lamp red until the gull is clear');
+  // A tap made on any green is never photobombed: green only shows once the latency-shifted check is clear too.
+  for (let center = -180; center <= 180; center += 5) {
+    for (let screen = -400; screen <= 400; screen += 1) {
+      const red = ride.gullInFrame(screen - center) || ride.gullInFrame(screen - center - ride.INPUT_LATENCY_MS - ride.COYOTE_MS);
+      if (red) continue;
+      // A tap on this green frame lands INPUT_LATENCY_MS later; the shot judges the gull minus that latency.
+      for (let lag = 0; lag <= ride.COYOTE_MS; lag += 4) assert.equal(ride.gullInFrame(screen + lag - center - ride.INPUT_LATENCY_MS), false);
+    }
+  }
   // A no-tap gull pass: no rideStep, no nudge, no miss, no ride spent.
   const dodge = src.slice(src.indexOf('if (gullThisPass.current) {'), src.indexOf('silentPasses.current += 1;'));
   assert.ok(dodge.includes("catchMark('gull-dodge')") && dodge.includes('retry(false)') && dodge.includes('return;'));
