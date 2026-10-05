@@ -344,7 +344,9 @@ test('a Secret piece wears the SECRET badge everywhere', () => {
 });
 
 test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error reads as off)', async () => {
-  const flagModule = loadTs('src/services/secretShopFlag.ts', { '../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) } });
+  const noMine = async () => { throw new Error('404: an older server'); };
+  const flagModule = loadTs('src/services/secretShopFlag.ts', { '../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) },
+    '../api/endpoints/me/secret-shop': { __esModule: true, default: noMine } });
   assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: {} })), false);
   flagModule.resetSecretShopFlagForTests();
   assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: 'true' } })), false, 'only a real true');
@@ -356,6 +358,17 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
   assert.equal(flagModule.secretShopFlagNow(), true);
   t = 6 * 60_000; // past the 5 minute cache: a server flip lands
   assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: false } }), () => t), false);
+
+  // The per-player answer wins over the public flag (the preview list: SECRET_SHOP_V2_PREVIEW_IDS).
+  flagModule.resetSecretShopFlag();
+  assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: false } }), Date.now,
+    async () => ({ secret_shop_v2: true, preview: true })), true, 'a previewer sees it while the launch flag is off');
+  flagModule.resetSecretShopFlag();
+  assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: true } }), Date.now,
+    async () => ({ secret_shop_v2: false, preview: false })), false, 'the server decides per player');
+  flagModule.resetSecretShopFlag();
+  assert.equal(await flagModule.loadSecretShopFlag(async () => { throw new Error('offline'); }, Date.now, noMine), false);
+  assert.match(src('src/context/AuthProvider.tsx'), /resetSecretShopFlag\(\)/, 'sign-out forgets the per-player answer');
 
   const store = src('src/screens/StoreScreen.tsx');
   assert.match(store, /const nextSecretV2 = !!nextStore\.is_secret_store && await loadSecretShopFlag\(\);/);
