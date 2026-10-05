@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FxFloat, FxRigLayers, FxScene, FxSceneLight, FxShadow, useFxMomentCue, wornFx } from '../fx/FxLayers';
-import { useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
-import { FX_MOMENT, FxLod, NO_KICK } from '../fx/registry';
+import { FxBox, useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
+import { JetpackFloorLight } from '../fx/rigs/Jetpack';
+import { FX_MOMENT, FxLod, NO_KICK, containBox } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
@@ -368,6 +369,13 @@ export default function Playercard({
             </Svg>
           </Animated.View>
           </FxShadow>
+        )}
+        {/* The jetpack's light on the floor: outside the moving shark, so it never tilts or floats. */}
+        {fx.floats && lod === 'full' && fxRunning && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <FxBox>{({ width, height }) => <JetpackFloorLight t={fxClock} kick={fxKick} box={containBox(width, height)}
+              floorY={height * ((parseFloat(shadowAt?.top ?? '80') + 2.5) / 100)} />}</FxBox>
+          </View>
         )}
         {grounded && (
           // The plaza shadow: the shark stands on the scene's ground, never floats over it (art panel round 3).

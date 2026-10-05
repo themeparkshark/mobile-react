@@ -445,13 +445,17 @@ test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame
   // Stepped like a hand-drawn loop (one drawing per 80 ms), never a tweened flicker, no soft glow.
   assert.match(rig, /export const FLAME_FRAME_MS = 80;/);
   assert.match(rig, /opacity: frameAt\(v, kick\.value, delay\) === k \? 1 : 0,/);
-  assert.match(rig, /if \(lod === 'still'\) return \{ opacity: k === 0 \? 1 : 0 \};/, "Reduce Motion: Alex's paper drawing");
+  // Alex's drawing untouched; a navy keyline behind it (the same drawing, tinted) for cyan backdrops.
+  assert.match(rig, /tint=\{KEYLINE\} style=\{key\} \/>\s*<FxPart source=\{source\} box=\{box\} spec=\{spec\} aspect=\{spec\.aspect\} style=\{style\} \/>/);
+  // The floor light is drawn outside the moving shark, on the stage floor, under the nozzle.
+  assert.match(src('src/components/Playercard.tsx'), /<JetpackFloorLight t=\{fxClock\} kick=\{fxKick\} box=\{containBox\(width, height\)\}\s*floorY=/);
+  assert.match(rig, /if \(lod === 'still'\) return \{ opacity: k === 0 \? 1 : 0, transform/, "Reduce Motion: Alex's paper drawing");
   assert.doesNotMatch(rig, /glow\.webp|fx\/flame\.webp'|puff\.webp|#ffb43a|Math\.sin\(v \/ 41\)/, 'no generated flame, smoke, glow or orange light');
   assert.match(rig, /require\('\.\.\/\.\.\/\.\.\/assets\/fx\/jet-drop\.webp'\)/);
   for (const gone of ['flame.webp', 'puff.webp', 'jet-flame.webp']) assert.equal(fs.existsSync(path.join(root, 'assets/fx', gone)), false, gone);
   // Weight: squash on the dip, stretch on the pop, hang time at the top of the bob.
   assert.match(rig, /export function jetpackBody\(/);
-  assert.match(rig, /Math\.pow\(Math\.abs\(s\), s > 0 \? 0\.6 : 1\.4\)/);
+  assert.match(rig, /return u \+ 0\.0557 \* \(Math\.cos\(2 \* Math\.PI \* u\) - 1\);/);
   assert.match(src('src/fx/FxLayers.tsx'), /\{ scaleX: body\.sx \},\s*\{ scaleY: body\.sy \},/);
   const fixture = src('src/screens/StoreScreen/SecretShopPreviewScreen.tsx');
   assert.match(fixture, /\{ id: 436, name: 'Jetpack 3000', fx: 'jetpack', slot: 3, rarity: 3, cost: 140,/);
@@ -474,4 +478,41 @@ test('the reef halo is seen from above: far half high and behind the head, near 
   assert.match(halo, /const show = near === 'both' \? true : near \? p\.depth > 0 : p\.depth <= 0;/, 'near fish in front, far fish behind');
   assert.match(halo, /depth: Math\.sin\(angle\),/);
   assert.match(halo, /y: r\.cy \+ ex \* Math\.sin\(tilt\) \+ ey \* Math\.cos\(tilt\),/, 'near (depth > 0) is lower on screen');
+});
+
+function loadJetpack() {
+  const reg = loadTs('src/fx/registry.ts', { './geometry.json': geometry });
+  return loadTs('src/fx/rigs/Jetpack.tsx', {
+    'react-native': { StyleSheet: { create: s => s, absoluteFill: {} }, View: 'View' },
+    'react-native-reanimated': { __esModule: true, default: { Image: 'AImage', View: 'AView' }, useAnimatedStyle: f => f() },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
+    '../FxStage': { FxPart: 'FxPart', useMomentCue: () => undefined },
+    '../registry': reg,
+  });
+}
+
+test("the jetpack never loses its flame: exactly one of Alex's drawings at every moment, through a whole boost", () => {
+  const jet = loadJetpack();
+  const NO = -1e9;
+  // From a stage's negative settle start, through a tapped boost (kick at 3000) and its settle.
+  for (let v = -1800; v < 12000; v += 7) {
+    for (const kick of [NO, 3000]) {
+      for (const delay of [0, 40]) {
+        const f = jet.frameAt(v, kick, delay);
+        assert.ok(f === 0 || f === 1 || f === 2, `frame ${f} at t=${v}`);
+      }
+    }
+  }
+});
+
+test('the hover bob is smooth (no kink at the midline) and hangs at the top', () => {
+  const jet = loadJetpack();
+  let maxStep = 0;
+  for (let t = 0; t < 2600 * 3; t += 5) maxStep = Math.max(maxStep, Math.abs(jet.hoverBob(t + 5) - jet.hoverBob(t)));
+  // A plain sine moves at most 2*pi*5/2600 = 0.0121 per 5 ms; the warp may be up to ~1.4x that, never a spike.
+  assert.ok(maxStep < 0.019, `max step ${maxStep}`);
+  let top = 0;
+  let bottom = 0;
+  for (let t = 0; t < 2600; t += 1) { const b = jet.hoverBob(t); if (b > 0.9) top++; if (b < -0.9) bottom++; }
+  assert.ok(top > bottom * 1.25, `hangs at the top (${top} ms) longer than the bottom (${bottom} ms)`);
 });

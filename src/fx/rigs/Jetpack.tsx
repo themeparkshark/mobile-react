@@ -48,11 +48,20 @@ export function boostAt(t: number, kick: number): number {
   return boostCurve(momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350).p);
 }
 
-/** The idle bob, -1..1, with hang time at the top and a quicker drop (weight, not a sine). */
+/**
+ * The bob's warped phase: a smooth time warp (no kink) that lingers about 35% longer at the
+ * top and drops quicker through the bottom: weight, not a sine (game feel round 7).
+ */
+export function hoverPhase(t: number): number {
+  'worklet';
+  const u = ((t / 2600) % 1 + 1) % 1;
+  return u + 0.0557 * (Math.cos(2 * Math.PI * u) - 1);
+}
+
+/** The idle bob, -1..1 (1 is the top). */
 export function hoverBob(t: number): number {
   'worklet';
-  const s = Math.sin((t / 2600) * Math.PI * 2);
-  return Math.sign(s) * Math.pow(Math.abs(s), s > 0 ? 0.6 : 1.4);
+  return Math.sin(2 * Math.PI * hoverPhase(t));
 }
 
 /** How high the shark floats at time t, in px of the stage height (negative is up). */
@@ -74,7 +83,7 @@ export function jetpackBody(t: number, kick: number): { sx: number; sy: number; 
   else if (p >= 0.1 && p < 0.3) { const k = Math.sin(((p - 0.1) / 0.2) * Math.PI); sx = 1 - 0.05 * k; sy = 1 + 0.07 * k; }
   else if (p >= 0.3 && p < 0.55) { const k = Math.sin(((p - 0.3) / 0.25) * Math.PI); sx = 1 + 0.025 * k; sy = 1 - 0.03 * k; }
   const b = boostCurve(p);
-  return { sx, sy, rot: 1.4 * Math.cos((t / 2600) * Math.PI * 2) - 3 * Math.max(0, b) };
+  return { sx, sy, rot: 1.4 * Math.cos(2 * Math.PI * hoverPhase(t)) - 3 * Math.max(0, b) };
 }
 
 const SPARKS = [0, 1, 2, 3, 4, 5];
@@ -89,7 +98,7 @@ function nozzle(box: PaperBox) {
  */
 function Spark({ t, kick, box, i }: RigProps & { i: number }) {
   const n = nozzle(box);
-  const size = box.w * 0.024;
+  const size = box.w * 0.031;
   const style = useAnimatedStyle(() => {
     const p = phaseOf(t.value, 620 + i * 61, i / SPARKS.length);
     const side = ((i * 37) % 11) / 10 - 0.5;
@@ -97,7 +106,8 @@ function Spark({ t, kick, box, i }: RigProps & { i: number }) {
     return {
       opacity: p < 0.08 ? p / 0.08 : 1 - p * p,
       transform: [
-        { translateX: n.x - size / 2 + side * box.w * (0.07 + 0.06 * b) * p },
+        // Thrown outward from the nozzle, then falling: exhaust spit, not bubbles.
+        { translateX: n.x - size / 2 + (side < 0 ? -1 : 1) * (0.25 + Math.abs(side)) * box.w * (0.09 + 0.06 * b) * Math.sqrt(p) },
         { translateY: n.y - size / 2 + (0.1 + 0.11 * p + 0.09 * p * p) * box.h * (1 + 0.5 * b) },
         { scale: (1 - 0.45 * p) * (1 + 0.5 * b) },
       ],
@@ -106,12 +116,20 @@ function Spark({ t, kick, box, i }: RigProps & { i: number }) {
   return <Animated.Image source={DROP} style={[styles.abs, { width: size, height: size }, style]} />;
 }
 
-/** The drawing of the loop on screen at time v: stepped, and twice as fast on a boost. */
-function frameAt(v: number, kick: number, delay: number): number {
+/**
+ * The drawing of the loop on screen at time v: stepped, and twice as fast on a boost.
+ * Always 0, 1 or 2, also before the clock reaches 0 (a stage's settle delay starts it
+ * negative), so exactly one drawing is on screen at every moment.
+ */
+export function frameAt(v: number, kick: number, delay: number): number {
   'worklet';
   const fast = boostAt(v, kick) > 0.2 ? 2 : 1;
-  return Math.floor(((v + delay) * fast) / FLAME_FRAME_MS) % 3;
+  const n = Math.floor(((v + delay) * fast) / FLAME_FRAME_MS);
+  return ((n % 3) + 3) % 3;
 }
+
+/** Alex's deep navy, for the keyline that keeps his cyan flame readable on cyan water. */
+const KEYLINE = '#0b3a5c';
 
 /**
  * One of Alex's flames: his three drawings swap on a stepped cadence (no blur, no glow),
@@ -126,41 +144,51 @@ function Flame({ t, kick, box, lod, spec, delay, frames }: RigProps & { spec: ty
 }
 
 function FlameFrame({ t, kick, box, lod, spec, delay, source, k }: Pick<RigProps, 't' | 'kick' | 'box' | 'lod'> & { spec: typeof G.flame; delay: number; source: number; k: number }) {
-  const style = useAnimatedStyle(() => {
+  const shape = (pad: number) => {
+    'worklet';
     // Reduce Motion holds frame 0: Alex's paper drawing exactly.
-    if (lod === 'still') return { opacity: k === 0 ? 1 : 0 };
+    if (lod === 'still') return { opacity: k === 0 ? 1 : 0, transform: [{ scaleX: pad }, { scaleY: pad }] };
     const v = t.value;
     const b = boostAt(v, kick.value);
     return {
       opacity: frameAt(v, kick.value, delay) === k ? 1 : 0,
-      transform: [{ rotate: `${spec.rot}deg` }, { scaleX: 1 + 0.08 * Math.max(0, b) }, { scaleY: 1 + 0.55 * b }],
+      // Stretched from the nozzle (the part's anchor): squashed by the dip, 1.6x on the pop.
+      transform: [{ rotate: `${spec.rot}deg` }, { scaleX: pad * (1 + 0.08 * Math.max(0, b)) }, { scaleY: pad * (1 + 0.6 * b) }],
     };
-  });
-  return <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} style={style} />;
+  };
+  const style = useAnimatedStyle(() => shape(1));
+  // A thin navy keyline behind the drawing (the same drawing, tinted, a hair larger), like the
+  // black line Alex draws round the pack: his flame reads on any backdrop, his drawing untouched.
+  const key = useAnimatedStyle(() => { const s = shape(1.07); return { ...s, opacity: s.opacity * 0.85 }; });
+  return (
+    <>
+      <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} tint={KEYLINE} style={key} />
+      <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} style={style} />
+    </>
+  );
 }
 
 /**
- * The flame lights the floor: a flat, two-tone cel pool in Alex's cyans (no soft glow), that
- * stays on the floor while the shark floats and flares on every boost.
+ * The flame's light on the floor: a flat 1:4 cel oval in Alex's cyans, centred under the
+ * nozzle, never rotated (drawn outside the moving shark). It shrinks and fades the higher the
+ * shark hangs, so a boost makes it smaller and fainter, never bigger.
  */
-function GroundPool({ t, kick, box }: RigProps) {
-  const w = box.w * 0.42;
-  const h = w * 0.2;
+export function JetpackFloorLight({ t, kick, box, floorY }: Pick<RigProps, 't' | 'kick' | 'box'> & { floorY: number }) {
+  const w = box.w * 0.2;
+  const h = w / 4;
   const style = useAnimatedStyle(() => {
-    const b = Math.max(0, boostAt(t.value, kick.value));
-    const lift = 0.5 + 0.5 * hoverBob(t.value);
-    return {
-      // Smaller and fainter the higher the shark hangs; a boost flares it.
-      opacity: 0.32 - 0.08 * lift + 0.3 * b,
-      transform: [{ translateY: -jetpackFloat(t.value, kick.value, box.h) }, { scaleX: 1 - 0.1 * lift + 0.3 * b }, { scaleY: 1 - 0.1 * lift + 0.2 * b }],
-    };
+    // 0 at rest height, about 1 at the top of a boost.
+    const lift = Math.max(0, (-jetpackFloat(t.value, kick.value, box.h) / box.h - 0.075) / 0.17);
+    const k = Math.max(0.35, 1 - 0.65 * lift);
+    return { opacity: k, transform: [{ scaleX: k }, { scaleY: k }] };
   });
   const left = box.x + G.flame.cx * box.w - w / 2;
-  const top = box.y + 0.93 * box.h - h / 2;
+  // On the floor the shark stands on (the contact shadow's line: the plinth top in the shop).
+  const top = floorY - h / 2;
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, { left, top, width: w, height: h }, style]}>
-      <View style={[StyleSheet.absoluteFill, { borderRadius: h, backgroundColor: CYAN }]} />
-      <View style={{ position: 'absolute', left: w * 0.22, top: h * 0.22, width: w * 0.56, height: h * 0.56, borderRadius: h, backgroundColor: CYAN_LIGHT }} />
+      <View style={[StyleSheet.absoluteFill, { borderRadius: h, backgroundColor: CYAN, opacity: 0.3 }]} />
+      <View style={{ position: 'absolute', left: w * 0.25, top: h * 0.25, width: w * 0.5, height: h * 0.5, borderRadius: h, backgroundColor: CYAN_LIGHT, opacity: 0.35 }} />
     </Animated.View>
   );
 }
@@ -171,7 +199,6 @@ export function JetpackFront(props: RigProps) {
   useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
   return (
     <>
-      {lod === 'full' && <GroundPool {...props} />}
       <Flame {...props} spec={G.flame2} delay={40} frames={SIDE_FRAMES} />
       <FxPart source={BODY} box={box} spec={G.body} aspect={G.body.aspect} />
       <Flame {...props} spec={G.flame} delay={0} frames={FLAME_FRAMES} />

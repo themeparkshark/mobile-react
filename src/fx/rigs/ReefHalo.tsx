@@ -59,12 +59,13 @@ function Fish({ t, kick, box, i, near, lod }: RigProps & { i: number; near: bool
     const m = momentAt(v, kick.value, FLIP_PERIOD, FLIP_LENGTH, 350);
     const flip = m.p >= 0 && flipping(m.cycle, i) ? m.p : -1;
     const hop = flip < 0 ? 0 : Math.sin(Math.PI * flip);
-    const scale = 0.8 + 0.2 * (p.depth + 1) / 2;
+    // Near fish big, far fish small and dimmer: the depth reads at a glance (game feel round 7).
+    const scale = 0.72 + 0.36 * (p.depth + 1) / 2;
     // Facing the way it swims: thin at the ring's ends, so the turn reads as a turn.
     // Snaps round quickly and never thinner than 0.4, so a far fish never reads as a sliver.
     const face = -Math.max(-1, Math.min(1, p.depth * 7));
     return {
-      opacity: show ? (p.depth > 0 ? 1 : 0.8) : 0,
+      opacity: show ? (p.depth > 0 ? 1 : 0.7) : 0,
       transform: [
         { translateX: (p.x - 0.5) * box.w },
         { translateY: (p.y - 0.5) * box.h - hop * box.h * 0.1 },
