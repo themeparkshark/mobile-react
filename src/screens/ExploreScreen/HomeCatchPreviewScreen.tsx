@@ -14,13 +14,14 @@ import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
 import type { FingerSide } from './PrepItem';
-import HomeCatchMoment, { resetRideHintForPreview, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
+import HomeCatchMoment, { resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
+import { resetRevealSeenForPreview } from './ridePhoto/CatchReveal';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import { peekLine, walkCloserLine } from './findPresentation';
 import HomeHudChips from './HomeHudChips';
-import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
+import { rideSpec, GRADE_BONUS_XP, setRidePhotoServerEnabled, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
 import { catchShown, useCatchOpen } from './catchPresence';
@@ -55,8 +56,14 @@ const FIXTURES: Fixture[] = [
  */
 // Recordings show the app, not the dev warning toast.
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
+// The preview is the Ride Photo harness: the server's switch (player_stats.ride_photo_enabled) is on here.
+if (__DEV__) setRidePhotoServerEnabled(true);
 
-type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean };
+type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
+  /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;
+  /** The escape picks RIDE AGAIN (the next ride then catches). */ again?: boolean;
+  /** R6: a gull crosses at arrival on this pass (the shot is photobombed). */ gullPass?: number;
+  /** R6: a repeat whose photo beats its stored best (the server says new_best). */ newBest?: boolean };
 /**
  * Performance experiments (EXPO_PUBLIC_HH3_EXP): 'nowarm' disables the next-step stage warm; 'order'
  * rides teacups, coaster, flume first, to see whether slow hand-backs follow new ride kinds; 'noforce' lets
@@ -66,6 +73,26 @@ const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
 /** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
 const STILL = EXP.startsWith('still');
 const BARE = EXP === 'still-bare';
+/**
+ * Ride Photo v2 captures (EXPO_PUBLIC_HH3_EXP=v2): every rarity's first full reveal, every grade, a Blurry,
+ * a repeat tier skipped with a tap, an owned find, and Reduce Motion. Offsets are latency compensated.
+ */
+const V2_SCRIPT: ScriptStep[] = [
+  // Uncommon, first ride: the one-time freeze gives a Frame It!.
+  { index: 2, kind: 'coaster', sky: 'day', shots: [0], rarity: 2 },
+  // Rare: a Blurry, then a Great-timed shot while a gull crosses (the lamp is red): Photobombed! (capped at Good).
+  { index: 0, kind: 'flume', sky: 'sunset', shots: [-420, -90], rarity: 3, gullPass: 1 },
+  // Epic: a Great, then a gull pass let go by (a free dodge, no ride spent), then a Frame It! (the dark ride).
+  { index: 3, kind: 'teacups', sky: 'night', shots: [50, 99999, 4], rarity: 4, gullPass: 1 },
+  // Legendary: a Frame It! and the charge; the server's roll takes 1.6 s, so the print keeps shivering.
+  { index: 4, kind: 'coaster', sky: 'night', shots: [4], rarity: 5 },
+  // Legendary again: a Great, and the roll says no. The print shakes free: SO CLOSE! Then RIDE AGAIN, and it's caught.
+  { index: 4, kind: 'flume', sky: 'sunset', shots: [45], rarity: 5, escape: true, again: true },
+  // Uncommon again, owned, a Great that beats its stored Good: skipped with a tap, which lands on NEW BEST!.
+  { index: 5, kind: 'teacups', sky: 'day', shots: [70], rarity: 2, owned: true, skip: true, newBest: true },
+  // Reduce Motion: the car waits in the frame, one tap is a Great, the reveal fades.
+  { index: 2, kind: 'flume', sky: 'day', shots: [-400], rarity: 3, reduced: true },
+];
 const BASE_SCRIPT: ScriptStep[] = [
   // Five different finds (tall, wide and round art), every ride, three skies, an owned find and the Epic.
   { index: 0, kind: 'coaster', sky: 'day', shots: [-650] },
@@ -76,7 +103,7 @@ const BASE_SCRIPT: ScriptStep[] = [
   // Reduce Motion: the car waits in the frame, one tap is a Great, no shake, hop or sunburst.
   { index: 4, kind: 'teacups', sky: 'sunset', shots: [-400], rarity: 2, reduced: true },
 ];
-const SCRIPT: ScriptStep[] = EXP === 'order'
+const SCRIPT: ScriptStep[] = EXP === 'v2' ? V2_SCRIPT : EXP === 'order'
   ? [{ ...BASE_SCRIPT[2], shots: [-650] }, { ...BASE_SCRIPT[0], shots: [12] }, { ...BASE_SCRIPT[1], shots: [-300, 20] },
     BASE_SCRIPT[3], BASE_SCRIPT[4]]
   : BASE_SCRIPT;
@@ -162,7 +189,7 @@ function HomeCatchPreview() {
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
     id: 900 + index, pivot_id: 9000 + index, name: fixture.name, variant_slug: null, description: null,
     icon_url: `${ART_DIR}${fixture.slug}.png`, rarity: fixture.rarity, energy_reward: 10, ticket_reward: 1,
-    experience_reward: 25, is_new_variant: index !== 1, set_name: fixture.set, set_color: fixture.color,
+    experience_reward: 25, is_new_variant: index !== 1, set_name: fixture.set, set_slug: 'snack_stand', set_color: fixture.color,
     latitude: origin.latitude + fixture.north / 111320,
     longitude: origin.longitude + fixture.east / (111320 * Math.cos(origin.latitude * Math.PI / 180)),
     active_to: new Date(Date.now() + (index === 3 ? 4 : 25) * 60_000).toISOString(),
@@ -201,18 +228,30 @@ function HomeCatchPreview() {
   }, [items, toLocal, size.width, size.height]);
 
   const fakeRedeem: typeof redeemPrepItem = async (id, _pivot, _lat, _lng, details) => {
-    await new Promise(resolve => setTimeout(resolve, 450));
     const item = stepItem.current?.id === id ? stepItem.current : items.find(entry => entry.id === id)!;
+    // A Legendary's server roll takes a moment (the reveal's shiver waits for it).
+    await new Promise(resolve => setTimeout(resolve, item.rarity >= 5 ? 2600 : 450));
+    if (SCRIPT[stepRef.current]?.escape && !rodeAgain.current) {
+      throw Object.assign(new Error('rode_by'), { response: { status: 409, data: { error: 'It rode by! Get ready for the next ride.', photo: { rides_left: 2 } } } });
+    }
     found.current += 1;
     const quality = details?.photo_quality ?? null;
     if (quality) lastGrade.current = quality;
+    // Rarity-scaled like production home finds (ECONOMY_DECISIONS.md: uncommon 9 E / 23 XP ... legendary 50 E / 100 XP),
+    // plus the server's photo bonus.
+    const tier = Math.max(1, Math.min(5, item.rarity));
+    const base = ([0, { e: 5, xp: 9 }, { e: 9, xp: 23 }, { e: 16, xp: 57 }, { e: 30, xp: 75 }, { e: 50, xp: 100 }] as const)[tier] as { e: number; xp: number };
+    const bonus = quality ? GRADE_BONUS_XP[quality] : 0;
     return { success: true, data: {
-      rewards: { energy: 20, tickets: 1, coins: 0, experience: 50 }, streak: { current: 3, multiplier: 1 },
+      rewards: { energy: base.e, tickets: tier >= 4 ? 1 : 0, coins: tier >= 4 ? 0 : 10 * tier, experience: base.xp + bonus }, streak: { current: 3, multiplier: 1 },
       is_new_variant: item.is_new_variant, replayed: false,
-      set_progress: { total: 12, collected: 4 + found.current, percentage: 40, is_complete: false, collected_ids: [] },
-      dex: { set_slug: 'snack_stand', found: 4 + found.current, total: 12, reward_status: 'locked' },
-      photo: quality ? { quality, golden_hour: false, bonus_xp: GRADE_BONUS_XP[quality] } : null,
-      item: { id, name: item.name, rarity: item.rarity, rarity_label: '', set_name: item.set_name, set_color: item.set_color },
+      // Consistent with the preview book page: 4 owned before a new find (5 after it); a repeat's page already has it (5).
+      set_progress: { total: 12, collected: 5, percentage: 42, is_complete: false, collected_ids: [] },
+      dex: { set_slug: 'snack_stand', found: 5, total: 12, reward_status: 'locked' },
+      photo: quality ? { quality, golden_hour: false, bonus_xp: GRADE_BONUS_XP[quality],
+        // As the server: the best before this catch, and whether this photo beat it (owned finds only).
+        previous_best: item.is_new_variant ? null : 'good', new_best: !item.is_new_variant && !!SCRIPT[stepRef.current]?.newBest && quality !== 'good' } : null,
+      item: { id, name: item.name, rarity: item.rarity, rarity_label: '', set_name: item.set_name, set_color: item.set_color, caught_count: item.is_new_variant ? 1 : 3 },
     } };
   };
 
@@ -253,6 +292,10 @@ function HomeCatchPreview() {
   }));
   const hudTop = hudWidth > 0 ? hudRowTop(obstacles, 12, hudWidth) : 12;
   const slotBottom = chip && size.width > 0 ? peekBottom(obstacles, size, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
+  const stepRef = useRef(0);
+  /** RIDE AGAIN in the script: the next ride of the same find (it catches), and the step only advances after it. */
+  const rodeAgain = useRef(false);
+  stepRef.current = step;
   // 'still-peek': a far find tapped, its one-line peek held for the capture.
   useEffect(() => {
     if (EXP !== 'still-peek') return;
@@ -307,6 +350,7 @@ function HomeCatchPreview() {
   useEffect(() => {
     if (!autoplay) return;
     resetRideHintForPreview();
+    resetRevealSeenForPreview();
     resetRideMemoryForPreview();
     const timer = setTimeout(() => runStep(0), 4000);
     return () => clearTimeout(timer);
@@ -358,8 +402,12 @@ function HomeCatchPreview() {
         badgeBottom={BOTTOM_SLOT} redeem={fakeRedeem} getFix={() => origin}
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
-        forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky } : null}
+        forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky, gullPass: SCRIPT[step].gullPass } : null}
         onCascade={setCascadeOn} forceReducedMotion={autoplay && !!SCRIPT[step]?.reduced}
+        autoSkipReveal={autoplay && !!SCRIPT[step]?.skip}
+        loadSetPage={async () => previewSetPage(stepItem.current ?? request?.item ?? null)}
+        autoEscape={autoplay && SCRIPT[step]?.again ? 'again' : 'map'}
+        onRideAgain={(item) => { if (autoplay) rodeAgain.current = true; void startCatch(item); }}
         warm={autoplay && EXP !== 'nowarm' ? SCRIPT.slice(step, step + 2).map((entry, i) => ({ item: scriptItem(step + i), forceRide: EXP === 'noforce' ? null : { kind: entry.kind, sky: entry.sky } })) : undefined}
         onCollected={() => undefined} onUnavailable={() => undefined}
         onFailed={(line) => setChip({ key: `fail-${Date.now()}`, text: line, tone: 'error' })}
@@ -367,7 +415,10 @@ function HomeCatchPreview() {
           const pivot = request?.pivotId;
           setRequest(null);
           if (done && pivot != null && !autoplay) setCaught(current => new Set([...current, pivot]));
-          // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos).
+          // Autoplay: after the Rare, ride the Epic (dark ride, 2 photos). A RIDE AGAIN escape waits for its next ride.
+          if (autoplay && SCRIPT[stepRef.current]?.again && !rodeAgain.current) return;
+          if (autoplay && rodeAgain.current && !done) return;
+          rodeAgain.current = false;
           catches.current += 1;
           if (autoplay && catches.current < SCRIPT.length) setTimeout(() => runStep(catches.current), 2600);
         }} />
@@ -377,6 +428,19 @@ function HomeCatchPreview() {
 }
 
 const noop = () => undefined;
+/** The Snack Stand page for the reveal's book slots: the six fixtures plus six more (the caught one carries the step's id). */
+function previewSetPage(caught: PrepItemType | null): BookItem[] {
+  const extra = ['corn-dog', 'cotton-candy', 'hot-dog', 'funnel-cake', 'pizza-slice', 'mini-donut-bag'];
+  const fixtures = FIXTURES.map((f, i) => ({ id: caught && caught.name === f.name ? caught.id : 900 + i, name: f.name,
+    icon_url: `${ART_DIR}${f.slug}.png`, variant_slug: f.slug,
+    // Owned on the page: the pretzel, and a repeat being caught again (it is in the book already).
+    is_collected: i === 1 || (!!caught && caught.name === f.name && caught.is_new_variant === false),
+    // Book stars: the stored best photo per owned item (the repeat being caught had a Good).
+    best_photo_grade: i === 1 ? 'great' : caught && caught.name === f.name && caught.is_new_variant === false ? 'good' : null }));
+  const rest = extra.map((slug, i) => ({ id: 950 + i, name: slug, icon_url: `${ART_DIR}${slug}.png`, variant_slug: slug, is_collected: i < 3,
+    best_photo_grade: (['frame_it', 'good', null] as const)[i] ?? null }));
+  return [...rest.slice(0, 3), ...fixtures, ...rest.slice(3)];
+}
 /** The nearest in-range fixture shows the only finger (as in the app). */
 const nearestInRange = FIXTURES.map((f, i) => ({ i, d: f.inRange ? Math.hypot(f.north, f.east) : Infinity }))
   .sort((a, b) => a.d - b.d)[0].i;

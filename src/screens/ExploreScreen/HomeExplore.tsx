@@ -381,20 +381,26 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
 
   // Filter to only show active items
   // Legendaries that rode off this session leave the map at once (the server is told; a refresh confirms).
+  // Their markers stay in the map's child list, hidden (MapLibre children never unmount mid-list); every
+  // other use (staging, warming, the finger, edge arrows, counts) sees only the live finds.
   const [rodeOff, setRodeOff] = useState<ReadonlySet<number>>(() => new Set());
-  const activePrepItems = prepItems.filter((item) => {
-    if (item.pivot_id != null && rodeOff.has(item.pivot_id)) return false;
+  const isRodeOff = (item: PrepItemType) => item.pivot_id != null && rodeOff.has(item.pivot_id);
+  const shownPrepItems = prepItems.filter((item) => {
     if (!item.active_from || !item.active_to) return true;
     return dayjs().isBetween(dayjs(item.active_from), dayjs(item.active_to));
   });
+  const activePrepItems = shownPrepItems.filter(item => !isRodeOff(item));
   const lat = location?.latitude;
   const lng = location?.longitude;
-  const placed = useMemo(() => activePrepItems.map(item => {
+  const allPlaced = useMemo(() => shownPrepItems.map(item => {
     const distance = item.latitude != null && item.longitude != null && lat != null && lng != null
       ? calculateDistance(lat, lng, item.latitude, item.longitude) : null;
     return { item, distance, inRange: !loadError && isInPickupRange(distance) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [prepItems, lat, lng, loadError]);
+  const placed = useMemo(() => allPlaced.filter(entry => !isRodeOff(entry.item)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allPlaced, rodeOff]);
   // How to Play hand-off: glide to the nearest find once per request (waits for the first finds to load).
   const [findFocus, setFindFocus] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
   const handledHighlight = useRef<number | null>(null);
@@ -578,6 +584,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     setRodeOff(current => new Set(current).add(pivotId));
     callbacks.current.onCatchUnavailable?.();
   }, []);
+  // A Legendary rode by and the kid chose RIDE AGAIN: the same find's next ride opens like a tap on it.
+  const onRideAgainStable = useCallback((item: PrepItemType, pivotId: number) => {
+    if (callbacks.current.catchRequest) return;
+    catchRef.current?.primeRide(item, findPoints.current.get(pivotId) ?? null);
+    callbacks.current.onPrepItemNearby(item, pivotId, 'tap');
+  }, []);
   const onDoneStable = useCallback((caught: boolean) => {
     setCatchRequest(null);
     callbacks.current.onCatchDone?.(caught);
@@ -595,11 +607,13 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
 
   // Stable for the life of the screen (reads the latest state from a ref), so no find marker
   // re-renders when a catch opens or finishes.
-  const tapState = useRef({ loadError, catchingPivot, nudge, onPrepItemNearby });
-  tapState.current = { loadError, catchingPivot, nudge, onPrepItemNearby };
+  const tapState = useRef({ loadError, catchingPivot, nudge, onPrepItemNearby, rodeOff });
+  tapState.current = { loadError, catchingPivot, nudge, onPrepItemNearby, rodeOff };
   const tapFind = useCallback((prepItem: PrepItemType, distance: number | null, inRange: boolean) => {
     const state = tapState.current;
     if (state.loadError || !prepItem.pivot_id || state.catchingPivot != null) return;
+    // A ridden-off Legendary's hidden marker is inert.
+    if (state.rodeOff.has(prepItem.pivot_id)) return;
     if (!inRange) { void state.nudge(prepItem, distance); return; }
     // Ride Photo opens on this frame, from the find's own spot.
     catchRef.current?.primeRide(prepItem, findPoints.current.get(prepItem.pivot_id) ?? null);
@@ -640,12 +654,12 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
         extraControls={chestButton} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}>
-        {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
+        {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
-            hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1)}
+            hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
             chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
@@ -682,7 +696,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
-        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable}
+        onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable} onRideAgain={onRideAgainStable}
         warm={warmFinds} onCascade={setCascadeOn} />
 
 

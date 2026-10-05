@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Canvas, Group, Image as SkImageNode, Picture, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
+import { Canvas, Group, Image as SkImageNode, ImageFormat, Picture, Rect, RadialGradient, vec, type SkImage } from '@shopify/react-native-skia';
 
 const WARM_SCALE = [{ scale: 0.01 }];
 /** Stamp art per ride (the ride's own vehicle). Unbuilt rides show a lock instead. */
@@ -31,13 +31,48 @@ import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, t
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
-import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
+import CatchReveal, { type CatchRevealData, type RevealEscape, type RevealOutcome } from './ridePhoto/CatchReveal';
+import { bestStars, isNewBest, ownedSlots } from './ridePhoto/revealRules';
+import { getPrepItemSet, type PrepItemSetItem } from '../../api/endpoints/me/prep-item-sets';
+
+/**
+ * The book page's slots from the set page read at the ride's start: the caught find is owned (and new when
+ * it is), and the owned count always equals the server's count (a stale page is corrected in order), so the
+ * page never disagrees with its own number. Null when the page does not match this set (the reveal then
+ * draws plain slots).
+ */
+export function bookSlots(page: readonly BookItem[], caughtId: number, isNew: boolean, collected: number | null, total: number | null,
+  photo: { readonly grade?: string | null; readonly newBest?: boolean } = {}) {
+  const owned = ownedSlots(page.map(entry => ({ id: entry.id, owned: entry.is_collected })), caughtId, collected, total);
+  if (!owned) return null;
+  return page.map((entry, i) => {
+    // Book stars: each owned item's best photo grade (newer servers send it). The caught slot shows the best
+    // after this photo; on a NEW BEST! it steps up from the old best.
+    const before = owned[i].owned ? bestStars(entry.best_photo_grade) : 0;
+    const stars = owned[i].caught ? Math.max(before, bestStars(photo.grade)) : before;
+    return { id: entry.id, art: findImageSource({ icon_url: entry.icon_url, variant_slug: entry.variant_slug, name: entry.name }),
+      owned: owned[i].owned, isNew: isNew && owned[i].caught, caught: owned[i].caught,
+      stars, prevStars: before, newBest: owned[i].caught && !isNew && photo.newBest === true };
+  });
+}
+
+/** One item on a set's book page (what the catch reveal draws in its slots). */
+export type BookItem = Pick<PrepItemSetItem, 'id' | 'name' | 'icon_url' | 'variant_slug' | 'is_collected' | 'best_photo_grade'>;
+function encodePrint(photo: SkImage | null): string | undefined {
+  try {
+    const b64 = photo?.encodeToBase64(ImageFormat.JPEG, 88);
+    return b64 ? `data:image/jpeg;base64,${b64}` : undefined;
+  } catch { return undefined; }
+}
+const defaultLoadSetPage = async (slug: string): Promise<BookItem[] | null> => (await getPrepItemSet(slug)).items ?? null;
+import { shareFlex } from '../../share';
 
 const RIDE_HINT_KEY = 'ride_photo_hint_seen_v1';
 let rideHintSeen: boolean | null = null;
@@ -68,6 +103,14 @@ const STICKER = 64;
 const STICKER_LEFT = 8;
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/** The catch reveal's fade onto the map before the print flies (CatchReveal fades in 220 ms). */
+const REVEAL_FADE_MS = 230;
+/** After the print's 460 ms flight lands, the map and player updates commit. */
+const PRINT_SETTLE_MS = 620;
+/** Next-stage prebuilds are at least this far apart. */
+const PREBUILD_GAP_MS = 1000;
+/** RIDE AGAIN reopens the viewfinder after its close has fully reset. */
+const RIDE_AGAIN_MS = 1150;
 const GRADE_CHIP: Record<PhotoGrade, [string, string]> = {
   blurry: ['#334155', '#ffffff'], good: ['#ffffff', '#0b2f5c'], great: ['#dfe7f1', '#0b2f5c'], frame_it: ['#ffcf3b', '#0b2f5c'],
 };
@@ -119,21 +162,31 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   /** Development recordings only (see RidePhotoCatch). */
   readonly autoShots?: number[] | null;
   /** Development recordings: pin the ride and sky. */
-  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null;
+  readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky; readonly gullPass?: number } | null;
   /** Ride Photo finds to warm in idle time (their stages are built before any tap). */
   /** The reward banner is on the map (map markers under it hide their tags). */
   readonly onCascade?: (active: boolean) => void;
   /** Development recordings: play this catch as if Reduce Motion were on. */
   readonly forceReducedMotion?: boolean;
+  /** Development recordings: tap through the reveal (it must be skippable for that tier). */
+  readonly autoSkipReveal?: boolean;
+  /** Development recordings: the escape's own pick. */
+  readonly autoEscape?: 'map' | 'again';
+  /** A Legendary rode by and the kid chose RIDE AGAIN: open the same find's viewfinder for its next ride. */
+  readonly onRideAgain?: (item: PrepItemType, pivotId: number) => void;
+  /** The set's book page for the reveal (default: the server's set page; previews pass fixtures). */
+  readonly loadSetPage?: (slug: string) => Promise<BookItem[] | null>;
   readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, autoSkipReveal = false, autoEscape = 'map', loadSetPage, onRideAgain, refreshAfterCatch = true }, ref) {
   const systemReduced = useReducedGameMotion();
   // Development recordings can show one catch with Reduce Motion on.
   const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
-  const { refreshPlayer } = useContext(AuthContext);
+  const { refreshPlayer, player } = useContext(AuthContext);
+  // Uncommon's tighter lamp is earned per player, never per device.
+  useEffect(() => { setRidePhotoPlayer(player?.id ?? null); }, [player?.id]);
   const { currencies } = useContext(CurrencyContext);
   const { triggerFly } = useCurrencyFly();
   const layerRef = useRef<View>(null);
@@ -153,6 +206,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const [photo, setPhoto] = useState<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const [cascade, setCascade] = useState(0);
   const [bonusXp, setBonusXp] = useState<number | null>(null);
+  // v2: the full-screen catch reveal for Ride Photo catches (the print, the pop, the tally, the book page).
+  const [shownReveal, setReveal] = useState<CatchRevealData | null>(null);
+  /** Bumped by every prime, so a finished catch's deferred clears never touch the next ride. */
+  const primeSeq = useRef(0);
+  const [revealOutcome, setRevealOutcome] = useState<RevealOutcome>('pending');
+  const [revealEscape, setRevealEscape] = useState<RevealEscape | null>(null);
+  // The reveal and the viewfinder share two UI-thread flags (no React props): the reveal's opaque scrim stops
+  // the scene clock under it, and CONTINUE hides the viewfinder on the same frame the reveal starts to fade.
+  const revealCovered = useSharedValue(false);
+  const revealHidden = useSharedValue(false);
+  const revealFlags = useMemo(() => ({ covered: revealCovered, hidden: revealHidden }), [revealCovered, revealHidden]);
+  const revealedRef = useRef(false);
   // The Ride Photo layer covers the whole screen (the header and tab bar slide away), so it is offset by
   // where this map container sits in the window.
   const window = useWindowDimensions();
@@ -177,8 +242,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const flyFromY = useSharedValue(0);
   const rideIn = useSharedValue(0);
 
-  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request });
-  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request };
+  const latest = useRef({ getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain });
+  latest.current = { getFix, currencies, triggerFly, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
@@ -192,6 +257,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   useImperativeHandle(ref, () => ({
     primeRide: (item, from) => {
       if (catchStyleFor(item.rarity) !== 'ride_photo' || layer.width === 0) return false;
+      primeSeq.current += 1;
       setRideItem(item);
       const full = from ? { x: from.x + offset.x, y: from.y + offset.y } : null;
       setPrimed({ item, from: full });
@@ -227,9 +293,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     setSummary(next);
     latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
-    if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
-    latest.current.onCollected(data);
-    if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
+    // Via the print, the map and player updates wait out the close and the flight (their commits never land in
+    // the hand-off's frames); they still run if the catch is closed early.
+    const settle = () => {
+      if (data.hunt_week?.rank_line) setHomeHuntRankLine(data.hunt_week.rank_line);
+      latest.current.onCollected(data);
+      if (refreshAfterCatch) latest.current.refreshPlayer().catch(() => undefined);
+    };
+    if (viaPrint && motion) setTimeout(settle, PRINT_SETTLE_MS); else settle();
     progress.value = next.progressFrom;
     // Via the print, the pad stays fully hidden until the print lands (arrive() springs it in with the kick).
     const pad = motion ? withSpring(1, { damping: 16, stiffness: 240 }) : withTiming(1, { duration: 120 });
@@ -254,14 +325,17 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     soundScheduled.current = false;
     // The banner springs in 120 ms after the kick, so the two never land in one frame.
     if (badgeIn.value < 0.5) badgeIn.value = motion ? withDelay(120, withSpring(1, { damping: 14, stiffness: 320 })) : withTiming(1, { duration: 1 });
-    catchHaptic(tier >= 4 ? 'comboHeavy' : 'success', 4);
+    // After a reveal the badge is a soft landing (the reveal's burst was the one climax haptic).
+    catchHaptic(revealedRef.current ? 'hitSoft' : tier >= 4 ? 'comboHeavy' : 'success', revealedRef.current ? 2 : 4);
     badgeKick.value = motion ? withSequence(withTiming(1.22, { duration: 100 }), withSpring(1, { damping: 7, stiffness: 300 })) : 1;
     ringPop.value = 0;
     ringPop.value = withTiming(1, { duration: motion ? 520 : 1 });
     const beats: (() => void)[] = [];
-    if (next.isNew) beats.push(() => { reveal.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1; });
+    // After the full reveal the badge is only the hand-off: the progress tick and the coins flying home.
+    const brief = revealedRef.current;
+    if (next.isNew && !brief) beats.push(() => { reveal.value = motion ? withSpring(1, { damping: 9, stiffness: 260 }) : 1; });
     beats.push(() => { progress.value = withTiming(next.progressTo, { duration: motion ? 420 : 1, easing: Easing.out(Easing.cubic) }); });
-    beats.push(() => { gradeIn.value = motion ? withSpring(1, { damping: 10, stiffness: 260 }) : 1; });
+    if (!brief) beats.push(() => { gradeIn.value = motion ? withSpring(1, { damping: 10, stiffness: 260 }) : 1; });
     if (newRideRef.current) beats.push(() => { rideIn.value = motion ? withSpring(1, { damping: 10, stiffness: 240 }) : 1; });
     if (!data.replayed) beats.push(() => {
       layerRef.current?.measureInWindow((x, y) => {
@@ -285,7 +359,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       catchSound('tick', { pitch: 2 + i * 2, volume: 0.7 });
     }
     AccessibilityInfo.announceForAccessibility(`Caught ${next.setName ? `for ${next.setName}` : ''}${next.isNew ? ', new' : ''}`);
-    await wait(1300);
+    await wait(brief ? (newRideRef.current ? 1100 : 650) : 1300);
     if (aliveRef.current !== token) return;
     badgeIn.value = withTiming(0, { duration: CATCH_TIMING.exit });
     await wait(CATCH_TIMING.exit);
@@ -301,26 +375,37 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (image) setTimeout(() => image.dispose(), 500);
   };
 
-  const finish = (caught: boolean) => {
+  // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The finished ride
+  // stays (hidden) until the next is prebuilt; that bookkeeping waits two frames, off the done frame.
+  const finish = (caught: boolean, keepReveal = false) => {
     catchMark('done');
     latest.current.onCascade?.(false);
     releasePhoto();
     newRideRef.current = false; setNewRide(null); rideIn.value = 0;
-    // rideItem clears too: the next find never inherits this one's rarity, speed or hint rules. The stage keeps
-    // showing the finished ride (hidden) for 1.2 s, so the next find's stage is never built in the hand-back;
-    // it is prebuilt at +600 ms and swapped in after.
-    if (rideItemRef.current) setReadyItem(rideItemRef.current);
-    setStageNonce(n => n + 1);
-    setShowing(null); setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+    const finished = rideItemRef.current;
+    // The done frame commits only what is visible (the catch layer goes); the invisible bookkeeping clears two
+    // frames later, unless a new ride was primed in between (RIDE AGAIN, a fast tap).
+    const seq = primeSeq.current;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (finished) setReadyItem(finished);
+      setStageNonce(n => n + 1);
+      if (primeSeq.current !== seq) return;
+      setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+    }));
+    setShowing(null);
     reveal.value = 0; gradeIn.value = 0;
-    showCatchChrome(false);
-    setCatchOpen(false);
+    // The (already invisible) reveal clears two frames later, off the done frame; its photo is released after.
+    revealedRef.current = false; revealCovered.value = false; revealHand.current = null; escapeHand.current = null;
+    if (!keepReveal) requestAnimationFrame(() => requestAnimationFrame(() => { setReveal(null); setRevealEscape(null); revealHidden.value = false; }));
+    // RIDE AGAIN: the app chrome and the map stay hidden under the covering card (the next ride opens there).
+    if (!keepReveal) { showCatchChrome(false); setCatchOpen(false); }
     latest.current.onDone(caught);
   };
 
   useEffect(() => {
     if (!request || layer.width === 0) return;
     const token = ++aliveRef.current;
+    primeSeq.current += 1;
     const alive = () => aliveRef.current === token;
     const { item, pivotId } = request;
     const motion = !latest.current.reducedMotion;
@@ -403,22 +488,55 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const soundScheduled = useRef(false);
   const pendingPhoto = useRef<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
-  const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null) => {
+  const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null, photobombed = false) => {
     const req = request;
     const token = aliveRef.current;
     if (!req || !redeemRun.current) return;
+    const kind = rideKindRef.current;
+    // v2: the catch reveal starts now, while the server decides: the print shivers until the answer lands
+    // (a Legendary's roll is real, so a ride-by shakes free instead of popping).
+    const reveal = grade !== 'blurry';
+    if (reveal) {
+      revealedRef.current = true;
+      setRevealOutcome('pending');
+      setReveal(revealData(req.item, null, grade, image, kind, token, photobombed));
+    }
     const result = await redeemRun.current;
     if (aliveRef.current !== token) return;
     if (result.kind !== 'caught') {
-      catchHaptic('failBuzz', 3);
-      closeRide(false);
-      if (result.kind === 'gone') latest.current.onUnavailable();
-      latest.current.onFailed(result.line, result.kind === 'failed');
-      setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
+      // With a reveal the escape owns the feedback (no outcome buzz while the roll still plays).
+      if (!reveal) catchHaptic('failBuzz', 3);
+      const fail = (choice: 'map' | 'again' = 'map') => {
+        closeRide(false);
+        if (result.kind === 'gone') latest.current.onUnavailable();
+        // The server's ride count for this find carries into its next open (ride icons, the mercy ride).
+        const left = result.kind === 'failed' ? result.ridesLeft : null;
+        if (left != null) ridesUsedFor.current.set(req.item.id, Math.max(0, 3 - left));
+        if (choice === 'again') {
+          // The escape card stays up, covering, while the old viewfinder resets underneath (RidePhotoCatch
+          // frees its open 1000 ms after a close); the next ride opens under the card, then the card fades.
+          rideAgainPending.current = true;
+          setTimeout(() => { if (aliveRef.current === token) finish(false, true); }, 200);
+          setTimeout(() => { rideAgainPending.current = false; revealHidden.value = false; latest.current.onRideAgain?.(req.item, req.pivotId); }, RIDE_AGAIN_MS);
+          setTimeout(() => { setReveal(current => (current?.key === token ? null : current)); setRevealEscape(null); }, RIDE_AGAIN_MS + 160); // gone before the first pass (its clack)
+          // If the next ride did not open (the parent declined), bring the map back rather than strand the kid.
+          setTimeout(() => { if (!busyRef.current) { showCatchChrome(false); setCatchOpen(false); } }, RIDE_AGAIN_MS + 600);
+        } else {
+          // A ride-by the reveal already showed (rides left, the map choice) needs no red line on the map.
+          const shown = reveal && result.kind === 'failed' && result.ridesLeft != null;
+          if (!shown) latest.current.onFailed(result.line, result.kind === 'failed');
+          setTimeout(() => { if (aliveRef.current === token) finish(false); }, 320);
+        }
+      };
+      if (reveal) {
+        escapeHand.current = fail;
+        setRevealEscape({ ridesLeft: result.kind === 'failed' ? result.ridesLeft ?? null : 0,
+          canRetry: result.kind === 'failed' && !!latest.current.onRideAgain, vehicle: kind });
+        setRevealOutcome('escaped');
+      } else fail();
       return;
     }
     // One hand-off: the viewfinder irises out behind the print, which flies into the badge on the map.
-    const kind = rideKindRef.current;
     const served = (result.data.dex as { rides_snapped?: string[] } | null | undefined)?.rides_snapped ?? null;
     const fresh = kind ? recordRide(kind, served) : false;
     newRideRef.current = fresh;
@@ -426,13 +544,108 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // The sticker keeps the item art until the print lands: the photo is never on screen twice.
     pendingPhoto.current = { image, grade };
     pendingLand.current = { data: result.data, token, item: req.item };
-    closeRide(true);
-    // The landing thunk is scheduled by the stage on the JS clock, in the same turn the 460 ms flight
-    // starts (the UI completion still drives the kick and the cascade).
-    soundScheduled.current = true;
-    setRide(current => (current ? { ...current, flyTo: { x: target.x + offset.x, y: target.y + offset.y } } : current));
-    await land(req.item, result.data, token, true);
+    const handOff = async () => {
+      if (aliveRef.current !== token) return;
+      // After a reveal: its fade (UI thread) runs first; then the close and the flight start in one commit.
+      if (revealedRef.current) await wait(REVEAL_FADE_MS);
+      if (aliveRef.current !== token) return;
+      closeRide(true);
+      soundScheduled.current = true; // the landing thunk runs on the flight's JS clock
+      setRide(current => (current ? { ...current, flyTo: { x: target.x + offset.x, y: target.y + offset.y } } : current));
+      await land(req.item, result.data, token, true);
+    };
+    if (!reveal) { await handOff(); return; }
+    revealHand.current = handOff;
+    setReveal(revealData(req.item, result.data, grade, image, kind, token, photobombed));
+    setRevealOutcome('caught');
   }, [request, land, target.x, target.y, offset.x, offset.y]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const revealHand = useRef<(() => Promise<void>) | null>(null);
+  const escapeHand = useRef<((choice: 'map' | 'again') => void) | null>(null);
+  const ridesUsedFor = useRef(new Map<number, number>());
+  // CONTINUE: the reveal fades itself on the UI thread; the hand-off runs on the next frame. The reveal's
+  // data stays until the moment ends (finish), so nothing blanks while it fades.
+  const onRevealContinue = useCallback(() => {
+    cancelShareEncode();
+    const hand = revealHand.current;
+    revealHand.current = null;
+    if (hand) void hand();
+  }, []);
+  const onRevealEscaped = useCallback((choice: 'map' | 'again') => {
+    cancelShareEncode();
+    const fail = escapeHand.current;
+    escapeHand.current = null;
+    fail?.(choice);
+  }, []);
+  // The print's JPEG for SHARE: encoded once the buttons have settled (never during a beat, never on the tap),
+  // cancelled on CONTINUE or an escape, and skipped on a repeat that continues on its own (encoded on the tap).
+  const shareUri = useRef<{ key: number; uri: string | undefined } | null>(null);
+  const shareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelShareEncode = () => { if (shareTimer.current) clearTimeout(shareTimer.current); shareTimer.current = null; };
+  const onRevealActions = useCallback((compact: boolean) => {
+    cancelShareEncode();
+    const current = revealRef.current;
+    if (!current || compact || shareUri.current?.key === current.key) return;
+    const key = current.key, photo = current.photo;
+    shareTimer.current = setTimeout(() => {
+      shareTimer.current = null;
+      if (revealRef.current?.key === key && revealHand.current) shareUri.current = { key, uri: encodePrint(photo) };
+    }, 700);
+  }, []);
+  useEffect(() => cancelShareEncode, []);
+  const revealRef = useRef(shownReveal);
+  revealRef.current = shownReveal;
+  const onRevealShare = useCallback(() => {
+    const current = revealRef.current;
+    if (!current) return;
+    let photoUri = shareUri.current?.key === current.key ? shareUri.current.uri : undefined;
+    if (!photoUri) photoUri = encodePrint(current.photo);
+    const art = current.art && typeof current.art === 'object' && 'uri' in current.art && typeof current.art.uri === 'string' ? current.art.uri
+      : typeof current.art === 'number' ? current.art : null;
+    catchMark('reveal-share');
+    shareFlex('ride_photo', { itemName: current.name, artUrl: art ?? (photoUri ?? ''), rarity: current.rarity as 2, grade: current.grade,
+      goldenHour: current.golden, photoUri }, { surface: 'ride_photo_reveal' });
+  }, []);
+
+  // The set's book page (every item's art), read while the ride runs so the reveal can show it.
+  const setPage = useRef<{ slug: string; items: readonly BookItem[] } | null>(null);
+  useEffect(() => {
+    // Read fresh on every ride (one light GET while the ride plays), so the page is current up to this catch.
+    const slug = rideItem?.set_slug;
+    if (!slug) return;
+    let live = true;
+    void (loadSetPage ?? defaultLoadSetPage)(slug).then(items => {
+      if (!live || !items) return;
+      setPage.current = { slug, items };
+      const urls = items.map(entry => entry.icon_url).filter((url): url is string => typeof url === 'string' && /^https?:/i.test(url));
+      if (urls.length) void Image.prefetch(urls).catch(() => undefined);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [rideItem?.set_slug, rideItem?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Everything the reveal shows. Before the answer: the find's own facts, zero rewards; after: the server's. */
+  const revealData = (item: PrepItemType, data: RedeemPrepItemResponseType['data'] | null, grade: PhotoGrade, image: SkImage | null,
+    kind: RideKind | null, key: number, photobombed = false): CatchRevealData => {
+    const sum = catchSummary(item, data);
+    const rarity = data?.item?.rarity ?? item.rarity;
+    const tier = Math.max(2, Math.min(5, rarityTier(rarity))) as 2 | 3 | 4 | 5;
+    const bonus = typeof data?.photo?.bonus_xp === 'number' ? Math.max(0, data.photo.bonus_xp) : 0;
+    const paid = !!data && !data.replayed;
+    const page = setPage.current && setPage.current.slug === item.set_slug ? setPage.current.items : null;
+    const newBest = isNewBest(sum.isNew, data?.photo);
+    const slots = page ? bookSlots(page, item.id, sum.isNew, sum.collected, sum.total, { grade: data ? grade : null, newBest }) : null;
+    return {
+      key, name: findDisplayName(item.name, item.set_name), art: findImageSource(item), rarity, tier,
+      grade: grade === 'blurry' ? 'good' : grade, golden: data?.photo?.golden_hour === true || item.golden_hour === true,
+      isNew: sum.isNew, newBest, photobombed, prevGrade: data?.photo?.previous_best ?? null,
+      rewards: { experience: paid ? data!.rewards.experience : 0, coins: paid ? data!.rewards.coins : 0,
+        energy: paid ? data!.rewards.energy : 0, tickets: paid ? data!.rewards.tickets : 0, bonusXp: paid ? bonus : 0 },
+      setName: sum.setName, setColor: sum.setColor, collected: sum.collected, total: sum.total,
+      caughtCount: typeof data?.item?.caught_count === 'number' ? data.item.caught_count : null,
+      slots, photo: image, rideName: kind ? RIDES[kind].name : 'Ride',
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    };
+  };
 
   const onPrintLanded = useCallback(() => {
     const pending = pendingLand.current;
@@ -458,8 +671,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   // The viewfinder covers the map: the React-level catch state (map chrome, ambient pause) commits unseen.
   const onCovered = useCallback(() => setCatchOpen(true), []);
-  const onChromeBack = useCallback(() => showCatchChrome(false), []);
+  // While RIDE AGAIN is pending, the closing viewfinder must not bring the chrome back over the covering card.
+  const rideAgainPending = useRef(false);
+  const onChromeBack = useCallback(() => { if (!rideAgainPending.current) showCatchChrome(false); }, []);
   const onIrisClosed = useCallback(() => { showCatchChrome(false); setCatchOpen(false); }, []);
+  const onIrisClosedGuarded = useCallback(() => { if (!rideAgainPending.current) onIrisClosed(); }, [onIrisClosed]);
 
   const onClose = useCallback(() => {
     const token = ++aliveRef.current;
@@ -566,7 +782,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   }, [stageItem?.id, stageItem?.rarity, forceRide?.kind, forceRide?.sky, stageNonce, window.width, window.height, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Next-find stages are never built during a reward: they wait until the catch layer is idle, plus 600 ms.
-  const rewardBusy = !!request || !!primed || !!ride || !!showing;
+  // A reveal still on screen (a held RIDE AGAIN card included) counts as busy.
+  const rewardBusy = !!request || !!primed || !!ride || !!showing || !!shownReveal;
   const rewardBusyRef = useRef(rewardBusy);
   rewardBusyRef.current = rewardBusy;
   const rewardEndRef = useRef(0);
@@ -574,13 +791,24 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const settled = () => !rewardBusyRef.current && Date.now() - rewardEndRef.current > 600;
   useEffect(() => {
     if (!warm || window.width === 0 || rewardBusy) return;
-    const timer = setTimeout(() => {
-      for (const entry of warm) {
-        if (catchStyleFor(entry.item.rarity) !== 'ride_photo') continue;
+    // One stage per idle slice, each after two clean frames, and never once a reward has started again.
+    const queue = warm.filter(entry => catchStyleFor(entry.item.rarity) === 'ride_photo');
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+      ?? ((cb: () => void) => setTimeout(cb, 50));
+    let live = true;
+    const step = () => {
+      const entry = queue.shift();
+      if (!live || !entry || rewardBusyRef.current) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => idle(() => {
+        if (!live || rewardBusyRef.current) return;
         prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
-      }
-    }, 600);
-    return () => clearTimeout(timer);
+        // At least 1 s between builds, so one build's raster and upload never overlap the next.
+        later = setTimeout(step, PREBUILD_GAP_MS);
+      }, { timeout: 2000 })));
+    };
+    let later: ReturnType<typeof setTimeout> | null = null;
+    const timer = setTimeout(step, 600);
+    return () => { live = false; clearTimeout(timer); if (later) clearTimeout(later); };
   }, [warmKey, rewardBusy, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
   const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);
@@ -619,8 +847,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         from={stageFrom}
         layer={fullLayer} reducedMotion={reducedMotion} firstRide={ride?.hint ?? rideHintSeen !== true}
         closing={ride?.closing ?? false} flyTarget={ride?.flyTo ?? null}
-        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosed} onChromeBack={onChromeBack}
-        autoShots={autoShots} forceRide={forceRide} /></View>}
+        onCaught={onRideCaught} onPrintReady={onPrintReady} onPrintLanded={onPrintLanded} onRodeOff={onRodeOff} onClose={onClose} onCovered={onCovered} onIrisClosed={onIrisClosedGuarded} onChromeBack={onChromeBack}
+        autoShots={autoShots} forceRide={forceRide} reveal={revealFlags} fadeClose={!!shownReveal}
+        ridesUsed={ridesUsedFor.current.get(stageFor.id) ?? 0} /></View>}
+      {layer.width > 0 && <View pointerEvents="box-none"
+        style={{ position: 'absolute', left: -offset.x, top: -offset.y, width: window.width, height: window.height }}>
+        <CatchReveal data={shownReveal} outcome={revealOutcome} escape={revealEscape} flags={revealFlags} width={window.width} height={window.height} insets={insets} reducedMotion={reducedMotion}
+          onContinue={onRevealContinue} onShare={onRevealShare} onEscaped={onRevealEscaped} onActions={onRevealActions}
+          autoContinue={autoShots ? 2600 : null} autoSkipMs={autoSkipReveal ? 1500 : null} autoEscape={autoEscape} />
+      </View>}
 
       {item && <>
         <Animated.View style={[styles.ring, { borderColor: color }, ringStyle]} pointerEvents="none" />
