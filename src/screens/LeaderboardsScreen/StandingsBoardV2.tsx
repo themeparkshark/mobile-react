@@ -561,6 +561,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // Three page loads failed in a row: the grey rows become "Tap to load more".
   const [pageFailed, setPageFailed] = useState(false);
   const list = useRef<FlashList<ListItem>>(null);
+  // The skeleton stays over the list until FlashList has drawn its first rows (r7: one
+  // blank ocean frame showed between the skeleton and the board).
+  const [listDrawn, setListDrawn] = useState(false);
   const request = useRef(0);
   const entered = useRef(false);
   const scrollY = useSharedValue(0);
@@ -991,7 +994,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           refreshControl={refreshControl}
           // Room for the docked row only while it shows (r2: no cream void under Your spot).
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
+          onLoad={() => setListDrawn(true)}
         />
+        {!listDrawn && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
         {/* Rows soften into the strip instead of a hard cut (r2 art): a cream fade and a hairline shadow. */}
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }, topShade]}>
           <View style={{ height: 2, backgroundColor: 'rgba(5,52,110,0.18)' }} />

@@ -364,6 +364,8 @@ test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing la
   assert.match(board, /const crownLater = finaleFollows && !reduced;/, 'the reduced/no-tick path never doubles the success haptic');
   assert.match(board, /<WeekPill endsAt=\{model\?\.endsAt \?\? expectedWeekEnd\(now\)\} now=\{now\} \/>/);
   assert.match(board, /playKey="skeleton" loading/, 'first paint: shark-disc placeholders, never OPEN');
+  assert.match(board, /onLoad=\{\(\) => setListDrawn\(true\)\}/, 'no blank frame between the skeleton and the board');
+  assert.match(board, /\{!listDrawn && <View pointerEvents="none"[^>]*><Skeleton \/><\/View>\}/);
   const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
   assert.match(podium, /\) : loading \? \(/);
   assert.match(podium, /p3\.value = 0\.55; p2\.value = 0\.55; p1\.value = 0;/, 'never an empty stage at the rise');

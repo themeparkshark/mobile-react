@@ -146,8 +146,8 @@ function Spot({ rank, row, metric, progress, pop, loading, onPress }: {
         </Pressable>
       ) : loading ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ alignItems: 'center' }}>
-          <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: 'rgba(255,255,255,0.32)', marginTop: first ? 28 : 20 }} />
-          <View style={{ width: first ? 84 : 72, height: 20, borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.32)', marginTop: 6 }} />
+          <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)', marginTop: first ? 28 : 20 }} />
+          <View style={{ width: first ? 84 : 72, height: 20, borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.6)', marginTop: 6 }} />
         </View>
       ) : (
         <View accessible accessibilityLabel={`Place ${rank} is open`} style={{ alignItems: 'center' }}>
