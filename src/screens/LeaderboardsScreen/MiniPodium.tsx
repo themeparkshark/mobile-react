@@ -221,7 +221,9 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, dim
             so the bases read 1 > 2 > 3. Crop and flip only (ART_RULES). */}
         <RNImage source={BARREL} fadeDuration={0} resizeMode="cover" style={{ width, height: width * 683 / 1079 }} />
       </View>
-      <View pointerEvents="box-none" style={{
+      {/* The dimmed hold is the old stage: VoiceOver skips it (its rows already carry their new
+          ranks) and follows the dock's climb instead (r7). */}
+      <View pointerEvents="box-none" accessibilityElementsHidden={dimmed} importantForAccessibility={dimmed ? 'no-hide-descendants' : 'auto'} style={{
         position: 'absolute', left: 0, right: 0, bottom: 42, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',
         opacity: dimmed ? 0.45 : 1,
       }}>

@@ -371,6 +371,7 @@ test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing la
   assert.match(podium, /p3\.value = 0\.55; p2\.value = 0\.55; p1\.value = 0;/, 'never an empty stage at the rise');
   assert.match(podium, /pop\.value = withSequence\(withTiming\(1\.15/, 'a scale pop on the haptic beat');
   assert.match(podium, /export const CONFETTI_PIECES = 30;/);
+  assert.match(podium, /accessibilityElementsHidden=\{dimmed\} importantForAccessibility=\{dimmed \? 'no-hide-descendants' : 'auto'\}/, 'VoiceOver skips the dimmed old stage');
   assert.match(podium, /const xs = \[width \* 0\.14, width \/ 2, width \* 0\.86\];/, 'confetti across the full podium width');
   const screen = read('src/screens/LeaderboardScreen.tsx');
   assert.match(screen, /<View collapsable=\{false\} style=\{\{ flex: 1 \}\}>\s*\{\(\['week', 'friends', 'all_time'\] as const\)/, 'the panes\' zIndex stays under the nav');
