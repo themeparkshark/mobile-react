@@ -243,7 +243,7 @@ export default function PinSwapsScreen() {
   const owned = useMemo(() => new Set(pins.map(p => p.id)), [pins]);
   live.current = { board, busyId, owned, pinsCount: pins.length, pinsKnown: pinsReady && !pinsLoading && !pinsError, lastGiven };
   const badgeFor = useCallback((item: ItemType): BoardBadge => (
-    owned.has(item.id) ? 'owned' : item.id === lastGiven ? 'yours' : undefined
+    item.id === lastGiven ? 'yours' : owned.has(item.id) ? 'owned' : undefined
   ), [owned, lastGiven]);
 
   /** Hold a board pin (fresh from the board, or "Try again" on the same pin after it expired). */
