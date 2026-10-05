@@ -146,7 +146,7 @@ export interface RidePhotoProps {
   readonly firstRide: boolean;
   readonly onCaught: (details: RedeemCatchDetails, grade: PhotoGrade) => void;
   /** The grade has held; the print is about to fly. */
-  readonly onPrintReady: (grade: PhotoGrade, print: SkImage | null) => void;
+  readonly onPrintReady: (grade: PhotoGrade, print: SkImage | null, photobombed?: boolean) => void;
   /** Where the print lands (this layer's points): the badge on the map. */
   readonly flyTarget: { x: number; y: number } | null;
   readonly onPrintLanded: () => void;
@@ -816,7 +816,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         finishHold.current = null;
         holding.value = false;
         burst.value = withTiming(0, { duration: 250 });
-        if (caught) { catchMark('print-ready'); handedImage.current = printImageRef.current; onPrintReady(grade, printImageRef.current); }
+        if (caught) { catchMark('print-ready'); handedImage.current = printImageRef.current; onPrintReady(grade, printImageRef.current, bombed); }
         else {
           // Epic's first photo drops into slot 1 of the film strip in the band, with a click and a glow,
           // and the car goes around again for photo 2.
@@ -1331,6 +1331,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             <Shimmer x={0} y={0} width={PHOTO_W} height={PHOTO_H} progress={sheen} alpha={0.5} />
           </Canvas>
           {print?.grade === 'blurry' && <View style={styles.blurVeil} />}
+          {/* A gull photobombed this shot: a tag on the photo itself, held for the whole print */}
+          <View style={[styles.bombTag, !print?.bombed && styles.bombGone]} accessibilityLabel="Photobombed">
+            <Text style={styles.bombText}>Photobombed!</Text>
+          </View>
         </View>
         <View style={styles.caption}>
           <Text style={styles.captionName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{name}</Text>
@@ -1340,9 +1344,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none"><Picture picture={printFrame} /></Canvas>
         {print && <Animated.View style={[styles.stamp, plateLeft && styles.stampLeft, stampStyle]}>
           <StampPlate grade={print.grade} soClose={print.soClose} double={print.double} size={PLATE_PEAK} />
-          {print.bombed && <View style={styles.bombTag} accessibilityLabel="Photobombed">
-            <Text style={styles.bombText}>Photobombed!</Text>
-          </View>}
+
         </Animated.View>}
       </Animated.View>
 
@@ -1355,10 +1357,11 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
 export default memo(RidePhotoCatch);
 
 const styles = StyleSheet.create({
-  bombTag: { position: 'absolute', left: -6 * PLATE_PEAK, bottom: -22 * PLATE_PEAK, paddingHorizontal: 8 * PLATE_PEAK, paddingVertical: 3 * PLATE_PEAK,
-    borderRadius: 8 * PLATE_PEAK, borderWidth: 2.5 * PLATE_PEAK, borderColor: '#1b3a5c', backgroundColor: '#ff6b5e', transform: [{ rotate: '6deg' }] },
-  bombText: { fontFamily: 'Shark', fontSize: 13 * PLATE_PEAK, color: '#ffffff', letterSpacing: 0.4,
-    textShadowColor: '#1b3a5c', textShadowOffset: { width: 0, height: 1.5 * PLATE_PEAK }, textShadowRadius: 0.1 },
+  bombTag: { position: 'absolute', left: 8, top: 8, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8, borderWidth: 2.5,
+    borderColor: '#ffffff', backgroundColor: '#ff5a4e', transform: [{ rotate: '-6deg' }] },
+  bombGone: { display: 'none' },
+  bombText: { fontFamily: 'Shark', fontSize: 17, color: '#ffffff', letterSpacing: 0.4,
+    textShadowColor: '#7a1309', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   view: { position: 'absolute', left: 0, top: 0, overflow: 'hidden', backgroundColor: '#000000' },
   iris: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000000' },
   shotFlash: { backgroundColor: '#ffffff' },

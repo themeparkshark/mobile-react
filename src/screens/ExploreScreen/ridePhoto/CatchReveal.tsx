@@ -116,6 +116,8 @@ export interface CatchRevealData {
   readonly isNew: boolean;
   /** R6: a repeat whose photo beat the stored best (the server's answer). */
   readonly newBest?: boolean;
+  /** R6: a gull photobombed the catching photo (it is capped at Good). */
+  readonly photobombed?: boolean;
   /** The server's rewards (zeros until the answer lands). */
   readonly rewards: RevealRewards;
   readonly setName: string | null;
@@ -299,7 +301,7 @@ function BookCount({ before, after, total, fill, style }: {
 }
 
 /** One book slot, always mounted. Owned: the item's art. Missing: its silhouette. New: pops in with a gold ring. */
-const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallback, caughtFallback = false, color, art, fill, best, times }: {
+const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallback, caughtFallback = false, bestFallback = false, color, art, fill, best, times }: {
   readonly index: number; readonly total: number; readonly slot: RevealSlot | null; readonly filledFallback: boolean; readonly isNewFallback: boolean;
   readonly color: string; readonly art: ImageSource | null; readonly fill: SharedValue<number>;
   /** R6 NEW BEST!: 0..1, the caught slot flips (the stars step up at the half) and lands in gold. */
@@ -308,6 +310,8 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   readonly times: number | null;
   /** Plain slots (page unknown): this one carries the repeat find's own art and bubble. */
   readonly caughtFallback?: boolean;
+  /** Plain slots: the repeat find's slot plays NEW BEST!. */
+  readonly bestFallback?: boolean;
 }) {
   const isNew = slot ? slot.isNew : isNewFallback;
   const owned = slot ? slot.owned && !slot.isNew : filledFallback;
@@ -318,7 +322,7 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   const shownArt = slot?.art ?? (isNew || (caughtFallback && !isNew) ? art : null);
   // Plain owned slots are filled set-colour tiles with a big check (never a blank white box).
   const plainOwned = !slot && owned && !shownArt;
-  const newBest = !!slot?.newBest;
+  const newBest = slot ? !!slot.newBest : bestFallback;
   const stars = owned || isNew ? Math.max(0, Math.min(3, slot?.stars ?? 0)) : 0;
   const prevStars = newBest ? Math.max(0, Math.min(3, slot?.prevStars ?? 0)) : stars;
   const flip = useAnimatedStyle(() => (newBest ? {
@@ -333,7 +337,7 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
       {/* A missing item: its silhouette in #1b3a5c at 30% with a darker 1.5 pt outline (a darker copy just behind it) */}
       <Image source={!owned && !isNew ? shownArt ?? undefined : undefined} style={[styles.slotArt, styles.slotOutline, (owned || isNew || !shownArt) && styles.hidden]}
         tintColor="#0b1f36" contentFit="contain" transition={0} />
-      <Image source={shownArt ?? undefined} style={[styles.slotArt, !shownArt && styles.hidden, !owned && !isNew && styles.slotMissing]}
+      <Image source={shownArt ?? undefined} style={[styles.slotArt, !owned && !isNew && styles.slotMissing, !shownArt && styles.hidden]}
         tintColor={!owned && !isNew ? '#1b3a5c' : undefined} contentFit="contain" transition={0} />
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.slotCheck, !plainOwned && styles.gone]}><GameIcon name="check" size={22} /></View>
       <Animated.View pointerEvents="none" style={[styles.slotNew, { borderColor: BRAND.gold }, !isNew && styles.hidden, style]}>
@@ -969,7 +973,8 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const escaped = outcome === 'escaped';
   // The NEW! stamp sits on the new slot when the grid shows it, else on the page corner.
   const slotsShown = Math.min(MAX_SLOTS, book.total);
-  const newIndex = d?.slots ? d.slots.findIndex(slot => slot.isNew || !!slot.newBest) : book.newIndex ?? -1;
+  const newIndex = d?.slots ? d.slots.findIndex(slot => slot.isNew || !!slot.newBest)
+    : !d?.isNew && d?.newBest && book.after > 0 ? 0 : book.newIndex ?? -1;
   const perRow = 8;
   const pageW = width - 40;
   const cell = 38 + 4;
@@ -1051,6 +1056,9 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
             {/* Bound only while a reveal is live: the photo is freed after the moment ends (never drawn after). */}
             <SkImageNode image={data?.photo ?? BLANK_IMAGE} x={0} y={0} width={hero.photoW} height={hero.photoH} fit="fill" />
           </Canvas>
+          <View style={[styles.bombTag, !d?.photobombed && styles.gone]} accessibilityLabel="Photobombed">
+            <Text style={styles.bombText}>Photobombed!</Text>
+          </View>
         </View>
         <View style={[styles.caption, { height: hero.strip - 14 }]}>
           <Text style={styles.captionName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{d?.name ?? ''}</Text>
@@ -1119,6 +1127,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
             {Array.from({ length: MAX_SLOTS }, (_, i) => (
               <Slot key={i} index={i} total={slotsShown} slot={d?.slots?.[i] ?? null} filledFallback={i < book.before}
                 isNewFallback={i === book.newIndex} caughtFallback={!d?.isNew && i === 0 && book.after > 0}
+                bestFallback={!d?.isNew && !!d?.newBest && i === 0 && book.after > 0}
                 color={d?.setColor ?? BRAND.gold} art={d?.art ?? null} fill={fill} best={best}
                 times={!d?.isNew && d?.caughtCount && d.caughtCount > 1 ? d.caughtCount : null} />
             ))}
@@ -1226,6 +1235,10 @@ const styles = StyleSheet.create({
   captionDate: { color: '#4a6a90', fontFamily: 'Knockout', fontSize: 15 },
   printStamp: { position: 'absolute', right: -6 },
   printFlash: { position: 'absolute', borderRadius: 5 },
+  bombTag: { position: 'absolute', left: 8, top: 8, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8, borderWidth: 2.5,
+    borderColor: BRAND.white, backgroundColor: '#ff5a4e', transform: [{ rotate: '-6deg' }] },
+  bombText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, letterSpacing: 0.4,
+    textShadowColor: '#7a1309', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   tape: { position: 'absolute', top: -14, left: '38%', width: 74, height: 30, borderRadius: 3, backgroundColor: 'rgba(255,246,214,0.85)',
     transform: [{ rotate: '-4deg' }] },
   ribbon: { position: 'absolute', justifyContent: 'center', paddingHorizontal: 48 },

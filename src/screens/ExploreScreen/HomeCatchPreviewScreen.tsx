@@ -245,9 +245,9 @@ function HomeCatchPreview() {
     return { success: true, data: {
       rewards: { energy: base.e, tickets: tier >= 4 ? 1 : 0, coins: tier >= 4 ? 0 : 10 * tier, experience: base.xp + bonus }, streak: { current: 3, multiplier: 1 },
       is_new_variant: item.is_new_variant, replayed: false,
-      // Consistent with the preview book page: 4 owned there, plus this find when it is new.
-      set_progress: { total: 12, collected: 4 + (item.is_new_variant ? 1 : 0), percentage: 40, is_complete: false, collected_ids: [] },
-      dex: { set_slug: 'snack_stand', found: 4 + (item.is_new_variant ? 1 : 0), total: 12, reward_status: 'locked' },
+      // Consistent with the preview book page: 4 owned before a new find (5 after it); a repeat's page already has it (5).
+      set_progress: { total: 12, collected: 5, percentage: 42, is_complete: false, collected_ids: [] },
+      dex: { set_slug: 'snack_stand', found: 5, total: 12, reward_status: 'locked' },
       photo: quality ? { quality, golden_hour: false, bonus_xp: GRADE_BONUS_XP[quality],
         // As the server: the best before this catch, and whether this photo beat it (owned finds only).
         previous_best: item.is_new_variant ? null : 'good', new_best: !item.is_new_variant && !!SCRIPT[stepRef.current]?.newBest && quality !== 'good' } : null,

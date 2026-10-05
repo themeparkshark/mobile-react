@@ -484,7 +484,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const soundScheduled = useRef(false);
   const pendingPhoto = useRef<{ image: SkImage | null; grade: PhotoGrade } | null>(null);
   const pendingLand = useRef<{ data: RedeemPrepItemResponseType['data']; token: number; item: PrepItemType } | null>(null);
-  const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null) => {
+  const onPrintReady = useCallback(async (grade: PhotoGrade, image: SkImage | null, photobombed = false) => {
     const req = request;
     const token = aliveRef.current;
     if (!req || !redeemRun.current) return;
@@ -495,7 +495,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (reveal) {
       revealedRef.current = true;
       setRevealOutcome('pending');
-      setReveal(revealData(req.item, null, grade, image, kind, token));
+      setReveal(revealData(req.item, null, grade, image, kind, token, photobombed));
     }
     const result = await redeemRun.current;
     if (aliveRef.current !== token) return;
@@ -552,7 +552,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     };
     if (!reveal) { await handOff(); return; }
     revealHand.current = handOff;
-    setReveal(revealData(req.item, result.data, grade, image, kind, token));
+    setReveal(revealData(req.item, result.data, grade, image, kind, token, photobombed));
     setRevealOutcome('caught');
   }, [request, land, target.x, target.y, offset.x, offset.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -621,7 +621,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   /** Everything the reveal shows. Before the answer: the find's own facts, zero rewards; after: the server's. */
   const revealData = (item: PrepItemType, data: RedeemPrepItemResponseType['data'] | null, grade: PhotoGrade, image: SkImage | null,
-    kind: RideKind | null, key: number): CatchRevealData => {
+    kind: RideKind | null, key: number, photobombed = false): CatchRevealData => {
     const sum = catchSummary(item, data);
     const rarity = data?.item?.rarity ?? item.rarity;
     const tier = Math.max(2, Math.min(5, rarityTier(rarity))) as 2 | 3 | 4 | 5;
@@ -633,7 +633,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     return {
       key, name: findDisplayName(item.name, item.set_name), art: findImageSource(item), rarity, tier,
       grade: grade === 'blurry' ? 'good' : grade, golden: data?.photo?.golden_hour === true || item.golden_hour === true,
-      isNew: sum.isNew, newBest,
+      isNew: sum.isNew, newBest, photobombed,
       rewards: { experience: paid ? data!.rewards.experience : 0, coins: paid ? data!.rewards.coins : 0,
         energy: paid ? data!.rewards.energy : 0, tickets: paid ? data!.rewards.tickets : 0, bonusXp: paid ? bonus : 0 },
       setName: sum.setName, setColor: sum.setColor, collected: sum.collected, total: sum.total,
