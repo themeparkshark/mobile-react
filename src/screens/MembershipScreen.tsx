@@ -5,11 +5,13 @@
  * to the server, which verifies Apple's signature and switches VIP on before we
  * celebrate. A binary without the StoreKit module asks for an app update.
  */
+import { clearGrownUpPass, grownUpForNextStep } from '../components/GrownUpGate';
+import { useFocusEffect } from '@react-navigation/native';
+import { openExternal, openLegal } from '../services/external';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
-import { useContext, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
 } from 'react-native-reanimated';
@@ -83,12 +85,28 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const ownedElsewhere = () => gameAlert('VIP is on another account',
     'This Apple ID’s VIP is linked to a different Theme Park Shark account. Sign in to that account to use it.');
 
+  // Leaving the paywall (blur or unmount) drops the pass from its entry: only this visit's Buy may use it.
+  useFocusEffect(useCallback(() => () => clearGrownUpPass(), []));
+  // A ref, so a second tap while the gate is up can never start a second purchase.
+  const buying = useRef(false);
   const buy = async () => {
-    if (!plan || busy) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setBusy('buy');
-    const outcome = await buyVip(plan);
-    setBusy(null);
+    if (!plan || busy || buying.current) return;
+    buying.current = true;
+    try {
+      // The paywall itself is gated: the pass from the door that opened it covers this one Buy
+      // (once, within 2 minutes); otherwise a grown-up answers here. Nothing is bought without one.
+      if (!(await grownUpForNextStep('vip'))) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setBusy('buy');
+      const outcome = await buyVip(plan);
+      setBusy(null);
+      await reportBuy(outcome);
+    } finally {
+      buying.current = false;
+    }
+  };
+
+  const reportBuy = async (outcome: Awaited<ReturnType<typeof buyVip>>) => {
     if (outcome === 'success') await celebrate();
     else if (outcome === 'pending') gameAlert('Waiting for approval', 'Your purchase is pending. VIP switches on once it’s approved.');
     else if (outcome === 'unverified') gameAlert('Almost there', 'Your purchase went through. VIP switches on as soon as we can confirm it with Apple, at the latest the next time you open the app.');
@@ -147,7 +165,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             // A 1.6.0 binary running this JS has no StoreKit module.
             <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
               <Text style={s.guestText}>Update Theme Park Shark to join VIP.</Text>
-              <GameButton label="Update the app" onPress={() => void Linking.openURL(APP_STORE_URL)} />
+              <GameButton label="Update the app" onPress={() => void openExternal(APP_STORE_URL, 'system')} />
             </Animated.View>
           ) : loading ? (
             <SharkLoader compact tone="onBlue" style={{ marginTop: 20 }} />
@@ -186,11 +204,11 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               <Text style={s.link}>{busy === 'restore' ? 'Restoring…' : 'Restore purchases'}</Text>
             </Pressable>
             <Text style={s.dot}>·</Text>
-            <Pressable onPress={() => urls?.terms && WebBrowser.openBrowserAsync(urls.terms)} hitSlop={8}>
+            <Pressable onPress={() => openLegal(urls?.terms)} hitSlop={8}>
               <Text style={s.link}>Terms</Text>
             </Pressable>
             <Text style={s.dot}>·</Text>
-            <Pressable onPress={() => urls?.privacy_policy && WebBrowser.openBrowserAsync(urls.privacy_policy)} hitSlop={8}>
+            <Pressable onPress={() => openLegal(urls?.privacy_policy)} hitSlop={8}>
               <Text style={s.link}>Privacy</Text>
             </Pressable>
           </View>

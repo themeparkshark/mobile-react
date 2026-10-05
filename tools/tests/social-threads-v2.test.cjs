@@ -461,7 +461,8 @@ test('Clean Social: shared clean background, no topic chips, badges or picker, M
   const social = read('src/screens/SocialScreen.tsx');
   assert.match(social, /<CleanScreenBackground style=\{styles\.body\}>/);
   assert.doesNotMatch(social, /WATER|accessibilityLabel="Topics"|All topics|TOPICS\.map|topicChip/);
-  assert.match(social, /runAfterShortcuts\(\(\) => \{ WebBrowser\.openBrowserAsync\(urls\.shop\)\.catch\(\(\) => \{ void Linking\.openURL\(urls\.shop\); \}\); \}\)/);
+  // Merch sells for real money: it leaves the app through the grown-up gate (services/external) after the sheet hides.
+  assert.match(social, /runAfterShortcuts\(\(\) => \{ void openExternal\(urls\.shop\); \}\)/);
   assert.match(social, /onModalHide=\{\(\) => \{\s*const action = afterShortcutsHide\.current;/);
   assert.equal((social.match(/runAfterShortcuts\(\(\) =>/g) || []).length, 5, 'all five shortcuts wait for the sheet');
   for (const f of ['src/screens/threads/ThreadCard.tsx', 'src/screens/ThreadScreen.tsx']) assert.doesNotMatch(read(f), /TopicBadge|WATER/, f);

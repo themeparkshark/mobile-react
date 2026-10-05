@@ -37,6 +37,10 @@ export const AuthContext = createContext<AuthContextType>(
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [player, setPlayer] = useState<PlayerType | null>(null);
+  // The paywall's grown-up gate is decided by the signed-in player: a VIP member opens perks, ungated.
+  useEffect(() => {
+    try { require('../components/GrownUpGate').setGateVipMember(player?.is_subscribed === true); } catch { /* not loaded */ }
+  }, [player?.is_subscribed]);
   const [token, setToken] = useState<string>();
   const [isReady, setIsReady] = useState<boolean>(false);
   const hasInitialNavigated = useRef(false);

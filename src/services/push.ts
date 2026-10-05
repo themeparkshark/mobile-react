@@ -3,6 +3,7 @@
  * losing a ride). We never ask at launch: the soft ask appears where it makes
  * sense (live parks, boss raids), and the iOS prompt only follows a tap.
  */
+import { openServerRoute } from '../components/GrownUpGate';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -51,7 +52,8 @@ export async function refreshPushRegistration(): Promise<void> {
 export function listenForPushTaps(): () => void {
   const open = (response: Notifications.NotificationResponse | null) => {
     const route = response?.notification.request.content.data?.route as { screen?: string; params?: object } | undefined;
-    if (route?.screen) RootNavigation.navigate(route.screen, route.params ?? {});
+    // Server-named screens: the paywall is gated (openServerRoute), never opened directly.
+    if (route?.screen) openServerRoute(route.screen, route.params ?? {});
   };
   Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
   const sub = Notifications.addNotificationResponseReceivedListener(open);

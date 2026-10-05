@@ -7,11 +7,12 @@
  * rows, and hid posting behind a small + that opened a broken sheet.
  * Those shortcuts now live behind the chest button in the top bar.
  */
+import { openExternal } from '../services/external';
 import { FlashList } from '@shopify/flash-list';
+import { openMembership } from '../components/GrownUpGate';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -383,12 +384,13 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
               },
               {
                 image: require('../../assets/images/screens/social/merch.png'),
-                onPress: () => runAfterShortcuts(() => { WebBrowser.openBrowserAsync(urls.shop).catch(() => { void Linking.openURL(urls.shop); }); }),
+                // The merch store sells for real money: behind the grown-up gate.
+                onPress: () => runAfterShortcuts(() => { void openExternal(urls.shop); }),
                 text: 'Merch',
               },
               {
                 image: require('../../assets/images/screens/social/membership.png'),
-                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.BecomeAMember)) navigation.navigate('Membership'); }),
+                onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.BecomeAMember)) void openMembership(); }),
                 text: 'Member',
                 permission: PermissionEnums.BecomeAMember,
                 show: !player || Boolean(player && !player.is_subscribed),

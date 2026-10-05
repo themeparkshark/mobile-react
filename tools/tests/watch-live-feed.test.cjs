@@ -197,7 +197,7 @@ test('round 5: one reward bank survives a reopened player, shows the reward firs
   assert.match(screen, /LayoutAnimation\.configureNext/);
   assert.match(screen, /!showUnsaved && !settling/);
   // Legacy rows go through the same bank, so a failed save is never silent.
-  assert.match(screen, /if \(!post\.has_watched\) save\(post\);/);
+  assert.match(screen, /if \(opened && !post\.has_watched\) save\(post\);/, 'paid only once the grown-up opened the link');
 });
 
 test('round 6: Later releases the held hero and meter, Try again during a quiet retry answers, no delivery after leaving', () => {

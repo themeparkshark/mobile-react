@@ -1,6 +1,7 @@
+import { openAppSettings } from '../services/external';
 import * as Location from 'expo-location';
 import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { AppState, Linking, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import { LocationType } from '../models/location-type';
@@ -563,7 +564,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const current = await Location.getForegroundPermissionsAsync();
     if (current.status === 'granted') { setPermissionGranted(true); return true; }
     if (!current.canAskAgain) {
-      await Linking.openURL('app-settings:');
+      openAppSettings();
       return false;
     }
     const { status } = await Location.requestForegroundPermissionsAsync();

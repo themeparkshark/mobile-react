@@ -1,22 +1,12 @@
+import { openAppSettings, openExternal, openLegal } from '../services/external';
 import dayjs from 'dayjs';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Application from 'expo-application';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import * as WebBrowser from 'expo-web-browser';
 import { useContext, useEffect, useRef, useState } from 'react';
-import {
-  AppState,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import deletePlayer from '../api/endpoints/me/delete';
@@ -192,7 +182,7 @@ export default function SettingsScreen() {
         gameAlert('Background Park Play',
           'Enable Always location in iPhone Settings to detect rides and keep LinePlay progress while your phone is locked.',
           [{ text: 'Not now', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } }], { icon: 'pin' });
+            { text: 'Open Settings', onPress: () => { openAppSettings(); } }], { icon: 'pin' });
         return;
       }
       if (!permission.granted) permission = await Location.requestBackgroundPermissionsAsync();
@@ -217,10 +207,7 @@ export default function SettingsScreen() {
       playerId: player?.id,
     });
     try {
-      if (await Linking.canOpenURL(url)) {
-        await Linking.openURL(url);
-        return;
-      }
+      if (await openExternal(url, 'system')) return;
     } catch { /* fall through to the address */ }
     gameAlert(kind === 'bug' ? 'Report a bug' : 'Need help?', `Email us at ${SUPPORT_EMAIL} and we will get back to you.`,
       undefined, { icon: 'info' });
@@ -419,8 +406,8 @@ export default function SettingsScreen() {
               });
             }}
           />
-          <SettingsRow art="edit" title="Terms of Service" onPress={() => WebBrowser.openBrowserAsync(urls.terms)} />
-          <SettingsRow art="lock" title="Privacy Policy" onPress={() => WebBrowser.openBrowserAsync(urls.privacy_policy)} />
+          <SettingsRow art="edit" title="Terms of Service" onPress={() => openLegal(urls.terms)} />
+          <SettingsRow art="lock" title="Privacy Policy" onPress={() => openLegal(urls.privacy_policy)} />
           <SettingsRow art="mail" title="Need Help?" detail={SUPPORT_EMAIL} onPress={() => { void openSupport('help'); }} />
           <SettingsRow art="wrench" title={FEEDBACK_COPY.settingsTitle} detail={FEEDBACK_COPY.settingsDetail} isLast
             onPress={() => openFeedbackReport('settings')} />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { MINIGAME_ORIGIN_WHITELIST, allowMinigameNavigation } from './minigameWeb';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
@@ -89,7 +90,9 @@ export default function SharkMiniGame({ visible, taskName, targetScore = 5, onCl
             source={{ uri: htmlUri, baseUrl: htmlUri }}
             onMessage={handleMessage}
             injectedJavaScript={injected}
-            originWhitelist={["*"]}
+            originWhitelist={MINIGAME_ORIGIN_WHITELIST}
+          onShouldStartLoadWithRequest={allowMinigameNavigation}
+          setSupportMultipleWindows={false}
             javaScriptEnabled
             domStorageEnabled
             allowFileAccess

@@ -8,6 +8,7 @@
  * a failed page offers Try again, and a tap navigates first and marks read in
  * the background.
  */
+import { openServerRoute } from '../components/GrownUpGate';
 import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -134,7 +135,7 @@ export default function NotificationsScreen() {
     markRead(item);
     const target = resolveRoute(item.content?.route);
     if (target) {
-      try { RootNavigation.navigate(target.screen, target.params); } catch { /* unknown screen on this build */ }
+      try { openServerRoute(target.screen, target.params); } catch { /* unknown screen on this build */ }
     }
   }, [markRead]);
 

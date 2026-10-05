@@ -22,7 +22,7 @@ import { TurboModuleRegistry, NativeModules, Platform } from 'react-native';
 import {
   adErrorCode, claimAdReward, getAdReward, offerAdReward, type AdPlacement, type AdReward,
 } from '../api/endpoints/me/ad-rewards';
-import { AD_REQUEST, ADS_ENABLED, REWARDED_AD_UNITS, USING_TEST_ADS } from './adConfig';
+import { AD_AUDIENCE_13_PLUS_KNOWN, AD_REQUEST, ADS_ENABLED, REWARDED_AD_UNITS, USING_TEST_ADS } from './adConfig';
 
 type Gma = typeof import('react-native-google-mobile-ads');
 
@@ -32,6 +32,8 @@ type Gma = typeof import('react-native-google-mobile-ads');
  * until the AdMob account exists, see adConfig.ts).
  */
 export function adsAvailable(): boolean {
+  // Never to a player under 13 or of unknown age (today: everyone). Offers hide; VIP still gets theirs.
+  if (!AD_AUDIENCE_13_PLUS_KNOWN) return false;
   if (!ADS_ENABLED || Platform.OS !== 'ios') return false;
   try {
     return !!(TurboModuleRegistry.get('RNGoogleMobileAdsModule') ?? NativeModules.RNGoogleMobileAdsModule);
@@ -52,7 +54,11 @@ function start(): Promise<void> {
   if (!started) {
     started = (async () => {
       const ads = gma();
-      await ads.default().setRequestConfiguration({ maxAdContentRating: ads.MaxAdContentRating[AD_REQUEST.maxAdContentRating] });
+      await ads.default().setRequestConfiguration({
+        maxAdContentRating: ads.MaxAdContentRating[AD_REQUEST.maxAdContentRating],
+        tagForChildDirectedTreatment: AD_REQUEST.tagForChildDirectedTreatment,
+        tagForUnderAgeOfConsent: AD_REQUEST.tagForUnderAgeOfConsent,
+      });
       await ads.default().initialize();
     })().catch((error) => {
       started = null;

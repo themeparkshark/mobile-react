@@ -1,4 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
+import { GrownUpGateHost } from './components/GrownUpGate';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
@@ -33,7 +34,7 @@ import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { ShareStudioHost } from './share';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
-import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
+import { addBreadcrumb } from './services/telemetry';
 import { markUserActivity } from './hooks/useUserIdle';
 
 const Stack = createNativeStackNavigator();
@@ -58,9 +59,6 @@ export default function App() {
   const initialRouteName = devInitialRoute() ?? 'Splash';
   useAppUpdates();
   const { player } = useContext(AuthContext);
-  useEffect(() => {
-    setTelemetryUser(player?.id);
-  }, [player?.id]);
   const { setCrumbs } = useContext(CrumbContext);
   const { retrieveCurrencies } = useContext(CurrencyContext);
   const { retrieveTheme } = useContext(ThemeContext);
@@ -321,6 +319,8 @@ export default function App() {
     <ShareStudioHost />
     {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}
     <GameDialogHost />
+    {/* The grown-up gate in front of every paywall and real-money purchase. */}
+    <GrownUpGateHost />
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
     {cleanRecording ? null : (__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}

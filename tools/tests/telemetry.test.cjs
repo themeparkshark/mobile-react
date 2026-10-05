@@ -83,11 +83,10 @@ test('no DSN means no network and no storage', async () => {
   assert.equal(storage.size, 0);
 });
 
-test('an error event carries release, channel, opaque user id and core-loop breadcrumbs, never PII', async () => {
+test('an error event carries release, channel and core-loop breadcrumbs, never a player id or name (kids app)', async () => {
   const { mod } = loadTelemetry();
   const bodies = [];
   mod.initTelemetry({ dsn: DSN, transport: async (url, body) => { bodies.push([url, body]); return true; }, installGlobalHandlers: false, now: () => 1_700_000_000_000 });
-  mod.setTelemetryUser(77);
   mod.addBreadcrumb('core', 'ride_challenge.start', { status: 201 });
   const id = mod.captureException(new Error('shelf exploded'), { source: 'error-boundary', handled: true });
   await flush();
@@ -98,10 +97,11 @@ test('an error event carries release, channel, opaque user id and core-loop brea
   assert.equal(event.release, 'com.themeparkshark.app@ota-fp1', 'an OTA launch is keyed by runtime and update id');
   assert.equal(event.environment, 'testflight');
   assert.equal(event.dist, 'update-1');
-  assert.equal(event.user.id, '77');
+  assert.equal(event.user, undefined, 'no player id in any envelope');
+  assert.equal(mod.setTelemetryUser, undefined, 'there is no way to attach one');
   assert.equal(event.exception.values[0].value, 'shelf exploded');
   assert.equal(event.breadcrumbs.values[0].message, 'ride_challenge.start');
-  assert.doesNotMatch(bodies[0][1], /username|email|Device-Name|Bearer/i);
+  assert.doesNotMatch(bodies[0][1], /username|screen_name|email|Device-Name|Bearer|"user"/i);
 });
 
 test('repeat errors inside five minutes are sent once', async () => {

@@ -5,6 +5,7 @@
  * sheet only when the player taps SHARE; nothing is ever posted for them.
  */
 
+import { shareFileExternal } from '../../../services/external';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
@@ -45,7 +46,7 @@ export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: numb
     try {
       const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: shareText(rideName, score, stars), UTI: 'public.png' });
+        await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: shareText(rideName, score, stars), UTI: 'public.png' });
       }
     } catch {
       // The share sheet is optional; a failure never blocks the results.

@@ -1,3 +1,4 @@
+import { shareFileExternal } from '../../services/external';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Animated, Dimensions,
@@ -129,7 +130,7 @@ export default function RideWrappedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const uri = await viewShotRef.current?.capture?.();
       if (uri && await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'image/png' });
+        await shareFileExternal(uri, { mimeType: 'image/png' });
       }
     } catch (e) {
       console.error('Share error:', e);

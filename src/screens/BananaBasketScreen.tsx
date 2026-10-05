@@ -9,6 +9,7 @@
  * no native rebuild needed.
  */
 
+import { MINIGAME_ORIGIN_WHITELIST, allowMinigameNavigation } from '../components/minigameWeb';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -91,7 +92,9 @@ export default function BananaBasketScreen({ navigation }: any) {
           source={{ uri: htmlUri, baseUrl: htmlUri }}
           onMessage={handleMessage}
           injectedJavaScript={injected}
-          originWhitelist={['*']}
+          originWhitelist={MINIGAME_ORIGIN_WHITELIST}
+          onShouldStartLoadWithRequest={allowMinigameNavigation}
+          setSupportMultipleWindows={false}
           javaScriptEnabled
           domStorageEnabled
           allowFileAccess

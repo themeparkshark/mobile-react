@@ -486,7 +486,7 @@ test('round 5: no app or map chrome over the viewfinder; close without a grey st
   const map = read('src/components/Map.tsx');
   assert.match(map, /catchShown\.value/, 'map controls and credit read the catch shared value');
   assert.doesNotMatch(map, /\{!chromeHidden && <Pressable/, 'the credit stays mounted');
-  assert.match(map, /if \(isCatchShown\(\)\) return; void Linking\.openURL/);
+  assert.match(map, /if \(isCatchShown\(\)\) return; void openExternal\(/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /const chromeFade = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, 1 - catchShown\.value/);
   assert.match(read('src/components/Wrapper.tsx'), /backgroundColor: '#0e7fd9'/);

@@ -60,8 +60,9 @@ test('share sheets can save images: the add-to-Photos purpose string names the r
   // captured flex cards (Share Studio) and ride cards. iOS asks with this string.
   assert.match(info.NSPhotoLibraryAddUsageDescription, /Save Image in the share sheet/);
   const src = read;
-  assert.match(src('src/share/capture.ts'), /Share\.share\(\{ url: uri \}\)/);
-  assert.match(src('src/share/capture.ts'), /Sharing\.shareAsync/);
+  // Both through the grown-up gate (services/external).
+  assert.match(src('src/share/capture.ts'), /shareExternal\(\{ url: uri \}\)/);
+  assert.match(src('src/share/capture.ts'), /shareFileExternal\(uri/);
   assert.match(src('src/components/RideTracker/ShareableRideCard.tsx'), /from 'expo-sharing'/);
 });
 

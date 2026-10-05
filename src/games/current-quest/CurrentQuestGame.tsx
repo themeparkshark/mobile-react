@@ -21,6 +21,7 @@
  * engine-apply time, which also decides the free slip undo).
  */
 
+import { shareExternal } from '../../services/external';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Image as RNImage, LayoutChangeEvent, Share, StyleSheet, Text, View } from 'react-native';
 import { useFont } from '@shopify/react-native-skia';
@@ -2076,7 +2077,7 @@ export default function CurrentQuestGame({
     const strokes = run.results.reduce((a, r) => a + r.strokes, 0);
     // Player-initiated, system share sheet only; the link names the exact boards (0.A.11).
     const url = challengeUrl({ seed: runSeed, boards: run.boards.map((b) => b.id), shells, strokes });
-    void Share.share({ message: `Beat my Current Quest run: ${shells} shells in ${strokes} strokes. ${url}`, url });
+    void shareExternal({ message: `Beat my Current Quest run: ${shells} shells in ${strokes} strokes. ${url}`, url });
   }, [runSeed]);
   const onShareCard = useCallback(() => {
     if (!share) return;

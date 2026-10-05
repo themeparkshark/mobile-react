@@ -40,7 +40,8 @@ test('the Shark Shop always reaches an end state and uses brand pills', () => {
   assert.match(code, /state="empty"/);
   const card = read('src/screens/StoreScreen/Item.tsx');
   assert.match(card, /is_member_item/);
-  assert.match(card, /navigate\('Membership'\)/);
+  // VIP gear opens the paywall through the grown-up gate.
+  assert.match(card, /void openMembership\(\)/);
 });
 
 test('the restock timer never sits on zero and uses brand surfaces', () => {

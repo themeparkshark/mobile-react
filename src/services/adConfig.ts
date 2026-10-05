@@ -53,4 +53,16 @@ export const ADS_ENABLED = hasRealUnits || USING_TEST_ADS;
 export const AD_REQUEST = {
   requestNonPersonalizedAdsOnly: true,
   maxAdContentRating: 'G',
+  // COPPA and GDPR: every request is treated as child-directed and under the age of consent.
+  tagForChildDirectedTreatment: true,
+  tagForUnderAgeOfConsent: true,
 } as const;
+
+/**
+ * Rewarded ads never show to a player who is under 13 or whose age is unknown.
+ * The app collects no age (birth years were dropped on October 28), so every
+ * player is unknown and no ad offer is shown to anyone. VIP rewards, which
+ * need no ad, are unaffected. Turning ads on needs a real 13+ signal first:
+ * Dustin's call.
+ */
+export const AD_AUDIENCE_13_PLUS_KNOWN = false;

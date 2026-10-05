@@ -106,7 +106,10 @@ test('a purchase left unfinished last run is delivered at launch and announced',
 });
 
 /** ads.ts with a fake Google Mobile Ads SDK and a fake server. */
-function adsHarness({ native = true, offer, claim, closeEarly = false, env = '1' } = {}) {
+function adsHarness({ native = true, offer, claim, closeEarly = false, env = '1', audience13 = true } = {}) {
+  // audience13 stands in for a future known-13+ signal; the shipped constant is false (no age is collected).
+  const realConfig = loadTs('src/services/adConfig.ts', {}, { process: { env: { EXPO_PUBLIC_TPS_TEST_ADS: env } } });
+  const adConfig = { ...realConfig, AD_AUDIENCE_13_PLUS_KNOWN: audience13 };
   const calls = { offers: [], claims: [], requests: [], required: 0, config: [] };
   const listeners = {};
   const gma = {
@@ -140,9 +143,27 @@ function adsHarness({ native = true, offer, claim, closeEarly = false, env = '1'
       getAdReward: async () => reward('granted'),
       adErrorCode: e => e?.response?.data?.code ?? null,
     },
+    './adConfig': adConfig,
   }, { process: { env: { EXPO_PUBLIC_TPS_TEST_ADS: env } } });
   return { ads, calls, reward };
 }
+
+test('no ad ever shows to a player under 13 or of unknown age (today: everyone); VIP still gets the reward', async () => {
+  const shipped = loadTs('src/services/adConfig.ts', {}, { process: { env: { EXPO_PUBLIC_TPS_TEST_ADS: '1' } } });
+  assert.equal(shipped.AD_AUDIENCE_13_PLUS_KNOWN, false, 'the app collects no age, so every player is unknown');
+  assert.equal(shipped.AD_REQUEST.tagForChildDirectedTreatment, true);
+  assert.equal(shipped.AD_REQUEST.tagForUnderAgeOfConsent, true);
+  assert.equal(shipped.AD_REQUEST.maxAdContentRating, 'G');
+  const { ads, calls, reward } = adsHarness({ audience13: false, offer: () => reward('granted', 'vip') });
+  assert.equal(ads.adsAvailable(), false, 'offers hide (every offer checks vip || adsAvailable())');
+  assert.equal(plain(await ads.watchForReward('daily_ticket', null, false)).status, 'unavailable');
+  assert.deepEqual(calls.offers, []);
+  assert.equal(plain(await ads.watchForReward('daily_ticket', null, true)).status, 'granted');
+  assert.equal(calls.required, 0, 'the SDK is never required');
+  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/RedeemRedeemableModal.tsx', 'src/components/PostWinRewardsModal.tsx', 'src/screens/LinePlay/components/LineSnackOffer.tsx']) {
+    assert.match(read(file), /(vip|isVip) \|\| adsAvailable\(\)|!vip && !adsAvailable\(\)/, `${file}: offers need VIP or adsAvailable()`);
+  }
+});
 
 test('a store bundle with no real ad units never touches the SDK; VIP still gets the reward', async () => {
   const { ads, calls, reward } = adsHarness({ env: '', offer: () => reward('granted', 'vip') });
@@ -170,7 +191,7 @@ test('a watched ad is non-personalized, carries only the nonce, and the server g
   const [{ options }] = calls.requests;
   assert.equal(options.requestNonPersonalizedAdsOnly, true);
   assert.deepEqual(plain(options.serverSideVerificationOptions), { customData: '2f5d1f2e-0000-4000-8000-000000000001' });
-  assert.deepEqual(plain(calls.config), [{ maxAdContentRating: 'G' }]);
+  assert.deepEqual(plain(calls.config), [{ maxAdContentRating: 'G', tagForChildDirectedTreatment: true, tagForUnderAgeOfConsent: true }]);
 });
 
 test('closing the ad early pays nothing and never claims', async () => {
@@ -209,6 +230,8 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
     'expo-haptics': {}, react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: s => s } },
     'react-native-reanimated': { default: {}, FadeInUp: {} }, '../../context/AuthProvider': {}, '../../api/endpoints/me/shop': {},
     '../../api/endpoints/me/ad-rewards': {}, '../../services/purchases': {}, '../../services/ads': {}, '../../ui': { BRAND: {} }, '../../components/help/OneTimeTip': {}, '../../components/help/HelpProvider': {},
+    '../../components/GrownUpGate': { ensureGrownUp: async () => true },
+    '../../services/external': { openExternal: async () => true },
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
     '15 Park Tickets, 1,500 Shark Coins, 150 Energy and 2 Rescue Passes');

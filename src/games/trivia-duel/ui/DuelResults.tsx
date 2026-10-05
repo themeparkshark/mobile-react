@@ -7,9 +7,9 @@
  * drops in for 1.5s then tucks into the corner, one Fact Card row with Read
  * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
  */
+import { openExternal } from '../../../services/external';
 import React, { useEffect } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -212,7 +212,7 @@ function FactRow({ card }: { card: FactCard & { isNew: boolean } }) {
       <Text style={styles.factText} numberOfLines={2}>{card.fact}</Text>
       {card.tpsArticleUrl ? (
         <Pressable
-          onPress={() => { void WebBrowser.openBrowserAsync(`${card.tpsArticleUrl}${card.tpsArticleUrl!.includes('?') ? '&' : '?'}utm_source=app&utm_medium=trivia`); }}
+          onPress={() => { void openExternal(`${card.tpsArticleUrl}${card.tpsArticleUrl!.includes('?') ? '&' : '?'}utm_source=app&utm_medium=trivia`); }}
           style={styles.readBtn}
           accessibilityRole="link"
           hitSlop={8}

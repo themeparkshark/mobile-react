@@ -17,17 +17,9 @@
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
 
+import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Dimensions,
-  FlatList,
-  AppState,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
@@ -216,7 +208,7 @@ export default function LinePlayScreen() {
         gameAlert('Play while locked',
           'Allow Always location in iPhone Settings so verified queue time can continue while LinePlay is in the background.',
           [{ text: 'Keep app open', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } }], { icon: 'settings' });
+            { text: 'Open Settings', onPress: () => { openAppSettings(); } }], { icon: 'settings' });
         return;
       }
       if (!permission.granted) permission = await Location.requestBackgroundPermissionsAsync();

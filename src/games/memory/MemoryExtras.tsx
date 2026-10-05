@@ -11,6 +11,7 @@
  *
  * Bright surfaces only: cream and white sheets, blue ink, gold actions. No emoji.
  */
+import { shareFileExternal } from '../../services/external';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
@@ -222,7 +223,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
     setBusy(true);
     try {
       const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your Daily' });
+      if (await Sharing.isAvailableAsync()) await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: 'Share your Daily' });
     } catch {
       // The share sheet was dismissed or view-shot failed: nothing is sent.
     } finally {

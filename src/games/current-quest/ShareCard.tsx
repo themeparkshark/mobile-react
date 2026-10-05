@@ -6,6 +6,7 @@
  * app never posts or sends anything itself.
  */
 
+import { shareExternal, shareFileExternal } from '../../services/external';
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Image, Share, StyleSheet, Text, View } from 'react-native';
 import ViewShot from 'react-native-view-shot';
@@ -39,11 +40,9 @@ export const ShareCard = forwardRef<ShareCardHandle, { data: ShareCardData }>(fu
       try {
         const uri = await shot.current?.capture?.();
         if (uri && (await Sharing.isAvailableAsync())) {
-          await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: message });
-          return true;
+          return shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: message });
         }
-        await Share.share({ message });
-        return true;
+        return (await shareExternal({ message })) !== null;
       } catch {
         return false;
       }

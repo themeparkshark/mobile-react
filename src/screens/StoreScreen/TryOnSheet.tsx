@@ -18,6 +18,7 @@
  * ever changes, so there is no blank button frame.
  */
 import * as Haptics from 'expo-haptics';
+import { openMembership } from '../../components/GrownUpGate';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -223,10 +224,15 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   onCloseRef.current = onClose;
   const onLeavingRef = useRef(onLeaving);
   onLeavingRef.current = onLeaving;
+  // Something to do once the sheet is fully gone (the VIP gate: one modal never opens over another).
+  const afterHiddenRef = useRef<(() => void) | null>(null);
   const finishClose = useCallback(() => {
     if (closedRef.current) return;
     closedRef.current = true;
     onCloseRef.current();
+    const after = afterHiddenRef.current;
+    afterHiddenRef.current = null;
+    after?.();
   }, []);
   const leave = useCallback(() => {
     // Tell the shelf first, so its cover is up before this modal hides.
@@ -362,7 +368,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     switch (cta.action) {
       case 'wear': void wearNow(); break;
       case 'close': closeAnimated(); break;
-      case 'vip': onClose(); RootNavigation.navigate('Membership'); break;
+      // The grown-up gate opens only after the sheet has slid away and its modal is gone.
+      case 'vip': afterHiddenRef.current = () => { void openMembership(); }; closeAnimated(); break;
       case 'recheck': void settleUnknown('recheck'); break;
       case 'none': break;
       case 'earn': onClose(); RootNavigation.navigate('Explore'); break;
