@@ -395,6 +395,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const noCover = useSharedValue(false);
   const coveredSv = reveal?.covered ?? noCover;
   const hiddenSv = reveal?.hidden ?? noCover;
+  /** The close prop on the UI thread (the close button never mounts or unmounts). */
+  const closingSv = useSharedValue(!!closing);
+  useEffect(() => { closingSv.value = !!closing; }, [closing, closingSv]);
   useAnimatedReaction(() => open.value > 0.01 && !coveredSv.value, (on, was) => { if (on !== was) runOnJS(setClock)(on); });
 
   // ── Telegraph on the target: brackets close in, red/yellow/green lamps, rising pips ──
@@ -1099,11 +1102,20 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       (reducedMotion ? 1 : PRINT_FLIGHT_MS) + 400);
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
-    fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
-      // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
-      if (done) runOnJS(landOnce)(Date.now());
-    });
-    dim.value = withTiming(0, { duration: 300 });
+    const launch = () => {
+      fly.value = 0;
+      fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
+        // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
+        if (done) runOnJS(landOnce)(Date.now());
+        else runOnJS(catchMark)('print-fly-cancelled');
+      });
+      dim.value = withTiming(0, { duration: 300 });
+    };
+    launch();
+    // A flight that has not moved two frames later (its start was dropped) starts again, so the print is seen.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!landedOnce.current && fly.value === 0) { catchMark('print-fly-restart'); launch(); }
+    }));
     catchSound('whoosh', { volume: 0.6 });
     for (let i = 1; i <= 6; i++) later(i * 62, () => trailBurst(i / 7.5));
   }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1233,7 +1245,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const nudgeStyle = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * nudgeBlink.value, transform: [{ scale: 1 + 0.08 * nudgeBlink.value }] }));
   const glintStyle = useAnimatedStyle(() => ({ opacity: edgeGlint.value }));
   const slotGlowStyle = useAnimatedStyle(() => ({ opacity: slotGlow.value, transform: [{ scale: 1 + 0.3 * slotGlow.value }] }));
-  const closeStyle = useAnimatedStyle(() => ({ opacity: open.value * veil.value }));
+  // The always-mounted close button is gone with the viewfinder (hidden under or after a reveal, or closing).
+  const closeStyle = useAnimatedStyle(() => ({ opacity: hiddenSv.value || closingSv.value ? 0 : open.value * veil.value }));
   const lastRideStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${Math.sin(clock.value * 9) * 7}deg` }] }));
   const nudgeFinger = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * nudgeBlink.value }] }));
 
