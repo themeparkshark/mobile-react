@@ -204,6 +204,12 @@ test('push: a refreshed board never moves cards on screen; only traded or taken 
   small[0] = { id: -50, pin: { id: -50, item: item_(50) }, held_from: '', held_to: '', key: small[0].key };
   const smallNext = model.mergeBoard(small, [sw(2, 12), sw(9, 50)], []);
   assert.deepEqual(plain(smallNext.map(c => c.id)), [9, 2]);
+  // A taken card before your stand-in can never grab your pin's real copy (r7c NEW-4).
+  const order = model.toCards([sw(1, 11), sw(2, 12)]);
+  order[1] = { id: -50, pin: { id: -50, item: item_(50) }, held_from: '', held_to: '', key: order[1].key };
+  const afterTaken = model.mergeBoard(order, [sw(9, 50), sw(3, 13)], [1]);
+  assert.deepEqual(plain(afterTaken.map(c => c.id)), [3, 9]);
+  assert.equal(afterTaken.filter(c => c.pin.item.id === 50).length, 1);
   // A hold proved #3 was taken: only that slot changes, in place.
   const taken = model.mergeBoard(current, draw, [3]);
   assert.deepEqual(plain(taken.map(c => c.id)), [1, 7, 8, 4]);

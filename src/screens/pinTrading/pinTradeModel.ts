@@ -252,14 +252,18 @@ export function mergeBoard(
   const onBoard = new Set(current.filter(card => !gone.has(card.id)).map(card => card.id));
   const fresh = new Map(server.map(swap => [swap.id, swap]));
   const spare = server.filter(swap => !onBoard.has(swap.id) && !gone.has(swap.id));
+  // Claim the real copies for stand-ins first, so a removed slot earlier on the board can never take one.
+  const claimed = new Map<string, PinSwapType>();
+  for (const card of current) {
+    if (card.id >= 0) continue;
+    const realIdx = spare.findIndex(swap => swap.pin.item.id === card.pin.item.id);
+    if (realIdx >= 0) claimed.set(card.key, spare.splice(realIdx, 1)[0]);
+  }
   const out: BoardCard[] = [];
   for (const card of current) {
     if (card.id < 0) {
-      const realIdx = spare.findIndex(swap => swap.pin.item.id === card.pin.item.id);
-      if (realIdx >= 0) {
-        const real = spare.splice(realIdx, 1)[0];
-        out.push({ ...boardEntry(real), key: card.key });
-      } else out.push(card);
+      const real = claimed.get(card.key);
+      out.push(real ? { ...boardEntry(real), key: card.key } : card);
       continue;
     }
     if (!gone.has(card.id)) {
