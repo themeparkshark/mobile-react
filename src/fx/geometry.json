@@ -34,13 +34,18 @@
           "jet-flame-1.webp",
           "jet-flame-2.webp"
         ],
-        "aspect": 1.4596,
+        "aspect": 1.4174,
         "cx": 0.76553,
         "cy": 0.65118,
-        "w": 0.14645,
-        "ax": 0.5758,
-        "ay": 0.1453,
-        "rot": 0
+        "w": 0.16124,
+        "ax": 0.5688,
+        "ay": 0.1683,
+        "rot": 0,
+        "keys": [
+          "jet-flame-0-key.webp",
+          "jet-flame-1-key.webp",
+          "jet-flame-2-key.webp"
+        ]
       },
       "flame2": {
         "file": "jet-flame-side-0.webp",
@@ -49,13 +54,18 @@
           "jet-flame-side-1.webp",
           "jet-flame-side-2.webp"
         ],
-        "aspect": 1.0156,
+        "aspect": 1.0241,
         "cx": 0.68787,
         "cy": 0.6322,
-        "w": 0.04734,
-        "ax": 0.859,
-        "ay": 0.0615,
-        "rot": 0
+        "w": 0.06139,
+        "ax": 0.7831,
+        "ay": 0.1647,
+        "rot": 0,
+        "keys": [
+          "jet-flame-side-0-key.webp",
+          "jet-flame-side-1-key.webp",
+          "jet-flame-side-2-key.webp"
+        ]
       }
     },
     "plasma_blade": {

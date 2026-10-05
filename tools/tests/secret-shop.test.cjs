@@ -446,7 +446,8 @@ test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame
   assert.match(rig, /export const FLAME_FRAME_MS = 80;/);
   assert.match(rig, /opacity: frameAt\(v, kick\.value, delay\) === k \? 1 : 0,/);
   // Alex's drawing untouched; a navy keyline behind it (the same drawing, tinted) for cyan backdrops.
-  assert.match(rig, /tint=\{KEYLINE\} style=\{key\} \/>\s*<FxPart source=\{source\} box=\{box\} spec=\{spec\} aspect=\{spec\.aspect\} style=\{style\} \/>/);
+  assert.match(rig, /<FxPart source=\{keyline\} box=\{box\} spec=\{spec\} aspect=\{spec\.aspect\} style=\{style\} \/>\s*<FxPart source=\{source\} box=\{box\} spec=\{spec\} aspect=\{spec\.aspect\} style=\{style\} \/>/);
+  for (const f of [...g.flame.keys, ...g.flame2.keys]) assert.ok(fs.existsSync(path.join(root, 'assets/fx', f)), f);
   // The floor light is drawn outside the moving shark, on the stage floor, under the nozzle.
   assert.match(src('src/components/Playercard.tsx'), /<JetpackFloorLight t=\{fxClock\} kick=\{fxKick\} box=\{containBox\(width, height\)\}\s*floorY=/);
   // Only where a floor exists (a stage plinth), as a true two-band ellipse.

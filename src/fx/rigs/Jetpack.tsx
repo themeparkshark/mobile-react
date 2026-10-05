@@ -14,6 +14,18 @@ const FLAME_FRAMES = [
   require('../../../assets/fx/jet-flame-1.webp'),
   require('../../../assets/fx/jet-flame-2.webp'),
 ];
+// Each drawing's keyline: his silhouette grown by 7 px (paper scale) in navy, baked, so it is an
+// even line like his charcoal outline round the pack (a scaled copy hid under the drawing on cyan).
+const FLAME_KEYS = [
+  require('../../../assets/fx/jet-flame-0-key.webp'),
+  require('../../../assets/fx/jet-flame-1-key.webp'),
+  require('../../../assets/fx/jet-flame-2-key.webp'),
+];
+const SIDE_KEYS = [
+  require('../../../assets/fx/jet-flame-side-0-key.webp'),
+  require('../../../assets/fx/jet-flame-side-1-key.webp'),
+  require('../../../assets/fx/jet-flame-side-2-key.webp'),
+];
 const SIDE_FRAMES = [
   require('../../../assets/fx/jet-flame-side-0.webp'),
   require('../../../assets/fx/jet-flame-side-1.webp'),
@@ -136,22 +148,20 @@ export function frameAt(v: number, kick: number, delay: number): number {
   return ((n % 3) + 3) % 3;
 }
 
-/** Alex's deep navy, for the keyline that keeps his cyan flame readable on cyan water. */
-const KEYLINE = '#0b3a5c';
 
 /**
  * One of Alex's flames: his three drawings swap on a stepped cadence (no blur, no glow),
  * and the boost stretches the drawing long from its nozzle (squashed by the dip).
  */
-function Flame({ t, kick, box, lod, spec, delay, frames }: RigProps & { spec: typeof G.flame; delay: number; frames: number[] }) {
+function Flame({ t, kick, box, lod, spec, delay, frames, keys }: RigProps & { spec: typeof G.flame; delay: number; frames: number[]; keys: number[] }) {
   return (
     <>
-      {frames.map((source, k) => <FlameFrame key={k} t={t} kick={kick} box={box} lod={lod} spec={spec} delay={delay} source={source} k={k} />)}
+      {frames.map((source, k) => <FlameFrame key={k} t={t} kick={kick} box={box} lod={lod} spec={spec} delay={delay} source={source} keyline={keys[k]} k={k} />)}
     </>
   );
 }
 
-function FlameFrame({ t, kick, box, lod, spec, delay, source, k }: Pick<RigProps, 't' | 'kick' | 'box' | 'lod'> & { spec: typeof G.flame; delay: number; source: number; k: number }) {
+function FlameFrame({ t, kick, box, lod, spec, delay, source, keyline, k }: Pick<RigProps, 't' | 'kick' | 'box' | 'lod'> & { spec: typeof G.flame; delay: number; source: number; keyline: number; k: number }) {
   const shape = (pad: number) => {
     'worklet';
     // Reduce Motion holds frame 0: Alex's paper drawing exactly.
@@ -165,14 +175,14 @@ function FlameFrame({ t, kick, box, lod, spec, delay, source, k }: Pick<RigProps
     };
   };
   const style = useAnimatedStyle(() => shape(1));
-  // A thin navy keyline behind the drawing (the same drawing, tinted, a hair larger), like the
-  // black line Alex draws round the pack: his flame reads on any backdrop, his drawing untouched.
-  const key = useAnimatedStyle(() => shape(1.14));
+  // The navy keyline behind the drawing moves with it exactly (same style): his flame reads on any
+  // backdrop, his drawing untouched on top.
+
   // A white-hot core: the same drawing, tinted white, small at the nozzle (it sits on his own white core).
   const core = useAnimatedStyle(() => { const s = shape(0.6); return { ...s, opacity: s.opacity * 0.9 }; });
   return (
     <>
-      <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} tint={KEYLINE} style={key} />
+      <FxPart source={keyline} box={box} spec={spec} aspect={spec.aspect} style={style} />
       <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} style={style} />
       <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} tint="#ffffff" style={core} />
     </>
@@ -218,9 +228,9 @@ export function JetpackFront(props: RigProps) {
   useMomentCue(t, kick, () => { 'worklet'; if (lod === 'still') return -1; const m = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350); return m.cycle < 0 ? -1 : m.p; }, cue ? () => cue('boost') : undefined);
   return (
     <>
-      <Flame {...props} spec={G.flame2} delay={40} frames={SIDE_FRAMES} />
+      <Flame {...props} spec={G.flame2} delay={40} frames={SIDE_FRAMES} keys={SIDE_KEYS} />
       <FxPart source={BODY} box={box} spec={G.body} aspect={G.body.aspect} />
-      <Flame {...props} spec={G.flame} delay={0} frames={FLAME_FRAMES} />
+      <Flame {...props} spec={G.flame} delay={0} frames={FLAME_FRAMES} keys={FLAME_KEYS} />
       {lod === 'full' && SPARKS.map(i => <Spark key={`s${i}`} {...props} i={i} />)}
     </>
   );
