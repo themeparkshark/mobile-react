@@ -246,12 +246,22 @@ export function toCards(swaps: readonly PinSwapType[]): BoardCard[] {
 export function mergeBoard(
   current: readonly BoardCard[], server: readonly PinSwapType[], removed: readonly number[] = [], max = 15,
 ): BoardCard[] {
+  // A local stand-in for your just-posted pin (negative id) takes the server's real copy of that pin,
+  // in place, so your pin never appears twice.
   const gone = new Set(removed);
   const onBoard = new Set(current.filter(card => !gone.has(card.id)).map(card => card.id));
   const fresh = new Map(server.map(swap => [swap.id, swap]));
   const spare = server.filter(swap => !onBoard.has(swap.id) && !gone.has(swap.id));
   const out: BoardCard[] = [];
   for (const card of current) {
+    if (card.id < 0) {
+      const realIdx = spare.findIndex(swap => swap.pin.item.id === card.pin.item.id);
+      if (realIdx >= 0) {
+        const real = spare.splice(realIdx, 1)[0];
+        out.push({ ...boardEntry(real), key: card.key });
+      } else out.push(card);
+      continue;
+    }
     if (!gone.has(card.id)) {
       const update = fresh.get(card.id);
       out.push(update ? { ...boardEntry(update), key: card.key } : card);

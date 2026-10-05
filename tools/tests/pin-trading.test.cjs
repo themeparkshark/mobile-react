@@ -197,10 +197,16 @@ test('push: a refreshed board never moves cards on screen; only traded or taken 
   const draw = [sw(8, 18), sw(7, 99), sw(1, 11)];
   const next = model.mergeBoard(current, draw, []);
   assert.deepEqual(plain(next.slice(0, 4).map(c => c.key)), keys, 'every slot keeps its key');
-  assert.deepEqual(plain(next.slice(0, 4).map(c => c.id)), [1, -99, 3, 4], 'missing from a draw is not gone; your pin stays');
+  assert.deepEqual(plain(next.map(c => c.id)), [1, 7, 3, 4, 8], 'your pin takes its real server copy in place (never twice); missing is not gone');
+  assert.equal(next.filter(c => c.pin.item.id === 99).length, 1, 'your posted pin appears exactly once');
+  // Small board (the r7b NEW-1 case): the server copy of your pin never appends a second card.
+  const small = model.toCards([sw(1, 11), sw(2, 12)]);
+  small[0] = { id: -50, pin: { id: -50, item: item_(50) }, held_from: '', held_to: '', key: small[0].key };
+  const smallNext = model.mergeBoard(small, [sw(2, 12), sw(9, 50)], []);
+  assert.deepEqual(plain(smallNext.map(c => c.id)), [9, 2]);
   // A hold proved #3 was taken: only that slot changes, in place.
   const taken = model.mergeBoard(current, draw, [3]);
-  assert.deepEqual(plain(taken.slice(0, 4).map(c => c.id)), [1, -99, 8, 4]);
+  assert.deepEqual(plain(taken.map(c => c.id)), [1, 7, 8, 4]);
   assert.equal(taken[2].key, keys[2]);
   // Keys are never duplicated, however many refreshes run.
   let board = model.toCards([sw(1, 11), sw(2, 12)]);
@@ -211,8 +217,10 @@ test('push: a refreshed board never moves cards on screen; only traded or taken 
   const pool = Array.from({ length: 60 }, (_, i) => sw(100 + i, 200 + i));
   let b = model.toCards(pool.slice(0, 15));
   const before = b.map(c => `${c.key}:${c.id}`);
+  let seed = 7;
+  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
   for (let i = 0; i < 200; i++) {
-    const drawN = [...pool].sort(() => Math.random() - 0.5).slice(0, 15);
+    const drawN = [...pool].map(x => [rand(), x]).sort((a, b) => a[0] - b[0]).map(p => p[1]).slice(0, 15);
     b = model.mergeBoard(b, drawN, []);
   }
   assert.deepEqual(plain(b.map(c => `${c.key}:${c.id}`)), plain(before));

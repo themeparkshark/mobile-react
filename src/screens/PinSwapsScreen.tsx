@@ -349,7 +349,6 @@ export default function PinSwapsScreen() {
         setPins(mine);
         setPinsReady(true);
       } else void loadPins(true, true);
-      // Cards on screen never move: only the traded slot changes (it already shows your pin).
       // Cards on screen never move: the traded slot already shows your pin (negative id), nothing else changes.
       setBoard(mergeBoard(boardRef.current, swaps, []));
       setBoardState('ready');
@@ -384,6 +383,7 @@ export default function PinSwapsScreen() {
       // moment is on screen (onCelebrationStart), so the board never shows bright in between.
       sessionTrades += 1;
       void warmPinImages([h.swap.pin.item.icon_url], Dimensions.get('window').height < 740 ? 150 : 190);
+      void warmPinImages([pick.icon_url], 120);
     } catch (error) {
       const kind = classifyTradeError(error);
       if (kind === 'owned') {

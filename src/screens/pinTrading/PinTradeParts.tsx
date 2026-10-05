@@ -133,9 +133,10 @@ export const BoardPinCard = memo(function BoardPinCard({ item, swapId, tiltSeed 
 
 /**
  * Hold timer: a Shark-font clock and a draining bar. Calm is white on navy
- * with a gold bar. At 30 s it fires one warning haptic and turns red: the
- * clock sits on a white pill in brand red and pulses on each digit flip. The
- * last 5 s tick (a soft haptic plus `onTick`). The bar drains on the UI
+ * with a gold bar. At 30 s it turns red (no buzz): the
+ * clock sits on a white pill in brand red; it pulses on each digit flip in the
+ * last 10 s. A soft tick sounds at 30 s and in the last 5 s; only the last 3 s
+ * add a light haptic (no warning buzz). The bar drains on the UI
  * thread (scaleX, no layout); the clock re-renders only when the second changes.
  */
 export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, still, label, onExpire, onTick, onUrgent }: {
@@ -183,7 +184,7 @@ export const TradeTimer = memo(function TradeTimer({ deadline, totalMs, frozen, 
       return;
     }
     // The chip follows the clock on every render path (a hold that opens under 30 s is red at once);
-    // only the warning haptic is one-shot.
+    // the 30 s soft tick is one-shot.
     if (left <= HOLD_URGENT_S) onUrgent?.();
     if (left <= HOLD_URGENT_S && !warned.current) {
       warned.current = true;
