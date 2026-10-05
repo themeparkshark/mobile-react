@@ -692,7 +692,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       const toFree = made.filter(image => image !== handed);
       const freeNext = () => { const image = toFree.shift(); if (!image) return; image.dispose(); requestAnimationFrame(freeNext); };
       setTimeout(freeNext, 400);
-      open.value = 0; printIn.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; ghost.value = 0; iris.value = 0;
+      // A print still in flight (a slow hand-off frame under load) is never cancelled here: that dropped its landing.
+      if (!flying.current) { printIn.value = 0; fly.value = 0; }
+      open.value = 0; dim.value = 0; burst.value = 0; ghost.value = 0; iris.value = 0;
     });
   }, [closing]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1024,14 +1026,31 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const fadeCloseRef = useRef(fadeClose);
   fadeCloseRef.current = fadeClose;
+  const flying = useRef(false);
+  const landGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (landGuard.current) clearTimeout(landGuard.current); }, []);
+  const landedOnce = useRef(false);
+  const landOnce = useCallback((uiMs: number) => {
+    if (landedOnce.current) return;
+    landedOnce.current = true;
+    flying.current = false;
+    markLanded(uiMs);
+    onPrintLanded();
+  }, [markLanded, onPrintLanded]);
   useEffect(() => {
     if (!flyTarget) return;
     catchMark('print-fly');
+    flying.current = true;
+    landedOnce.current = false;
+    // The landing is guaranteed: if the flight's own callback never comes (cancelled), the badge still lands.
+    if (landGuard.current) clearTimeout(landGuard.current);
+    landGuard.current = setTimeout(() => { if (!landedOnce.current) { catchMark('print-land-guard'); landOnce(Date.now()); } },
+      (reducedMotion ? 1 : PRINT_FLIGHT_MS) + 400);
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
     fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
       // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
-      if (done) { runOnJS(markLanded)(Date.now()); runOnJS(onPrintLanded)(); }
+      if (done) runOnJS(landOnce)(Date.now());
     });
     dim.value = withTiming(0, { duration: 300 });
     catchSound('whoosh', { volume: 0.6 });

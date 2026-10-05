@@ -619,7 +619,7 @@ test('round 6: one reveal per photo, quiet hand-back, honest cascade', () => {
 
 test('ship fixes: the real print landing is logged (D2), stamp row is honest', () => {
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /if \(done\) \{ runOnJS\(markLanded\)\(Date\.now\(\)\); runOnJS\(onPrintLanded\)\(\); \}/);
+  assert.match(src, /if \(done\) runOnJS\(landOnce\)\(Date\.now\(\)\);[\s\S]*markLanded\(uiMs\);\s*onPrintLanded\(\);|markLanded\(uiMs\);\s*onPrintLanded\(\);[\s\S]*if \(done\) runOnJS\(landOnce\)\(Date\.now\(\)\);/);
   assert.match(src, /catchMark\(`print-land ui=\$\{uiMs\}/);
   const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(moment, /New ride!<\/Text>\s*\{newRide\.stamps\.filter\(stamp => stamp\.state !== 'soon'\)/, 'New ride!, then the 3 stamps');

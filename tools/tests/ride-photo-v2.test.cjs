@@ -486,3 +486,10 @@ test('R6 real ride seed: RIDE AGAIN (rides used + 1) never replays the ride befo
   assert.equal(same, 0, 'every ride 2 approach differs from ride 1');
   assert.ok(n > 500);
 });
+
+test('R6: the print always lands (a cancelled flight still lands the badge; the close never cancels a flight)', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /if \(!flying\.current\) \{ printIn\.value = 0; fly\.value = 0; \}/);
+  assert.match(src, /landGuard\.current = setTimeout\(\(\) => \{ if \(!landedOnce\.current\) \{ catchMark\('print-land-guard'\); landOnce\(Date\.now\(\)\); \} \}/);
+  assert.match(src, /if \(landedOnce\.current\) return;\s*landedOnce\.current = true;/, 'lands once');
+});
