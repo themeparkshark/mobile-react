@@ -81,7 +81,7 @@ const V2_SCRIPT: ScriptStep[] = [
   // Uncommon, first ride: the one-time freeze gives a Frame It!.
   { index: 2, kind: 'coaster', sky: 'day', shots: [0], rarity: 2 },
   // Rare: a Blurry, then a Great-timed shot while a gull crosses (the lamp is red): Photobombed! (capped at Good).
-  { index: 0, kind: 'flume', sky: 'sunset', shots: [-420, -60], rarity: 3, gullPass: 1 },
+  { index: 0, kind: 'flume', sky: 'sunset', shots: [-420, -90], rarity: 3, gullPass: 1 },
   // Epic: a Great, then a gull pass let go by (a free dodge, no ride spent), then a Frame It! (the dark ride).
   { index: 3, kind: 'teacups', sky: 'night', shots: [50, 99999, 4], rarity: 4, gullPass: 1 },
   // Legendary: a Frame It! and the charge; the server's roll takes 1.6 s, so the print keeps shivering.
