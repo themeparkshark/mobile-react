@@ -135,6 +135,8 @@ export interface StandingsBoardModel {
   readonly pageSize: number;
   /** The board build later pages must read, so a rebuild never skips or repeats a player. */
   readonly build: string | null;
+  /** When pages past the first were last fetched (names on them are refreshed at least every 5 minutes). */
+  readonly pagesAt?: number;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -228,6 +230,7 @@ export function mergePage(model: StandingsBoardModel, page: Partial<StandingsPag
     // A page that came back empty ends the list even if the server said more.
     nextOffset: incoming.length ? next : null,
     build: typeof (page as { build?: unknown } | null | undefined)?.build === 'string' ? (page as { build: string }).build : model.build,
+    pagesAt: Date.now(),
   };
 }
 
@@ -416,14 +419,16 @@ export function nextStep(
   const landing = model.chase.targetRank ?? model.chase.rank;
   // A far jump reads as how many you pass (an up arrow and 1,250), not a five-digit rank.
   const far = landing > 999;
-  options.push({ kind: 'jump', plus: n, order: 2,
+  // A podium landing is a milestone too (r6: a goal hid a 1-ride podium step).
+  options.push({ kind: 'jump', plus: n, order: landing <= 3 ? 0.5 : 2,
     target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
     text: landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
       : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
   // Milestones first (r5): the top 10 within 3, or a weekly goal within 2, beats any jump
   // (#13 two rides from #12 but three from the top 10 sees TOP 10). Between two
   // milestones the closer wins, ties go to the top 10; with none, the jump.
-  options.sort((x, y) => (x.kind === 'jump' ? 1 : 0) - (y.kind === 'jump' ? 1 : 0) || x.plus - y.plus || x.order - y.order);
+  const milestone = (o: Option) => (o.kind !== 'jump' || o.icon === 'crown' ? 0 : 1);
+  options.sort((x, y) => milestone(x) - milestone(y) || x.plus - y.plus || x.order - y.order);
   const { order: _order, ...best } = options[0];
   return best;
 }

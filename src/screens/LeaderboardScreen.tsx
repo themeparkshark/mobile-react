@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import InformationModal from '../components/InformationModal';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import Topbar from '../components/Topbar';
@@ -46,14 +46,23 @@ function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
   // One shared position drives the pill and every label's color, so a label is
   // navy exactly while the white pill is under it (never white on white mid-slide).
   const pillX = useSharedValue(active);
+  // The pill is always mounted once the rail has a width, and hidden by opacity until
+  // the default board is known (r6: a pill mounted late kept a stale initial style
+  // under Reanimated 3.16, so no tab ever looked selected on a cold open).
+  const shown = useSharedValue(ready ? 1 : 0);
   const placed = useRef(ready);
   useEffect(() => {
     // The first placement after a cold open snaps; only a kid's tap slides.
-    if (!placed.current) { if (ready) { placed.current = true; pillX.value = active; } return; }
+    if (!placed.current) {
+      if (ready) { placed.current = true; pillX.value = active; shown.value = withTiming(1, { duration: 120 }); }
+      return;
+    }
+    shown.value = 1;
     pillX.value = reduced ? active : withSpring(active, { damping: 17, stiffness: 230 });
-  }, [active, reduced, pillX, ready]);
+  }, [active, reduced, pillX, ready, shown]);
   const pill = useAnimatedStyle(() => ({
     width: segment,
+    opacity: shown.value,
     transform: [{ translateX: pillX.value * segment }],
   }), [segment]);
   // Two-layer labels: white labels on the rail, and a navy copy of the same row
@@ -73,7 +82,7 @@ function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
       flexDirection: 'row', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 4, borderRadius: 18,
       backgroundColor: 'rgba(5,52,110,0.35)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
     }}>
-      {width > 0 && ready && <Animated.View style={[{
+      {width > 0 && <Animated.View style={[{
         position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 14, backgroundColor: BRAND.white,
         borderBottomWidth: 3, borderBottomColor: BRAND.sky,
       }, pill]} />}
@@ -90,7 +99,7 @@ function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
           </Pressable>
         );
       })}
-      {width > 0 && ready && (
+      {width > 0 && (
         <Animated.View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
           style={[{ position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 14, overflow: 'hidden' }, pill]}>
           <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: contentWidth, flexDirection: 'row' }, inner]}>

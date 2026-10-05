@@ -114,9 +114,10 @@ function Spot({ rank, row, metric, progress, onPress }: {
             borderRadius: RADIUS.pill, backgroundColor: row.isMe ? BRAND.gold : BRAND.navy, borderWidth: 2, borderColor: row.isMe ? BRAND.goldLip : BRAND.white,
           }}>
             {/* One award language: the crown says the place (r2 art: no medal in the pill too). */}
-            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
+            {/* The full name, shrunk to fit (r6: names were cut at 12 letters). */}
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
               style={{ fontFamily: 'Shark', fontSize: 13, color: row.isMe ? BRAND.navy : BRAND.white, textTransform: 'uppercase', flexShrink: 1 }}>
-              {row.isMe ? 'You' : row.name.slice(0, 12)}
+              {row.isMe ? 'You' : row.name}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 8, height: 24,

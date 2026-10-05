@@ -243,7 +243,7 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
   assert.doesNotMatch(board, /marginBottom: -40/, 'no strip down to the screen edge');
   assert.match(board, /opacity: Math\.min\(1, Math\.max\(0, shown\.value\) \* 4\)/, 'fades only in the last quarter: no ghosting');
   assert.match(board, /const shownRank = revealing && climbFrom \? climbFrom : me\?\.rank;/, 'the old rank until the last tick');
-  assert.match(board, /if \(showResults\) \{ setCelebrate\(false\); setMeJoined\(false\); setPodiumHold\(changed\); pendingClimb\.current = celebrateNow; \}/, 'podium confetti waits for the Monday card');
+  assert.match(board, /if \(showResults\) \{ setCelebrate\(false\); setMeJoined\(false\); setPodiumHold\(joined\); pendingClimb\.current = celebrateNow; \}/, 'podium confetti waits for the Monday card');
   assert.match(board, /step=\{item\.row\.isMe \? myStep : null\}/, 'your own row carries the next step');
   assert.match(board, /\{ name: 'goRide', label: 'Go ride' \}/, 'GO RIDE is a VoiceOver action');
   assert.match(board, /request\.current \+= 1;\s+heldPage\.current = null;/, 'every load invalidates pages in flight');
@@ -262,7 +262,7 @@ test('r4: podium finale after the climb, your name keeps its width, far jumps sh
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
   assert.match(podium, /if \(dimmed\) \{ p1\.value = 1; p2\.value = 1; p3\.value = 1; return; \}/, 'r5: the old top three stand dimmed during the hold');
-  assert.match(board, /setPodiumHold\(!!climbNow && changed\);/, 'the podium holds through the overtake');
+  assert.match(board, /setPodiumHold\(!!climbNow && joined\);/, 'r6: the podium holds only when you newly reach it');
   assert.match(board, /landedTimer\.current = setTimeout\(\(\) => setPodiumHold\(false\), 250\);/, 'then rises as the finale');
   assert.match(board, /the next step sits under it/, 'your row: step chip under your name');
   assert.match(board, /\{icon === 'up' && <GameIcon name="shark"/, 'a far jump counts players');
@@ -303,8 +303,28 @@ test('r5: milestone rule for #13, confetti that renders and stops, crown gets th
   assert.match(board, /if \(landedTimer\.current\) clearTimeout\(landedTimer\.current\);/, 'the 250 ms timer is cleared');
   assert.match(board, /One pill, one phrase/, 'the step is one pill');
   assert.match(board, /Same 18 pt name as everyone, with your YOU chip/);
-  assert.match(board, /screenW \/ 2 - 62/, 'cream beside the compass closes the dock gap');
+  assert.match(board, /fillRule="evenodd"/, 'r6: one cream strip with a round compass cutout (no keyhole)');
   const screen = read('src/screens/LeaderboardScreen.tsx');
-  assert.match(screen, /\{width > 0 && ready && <Animated\.View/, 'the pill waits for the default board');
+  assert.match(screen, /\{width > 0 && <Animated\.View/, 'r6: the pill is always mounted once the rail has a width');
+  assert.match(screen, /opacity: shown\.value,/, 'and hidden by opacity until the default board is known');
   assert.match(screen, /The first placement after a cold open snaps/);
+});
+
+test('r6: a podium landing is a milestone, VoiceOver matches the screen, names on scrolled pages refresh', () => {
+  const base = { board: 'week', metric: 'ride_wins' };
+  const step = model.nextStep({ ...base, me: { rank: 5, score: 7 }, chase: { name: 'p4', toPass: 1, tied: false, passes: 2, targetRank: 3, rank: 4 }, rows: [],
+    goals: [{ at: 8, xp: 25, reached: false }] });
+  assert.deepEqual(plain([step.kind, step.icon, step.target]), ['jump', 'crown', '#3'], 'a 1-ride podium beats a 1-ride goal');
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /accessibilityLabel=\{revealing && climbFrom \? `You are number \$\{climbFrom\}\. Climbing!` : label\}/);
+  assert.match(board, /Swipe up or down for Go ride\./);
+  const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
+  assert.match(store, /Date\.now\(\) - \(previous\.pagesAt \?\? 0\) > 5 \* 60_000/);
+});
+
+test('r6: no duplicate player during the hold, full podium names', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /waiting=\{holdIds\.has\(item\.row\.id\)\}/);
+  assert.match(board, /opacity: waiting \? 0 : 1/, 'the slot stays, the duplicate is hidden until the finale');
+  assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /row\.name\.slice\(0, 12\)/);
 });

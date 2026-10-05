@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { FlashList, type ListRenderItem as FlashRenderItem } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, AppState, InteractionManager, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
@@ -61,6 +62,11 @@ const BARREL = require('../../../assets/images/screens/leaderboard/barrel.png');
 /** Clears the raised compass button in the bottom bar. */
 const YOU_CARD_BOTTOM = 52;
 const YOU_CARD_HEIGHT = 72;
+/** The strip under the dock, down to the nav's top edge. */
+const STRIP_H = YOU_CARD_BOTTOM - 8;
+/** The raised compass in the nav: a 100 pt disc whose center sits 5 pt below the nav's top edge. */
+const COMPASS_R = 53;
+const COMPASS_DY = 5;
 const HEADER_HEIGHT = MINI_PODIUM_HEIGHT + 18;
 
 type Status = 'loading' | 'ready' | 'error';
@@ -174,7 +180,9 @@ export function RankBadge({ rank, me = false }: { readonly rank: number; readonl
 }
 
 /** A 64 pt row: rank, shark, name, number. Muted rows (friends with no rides yet) show the shark greyed and no number. */
-const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPress }: {
+const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPress, waiting = false }: {
+  /** During the climb hold, a player who also stands on the dimmed old podium keeps an empty slot (r6: no duplicate). */
+  readonly waiting?: boolean;
   readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean;
   /** Your own row only: the next step as its one secondary chip (r3: Friends shows it too). */
   readonly step: ReturnType<typeof nextStep> | null;
@@ -184,7 +192,7 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
 }) {
   return (
     <Animated.View entering={enter != null ? FadeInRight.delay(enter).springify().damping(16).stiffness(180) : undefined}
-      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center', opacity: waiting ? 0 : 1 }}>
       <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (row.isMe && step && 'plus' in step ? `. ${step.text}` : '')}
         onPress={() => onPress(row)}
         style={({ pressed }) => ({
@@ -417,10 +425,17 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
       {/* Beside the raised compass, cream reaches the nav's top edge, so no half row shows
           between dock and nav (r5). The middle stays open for the compass. */}
-      <View pointerEvents="none" style={{ position: 'absolute', left: 0, bottom: -(YOU_CARD_BOTTOM - 8), height: YOU_CARD_BOTTOM - 8, width: Math.max(0, screenW / 2 - 62), backgroundColor: BRAND.cream }} />
-      <View pointerEvents="none" style={{ position: 'absolute', right: 0, bottom: -(YOU_CARD_BOTTOM - 8), height: YOU_CARD_BOTTOM - 8, width: Math.max(0, screenW / 2 - 62), backgroundColor: BRAND.cream }} />
+      <Svg pointerEvents="none" width={screenW} height={STRIP_H} style={{ position: 'absolute', left: 0, bottom: -STRIP_H }}>
+        {/* Cream from the dock to the nav's top edge, with a round cutout for the raised
+            compass (r6: the two side blocks left a keyhole showing a clipped row). */}
+        <Path fill={BRAND.cream} fillRule="evenodd"
+          d={`M0 0 H${screenW} V${STRIP_H} H0 Z M${screenW / 2 - COMPASS_R} ${STRIP_H + COMPASS_DY} a${COMPASS_R} ${COMPASS_R} 0 1 0 ${COMPASS_R * 2} 0 a${COMPASS_R} ${COMPASS_R} 0 1 0 ${-COMPASS_R * 2} 0 Z`} />
+      </Svg>
       <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens your card' : 'Shows your row'}
+        <Pressable accessibilityRole="button"
+          // While the ticks play, the spoken rank matches the screen (r6).
+          accessibilityLabel={revealing && climbFrom ? `You are number ${climbFrom}. Climbing!` : label}
+          accessibilityHint={joining ? (step.kind === 'join' && step.canRide ? 'Opens your card. Swipe up or down for Go ride.' : 'Opens your card') : 'Shows your row'}
           // GO RIDE sits inside this row, so VoiceOver reaches it as an action (r2 kids UX).
           accessibilityActions={joining && step.kind === 'join' && step.canRide ? [{ name: 'activate' }, { name: 'goRide', label: 'Go ride' }] : undefined}
           onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'goRide') onGoRide(); else (joining ? onOpenCard : onPress)(); }}
@@ -594,10 +609,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     // Order: Monday card, then the overtake, then the podium rise and confetti as the finale.
     const celebrateNow = () => {
       setCelebrate(changed); setMeJoined(joined);
-      setPodiumHold(!!climbNow && changed);
+      // Hold only when you newly reach the podium, so the dimmed old top three is exact (r6).
+      setPodiumHold(!!climbNow && joined);
       climbNow?.();
     };
-    if (showResults) { setCelebrate(false); setMeJoined(false); setPodiumHold(changed); pendingClimb.current = celebrateNow; } else celebrateNow();
+    if (showResults) { setCelebrate(false); setMeJoined(false); setPodiumHold(joined); pendingClimb.current = celebrateNow; } else celebrateNow();
     // The Monday card shows once: unseen on the server and not already shown this session.
     if (next.board === 'week' && next.lastWeek && !next.lastWeek.seen && resultsShown !== `${meId}:${next.lastWeek.weekStart}`) {
       resultsShown = `${meId}:${next.lastWeek.weekStart}`;
@@ -848,6 +864,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   }, [active, items]);
 
   const metric = model?.metric ?? 'ride_wins';
+  const holdIds = useMemo(() => new Set(podiumHold ? oldPodium.filter((r): r is StandingsRowModel => !!r).map(r => r.id) : []), [podiumHold, oldPodium]);
   // Your own row in the list carries the next step too (Friends shows your row, not the dock).
   const myStep = useMemo(() => (model ? nextStep(model, inPark) : null), [model, inPark]);
   const renderItem: FlashRenderItem<ListItem> = useCallback(({ item, index }) => {
@@ -857,10 +874,11 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (item.type === 'footer') return <FooterRow label={item.label} metric={metric} />;
     return (
       <BoardRow row={item.row} metric={metric} muted={item.muted} step={item.row.isMe ? myStep : null}
+        waiting={holdIds.has(item.row.id)}
         enter={!reduced && !entered.current && index < 8 && celebrate ? 120 + index * 45 : null}
         onPress={onRow} />
     );
-  }, [metric, reduced, celebrate, onRow, myStep]);
+  }, [metric, reduced, celebrate, onRow, myStep, holdIds]);
   const onEndReached = useCallback(() => { if (activeRef.current && canInsert()) moreRef.current('end'); }, [canInsert]);
   const onRefresh = useCallback(() => { setRefreshing(true); loadRef.current(true); }, []);
   const refreshControl = useMemo(() => <RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={onRefresh} />, [refreshing, onRefresh]);
