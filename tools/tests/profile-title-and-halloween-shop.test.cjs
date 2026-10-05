@@ -54,6 +54,9 @@ test('a title says how you earned it in kid-simple words', () => {
   assert.equal(m.findEarned('Nope', earned), null);
   assert.equal(m.describeTitle('Churro Collection Scout', earned), 'You found 8 churros in your Churro Collection book.');
   assert.equal(m.bookNoun('Pretzel Collection'), 'pretzels');
+  assert.equal(m.titleBadgeSlug('Churro Finder'), 'churro_collection', 'the profile pill finds the book art from the name alone');
+  assert.equal(m.titleBadgeSlug('Night Lights Finder'), 'night_lights');
+  assert.equal(m.titleBadgeSlug('Coaster Champ'), null);
   assert.equal(m.bookNoun('Camera Crew'), 'finds');
 });
 
@@ -61,7 +64,7 @@ test('the title sheet: tap your own pill, change or remove through the server, n
   const pill = read('src/components/profile/TitlePill.tsx');
   assert.match(pill, /onPress\?: \(\) => void/);
   const profile = read('src/screens/ProfileScreen.tsx');
-  assert.match(profile, /<TitlePill title=\{player\.title\} trophy=\{<ProfileEventChip \/>\} onPress=\{\(\) => setTitleSheet\(true\)\} \/>/);
+  assert.match(profile, /<TitlePill title=\{player\.title\} trophy=\{<ProfileEventChip \/>\} onPress=\{\(\) => setTitleSheet\(true\)\}/);
   assert.match(profile, /<TitleSheet visible=\{titleSheet\}/);
   assert.ok(profile.indexOf('const [titleSheet, setTitleSheet]') < profile.indexOf('if (!player) {'), 'the sheet state is a hook before the guest return');
   const other = read('src/screens/PlayerScreen.tsx');
@@ -75,8 +78,14 @@ test('the title sheet: tap your own pill, change or remove through the server, n
   assert.doesNotMatch(sheet, /label="Remove title"/);
   assert.match(sheet, /onRemoved\?\.\(previous\)/, 'the profile gets the removed title for Undo');
   assert.match(sheet, /haptic\('success'\)/);
-  assert.match(sheet, /setBadge\(\{ slug: entry\.equip\.slug, badgeUrl: entry\.iconUrl \}\)/, 'book titles show the book art');
+  assert.match(sheet, /setBadge\(\{ slug, badgeUrl: entry\?\.iconUrl \?\? null \}\)/, 'book titles show the book art');
   assert.match(profile, /<TitleUndoBar previous=\{undoTitle\}/);
+  assert.match(profile, /art=\{<TitleArt entry=\{null\} title=\{player\.title\} size=\{28\} \/>\}/, 'the pill shows the book art, not the crown');
+  assert.match(sheet, /disabled=\{!!busy \|\| earned === null\}/, 'Remove waits for the lists so Undo always knows the title');
+  const undo = read('src/components/profile/TitleUndoBar.tsx');
+  assert.match(undo, /if \(!previous \|\| busy\) return;\s*const timer = setTimeout\(onDone, UNDO_MS\)/, 'the timer never fires while an undo is in flight');
+  assert.match(undo, /UNDO_MS = 10_000/);
+  assert.match(undo, /if \(mounted\.current\) setFailed\(true\)/);
   assert.match(profile, /await equipEarned\(previous\); await refreshPlayer\(\);/);
 });
 
@@ -105,6 +114,10 @@ test('stall copy: countdown when open, the away line and no buy for everyone els
   assert.equal(m.awayMessage('not_event_hours', night, Date.parse('2026-10-04T15:00:00-04:00')),
     'The Halloween Shop opens at 6:30 PM, when Fin-ister Nights starts. It stays open till 2 AM.');
   assert.equal(m.awayMessage('not_at_event', night, now), 'Come to Fin-ister Nights at the park to shop. Tonight it\'s open 6:30 PM to 2 AM.');
+  assert.equal(m.awayHeadline('not_event_hours', night, Date.parse('2026-10-04T15:00:00-04:00')), 'Opens tonight');
+  assert.equal(m.awayHeadline('not_event_hours', night, Date.parse('2026-10-05T02:30:00-04:00')), 'Closed for tonight');
+  assert.equal(m.awayHeadline('not_at_event', night, now), 'Event only');
+  for (const h of ['Opens tonight', 'Closed for tonight', 'Event only', 'Closed for the season']) assert.ok(h.length <= 22, h);
   assert.equal(m.stallAction({ open: true, store_id: 19 }), 'open');
   assert.equal(m.stallAction({ open: false, store_id: 19 }), 'away');
   assert.equal(m.stallAction(null), 'none');
@@ -127,8 +140,12 @@ test('the stall is ONE always-mounted Marker with stable key and fixed box (MapL
   assert.doesNotMatch(sprite, /react-native-skia|react-native-svg/);
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /onShopPress: openHalloweenShop/);
-  assert.match(explore, /stallAction\(stall\) === 'open'\) \{\s*queueHaptic\('tapLight'\);\s*RootNavigation\.navigate\('Store', \{ store: stall\.store_id \}\)/);
-  assert.match(explore, /awayMessage\(stall\.reason, frightNightWindow\)/, 'the teaser quotes tonight\'s real hours');
+  assert.match(explore, /stallAction\(stall\) === 'open'\) \{\s*queueHaptic\('tapLight'\);\s*playSfx\('ui\.tap', 0\.6\);\s*RootNavigation\.navigate\('Store', \{ store: stall\.store_id \}\)/);
+  assert.match(explore, /const now = frightServerNow\(\);/, 'the away dialog reads the server clock, like the chip');
+  assert.match(explore, /awayHeadline\(stall\.reason, frightNightWindow, now\)/);
+  assert.match(explore, /awayMessage\(stall\.reason, frightNightWindow, now\)/, 'the teaser quotes tonight\'s real hours');
+  assert.match(sprite, /require\('\.\/art\/halloween-booth-closed\.webp'\)/, 'away is the solid booth without its glow');
+  assert.doesNotMatch(sprite, /shadowRadius/, 'the glow is baked into the art: no live shadow on a map marker');
   assert.match(sprite, /require\('\.\/art\/halloween-booth\.webp'\)/, 'the Halloween booth art, not the day shop');
 });
 

@@ -15,14 +15,18 @@ import getPrepItemSets, { equipSetTitle } from '../../api/endpoints/me/prep-item
 import { equipStampTitle, getStamps } from '../../api/endpoints/me/stamps';
 import { BRAND, GameButton, GameDialog, GameIcon, GameText } from '../../ui';
 import { setBadge } from '../../screens/SetCollection/DexParts';
-import { describeTitle, earnedTitles, findEarned, type EarnedTitle } from './titleModel';
+import { describeTitle, earnedTitles, findEarned, titleBadgeSlug, type EarnedTitle } from './titleModel';
 
 const STAMP_SEAL = require('../../../assets/images/stamps/stamp-logo.png');
 
-/** The title's own art: the book's badge (the same art as its Collection Book tab), the stamp seal, else the crown. */
-function TitleArt({ entry, size }: { readonly entry: EarnedTitle | null; readonly size: number }) {
-  if (entry?.equip.kind === 'set') {
-    return <Image source={setBadge({ slug: entry.equip.slug, badgeUrl: entry.iconUrl })} style={{ width: size, height: size }} contentFit="contain" />;
+/**
+ * The title's own art: the book's badge (the same art as its Collection Book tab), the stamp seal for stamps,
+ * the crown only when neither is known. Without the lists (the profile pill) the book comes from the title's name.
+ */
+export function TitleArt({ entry, title, size }: { readonly entry: EarnedTitle | null; readonly title?: string | null; readonly size: number }) {
+  const slug = entry?.equip.kind === 'set' ? entry.equip.slug : entry ? null : titleBadgeSlug(title);
+  if (slug) {
+    return <Image source={setBadge({ slug, badgeUrl: entry?.iconUrl ?? null })} style={{ width: size, height: size }} contentFit="contain" />;
   }
   if (entry?.equip.kind === 'stamp') return <Image source={STAMP_SEAL} style={{ width: size, height: size }} contentFit="contain" />;
   return <GameIcon name="crown" size={size - 4} />;
@@ -75,6 +79,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
     setBusy(key);
     setError(null);
     haptic('tapLight');
+    playSfx('ui.tap', 0.6);
     try {
       await run();
       await onChanged();
@@ -84,6 +89,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
       after?.();
     } catch {
       haptic('warning');
+      playSfx('fail', 0.5);
       setError('That did not save. Try again.');
     } finally {
       setBusy(null);
@@ -92,8 +98,10 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
 
   const wear = (entry: EarnedTitle) => save(entry.key, () => equipEarned(entry));
   // stamp_id null clears whatever title is worn (users.equipped_title), from a book or a stamp.
+  // Disabled until the lists load, so Undo always knows which endpoint wears the title again.
   const remove = () => {
-    const previous = findEarned(title, earned ?? []);
+    if (earned === null) return Promise.resolve();
+    const previous = findEarned(title, earned);
     return save('remove', () => equipStampTitle(null), () => onRemoved?.(previous));
   };
 
@@ -108,7 +116,7 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
         <View style={styles.body}>
           {!!worn && (
             <View style={styles.pill} accessible accessibilityLabel={`Title: ${worn}`}>
-              <TitleArt entry={findEarned(worn, earned ?? [])} size={30} />
+              <TitleArt entry={findEarned(worn, earned ?? [])} title={worn} size={30} />
               <Text style={styles.pillText} numberOfLines={2} maxFontSizeMultiplier={1.3}>{worn}</Text>
             </View>
           )}
@@ -125,7 +133,8 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             {!!worn && (
               // Quiet on purpose: taking a title off is the rare choice, and the profile offers Undo.
               <Pressable accessibilityRole="button" accessibilityLabel="Remove title" accessibilityHint="Takes the title off your profile"
-                disabled={!!busy} hitSlop={8} onPress={() => { void remove(); }} style={({ pressed }) => [styles.remove, pressed && styles.rowPressed]}>
+                disabled={!!busy || earned === null} hitSlop={8} onPress={() => { void remove(); }} style={({ pressed }) => [styles.remove, earned === null && styles.removeOff, pressed && styles.rowPressed]}>
+                <GameIcon name="close" size={18} />
                 <Text style={styles.removeText} maxFontSizeMultiplier={1.3}>{busy === 'remove' ? 'Removing...' : 'Remove title'}</Text>
               </Pressable>
             )}
@@ -177,7 +186,7 @@ const styles = StyleSheet.create({
   copy: { color: '#e2f6ff' },
   hint: { color: '#bfe6ff' },
   error: { color: '#ffd6d6' },
-  actions: { alignSelf: 'stretch', gap: 6, marginTop: 4 },
+  actions: { alignSelf: 'stretch', gap: 2, marginTop: 4, marginBottom: -6 },
   list: { alignSelf: 'stretch', maxHeight: 300 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, backgroundColor: '#fff8e4', borderRadius: 14,
@@ -192,7 +201,9 @@ const styles = StyleSheet.create({
   wear: { backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4,
     borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5, minHeight: 32, justifyContent: 'center' },
   wearText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, letterSpacing: 0.5 },
-  remove: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
-  removeText: { fontFamily: 'Knockout', fontSize: 17, color: '#ffd6d6', textDecorationLine: 'underline' },
+  remove: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 44,
+    minWidth: 160, justifyContent: 'center' },
+  removeOff: { opacity: 0.45 },
+  removeText: { fontFamily: 'Knockout', fontSize: 18, color: 'rgba(255,255,255,0.85)', textDecorationLine: 'underline' },
   rowMeaning: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
 });

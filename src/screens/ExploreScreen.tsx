@@ -110,7 +110,8 @@ import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText, gameAlert } from '../ui';
 import type { FrightShopStall } from '../api/endpoints/fright/types';
 import { queueHaptic } from '../gamekit/Haptics';
-import { AWAY_LINE, HALLOWEEN_SHOP_NAME, awayMessage, stallAction } from '../components/fright/halloweenShop';
+import { playSfx } from '../gamekit/SFX';
+import { AWAY_LINE, awayHeadline, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
 import HelpButton from '../components/help/HelpButton';
@@ -573,15 +574,21 @@ function ExploreScreen() {
     return () => clearInterval(timer);
   }, []);
   const frightNightWindow = frightNight.tonight?.night ?? null;
+  const frightServerNow = frightNight.now;
   const openHalloweenShop = useCallback((stall: FrightShopStall) => {
     if (stallAction(stall) === 'open') {
       queueHaptic('tapLight');
+      playSfx('ui.tap', 0.6);
       RootNavigation.navigate('Store', { store: stall.store_id });
     } else {
       queueHaptic('warning');
-      gameAlert(HALLOWEEN_SHOP_NAME, `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason, frightNightWindow)}`, [{ text: 'Got it' }]);
+      playSfx('ui.select', 0.5);
+      // The server clock (R5), not the phone's: "opens at" vs "closed for tonight" must agree with the stall chip.
+      const now = frightServerNow();
+      gameAlert(awayHeadline(stall.reason, frightNightWindow, now), `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason, frightNightWindow, now)}`,
+        [{ text: 'Got it' }], { icon: 'lock' });
     }
-  }, [frightNightWindow]);
+  }, [frightNightWindow, frightServerNow]);
   const frightMap = useMemo<FrightMapInput | null>(() => !stressOff && frightNight.tonight /* mounted for the whole event-park session: markers never churn (MapLibre insert crash); active/phase fade them */
     && frightNight.eventPark ? {
       tonight: frightNight.tonight, active: frightNight.modeOn, nowOffsetMs: frightNight.offset,

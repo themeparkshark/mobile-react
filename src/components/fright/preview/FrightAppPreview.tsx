@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FrightRun, FrightSpot, FrightTonight } from '../../../api/endpoints/fright';
 import type { FrightShopStall } from '../../../api/endpoints/fright/types';
 import { gameAlert } from '../../../ui';
-import { AWAY_LINE, awayMessage } from '../halloweenShop';
+import { AWAY_LINE, awayHeadline, awayMessage } from '../halloweenShop';
 import type { RideControlPark } from '../../../api/endpoints/parks/rideControl';
 import Map from '../../Map';
 import RideControlBar from '../../RideControlBar';
@@ -124,8 +124,9 @@ export default function FrightAppPreview({ state }: { readonly state: AppPreview
   const mapInput: FrightMapInput = {
     tonight, active: true, nowOffsetMs: 0, player: PLAYER, spooky: true, doneKeys: [], quiet: engine.quiet,
     cinematic: null, onHauntPress: noop, tierCap: 'lite', ambience: false,
-    onShopPress: stall => gameAlert('Halloween Shop', stall.open ? 'DEV: opens the Halloween Shop (Store screen).'
-      : `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason)}`, [{ text: 'Got it' }]),
+    onShopPress: stall => gameAlert(stall.open ? 'Halloween Shop' : awayHeadline(stall.reason, tonight.night, Date.now()),
+      stall.open ? 'DEV: opens the Halloween Shop (Store screen).'
+        : `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason, tonight.night, Date.now())}`, [{ text: 'Got it' }], { icon: 'lock' }),
   };
 
   return (

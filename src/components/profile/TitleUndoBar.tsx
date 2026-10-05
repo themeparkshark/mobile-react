@@ -3,13 +3,15 @@
  * with UNDO, for 6 seconds. Undo wears the same title again through the
  * server (the endpoint that owns it), then the profile refreshes.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { haptic } from '../../gamekit/Haptics';
+import { playSfx } from '../../gamekit/SFX';
 import { BRAND } from '../../ui';
 import type { EarnedTitle } from './titleModel';
 
-export const UNDO_MS = 6000;
+/** Long enough for a kid to find the button (panel round 2). */
+export const UNDO_MS = 10_000;
 
 export default function TitleUndoBar({ previous, onUndo, onDone }: {
   /** The title that came off; no bar without one. */
@@ -20,12 +22,16 @@ export default function TitleUndoBar({ previous, onUndo, onDone }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { setFailed(false); }, [previous]);
+  // The timer only runs while no undo is in flight: it can never hide the bar mid-request
+  // (which dropped the result and its error). After a failed undo it restarts in full.
   useEffect(() => {
-    if (!previous) return;
-    setFailed(false);
+    if (!previous || busy) return;
     const timer = setTimeout(onDone, UNDO_MS);
     return () => clearTimeout(timer);
-  }, [previous, onDone]);
+  }, [previous, onDone, busy]);
   if (!previous) return null;
   return (
     <View style={styles.row}>
@@ -36,17 +42,21 @@ export default function TitleUndoBar({ previous, onUndo, onDone }: {
         <Pressable accessibilityRole="button" accessibilityLabel={`Undo, wear ${previous.title} again`} disabled={busy} hitSlop={10}
           style={({ pressed }) => [styles.undo, pressed && { transform: [{ scale: 0.95 }] }]}
           onPress={async () => {
+            if (busy) return;
             setBusy(true);
             haptic('tapLight');
+            playSfx('ui.tap', 0.6);
             try {
               await onUndo(previous);
               haptic('success');
-              onDone();
+              playSfx('ui.confirm', 0.7);
+              if (mounted.current) onDone();
             } catch {
               haptic('warning');
-              setFailed(true);
+              playSfx('fail', 0.5);
+              if (mounted.current) setFailed(true);
             } finally {
-              setBusy(false);
+              if (mounted.current) setBusy(false);
             }
           }}>
           <Text style={styles.undoText} maxFontSizeMultiplier={1.2}>{busy ? '...' : 'UNDO'}</Text>

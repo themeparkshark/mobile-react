@@ -131,3 +131,16 @@ export function findEarned(title: string | null | undefined, earned: readonly Ea
   const name = clean(title);
   return name ? earned.find(entry => entry.title === name) ?? null : null;
 }
+
+/** Books with bundled badge art (SetCollection/DexParts LEGACY_BADGES). */
+export const BADGE_BOOKS: readonly string[] = ['churro_collection', 'pretzel_collection', 'night_lights', 'rain_parade', 'camera_crew'];
+
+/**
+ * The book a title names, from the title alone (no network): "Churro Finder" and "Churro Connoisseur" are the
+ * Churro Collection, "Night Lights Finder" is Night Lights. Null when no bundled book matches (stamps, events).
+ */
+export function titleBadgeSlug(title: string | null | undefined): string | null {
+  const first = clean(title).split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (first.length < 3) return null;
+  return BADGE_BOOKS.find(slug => slug.split('_')[0] === first) ?? null;
+}

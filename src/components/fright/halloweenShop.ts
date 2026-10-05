@@ -84,3 +84,13 @@ export function awayMessage(reason: string | null | undefined, night?: NightLike
   }
   return `Come to Fin-ister Nights at the park to shop.${hours}`;
 }
+
+/** The away dialog's ribbon headline (at most 22 characters, the ribbon limit): what is true right now. */
+export function awayHeadline(reason: string | null | undefined, night: NightLike, nowMs: number): string {
+  if (reason === 'off_season') return 'Closed for the season';
+  if (reason === 'not_event_hours') {
+    if (night?.closes_at && nowMs >= Date.parse(night.closes_at)) return 'Closed for tonight';
+    return 'Opens tonight';
+  }
+  return 'Event only';
+}

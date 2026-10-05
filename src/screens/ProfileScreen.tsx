@@ -31,7 +31,7 @@ import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
-import TitleSheet, { equipEarned } from '../components/profile/TitleSheet';
+import TitleSheet, { TitleArt, equipEarned } from '../components/profile/TitleSheet';
 import TitleUndoBar from '../components/profile/TitleUndoBar';
 import type { EarnedTitle } from '../components/profile/titleModel';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
@@ -513,7 +513,8 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ marginTop: 12 }}>
-                <TitlePill title={player.title} trophy={<ProfileEventChip />} onPress={() => setTitleSheet(true)} />
+                <TitlePill title={player.title} trophy={<ProfileEventChip />} onPress={() => setTitleSheet(true)}
+                  art={<TitleArt entry={null} title={player.title} size={28} />} />
                 {!player.title && (
                   <TitleUndoBar previous={undoTitle} onDone={clearUndo}
                     onUndo={async previous => { await equipEarned(previous); await refreshPlayer(); }} />
