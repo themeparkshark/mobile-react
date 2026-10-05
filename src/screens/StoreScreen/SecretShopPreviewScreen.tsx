@@ -157,8 +157,8 @@ function Stage() {
           <TopbarColumn stretch={false} />
         </Topbar>
         <View style={{ height: 470, marginTop: -8 }}>
-          <Playercard inventory={look} popLayers style={{ position: 'absolute', width: W, height: 460 }} shadow
-            shadowAt={{ left: '56.5%', top: '80%' }} />
+          {/* Exactly the real Dressing Room's card (InventoryScreen): open ocean, no floor, no shadow. */}
+          <Playercard inventory={look} popLayers style={{ position: 'absolute', width: W, height: 460 }} />
         </View>
         <Text style={styles.stageName}>{hero.name}</Text>
         <Text style={styles.stageHint}>Tap for the next piece ({index + 1} of {HEROES.length})</Text>
