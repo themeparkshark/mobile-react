@@ -71,15 +71,18 @@ export function rideSpec(rarity: number | null | undefined): RideSpec {
  * | Rarity    | Frame It! | Great | Good | Good total (with the coyote frame) | v1 Good |
  * |-----------|-----------|-------|------|------------------------------------|---------|
  * | Uncommon  | +-40      | +-95  | +-200| about 433 ms                       | +-250   |
- * | Rare      | +-35      | +-80  | +-170| about 373 ms                       | +-225   |
- * | Epic      | +-30      | +-70  | +-145| about 323 ms                       | +-190   |
- * | Legendary | +-30      | +-60  | +-120| about 273 ms                       | +-150   |
+ * | Rare      | +-25      | +-80  | +-170| about 373 ms                       | +-225   |
+ * | Epic      | +-15      | +-70  | +-145| about 323 ms                       | +-190   |
+ * | Legendary | +-4       | +-55  | +-95 | about 223 ms                       | +-150   |
  */
 export const GRADE_WINDOWS_BY_TIER: Readonly<Record<2 | 3 | 4 | 5, { frame_it: number; great: number; good: number }>> = {
   2: { frame_it: 40, great: 95, good: 200 },
-  3: { frame_it: 35, great: 80, good: 170 },
-  4: { frame_it: 30, great: 70, good: 145 },
-  5: { frame_it: 30, great: 60, good: 120 },
+  3: { frame_it: 25, great: 80, good: 170 },
+  4: { frame_it: 15, great: 70, good: 145 },
+  // R7 (difficulty proof, tools/ride-photo-difficulty.cjs: a +-150 ms jittered bot): first-try Frame It! falls
+  // with rarity (about 39, 28, 21 and 14%), Legendary Great about 33%, Blurry about 25%. The Legendary mercy
+  // ride grades on Uncommon's windows, and misses still grow Good and Great.
+  5: { frame_it: 4, great: 55, good: 95 },
 };
 /** The strictest table (Legendary), kept for callers that do not pass a rarity. */
 export const GRADE_WINDOWS_MS = GRADE_WINDOWS_BY_TIER[5];
@@ -437,7 +440,7 @@ export function swayAt(sway: Sway, sec: number, on = 1): { x: number; y: number;
  * the car meets the frame (graded through swayShiftMs like the sway). Never on the mercy ride or under
  * Reduce Motion.
  */
-export const LEGENDARY_BUMP = { amp: 10, leadMs: [300, 600] as const, kickMs: 70, settleMs: 300 } as const;
+export const LEGENDARY_BUMP = { amp: 10, leadMs: [700, 900] as const, kickMs: 90, tauMs: 700, totalMs: 2000 } as const;
 export interface Bump { readonly leadMs: number; readonly dir: 1 | -1 }
 export function bumpFor(rarity: number | null | undefined, seed: number, pass: number, reducedMotion = false, mercy = false): Bump | null {
   const tier = Math.round(Number(rarity) || 2);
@@ -445,7 +448,21 @@ export function bumpFor(rarity: number | null | undefined, seed: number, pass: n
   const [lo, hi] = LEGENDARY_BUMP.leadMs;
   return { leadMs: Math.round(lo + (hi - lo) * unitHash(seed, 5000 + pass)), dir: unitHash(seed, 5300 + pass) < 0.5 ? -1 : 1 };
 }
-/** The bump's offset for its progress value `v` (-0.35..1, animated kick then a damped settle). Worklet. */
+/**
+ * R7: the bump's shape over time (ms since it kicked): a 90 ms kick to full, then a slow damped return
+ * (tau 700 ms), so the camera is still off by a third to a half of the bump when the car arrives 700 to
+ * 900 ms later. It changes the moment the car meets the frame, not only startles. Worklet.
+ */
+export function bumpCurve(ms: number): number {
+  'worklet';
+  if (ms <= 0 || ms >= LEGENDARY_BUMP.totalMs) return 0;
+  const k = LEGENDARY_BUMP.kickMs;
+  if (ms < k) { const x = ms / k; return 1 - (1 - x) * (1 - x); }
+  const decay = Math.exp(-(ms - k) / LEGENDARY_BUMP.tauMs);
+  const tail = ms > 1600 ? 1 - ((ms - 1600) / 400) ** 2 : 1;
+  return decay * Math.max(0, tail);
+}
+/** The bump's offset for its shape value `v` (0..1). Worklet. */
 export function bumpAt(v: number, dir: number): { x: number; y: number } {
   'worklet';
   return { x: LEGENDARY_BUMP.amp * v * dir, y: -LEGENDARY_BUMP.amp * 0.45 * v };
@@ -459,7 +476,9 @@ export function bumpAt(v: number, dir: number): { x: number; y: number } {
  * under Reduce Motion, never on the first-ride freeze pass.
  */
 export const GULL_CHANCE = 0.25;
+/** R7: the gull crosses 120 to 180 ms before or after the perfect moment, never on it (waiting still lands Great). */
 export const GULL_CENTER_MS = 150;
+export const GULL_CLEAR_MS = [120, 180] as const;
 export const GULL_IN_FRAME_MS = 160;
 export const GULL_LEAD_MS = 600;
 export interface Gull { readonly centerMs: number; readonly dir: 1 | -1 }
@@ -468,7 +487,9 @@ export function gullFor(rarity: number | null | undefined, seed: number, pass: n
   const tier = Math.round(Number(rarity) || 2);
   if (tier < 3 || opts.reducedMotion || opts.mercy || opts.freeze) return null;
   if (unitHash(seed, 7000 + pass) >= GULL_CHANCE) return null;
-  const centerMs = Math.round(-GULL_CENTER_MS + 2 * GULL_CENTER_MS * unitHash(seed, 7100 + pass));
+  const [lo, hi] = GULL_CLEAR_MS;
+  const side = unitHash(seed, 7300 + pass) < 0.5 ? -1 : 1;
+  const centerMs = side * Math.round(lo + (hi - lo) * unitHash(seed, 7100 + pass));
   return { centerMs, dir: unitHash(seed, 7200 + pass) < 0.5 ? -1 : 1 };
 }
 /** True when a shot `msFromCrossing` (wall ms from the gull's frame crossing) has the gull in the frame. Worklet. */
@@ -488,8 +509,13 @@ export function photobombCap(grade: PhotoGrade): PhotoGrade {
  */
 export const UNCOMMON_GROWN_AFTER = 10;
 export const UNCOMMON_GROWN_LEAD_MS = 120;
-export function uncommonGreenLead(catches: number): number {
-  return catches >= UNCOMMON_GROWN_AFTER ? UNCOMMON_GROWN_LEAD_MS : TELEGRAPH[2].greenLeadMs;
+/**
+ * R7: per player, in steps (200 ms for the first 10 Uncommon catches, 160 ms to 20, then 120 ms), and it
+ * relaxes back to 200 ms for the rest of a ride after 2 Blurry shots, so a struggling kid is never stuck.
+ */
+export function uncommonGreenLead(catches: number, blurriesThisRide = 0): number {
+  if (blurriesThisRide >= 2 || catches < UNCOMMON_GROWN_AFTER) return TELEGRAPH[2].greenLeadMs;
+  return catches < 2 * UNCOMMON_GROWN_AFTER ? 160 : UNCOMMON_GROWN_LEAD_MS;
 }
 
 /** How much to scale the scene so a swayed and rolled scene never uncovers its edges. */

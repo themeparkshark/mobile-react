@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent, type TextInputProps } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Canvas, Image as SkImageNode, type SkImage } from '@shopify/react-native-skia';
+import { Canvas, Image as SkImageNode, Picture, Skia, createPicture, type SkImage } from '@shopify/react-native-skia';
+import { paintFirework, paintRibbon, paintStarFlash } from './revealFx';
 import Animated, {
   Easing, cancelAnimation, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat,
   withSequence, withSpring, withTiming, type SharedValue,
@@ -18,7 +19,7 @@ import StampPlate from './StampPlate';
 import { catchHaptic, catchMark, catchSound } from './catchAudio';
 import {
   BONUS_MS, COMPACT_TALLY_MS, NEW_BEST_SWAP_MS, GRADE_BONUS_LABEL, PENDING_WOBBLE_CAP_MS, WOBBLES, WOBBLE_MS, autoContinueMs, rowMs, wobblesFor, bookPage, canSkip, isCompact, revealPlan, revealStart,
-  revealStep, revealTitle, tallyRows, tallyValue, xpSplit,
+  revealStep, revealTitle, tallyRows, tallyValue, xpSplit, bestStars,
   type BeatSlot, type RevealBeat, type RevealGrade, type RevealInput, type RevealRewards, type RevealState,
 } from './revealRules';
 import { BLANK_IMAGE, PRINT_FRAME_FILL, PRINT_STAGE_FOR, printHero } from './RidePhotoCatch';
@@ -116,6 +117,8 @@ export interface CatchRevealData {
   readonly isNew: boolean;
   /** R6: a repeat whose photo beat the stored best (the server's answer). */
   readonly newBest?: boolean;
+  /** R7: the stored best grade before this catch (NEW BEST! shows old next to new). */
+  readonly prevGrade?: string | null;
   /** R6: a gull photobombed the catching photo (it is capped at Good). */
   readonly photobombed?: boolean;
   /** The server's rewards (zeros until the answer lands). */
@@ -140,6 +143,8 @@ const MAX_SLOTS = 15;
 const ROW_ICON: Readonly<Record<'xp' | 'coins' | 'energy' | 'ticket', GameIconName>> = { xp: 'xp', coins: 'coin', energy: 'energy', ticket: 'ticket' };
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
+/** An empty picture: the FX canvases stay mounted and draw nothing when idle. */
+const EMPTY_PIC = createPicture(() => undefined, { width: 1, height: 1 });
 
 /** Confetti in the house reveal's colours (DexReveal), plus white. */
 const CONFETTI = [BRAND.gold, BRAND.red, '#3cb85c', '#38b6ff', '#b65cff', BRAND.white];
@@ -170,85 +175,6 @@ const Volley = memo(function Volley({ x, y, progress, seed, spread = 1, stars = 
 });
 
 /** A firework: a bright core and 12 spokes that burst out, trail and fade. One shared value drives it. */
-/** R6: a firework 70 to 90 pt across: a tinted gold core, 12 gold and white spokes, and 8 glitter stars that hang. */
-const Firework = memo(function Firework({ x, y, progress, size = 84 }: { readonly x: number; readonly y: number; readonly progress: SharedValue<number>; readonly size?: number }) {
-  const core = useAnimatedStyle(() => {
-    const p = progress.value;
-    return { opacity: p <= 0 || p >= 1 ? 0 : (1 - p) * 0.95, transform: [{ scale: 0.3 + 1.1 * Math.min(1, p * 3.2) }] };
-  });
-  const r = size / 2;
-  return (
-    <View pointerEvents="none" style={[styles.firework, { left: x - 90, top: y - 90 }]}>
-      <Animated.View style={[styles.fireCore, core]}>
-        <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffc93b" />
-      </Animated.View>
-      {Array.from({ length: 12 }, (_, i) => <Spoke key={i} angle={(i / 12) * 360} progress={progress} long={i % 2 === 0} reach={r} />)}
-      {Array.from({ length: 8 }, (_, i) => <Glitter key={i} angle={(i / 8) * 360 + 22.5} progress={progress} reach={r} />)}
-    </View>
-  );
-});
-const Spoke = memo(function Spoke({ angle, progress, long, reach }: { readonly angle: number; readonly progress: SharedValue<number>; readonly long: boolean; readonly reach: number }) {
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    const out = 1 - (1 - Math.min(1, p * 1.7)) ** 3;
-    return {
-      opacity: p <= 0 || p >= 1 ? 0 : p > 0.55 ? (1 - p) / 0.45 : 1,
-      transform: [{ rotate: `${angle}deg` }, { translateY: -(8 + out * (long ? reach - 10 : reach - 18)) }, { scaleY: 0.5 + 0.7 * (1 - p) }],
-    };
-  });
-  return <Animated.View style={[styles.spoke, long && styles.spokeLong, style]} />;
-});
-const Glitter = memo(function Glitter({ angle, progress, reach }: { readonly angle: number; readonly progress: SharedValue<number>; readonly reach: number }) {
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    const out = 1 - (1 - Math.min(1, p * 1.4)) ** 2;
-    const a = (angle * Math.PI) / 180;
-    const d = 6 + out * (reach + 4);
-    return {
-      opacity: p <= 0.12 || p >= 1 ? 0 : p > 0.7 ? (1 - p) / 0.3 : 1,
-      transform: [{ translateX: Math.sin(a) * d }, { translateY: -Math.cos(a) * d + p * p * 14 }, { scale: 0.6 + 0.5 * Math.sin(p * 18) ** 2 }],
-    };
-  });
-  return <Animated.View style={[styles.glitter, style]}><GameIcon name="star" size={13} /></Animated.View>;
-});
-
-/**
- * R6: a curling, glossy gold ribbon unfurling from behind the medallion (Legendary): a chain of segments laid
- * along a curl, revealed one after another, then drifting down and fading. One shared value drives it.
- */
-const Ribbon = memo(function Ribbon({ x, y, angle, curl, progress, count = 12 }: {
-  readonly x: number; readonly y: number; readonly angle: number; readonly curl: number; readonly progress: SharedValue<number>; readonly count?: number;
-}) {
-  const segs = useMemo(() => {
-    const out: { x: number; y: number; rot: number; i: number }[] = [];
-    let px = x, py = y, th = (angle * Math.PI) / 180;
-    for (let i = 0; i < count; i++) {
-      const step = 13;
-      px += Math.cos(th) * step; py += Math.sin(th) * step;
-      out.push({ x: px, y: py, rot: (th * 180) / Math.PI, i });
-      th += curl * (0.7 + i * 0.08);
-    }
-    return out;
-  }, [x, y, angle, curl, count]);
-  return <>{segs.map(seg => <RibbonSeg key={seg.i} seg={seg} n={count} progress={progress} />)}</>;
-});
-const RibbonSeg = memo(function RibbonSeg({ seg, n, progress }: { readonly seg: { x: number; y: number; rot: number; i: number }; readonly n: number; readonly progress: SharedValue<number> }) {
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    const show = p * 2.6 * n - seg.i; // unfurls over the first ~40%
-    if (p <= 0 || p >= 1 || show <= 0) return { opacity: 0, transform: [{ translateX: -100 }, { translateY: -100 }, { rotate: '0deg' }, { scaleX: 0 }] };
-    const fall = p > 0.45 ? (p - 0.45) * (p - 0.45) * 160 : 0;
-    return {
-      opacity: p > 0.8 ? (1 - p) / 0.2 : 1,
-      transform: [{ translateX: seg.x - 9 }, { translateY: seg.y - 5 + fall }, { rotate: `${seg.rot + Math.sin(p * 9 + seg.i) * 6}deg` },
-        { scaleX: Math.min(1, show) }],
-    };
-  });
-  return <Animated.View pointerEvents="none" style={[styles.ribbonSeg, { backgroundColor: seg.i % 2 ? '#ffb800' : '#ffd23f' }, style]}>
-    <View style={styles.ribbonGloss} />
-  </Animated.View>;
-});
-
 const Piece = memo(function Piece({ piece, x, y, progress, stars }: {
   readonly piece: { vx: number; vy: number; spin: number; color: string; w: number; h: number };
   readonly x: number; readonly y: number; readonly progress: SharedValue<number>; readonly stars: boolean;
@@ -301,7 +227,17 @@ function BookCount({ before, after, total, fill, style }: {
 }
 
 /** One book slot, always mounted. Owned: the item's art. Missing: its silhouette. New: pops in with a gold ring. */
-const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallback, caughtFallback = false, bestFallback = false, color, art, fill, best, times }: {
+/** R7: one book star. Old stars sit still; a NEW BEST! star pops on at its step (best goes 0 to 1 over the steps). */
+const SlotStar = memo(function SlotStar({ step, steps, best }: { readonly step: number; readonly steps: number; readonly best: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => {
+    if (step <= 0) return { opacity: 1, transform: [{ scale: 1 }] };
+    const at = (step - 1) / steps, local = Math.max(0, Math.min(1, (best.value - at) * steps * 2.2));
+    return { opacity: local > 0 ? 1 : 0, transform: [{ scale: local <= 0 ? 0.2 : local < 0.6 ? 0.2 + 2 * local : 1.4 - 0.4 * Math.min(1, (local - 0.6) / 0.4) }] };
+  });
+  return <Animated.View style={style}><GameIcon name="star" size={13} /></Animated.View>;
+});
+
+const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallback, caughtFallback = false, bestFallback = false, fallbackStars = null, color, art, fill, best, times }: {
   readonly index: number; readonly total: number; readonly slot: RevealSlot | null; readonly filledFallback: boolean; readonly isNewFallback: boolean;
   readonly color: string; readonly art: ImageSource | null; readonly fill: SharedValue<number>;
   /** R6 NEW BEST!: 0..1, the caught slot flips (the stars step up at the half) and lands in gold. */
@@ -312,6 +248,8 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   readonly caughtFallback?: boolean;
   /** Plain slots: the repeat find's slot plays NEW BEST!. */
   readonly bestFallback?: boolean;
+  /** Plain slots: the caught find's stars before and after (from its photo grades). */
+  readonly fallbackStars?: { readonly prev: number; readonly now: number } | null;
 }) {
   const isNew = slot ? slot.isNew : isNewFallback;
   const owned = slot ? slot.owned && !slot.isNew : filledFallback;
@@ -323,16 +261,14 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
   // Plain owned slots are filled set-colour tiles with a big check (never a blank white box).
   const plainOwned = !slot && owned && !shownArt;
   const newBest = slot ? !!slot.newBest : bestFallback;
-  const stars = owned || isNew ? Math.max(0, Math.min(3, slot?.stars ?? 0)) : 0;
-  const prevStars = newBest ? Math.max(0, Math.min(3, slot?.prevStars ?? 0)) : stars;
-  const flip = useAnimatedStyle(() => (newBest ? {
-    transform: [{ scaleX: Math.max(0.06, Math.abs(Math.cos(Math.PI * Math.min(1, best.value)))) },
-      { scale: 1 + 0.18 * Math.sin(Math.PI * Math.min(1, best.value)) }],
-  } : { transform: [{ scaleX: 1 }, { scale: 1 }] }));
-  const goldOn = useAnimatedStyle(() => ({ opacity: newBest && best.value >= 0.5 ? 1 : 0 }));
-  const oldStarsOn = useAnimatedStyle(() => ({ opacity: newBest && best.value >= 0.5 ? 0 : 1 }));
+  const fb = !slot && caught ? fallbackStars : null;
+  const stars = owned || isNew ? Math.max(0, Math.min(3, slot ? slot.stars ?? 0 : fb?.now ?? 0)) : 0;
+  const prevStars = newBest ? Math.max(0, Math.min(stars, slot ? slot.prevStars ?? 0 : fb?.prev ?? 0)) : stars;
+  // NEW BEST!: the slot glows saturated gold and pulses once as the stars step up (the art never hides).
+  const goldOn = useAnimatedStyle(() => ({ opacity: newBest && best.value > 0 ? 1 : 0 }));
+  const pulse = useAnimatedStyle(() => (newBest ? { transform: [{ scale: 1 + 0.12 * Math.sin(Math.PI * Math.min(1, best.value)) }] } : { transform: [{ scale: 1 }] }));
   return (
-    <Animated.View style={[styles.slot, index >= total && styles.hidden, owned && styles.slotOwned, plainOwned && { backgroundColor: color }, flip]}>
+    <Animated.View style={[styles.slot, index >= total && styles.hidden, owned && styles.slotOwned, plainOwned && { backgroundColor: color }, pulse]}>
       {/* Every slot keeps its image view mounted; only the source and the tint change between catches. */}
       {/* A missing item: its silhouette in #1b3a5c at 30% with a darker 1.5 pt outline (a darker copy just behind it) */}
       <Image source={!owned && !isNew ? shownArt ?? undefined : undefined} style={[styles.slotArt, styles.slotOutline, (owned || isNew || !shownArt) && styles.hidden]}
@@ -345,15 +281,12 @@ const Slot = memo(function Slot({ index, total, slot, filledFallback, isNewFallb
       </Animated.View>
       {/* (`color` keeps owned frames in the set colour; a missing slot gets a darker outline) */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.slotFrame, owned && { borderColor: color }, !owned && !isNew && styles.slotFrameMissing]} />
-      {/* NEW BEST!: the slot lands in gold */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.slotGold, !newBest && styles.gone, goldOn]} />
-      {/* Book stars: the item's best photo grade */}
-      <Animated.View pointerEvents="none" style={[styles.slotStars, prevStars === 0 && styles.gone, oldStarsOn]}>
-        {Array.from({ length: prevStars }, (_, k) => <GameIcon key={k} name="star" size={11} />)}
-      </Animated.View>
-      <Animated.View pointerEvents="none" style={[styles.slotStars, (!newBest || stars === 0) && styles.gone, goldOn]}>
-        {Array.from({ length: stars }, (_, k) => <GameIcon key={k} name="star" size={11} />)}
-      </Animated.View>
+      {/* NEW BEST!: the slot lands in a saturated gold frame and glow */}
+      <Animated.View pointerEvents="none" style={[styles.slotGold, !newBest && styles.gone, goldOn]} />
+      {/* Book stars: the item's best photo grade; on NEW BEST! the new ones pop on one by one */}
+      <View pointerEvents="none" style={[styles.slotStars, stars === 0 && styles.gone]}>
+        {Array.from({ length: stars }, (_, k) => <SlotStar key={k} step={k < prevStars ? 0 : k - prevStars + 1} steps={Math.max(1, stars - prevStars)} best={best} />)}
+      </View>
       <View pointerEvents="none" style={[styles.timesBubble, { backgroundColor: color }, !(times != null && caught) && styles.gone]}>
         <Text style={styles.timesText}>x{times ?? 0}</Text>
       </View>
@@ -497,7 +430,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
     to(rays, reducedMotion ? 0 : 1); to(medal, 1); to(item, 1); to(title, 1); to(ribbon, 1); to(chips, 1); to(tally, 1);
     rowP.forEach(v => to(v, 1)); rowIn.forEach(v => to(v, 1)); to(bonusFly, 1);
     to(printGone, 0); to(punch, 0); to(whiteout, 0); to(starFlash, 0);
-    if (!keepBook) { to(page, 1); to(fill, 1); to(stamp, dataRef.current?.isNew || dataRef.current?.newBest ? 1 : 0); to(best, 1); to(actions, 1); }
+    if (!keepBook) { to(page, 1); to(fill, 1); to(stamp, dataRef.current?.isNew ? 1 : 0); to(best, 1); to(actions, 1); }
   }, [reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── The beats ──
@@ -595,6 +528,10 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       ribbon.value = rm ? withTiming(1, { duration: 200 }) : withDelay(110, withSpring(1, { damping: 11, stiffness: 170 }));
       chips.value = rm ? withTiming(1, { duration: 200 }) : withDelay(230, withSpring(1, { damping: 12, stiffness: 220 }));
       later(rm ? 0 : 110, () => catchSound('stamp', { volume: 0.7 }));
+      if (d.newBest && !d.isNew) {
+        // NEW BEST!'s own sting (house sounds only): the reward chord, a high chime, a success haptic.
+        later(rm ? 0 : 140, () => { catchSound('reward', { volume: 0.9 }); catchSound('chime', { volume: 0.8, pitch: 7 }); catchHaptic('success', 4); });
+      }
       const set = d.setName && d.total ? ` ${d.setName}, ${Math.max(0, d.collected ?? 0)} of ${d.total}${d.isNew ? ', new' : ''}.` : '';
       AccessibilityInfo.announceForAccessibility(`${revealTitle(t)} ${d.name}, ${rarityLabel(d.rarity)}. ${GRADE_BONUS_LABEL[d.grade]}`
         + `${d.rewards.experience > 0 ? ` Plus ${d.rewards.experience} XP.` : ''}${set}`);
@@ -645,13 +582,13 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
           withSpring(1, { damping: 10, stiffness: 300 })));
         later(rm ? 0 : 710, () => { catchSound('stamp', { volume: 1 }); catchHaptic('hitRigid', 4); });
       } else if (d.newBest) {
-        // NEW BEST!: the caught slot flips to gold over 600 ms (its stars step up at the half), then the gold stamp.
+        // NEW BEST!: the caught slot goes gold and its new stars pop on one by one (one rising pop each).
         const at0 = compact ? 160 : 340;
-        best.value = rm ? withTiming(1, { duration: 1 }) : withDelay(at0, withTiming(1, { duration: NEW_BEST_SWAP_MS, easing: Easing.inOut(Easing.cubic) }));
-        later(rm ? 0 : at0 + NEW_BEST_SWAP_MS / 2, () => { catchSound('chime', { volume: 0.9 }); catchSound('sparkle', { volume: 0.7 }); });
-        stamp.value = rm ? withTiming(1, { duration: 200 }) : withDelay(at0 + NEW_BEST_SWAP_MS - 120, withSequence(withTiming(1, { duration: 110, easing: Easing.in(Easing.quad) }),
-          withSpring(1, { damping: 10, stiffness: 300 })));
-        later(rm ? 0 : at0 + NEW_BEST_SWAP_MS - 10, () => { catchSound('stamp', { volume: 1 }); catchHaptic('hitRigid', 4); });
+        const steps = Math.max(1, bestStars(d.grade) - bestStars(d.prevGrade));
+        best.value = rm ? withTiming(1, { duration: 1 }) : withDelay(at0, withTiming(1, { duration: NEW_BEST_SWAP_MS, easing: Easing.linear }));
+        for (let i = 0; i < steps; i++) {
+          later(rm ? 0 : at0 + ((i + 0.5) * NEW_BEST_SWAP_MS) / steps, () => { catchSound('pop', { volume: 0.9, pitch: 6 + i * 3 }); catchHaptic('tapLight', 2); });
+        }
       }
       return;
     }
@@ -876,9 +813,29 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   // ── Styles ──
   const rootStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 1 - 0.08 * exit.value }] }));
   const whiteStyle = useAnimatedStyle(() => ({ opacity: whiteout.value, transform: [{ scale: 0.7 + 0.5 * (1 - whiteout.value / 0.6) }] }));
-  const starFlashStyle = useAnimatedStyle(() => {
+  // Legendary FX pictures (UI thread). Fireworks sit in clear space: left of the medallion, and lower right under
+  // the tucked polaroid, away from the crown and the photo.
+  const fxW = width, fxH = height;
+  const fireAX = width * 0.15, fireAY = L.medal - medalSize * 0.28, fireBX = width * 0.86, fireBY = L.medal + medalSize * 0.62;
+  const starPic = useDerivedValue(() => {
     const f = starFlash.value;
-    return { opacity: f <= 0 || f >= 1 ? 0 : f < 0.25 ? 1 : (1 - f) / 0.75, transform: [{ scale: 0.4 + 0.9 * f }, { rotate: `${f * 30}deg` }] };
+    if (f <= 0 || f >= 1) return EMPTY_PIC;
+    const rec = Skia.PictureRecorder();
+    const c = rec.beginRecording(Skia.XYWHRect(0, 0, fxW, fxH));
+    paintStarFlash(c, cx, L.medal, medalSize * 0.8, f);
+    return rec.finishRecordingAsPicture();
+  });
+  const fxPic = useDerivedValue(() => {
+    const a = fireA.value, b = fireB.value, r = streamV.value;
+    if ((a <= 0 || a >= 1) && (b <= 0 || b >= 1) && (r <= 0 || r >= 1)) return EMPTY_PIC;
+    const rec = Skia.PictureRecorder();
+    const c = rec.beginRecording(Skia.XYWHRect(0, 0, fxW, fxH));
+    paintRibbon(c, cx - medalSize * 0.32, L.medal - medalSize * 0.1, -165, 1, r);
+    paintRibbon(c, cx + medalSize * 0.32, L.medal - medalSize * 0.1, -15, -1, r);
+    paintRibbon(c, cx - medalSize * 0.1, L.medal + medalSize * 0.36, 120, 0.8, r, 110);
+    paintFirework(c, fireAX, fireAY, 88, a);
+    paintFirework(c, fireBX, fireBY, 76, b);
+    return rec.finishRecordingAsPicture();
   });
   const bgStyle = useAnimatedStyle(() => ({ opacity: bg.value }));
   const chargeStyle = useAnimatedStyle(() => ({ opacity: charge.value * 0.9 }));
@@ -949,7 +906,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const crackLineStyle = useAnimatedStyle(() => ({ opacity: crack.value > 0.15 ? 1 : 0, transform: [{ rotate: '-28deg' }, { scaleX: Math.min(1, crack.value * 2) }] }));
   const escapeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, escapeIn.value * 1.5), transform: [{ translateY: rmOn ? 0 : (1 - escapeIn.value) * 30 }] }));
   const pageStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, page.value * 1.4), transform: [{ translateY: rmOn ? 0 : (1 - page.value) * 90 }] }));
-  const stampNew = !!view?.isNew || !!view?.newBest;
+  const stampNew = !!view?.isNew;
   const stampStyle = useAnimatedStyle(() => ({
     opacity: stampNew && stamp.value > 0 ? (rmOn ? Math.min(1, stamp.value) : 1) : 0,
     transform: [{ rotate: '-12deg' }, { scale: rmOn ? 1 : stamp.value <= 0 ? 2.4 : 2.4 - 1.4 * Math.min(1, stamp.value) }],
@@ -980,7 +937,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
   const cell = 38 + 4;
   const gridW = Math.min(perRow, Math.max(1, slotsShown)) * cell - 4;
   // The stamp sits on the slot's lower half, overhanging only toward the panel's middle, never past a 6 pt inset.
-  const stampW = !d?.isNew && d?.newBest ? 92 : 54;
+  const stampW = 54;
   const slotLeft = (pageW - 6 - gridW) / 2 + (newIndex % perRow) * cell;
   const towardMiddle = slotLeft + 19 < (pageW - 6) / 2 ? slotLeft - 4 : slotLeft + 42 - stampW;
   const stampAt = book.grid && newIndex >= 0 && newIndex < slotsShown
@@ -1027,14 +984,11 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       <Animated.View pointerEvents="none" style={[styles.titleWrap, { top: L.title, width }, titleStyle]}>
         <View style={[styles.crown, !(tier === 5 && !escaped) && styles.hidden]}><GameIcon name="crown" size={40} /></View>
         <StrokedText style={{ ...styles.title, fontSize: 46 * u, color: escaped ? '#ffe07a' : TITLE_FILL[tier] }} strokeColor={INK} numberOfLines={1}
-          adjustsFontSizeToFit>{escaped ? 'SO CLOSE!' : revealTitle(tier)}</StrokedText>
+          adjustsFontSizeToFit>{escaped ? 'SO CLOSE!' : d?.newBest && !d?.isNew ? 'NEW BEST!' : revealTitle(tier)}</StrokedText>
       </Animated.View>
 
-      {/* Legendary: an 8-point star flash behind the medallion (two crossed gold squares) */}
-      <Animated.View pointerEvents="none" style={[styles.abs, styles.starFlash, { width: medalSize * 1.3, height: medalSize * 1.3, left: cx - medalSize * 0.65, top: L.medal - medalSize * 0.65 }, starFlashStyle]}>
-        <View style={[StyleSheet.absoluteFill, styles.starRay]} />
-        <View style={[StyleSheet.absoluteFill, styles.starRay, { transform: [{ rotate: '45deg' }] }]} />
-      </Animated.View>
+      {/* Legendary: the soft 8-point star flash, behind the medallion (one always-mounted Skia canvas) */}
+      <Canvas pointerEvents="none" style={[StyleSheet.absoluteFill]}><Picture picture={starPic} /></Canvas>
       {/* The medallion and the find */}
       <Animated.View pointerEvents="none" style={[styles.medal, { width: medalSize, height: medalSize, left: cx - medalSize / 2, top: L.medal - medalSize / 2 }, medalStyle]}>
         {/* All four medallions stay mounted (decoded once), the current tier shows */}
@@ -1085,6 +1039,11 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
           <Text style={styles.chipText}>{rarityText}</Text>
         </View>
         <View style={[styles.gradeChip, d?.grade === 'frame_it' && styles.gold]}>
+          {/* NEW BEST!: the old best, dimmed, then an arrow, then the new grade */}
+          <View style={[styles.oldGrade, !(d?.newBest && !d?.isNew && bestStars(d?.prevGrade) > 0) && styles.gone]}>
+            {Array.from({ length: bestStars(d?.prevGrade) }, (_, i) => <GameIcon key={i} name="star" size={14} />)}
+            <Text style={styles.gradeArrow}>›</Text>
+          </View>
           {Array.from({ length: GRADE_STARS[d?.grade ?? 'good'] }, (_, i) => <GameIcon key={i} name="star" size={17} />)}
           <Text style={styles.gradeText}>{GRADE_BONUS_LABEL[d?.grade ?? 'good']}</Text>
         </View>
@@ -1128,6 +1087,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
               <Slot key={i} index={i} total={slotsShown} slot={d?.slots?.[i] ?? null} filledFallback={i < book.before}
                 isNewFallback={i === book.newIndex} caughtFallback={!d?.isNew && i === 0 && book.after > 0}
                 bestFallback={!d?.isNew && !!d?.newBest && i === 0 && book.after > 0}
+                fallbackStars={d && !d.isNew ? { prev: bestStars(d.prevGrade), now: Math.max(bestStars(d.prevGrade), bestStars(d.grade)) } : null}
                 color={d?.setColor ?? BRAND.gold} art={d?.art ?? null} fill={fill} best={best}
                 times={!d?.isNew && d?.caughtCount && d.caughtCount > 1 ? d.caughtCount : null} />
             ))}
@@ -1136,10 +1096,8 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
             {d?.isNew ? 'Added to your Collection Book' : d?.caughtCount && d.caughtCount > 1 ? `Caught ${d.caughtCount} times` : 'Already in your book'}
           </Text>
         </View>
-        <Animated.View style={[styles.newStampWrap, stampAt, !(d?.isNew || d?.newBest) && styles.hidden, stampStyle]}>
-          <View style={[styles.newStamp, !d?.isNew && d?.newBest && styles.bestStamp]}>
-            <Text style={styles.newText}>{!d?.isNew && d?.newBest ? 'NEW BEST!' : 'NEW!'}</Text>
-          </View>
+        <Animated.View style={[styles.newStampWrap, stampAt, !d?.isNew && styles.hidden, stampStyle]}>
+          <View style={styles.newStamp}><Text style={styles.newText}>NEW!</Text></View>
         </Animated.View>
       </Animated.View>
 
@@ -1195,11 +1153,8 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
         <Volley x={width * 0.12} y={L.medal + 60} progress={volleyB} seed={11} spread={0.7} />
         <Volley x={width * 0.88} y={L.medal + 60} progress={volleyC} seed={19} spread={0.7} />
         {/* Legendary only: gold streamers from the medallion and two firework bursts in the upper third */}
-        <Ribbon x={cx - medalSize * 0.3} y={L.medal - medalSize * 0.2} angle={-150} curl={0.32} progress={streamV} />
-        <Ribbon x={cx + medalSize * 0.3} y={L.medal - medalSize * 0.2} angle={-30} curl={-0.32} progress={streamV} />
-        <Ribbon x={cx} y={L.medal + medalSize * 0.3} angle={100} curl={0.28} progress={streamV} count={10} />
-        <Firework x={width * 0.2} y={L.title + 96} progress={fireA} size={88} />
-        <Firework x={width * 0.8} y={L.title + 74} progress={fireB} size={76} />
+        {/* Ribbons and fireworks: one Skia canvas, one picture a frame, empty when idle */}
+        <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}><Picture picture={fxPic} /></Canvas>
       </View>
       {/* Legendary: the gold bloom, centred on the medallion, clear at the edges */}
       <Animated.View pointerEvents="none" style={[styles.abs, { width: width * 1.5, height: width * 1.5, left: cx - width * 0.75, top: L.medal - width * 0.75 }, whiteStyle]}>
@@ -1257,6 +1212,8 @@ const styles = StyleSheet.create({
   },
   gold: { backgroundColor: BRAND.gold },
   gradeText: { fontFamily: 'Shark', fontSize: 17, color: INK, marginLeft: 3 },
+  oldGrade: { flexDirection: 'row', alignItems: 'center', opacity: 0.5, marginRight: 2 },
+  gradeArrow: { fontFamily: 'Shark', fontSize: 20, color: INK, marginHorizontal: 3, marginTop: -2 },
   tally: { position: 'absolute', left: 0, flexDirection: 'row', justifyContent: 'center', gap: 10 },
   plaque: {
     alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#1a8fe3',
@@ -1290,10 +1247,6 @@ const styles = StyleSheet.create({
   timesBubble: { position: 'absolute', right: -10, top: -12, minWidth: 30, height: 28, borderRadius: 14, paddingHorizontal: 5, zIndex: 3,
     backgroundColor: INK, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   timesText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textShadowColor: INK, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
-  firework: { position: 'absolute', width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
-  fireCore: { position: 'absolute', width: 70, height: 70 },
-  spoke: { position: 'absolute', width: 7, height: 20, borderRadius: 4, backgroundColor: '#ffd23f', borderWidth: 1, borderColor: '#fff1b8' },
-  spokeLong: { width: 7, height: 26, backgroundColor: '#ffffff', borderColor: '#ffe07a' },
   escape: { position: 'absolute', left: 0, alignItems: 'center', gap: 14, paddingHorizontal: 20 },
   escapeRides: { flexDirection: 'row', gap: 12 },
   escapeRide: { width: 76, height: 60, borderRadius: 14, backgroundColor: '#0b2f5c', borderWidth: 3, borderColor: BRAND.gold,
@@ -1309,11 +1262,6 @@ const styles = StyleSheet.create({
   escapeTip: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, paddingHorizontal: 16, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
   escapeTipText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, letterSpacing: 0.3 },
-  starFlash: { alignItems: 'center', justifyContent: 'center' },
-  starRay: { margin: '15%', backgroundColor: '#ffd23f', borderRadius: 6, borderWidth: 3, borderColor: '#fff1b8' },
-  glitter: { position: 'absolute', left: 83, top: 83, width: 14, height: 14 },
-  ribbonSeg: { position: 'absolute', left: 0, top: 0, width: 18, height: 10, borderRadius: 3, overflow: 'hidden', borderWidth: 1, borderColor: '#c27a00' },
-  ribbonGloss: { position: 'absolute', left: 0, right: 0, top: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.6)' },
   mystery: { position: 'absolute', fontFamily: 'Shark', fontSize: 64, color: BRAND.gold, textShadowColor: INK,
     textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   escapeBack: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b5aa0',
@@ -1332,8 +1280,9 @@ const styles = StyleSheet.create({
   pageLine: { fontFamily: 'Shark', fontSize: 16, color: INK, marginTop: 4 },
   newStampWrap: { position: 'absolute', minWidth: 54, height: 24, zIndex: 3 },
   bestStamp: { width: 92, backgroundColor: '#f0a800', borderColor: BRAND.white },
-  slotGold: { borderRadius: 8, borderWidth: 3, borderColor: '#ffcf3b', backgroundColor: 'rgba(255,214,90,0.28)' },
-  slotStars: { position: 'absolute', bottom: -6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', zIndex: 2 },
+  slotGold: { position: 'absolute', left: -3, top: -3, right: -3, bottom: -3, borderRadius: 11, borderWidth: 3.5, borderColor: '#ffb800',
+    backgroundColor: 'rgba(255,200,40,0.35)', shadowColor: '#ffcf3b', shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  slotStars: { position: 'absolute', bottom: -7, left: -4, right: -4, flexDirection: 'row', justifyContent: 'center', zIndex: 2 },
   newStamp: {
     width: 54, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 7,
     backgroundColor: BRAND.red, borderWidth: 2.5, borderColor: BRAND.white,

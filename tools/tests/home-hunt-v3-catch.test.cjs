@@ -174,21 +174,22 @@ test('wiring: taps catch, the server nearby check never auto-opens outside the t
 });
 
 test('round 2: grading is in ms at the touch minus 50 ms, with a coyote frame, the same for every rarity', () => {
-  assert.deepEqual(plain(ride.GRADE_WINDOWS_MS), { frame_it: 30, great: 60, good: 120 });
+  // R7: the default (strictest) table is Legendary's, tightened by the difficulty proof.
+  assert.deepEqual(plain(ride.GRADE_WINDOWS_MS), { frame_it: 4, great: 55, good: 95 });
   // A tap exactly on the visual centre lands 50 ms late on the clock and still grades Frame It!.
   const arrival = 1600;
   assert.equal(ride.gradeOffset(ride.shotOffsetMs(arrival + 50, arrival)).grade, 'frame_it');
-  assert.equal(ride.gradeOffset(30 + 16).grade, 'frame_it', 'one frame of grace');
+  assert.equal(ride.gradeOffset(4 + 16).grade, 'frame_it', 'one frame of grace');
   assert.equal(ride.gradeOffset(50).grade, 'great');
-  assert.equal(ride.gradeOffset(-120).grade, 'good');
-  const early = ride.gradeOffset(-170);
+  assert.equal(ride.gradeOffset(-100).grade, 'good');
+  const early = ride.gradeOffset(-140);
   assert.equal(early.grade, 'blurry');
   assert.equal(early.direction, 'early');
   assert.equal(early.soClose, true, 'inside 1.5x the Good window');
   const late = ride.gradeOffset(600);
   assert.equal(late.direction, 'late');
   assert.equal(late.soClose, false);
-  assert.equal(ride.gradeOffset(-200, 3).grade, 'good', 'windows grow after misses');
+  assert.equal(ride.gradeOffset(-160, 3).grade, 'good', 'windows grow after misses');
 });
 
 test('round 2: holds, stars and the ready pips', () => {
@@ -237,8 +238,8 @@ test('round 2: the map steps back during a catch and the catch never reads GPS o
 
 test('round 3: per-rarity windows (Frame It! stays tight, Good is generous on easy rides)', () => {
   assert.deepEqual(plain(ride.GRADE_WINDOWS_BY_TIER), {
-    2: { frame_it: 40, great: 95, good: 200 }, 3: { frame_it: 35, great: 80, good: 170 },
-    4: { frame_it: 30, great: 70, good: 145 }, 5: { frame_it: 30, great: 60, good: 120 },
+    2: { frame_it: 40, great: 95, good: 200 }, 3: { frame_it: 25, great: 80, good: 170 },
+    4: { frame_it: 15, great: 70, good: 145 }, 5: { frame_it: 4, great: 55, good: 95 },
   });
   // v2 (harder): ages 6 to 8 spread about +-150 to 200 ms, so Uncommon still covers +-200 ms with the
   // coyote frame (over 400 ms total) and Rare over 340 ms; misses still grow them.

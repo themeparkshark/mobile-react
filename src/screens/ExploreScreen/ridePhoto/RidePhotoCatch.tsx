@@ -1,8 +1,7 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, PixelRatio, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View, type StatusBarProps } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { StatusBar } from 'expo-status-bar';
 import {
   Canvas, Circle, ColorMatrix, Group, Image as SkImageNode, ImageShader, Path, Picture, Rect, Skia, createPicture, type SkImage, type Transforms3d,
 } from '@shopify/react-native-skia';
@@ -29,7 +28,7 @@ import {
   rideSpec, rideStep, shotOffsetMs, shutterAction, type PhotoGrade, type RideState,
   passPlan, planEasing, planMs, readyLamp, swayAt, swayFor, swayOverscan, telegraphFor, type PassPlan,
   distanceMs, isMercyRide, swayShiftMs, RING_FADE_MS,
-  bumpAt, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead,
+  bumpAt, bumpCurve, bumpFor, LEGENDARY_BUMP, gullFor, gullInFrame, photobombCap, GULL_LEAD_MS, uncommonGreenLead, GRADE_RANK,
 } from '../ridePhoto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rarityColor, rarityLabel, rarityTier } from '../findPresentation';
@@ -79,13 +78,30 @@ const BLANK: SkImage = (() => {
 /** Consecutive Good-or-better first-pass shots this app session: a little "one more" pull, no economy. */
 let photoStreak = 0;
 
-/** R6 "Uncommon grows up": Uncommon catches on this device (the green lead tightens after 10). */
-const UNCOMMON_KEY = 'ride_photo_uncommon_catches_v1';
+/**
+ * R6/R7 "Uncommon grows up": Uncommon catches per player (a shared family iPad never hands a big sibling's
+ * tighter lamp to a little one). The catch layer names the signed-in player (setRidePhotoPlayer).
+ */
+const UNCOMMON_KEY = 'ride_photo_uncommon_catches_v2';
+let ridePlayer = 'guest';
 let uncommonCatches = 0;
-AsyncStorage.getItem(UNCOMMON_KEY).then(v => { const n = Number(v); if (Number.isFinite(n) && n > uncommonCatches) uncommonCatches = n; }).catch(() => undefined);
+const loadUncommon = (player: string) => {
+  uncommonCatches = 0;
+  AsyncStorage.getItem(`${UNCOMMON_KEY}:${player}`).then(v => {
+    const n = Number(v);
+    if (ridePlayer === player && Number.isFinite(n) && n > uncommonCatches) uncommonCatches = n;
+  }).catch(() => undefined);
+};
+loadUncommon(ridePlayer);
+export function setRidePhotoPlayer(id: string | number | null | undefined): void {
+  const next = id == null ? 'guest' : String(id);
+  if (next === ridePlayer) return;
+  ridePlayer = next;
+  loadUncommon(next);
+}
 function countUncommonCatch() {
   uncommonCatches += 1;
-  AsyncStorage.setItem(UNCOMMON_KEY, String(uncommonCatches)).catch(() => undefined);
+  AsyncStorage.setItem(`${UNCOMMON_KEY}:${ridePlayer}`, String(uncommonCatches)).catch(() => undefined);
 }
 
 function buzz(intent: HapticIntent, priority = 2) { catchHaptic(intent, priority); }
@@ -328,6 +344,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const parked = useSharedValue(parkedMode);
   const misses = useSharedValue(0);
   const flash = useSharedValue(0);
+  const edgeFlash = useSharedValue(0);
   const dim = useSharedValue(0);
   const lit = useSharedValue(0);
   const ghostT = useSharedValue(0);
@@ -410,7 +427,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     if (i === 0) setMissNote(null);
     if (i === 2) { catchSound('charge'); buzz('tickSelection', 1); }
   }, []);
-  const bumpFelt = useCallback(() => { buzz('softBump', 1); catchSound('teacupClink', { volume: 0.5, pitch: -5 }); catchMark('bump'); }, []);
+  const bumpFelt = useCallback(() => { catchMark('bump'); }, []);
   const freezeForHint = useCallback(() => {
     setMissNote(null); setNudge(false); setHandOn(true); buzz('tickSelection', 1); catchMark('hint-freeze');
   }, []);
@@ -422,13 +439,15 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       return;
     }
     ready.value = readyLamp(ms, greenLead.value, redOnly.value);
-    // R6: the Legendary bump kicks once per pass at its seeded car distance (a jolt, then a damped settle).
+    // R7: while the gull is in the window the lamp holds red (wait for it), with a little margin either side.
+    if (Number.isFinite(gullMs.value) && gullInFrame(gullMs.value) && ready.value > 0) ready.value = 1;
+    // The Legendary bump kicks once per pass at its seeded car distance (700 to 900 ms out), then drifts back
+    // slowly, so the camera is still off when the car arrives. No buzz or clink (kids read any buzz as "now").
     // (Only once the car is rolling: a short first approach held at the station never bumps before it moves.)
     if (bumpLead.value > 0 && ms <= bumpLead.value && t.value > plan.value.fromT + 1e-4) {
       bumpLead.value = -1;
-      bumpV.value = withSequence(withTiming(1, { duration: LEGENDARY_BUMP.kickMs, easing: Easing.out(Easing.quad) }),
-        withTiming(-0.35, { duration: 140, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0, { duration: LEGENDARY_BUMP.settleMs - 140, easing: Easing.out(Easing.quad) }));
+      bumpV.value = 0;
+      bumpV.value = withTiming(LEGENDARY_BUMP.totalMs, { duration: LEGENDARY_BUMP.totalMs, easing: Easing.linear });
       runOnJS(bumpFelt)();
     }
     const mode = ringMode.value;
@@ -454,6 +473,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   useEffect(() => clearRideTimers, [clearRideTimers]);
   useEffect(() => clearPassTimers, [clearPassTimers]);
   const shotThisPass = useRef(false);
+  /** R7: a gull flies this pass; letting it go by (no tap) is a free dodge. */
+  const gullThisPass = useRef(false);
   const missedThisPass = useRef(false);
   const passEndRef = useRef<() => void>(() => undefined);
   const runPass = useCallback((fromT: number) => {
@@ -472,7 +493,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const mercy = isMercyRide(spec, rideRef.current.passes);
     const tele = mercy ? telegraphFor(item?.rarity, true) : telegraph;
     // Uncommon grows up: after 10 catches the green lamp leads by 120 ms (the mercy ride keeps 200).
-    greenLead.value = !mercy && Math.round(item?.rarity ?? 0) === 2 ? uncommonGreenLead(uncommonCatches) : tele.greenLeadMs;
+    greenLead.value = !mercy && Math.round(item?.rarity ?? 0) === 2 ? uncommonGreenLead(uncommonCatches, misses.value) : tele.greenLeadMs;
     redOnly.value = tele.redOnly;
     ringMode.value = tele.ring === 'full' ? 0 : tele.ring === 'fade' ? 1 : 2;
     mercyOn.value = mercy;
@@ -482,7 +503,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     const seed = (item?.id ?? 0) + ridesUsed * 7919;
     const bump = bumpFor(item?.rarity, seed, passCount.current, parkedMode || reducedMotion, mercy);
     const forcedGull = __DEV__ && forceRide?.gullPass != null && !parkedMode && !reducedMotion
-      ? (forceRide.gullPass === passCount.current ? { centerMs: 0, dir: 1 as const } : null) : undefined;
+      ? (forceRide.gullPass === passCount.current ? { centerMs: -130, dir: 1 as const } : null) : undefined;
     const gull = forcedGull !== undefined ? forcedGull
       : gullFor(item?.rarity, seed, passCount.current, { reducedMotion: parkedMode || reducedMotion, mercy, freeze: hintFreeze.value });
     passCount.current += 1;
@@ -502,6 +523,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     }));
     // The gull flies on the wall clock (never with the car's surges): ms from its crossing of the window.
     cancelAnimation(gullMs);
+    gullThisPass.current = !!gull;
     if (gull) {
       gullDir.value = gull.dir;
       gullMs.value = -next.d1 - gull.centerMs;
@@ -558,6 +580,17 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     armed.value = false;
     ready.value = 0; approach.value = 0;
     if (shotThisPass.current) return;
+    // Development recordings: a scripted "hold" (99999) lets this pass go by without a shot.
+    if (script && autoPass.value < script.length && script[autoPass.value] >= 99999) autoPass.value += 1;
+    if (gullThisPass.current) {
+      // R7: the kid waited out the gull. A free dodge: no nudge, no hand, no miss, no ride spent, no window
+      // growth; a soft "phew" and the car comes straight back around.
+      gullThisPass.current = false;
+      catchMark('gull-dodge');
+      catchSound('sparkle', { volume: 0.55 }); buzz('tickSelection', 1);
+      retry(false);
+      return;
+    }
     silentPasses.current += 1;
     const next = rideStep(spec, rideRef.current, { type: 'pass_end' });
     setRide(next);
@@ -586,6 +619,10 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     silentPasses.current = 0;
     passCount.current = 0;
     cancelAnimation(gullMs); gullMs.value = NaN; cancelAnimation(bumpV); bumpV.value = 0; bumpLead.value = -1;
+    firstPhoto.current = null; gullThisPass.current = false;
+    // A stale landing guard can never land an old badge into this ride.
+    if (landGuard.current) { clearTimeout(landGuard.current); landGuard.current = null; }
+    landedOnce.current = true; flying.current = false;
     swayOn.value = 0;
     swayOn.value = withDelay(reducedMotion ? 0 : 90 + HOP_MS + 300, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }));
     misses.value = 0; fly.value = 0; dim.value = 0; burst.value = 0; printIn.value = 0; stampIn.value = 0; iris.value = 0;
@@ -818,11 +855,19 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         finishHold.current = null;
         holding.value = false;
         burst.value = withTiming(0, { duration: 250 });
-        if (caught) { catchMark('print-ready'); handedImage.current = printImageRef.current; onPrintReady(grade, printImageRef.current, bombed); }
+        if (caught) {
+          catchMark('print-ready');
+          // R7: an Epic hands over its best print and grade (never the worse second photo).
+          const first = firstPhoto.current;
+          const best = first && GRADE_RANK[first.grade] > GRADE_RANK[grade] ? first : { image: printImageRef.current, grade, bombed };
+          handedImage.current = best.image;
+          onPrintReady(best.grade, best.image, best.bombed);
+        }
         else {
           // Epic's first photo drops into slot 1 of the film strip in the band, with a click and a glow,
           // and the car goes around again for photo 2.
           setStrip({ image: printImageRef.current, grade });
+          firstPhoto.current = { image: printImageRef.current, grade, bombed };
           toStrip.value = withTiming(1, { duration: reducedMotion ? 1 : 280, easing: Easing.in(Easing.cubic) });
           dim.value = withTiming(0, { duration: 200 });
           later(reducedMotion ? 20 : 290, () => {
@@ -842,6 +887,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const printImageRef = useRef<SkImage | null>(null);
   const madeImages = useRef<SkImage[]>([]);
   const handedImage = useRef<SkImage | null>(null);
+  const firstPhoto = useRef<{ image: SkImage | null; grade: PhotoGrade; bombed: boolean } | null>(null);
   // Shutter taps during the hold skip it; mashing during the develop never skips the suspense.
   const callSkip = useCallback(() => { const done = finishHold.current; if (done) done(); }, []);
   // x: during the hold it skips; still developing a counted catch, it fast-forwards to the reveal
@@ -868,8 +914,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     clearPassTimers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const onShot = useCallback((grade: PhotoGrade, offset: number, direction: 'early' | 'late' | null, soClose: boolean, shotUAt: number,
-    bombed = false, gullAt = NaN, gullFlies = 1) => {
-    catchMark(`shot-${grade} offset=${Math.round(offset)}${bombed ? ' photobombed' : ''}`);
+    bombed = false, gullAt = NaN, gullFlies = 1, camMs = 0) => {
+    // The camera's share of the offset is logged per shot (cam=), so the obstacle's effect on grades is visible.
+    catchMark(`shot-${grade} offset=${Math.round(offset)} cam=${camMs >= 0 ? '+' : ''}${Math.round(camMs)}${bombed ? ' photobombed' : ''}`);
     // Any gull still on screen is in the photo where it was.
     const gullShot = Number.isFinite(gullAt) ? { ms: gullAt, dir: gullFlies, leadMs: GULL_LEAD_MS } : null;
     // The grade plate goes on the corner away from the vehicle in the photo, so it never covers the find.
@@ -929,7 +976,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const camAt = useCallback(() => {
     'worklet';
     const sw = swayAt(sway, clock.value, swayOn.value);
-    const b = bumpAt(bumpV.value, bumpDir.value);
+    const b = bumpAt(bumpCurve(bumpV.value), bumpDir.value);
     return { x: sw.x + b.x, y: sw.y + b.y, rollDeg: sw.rollDeg };
   }, [sway]); // eslint-disable-line react-hooks/exhaustive-deps
   const camX = useCallback(() => {
@@ -944,14 +991,15 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     let direction: 'early' | 'late' | null = null;
     let soClose = false;
     let bombed = false;
+    let camMs = 0;
     if (frozen.value) {
       grade = 'frame_it';
       // The freeze is a one-time gift: it is off after the frozen shot.
       hintFreeze.value = false;
       frozen.value = false;
     } else if (!parked.value) {
-      offset = shotOffsetMs(planMs(plan.value, t.value), plan.value.d1)
-        + swayShiftMs(camX() / swayScale, frameVx, plan.value.r);
+      camMs = swayShiftMs(camX() / swayScale, frameVx, plan.value.r);
+      offset = shotOffsetMs(planMs(plan.value, t.value), plan.value.d1) + camMs;
       const result = gradeOffset(offset, misses.value, mercyOn.value ? 2 : rarity);
       grade = result.grade; direction = result.direction; soClose = result.soClose;
       // R6: a gull in the window photobombs the shot: it caps at Good (a Blurry stays Blurry).
@@ -963,11 +1011,13 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     cancelAnimation(t);
     // R6: one full-bleed white flash, status bar to shutter tray, 1 frame up and 3 frames down. No iris blink
     // on the shot (its black bars read as bands), and nothing moves the scene.
-    flash.value = withSequence(withTiming(0.92, { duration: 16 }), withTiming(0, { duration: 60, easing: Easing.out(Easing.quad) }));
+    // Reduce Motion (and light-sensitive kids): no full-screen white, only a white edge on the viewfinder.
+    if (reducedMotion) edgeFlash.value = withSequence(withTiming(0.8, { duration: 16 }), withTiming(0, { duration: 160 }));
+    else flash.value = withSequence(withTiming(0.92, { duration: 16 }), withTiming(0, { duration: 60, easing: Easing.out(Easing.quad) }));
     ready.value = 0;
     runOnJS(shutterNow)();
-    runOnJS(onShot)(grade, offset, direction, soClose, parked.value ? tFrame : t.value, bombed, gullMs.value, gullDir.value);
-  }, [passMs, onShot, shutterNow, rarity, sway, swayScale, frameVx, camX]); // eslint-disable-line react-hooks/exhaustive-deps
+    runOnJS(onShot)(grade, offset, direction, soClose, parked.value ? tFrame : t.value, bombed, gullMs.value, gullDir.value, camMs);
+  }, [passMs, onShot, shutterNow, rarity, sway, swayScale, frameVx, camX, reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One gesture, always attached: every touch gets a visible press, and the worklet decides what it means.
   const tap = useMemo(() => Gesture.Tap().maxDuration(100_000).onBegin(() => {
@@ -1098,6 +1148,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   });
   // Iris bars are fixed half-screen views scaled on Y (a transform, not a layout prop).
   const shotFlashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const edgeFlashStyle = useAnimatedStyle(() => ({ opacity: edgeFlash.value }));
   const irisTop = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
   const irisBottom = useAnimatedStyle(() => ({ transform: [{ scaleY: iris.value }] }));
   // Shutter: the disc fills red, amber, then green; a gold arc fills as the car nears. Drawn in Skia.
@@ -1188,6 +1239,13 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   const name = item?.name ?? '';
   const color = rarityColor(item?.rarity);
   const visible = active || opened.current;
+  // Light status bar while the camera is up: an imperative stack entry (no StatusBar mounts on close).
+  const barUp = visible && !closing;
+  useEffect(() => {
+    if (!barUp) return;
+    const entry = RNStatusBar.pushStackEntry({ barStyle: 'light-content', animated: true } as StatusBarProps);
+    return () => RNStatusBar.popStackEntry(entry);
+  }, [barUp]);
   const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const shutterCenterY = layer.height - insets.bottom - 62;
   const missDirLeft = missNote?.dir === 'late';
@@ -1197,7 +1255,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
   return (
     <View pointerEvents={visible && !closing ? 'box-none' : 'none'} style={StyleSheet.absoluteFill}>
       {/* Status bar icons stay light over the viewfinder and the hold */}
-      {visible && !closing && <StatusBar style="light" />}
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.view, { width: layer.width, height: layer.height }, viewStyle]}>
           <Animated.View style={sceneShake}>
@@ -1306,6 +1363,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             style={[StyleSheet.absoluteFill, { top: insets.top + 56 }]} />
           {/* The shot's flash, full bleed over the whole viewfinder */}
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shotFlash, shotFlashStyle]} />
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edgeFlash, edgeFlashStyle]} />
           {/* The iris: black bars that close the viewfinder at the end */}
           <Animated.View pointerEvents="none" style={[styles.iris, { top: 0, height: layer.height / 2, transformOrigin: 'top' }, irisTop]} />
           <Animated.View pointerEvents="none" style={[styles.iris, { bottom: 0, height: layer.height / 2, transformOrigin: 'bottom' }, irisBottom]} />
@@ -1313,11 +1371,14 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       </GestureDetector>
 
       {/* Close (x): outside the shutter's gesture, reachable by VoiceOver */}
-      {visible && !closing && <Animated.View style={[styles.closeWrap, { top: insets.top + 8 }, closeStyle]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close the camera" hitSlop={10} onPress={handleClose} style={styles.close}>
+      {/* Always mounted (never mounts or unmounts on close): hidden and inert when the camera is not up */}
+      <Animated.View pointerEvents={visible && !closing ? 'box-none' : 'none'} accessibilityElementsHidden={!(visible && !closing)}
+        importantForAccessibility={visible && !closing ? 'auto' : 'no-hide-descendants'} style={[styles.closeWrap, { top: insets.top + 8 }, closeStyle]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close the camera" hitSlop={10} onPress={handleClose} style={styles.close}
+          disabled={!(visible && !closing)}>
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
-      </Animated.View>}
+      </Animated.View>
 
       {/* The find hops from the map into the seat */}
       {riderSource && <Animated.View pointerEvents="none" style={[styles.hop, { width: riderSize, height: riderSize }, hopStyle]}>
@@ -1384,6 +1445,7 @@ const styles = StyleSheet.create({
   view: { position: 'absolute', left: 0, top: 0, overflow: 'hidden', backgroundColor: '#000000' },
   iris: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000000' },
   shotFlash: { backgroundColor: '#ffffff' },
+  edgeFlash: { borderWidth: 10, borderColor: '#ffffff' },
   corner: { position: 'absolute', width: 26, height: 26, borderColor: 'rgba(255,255,255,0.85)' },
   band: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 18, backgroundColor: '#000000' },

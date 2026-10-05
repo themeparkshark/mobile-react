@@ -31,7 +31,7 @@ import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, t
 import { catchFind, type CatchResult } from './homeCatch';
 import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
-import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
+import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { setCatchOpen, showCatchChrome } from './catchPresence';
@@ -107,6 +107,8 @@ const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms
 const REVEAL_FADE_MS = 230;
 /** After the print's 460 ms flight lands, the map and player updates commit. */
 const PRINT_SETTLE_MS = 620;
+/** Next-stage prebuilds are at least this far apart. */
+const PREBUILD_GAP_MS = 1000;
 /** RIDE AGAIN reopens the viewfinder after its close has fully reset. */
 const RIDE_AGAIN_MS = 1150;
 const GRADE_CHIP: Record<PhotoGrade, [string, string]> = {
@@ -182,7 +184,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const systemReduced = useReducedGameMotion();
   // Development recordings can show one catch with Reduce Motion on.
   const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
-  const { refreshPlayer } = useContext(AuthContext);
+  const { refreshPlayer, player } = useContext(AuthContext);
+  // Uncommon's tighter lamp is earned per player, never per device.
+  useEffect(() => { setRidePhotoPlayer(player?.id ?? null); }, [player?.id]);
   const { currencies } = useContext(CurrencyContext);
   const { triggerFly } = useCurrencyFly();
   const layerRef = useRef<View>(null);
@@ -633,7 +637,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     return {
       key, name: findDisplayName(item.name, item.set_name), art: findImageSource(item), rarity, tier,
       grade: grade === 'blurry' ? 'good' : grade, golden: data?.photo?.golden_hour === true || item.golden_hour === true,
-      isNew: sum.isNew, newBest, photobombed,
+      isNew: sum.isNew, newBest, photobombed, prevGrade: data?.photo?.previous_best ?? null,
       rewards: { experience: paid ? data!.rewards.experience : 0, coins: paid ? data!.rewards.coins : 0,
         energy: paid ? data!.rewards.energy : 0, tickets: paid ? data!.rewards.tickets : 0, bonusXp: paid ? bonus : 0 },
       setName: sum.setName, setColor: sum.setColor, collected: sum.collected, total: sum.total,
@@ -798,11 +802,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       requestAnimationFrame(() => requestAnimationFrame(() => idle(() => {
         if (!live || rewardBusyRef.current) return;
         prebuildRideStage(entry.item, entry.forceRide ?? null, { width: window.width, height: window.height }, insets, sceneArt);
-        step();
+        // At least 1 s between builds, so one build's raster and upload never overlap the next.
+        later = setTimeout(step, PREBUILD_GAP_MS);
       }, { timeout: 2000 })));
     };
+    let later: ReturnType<typeof setTimeout> | null = null;
     const timer = setTimeout(step, 600);
-    return () => { live = false; clearTimeout(timer); };
+    return () => { live = false; clearTimeout(timer); if (later) clearTimeout(later); };
   }, [warmKey, rewardBusy, window.width, window.height, insets.top, insets.bottom, sceneArt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Stable props, so memo(RidePhotoCatch) holds through the open's renders.
   const fullLayer = useMemo(() => ({ width: window.width, height: window.height }), [window.width, window.height]);

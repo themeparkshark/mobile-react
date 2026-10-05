@@ -103,9 +103,10 @@ test('the moving camera matters: the frame holds still, the drift shifts the rig
   assert.equal(ride.swayShiftMs(50, 0.1, 1), ride.SWAY_SHIFT_CAP_MS);
   assert.equal(ride.SWAY_SHIFT_CAP_MS, 120);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /\+ swayShiftMs\(camX\(\) \/ swayScale, frameVx, plan\.value\.r\);/);
+  assert.match(src, /camMs = swayShiftMs\(camX\(\) \/ swayScale, frameVx, plan\.value\.r\);\s*offset = shotOffsetMs\(planMs\(plan\.value, t\.value\), plan\.value\.d1\) \+ camMs;/);
+  assert.match(src, /cam=\$\{camMs >= 0 \? '\+' : ''\}\$\{Math\.round\(camMs\)\}/, 'the camera share is logged per shot');
   // The camera offset graded and locked is the sway plus the Legendary bump.
-  assert.match(src, /const sw = swayAt\(sway, clock\.value, swayOn\.value\);\s*const b = bumpAt\(bumpV\.value, bumpDir\.value\);/);
+  assert.match(src, /const sw = swayAt\(sway, clock\.value, swayOn\.value\);\s*const b = bumpAt\(bumpCurve\(bumpV\.value\), bumpDir\.value\);/);
   assert.match(src, /frameLock=\{frameLock\}/);
   assert.match(read('src/screens/ExploreScreen/ridePhoto/RideScene.tsx'), /<Group transform=\{lock\}>\s*<Group transform=\{bracketScale\}>/);
 });
@@ -356,7 +357,7 @@ test('round 3: the book page never disagrees with its count; the shot earns a qu
   // A repeat never shows NEW!: the stamp is gated in its animated style, and a skip never sets it.
   const reveal = read('src/screens/ExploreScreen/ridePhoto/CatchReveal.tsx');
   assert.match(reveal, /opacity: stampNew && stamp\.value > 0 \?/);
-  assert.match(reveal, /to\(stamp, dataRef\.current\?\.isNew \|\| dataRef\.current\?\.newBest \? 1 : 0\)/);
+  assert.match(reveal, /to\(stamp, dataRef\.current\?\.isNew \? 1 : 0\)/);
 });
 
 test('round 5: beats run on the latest data, RIDE AGAIN keeps the card up and never replays a ride, Reduce Motion only fades', () => {
@@ -392,7 +393,7 @@ test('R6 camera obstacle: Epic 20 pt, Legendary 28 pt plus one seeded 10 pt bump
   for (let seed = 1; seed < 60; seed++) for (let pass = 0; pass < 4; pass++) {
     const b = ride.bumpFor(5, seed, pass);
     assert.deepEqual(plain(b), plain(ride.bumpFor(5, seed, pass)), 'seeded');
-    assert.ok(b.leadMs >= 300 && b.leadMs <= 600);
+    assert.ok(b.leadMs >= 700 && b.leadMs <= 900, 'R7: never closer than 700 ms (a buzz there reads as now)');
     leads.add(b.leadMs); dirs.add(b.dir);
   }
   assert.ok(leads.size > 20 && dirs.size === 2, 'bumps vary pass to pass');
@@ -416,7 +417,8 @@ test('R6 gull photobomb: Rare and up, 1 pass in 4, crosses within 150 ms of arri
       assert.deepEqual(plain(g), plain(ride.gullFor(tier, seed, pass)), 'seeded');
       if (!g) continue;
       hits++;
-      assert.ok(Math.abs(g.centerMs) <= 150);
+      assert.ok(Math.abs(g.centerMs) >= 120 && Math.abs(g.centerMs) <= 180, 'R7: never on the perfect moment');
+      assert.equal(ride.gullInFrame(0 - g.centerMs), false, 'waiting for the moment dodges it');
       assert.ok(g.dir === 1 || g.dir === -1);
       assert.equal(ride.gullFor(tier, seed, pass, { mercy: true }), null);
       assert.equal(ride.gullFor(tier, seed, pass, { reducedMotion: true }), null);
@@ -440,12 +442,17 @@ test('R6 gull photobomb: Rare and up, 1 pass in 4, crosses within 150 ms of arri
 test('R6 Uncommon grows up: the green lead is 200 ms for the first 10 catches, then 120 ms', () => {
   assert.equal(ride.uncommonGreenLead(0), 200);
   assert.equal(ride.uncommonGreenLead(9), 200);
-  assert.equal(ride.uncommonGreenLead(10), 120);
+  assert.equal(ride.uncommonGreenLead(10), 160);
+  assert.equal(ride.uncommonGreenLead(19), 160);
+  assert.equal(ride.uncommonGreenLead(20), 120);
   assert.equal(ride.uncommonGreenLead(500), 120);
+  assert.equal(ride.uncommonGreenLead(500, 2), 200, 'two Blurry shots this ride: back to the easy lamp');
   // A child reacting to a 120 ms green (about 250 ms) still lands Good on Uncommon.
   assert.equal(ride.gradeOffset(250 - 120, 0, 2).grade !== 'blurry', true);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
-  assert.match(src, /!mercy && Math\.round\(item\?\.rarity \?\? 0\) === 2 \? uncommonGreenLead\(uncommonCatches\) : tele\.greenLeadMs/);
+  assert.match(src, /!mercy && Math\.round\(item\?\.rarity \?\? 0\) === 2 \? uncommonGreenLead\(uncommonCatches, misses\.value\) : tele\.greenLeadMs/);
+  assert.match(src, /AsyncStorage\.setItem\(`\$\{UNCOMMON_KEY\}:\$\{ridePlayer\}`/, 'per player, not per device');
+  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /setRidePhotoPlayer\(player\?\.id \?\? null\)/);
 });
 
 test('R6 NEW BEST!: only on the server word for a repeat; the slot flips to gold in 600 ms; book stars; skip never passes it', () => {
@@ -474,16 +481,17 @@ test('R6 real ride seed: RIDE AGAIN (rides used + 1) never replays the ride befo
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(src, /const seed = \(item\?\.id \?\? 0\) \+ ridesUsed \* 7919;/);
   const seedFor = (id, used) => id + used * 7919;
-  let same = 0, n = 0;
+  let same = 0, n = 0, bumpsDiffer = 0;
   for (let id = 1; id < 200; id++) for (const pass of [0, 1, 2]) {
     const a = ride.passPlan({ ...base, rarity: 5, seed: seedFor(id, 0), pass });
     const b = ride.passPlan({ ...base, rarity: 5, seed: seedFor(id, 1), pass });
     n++;
     if (Math.abs(a.k - b.k) < 1e-6 && Math.abs(a.r - b.r) < 1e-6) same++;
     const ba = ride.bumpFor(5, seedFor(id, 0), pass), bb = ride.bumpFor(5, seedFor(id, 1), pass);
-    if (ba.leadMs === bb.leadMs && ba.dir === bb.dir) same += 0; // bumps may coincide by chance; the approach must not
+    if (ba.leadMs !== bb.leadMs || ba.dir !== bb.dir) bumpsDiffer++;
   }
   assert.equal(same, 0, 'every ride 2 approach differs from ride 1');
+  assert.ok(bumpsDiffer / n > 0.9, 'the bump differs on almost every ride 2 pass');
   assert.ok(n > 500);
 });
 
@@ -492,4 +500,45 @@ test('R6: the print always lands (a cancelled flight still lands the badge; the 
   assert.match(src, /if \(!flying\.current\) \{ printIn\.value = 0; fly\.value = 0; \}/);
   assert.match(src, /landGuard\.current = setTimeout\(\(\) => \{ if \(!landedOnce\.current\) \{ catchMark\('print-land-guard'\); landOnce\(Date\.now\(\)\); \} \}/);
   assert.match(src, /if \(landedOnce\.current\) return;\s*landedOnce\.current = true;/, 'lands once');
+});
+
+test('R7 fairness: the gull teaches wait (red lamp, a free dodge), the bump is quiet and matters at arrival, the best Epic print', () => {
+  const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
+  assert.match(src, /if \(Number\.isFinite\(gullMs\.value\) && gullInFrame\(gullMs\.value\) && ready\.value > 0\) ready\.value = 1;/, 'lamp red while the gull is in');
+  // A no-tap gull pass: no rideStep, no nudge, no miss, no ride spent.
+  const dodge = src.slice(src.indexOf('if (gullThisPass.current) {'), src.indexOf('silentPasses.current += 1;'));
+  assert.ok(dodge.includes("catchMark('gull-dodge')") && dodge.includes('retry(false)') && dodge.includes('return;'));
+  assert.doesNotMatch(dodge, /rideStep|setNudge|misses\.value/);
+  // The bump: no buzz or clink, and the camera is still off when the car arrives 700 to 900 ms later.
+  assert.match(src, /const bumpFelt = useCallback\(\(\) => \{ catchMark\('bump'\); \}, \[\]\);/);
+  for (const lead of [700, 800, 900]) {
+    const v = ride.bumpCurve(lead);
+    assert.ok(v > 0.25 && v < 0.5, `bump still ${v.toFixed(2)} of full at arrival (${lead} ms)`);
+  }
+  assert.equal(ride.bumpCurve(0), 0); assert.equal(ride.bumpCurve(2000), 0);
+  assert.ok(ride.bumpCurve(90) > 0.99, 'a 90 ms kick');
+  // Epic hands over its best print and grade.
+  assert.match(src, /const best = first && GRADE_RANK\[first\.grade\] > GRADE_RANK\[grade\] \? first : \{ image: printImageRef\.current, grade, bombed \};/);
+  // Reduce Motion: no full-screen white flash.
+  assert.match(src, /if \(reducedMotion\) edgeFlash\.value = /);
+  // Always mounted: the close button and no StatusBar component (an imperative stack entry).
+  assert.doesNotMatch(src, /<StatusBar /);
+  assert.match(src, /RNStatusBar\.pushStackEntry/);
+  assert.doesNotMatch(src, /\{visible && !closing && <Animated\.View style=\{\[styles\.closeWrap/);
+  // A stale landing guard never lands into a new ride.
+  assert.match(src, /if \(landGuard\.current\) \{ clearTimeout\(landGuard\.current\); landGuard\.current = null; \}\s*landedOnce\.current = true;/);
+});
+
+test('R7 NEW BEST!: its title, old grade next to new, stars step up one by one, its own sting', () => {
+  const reveal = read('src/screens/ExploreScreen/ridePhoto/CatchReveal.tsx');
+  assert.match(reveal, /d\?\.newBest && !d\?\.isNew \? 'NEW BEST!' : revealTitle\(tier\)/);
+  assert.match(reveal, /styles\.oldGrade/);
+  assert.match(reveal, /<SlotStar key=\{k\} step=\{k < prevStars \? 0 : k - prevStars \+ 1\}/);
+  assert.match(reveal, /catchSound\('reward', \{ volume: 0\.9 \}\); catchSound\('chime', \{ volume: 0\.8, pitch: 7 \}\); catchHaptic\('success', 4\);/);
+  // Legendary FX are one Skia canvas, not dozens of animated views.
+  assert.match(reveal, /paintFirework\(c, fireAX, fireAY, 88, a\);/);
+  assert.doesNotMatch(reveal, /const Ribbon = memo|const Firework = memo/);
+  const moment = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(moment, /later = setTimeout\(step, PREBUILD_GAP_MS\);/);
+  assert.match(moment, /const PREBUILD_GAP_MS = 1000;/);
 });

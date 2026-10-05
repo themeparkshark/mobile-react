@@ -94,6 +94,10 @@ test('a Legendary that rides off is reported to the server and stops being tappa
   assert.match(moment, /void reportRideOff\(pivotId\)/);
   assert.match(moment, /latest\.current\.onRodeOff\?\.\(pivotId\)/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /rodeOff\.has\(item\.pivot_id\)\) return false/);
+  // R7: the ridden-off marker stays mounted (hidden), the live list leaves it out, and its tap is inert.
+  assert.match(home, /const activePrepItems = shownPrepItems\.filter\(item => !isRodeOff\(item\)\);/);
+  assert.match(home, /\|\| isRodeOff\(prepItem\)\}/);
+  assert.match(home, /homeLocationConfirmed && allPlaced\.map\(/);
+  assert.match(home, /if \(state\.rodeOff\.has\(prepItem\.pivot_id\)\) return;/);
   assert.match(home, /onRodeOff=\{onRodeOffStable\}/);
 });
