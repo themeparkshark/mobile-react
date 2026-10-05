@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import Svg, { Ellipse } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FxPart, RigProps, useMomentCue } from '../FxStage';
 import { FX_GEOMETRY, PaperBox, momentAt, phaseOf } from '../registry';
@@ -98,18 +99,25 @@ function nozzle(box: PaperBox) {
  */
 function Spark({ t, kick, box, i }: RigProps & { i: number }) {
   const n = nozzle(box);
-  const size = box.w * 0.031;
+  const size = box.w * 0.05;
   const style = useAnimatedStyle(() => {
     const p = phaseOf(t.value, 620 + i * 61, i / SPARKS.length);
     const side = ((i * 37) % 11) / 10 - 0.5;
     const b = Math.max(0, boostAt(t.value, kick.value));
+    const dir = side < 0 ? -1 : 1;
+    const spread = (0.25 + Math.abs(side)) * box.w * (0.09 + 0.06 * b);
+    const fall = box.h * (1 + 0.5 * b);
+    // Velocity (d/dp of the path below): the tail points back along it, at the nozzle: a drip, not a bubble.
+    const vx = dir * spread * 0.5 / Math.sqrt(Math.max(p, 0.02));
+    const vy = (0.11 + 0.18 * p) * fall;
     return {
       opacity: p < 0.08 ? p / 0.08 : 1 - p * p,
       transform: [
-        // Thrown outward from the nozzle, then falling: exhaust spit, not bubbles.
-        { translateX: n.x - size / 2 + (side < 0 ? -1 : 1) * (0.25 + Math.abs(side)) * box.w * (0.09 + 0.06 * b) * Math.sqrt(p) },
-        { translateY: n.y - size / 2 + (0.1 + 0.11 * p + 0.09 * p * p) * box.h * (1 + 0.5 * b) },
-        { scale: (1 - 0.45 * p) * (1 + 0.5 * b) },
+        // Thrown outward from the nozzle, then falling: exhaust spit.
+        { translateX: n.x - size / 2 + dir * spread * Math.sqrt(p) },
+        { translateY: n.y - size / 2 + (0.1 + 0.11 * p + 0.09 * p * p) * fall },
+        { rotate: `${(-Math.atan2(vx, vy) * 180) / Math.PI}deg` },
+        { scale: (1 - 0.4 * p) * (1 + 0.4 * b) },
       ],
     };
   });
@@ -159,11 +167,14 @@ function FlameFrame({ t, kick, box, lod, spec, delay, source, k }: Pick<RigProps
   const style = useAnimatedStyle(() => shape(1));
   // A thin navy keyline behind the drawing (the same drawing, tinted, a hair larger), like the
   // black line Alex draws round the pack: his flame reads on any backdrop, his drawing untouched.
-  const key = useAnimatedStyle(() => { const s = shape(1.07); return { ...s, opacity: s.opacity * 0.85 }; });
+  const key = useAnimatedStyle(() => shape(1.14));
+  // A white-hot core: the same drawing, tinted white, small at the nozzle (it sits on his own white core).
+  const core = useAnimatedStyle(() => { const s = shape(0.6); return { ...s, opacity: s.opacity * 0.9 }; });
   return (
     <>
       <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} tint={KEYLINE} style={key} />
       <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} style={style} />
+      <FxPart source={source} box={box} spec={spec} aspect={spec.aspect} tint="#ffffff" style={core} />
     </>
   );
 }
@@ -177,18 +188,26 @@ export function JetpackFloorLight({ t, kick, box, floorY }: Pick<RigProps, 't' |
   const w = box.w * 0.2;
   const h = w / 4;
   const style = useAnimatedStyle(() => {
-    // 0 at rest height, about 1 at the top of a boost.
-    const lift = Math.max(0, (-jetpackFloat(t.value, kick.value, box.h) / box.h - 0.075) / 0.17);
-    const k = Math.max(0.35, 1 - 0.65 * lift);
-    return { opacity: k, transform: [{ scaleX: k }, { scaleY: k }] };
+    // 0 at rest height, about 1 at the top of a boost: the pool shrinks to 0.8x as the shark rises...
+    const lift = Math.min(1, Math.max(0, (-jetpackFloat(t.value, kick.value, box.h) / box.h - 0.075) / 0.17));
+    const k = 1 - 0.2 * lift;
+    // ...but the pop itself flashes the floor for 150 ms: the thrust hits, then eases off.
+    const p = momentAt(t.value, kick.value, BOOST_PERIOD, BOOST_LENGTH, 350).p;
+    const popMs = BOOST_PERIOD * BOOST_LENGTH;
+    const since = p < 0 ? -1 : p * popMs - 0.1 * popMs;
+    const flash = since >= 0 && since < 150 ? 0.3 * (1 - since / 150) : 0;
+    return { opacity: Math.min(1, 0.8 * k + flash), transform: [{ scaleX: k }, { scaleY: k }] };
   });
   const left = box.x + G.flame.cx * box.w - w / 2;
   // On the floor the shark stands on (the contact shadow's line: the plinth top in the shop).
   const top = floorY - h / 2;
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, { left, top, width: w, height: h }, style]}>
-      <View style={[StyleSheet.absoluteFill, { borderRadius: h, backgroundColor: CYAN, opacity: 0.3 }]} />
-      <View style={{ position: 'absolute', left: w * 0.25, top: h * 0.25, width: w * 0.5, height: h * 0.5, borderRadius: h, backgroundColor: CYAN_LIGHT, opacity: 0.35 }} />
+      {/* A true ellipse in two flat cel bands (no straight edges, no blur). */}
+      <Svg width={w} height={h} viewBox="0 0 100 25">
+        <Ellipse cx="50" cy="12.5" rx="50" ry="12.5" fill={CYAN} fillOpacity={0.25} />
+        <Ellipse cx="50" cy="12.5" rx="27" ry="6.5" fill={CYAN_LIGHT} fillOpacity={0.35} />
+      </Svg>
     </Animated.View>
   );
 }

@@ -370,8 +370,9 @@ export default function Playercard({
           </Animated.View>
           </FxShadow>
         )}
-        {/* The jetpack's light on the floor: outside the moving shark, so it never tilts or floats. */}
-        {fx.floats && lod === 'full' && fxRunning && (
+        {/* The jetpack's light on the floor: outside the moving shark, so it never tilts or floats.
+            Only where there is a floor (a stage plinth); the open-ocean Dressing Room has none. */}
+        {fx.floats && lod === 'full' && fxRunning && !!shadowAt && (
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
             <FxBox>{({ width, height }) => <JetpackFloorLight t={fxClock} kick={fxKick} box={containBox(width, height)}
               floorY={height * ((parseFloat(shadowAt?.top ?? '80') + 2.5) / 100)} />}</FxBox>

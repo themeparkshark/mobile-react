@@ -449,6 +449,9 @@ test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame
   assert.match(rig, /tint=\{KEYLINE\} style=\{key\} \/>\s*<FxPart source=\{source\} box=\{box\} spec=\{spec\} aspect=\{spec\.aspect\} style=\{style\} \/>/);
   // The floor light is drawn outside the moving shark, on the stage floor, under the nozzle.
   assert.match(src('src/components/Playercard.tsx'), /<JetpackFloorLight t=\{fxClock\} kick=\{fxKick\} box=\{containBox\(width, height\)\}\s*floorY=/);
+  // Only where a floor exists (a stage plinth), as a true two-band ellipse.
+  assert.match(src('src/components/Playercard.tsx'), /\{fx\.floats && lod === 'full' && fxRunning && !!shadowAt && \(/);
+  assert.match(rig, /<Ellipse cx="50" cy="12\.5" rx="50" ry="12\.5" fill=\{CYAN\} fillOpacity=\{0\.25\} \/>/);
   assert.match(rig, /if \(lod === 'still'\) return \{ opacity: k === 0 \? 1 : 0, transform/, "Reduce Motion: Alex's paper drawing");
   assert.doesNotMatch(rig, /glow\.webp|fx\/flame\.webp'|puff\.webp|#ffb43a|Math\.sin\(v \/ 41\)/, 'no generated flame, smoke, glow or orange light');
   assert.match(rig, /require\('\.\.\/\.\.\/\.\.\/assets\/fx\/jet-drop\.webp'\)/);
@@ -484,6 +487,7 @@ function loadJetpack() {
   const reg = loadTs('src/fx/registry.ts', { './geometry.json': geometry });
   return loadTs('src/fx/rigs/Jetpack.tsx', {
     'react-native': { StyleSheet: { create: s => s, absoluteFill: {} }, View: 'View' },
+    'react-native-svg': { __esModule: true, default: 'Svg', Ellipse: 'Ellipse' },
     'react-native-reanimated': { __esModule: true, default: { Image: 'AImage', View: 'AView' }, useAnimatedStyle: f => f() },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../FxStage': { FxPart: 'FxPart', useMomentCue: () => undefined },
