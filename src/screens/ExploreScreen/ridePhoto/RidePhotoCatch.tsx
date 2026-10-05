@@ -1103,7 +1103,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     // The print starts moving on the first frame (no static hold) and arcs into the badge in 460 ms;
     // the whoosh starts with it, and the landing calls back on the UI frame it lands.
     const launch = () => {
-      fly.value = 0;
       fly.value = withTiming(1, { duration: reducedMotion ? 1 : PRINT_FLIGHT_MS, easing: Easing.bezier(0.45, 0.05, 0.3, 1) }, done => {
         // D2: the UI-thread landing time is logged, so badge-sound sync is measured against the real landing.
         if (done) runOnJS(landOnce)(Date.now());
@@ -1112,10 +1111,6 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
       dim.value = withTiming(0, { duration: 300 });
     };
     launch();
-    // A flight that has not moved two frames later (its start was dropped) starts again, so the print is seen.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (!landedOnce.current && fly.value === 0) { catchMark('print-fly-restart'); launch(); }
-    }));
     catchSound('whoosh', { volume: 0.6 });
     for (let i = 1; i <= 6; i++) later(i * 62, () => trailBurst(i / 7.5));
   }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
