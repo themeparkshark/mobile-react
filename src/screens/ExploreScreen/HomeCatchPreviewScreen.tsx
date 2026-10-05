@@ -21,7 +21,7 @@ import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import { peekLine, walkCloserLine } from './findPresentation';
 import HomeHudChips from './HomeHudChips';
-import { rideSpec, GRADE_BONUS_XP, type PhotoGrade } from './ridePhoto';
+import { rideSpec, GRADE_BONUS_XP, setRidePhotoServerEnabled, type PhotoGrade } from './ridePhoto';
 import { preloadRidePhoto, useRideArt } from './ridePhoto/rideAssets';
 import { RIDES, buildStage, sceneVariant } from './ridePhoto/rides';
 import { catchShown, useCatchOpen } from './catchPresence';
@@ -56,6 +56,8 @@ const FIXTURES: Fixture[] = [
  */
 // Recordings show the app, not the dev warning toast.
 if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignoreAllLogs(true);
+// The preview is the Ride Photo harness: the server's switch (player_stats.ride_photo_enabled) is on here.
+if (__DEV__) setRidePhotoServerEnabled(true);
 
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
   /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;

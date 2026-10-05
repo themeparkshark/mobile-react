@@ -423,7 +423,8 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
     }
     ready.value = readyLamp(ms, greenLead.value, redOnly.value);
     // R6: the Legendary bump kicks once per pass at its seeded car distance (a jolt, then a damped settle).
-    if (bumpLead.value > 0 && ms <= bumpLead.value) {
+    // (Only once the car is rolling: a short first approach held at the station never bumps before it moves.)
+    if (bumpLead.value > 0 && ms <= bumpLead.value && t.value > plan.value.fromT + 1e-4) {
       bumpLead.value = -1;
       bumpV.value = withSequence(withTiming(1, { duration: LEGENDARY_BUMP.kickMs, easing: Easing.out(Easing.quad) }),
         withTiming(-0.35, { duration: 140, easing: Easing.inOut(Easing.quad) }),

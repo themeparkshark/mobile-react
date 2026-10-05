@@ -402,7 +402,7 @@ test('R6 camera obstacle: Epic 20 pt, Legendary 28 pt plus one seeded 10 pt bump
   assert.equal(ride.swayShiftMs(38, 0.1, 1), ride.SWAY_SHIFT_CAP_MS);
   const src = read('src/screens/ExploreScreen/ridePhoto/RidePhotoCatch.tsx');
   assert.match(src, /bumpFor\(item\?\.rarity, seed, passCount\.current, parkedMode \|\| reducedMotion, mercy\)/);
-  assert.match(src, /if \(bumpLead\.value > 0 && ms <= bumpLead\.value\)/, 'fires on the car distance');
+  assert.match(src, /if \(bumpLead\.value > 0 && ms <= bumpLead\.value && t\.value > plan\.value\.fromT \+ 1e-4\)/, 'fires on the car distance');
 });
 
 test('R6 gull photobomb: Rare and up, 1 pass in 4, crosses within 150 ms of arrival, caps at Good, seen coming', () => {
