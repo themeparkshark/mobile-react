@@ -89,6 +89,39 @@ To remove them for good (needs a lockfile update, run by Dustin):
 `npm uninstall react-native-google-mobile-ads react-native-worklets-core react-native-maps expo-gl expo-image-picker three-stdlib @expo/ngrok @react-navigation/drawer`
 then drop the matching exclusions.
 
+## 1.7.1 native binary (claude/binary-1.7.1)
+
+1.7.1 adds one native change: `tools/maplibre/patch-marker-frame.mjs` (run by
+`postinstall`) patches MLRNPointAnnotation so a React layout pass can no
+longer move a marker MapLibre owns to the map's top-left corner. It changes
+the iOS runtime fingerprint, so 1.7.0 and 1.7.1 are two OTA lines:
+
+| Binary | Runtime | Publish OTAs from |
+|---|---|---|
+| 1.7.0 (20260930.11 to .14), production and TestFlight | `f7aa10f3...` | `claude/release-rc` (production), `claude/dustin-preview` (testflight) |
+| 1.7.1 (20260930.15), TestFlight | `92c961be...` | a checkout of `claude/binary-1.7.1` (or a branch that merges it) |
+
+- `npm run update-testflight` from a 1.7.0 branch keeps reaching 1.7.0
+  phones only; from this branch it reaches 1.7.1 phones only. A JS change
+  both lines need is published twice, once from each.
+- Production 1.7.0 players keep getting OTAs on `f7aa10f3` from
+  `claude/release-rc`. Do not run `update-prod` from this branch until a
+  1.7.1 build is live in the App Store: no production binary has its runtime.
+- Check the runtime before publishing: run
+  `npx expo-updates fingerprint:generate --platform ios` with `API_URL` set
+  to the profile's URL. It must print the runtime of the binary you target.
+
+Built locally, not on EAS (app-store-submit skill): Xcode 26.3, manual
+signing with the iOS Distribution cert JMLKT3J357 (key in
+`~/.app-store/signing/tps-dist/`, its own keychain) and the profiles
+"TPS App Store local 2026-10" / "TPS LinePlayWidget App Store local 2026-10",
+`API_URL` and `SOURCEMAP_FILE` from the testflight profile, and
+`EXUpdatesRequestHeaders.expo-channel-name = testflight` added to Expo.plist
+for the archive only (EAS adds it per build; Expo.plist is fingerprint-ignored).
+The EAS remote build counter is still at 20260930.14: set it to .15 or higher
+(`eas build:version:set -p ios`) before the next EAS build of 1.7.1, or that
+upload is rejected as a duplicate.
+
 ## OTA updates
 
 `runtimeVersion` uses the fingerprint policy, so an update only reaches
