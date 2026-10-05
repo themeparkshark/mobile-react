@@ -303,7 +303,8 @@ test('r5: milestone rule for #13, confetti that renders and stops, crown gets th
   assert.match(board, /if \(landedTimer\.current\) clearTimeout\(landedTimer\.current\);/, 'the 250 ms timer is cleared');
   assert.match(board, /One pill, one phrase/, 'the step is one pill');
   assert.match(board, /Same 18 pt name as everyone, with your YOU chip/);
-  assert.match(board, /fillRule="evenodd"/, 'r6: one cream strip with a round compass cutout (no keyhole)');
+  assert.match(board, /bottom: -STRIP_H, height: STRIP_H, backgroundColor: BRAND\.cream/, 'r6: one full-width cream strip down to the nav (the nav and compass draw above it)');
+  assert.doesNotMatch(board, /fillRule="evenodd"/, 'r6: no cutout (it showed a row through the compass gap)');
   const screen = read('src/screens/LeaderboardScreen.tsx');
   assert.match(screen, /\{width > 0 && <Animated\.View/, 'r6: the pill is always mounted once the rail has a width');
   assert.match(screen, /opacity: shown\.value,/, 'and hidden by opacity until the default board is known');

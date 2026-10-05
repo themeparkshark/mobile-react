@@ -19,7 +19,6 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { FlashList, type ListRenderItem as FlashRenderItem } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, AppState, InteractionManager, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
@@ -64,9 +63,6 @@ const YOU_CARD_BOTTOM = 52;
 const YOU_CARD_HEIGHT = 72;
 /** The strip under the dock, down to the nav's top edge. */
 const STRIP_H = YOU_CARD_BOTTOM - 8;
-/** The raised compass in the nav: a 100 pt disc whose center sits 5 pt below the nav's top edge. */
-const COMPASS_R = 53;
-const COMPASS_DY = 5;
 const HEADER_HEIGHT = MINI_PODIUM_HEIGHT + 18;
 
 type Status = 'loading' | 'ready' | 'error';
@@ -423,14 +419,10 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       {/* The dock: rows fade out above it. It stops above the nav's raised icons
           (r2: a strip down to the screen edge erased them). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
-      {/* Beside the raised compass, cream reaches the nav's top edge, so no half row shows
-          between dock and nav (r5). The middle stays open for the compass. */}
-      <Svg pointerEvents="none" width={screenW} height={STRIP_H} style={{ position: 'absolute', left: 0, bottom: -STRIP_H }}>
-        {/* Cream from the dock to the nav's top edge, with a round cutout for the raised
-            compass (r6: the two side blocks left a keyhole showing a clipped row). */}
-        <Path fill={BRAND.cream} fillRule="evenodd"
-          d={`M0 0 H${screenW} V${STRIP_H} H0 Z M${screenW / 2 - COMPASS_R} ${STRIP_H + COMPASS_DY} a${COMPASS_R} ${COMPASS_R} 0 1 0 ${COMPASS_R * 2} 0 a${COMPASS_R} ${COMPASS_R} 0 1 0 ${-COMPASS_R * 2} 0 Z`} />
-      </Svg>
+      {/* Cream from the dock down to the nav's top edge, full width, so no row ever shows
+          between dock and nav. The nav (compass included) draws above this screen, so the
+          compass sits on the cream (r6 captures: a round cutout showed a row through it). */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: -STRIP_H, height: STRIP_H, backgroundColor: BRAND.cream }} />
       <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8 }}>
         <Pressable accessibilityRole="button"
           // While the ticks play, the spoken rank matches the screen (r6).
