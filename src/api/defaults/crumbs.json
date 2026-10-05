@@ -86,7 +86,7 @@
     "task_unlocks": "%s/%s unlocks",
     "task_list_modal_heading": "Uncompleted Tasks",
     "threads": "Threads",
-    "trade_expiration": "Your trade will expire in %s:%s",
+    "trade_expiration": "Time left to trade %s:%s",
     "trade_pin": "Trade Pin",
     "vault_cost": "%s Keys to Unlock Vault",
     "verified_player": "This is a notable and verified player.",
