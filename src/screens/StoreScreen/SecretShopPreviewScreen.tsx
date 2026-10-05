@@ -37,7 +37,8 @@ const type = (id: number, name: string) => ({ id, name, image_url: '' });
 const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/images/coingold.png')) };
 
 const HEROES: { id: number; name: string; fx: FxKey; slot: number; rarity: number; cost: number; art: number; season?: string }[] = [
-  { id: 9001, name: 'Fin Jet Rocket Pack', fx: 'jetpack', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/jetpack.webp') },
+  // Alex's Jetpack 3000 (items.id 436), upgraded with the jetpack rig.
+  { id: 436, name: 'Jetpack 3000', fx: 'jetpack', slot: 3, rarity: 3, cost: 140, art: require('../../../assets/fx/jetpack.webp') },
   { id: 9002, name: 'Plasma Fin Blade', fx: 'plasma_blade', slot: 5, rarity: 4, cost: 280, art: require('../../../assets/fx/blade.webp') },
   { id: 9003, name: 'Reef Halo', fx: 'reef_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/fish-yellow.webp') },
   { id: 9004, name: 'Saucer Buddy', fx: 'saucer', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/ufo.webp') },
@@ -93,7 +94,7 @@ function fixtureToday(night = 1): ShopToday {
     sections: [
       section({ key: 'event:halloween', type: 'event', event_key: 'halloween', title: 'Halloween Nights', color: '#ff7a00',
         ends_at: at(7), event_ends_at: '2026-11-02T00:00:00-07:00', event_last_day: '2026-11-01', items: [by('ghost_lantern')] }),
-      section({ key: 'featured', type: 'featured', title: 'The Vault', ends_at: at(monday), hero_id: 9001,
+      section({ key: 'featured', type: 'featured', title: 'The Vault', ends_at: at(monday), hero_id: 436,
         items: [by('jetpack'), by('plasma_blade'), by('saucer')] }),
       section({ key: 'daily', type: 'daily', title: 'Tonight Only', ends_at: at(1), items: [by(night === 2 ? 'midway_fireworks' : 'reef_halo')] }),
     ],

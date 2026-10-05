@@ -6,44 +6,55 @@
   "note": "Rig part placement in paper-canvas fractions. Shared by the app rigs (src/fx) and the rest-frame compositor (next-wave/secret-shop/art/tools/compose.py). cx/cy: where the part's anchor (ax, ay, fractions of the part) sits; w: part width as a fraction of canvas width; aspect: part height / width; rot: degrees clockwise about the anchor.",
   "rigs": {
     "jetpack": {
+      "_source": "Alex's hand-drawn Jetpack 3000 (items.id 436), cut from his paper (1352x1528): the pack, and his own 3-frame flame loop from his 2023 GIF (JET_PACK_GIF.gif), placed at the paper's nozzles",
       "body": {
         "file": "jetpack.webp",
-        "aspect": 1.2387,
-        "cx": 0.785,
-        "cy": 0.42,
-        "w": 0.24,
+        "aspect": 0.6895,
+        "cx": 0.62611,
+        "cy": 0.49673,
+        "w": 0.51997,
         "ax": 0.5,
         "ay": 0.5,
         "rot": 0,
         "nozzles": [
           {
-            "x": 0.565,
-            "y": 0.94
+            "x": 0.7681,
+            "y": 0.9876
           },
           {
-            "x": 0.82,
-            "y": 0.91
+            "x": 0.6188,
+            "y": 0.9277
           }
         ]
       },
       "flame": {
-        "file": "flame.webp",
-        "aspect": 2.4151,
-        "cx": 0.8006,
-        "cy": 0.532,
-        "w": 0.07,
-        "ax": 0.5,
-        "ay": 0.04,
+        "file": "jet-flame-0.webp",
+        "frames": [
+          "jet-flame-0.webp",
+          "jet-flame-1.webp",
+          "jet-flame-2.webp"
+        ],
+        "aspect": 1.4596,
+        "cx": 0.76553,
+        "cy": 0.65118,
+        "w": 0.14645,
+        "ax": 0.5758,
+        "ay": 0.1453,
         "rot": 0
       },
       "flame2": {
-        "file": "flame.webp",
-        "aspect": 2.4151,
-        "cx": 0.8618,
-        "cy": 0.524,
-        "w": 0.058,
-        "ax": 0.5,
-        "ay": 0.04,
+        "file": "jet-flame-side-0.webp",
+        "frames": [
+          "jet-flame-side-0.webp",
+          "jet-flame-side-1.webp",
+          "jet-flame-side-2.webp"
+        ],
+        "aspect": 1.0156,
+        "cx": 0.68787,
+        "cy": 0.6322,
+        "w": 0.04734,
+        "ax": 0.859,
+        "ay": 0.0615,
         "rot": 0
       }
     },
@@ -61,11 +72,11 @@
     },
     "reef_halo": {
       "ring": {
-        "cx": 0.6,
-        "cy": 0.15,
+        "cx": 0.47,
+        "cy": 0.155,
         "rx": 0.16,
-        "ry": 0.046,
-        "tilt": -5,
+        "ry": 0.07,
+        "tilt": 8,
         "stroke": 0.012,
         "aspect": 0.5651,
         "scale": 1.02

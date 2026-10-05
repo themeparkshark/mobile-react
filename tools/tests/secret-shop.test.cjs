@@ -430,3 +430,48 @@ test('no timer moment competes with a Secret buy: the try-on holds them from the
   assert.match(card, /if \(fxPlayRef\.current === startPlay\) fxKick\.value = NO_KICK/);
   assert.equal(fx.momentAt(950, 950 + 1500, 6000, 0.2).p, -1);
 });
+
+test("the jetpack is Alex's hand-drawn Jetpack 3000, animated with his own flame drawings (no generated art)", () => {
+  const g = geometry.rigs.jetpack;
+  assert.match(g._source, /Alex's hand-drawn Jetpack 3000 \(items\.id 436\)/);
+  assert.equal(g.body.file, 'jetpack.webp');
+  assert.deepEqual(g.flame.frames, ['jet-flame-0.webp', 'jet-flame-1.webp', 'jet-flame-2.webp']);
+  assert.deepEqual(g.flame2.frames, ['jet-flame-side-0.webp', 'jet-flame-side-1.webp', 'jet-flame-side-2.webp']);
+  for (const f of [...g.flame.frames, ...g.flame2.frames]) {
+    const { w, h } = webpSize(f);
+    assert.ok(Math.abs(h / w - (g.flame.frames.includes(f) ? g.flame : g.flame2).aspect) < 0.012, f);
+  }
+  const rig = src('src/fx/rigs/Jetpack.tsx');
+  // Stepped like a hand-drawn loop (one drawing per 80 ms), never a tweened flicker, no soft glow.
+  assert.match(rig, /export const FLAME_FRAME_MS = 80;/);
+  assert.match(rig, /opacity: frameAt\(v, kick\.value, delay\) === k \? 1 : 0,/);
+  assert.match(rig, /if \(lod === 'still'\) return \{ opacity: k === 0 \? 1 : 0 \};/, "Reduce Motion: Alex's paper drawing");
+  assert.doesNotMatch(rig, /glow\.webp|fx\/flame\.webp'|puff\.webp|#ffb43a|Math\.sin\(v \/ 41\)/, 'no generated flame, smoke, glow or orange light');
+  assert.match(rig, /require\('\.\.\/\.\.\/\.\.\/assets\/fx\/jet-drop\.webp'\)/);
+  for (const gone of ['flame.webp', 'puff.webp', 'jet-flame.webp']) assert.equal(fs.existsSync(path.join(root, 'assets/fx', gone)), false, gone);
+  // Weight: squash on the dip, stretch on the pop, hang time at the top of the bob.
+  assert.match(rig, /export function jetpackBody\(/);
+  assert.match(rig, /Math\.pow\(Math\.abs\(s\), s > 0 \? 0\.6 : 1\.4\)/);
+  assert.match(src('src/fx/FxLayers.tsx'), /\{ scaleX: body\.sx \},\s*\{ scaleY: body\.sy \},/);
+  const fixture = src('src/screens/StoreScreen/SecretShopPreviewScreen.tsx');
+  assert.match(fixture, /\{ id: 436, name: 'Jetpack 3000', fx: 'jetpack', slot: 3, rarity: 3, cost: 140,/);
+  assert.doesNotMatch(fixture, /Fin Jet/);
+});
+
+test('the reef halo is seen from above: far half high and behind the head, near half low and in front', () => {
+  const r = geometry.rigs.reef_halo.ring;
+  assert.ok(r.tilt > 0, 'tilts with the head (down toward the back), never leaning forward toward the snout');
+  // Against the base shark's crown (classic-no-eye.png: the head top is y 0.184 at x 0.40..0.50).
+  const [W, H] = geometry.canvas;
+  const halfH = (2 * r.rx * W * r.scale * r.aspect) / 2 / H;
+  assert.ok(r.cy - halfH < 0.184 - 0.05, 'the far edge rides above the crown');
+  assert.ok(r.cy + halfH > 0.184, 'the near edge crosses in front of the head top');
+  assert.ok(Math.abs(r.cx - 0.47) < 0.05, 'centred on the crown, not the back');
+  // The fish ride the drawn ring: their orbit is as open as the ring art.
+  const ringRy = (r.rx * W * r.aspect * 0.9) / H;
+  assert.ok(Math.abs(r.ry - ringRy) < 0.012, `orbit ry ${r.ry} vs ring ${ringRy.toFixed(3)}`);
+  const halo = src('src/fx/rigs/ReefHalo.tsx');
+  assert.match(halo, /const show = near === 'both' \? true : near \? p\.depth > 0 : p\.depth <= 0;/, 'near fish in front, far fish behind');
+  assert.match(halo, /depth: Math\.sin\(angle\),/);
+  assert.match(halo, /y: r\.cy \+ ex \* Math\.sin\(tilt\) \+ ey \* Math\.cos\(tilt\),/, 'near (depth > 0) is lower on screen');
+});

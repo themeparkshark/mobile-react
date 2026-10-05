@@ -153,9 +153,9 @@ export function partLayout(box: PaperBox, spec: PartSpec, aspectFallback = 1) {
  * item alone (no shark), zoomed so the item fills the tile.
  */
 export const FX_FOCUS: Record<FxKey, { cx: number; cy: number; span: number }> = {
-  jetpack: { cx: 0.84, cy: 0.5, span: 0.36 },
+  jetpack: { cx: 0.63, cy: 0.56, span: 0.56 },
   plasma_blade: { cx: 0.18, cy: 0.4, span: 0.44 },
-  reef_halo: { cx: 0.6, cy: 0.155, span: 0.42 },
+  reef_halo: { cx: 0.47, cy: 0.16, span: 0.42 },
   saucer: { cx: 0.85, cy: 0.29, span: 0.34 },
   midway_fireworks: { cx: 0.5, cy: 0.5, span: 1 },
   ghost_lantern: { cx: 0.31, cy: 0.58, span: 0.4 },

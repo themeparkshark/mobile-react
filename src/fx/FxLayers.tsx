@@ -6,7 +6,7 @@ import * as Haptics from '../helpers/haptics';
 import { FxBox, RigProps } from './FxStage';
 import { FxKey, FxLod, WornFx, coverBox, containBox, wornFx } from './registry';
 import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
-import { JetpackFront, jetpackFloat } from './rigs/Jetpack';
+import { JetpackFront, jetpackBody, jetpackFloat } from './rigs/Jetpack';
 import { MidwayFireworksScene, SceneFlashOnShark } from './rigs/MidwayFireworks';
 import { PlasmaBladeFront, bladeLean } from './rigs/PlasmaBlade';
 import { ReefHaloBack, ReefHaloFront } from './rigs/ReefHalo';
@@ -80,12 +80,18 @@ function MovingShark({ fx, t, kick, height, children }: { fx: WornFx; t: SharedV
   children: React.ReactNode }) {
   const floats = fx.floats;
   const leans = fx.rigs.some(r => r.key === 'plasma_blade');
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: floats ? jetpackFloat(t.value, kick.value, height) : 0 },
-      { rotate: `${leans ? bladeLean(t.value, kick.value) : 0}deg` },
-    ],
-  }));
+  const style = useAnimatedStyle(() => {
+    // The jetpack's weight: squash on the dip, stretch on the pop, a lazy tilt with the bob.
+    const body = floats ? jetpackBody(t.value, kick.value) : { sx: 1, sy: 1, rot: 0 };
+    return {
+      transform: [
+        { translateY: floats ? jetpackFloat(t.value, kick.value, height) : 0 },
+        { rotate: `${(leans ? bladeLean(t.value, kick.value) : 0) + body.rot}deg` },
+        { scaleX: body.sx },
+        { scaleY: body.sy },
+      ],
+    };
+  });
   return <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { transformOrigin: '55% 85%' }, style]}>{children}</Animated.View>;
 }
 
