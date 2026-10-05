@@ -45,19 +45,20 @@ export default function LastWeekCard({ result, me, onClose }: {
             width: 300, marginTop: 80, alignItems: 'center', padding: 22, borderRadius: RADIUS.xl, backgroundColor: BRAND.cream,
             borderWidth: 4, borderBottomWidth: 8, borderColor: BRAND.gold, ...SHADOW.lifted,
           }}>
-            <Text style={[textPreset('label'), { color: BRAND.goldLip }]}>LAST WEEK</Text>
+            {/* r2 art: navySoft Shark (the goldLip label face was about 2.3:1 on cream). */}
+            <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, letterSpacing: 1 }}>LAST WEEK</Text>
             {crown && <Image source={crown} style={{ width: 54, height: 54, marginBottom: -10, marginTop: 4, zIndex: 2 }} contentFit="contain" />}
             {me && <StandingsShark avatar={me.avatar} size={104} ring={BRAND.gold} />}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
               <GameIcon name="ride" size={30} />
-              <Text style={[textPreset('title'), { textAlign: 'center' }]}>{copy.headline}</Text>
+              <Text maxFontSizeMultiplier={1.25} style={[textPreset('title'), { textAlign: 'center' }]}>{copy.headline}</Text>
             </View>
-            <Text style={[textPreset('bodySmall'), { color: BRAND.navySoft, textAlign: 'center', marginTop: 2 }]}>{copy.line}</Text>
+            <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, textAlign: 'center', marginTop: 2 }}>{copy.line}</Text>
             {copy.reward && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingHorizontal: 14, height: 40,
                 borderRadius: RADIUS.pill, backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.goldLip }}>
                 <GameIcon name="ticket" size={24} />
-                <Text style={{ fontFamily: 'Shark', fontSize: 17, color: BRAND.navy }}>{copy.reward}</Text>
+                <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 17, color: BRAND.navy }}>{copy.reward}</Text>
               </View>
             )}
             <GameButton label="New week, go!" icon="ride" onPress={onClose} style={{ marginTop: 16 }} />

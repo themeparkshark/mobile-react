@@ -12,14 +12,18 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import allParks from '../../api/endpoints/parks/allParks';
-import { getStandings, type StandingsBoardKey } from '../../api/endpoints/me/standings';
+import { getStandings, getStandingsPage, type StandingsBoardKey } from '../../api/endpoints/me/standings';
+import { prefetchLayers } from './faceLayers';
+import { facePoints, faceLayerSources, wearsOwnLook } from './StandingsShark';
+import type { InventoryType } from '../../models/inventory-type';
 import type { ParkType } from '../../models/park-type';
 import { standingsGeneration, standingsSession } from './standingsCache';
-import { boardModel, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel } from './standingsV2Model';
+import { boardMatches, boardModel, expectedWeekEnd, mergePage, mergeRefresh, podiumRows, podiumSignature, seenRankKey, type StandingsBoardModel, type StandingsRowModel } from './standingsV2Model';
 
 const FRESH_MS = 45_000;
 const boards = new Map<string, { model: StandingsBoardModel; at: number }>();
 const inFlight = new Map<string, Promise<StandingsBoardModel>>();
+const pagesInFlight = new Map<string, Promise<StandingsBoardModel | 'rebuilt' | null>>();
 let generation = standingsGeneration();
 let owner: number | null = null;
 let session = standingsSession();
@@ -54,15 +58,111 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
   const running = inFlight.get(key);
   if (running) return running;
   const request = getStandings(board, board === 'all_time' ? parkId ?? null : null)
-    .then(dto => {
-      const model = boardModel(dto, board, meId);
+    .then(async dto => {
+      const fresh = boardModel(dto, board, meId);
+      const previous = boards.get(key)?.model;
+      // A refresh keeps the pages already scrolled through (no jump back to the top 50).
+      // When the board changed (a new build), those pages are fetched again from the
+      // new build (up to 4 pages), so no rank is ever skipped or shown twice.
+      // Also when the server's names version changed (a name was revoked), so a revoked name
+      // leaves scrolled pages on the next refresh, and nothing is refetched when it did not (r7).
+      const renamed = !!previous && previous.namesVersion != null && fresh.namesVersion != null && previous.namesVersion !== fresh.namesVersion;
+      const model = previous && previous.build && fresh.build && (previous.build !== fresh.build || renamed) && previous.rows.length > fresh.rows.length
+        ? await refetchPages(meId, board, parkId, fresh, previous, renamed)
+        : mergeRefresh(fresh, previous);
       // A sign-out while this was in flight must not repopulate the cache.
       if (owner === meId) boards.set(key, { model, at: Date.now() });
+      prefetchFaces(model.rows.slice(0, 12));
       return model;
     })
     .finally(() => { inFlight.delete(key); });
   inFlight.set(key, request);
   return request;
+}
+
+/**
+ * Infinite scroll: fetch the page after the rows this board has, reading the
+ * same build as the first page. The merged board is returned, not cached:
+ * the screen commits it (commitBoard) only when it actually shows it, so a
+ * page held while the kid is in Your spot can never land later from the cache
+ * above what they are looking at. One request per board at a time.
+ */
+export function loadMore(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, from: StandingsBoardModel): Promise<StandingsBoardModel | 'rebuilt' | null> {
+  sync(meId);
+  if (from.nextOffset == null) return Promise.resolve(null);
+  const offset = from.nextOffset;
+  // Deduped per board build and offset (r3 perf: a page fetched for an older board could undo a refresh).
+  const key = `${keyOf(meId, board, parkId)}:${from.build ?? '-'}:${offset}`;
+  const running = pagesInFlight.get(key);
+  if (running) return running;
+  const request = getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, offset, from.build)
+    .then(page => {
+      if (owner !== meId) return null;
+      // The board was rebuilt and the first page's build expired: the screen refreshes
+      // (refetchPages) instead of appending rows from a different board.
+      if (from.build && page?.build && page.build !== from.build) return 'rebuilt' as const;
+      const incoming = Array.isArray(page?.rows) ? page.rows : [];
+      // Exactly the new rows' faces, the first 20, so a landing page never floods the decoder.
+      prefetchFaces(incoming.slice(0, 20).map(row => boardModel({ rows: [row] }, board, meId).rows[0]).filter(Boolean));
+      return mergePage(from, page, meId);
+    })
+    .finally(() => { pagesInFlight.delete(key); });
+  pagesInFlight.set(key, request);
+  return request;
+}
+
+/** Pages again from a new build, up to `rows` rows (at most 4 pages). Failures keep what loaded. */
+async function refetchPages(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, fresh: StandingsBoardModel, previous: StandingsBoardModel, renamed = false): Promise<StandingsBoardModel> {
+  let model = fresh;
+  // Up to where the kid was (at most 12 pages, 600 rows), so a refresh never cuts their place short (r3).
+  for (let i = 0; i < 12 && model.nextOffset != null && model.rows.length < previous.rows.length; i++) {
+    try {
+      const page = await getStandingsPage(board, board === 'all_time' ? parkId ?? null : null, model.nextOffset, model.build);
+      model = mergePage(model, page, meId);
+    } catch {
+      // A name was revoked: never fall back to the old pages, which may still carry it.
+      // The kid keeps the fresh rows that loaded and pages on from there (r7 privacy).
+      if (renamed) return model;
+      // Otherwise a failed refetch keeps the board the kid had, never a shorter mixed one.
+      return previous;
+    }
+  }
+  return model;
+}
+
+/**
+ * Teach the card (r7): the first Standings visit of each week, the dock bounces once with a
+ * tap glyph. Per player and week, remembered on the device; once a session at most.
+ */
+const lessonKey = (meId: number | null, now: number) => `standings-v3:card-lesson:${meId ?? 0}:${expectedWeekEnd(now).slice(0, 10)}`;
+const lessonsThisSession = new Set<string>();
+export async function cardLessonDue(meId: number | null, now = Date.now()): Promise<boolean> {
+  const key = lessonKey(meId, now);
+  if (lessonsThisSession.has(key)) return false;
+  try { return !(await AsyncStorage.getItem(key)); } catch { return false; }
+}
+export function cardLessonDone(meId: number | null, now = Date.now()): void {
+  const key = lessonKey(meId, now);
+  lessonsThisSession.add(key);
+  void AsyncStorage.setItem(key, '1').catch(() => undefined);
+}
+
+/** The screen showed this board: it becomes the cached one (tab switches keep the place). */
+export function commitBoard(meId: number | null, board: StandingsBoardKey, parkId: number | null | undefined, model: StandingsBoardModel): void {
+  sync(meId);
+  // r3: a model from another tab or park is never saved under this key.
+  if (!boardMatches(model, board, parkId)) return;
+  const key = keyOf(meId, board, parkId);
+  const at = boards.get(key)?.at ?? Date.now();
+  if (owner === meId) boards.set(key, { model, at });
+}
+
+/** Faces for rows about to scroll in, decoded at row size, so a face is ready before its row shows. */
+function prefetchFaces(rows: readonly StandingsRowModel[]): void {
+  rows.forEach(row => {
+    const inv = row.avatar.inventory as InventoryType | null | undefined;
+    if (wearsOwnLook(inv ?? null)) prefetchLayers(faceLayerSources(inv), facePoints(40));
+  });
 }
 
 /** Warm boards so a tab or park switch is instant. Only fetches what is missing or stale. Failures are ignored. */
@@ -125,6 +225,7 @@ export async function podiumChanged(meId: number | null, model: StandingsBoardMo
 export function resetStandingsV2Cache(): void {
   boards.clear();
   inFlight.clear();
+  pagesInFlight.clear();
   chosenPark = null;
   owner = null;
 }

@@ -10,7 +10,7 @@
  * Ties go to whoever reached the number first.
  */
 import type { GameIconName } from '../../ui/iconNames';
-import type { StandingsBoardDto, StandingsBoardKey, StandingsRowDto } from '../../api/endpoints/me/standings';
+import type { StandingsBoardDto, StandingsBoardKey, StandingsPageDto, StandingsRowDto } from '../../api/endpoints/me/standings';
 
 export type StandingsV2TabKey = StandingsBoardKey | 'hunt';
 
@@ -43,6 +43,22 @@ export function initialStandingsV2Tab(param: unknown, tabs: readonly StandingsV2
   const key = typeof param === 'string' ? wanted[param] : undefined;
   const index = key ? tabs.findIndex(tab => tab.key === key) : -1;
   return index >= 0 ? index : 0;
+}
+
+/**
+ * The tab Standings opens on (v3 r2): the board where your spot means
+ * something today. Friends when 2 or more friends rode this week; else This
+ * Week when you have rides; else All-Time, your collection. Null until both
+ * weekly boards are known (keep This Week meanwhile).
+ */
+export function defaultStandingsTab(week: Pick<StandingsBoardModel, 'me'> & { readonly lastWeek?: StandingsBoardModel['lastWeek'] } | null, friends: Pick<StandingsBoardModel, 'rows'> | null): 'week' | 'friends' | 'all_time' | null {
+  if (!week || !friends) return null;
+  // Monday: an unseen results card (Tickets, a title) lives on This Week, so open there first.
+  if (week.lastWeek && !week.lastWeek.seen) return 'week';
+  const friendsRiding = friends.rows.filter(row => !row.isMe && row.score > 0).length;
+  if (friendsRiding >= 2) return 'friends';
+  if ((week.me?.score ?? 0) > 0) return 'week';
+  return 'all_time';
 }
 
 export type StandingsMetric = 'ride_wins' | 'ride_coins';
@@ -91,6 +107,9 @@ export interface StandingsChase {
   readonly score: number;
   readonly toPass: number;
   readonly tied: boolean;
+  /** v3: players toPass more jumps you past (a whole tie block), and the rank you land on. */
+  readonly passes: number;
+  readonly targetRank: number | null;
   readonly avatar: StandingsRowModel['avatar'];
 }
 
@@ -110,6 +129,17 @@ export interface StandingsBoardModel {
   readonly lastWeek: LastWeekResult | null;
   /** A flagged win this week: the kid sees "Your rides are being checked" with their real count. */
   readonly review: { readonly rides: number; readonly benched: boolean } | null;
+  /** Infinite scroll (v3): where the next page starts; null when every row is here. */
+  readonly nextOffset: number | null;
+  /** Rows the server sends per page (50 by default). */
+  readonly pageSize: number;
+  /** The board build later pages must read, so a rebuild never skips or repeats a player. */
+  readonly build: string | null;
+  /**
+   * The server's public-names version. It changes whenever a name is revoked, so pages
+   * already scrolled through are fetched again and a revoked name never stays on screen (r7).
+   */
+  readonly namesVersion: string | null;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -140,6 +170,8 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
   const chase = c && typeof c.screen_name === 'string' && num(c.to_pass) > 0
     ? {
       id: num(c.id), name: c.screen_name, rank: num(c.rank), score: num(c.score), toPass: num(c.to_pass), tied: c.tied === true,
+      passes: Math.max(1, num((c as { passes?: unknown }).passes, 1)),
+      targetRank: (c as { target_rank?: unknown }).target_rank == null ? num(c.rank) : num((c as { target_rank?: unknown }).target_rank),
       avatar: { id: num(c.id), screen_name: c.screen_name, avatar_url: null, inventory: c.inventory ?? null },
     }
     : null;
@@ -168,7 +200,68 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
     chase,
     goals,
     lastWeek,
+    nextOffset: nextOffsetOf(dto?.next_offset),
+    pageSize: Math.max(3, num(dto?.page_size, 50)),
+    build: typeof (dto as { build?: unknown } | null | undefined)?.build === 'string' ? (dto as { build: string }).build : null,
+    namesVersion: typeof (dto as { names?: unknown } | null | undefined)?.names === 'string' ? (dto as { names: string }).names : null,
   };
+}
+
+/** A next_offset the list can use: a whole number above 0, else null (older servers send none). */
+function nextOffsetOf(value: unknown): number | null {
+  const n = Number(value);
+  return value != null && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Appends one infinite-scroll page. Rows are keyed by player, so a page that
+ * overlaps (the board moved between requests) never shows anyone twice, and a
+ * player who climbed keeps their newest rank. Rows from the "Your spot" block
+ * that are now in the list leave that block.
+ */
+export function mergePage(model: StandingsBoardModel, page: Partial<StandingsPageDto> | null | undefined, meId?: number | null): StandingsBoardModel {
+  const incoming = (Array.isArray(page?.rows) ? page!.rows : [])
+    .map(row => rowModel(row, meId)).filter((row): row is StandingsRowModel => row !== null);
+  const byId = new Map<number, StandingsRowModel>();
+  [...model.rows, ...incoming].forEach(row => byId.set(row.id, row));
+  const rows = sortRows([...byId.values()]);
+  const next = page && 'next_offset' in page ? nextOffsetOf(page.next_offset) : model.nextOffset;
+  return {
+    ...model,
+    rows,
+    aroundMe: model.aroundMe.filter(row => !byId.has(row.id)),
+    playersCount: page?.players_count != null ? num(page.players_count, model.playersCount) : model.playersCount,
+    // A page that came back empty ends the list even if the server said more.
+    nextOffset: incoming.length ? next : null,
+    build: typeof (page as { build?: unknown } | null | undefined)?.build === 'string' ? (page as { build: string }).build : model.build,
+  };
+}
+
+/**
+ * A background refresh brings a new first page. Pages the kid already
+ * scrolled through stay (no jump, no lost place); only players the new first
+ * page does not have are kept from the old rows.
+ */
+export function mergeRefresh(fresh: StandingsBoardModel, previous: StandingsBoardModel | null | undefined): StandingsBoardModel {
+  if (!previous || previous.board !== fresh.board || previous.parkId !== fresh.parkId || previous.rows.length <= fresh.rows.length) return fresh;
+  const have = new Set(fresh.rows.map(row => row.id));
+  const lastRank = fresh.rows.reduce((max, row) => Math.max(max, row.rank ?? 0), 0);
+  const kept = previous.rows.filter(row => !have.has(row.id) && (row.rank == null || row.rank > lastRank));
+  if (!kept.length) return fresh;
+  const rows = sortRows([...fresh.rows, ...kept.map(row => (row.isMe && fresh.me ? { ...row, ...fresh.me, key: row.key } : row))]);
+  return {
+    ...fresh,
+    rows,
+    aroundMe: fresh.aroundMe.filter(row => !rows.some(r => r.id === row.id)),
+    nextOffset: previous.nextOffset == null ? null : Math.max(previous.nextOffset, fresh.nextOffset ?? 0),
+  };
+}
+
+/** Ranked rows first by rank, then unranked rows (friends at 0) in the order they came. */
+function sortRows(rows: readonly StandingsRowModel[]): StandingsRowModel[] {
+  return rows.map((row, i) => ({ row, i }))
+    .sort((a, b) => (a.row.rank ?? Infinity) - (b.row.rank ?? Infinity) || a.i - b.i)
+    .map(entry => entry.row);
 }
 
 /** Top three places (by position) and everyone below. */
@@ -179,31 +272,95 @@ export function splitPodium<T>(rows: readonly T[]): { readonly podium: readonly 
 /** The list under the podium, as fixed-height items: rows, the "Not riding yet" divider, and the gap before your rows. */
 export type ListItem =
   | { readonly type: 'row'; readonly key: string; readonly row: StandingsRowModel; readonly muted: boolean }
-  | { readonly type: 'divider'; readonly key: string; readonly label: string };
+  | { readonly type: 'divider'; readonly key: string; readonly label: string }
+  /** A grey placeholder row where the next page will land: same height, so nothing jumps when it fills. */
+  | { readonly type: 'skeleton'; readonly key: string }
+  /** After 3 failed loads, one "Tap to load more" row replaces the grey rows. */
+  | { readonly type: 'retry'; readonly key: string }
+  /** The end of the list: how many players are on this board. */
+  | { readonly type: 'footer'; readonly key: string; readonly label: string };
 
 export const ROW_HEIGHT = 64;
 export const DIVIDER_HEIGHT = 40;
+/** Placeholder rows shown at the end of the loaded rows while more exist. */
+export const SKELETON_ROWS = 3;
+/** Start loading the next page when the kid is this many rows from the last loaded one (1,920 pt, about 2.5 screens). */
+export const PREFETCH_ROWS = 30;
 
-export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'aroundMe'>): readonly ListItem[] {
+/**
+ * The list under the podium. With more pages to come, grey rows hold the
+ * place where they will land (before the "Your spot" block), so the next page
+ * fills in without moving anything.
+ */
+export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'aroundMe'> & { readonly nextOffset?: number | null; readonly playersCount?: number; readonly metric?: StandingsMetric },
+  options: { readonly failed?: boolean } = {}): readonly ListItem[] {
   const scored = model.rows.filter(row => row.score > 0);
   const resting = model.board === 'friends' ? model.rows.filter(row => row.score <= 0) : [];
+  const more = model.nextOffset != null;
   const items: ListItem[] = scored.slice(3).map(row => ({ type: 'row', key: row.key, row, muted: false }));
-  if (model.aroundMe.length) {
+  const pending = (): ListItem[] => (options.failed ? [{ type: 'retry', key: 'retry' }]
+    : Array.from({ length: SKELETON_ROWS }, (_, i) => ({ type: 'skeleton' as const, key: `skeleton-${i}` })));
+  // Friends at 0 come last on the server too, so placeholders go after them.
+  if (more && !resting.length) items.push(...pending());
+  const shown = new Set(model.rows.map(row => row.id));
+  const around = model.aroundMe.filter(row => !shown.has(row.id));
+  if (around.length) {
     items.push({ type: 'divider', key: 'gap', label: 'Your spot' });
-    model.aroundMe.forEach(row => items.push({ type: 'row', key: `near-${row.key}`, row, muted: false }));
+    around.forEach(row => items.push({ type: 'row', key: `near-${row.key}`, row, muted: false }));
   }
   if (resting.length) {
     items.push({ type: 'divider', key: 'resting', label: 'Not riding yet' });
     resting.forEach(row => items.push({ type: 'row', key: row.key, row, muted: true }));
+    if (more) items.push(...pending());
+  }
+  // The end of the board (or of Your spot): how many are racing, never a blank void.
+  if (model.board !== 'friends' && (model.playersCount ?? 0) > 3) {
+    const n = model.playersCount as number;
+    items.push({ type: 'footer', key: 'footer', label: model.metric === 'ride_coins' ? `${n.toLocaleString('en-US')} collectors` : `${n.toLocaleString('en-US')} riders this week` });
   }
   return items;
 }
 
-/** FlatList getItemLayout for the fixed-height items. */
+/** Index of the first placeholder row, or -1 when every row is loaded. */
+export function firstSkeletonIndex(items: readonly ListItem[]): number {
+  return items.findIndex(item => item.type === 'skeleton');
+}
+
+/** Whether a board model is for this tab and park (a page from another park must never land here). */
+export function boardMatches(model: Pick<StandingsBoardModel, 'board' | 'parkId'> | null | undefined, board: StandingsBoardKey, parkId: number | null | undefined): boolean {
+  if (!model || model.board !== board) return false;
+  return board !== 'all_time' || (model.parkId ?? null) === (parkId ?? null);
+}
+
+/** Only the first page is here and more exist: page 2 can be fetched while the kid looks at the podium. */
+export function onlyFirstPage(model: Pick<StandingsBoardModel, 'nextOffset' | 'rows' | 'pageSize'>): boolean {
+  return model.nextOffset != null && model.rows.length <= model.pageSize;
+}
+
+/**
+ * Whether to ask for the next page: the kid can see a row within
+ * PREFETCH_ROWS of the placeholders, so the page lands before they reach them.
+ */
+export function shouldPrefetch(lastVisibleIndex: number, items: readonly ListItem[], firstVisibleIndex = 0): boolean {
+  const at = firstSkeletonIndex(items);
+  return at >= 0 && lastVisibleIndex >= at - PREFETCH_ROWS && safeToInsert(firstVisibleIndex, items);
+}
+
+/**
+ * Whether a page may land now without moving what the kid is looking at:
+ * the grey rows are on screen or below it. A kid down in the "Your spot"
+ * block (below the grey rows) would see everything shift, so the page waits.
+ */
+export function safeToInsert(firstVisibleIndex: number, items: readonly ListItem[]): boolean {
+  const at = items.findIndex(item => item.type === 'skeleton' || item.type === 'retry');
+  return at < 0 || firstVisibleIndex <= at + SKELETON_ROWS - 1;
+}
+
+/** List row heights for the fixed-height items. */
 export function itemLayouts(items: readonly ListItem[]): readonly { readonly length: number; readonly offset: number }[] {
   let offset = 0;
   return items.map(item => {
-    const length = item.type === 'row' ? ROW_HEIGHT : DIVIDER_HEIGHT;
+    const length = item.type === 'divider' ? DIVIDER_HEIGHT : item.type === 'retry' ? ROW_HEIGHT * SKELETON_ROWS : ROW_HEIGHT;
     const layout = { length, offset };
     offset += length;
     return layout;
@@ -218,31 +375,93 @@ export function podiumRows(model: Pick<StandingsBoardModel, 'rows'>): readonly [
 export type YouState = 'leader' | 'chasing' | 'tied' | 'join' | 'review';
 
 /**
- * The You card's line. One number per state, short words, no em dashes:
- *   review   "Keep riding! Your rides are safe." (benched only; the number is their counted rides)
- *   join     "Win 1 ride to join!"            (chip "+1", a Go ride button)
- *   chasing  "2 more rides to pass gr8scott"
- *   tied     "Tied! zmaize got there first."  (+ "1 more ride passes them")
- *   leader   "You're #1! Hold the top spot."
+ * The pinned row's one next step (v3 r2). Glyph first for a 6 year old
+ * (+1 cart, an arrow, the target), the sentence for readers and VoiceOver.
+ * Milestones win: the top 10 when 3 or fewer away, or a weekly goal when 2
+ * or fewer away; otherwise the next jump (a whole tie block at once).
+ * Never names who beat you; never a dead-end button away from a park.
  */
-export function youLine(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review'] }): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
+export type NextStep =
+  | { readonly kind: 'review'; readonly text: string }
+  | { readonly kind: 'join'; readonly text: string; readonly canRide: boolean }
+  | { readonly kind: 'leader'; readonly text: string }
+  | { readonly kind: 'jump' | 'top10' | 'goal'; readonly plus: number; readonly target: string; readonly text: string;
+      /** The glyph on the target chip: a crown for the podium, a trophy for the top 10, a star for a goal, an up arrow for a far jump. */
+      readonly icon: 'crown' | 'trophy' | 'star' | 'up' | null };
+
+export function nextStep(
+  model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase'> & { readonly review?: StandingsBoardModel['review']; readonly rows?: StandingsBoardModel['rows']; readonly goals?: StandingsBoardModel['goals'] },
+  inPark = true,
+): NextStep {
   const score = model.me?.score ?? 0;
+  const unit = (n: number) => unitWord(model.metric, n);
   if (model.review?.benched && model.board !== 'all_time') {
-    // Benched (two impossible hops): reassure, one number, no blame.
-    return { state: 'review', text: 'Keep riding! Your rides are safe.', sub: 'The shark crew is double-checking a ride' };
+    return { kind: 'review', text: 'Keep riding! Your rides are safe.' };
   }
   if (score <= 0 || model.me?.rank == null) {
     const what = model.metric === 'ride_coins' ? 'ride coin' : 'ride';
-    return { state: 'join', text: `Win 1 ${what} to join!`, sub: model.board === 'friends' ? 'Race your friends this week' : null };
+    return inPark
+      ? { kind: 'join', canRide: true, text: `Win 1 ${what} to join!` }
+      : { kind: 'join', canRide: false, text: `Next park day: win 1 ${what}!` };
   }
-  if (model.chase?.tied) {
-    return { state: 'tied', text: `Tied! ${model.chase.name} got there first.`, sub: `1 more ${unitWord(model.metric, 1)} passes them` };
+  if (!model.chase) {
+    return { kind: 'leader', text: model.board === 'all_time' ? "You're #1! Top collector!" : "You're #1! Hold the top spot!" };
   }
-  if (model.chase) {
-    const n = model.chase.toPass;
-    return { state: 'chasing', text: `${n} more ${unitWord(model.metric, n)} to pass ${model.chase.name}`, sub: null };
+  type Option = { kind: 'jump' | 'top10' | 'goal'; plus: number; target: string; text: string; icon: 'crown' | 'trophy' | 'star' | 'up' | null; order: number };
+  const options: Option[] = [];
+  const top10 = topTenGap(model);
+  if (top10 != null && top10 <= 3) options.push({ kind: 'top10', plus: top10, target: 'TOP 10', icon: 'trophy', text: `${top10} more ${unit(top10)} to make the top 10!`, order: 0 });
+  const goal = model.board !== 'all_time' ? (model.goals ?? []).find(g => !g.reached && g.at > score) : undefined;
+  if (goal && goal.at - score <= 2) {
+    const n = goal.at - score;
+    // r3: the goal is the ride count a kid can see ("8"), never the abstract XP.
+    options.push({ kind: 'goal', plus: n, target: `${goal.at}`, icon: 'star', text: `${n} more ${unit(n)} reaches your weekly goal of ${goal.at}!`, order: 1 });
   }
-  return { state: 'leader', text: model.board === 'all_time' ? "You're #1! Top collector." : "You're #1! Hold the top spot.", sub: null };
+  const n = model.chase.toPass;
+  const passes = model.chase.passes ?? 1;
+  const landing = model.chase.targetRank ?? model.chase.rank;
+  // A far jump reads as how many you pass (an up arrow and 1,250), not a five-digit rank.
+  const far = landing > 999;
+  // A podium landing is a milestone too (r6: a goal hid a 1-ride podium step).
+  options.push({ kind: 'jump', plus: n, order: landing <= 3 ? -1 : 2,
+    target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
+    // Already on the podium (#2, #3): the step moves you up it, it does not put you on it (r7).
+    text: landing <= 3 && (model.me?.rank ?? 99) <= 3
+      ? (landing === 1 ? `${n} more ${unit(n)} takes the top spot!` : `${n} more ${unit(n)} moves you up to #${landing}!`)
+      : landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
+      : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
+  // Milestones first (r5): a podium landing, the top 10 within 3, or a weekly goal within 2,
+  // beats any jump (#13 two rides from #12 but three from the top 10 sees TOP 10). Between
+  // milestones the closer wins; a tie goes podium, then TOP 10, then goal (r7: #12 two rides
+  // from both the podium and the top 10 sees the crown). With none, the jump.
+  const milestone = (o: Option) => (o.kind !== 'jump' || o.icon === 'crown' ? 0 : 1);
+  options.sort((x, y) => milestone(x) - milestone(y) || x.plus - y.plus || x.order - y.order);
+  const { order: _order, ...best } = options[0];
+  return best;
+}
+
+/**
+ * What VoiceOver says on your pinned row. While the ticks play it matches the badge on
+ * screen (your old rank, climbing); after the last tick it is the row's normal label (r6/r7).
+ */
+export function dockLabel(label: string, revealing: boolean, climbFrom: number | null | undefined): string {
+  return revealing && climbFrom ? `You are number ${climbFrom}. Climbing!` : label;
+}
+
+/** The pinned row's line state and sentence (kept for the spoken label and older callers). */
+export function youLine(model: Parameters<typeof nextStep>[0], inPark = true): { readonly state: YouState; readonly text: string; readonly sub: string | null } {
+  const step = nextStep(model, inPark);
+  const state: YouState = step.kind === 'review' ? 'review' : step.kind === 'join' ? 'join' : step.kind === 'leader' ? 'leader'
+    : model.chase?.tied ? 'tied' : 'chasing';
+  return { state, text: step.text, sub: step.kind === 'review' ? 'The shark crew is double-checking a ride' : null };
+}
+
+/** How many more you need to take 10th place (ties go to whoever got there first), or null when you are in the top 10 or #10 is not loaded. */
+export function topTenGap(model: Pick<StandingsBoardModel, 'me'> & { readonly rows?: StandingsBoardModel['rows'] }): number | null {
+  const rank = model.me?.rank;
+  if (rank == null || rank <= 10 || !model.rows) return null;
+  const tenth = model.rows.find(row => row.rank === 10);
+  return tenth ? Math.max(1, tenth.score - (model.me?.score ?? 0) + 1) : null;
 }
 
 /** The number on the chase chip: "+1" to join, "+N" to pass, nothing for leaders or rides under review. */
@@ -295,6 +514,35 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
     : urgency === 'last_day' ? 'Last day!' : `${daysLeft} days left`;
   const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `Last chance, ${hours} hours ${minutes} minutes left this week`;
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
+}
+
+/**
+ * Where this week ends (next Monday 00:00 Pacific, the server's week), for the pill's first
+ * paint before any answer (r7: the pill changed shape when the board arrived). The server's
+ * `ends_at` replaces it as soon as it lands.
+ */
+export function expectedWeekEnd(now: number): string {
+  let offsetMs = -7 * 3_600_000;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hourCycle: 'h23',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(now));
+    const get = (type: string) => Number(parts.find(part => part.type === type)?.value);
+    const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+    if (Number.isFinite(wall)) offsetMs = Math.round((wall - now) / 60_000) * 60_000;
+  } catch { /* keep PDT */ }
+  const wallNow = new Date(now + offsetMs);
+  const dow = (wallNow.getUTCDay() + 6) % 7; // 0 = Monday
+  const nextMondayWall = Date.UTC(wallNow.getUTCFullYear(), wallNow.getUTCMonth(), wallNow.getUTCDate() + (7 - dow));
+  return new Date(nextMondayWall - offsetMs).toISOString();
+}
+
+/**
+ * The week's one-line clock for the board's single pill: "3 days left",
+ * "Last day!" or "Last chance! 2h 10m". Replaces v2's seven day dots.
+ */
+export function weekLeft(endsAt: string | null | undefined, now: number): { readonly label: string; readonly urgency: WeekUrgency; readonly spoken: string } {
+  const week = weekDots(endsAt, now);
+  return { label: week.label, urgency: week.urgency, spoken: week.spoken };
 }
 
 /** How many places you climbed since your last look (positive = up). 0 when unknown. */
@@ -374,15 +622,17 @@ export function lastWeekCopy(result: LastWeekResult): { readonly headline: strin
 }
 
 /** Spoken You card label: one number, no "0" while rides are being checked. */
-export function youLabel(model: Pick<StandingsBoardModel, 'board' | 'metric' | 'me' | 'chase' | 'available' | 'review'>, climb: number): string {
-  const line = youLine(model);
+export function youLabel(model: Parameters<typeof nextStep>[0] & Pick<StandingsBoardModel, 'available'>, climb: number, inPark = true): string {
+  const line = youLine(model, inPark);
   if (line.state === 'review') {
     const n = model.review?.rides ?? 0;
     return `Your ${n} ${unitWord('ride_wins', n)} this week are safe. The shark crew is double-checking a ride. Keep riding!`;
   }
   const me = model.me;
-  const head = me?.rank ? `You are number ${me.rank} with ${scoreText(model, me.score)}` : `You are new on this board with ${scoreText(model, me?.score ?? 0)}`;
-  return `${head}. ${line.text}.${line.sub ? ` ${line.sub}.` : ''}${climb > 0 ? ` Up ${climb} places.` : ''}`;
+  const score = me?.score ?? 0;
+  const head = me?.rank ? `You are number ${me.rank} with ${scoreText(model, score)}` : `You have ${score} ${unitWord(model.metric, score)}`;
+  const end = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
+  return `${head}. ${end(line.text)}${climb > 0 ? ` Up ${climb} places.` : ''}`;
 }
 
 /**

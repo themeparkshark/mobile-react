@@ -67,12 +67,15 @@ test('the You card: NEW players are invited, ties are explained, chasers get one
   const coinJoin = model.youLine(model.boardModel(dto({ board: 'all_time', metric: 'ride_coins', me: { rank: null, id: 5, score: 0 } }), 'all_time', 5));
   assert.equal(coinJoin.text, 'Win 1 ride coin to join!');
   const chasing = model.youLine(model.boardModel(dto(), 'week', 5));
-  assert.equal(chasing.text, '2 more rides to pass gr8scott');
+  assert.equal(chasing.text, '2 more rides to pass gr8scott!');
+  // v3 r2: a tie is the next step, never "X got there first".
   const tied = model.youLine(model.boardModel(dto({ chase: { id: 10, screen_name: 'zmaize', rank: 4, score: 8, to_pass: 1, tied: true } }), 'week', 5));
-  assert.deepEqual(plain(tied), { state: 'tied', text: 'Tied! zmaize got there first.', sub: '1 more ride passes them' });
+  assert.deepEqual(plain(tied), { state: 'tied', text: '1 more ride to pass zmaize!', sub: null });
+  const away = model.youLine(model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5), false);
+  assert.equal(away.text, 'Next park day: win 1 ride!', 'at home: no dead-end GO RIDE');
   const leader = model.youLine(model.boardModel(dto({ me: { rank: 1, id: 5, score: 60 }, chase: null }), 'week', 5));
   assert.equal(leader.state, 'leader');
-  for (const line of [join, coinJoin, chasing, tied, leader]) {
+  for (const line of [join, coinJoin, chasing, tied, leader, away]) {
     assert.doesNotMatch(`${line.text} ${line.sub ?? ''}`, /[—–]|[\u{1F300}-\u{1FAFF}]/u, 'no em dashes or emoji');
     assert.ok(line.text.length <= 40, `short enough for a kid: ${line.text}`);
   }
@@ -81,7 +84,7 @@ test('the You card: NEW players are invited, ties are explained, chasers get one
 test('list items: podium rows stay out, your neighbourhood and resting friends get their own fixed-height sections', () => {
   const week = model.boardModel(dto({ around_me: [{ rank: 61, id: 70, screen_name: 'a', score: 2 }] }), 'week', 5);
   const items = model.listItems(week);
-  assert.deepEqual(plain(items.map(i => i.type === 'row' ? i.row.id : i.label)), [10, 5, 'Your spot', 70]);
+  assert.deepEqual(plain(items.map(i => i.type === 'row' ? i.row.id : i.label)), [10, 5, 'Your spot', 70, '5 riders this week']);
   const friends = model.boardModel(dto({ board: 'friends', rows: [
     { rank: 1, id: 7, screen_name: 'a', score: 3 }, { rank: null, id: 5, screen_name: 'me', score: 0 }, { rank: null, id: 8, screen_name: 'b', score: 0 },
   ] }), 'friends', 5);
@@ -153,7 +156,7 @@ test('wiring: kid-safe taps, per-player cache reset on sign-out, win marks stand
   assert.match(board, /board === 'friends' && !row\.isMe\) RootNavigation\.navigate\('Player'/, 'only friends open a profile');
   assert.match(board, /setCard\(row\)/, 'public rows open the safe shark card');
   assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /navigate\('Player'/);
-  assert.match(board, /getItemLayout/);
+  assert.match(board, /overrideItemLayout=/, 'v3: FlashList with exact fixed row sizes');
   assert.match(board, /onViewableItemsChanged/);
   assert.match(board, /announceForAccessibility/);
   assert.doesNotMatch(board, /You \$\{scoreSummary/, 'no "You X of Y" pill');
@@ -176,7 +179,7 @@ test('round 4: the review card is for benched kids only, with one number and a c
   assert.doesNotMatch(spoken, /\b0\b|new/, 'no "0" and no "new" for a benched kid');
   const notBenched = model.boardModel(dto({ review: { checking: true, rides: 6, benched: false } }), 'week', 5);
   assert.equal(model.youLine(notBenched).state, 'chasing', 'one flag keeps the normal card and chase');
-  assert.match(model.youLabel(model.boardModel(dto(), 'week', 5), 4), /^You are number 5 with 8\. 2 more rides to pass gr8scott\. Up 4 places\.$/);
+  assert.match(model.youLabel(model.boardModel(dto(), 'week', 5), 4), /^You are number 5 with 8\. 2 more rides to pass gr8scott! Up 4 places\.$/);
 
   const join = model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5);
   assert.equal(model.chaseChip(join, model.youLine(join).state), '+1');
@@ -203,7 +206,7 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   assert.match(board, /const hideYou = !active \|\| \(!climbing && /);
   assert.doesNotMatch(board, /position: 'absolute', top: -46/, 'the ticker plays inside your card, never over a row');
   assert.match(board, /\{`Up \$\{climb\}!`\}/, '"Up N!" lives in the rank column');
-  assert.match(board, /onClimbDone=\{\(\) => \{ setClimbing\(false\); setClimb\(0\); setPassed\(\[\]\); \}\}/, 'the climb resets, so a same-size climb plays again');
+  assert.match(board, /onClimbDone=\{\(\) => \{ setClimbing\(false\); setClimb\(0\); setPassed\(\[\]\); setClimbFrom\(null\); setPodiumHold\(false\); \}\}/, 'the climb resets, so a same-size climb plays again');
   assert.match(board, /\}, \[climbId\]\);/);
   assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
   assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /barrel-flipped\.png/);
@@ -225,7 +228,7 @@ test('round 5: your row visibility from geometry, the goal note held while the w
 
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /list\.current\?\.recordInteraction\(\);/, 'an activated board wakes its list');
-  assert.match(board, /windowSize=\{active \? 9 : 3\}/);
+  assert.match(board, /drawDistance=\{active \? ROW_HEIGHT \* 12 : ROW_HEIGHT \* 3\}/, 'v3: a hidden tab draws only near its viewport');
   const screen = read('src/screens/LeaderboardScreen.tsx');
   assert.match(screen, /translateX: -pillX\.value \* segment/, 'a navy label row is clipped to the pill and follows its edge');
   assert.match(screen, /overflow: 'hidden' \}, pill\]/);

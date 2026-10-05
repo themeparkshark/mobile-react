@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import InformationModal from '../components/InformationModal';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import Topbar from '../components/Topbar';
@@ -20,9 +20,9 @@ import { AuthContext } from '../context/AuthProvider';
 import { usePresentationBadges } from '../hooks/usePresentationQueue';
 import { BRAND, GameIcon } from '../ui';
 import StandingsBoardV2 from './LeaderboardsScreen/StandingsBoardV2';
-import { prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
+import { cachedBoard, loadBoard, prefetchBoards } from './LeaderboardsScreen/standingsV2Store';
 import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standingsDemo';
-import { initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
+import { defaultStandingsTab, initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
@@ -31,8 +31,10 @@ const whooshSound = require('../../assets/sounds/whoosh.mp3');
  * Three tabs on a blue rail (four when the Home Hunt board is on); a white
  * pill springs under the chosen one. A dot on Home Hunt means unclaimed results.
  */
-function StandingsTabs({ tabs, active, onChange, dot }: {
+function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
   readonly tabs: readonly (StandingsTabSpec | StandingsV2Tab)[]; readonly active: number; readonly onChange: (index: number) => void; readonly dot: boolean;
+  /** The default board is known: show the pill (it lands in place, no slide). */
+  readonly ready?: boolean;
 }) {
   const size = standingsTabSizing(tabs.length);
   const reduced = useUiReducedMotion();
@@ -44,11 +46,23 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   // One shared position drives the pill and every label's color, so a label is
   // navy exactly while the white pill is under it (never white on white mid-slide).
   const pillX = useSharedValue(active);
+  // The pill is always mounted once the rail has a width, and hidden by opacity until
+  // the default board is known (r6: a pill mounted late kept a stale initial style
+  // under Reanimated 3.16, so no tab ever looked selected on a cold open).
+  const shown = useSharedValue(ready ? 1 : 0);
+  const placed = useRef(ready);
   useEffect(() => {
+    // The first placement after a cold open snaps; only a kid's tap slides.
+    if (!placed.current) {
+      if (ready) { placed.current = true; pillX.value = active; shown.value = withTiming(1, { duration: 120 }); }
+      return;
+    }
+    shown.value = 1;
     pillX.value = reduced ? active : withSpring(active, { damping: 17, stiffness: 230 });
-  }, [active, reduced, pillX]);
+  }, [active, reduced, pillX, ready, shown]);
   const pill = useAnimatedStyle(() => ({
     width: segment,
+    opacity: shown.value,
     transform: [{ translateX: pillX.value * segment }],
   }), [segment]);
   // Two-layer labels: white labels on the rail, and a navy copy of the same row
@@ -58,7 +72,7 @@ function StandingsTabs({ tabs, active, onChange, dot }: {
   const tabContent = (tab: StandingsTabSpec | StandingsV2Tab, color: string, icon: boolean) => (
     <>
       {icon ? <GameIcon name={tab.icon} size={size.icon} /> : <View style={{ width: size.icon, height: size.icon }} />}
-      <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: 'Shark', fontSize: size.font, color }}>{tab.label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: size.font, color }}>{tab.label}</Text>
     </>
   );
   const tabStyle = { flex: 1, paddingVertical: 9, alignItems: 'center' as const, justifyContent: 'center' as const,
@@ -136,11 +150,33 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
   const tabParam = (route.params as { tab?: string } | undefined)?.tab;
   const [huntOn, setHuntOn] = useState(() => homeHuntEnabled(cachedHomeHuntWeek()));
   const tabs = standingsV2Tabs(huntOn);
-  const [activeTab, setActiveTab] = useState(() => initialStandingsV2Tab(tabParam, tabs));
+  // Open on the board where your spot means something (defaultStandingsTab), unless a link chose one.
+  const smartTab = () => {
+    const pick = tabParam ? null : defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null);
+    return pick ? Math.max(0, tabs.findIndex(tab => tab.key === pick)) : initialStandingsV2Tab(tabParam, tabs);
+  };
+  const [activeTab, setActiveTab] = useState(smartTab);
+  const touched = useRef(!!tabParam);
+  // Cold open with nothing cached (r5): the pill waits (up to 1.2 s) for the default board,
+  // so it never slides on its own after the kid has started looking.
+  const [tabReady, setTabReady] = useState(() => !!tabParam || !!defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null));
+  useEffect(() => {
+    if (tabReady) return undefined;
+    const t = setTimeout(() => setTabReady(true), 1200);
+    return () => clearTimeout(t);
+  }, [tabReady]);
   const { playSound } = useContext(SoundEffectContext);
   const resultsWaiting = usePresentationBadges('standings').length > 0;
   useEffect(() => {
     let live = true;
+    // Nothing cached yet: pick the board once both weekly boards arrive, if the kid has not chosen one.
+    if (!touched.current && !defaultStandingsTab(cachedBoard(meId, 'week', null)?.model ?? null, cachedBoard(meId, 'friends', null)?.model ?? null)) {
+      void Promise.all([loadBoard(meId, 'week', null), loadBoard(meId, 'friends', null)]).then(([week, friends]) => {
+        const pick = defaultStandingsTab(week, friends);
+        if (live && pick && !touched.current) setActiveTab(Math.max(0, standingsV2Tabs(false).findIndex(tab => tab.key === pick)));
+        if (live) setTabReady(true);
+      }).catch(() => { if (live) setTabReady(true); });
+    }
     void loadHomeHuntWeek(meId).then(week => { if (live) setHuntOn(homeHuntEnabled(week)); });
     // The other boards load in the background so the first switch is instant.
     prefetchBoards(meId, [{ board: 'week' }, { board: 'friends' }, { board: 'all_time' }]);
@@ -160,13 +196,18 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
 
   return (
     <StandingsShell>
-      <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
+      <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} ready={tabReady} onChange={index => {
+        touched.current = true;
+        setTabReady(true);
         if (activeTab !== index) playSound(whooshSound);
         setActiveTab(index);
       }} />
       {/* The three boards stay mounted (hidden when not chosen), so a tab switch never paints a
           blank frame: faces, barrels and rows are already decoded. */}
-      <View style={{ flex: 1 }}>
+      {/* collapsable={false}: the panes' zIndex must stay inside this view. When it was flattened
+          (Fabric), the visible pane's zIndex 1 out-ranked the nav bar, so the board's cream, rows
+          and dock drew over the raised compass and nav icons (r7). */}
+      <View collapsable={false} style={{ flex: 1 }}>
         {(['week', 'friends', 'all_time'] as const).map(board => (
           <View key={board} pointerEvents={key === board ? 'box-none' : 'none'}
             accessibilityElementsHidden={key !== board} importantForAccessibility={key === board ? 'auto' : 'no-hide-descendants'}

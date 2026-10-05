@@ -27,6 +27,9 @@ export interface StandingsBoardDto {
   readonly friends_count?: number | null;
   readonly week?: { readonly starts_at: string; readonly ends_at: string; readonly timezone?: string };
   readonly rows: readonly StandingsRowDto[];
+  /** Infinite scroll (v3): where the next page starts, null when everyone is here. */
+  readonly next_offset?: number | null;
+  readonly page_size?: number;
   /** Your row and three either side, when you are outside the top rows. */
   readonly around_me?: readonly StandingsRowDto[];
   readonly me?: StandingsRowDto | null;
@@ -49,6 +52,25 @@ export interface StandingsBoardDto {
 export async function getStandings(board: StandingsBoardKey, parkId?: number | null): Promise<StandingsBoardDto> {
   const { data } = await client.get<StandingsBoardDto>('/me/standings', {
     params: { board, ...(board === 'all_time' && parkId ? { park: parkId } : {}) },
+  });
+  return data;
+}
+
+/** One more page of rows (v3 infinite scroll): rows only, no podium, chase or goals. */
+export interface StandingsPageDto {
+  readonly board: StandingsBoardKey;
+  readonly offset: number;
+  readonly page_size: number;
+  readonly next_offset: number | null;
+  readonly players_count: number;
+  readonly rows: readonly StandingsRowDto[];
+  /** The board build this page read (the one asked for, or the newest when that one expired). */
+  readonly build?: string | null;
+}
+
+export async function getStandingsPage(board: StandingsBoardKey, parkId: number | null | undefined, offset: number, build?: string | null): Promise<StandingsPageDto> {
+  const { data } = await client.get<StandingsPageDto>('/me/standings', {
+    params: { board, offset, ...(build ? { build } : {}), ...(board === 'all_time' && parkId ? { park: parkId } : {}) },
   });
   return data;
 }

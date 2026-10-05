@@ -1,32 +1,37 @@
 /**
- * One Standings v2 board (PROPOSAL.md, round 2 fixes in grading/r1).
+ * One Standings board (v3: next-wave/standings-v3/DESIGN.md; v2 PROPOSAL.md).
  *
- * Layout, top to bottom: one slim strip (the board's unit, the week's day
- * dots or the park chips), a 236 pt podium that collapses into a sticky top-3
- * ribbon on scroll, a fixed-height virtualized list, and the You card pinned
- * at the bottom, which slides away whenever your own row is on screen.
+ * Layout, top to bottom: one pill (the board's number and the week's clock,
+ * or the park chips on All-Time), a 236 pt podium, an infinite list, and your
+ * own row pinned at the bottom, which slides away whenever your real row is on
+ * screen.
  *
- * Kid first: one number per board, one icon per meaning (cart = this week,
- * ride coin = forever), short words, big targets. Public rows open a safe
- * shark card, never a profile. Celebrations play only for real changes, and
- * the loudest one is yours: passing players, then "Up 4!".
+ * Kid first, one number per row: rank, shark, name, number. Nothing else on
+ * a row. Your pinned row adds one line ("2 more rides to pass gr8scott").
+ * Goals and anything else live on the card you get by tapping your row.
+ *
+ * Smooth: FlashList recycles rows, faces stay decoded in memory, and the next
+ * page is fetched about two and a half screens before the end. Grey rows hold
+ * its place, and a page never lands above what the kid is looking at (down in
+ * the Your spot block it waits), so nothing on screen ever jumps.
  */
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Image as ExpoImage } from 'expo-image';
-import { outfitLayerUrls } from '../../helpers/wardrobe';
-import type { InventoryType } from '../../models/inventory-type';
+import { FlashList, type ListRenderItem as FlashRenderItem } from '@shopify/flash-list';
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  AccessibilityInfo, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
-  type ListRenderItem, type ViewToken,
+  AccessibilityInfo, AppState, InteractionManager, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View,
+  type ViewToken,
 } from 'react-native';
 import Animated, {
-  Easing, FadeInRight, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
-  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction, type SharedValue,
+  Easing, FadeIn, FadeInRight, FadeOut, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
+  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
 } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
+import type { InventoryType } from '../../models/inventory-type';
 import { markLastWeekSeen, type StandingsBoardKey } from '../../api/endpoints/me/standings';
+import { LocationStatusContext } from '../../context/LocationProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import type { ParkType } from '../../models/park-type';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader, textPreset } from '../../ui';
@@ -37,12 +42,15 @@ import { CROWN_ART } from './PodiumSpot';
 import SharkCard from './SharkCard';
 import StandingsShark from './StandingsShark';
 import { onStandingsDemo } from './standingsDemo';
+import { perfMark, StandingsPerfLog, startPerfScroll, STANDINGS_PERF_ON } from './standingsPerf';
 import {
-  cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, loadBoard, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
+  cachedBoard, cachedParks, cardLessonDone, cardLessonDue, chooseAllTimePark, chosenAllTimePark, commitBoard, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
+import { prefetchLayers } from './faceLayers';
+import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
-  chaseChip, chaseProgress, DIVIDER_HEIGHT, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
-  podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, weekDots, youLine,
+  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
 
@@ -52,54 +60,50 @@ const BARREL = require('../../../assets/images/screens/leaderboard/barrel.png');
 
 /** Clears the raised compass button in the bottom bar. */
 const YOU_CARD_BOTTOM = 52;
-const YOU_CARD_HEIGHT = 84;
-const RIBBON_HEIGHT = 56;
+const YOU_CARD_HEIGHT = 72;
+/** The strip under the dock, down to the nav's top edge. */
+const STRIP_H = YOU_CARD_BOTTOM - 8;
 const HEADER_HEIGHT = MINI_PODIUM_HEIGHT + 18;
 
 type Status = 'loading' | 'ready' | 'error';
 
 let resultsShown = '';
 
-/** The week's seven day dots, today glowing; gold on the last day, red in the last three hours. */
-function WeekDots({ endsAt, now }: { readonly endsAt: string | null; readonly now: number }) {
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<ListItem>) as unknown as React.ComponentType<Record<string, unknown>>;
+
+// Stable list props (r2 perf: nothing new on every render).
+const keyOfItem = (item: ListItem) => item.key;
+const typeOfItem = (item: ListItem) => item.type;
+const sizeOfItem = (layout: { size?: number }, item: ListItem) => {
+  layout.size = item.type === 'divider' ? DIVIDER_HEIGHT : item.type === 'retry' ? ROW_HEIGHT * SKELETON_ROWS : ROW_HEIGHT;
+};
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+
+/**
+ * The board's one pill: what the number is and how long the week has left.
+ * Gold on the last day, red (with a slow pulse) in the last three hours.
+ */
+function WeekPill({ endsAt, now }: { readonly endsAt: string | null; readonly now: number }) {
   const reduced = useUiReducedMotion();
-  const week = weekDots(endsAt, now);
+  const week = weekLeft(endsAt, now);
   const pulse = useSharedValue(1);
   useEffect(() => {
-    if (reduced || week.urgency === 'calm') { pulse.value = 1; return; }
-    pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
+    if (reduced || week.urgency !== 'last_hours') { pulse.value = 1; return; }
+    pulse.value = withRepeat(withSequence(withTiming(1.05, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
   }, [week.urgency, reduced, pulse]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const tone = week.urgency === 'last_hours' ? BRAND.red : week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
-  const ink = week.urgency === 'calm' ? BRAND.navy : week.urgency === 'last_day' ? BRAND.navy : BRAND.white;
+  const ink = week.urgency === 'last_hours' ? BRAND.white : BRAND.navy;
   return (
-    <Animated.View accessible accessibilityRole="text" accessibilityLabel={week.spoken} style={[{
-      flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 12, borderRadius: RADIUS.pill,
+    <Animated.View accessible accessibilityRole="text" accessibilityLabel={`Ranked by rides won this week. ${week.spoken}`} style={[{
+      flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill, alignSelf: 'center',
       backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'last_hours' ? BRAND.redLip : week.urgency === 'last_day' ? BRAND.goldLip : 'rgba(5,52,110,0.18)',
     }, style]}>
-      <View style={{ flexDirection: 'row', gap: 3 }}>
-        {week.dots.map((dot, i) => (
-          <View key={i} style={{
-            width: dot.state === 'today' ? 12 : 8, height: dot.state === 'today' ? 12 : 8, borderRadius: 6, alignSelf: 'center',
-            backgroundColor: dot.state === 'past' ? 'rgba(5,52,110,0.25)' : dot.state === 'today' ? BRAND.blueBright : week.urgency === 'calm' ? BRAND.sky : 'rgba(255,255,255,0.7)',
-            borderWidth: dot.state === 'today' ? 2 : 0, borderColor: BRAND.white,
-          }} />
-        ))}
-      </View>
-      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>{week.label}</Text>
+      <ScoreIcon metric="ride_wins" size={24} />
+      <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>Rides won</Text>
+      {!!week.label && <View style={{ width: 2, height: 18, borderRadius: 1, backgroundColor: week.urgency === 'last_hours' ? 'rgba(255,255,255,0.5)' : 'rgba(5,52,110,0.2)' }} />}
+      {!!week.label && <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>{week.label}</Text>}
     </Animated.View>
-  );
-}
-
-function UnitChip({ metric }: { readonly metric: StandingsMetric }) {
-  const label = metric === 'ride_coins' ? 'Ride coins' : 'Rides won';
-  return (
-    <View accessible accessibilityRole="text" accessibilityLabel={metric === 'ride_coins' ? 'Ranked by ride coins collected' : 'Ranked by rides won this week'}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 40, borderRadius: RADIUS.pill,
-        backgroundColor: BRAND.white, borderWidth: 2, borderColor: 'rgba(5,52,110,0.18)' }}>
-      <ScoreIcon metric={metric} size={24} />
-      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{label}</Text>
-    </View>
   );
 }
 
@@ -124,8 +128,8 @@ function ParkChips({ parks, value, loading, onChange }: {
   }, [screenW]);
   useEffect(() => { reveal(value); }, [value, reveal]);
   return (
-    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
-      <UnitChip metric="ride_coins" />
+    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}
+      accessibilityLabel="Ranked by ride coins collected">
       {items.map(item => {
         const on = item.id === value;
         return (
@@ -146,8 +150,9 @@ function ParkChips({ parks, value, loading, onChange }: {
               backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 2, borderBottomWidth: 4,
               borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }],
             })}>
-            {on && loading && <Animated.View style={spinStyle}><ScoreIcon metric="ride_coins" size={16} /></Animated.View>}
-            <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{item.label}</Text>
+            {on && loading ? <Animated.View style={spinStyle}><ScoreIcon metric="ride_coins" size={18} /></Animated.View>
+              : item.id === null ? <ScoreIcon metric="ride_coins" size={18} /> : null}
+            <Text maxFontSizeMultiplier={1.25} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -155,55 +160,83 @@ function ParkChips({ parks, value, loading, onChange }: {
   );
 }
 
-/** A 64 pt row. Muted rows (friends with no rides yet) show the shark greyed and no number. */
-const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, detail, chase, onPress }: {
-  readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean; readonly animate: boolean;
-  readonly index: number; readonly detail: string | null;
-  /** Your row while the You card is away: the chase bar, "+N" and the rival's face. */
-  readonly chase: { readonly progress: number; readonly chip: string; readonly avatar: StandingsRowModel['avatar'] } | null;
+/** Text on the board grows with Dynamic Type, up to what its fixed-height row can hold. */
+const FONT_CAP = 1.25;
+
+/** The rank badge: a pill that widens with the digits, never below 13 pt (r2: 3 and 4 digit ranks stayed readable). */
+export function RankBadge({ rank, me = false }: { readonly rank: number; readonly me?: boolean }) {
+  const digits = String(rank).length;
+  return (
+    <View style={{ minWidth: 32, height: 32, paddingHorizontal: digits > 4 ? 8 : digits > 2 ? 7 : 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: me ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: me ? '#021c3d' : BRAND.blueLip }}>
+      <Text maxFontSizeMultiplier={1.1} numberOfLines={1}
+        style={{ fontFamily: 'Shark', fontSize: digits <= 2 ? 16 : digits === 3 ? 14 : digits === 4 ? 13 : 12, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{rank >= 10000 ? rank.toLocaleString('en-US') : rank}</Text>
+    </View>
+  );
+}
+
+/** A 64 pt row: rank, shark, name, number. Muted rows (friends with no rides yet) show the shark greyed and no number. */
+const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPress, waiting = false }: {
+  /** During the climb hold, a player who also stands on the dimmed old podium keeps an empty slot (r6: no duplicate). */
+  readonly waiting?: boolean;
+  readonly row: StandingsRowModel; readonly metric: StandingsMetric; readonly muted: boolean;
+  /** Your own row only: the next step as its one secondary chip (r3: Friends shows it too). */
+  readonly step: ReturnType<typeof nextStep> | null;
+  /** First paint only: the slide-in delay for this row, or null (recycled rows never animate). */
+  readonly enter: number | null;
   readonly onPress: (row: StandingsRowModel) => void;
 }) {
-  const tenth = row.rank != null && row.rank % 10 === 0;
+  if (waiting) {
+    // A saved seat, not a hole (r7): the cream sheet stays, a calm empty-row outline shows,
+    // and the slot is hidden from VoiceOver and taps until the finale fills it.
+    return (
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+        <View style={{ height: ROW_HEIGHT - 8, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(7,104,185,0.22)' }} />
+      </View>
+    );
+  }
   return (
-    <Animated.View entering={animate ? FadeInRight.delay(120 + index * 45).springify().damping(16).stiffness(180) : undefined}
+    <Animated.View entering={enter != null ? FadeInRight.delay(enter).springify().damping(16).stiffness(180) : undefined}
       style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
-      {tenth && <View style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 2, borderRadius: 1, backgroundColor: 'rgba(5,52,110,0.12)' }} />}
-      <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (detail ? `. ${detail}` : '')}
+      <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (row.isMe && step && 'plus' in step ? `. ${step.text}` : '')}
         onPress={() => onPress(row)}
         style={({ pressed }) => ({
           height: ROW_HEIGHT - 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.md,
           borderWidth: row.isMe ? 3 : 2, borderColor: row.isMe ? BRAND.gold : 'rgba(7,104,185,0.14)',
           backgroundColor: row.isMe ? '#fff4cc' : BRAND.white, transform: [{ scale: pressed ? 0.98 : 1 }],
         })}>
-        <View style={{ width: 40, alignItems: 'center' }}>
-          {row.rank ? (
-            <View style={{ minWidth: 32, height: 32, paddingHorizontal: 4, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-              backgroundColor: tenth ? BRAND.navy : BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: BRAND.blueLip }}>
-              <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: row.rank > 99 ? 12 : 16, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{row.rank}</Text>
-            </View>
-          ) : <View style={{ opacity: 0.35 }}><ScoreIcon metric={metric} size={22} /></View>}
+        <View style={{ minWidth: 40, alignItems: 'center' }}>
+          {row.rank ? <RankBadge rank={row.rank} me={row.isMe} />
+            : <View style={{ opacity: 0.35 }}><ScoreIcon metric={metric} size={22} /></View>}
         </View>
-        <View style={{ marginLeft: 6 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
-          {chase ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-              <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
-                <View style={{ width: `${Math.round(chase.progress * 100)}%`, height: 6, borderRadius: 3, backgroundColor: BRAND.blueBright }} />
+        <View style={{ marginLeft: 8 }}><StandingsShark avatar={row.avatar} size={40} muted={muted} /></View>
+        {row.isMe && step && (step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal') ? (
+          // Your row: the name keeps its full width, the next step sits under it (r3: the name was squeezed to 7 letters).
+          <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center', gap: 2 }}>
+            {/* Same 18 pt name as everyone, with your YOU chip (r5). */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+              <View style={{ paddingHorizontal: 6, height: 18, borderRadius: 9, justifyContent: 'center', backgroundColor: BRAND.navy }}>
+                <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.white }}>YOU</Text>
               </View>
-              <View style={{ paddingHorizontal: 4, height: 18, borderRadius: 9, justifyContent: 'center', backgroundColor: BRAND.blueBright }}>
-                <Text style={{ fontFamily: 'Shark', fontSize: 11, color: BRAND.white }}>{chase.chip}</Text>
-              </View>
-              <StandingsShark avatar={chase.avatar} size={22} />
             </View>
-          ) : (row.isMe || detail) && (
-            <Text numberOfLines={1} style={[textPreset('caption'), { color: row.isMe ? BRAND.goldLip : BRAND.navySoft }]}>{detail ?? 'YOU'}</Text>
+            <StepGlyphs compact plus={step.plus} target={step.target} metric={metric} kind={step.kind} icon={step.icon} />
+          </View>
+        ) : (
+        <View style={{ flex: 1, marginLeft: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text maxFontSizeMultiplier={FONT_CAP} numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Shark', fontSize: 18, color: muted ? BRAND.navySoft : BRAND.navy, textTransform: 'uppercase' }}>{row.name}</Text>
+          {row.isMe && (
+            <View style={{ paddingHorizontal: 7, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.navy }}>
+              <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>YOU</Text>
+            </View>
           )}
         </View>
+        )}
         {!muted && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <ScoreIcon metric={metric} size={22} />
-            <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.blue, fontVariant: ['tabular-nums'], minWidth: 28, textAlign: 'right' }}>{row.score}</Text>
+            <Text maxFontSizeMultiplier={FONT_CAP} style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.blue, fontVariant: ['tabular-nums'], minWidth: 28, textAlign: 'right' }}>{row.score}</Text>
           </View>
         )}
       </Pressable>
@@ -211,63 +244,132 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, animate, index, de
   );
 });
 
-function Divider({ label }: { readonly label: string }) {
+/** Where the next page will land: a grey row the same size as a real one, so the list never jumps. The first one tells VoiceOver. */
+const SkeletonRow = memo(function SkeletonRow({ first }: { readonly first: boolean }) {
   return (
-    <View style={{ height: DIVIDER_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
-      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
-      <Text accessibilityRole="header" style={[textPreset('label'), { color: BRAND.navySoft }]}>{label}</Text>
-      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
+    <View accessible={first} accessibilityLabel={first ? 'Loading more players' : undefined}
+      importantForAccessibility={first ? 'yes' : 'no-hide-descendants'}
+      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+      <View style={{ height: ROW_HEIGHT - 8, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.06)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 12 }}>
+        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+        <View style={{ width: 110, height: 14, borderRadius: 7, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+      </View>
+    </View>
+  );
+});
+
+/** Three failed loads in a row: one big button in place of the grey rows (same height, nothing moves). */
+function RetryRow({ onPress }: { readonly onPress: () => void }) {
+  return (
+    <View style={{ height: ROW_HEIGHT * SKELETON_ROWS, backgroundColor: BRAND.cream, alignItems: 'center', justifyContent: 'center' }}>
+      <GameButton label="Tap to load more" icon="retry" size="compact" onPress={onPress} />
     </View>
   );
 }
 
-/** The goal pips (3, 8, 15 rides this week): gold when reached. */
-function GoalPips({ model }: { readonly model: StandingsBoardModel }) {
-  if (!model.goals.length) return null;
-  const reached = model.goals.filter(g => g.reached).length;
+/** The end of the list: how many are racing (r2: never a blank cream void under Your spot). */
+function FooterRow({ label, metric }: { readonly label: string; readonly metric: StandingsMetric }) {
   return (
-    <View accessible accessibilityLabel={`Weekly goals: ${reached} of ${model.goals.length} reached. Next goal ${model.goals.find(g => !g.reached)?.at ?? 'done'} rides.`}
-      style={{ flexDirection: 'row', gap: 4 }}>
-      {model.goals.map(goal => (
-        <View key={goal.at} style={{ minWidth: 26, height: 22, paddingHorizontal: 5, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
-          backgroundColor: goal.reached ? BRAND.gold : BRAND.white, borderWidth: 2, borderColor: goal.reached ? BRAND.goldLip : 'rgba(5,52,110,0.2)' }}>
-          {goal.reached ? <GameIcon name="check" size={14} />
-            : <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navySoft }}>{goal.at}</Text>}
-        </View>
-      ))}
+    <View accessible accessibilityRole="text" accessibilityLabel={label}
+      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+      <ScoreIcon metric={metric} size={18} />
+      <Text maxFontSizeMultiplier={FONT_CAP} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft }}>{label}</Text>
+    </View>
+  );
+}
+
+function Divider({ label }: { readonly label: string }) {
+  return (
+    <View style={{ height: DIVIDER_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
+      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
+      {/* The board's own face, like the Monday kicker (r7 art: the label preset was off-family). */}
+      <Text maxFontSizeMultiplier={FONT_CAP} accessibilityRole="header" style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
     </View>
   );
 }
 
 /**
- * The pinned You card: rank (or NEW), your shark, your number and goal pips,
- * one line, and a bar that ends at the face of the player you are chasing
- * with a "+2" chip, so the goal reads without words.
+ * The next step as glyphs a 6 year old reads without words: "+1 [cart] -> #107",
+ * "+3 [cart] -> TOP 10", "+2 [cart] -> +25 XP". The sentence is the spoken label.
  */
-function YouCard({ model, climb, climbId, passed, hidden, snapId, now, onPress, onGoRide, onClimbDone }: {
+function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
+  readonly plus: number; readonly target: string; readonly metric: StandingsMetric; readonly kind: 'jump' | 'top10' | 'goal';
+  readonly icon: 'crown' | 'trophy' | 'star' | 'up' | null;
+  /** On your own row in the list: a smaller pill under your name. */
+  readonly compact?: boolean;
+}) {
+  const h = compact ? 22 : 26;
+  const f = compact ? 12 : 15;
+  const ic = compact ? 13 : 16;
+  const gold = kind !== 'jump' || icon === 'crown';
+  // One pill, one phrase (r5): "+1 cart" on blue flows into the target on navy or gold.
+  return (
+    <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', height: h,
+      borderRadius: h / 2, overflow: 'hidden', borderWidth: 2, borderColor: gold ? BRAND.goldLip : BRAND.navy }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: compact ? 7 : 9, paddingRight: compact ? 5 : 7, height: '100%', backgroundColor: BRAND.blueBright }}>
+        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`+${plus}`}</Text>
+        <ScoreIcon metric={metric} size={ic + 1} />
+        <GameIcon name="arrow" size={ic - 2} />
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: compact ? 6 : 8, paddingRight: compact ? 8 : 10, height: '100%', backgroundColor: gold ? BRAND.gold : BRAND.navy }}>
+        {icon === 'crown' && <GameIcon name="crown" size={ic} />}
+        {icon === 'trophy' && <GameIcon name="trophy" size={ic} />}
+        {icon === 'star' && <GameIcon name="star" size={ic} />}
+        {icon === 'up' && <GameIcon name="arrow" size={ic - 2} style={{ transform: [{ rotate: '-90deg' }] }} />}
+        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: gold ? BRAND.navy : BRAND.white, fontVariant: ['tabular-nums'] }}>{target}</Text>
+        {/* A far jump counts players passed: a shark says "players" without words. */}
+        {icon === 'up' && <GameIcon name="shark" size={ic} />}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Your row, pinned at the bottom (v3): your rank badge, your shark, your number,
+ * and one next step in glyphs. Docked on its own cream strip with a fade above,
+ * so rows slide under it the way they slide under the tab bar. The overtake
+ * plays in the step slot: each player you passed slides by with a tick, then
+ * "Up N!" lands on your rank.
+ */
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught }: {
+  /** The week's first visit: bounce once with a tap glyph, so a kid learns the row opens their card (r7). */
+  readonly teach?: boolean;
+  readonly onTaught?: () => void;
+  /** The crown finale follows (you reached the podium): "Up N!" gets a light tick, the crown gets the success haptic. */
+  readonly finaleFollows: boolean;
+  /** "Up N!" just landed: the podium finale may play. */
+  readonly onClimbLanded: () => void;
   readonly model: StandingsBoardModel; readonly climb: number; readonly passed: readonly StandingsRowModel[];
+  /** The rank you climbed from: shown until the last "Passed X" tick, so the reveal is never spoiled. */
+  readonly climbFrom: number | null;
   /** Changes for every climb, so two climbs of the same size both play. */
   readonly climbId: number;
-  /** Changes when the board becomes the active tab: the card jumps to its state, no slide. */
+  /** Changes when the board becomes the active tab: the row jumps to its state, no slide. */
   readonly snapId: number;
-  readonly hidden: boolean; readonly now: number; readonly onPress: () => void;
-  /** NEW players: the card's button opens the map. */
+  readonly hidden: boolean; readonly now: number;
+  /** At a park: a new player gets a GO RIDE button; at home, no dead-end button. */
+  readonly inPark: boolean;
+  /** Ranked: shows your row in the list. */
+  readonly onPress: () => void;
+  /** Not ranked yet: your card (with your goals). */
+  readonly onOpenCard: () => void;
   readonly onGoRide: () => void;
-  /** The climb finished; the card may slide away again if your row is on screen. */
+  /** The climb finished; the row may slide away again if your real row is on screen. */
   readonly onClimbDone: () => void;
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
+  const { width: screenW } = useWindowDimensions();
   const me = model.me;
-  const line = youLine(model);
-  const chip = chaseChip(model, line.state);
-  const progress = line.state === 'join' ? 0.06 : line.state === 'review' ? 0 : chaseProgress(model);
-  const fill = useSharedValue(reduced ? progress : 0);
+  const step = nextStep(model, inPark);
   const shown = useSharedValue(reduced ? 1 : 0);
-  const [step, setStep] = useState(-1);
-  const urgent = model.board !== 'all_time' && weekDots(model.endsAt, now).urgency !== 'calm' && !!model.chase && model.chase.toPass <= 2;
+  const bounce = useSharedValue(0);
+  const [tapHint, setTapHint] = useState(false);
+  const [step2, setStep2] = useState(-1);
+  const urgent = model.board !== 'all_time' && weekLeft(model.endsAt, now).urgency !== 'calm' && step.kind !== 'join' && step.kind !== 'leader' && step.kind !== 'review';
 
-  useEffect(() => { fill.value = reduced ? progress : withDelay250(progress); }, [progress, reduced, fill]);
   const lastSnap = useRef(snapId);
   useLayoutEffect(() => {
     const snap = lastSnap.current !== snapId;
@@ -275,160 +377,158 @@ function YouCard({ model, climb, climbId, passed, hidden, snapId, now, onPress, 
     shown.value = reduced || snap ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
   }, [hidden, reduced, shown, snapId]);
 
+  // Teach the card once a week: one bounce and a tap glyph, after the dock has settled.
+  // Reduced motion: no bounce (the lesson still counts as given).
+  useEffect(() => {
+    if (!teach || hidden) return undefined;
+    if (reduced) { onTaught?.(); return undefined; }
+    const start = setTimeout(() => {
+      setTapHint(true);
+      bounce.value = withSequence(withTiming(-14, { duration: 170 }), withSpring(0, { damping: 7, stiffness: 260 }));
+    }, 700);
+    // Counted as given once it has played (a dock that hides first gets it next time).
+    const end = setTimeout(() => { setTapHint(false); onTaught?.(); }, 2900);
+    return () => { clearTimeout(start); clearTimeout(end); setTapHint(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teach, hidden, reduced]);
+
   // The overtake: each player you passed slides by with a tick, then "Up N!" lands.
   useEffect(() => {
-    if (climb <= 0) { setStep(-1); return; }
-    setStep(-1);
+    if (climb <= 0) { setStep2(-1); return; }
+    setStep2(-1);
     const announce = () => AccessibilityInfo.announceForAccessibility(`Up ${climb} ${climb === 1 ? 'place' : 'places'}! You are number ${me?.rank ?? ''} now.`);
     if (reduced || !passed.length) {
-      setStep(passed.length);
-      playSound(rewardSound);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      setStep2(passed.length);
+      // The crown keeps the only success haptic when it follows (r7: this branch doubled it).
+      // With reduced motion the podium plays no landing, so this beat is the success.
+      const crownLater = finaleFollows && !reduced;
+      playSound(crownLater ? tapSound : rewardSound);
+      if (crownLater) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
+      onClimbLanded();
       const done = setTimeout(onClimbDone, 1800);
       return () => clearTimeout(done);
     }
+    // Readable ticks (r5): 600 ms each, so a 7-year-old can read each name.
+    const TICK = 600;
     const timers = passed.map((_, i) => setTimeout(() => {
-      setStep(i);
+      setStep2(i);
       playSound(tapSound);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    }, 500 + i * 380));
+    }, 400 + i * TICK));
     timers.push(setTimeout(() => {
-      setStep(passed.length);
-      playSound(rewardSound);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      setStep2(passed.length);
+      playSound(finaleFollows ? tapSound : rewardSound);
+      if (finaleFollows) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
-    }, 500 + passed.length * 380));
-    timers.push(setTimeout(onClimbDone, 500 + passed.length * 380 + 1800));
+      onClimbLanded();
+    }, 400 + passed.length * TICK));
+    timers.push(setTimeout(onClimbDone, 400 + passed.length * TICK + 2400));
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climbId]);
 
-  const barStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: shown.value,
-    transform: [{ translateY: (1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM) }],
+  // Clamped: the spring may overshoot, but the dock never rises above its rest spot.
+  // It slides fully opaque and fades only in the last quarter of its travel, so its
+  // text never ghosts over a row (r2).
+  const dockStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, Math.max(0, shown.value) * 4),
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value }],
   }));
-  const joining = line.state === 'join';
-  const label = youLabel(model, climb);
-  const reviewing = line.state === 'review';
-  const shownScore = reviewing ? `${model.review?.rides ?? 0}` : scoreText(model, me?.score ?? 0);
-  const passing = step >= 0 && step < passed.length ? passed[step] : null;
+  const joining = step.kind === 'join';
+  const reviewing = step.kind === 'review';
+  const label = youLabel(model, climb, inPark);
+  const score = me?.score ?? 0;
+  // "0 of 211" is a scary denominator for a new player: just 0 until the first coin.
+  const shownScore = reviewing ? `${model.review?.rides ?? 0}` : score > 0 ? scoreText(model, score) : '0';
+  const passing = step2 >= 0 && step2 < passed.length ? passed[step2] : null;
+  const climbed = climb > 0 && step2 >= passed.length;
+  // Until the last tick: the old rank and no new line (r2: "You're #1" showed before the ticks).
+  const revealing = climb > 0 && passed.length > 0 && step2 < passed.length;
+  const shownRank = revealing && climbFrom ? climbFrom : me?.rank;
 
   return (
-    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 12, right: 12, bottom: YOU_CARD_BOTTOM }, cardStyle]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={joining ? 'Opens the map' : 'Shows your row'}
-        onPress={joining ? onGoRide : onPress}
-        style={({ pressed }) => ({
-          height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.lg,
-          backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: urgent ? BRAND.goldLip : BRAND.gold, ...SHADOW.lifted,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
-        })}>
-        <View style={{ width: 54, alignItems: 'center' }}>
-          {me?.rank ? (
-            <>
-              <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 28, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{`#${me.rank}`}</Text>
-              {climb > 0 && step >= passed.length ? (
-                <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
-                  style={{ paddingHorizontal: 6, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.green,
-                    borderWidth: 2, borderColor: BRAND.greenLip }}>
-                  <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>{`Up ${climb}!`}</Text>
-                </Animated.View>
-              ) : <Text style={[textPreset('label'), { color: BRAND.goldLip, fontSize: 12 }]}>YOU</Text>}
-            </>
-          ) : line.state === 'review' ? (
-            <GameIcon name="timer" size={34} />
-          ) : (
-            <View style={{ paddingHorizontal: 8, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.goldLip }}>
-              <Text style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>NEW</Text>
-            </View>
-          )}
-        </View>
-        {me && <StandingsShark avatar={me.avatar} size={48} ring={BRAND.gold} />}
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}>
+      {/* The dock: rows fade out above it. It stops above the nav's raised icons
+          (r2: a strip down to the screen edge erased them). */}
+      <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
+      {tapHint && (
+        <Animated.View pointerEvents="none" entering={FadeIn.duration(150)} exiting={FadeOut.duration(200)} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+          style={{ position: 'absolute', top: -18, right: 28, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: 15,
+            backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white }}>
+          <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>TAP</Text>
+          <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '90deg' }] }} />
+        </Animated.View>
+      )}
+      {/* Cream from the dock down to the nav's top edge, full width, so no row ever shows
+          between dock and nav. The nav (compass included) draws above this screen, so the
+          compass sits on the cream (r6 captures: a round cutout showed a row through it). */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: -STRIP_H, height: STRIP_H, backgroundColor: BRAND.cream }} />
+      <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8 }}>
+        <Pressable accessibilityRole="button"
+          // While the ticks play, the spoken rank matches the screen (r6).
+          accessibilityLabel={dockLabel(label, revealing, climbFrom)}
+          accessibilityHint={joining ? (step.kind === 'join' && step.canRide ? 'Opens your card. Swipe up or down for Go ride.' : 'Opens your card') : 'Shows your row'}
+          // GO RIDE sits inside this row, so VoiceOver reaches it as an action (r2 kids UX).
+          accessibilityActions={joining && step.kind === 'join' && step.canRide ? [{ name: 'activate' }, { name: 'goRide', label: 'Go ride' }] : undefined}
+          onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'goRide') onGoRide(); else (joining ? onOpenCard : onPress)(); }}
+          onPress={joining ? onOpenCard : onPress}
+          style={({ pressed }) => ({
+            height: YOU_CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: RADIUS.lg,
+            backgroundColor: '#fff4cc', borderWidth: 3, borderBottomWidth: 6, borderColor: urgent ? BRAND.goldLip : BRAND.gold, ...SHADOW.lifted,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
+          })}>
+          <View style={{ minWidth: 44, alignItems: 'center', marginRight: shownRank && shownRank >= 10000 ? 6 : 0 }}>
+            {shownRank ? <RankBadge rank={shownRank} me />
+              : reviewing ? <GameIcon name="timer" size={30} />
+              // No rank yet: an empty dashed badge, so the coin shows once, before the number (r7 art).
+              : <View style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(5,52,110,0.35)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navySoft }}>?</Text>
+              </View>}
+          </View>
+          <View style={{ marginLeft: 12 }}>{me && <StandingsShark avatar={me.avatar} size={44} ring={BRAND.gold} />}</View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <ScoreIcon metric={model.metric} size={20} />
-              <Text style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{shownScore}</Text>
+              <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{shownScore}</Text>
             </View>
-            <GoalPips model={model} />
-          </View>
-          {passing ? (
-            // The overtake plays inside your card: never over anyone's row.
-            <Animated.View key={passing.key} entering={reduced ? undefined : FadeInRight.springify().damping(14)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 20 }}>
-              <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} />
-              <StandingsShark avatar={passing.avatar} size={20} />
-              <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.green, flexShrink: 1 }}>{`Passed ${passing.name}!`}</Text>
-            </Animated.View>
-          ) : (
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
-              style={{ fontFamily: 'Knockout', fontSize: 16, color: urgent ? BRAND.goldLip : BRAND.navy }}>{line.text}</Text>
-          )}
-          {line.state === 'review' ? (
-            <Text numberOfLines={1} style={[textPreset('caption'), { color: BRAND.navySoft }]}>{line.sub}</Text>
-          ) : joining ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 24, borderRadius: 12,
-                backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.goldLip }}>
-                <GameIcon name="ride" size={16} />
-                <Text style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.navy }}>GO RIDE</Text>
-              </View>
-              <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
-                <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: BRAND.gold }, barStyle]} />
-              </View>
-              <View style={{ paddingHorizontal: 5, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.gold }}>
-                <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy }}>+1</Text>
-              </View>
-            </View>
-          ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.14)', overflow: 'hidden' }}>
-              <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: line.state === 'leader' ? BRAND.gold : BRAND.blueBright }, barStyle]} />
-            </View>
-            {model.chase && chip && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                <View style={{ paddingHorizontal: 5, height: 20, borderRadius: 10, justifyContent: 'center', backgroundColor: BRAND.blueBright }}>
-                  <Text style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white }}>{chip}</Text>
-                </View>
-                <StandingsShark avatar={model.chase.avatar} size={22} />
-              </View>
+            {passing ? (
+              // A crisp 120 ms fade, never a long spring, so every frame of the name is readable (r5).
+              <Animated.View key={passing.key} entering={reduced ? undefined : FadeIn.duration(120)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 26 }}>
+                <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '-90deg' }] }} />
+                <StandingsShark avatar={passing.avatar} size={22} />
+                <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, flexShrink: 1, textTransform: 'uppercase' }}>{`Passed ${passing.name}!`}</Text>
+              </Animated.View>
+            ) : revealing ? (
+              <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.greenLip }}>CLIMBING!</Text>
+            ) : step.kind === 'jump' || step.kind === 'top10' || step.kind === 'goal' ? (
+              <StepGlyphs plus={step.plus} target={step.target} metric={model.metric} kind={step.kind} icon={step.icon} />
+            ) : (
+              <Text maxFontSizeMultiplier={1.15} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
+                style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>{step.text}</Text>
             )}
           </View>
+          {climbed && (
+            // Inside the dock, at its right end (r7: three rounds of the pill hanging over row 6).
+            <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden style={{ marginLeft: 8, paddingHorizontal: 10, height: 30, borderRadius: 15, justifyContent: 'center',
+                backgroundColor: BRAND.green, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.greenLip }}>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.white }}>{`Up ${climb}!`}</Text>
+            </Animated.View>
           )}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-const withDelay250 = (to: number) => withSequence(withTiming(0, { duration: 250 }), withTiming(to, { duration: 650 }));
-
-/** Three mini sharks with their numbers; appears when the podium scrolls away. */
-function TopRibbon({ podium, metric, scrollY }: {
-  readonly podium: readonly (StandingsRowModel | null)[]; readonly metric: StandingsMetric; readonly scrollY: SharedValue<number>;
-}) {
-  const style = useAnimatedStyle(() => {
-    const t = interpolate(scrollY.value, [MINI_PODIUM_HEIGHT - 90, MINI_PODIUM_HEIGHT - 30], [0, 1], Extrapolation.CLAMP);
-    return { opacity: t, transform: [{ translateY: (1 - t) * -RIBBON_HEIGHT }] };
-  });
-  const order = [podium[1], podium[0], podium[2]];
-  return (
-    <Animated.View pointerEvents="none" style={[{
-      position: 'absolute', top: 0, left: 12, right: 12, height: RIBBON_HEIGHT, borderBottomLeftRadius: RADIUS.lg, borderBottomRightRadius: RADIUS.lg,
-      backgroundColor: BRAND.navy, borderWidth: 2, borderTopWidth: 0, borderColor: BRAND.gold, flexDirection: 'row', alignItems: 'center',
-      justifyContent: 'space-around', ...SHADOW.card,
-    }, style]}>
-      {order.map((row, i) => {
-        const rank = i === 1 ? 1 : i === 0 ? 2 : 3;
-        return (
-          <View key={rank} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '33%' }}>
-            <GameIcon name={`medal${rank}` as 'medal1'} size={20} />
-            {row ? <StandingsShark avatar={row.avatar} size={30} ring={row.isMe ? BRAND.gold : undefined} /> : null}
-            <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{row ? row.score : '-'}</Text>
-          </View>
-        );
-      })}
+          {joining && step.canRide && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Go ride: opens the map" hitSlop={8} onPress={onGoRide}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, minHeight: 44, borderRadius: 14,
+                backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.goldLip, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+              <GameIcon name="map" size={18} />
+              <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>GO RIDE</Text>
+            </Pressable>
+          )}
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -437,7 +537,7 @@ function TopRibbon({ podium, metric, scrollY }: {
 function Skeleton() {
   return (
     <View>
-      <MiniPodium podium={[null, null, null]} metric="ride_wins" celebrate={false} meJoined={false} playKey="skeleton" onPress={() => undefined} />
+      <MiniPodium podium={[null, null, null]} metric="ride_wins" celebrate={false} meJoined={false} playKey="skeleton" loading onPress={() => undefined} />
       <View style={{ marginTop: -18, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, backgroundColor: BRAND.cream, paddingTop: 14 }}>
         {[0, 1, 2, 3].map(i => (
           <View key={i} accessible={false} style={{ height: ROW_HEIGHT - 8, marginHorizontal: 12, marginVertical: 4, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.06)' }} />
@@ -457,10 +557,16 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
+  // At a park, a new player gets GO RIDE; at home there is no dead-end button.
+  const inPark = !!useContext(LocationStatusContext).park;
   const [parks, setParks] = useState<ParkType[]>(cachedParks());
   const [parkId, setParkId] = useState<number | null>(board === 'all_time' ? chosenAllTimePark() : null);
+  const parkIdRef = useRef(parkId);
+  parkIdRef.current = parkId;
   const first = cachedBoard(meId, board, parkId);
   const [model, setModel] = useState<StandingsBoardModel | null>(first?.model ?? null);
+  const modelRef = useRef(model);
+  modelRef.current = model;
   const [status, setStatus] = useState<Status>(first ? 'ready' : 'loading');
   const [switching, setSwitching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -469,13 +575,35 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const [climbing, setClimbing] = useState(false);
   const [climbId, setClimbId] = useState(0);
   const [passed, setPassed] = useState<readonly StandingsRowModel[]>([]);
+  const [climbFrom, setClimbFrom] = useState<number | null>(null);
+  // The new podium waits hidden while the Monday card and your climb play, then rises last (r3).
+  const [podiumHold, setPodiumHold] = useState(false);
+  const landedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (landedTimer.current) clearTimeout(landedTimer.current); }, []);
   const [celebrate, setCelebrate] = useState(false);
   const [meJoined, setMeJoined] = useState(false);
   const [myRowVisible, setMyRowVisible] = useState(false);
   const [card, setCard] = useState<StandingsRowModel | null>(null);
   const [results, setResults] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const list = useRef<FlatList<ListItem>>(null);
+  // Three page loads failed in a row: the grey rows become "Tap to load more".
+  const [pageFailed, setPageFailed] = useState(false);
+  const list = useRef<FlashList<ListItem>>(null);
+  // The skeleton stays over the list until FlashList has drawn its first rows (r7: one
+  // blank ocean frame showed between the skeleton and the board).
+  const [listDrawn, setListDrawn] = useState(false);
+  // ...and until the first answer has been checked for a Monday card and a climb, so a cold
+  // open never flashes the final board before the card (r7 art: the climb was spoiled).
+  const [reacted, setReacted] = useState(false);
+  const [lesson, setLesson] = useState(false);
+  // FlashList's onLoad fires before its first rows reach the screen; the skeleton lifts a
+  // beat later so no bare-ocean frame shows between them (r7 captures).
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (revealed || !listDrawn || !reacted) return undefined;
+    const timer = setTimeout(() => setRevealed(true), 120);
+    return () => clearTimeout(timer);
+  }, [revealed, listDrawn, reacted]);
   const request = useRef(0);
   const entered = useRef(false);
   const scrollY = useSharedValue(0);
@@ -512,6 +640,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const activeRef = useRef(active);
   activeRef.current = active;
   const react = useCallback(async (next: StandingsBoardModel) => {
+    try { await reactTo(next); } finally { setReacted(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId]);
+  const reactTo = async (next: StandingsBoardModel) => {
     // A hidden board saves its moments for when the kid opens it.
     if (!activeRef.current) return;
     const seen = await readSeenRank(meId, next);
@@ -519,23 +651,50 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     writeSeenRank(meId, next);
     const changed = await podiumChanged(meId, next);
     const top = podiumRows(next);
-    setCelebrate(changed);
-    setMeJoined(changed && top.some(row => row?.isMe) && (seen == null || seen > 3));
+    const joined = changed && top.some(row => row?.isMe) && (seen == null || seen > 3);
     const showResults = next.board === 'week' && !!next.lastWeek && !next.lastWeek.seen
       && resultsShown !== `${meId}:${next.lastWeek.weekStart}`;
-    if (up > 0) {
-      const climbNow = () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 4)); setClimbing(true); setClimb(up); setClimbId(id => id + 1); };
-      // The overtake waits for the Monday card, so it is never played behind it.
-      if (showResults) pendingClimb.current = climbNow; else climbNow();
-    }
+    const climbNow = up > 0
+      ? () => { setPassed(passedPlayers(next.rows, seen as number, next.me?.rank as number).slice(0, 3)); setClimbFrom(seen); setClimbing(true); setClimb(up); setClimbId(id => id + 1); }
+      : null;
+    // The podium rise, its confetti and the overtake all wait for the Monday card,
+    // so the best moment is never played behind it (r2 game feel).
+    // Order: Monday card, then the overtake, then the podium rise and confetti as the finale.
+    const celebrateNow = () => {
+      setCelebrate(changed); setMeJoined(joined);
+      // Hold only when you newly reach the podium, so the dimmed old top three is exact (r6).
+      setPodiumHold(!!climbNow && joined);
+      climbNow?.();
+    };
+    if (showResults) { setCelebrate(false); setMeJoined(false); setPodiumHold(joined); pendingClimb.current = celebrateNow; } else celebrateNow();
     // The Monday card shows once: unseen on the server and not already shown this session.
     if (next.board === 'week' && next.lastWeek && !next.lastWeek.seen && resultsShown !== `${meId}:${next.lastWeek.weekStart}`) {
       resultsShown = `${meId}:${next.lastWeek.weekStart}`;
       setResults(true);
     }
-  }, [meId]);
+  };
+  // A safety net: the gate never holds the board for more than 1.5 s.
+  useEffect(() => {
+    if (reacted || status !== 'ready') return undefined;
+    const timer = setTimeout(() => setReacted(true), 1500);
+    return () => clearTimeout(timer);
+  }, [reacted, status]);
+  // Teach the card on the week's first visit, when nothing else is playing (r7).
+  useEffect(() => {
+    if (!reacted || !active || results || climbing) return undefined;
+    let live = true;
+    void cardLessonDue(meId).then(due => { if (live && due) setLesson(true); });
+    return () => { live = false; };
+  }, [reacted, active, results, climbing, meId]);
 
   const load = useCallback((force: boolean) => {
+    // A new board, park or refresh: any page in flight or held for the old one must
+    // never land on it (r2 perf: a warm-cache park switch returned before this bump).
+    request.current += 1;
+    heldPage.current = null;
+    failures.current = 0;
+    retryAt.current = 0;
+    setPageFailed(false);
     const hit = cachedBoard(meId, board, parkId);
     if (hit) {
       setModel(hit.model);
@@ -579,21 +738,103 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   }, [active]);
   useEffect(() => { const t = setTimeout(() => { entered.current = true; }, 900); return () => clearTimeout(t); }, []);
 
-  const items = useMemo(() => (model ? listItems(model) : []), [model]);
-  // Outfit art for the podium and your row is fetched before it is drawn.
+  const items = useMemo(() => (model ? listItems(model, { failed: pageFailed }) : []), [model, pageFailed]);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  // Infinite scroll: one page at a time, merged into the cached board.
+  const fetchingMore = useRef(false);
+  const lastVisible = useRef(0);
+  const firstVisible = useRef(0);
+  // A page that lands while the kid is down in the Your spot block would push
+  // it down: it waits here until they scroll back up to the grey rows.
+  const heldPage = useRef<StandingsBoardModel | null>(null);
+  // The board a held page was built on: it lands only if that board is still the one shown.
+  const heldBase = useRef<StandingsBoardModel | null>(null);
+  // Failed pages back off (1 s, 2 s, 4 s, 8 s); after 3 the kid gets a button.
+  const failures = useRef(0);
+  const retryAt = useRef(0);
+  // While "show my row" is animating, nothing lands and nothing is fetched:
+  // the jump's target is a pixel offset, and a page landing mid-flight would move it.
+  const jumpingUntil = useRef(0);
+  const canInsert = useCallback(() => Date.now() >= jumpingUntil.current && safeToInsert(firstVisible.current, itemsRef.current), []);
+  const apply = useCallback((next: StandingsBoardModel) => {
+    // (r3: React startTransition throws inside this RN build's renderer, so a page lands as a normal update.)
+    setModel(next);
+    // Only a page the kid can see becomes the cached board.
+    commitBoard(meId, board, parkId, next);
+  }, [meId, board, parkId]);
+  const more = useCallback((why: 'idle' | 'scroll' | 'end' | 'tap') => {
+    // A held page is the next page: never fetch past it.
+    if (fetchingMore.current || heldPage.current || !model || model.nextOffset == null) return;
+    if (why === 'tap') { failures.current = 0; retryAt.current = 0; setPageFailed(false); }
+    if (Date.now() < retryAt.current || failures.current >= 3) return;
+    fetchingMore.current = true;
+    const id = request.current;
+    const started = Date.now();
+    const at = firstSkeletonIndex(itemsRef.current);
+    const before = model.rows.length;
+    const base = model;
+    if (STANDINGS_PERF_ON) perfMark(`page-request ${board} offset=${model.nextOffset} why=${why} rowsToEnd=${at - lastVisible.current}`);
+    loadMore(meId, board, parkId, model).then(next => {
+      if (STANDINGS_PERF_ON) perfMark(`page-arrived ${board} ${Date.now() - started}ms rows=${typeof next === "object" && next ? next.rows.length : String(next)} rowsToEndAtArrival=${firstSkeletonIndex(itemsRef.current) - lastVisible.current}`);
+      failures.current = 0;
+      retryAt.current = 0;
+      if (!next || id !== request.current) return;
+      // The board was rebuilt between pages: refresh (the store refetches the pages) rather than append.
+      if (next === 'rebuilt') { loadRef.current(true); return; }
+      if (!boardMatches(next, board, parkIdRef.current)) return;
+      // The board was replaced (a refresh) while this page loaded: it belongs to the old one.
+      if (modelRef.current !== base) return;
+      if (canInsert()) {
+        apply(next);
+        // VoiceOver near the end hears that more players arrived.
+        if (lastVisible.current >= at - 3) AccessibilityInfo.announceForAccessibility(`${Math.max(0, next.rows.length - before)} more players`);
+      } else {
+        heldPage.current = next;
+        heldBase.current = base;
+        if (STANDINGS_PERF_ON) perfMark(`page-held ${board}`);
+      }
+    }).catch(error => {
+      if (STANDINGS_PERF_ON) perfMark(`page-error ${String((error as Error)?.message ?? error).slice(0, 160)}`);
+      failures.current += 1;
+      retryAt.current = Date.now() + Math.min(8000, 1000 * 2 ** (failures.current - 1));
+      if (failures.current >= 3) setPageFailed(true);
+      if (STANDINGS_PERF_ON) perfMark(`page-failed ${board} ${Date.now() - started}ms failures=${failures.current}`);
+    }).finally(() => { fetchingMore.current = false; });
+  }, [model, meId, board, parkId, apply, canInsert]);
+  const moreRef = useRef(more);
+  moreRef.current = more;
+  const setModelRef = useRef(apply);
+  setModelRef.current = apply;
+  const canInsertRef = useRef(canInsert);
+  // Page 2 is fetched while the kid looks at the podium (from the network or
+  // the warm cache alike), so the first fling never waits on the network.
+  const firstPageOnly = !!model && onlyFirstPage(model);
+  useEffect(() => {
+    if (!active || !firstPageOnly) return undefined;
+    const task = InteractionManager.runAfterInteractions(() => moreRef.current('idle'));
+    return () => task.cancel();
+  }, [active, firstPageOnly]);
+  // The podium faces and yours are decoded at their drawn size before they show.
   useEffect(() => {
     if (!model) return;
-    const urls = [...podiumRows(model), model.me].flatMap(row => {
+    podiumRows(model).forEach((row, i) => {
       const inv = row?.avatar.inventory as InventoryType | null | undefined;
-      return [...outfitLayerUrls(inv), inv?.skin_item?.no_eye_url].filter((u): u is string => !!u);
+      if (row && wearsOwnLook(inv ?? null)) prefetchLayers(faceLayerSources(inv), facePoints(i === 0 ? 72 : 60));
     });
-    if (urls.length) void ExpoImage.prefetch(urls).catch(() => undefined);
+    const mine = model.me?.avatar.inventory as InventoryType | null | undefined;
+    if (wearsOwnLook(mine ?? null)) prefetchLayers(faceLayerSources(mine), facePoints(44));
   }, [model]);
   const layouts = useMemo(() => itemLayouts(items), [items]);
   const podium = useMemo(() => (model ? podiumRows(model) : [null, null, null] as const), [model]);
+  // The top three before you climbed (everyone but you, in order): shown dimmed during the hold.
+  const oldPodium = useMemo(() => {
+    const others = (model?.rows ?? []).filter(row => row.score > 0 && !row.isMe);
+    return [others[0] ?? null, others[1] ?? null, others[2] ?? null] as const;
+  }, [model]);
   const myIndex = items.findIndex(item => item.type === 'row' && item.row.isMe);
   const meOnPodium = podium.some(row => row?.isMe);
-  const line = useMemo(() => (model ? youLine(model) : null), [model]);
 
   const onRow = useCallback((row: StandingsRowModel) => {
     playSound(tapSound);
@@ -605,14 +846,17 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const scrollToMe = useCallback(() => {
     playSound(tapSound);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    jumpingUntil.current = Date.now() + 1200;
     if (myIndex >= 0) list.current?.scrollToIndex({ index: myIndex, viewPosition: 0.35, animated: !reduced });
-    else list.current?.scrollToOffset({ offset: 0, animated: !reduced });
+    else toTopRef.current();
   }, [myIndex, playSound, reduced]);
 
   const pendingRef = useRef<(() => void) | null>(null);
   pendingRef.current = results ? closeResults : null;
   const cardRef = useRef<StandingsRowModel | null>(null);
   cardRef.current = podium[0] ?? null;
+  const meRef = useRef<StandingsRowModel | null>(null);
+  meRef.current = model?.me ?? null;
   const scrollRef = useRef(scrollToMe);
   scrollRef.current = scrollToMe;
   useEffect(() => onStandingsDemo(event => {
@@ -621,19 +865,50 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (event.type === 'park' && board === 'all_time') { chooseAllTimePark(event.parkId); setParkId(event.parkId); }
     if (event.type === 'dismiss') { setCard(null); if (pendingRef.current) pendingRef.current(); else setResults(false); }
     if (event.type === 'card') setCard(cardRef.current);
+    if (event.type === 'myCard') setCard(meRef.current);
+    if (event.type === 'scrollBy') list.current?.scrollToOffset({ offset: Math.max(0, scrollY.value + event.dy), animated: true });
     if (event.type === 'refresh' && board === 'week') loadRef.current(true);
   }), [board]);
 
   const onScroll = useAnimatedScrollHandler(event => { scrollY.value = event.contentOffset.y; });
+  // A long way back to the top: snap to two screens from it, then animate the rest,
+  // so the list never lays out every row in between (r2 perf: a 300 ms JS stall).
+  const toTop = useCallback(() => {
+    if (scrollY.value > ROW_HEIGHT * 40) list.current?.scrollToOffset({ offset: ROW_HEIGHT * 14, animated: false });
+    list.current?.scrollToOffset({ offset: 0, animated: !reduced });
+  }, [scrollY, reduced]);
+  const toTopRef = useRef(toTop);
+  toTopRef.current = toTop;
+  // Perf captures only (both perf flags set at bundle time): a scripted fling and drag on the active board.
+  useEffect(() => {
+    if (!active) return undefined;
+    return startPerfScroll(
+      (dy, animated) => list.current?.scrollToOffset({ offset: scrollY.value + dy, animated }),
+      () => toTopRef.current(),
+    );
+  }, [active, scrollY]);
   useAnimatedReaction(() => scrollY.value < MINI_PODIUM_HEIGHT - 60, (onScreen, before) => {
     if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
   });
-  const viewability = useRef({ itemVisiblePercentThreshold: 60 }).current;
+  const viewability = VIEWABILITY;
   // Your row's visibility is tracked even while this tab is hidden, and applied when it shows.
   const myRowSeen = useRef(false);
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
+    // A fast programmatic scroll can report an empty window for a frame: keep the last known one.
+    if (viewableItems.length) {
+      lastVisible.current = viewableItems.reduce((max, token) => Math.max(max, token.index ?? 0), 0);
+      firstVisible.current = viewableItems.reduce((min, token) => Math.min(min, token.index ?? min), Number.MAX_SAFE_INTEGER);
+    }
+    // Back up at the grey rows: a held page lands now.
+    if (heldPage.current && canInsertRef.current()) {
+      const held = heldPage.current;
+      heldPage.current = null;
+      if (boardMatches(held, board, parkIdRef.current) && heldBase.current === modelRef.current) setModelRef.current(held);
+    }
+    // About two and a half screens before the grey rows: fetch, so the page lands before the kid gets there.
+    if (activeRef.current && Date.now() >= jumpingUntil.current && shouldPrefetch(lastVisible.current, itemsRef.current, firstVisible.current)) moreRef.current('scroll');
   }).current;
   // Becoming the active tab: wake the list and work out from geometry whether your
   // row is on screen, so the You card never duplicates a visible row.
@@ -654,17 +929,27 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, items]);
 
-  const renderItem: ListRenderItem<ListItem> = useCallback(({ item, index }) => {
+  const metric = model?.metric ?? 'ride_wins';
+  const holdIds = useMemo(() => new Set(podiumHold ? oldPodium.filter((r): r is StandingsRowModel => !!r).map(r => r.id) : []), [podiumHold, oldPodium]);
+  // Your own row in the list carries the next step too (Friends shows your row, not the dock).
+  const myStep = useMemo(() => (model ? nextStep(model, inPark) : null), [model, inPark]);
+  const renderItem: FlashRenderItem<ListItem> = useCallback(({ item, index }) => {
     if (item.type === 'divider') return <Divider label={item.label} />;
+    if (item.type === 'skeleton') return <SkeletonRow first={item.key === 'skeleton-0'} />;
+    if (item.type === 'retry') return <RetryRow onPress={() => moreRef.current('tap')} />;
+    if (item.type === 'footer') return <FooterRow label={item.label} metric={metric} />;
     return (
-      <BoardRow row={item.row} metric={model?.metric ?? 'ride_wins'} muted={item.muted} index={index}
-        animate={!reduced && !entered.current && index < 8 && celebrate}
-        detail={item.row.isMe && line ? line.text : null}
-        chase={item.row.isMe && model?.chase && line && (line.state === 'chasing' || line.state === 'tied')
-          ? { progress: chaseProgress(model), chip: chaseChip(model, line.state) ?? '', avatar: model.chase.avatar } : null}
+      <BoardRow row={item.row} metric={metric} muted={item.muted} step={item.row.isMe ? myStep : null}
+        waiting={holdIds.has(item.row.id)}
+        enter={!reduced && !entered.current && index < 8 && celebrate ? 120 + index * 45 : null}
         onPress={onRow} />
     );
-  }, [model, reduced, celebrate, line, onRow]);
+  }, [metric, reduced, celebrate, onRow, myStep, holdIds]);
+  const onEndReached = useCallback(() => { if (activeRef.current && canInsert()) moreRef.current('end'); }, [canInsert]);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadRef.current(true); }, []);
+  const refreshControl = useMemo(() => <RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={onRefresh} />, [refreshing, onRefresh]);
+  // Rows slide under the strip with a soft shadow, never a hard cut (r2 art).
+  const topShade = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.value, [HEADER_HEIGHT - 40, HEADER_HEIGHT], [0, 1], Extrapolation.CLAMP) }));
 
   const podiumFade = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [40, MINI_PODIUM_HEIGHT - 80], [1, 0], Extrapolation.CLAMP),
@@ -673,23 +958,21 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     <View style={{ height: HEADER_HEIGHT }}>
       {/* The podium fades as it scrolls under the ribbon, so no score pill floats alone. */}
       <Animated.View style={podiumFade}>
-        <MiniPodium podium={podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
-          playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}`} onPress={onRow} />
+        <MiniPodium podium={podiumHold ? oldPodium : podium} metric={model?.metric ?? 'ride_wins'} celebrate={celebrate} meJoined={meJoined}
+          dimmed={podiumHold}
+          playKey={`${board}:${parkId ?? 'all'}:${podiumSignature(podium)}:${celebrate}:${podiumHold}`} onPress={onRow} />
       </Animated.View>
       <View style={{ marginTop: -2, height: 20, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
         backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />
     </View>
-  ), [podium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade]);
+  ), [podium, oldPodium, model?.metric, celebrate, meJoined, board, parkId, onRow, podiumFade, podiumHold]);
 
   const strip = (
     <View style={{ paddingTop: 10, paddingBottom: 6, minHeight: 56 }}>
       {board === 'all_time' ? (
         <ParkChips parks={parks} value={parkId} loading={switching} onChange={id => { chooseAllTimePark(id); setParkId(id); }} />
       ) : (
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 16 }}>
-          <UnitChip metric="ride_wins" />
-          <WeekDots endsAt={model?.endsAt ?? null} now={now} />
-        </View>
+        <WeekPill endsAt={model?.endsAt ?? expectedWeekEnd(now)} now={now} />
       )}
     </View>
   );
@@ -727,8 +1010,8 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
               </View>
             </View>
           )}
-          <Text accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 10 }]}>{copy.title}</Text>
-          <Text style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 6, marginBottom: 18 }]}>{copy.message}</Text>
+          <Text maxFontSizeMultiplier={1.25} accessibilityRole="header" style={[textPreset('title'), { textAlign: 'center', textTransform: 'uppercase', marginTop: 10 }]}>{copy.title}</Text>
+          <Text maxFontSizeMultiplier={1.25} style={[textPreset('body'), { textAlign: 'center', color: BRAND.navySoft, marginTop: 6, marginBottom: 18 }]}>{copy.message}</Text>
           <GameButton label={copy.action} icon={copy.target === 'Friends' ? 'heart' : 'ride'}
             onPress={() => { playSound(tapSound); RootNavigation.navigate(copy.target); }} />
         </Animated.View>
@@ -745,35 +1028,52 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     <View style={{ flex: 1 }}>
       {strip}
       <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => { viewport.current = event.nativeEvent.layout.height; }}>
-        <Animated.FlatList
+        <AnimatedFlashList
           ref={list as never}
           data={items as ListItem[]}
-          keyExtractor={item => item.key}
-          renderItem={renderItem}
+          keyExtractor={keyOfItem}
+          renderItem={renderItem as never}
+          extraData={renderItem}
+          getItemType={typeOfItem}
+          estimatedItemSize={ROW_HEIGHT}
+          estimatedFirstItemOffset={HEADER_HEIGHT}
+          overrideItemLayout={sizeOfItem}
           ListHeaderComponent={header}
-          getItemLayout={(_, index) => ({
-            length: layouts[index]?.length ?? ROW_HEIGHT, offset: HEADER_HEIGHT + (layouts[index]?.offset ?? index * ROW_HEIGHT), index,
-          })}
-          initialNumToRender={10}
-          // A hidden tab keeps only what is near its viewport. (No clipped-subview
-          // removal: re-attaching on activation would paint a blank first frame.)
-          windowSize={active ? 9 : 3}
-          maxToRenderPerBatch={10}
+          // A hidden tab keeps only what is near its viewport.
+          drawDistance={active ? ROW_HEIGHT * 12 : ROW_HEIGHT * 3}
           onScroll={onScroll}
           scrollEventThrottle={16}
           viewabilityConfig={viewability}
           onViewableItemsChanged={onViewable}
-          refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
-          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 48 }} />}
+          // Backstop for a fling past the prefetch point.
+          onEndReached={onEndReached}
+          onEndReachedThreshold={2}
+          refreshControl={refreshControl}
+          // Room for the docked row only while it shows (r2: no cream void under Your spot).
+          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
+          onLoad={() => setListDrawn(true)}
         />
-        <TopRibbon podium={podium} metric={model.metric} scrollY={scrollY} />
+        {!revealed && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
+        {/* Rows soften into the strip instead of a hard cut (r2 art): a cream fade and a hairline shadow. */}
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }, topShade]}>
+          <View style={{ height: 2, backgroundColor: 'rgba(5,52,110,0.18)' }} />
+          <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ flex: 1 }} />
+        </Animated.View>
       </View>
-      <YouCard model={model} climb={climb} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} onPress={scrollToMe}
+      <YouRow model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
+        onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
-        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); }} />
-      <SharkCard row={card} metric={model.metric} board={board} onClose={() => setCard(null)} />
+        finaleFollows={meJoined}
+        teach={lesson} onTaught={() => { setLesson(false); cardLessonDone(meId); }}
+        onClimbLanded={() => {
+          if (landedTimer.current) clearTimeout(landedTimer.current);
+          landedTimer.current = setTimeout(() => setPodiumHold(false), 250);
+        }}
+        onClimbDone={() => { setClimbing(false); setClimb(0); setPassed([]); setClimbFrom(null); setPodiumHold(false); }} />
+      <SharkCard row={card} metric={model.metric} board={board} goals={card?.isMe ? model.goals : null} onClose={() => setCard(null)} />
       <LastWeekCard result={results ? model.lastWeek : null} me={model.me}
         onClose={closeResults} />
+      {STANDINGS_PERF_ON && active && <StandingsPerfLog board={board} />}
     </View>
   );
 }
