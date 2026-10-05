@@ -64,9 +64,10 @@ export function loadBoard(meId: number | null, board: StandingsBoardKey, parkId:
       // A refresh keeps the pages already scrolled through (no jump back to the top 50).
       // When the board changed (a new build), those pages are fetched again from the
       // new build (up to 4 pages), so no rank is ever skipped or shown twice.
-      // Also every 5 minutes for a deep scroller, so names on scrolled pages never go stale (r6 kid safety).
-      const stale = !!previous && Date.now() - (previous.pagesAt ?? 0) > 5 * 60_000;
-      const model = previous && previous.build && fresh.build && (previous.build !== fresh.build || stale) && previous.rows.length > fresh.rows.length
+      // Also when the server's names version changed (a name was revoked), so a revoked name
+      // leaves scrolled pages on the next refresh, and nothing is refetched when it did not (r7).
+      const renamed = !!previous && previous.namesVersion != null && fresh.namesVersion != null && previous.namesVersion !== fresh.namesVersion;
+      const model = previous && previous.build && fresh.build && (previous.build !== fresh.build || renamed) && previous.rows.length > fresh.rows.length
         ? await refetchPages(meId, board, parkId, fresh, previous)
         : mergeRefresh(fresh, previous);
       // A sign-out while this was in flight must not repopulate the cache.

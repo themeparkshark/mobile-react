@@ -204,7 +204,10 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
       }} />
       {/* The three boards stay mounted (hidden when not chosen), so a tab switch never paints a
           blank frame: faces, barrels and rows are already decoded. */}
-      <View style={{ flex: 1 }}>
+      {/* collapsable={false}: the panes' zIndex must stay inside this view. When it was flattened
+          (Fabric), the visible pane's zIndex 1 out-ranked the nav bar, so the board's cream, rows
+          and dock drew over the raised compass and nav icons (r7). */}
+      <View collapsable={false} style={{ flex: 1 }}>
         {(['week', 'friends', 'all_time'] as const).map(board => (
           <View key={board} pointerEvents={key === board ? 'box-none' : 'none'}
             accessibilityElementsHidden={key !== board} importantForAccessibility={key === board ? 'auto' : 'no-hide-descendants'}

@@ -49,7 +49,7 @@ import {
 import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
-  boardMatches, DIVIDER_HEIGHT, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -186,9 +186,19 @@ const BoardRow = memo(function BoardRow({ row, metric, muted, enter, step, onPre
   readonly enter: number | null;
   readonly onPress: (row: StandingsRowModel) => void;
 }) {
+  if (waiting) {
+    // A saved seat, not a hole (r7): the cream sheet stays, a calm empty-row outline shows,
+    // and the slot is hidden from VoiceOver and taps until the finale fills it.
+    return (
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
+        <View style={{ height: ROW_HEIGHT - 8, borderRadius: RADIUS.md, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(7,104,185,0.22)' }} />
+      </View>
+    );
+  }
   return (
     <Animated.View entering={enter != null ? FadeInRight.delay(enter).springify().damping(16).stiffness(180) : undefined}
-      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center', opacity: waiting ? 0 : 1 }}>
+      style={{ height: ROW_HEIGHT, backgroundColor: BRAND.cream, paddingHorizontal: 12, justifyContent: 'center' }}>
       <Pressable accessibilityRole="button" accessibilityLabel={rowLabel(row, metric) + (row.isMe && step && 'plus' in step ? `. ${step.text}` : '')}
         onPress={() => onPress(row)}
         style={({ pressed }) => ({
@@ -273,7 +283,8 @@ function Divider({ label }: { readonly label: string }) {
   return (
     <View style={{ height: DIVIDER_HEIGHT, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
-      <Text maxFontSizeMultiplier={FONT_CAP} accessibilityRole="header" style={[textPreset('label'), { color: BRAND.navySoft }]}>{label}</Text>
+      {/* The board's own face, like the Monday kicker (r7 art: the label preset was off-family). */}
+      <Text maxFontSizeMultiplier={FONT_CAP} accessibilityRole="header" style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navySoft, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
     </View>
   );
@@ -368,8 +379,12 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
     const announce = () => AccessibilityInfo.announceForAccessibility(`Up ${climb} ${climb === 1 ? 'place' : 'places'}! You are number ${me?.rank ?? ''} now.`);
     if (reduced || !passed.length) {
       setStep2(passed.length);
-      playSound(rewardSound);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      // The crown keeps the only success haptic when it follows (r7: this branch doubled it).
+      // With reduced motion the podium plays no landing, so this beat is the success.
+      const crownLater = finaleFollows && !reduced;
+      playSound(crownLater ? tapSound : rewardSound);
+      if (crownLater) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       announce();
       onClimbLanded();
       const done = setTimeout(onClimbDone, 1800);
@@ -426,7 +441,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       <View style={{ backgroundColor: BRAND.cream, paddingHorizontal: 12, paddingBottom: 8 }}>
         <Pressable accessibilityRole="button"
           // While the ticks play, the spoken rank matches the screen (r6).
-          accessibilityLabel={revealing && climbFrom ? `You are number ${climbFrom}. Climbing!` : label}
+          accessibilityLabel={dockLabel(label, revealing, climbFrom)}
           accessibilityHint={joining ? (step.kind === 'join' && step.canRide ? 'Opens your card. Swipe up or down for Go ride.' : 'Opens your card') : 'Shows your row'}
           // GO RIDE sits inside this row, so VoiceOver reaches it as an action (r2 kids UX).
           accessibilityActions={joining && step.kind === 'join' && step.canRide ? [{ name: 'activate' }, { name: 'goRide', label: 'Go ride' }] : undefined}
@@ -438,21 +453,12 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
             transform: [{ scale: pressed ? 0.98 : 1 }],
           })}>
           <View style={{ minWidth: 44, alignItems: 'center', marginRight: shownRank && shownRank >= 10000 ? 6 : 0 }}>
-            {shownRank ? (
-              <>
-                <RankBadge rank={shownRank} me />
-                {climbed && (
-                  // Wider than the rank column (r2 capture: "Up 129!" was clipped to "Up 1").
-                  <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
-                    style={{ position: 'absolute', top: -27, left: -18, width: 80, alignItems: 'center' }}>
-                    <View style={{ paddingHorizontal: 8, height: 24, borderRadius: 12, justifyContent: 'center', backgroundColor: BRAND.green,
-                      borderWidth: 2, borderColor: BRAND.greenLip }}>
-                      <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>{`Up ${climb}!`}</Text>
-                    </View>
-                  </Animated.View>
-                )}
-              </>
-            ) : reviewing ? <GameIcon name="timer" size={30} /> : <ScoreIcon metric={model.metric} size={30} />}
+            {shownRank ? <RankBadge rank={shownRank} me />
+              : reviewing ? <GameIcon name="timer" size={30} />
+              // No rank yet: an empty dashed badge, so the coin shows once, before the number (r7 art).
+              : <View style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(5,52,110,0.35)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navySoft }}>?</Text>
+              </View>}
           </View>
           <View style={{ marginLeft: 12 }}>{me && <StandingsShark avatar={me.avatar} size={44} ring={BRAND.gold} />}</View>
           <View style={{ flex: 1, marginLeft: 10 }}>
@@ -477,6 +483,14 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
                 style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>{step.text}</Text>
             )}
           </View>
+          {climbed && (
+            // Inside the dock, at its right end (r7: three rounds of the pill hanging over row 6).
+            <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(9).stiffness(220)} importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden style={{ marginLeft: 8, paddingHorizontal: 10, height: 30, borderRadius: 15, justifyContent: 'center',
+                backgroundColor: BRAND.green, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.greenLip }}>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.white }}>{`Up ${climb}!`}</Text>
+            </Animated.View>
+          )}
           {joining && step.canRide && (
             <Pressable accessibilityRole="button" accessibilityLabel="Go ride: opens the map" hitSlop={8} onPress={onGoRide}
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, minHeight: 44, borderRadius: 14,
@@ -495,7 +509,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
 function Skeleton() {
   return (
     <View>
-      <MiniPodium podium={[null, null, null]} metric="ride_wins" celebrate={false} meJoined={false} playKey="skeleton" onPress={() => undefined} />
+      <MiniPodium podium={[null, null, null]} metric="ride_wins" celebrate={false} meJoined={false} playKey="skeleton" loading onPress={() => undefined} />
       <View style={{ marginTop: -18, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, backgroundColor: BRAND.cream, paddingTop: 14 }}>
         {[0, 1, 2, 3].map(i => (
           <View key={i} accessible={false} style={{ height: ROW_HEIGHT - 8, marginHorizontal: 12, marginVertical: 4, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.06)' }} />
@@ -898,7 +912,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       {board === 'all_time' ? (
         <ParkChips parks={parks} value={parkId} loading={switching} onChange={id => { chooseAllTimePark(id); setParkId(id); }} />
       ) : (
-        <WeekPill endsAt={model?.endsAt ?? null} now={now} />
+        <WeekPill endsAt={model?.endsAt ?? expectedWeekEnd(now)} now={now} />
       )}
     </View>
   );

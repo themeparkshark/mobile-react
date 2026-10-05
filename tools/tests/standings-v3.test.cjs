@@ -233,7 +233,8 @@ test('face bitmaps come in a few pixel sizes, never the 1353 px art', () => {
 
 test('r2 capture fixes: Up N is never clipped, the dock never overshoots', () => {
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(board, /style=\{\{ position: 'absolute', top: -27, left: -18, width: 80, alignItems: 'center' \}\}/, 'the Up badge is wider than the rank column');
+  assert.doesNotMatch(board, /top: -27, left: -18/, 'r7: the Up badge no longer hangs over the row above');
+  assert.match(board, /Inside the dock, at its right end/, 'r7: the Up badge sits inside the dock, sized to its text');
   assert.match(board, /translateY: Math\.max\(0, 1 - shown\.value\)/, 'the dock never rises above its rest spot');
 });
 
@@ -317,15 +318,103 @@ test('r6: a podium landing is a milestone, VoiceOver matches the screen, names o
     goals: [{ at: 8, xp: 25, reached: false }] });
   assert.deepEqual(plain([step.kind, step.icon, step.target]), ['jump', 'crown', '#3'], 'a 1-ride podium beats a 1-ride goal');
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(board, /accessibilityLabel=\{revealing && climbFrom \? `You are number \$\{climbFrom\}\. Climbing!` : label\}/);
+  assert.match(board, /accessibilityLabel=\{dockLabel\(label, revealing, climbFrom\)\}/);
   assert.match(board, /Swipe up or down for Go ride\./);
-  const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
-  assert.match(store, /Date\.now\(\) - \(previous\.pagesAt \?\? 0\) > 5 \* 60_000/);
 });
 
 test('r6: no duplicate player during the hold, full podium names', () => {
   const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(board, /waiting=\{holdIds\.has\(item\.row\.id\)\}/);
-  assert.match(board, /opacity: waiting \? 0 : 1/, 'the slot stays, the duplicate is hidden until the finale');
+  assert.doesNotMatch(board, /opacity: waiting \? 0 : 1/, 'r7: the slot is never a see-through hole');
+  assert.match(board, /if \(waiting\) \{[\s\S]{0,400}pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"[\s\S]{0,200}backgroundColor: BRAND\.cream[\s\S]{0,200}borderStyle: 'dashed'/,
+    'r7: a saved seat: cream stays, a dashed empty-row outline, hidden from VoiceOver and taps');
   assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /row\.name\.slice\(0, 12\)/);
+});
+
+
+test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing label, first paint, nav above the board', () => {
+  const base = { board: 'week', metric: 'ride_wins' };
+  // #12 on 5, #3..#11 all on 6: two rides land #3 and two rides also make the top 10.
+  const tie = model.nextStep({ ...base, me: { rank: 12, score: 5 }, rows: [{ rank: 10, score: 6 }],
+    chase: { name: 'p11', toPass: 2, tied: false, passes: 9, targetRank: 3, rank: 11 } });
+  assert.deepEqual(plain([tie.kind, tie.icon, tie.target, tie.plus]), ['jump', 'crown', '#3', 2], 'the crown, not TOP 10');
+  // #4: crown +1 against a goal +2: the crown. #2: crown +2 against a goal +1: the closer goal.
+  const four = model.nextStep({ ...base, me: { rank: 4, score: 6 }, rows: [], chase: { name: 'p3', toPass: 1, tied: false, passes: 1, targetRank: 3, rank: 3 },
+    goals: [{ at: 8, xp: 25, reached: false }] });
+  assert.deepEqual(plain([four.kind, four.target]), ['jump', '#3']);
+  const two = model.nextStep({ ...base, me: { rank: 2, score: 7 }, rows: [], chase: { name: 'p1', toPass: 2, tied: false, passes: 1, targetRank: 1, rank: 1 },
+    goals: [{ at: 8, xp: 25, reached: false }] });
+  assert.deepEqual(plain([two.kind, two.target]), ['goal', '8'], 'a strictly closer goal still shows first');
+
+  // The climbing label (VoiceOver follows the screen).
+  assert.equal(model.dockLabel('You are number 1. 39 rides.', true, 96), 'You are number 96. Climbing!');
+  assert.equal(model.dockLabel('You are number 1. 39 rides.', false, 96), 'You are number 1. 39 rides.', 'after the last tick: the landed rank');
+  assert.equal(model.dockLabel('base', true, null), 'base');
+
+  // First paint: the pill is final from frame one (next Monday 00:00 Pacific).
+  const mon = Date.parse('2026-10-05T18:00:00Z'); // Monday 11:00 PDT
+  assert.equal(model.expectedWeekEnd(mon), '2026-10-12T07:00:00.000Z');
+  assert.equal(model.weekLeft(model.expectedWeekEnd(mon), mon).label, '7 days left');
+  const sunLate = Date.parse('2026-10-12T06:30:00Z'); // Sunday 23:30 PDT
+  assert.equal(model.expectedWeekEnd(sunLate), '2026-10-12T07:00:00.000Z');
+  const winter = Date.parse('2026-12-02T20:00:00Z'); // Wednesday, PST
+  assert.equal(model.expectedWeekEnd(winter), '2026-12-07T08:00:00.000Z');
+
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /const crownLater = finaleFollows && !reduced;/, 'the reduced/no-tick path never doubles the success haptic');
+  assert.match(board, /<WeekPill endsAt=\{model\?\.endsAt \?\? expectedWeekEnd\(now\)\} now=\{now\} \/>/);
+  assert.match(board, /playKey="skeleton" loading/, 'first paint: shark-disc placeholders, never OPEN');
+  const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
+  assert.match(podium, /\) : loading \? \(/);
+  assert.match(podium, /p3\.value = 0\.55; p2\.value = 0\.55; p1\.value = 0;/, 'never an empty stage at the rise');
+  assert.match(podium, /pop\.value = withSequence\(withTiming\(1\.15/, 'a scale pop on the haptic beat');
+  assert.match(podium, /export const CONFETTI_PIECES = 30;/);
+  assert.match(podium, /const xs = \[width \* 0\.14, width \/ 2, width \* 0\.86\];/, 'confetti across the full podium width');
+  const screen = read('src/screens/LeaderboardScreen.tsx');
+  assert.match(screen, /<View collapsable=\{false\} style=\{\{ flex: 1 \}\}>\s*\{\(\['week', 'friends', 'all_time'\] as const\)/, 'the panes\' zIndex stays under the nav');
+});
+
+test('r7: a revoked name on page 3 leaves on the next refresh; nothing is refetched when the names version holds', async () => {
+  const calls = [];
+  let names = 'v1';
+  let page3Name = 'realname';
+  const rowsFor = offset => Array.from({ length: 50 }, (_, i) => {
+    const rank = offset + i + 1;
+    return { rank, id: 2000 + rank, screen_name: rank === 120 ? page3Name : `p${rank}`, score: 1000 - rank };
+  });
+  const dto = () => ({ board: 'week', metric: 'ride_wins', park_id: null, players_count: 400,
+    week: { starts_at: '2026-10-05T00:00:00-07:00', ends_at: '2026-10-12T00:00:00-07:00' },
+    rows: rowsFor(0), page_size: 50, next_offset: 50, build: 'b1', names, around_me: [], me: null, chase: null, goals: [] });
+  const api = {
+    getStandings: async () => { calls.push('first'); return dto(); },
+    getStandingsPage: async (_b, _p, offset, build) => { calls.push(`page@${offset}`); return { rows: rowsFor(offset), next_offset: offset + 50, build }; },
+  };
+  let gen = 1;
+  const store = loadTs('src/screens/LeaderboardsScreen/standingsV2Store.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined, removeItem: async () => undefined } },
+    '../../api/endpoints/parks/allParks': { __esModule: true, default: async () => [] },
+    '../../api/endpoints/me/standings': api,
+    './faceLayers': { prefetchLayers: () => undefined },
+    './StandingsShark': { facePoints: () => [], faceLayerSources: () => [], wearsOwnLook: () => false },
+    './standingsCache': { standingsGeneration: () => gen, standingsSession: () => 1 },
+  });
+  const nameAt = (m, rank) => m.rows.find(r => r.rank === rank)?.name;
+  let m = await store.loadBoard(7, 'week', null);
+  for (const _ of [1, 2]) { const next = await store.loadMore(7, 'week', null, m); store.commitBoard(7, 'week', null, next); m = next; }
+  assert.equal(m.rows.length, 150);
+  assert.equal(nameAt(m, 120), 'realname');
+
+  // Refresh 1: nothing revoked, same names version: page 1 only, no page refetch.
+  calls.length = 0;
+  m = await store.loadBoard(7, 'week', null);
+  assert.deepEqual(calls, ['first'], 'no refetch when the names version holds');
+  assert.equal(m.rows.length, 150, 'the kid keeps their place');
+
+  // A moderator revokes the name on page 3; the server's names version changes.
+  page3Name = 'P2120'; names = 'v2';
+  calls.length = 0;
+  m = await store.loadBoard(7, 'week', null);
+  assert.deepEqual(calls, ['first', 'page@50', 'page@100'], 'the scrolled pages are fetched again');
+  assert.equal(nameAt(m, 120), 'P2120', 'the revoked name is gone on the next refresh');
+  assert.equal(m.rows.length, 150);
 });

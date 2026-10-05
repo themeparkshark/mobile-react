@@ -135,8 +135,11 @@ export interface StandingsBoardModel {
   readonly pageSize: number;
   /** The board build later pages must read, so a rebuild never skips or repeats a player. */
   readonly build: string | null;
-  /** When pages past the first were last fetched (names on them are refreshed at least every 5 minutes). */
-  readonly pagesAt?: number;
+  /**
+   * The server's public-names version. It changes whenever a name is revoked, so pages
+   * already scrolled through are fetched again and a revoked name never stays on screen (r7).
+   */
+  readonly namesVersion: string | null;
 }
 
 const num = (value: unknown, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -200,6 +203,7 @@ export function boardModel(dto: Partial<StandingsBoardDto> | null | undefined, f
     nextOffset: nextOffsetOf(dto?.next_offset),
     pageSize: Math.max(3, num(dto?.page_size, 50)),
     build: typeof (dto as { build?: unknown } | null | undefined)?.build === 'string' ? (dto as { build: string }).build : null,
+    namesVersion: typeof (dto as { names?: unknown } | null | undefined)?.names === 'string' ? (dto as { names: string }).names : null,
   };
 }
 
@@ -230,7 +234,6 @@ export function mergePage(model: StandingsBoardModel, page: Partial<StandingsPag
     // A page that came back empty ends the list even if the server said more.
     nextOffset: incoming.length ? next : null,
     build: typeof (page as { build?: unknown } | null | undefined)?.build === 'string' ? (page as { build: string }).build : model.build,
-    pagesAt: Date.now(),
   };
 }
 
@@ -420,17 +423,26 @@ export function nextStep(
   // A far jump reads as how many you pass (an up arrow and 1,250), not a five-digit rank.
   const far = landing > 999;
   // A podium landing is a milestone too (r6: a goal hid a 1-ride podium step).
-  options.push({ kind: 'jump', plus: n, order: landing <= 3 ? 0.5 : 2,
+  options.push({ kind: 'jump', plus: n, order: landing <= 3 ? -1 : 2,
     target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
     text: landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
       : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
-  // Milestones first (r5): the top 10 within 3, or a weekly goal within 2, beats any jump
-  // (#13 two rides from #12 but three from the top 10 sees TOP 10). Between two
-  // milestones the closer wins, ties go to the top 10; with none, the jump.
+  // Milestones first (r5): a podium landing, the top 10 within 3, or a weekly goal within 2,
+  // beats any jump (#13 two rides from #12 but three from the top 10 sees TOP 10). Between
+  // milestones the closer wins; a tie goes podium, then TOP 10, then goal (r7: #12 two rides
+  // from both the podium and the top 10 sees the crown). With none, the jump.
   const milestone = (o: Option) => (o.kind !== 'jump' || o.icon === 'crown' ? 0 : 1);
   options.sort((x, y) => milestone(x) - milestone(y) || x.plus - y.plus || x.order - y.order);
   const { order: _order, ...best } = options[0];
   return best;
+}
+
+/**
+ * What VoiceOver says on your pinned row. While the ticks play it matches the badge on
+ * screen (your old rank, climbing); after the last tick it is the row's normal label (r6/r7).
+ */
+export function dockLabel(label: string, revealing: boolean, climbFrom: number | null | undefined): string {
+  return revealing && climbFrom ? `You are number ${climbFrom}. Climbing!` : label;
 }
 
 /** The pinned row's line state and sentence (kept for the spoken label and older callers). */
@@ -499,6 +511,26 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
     : urgency === 'last_day' ? 'Last day!' : `${daysLeft} days left`;
   const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `Last chance, ${hours} hours ${minutes} minutes left this week`;
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
+}
+
+/**
+ * Where this week ends (next Monday 00:00 Pacific, the server's week), for the pill's first
+ * paint before any answer (r7: the pill changed shape when the board arrived). The server's
+ * `ends_at` replaces it as soon as it lands.
+ */
+export function expectedWeekEnd(now: number): string {
+  let offsetMs = -7 * 3_600_000;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hourCycle: 'h23',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(now));
+    const get = (type: string) => Number(parts.find(part => part.type === type)?.value);
+    const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+    if (Number.isFinite(wall)) offsetMs = Math.round((wall - now) / 60_000) * 60_000;
+  } catch { /* keep PDT */ }
+  const wallNow = new Date(now + offsetMs);
+  const dow = (wallNow.getUTCDay() + 6) % 7; // 0 = Monday
+  const nextMondayWall = Date.UTC(wallNow.getUTCFullYear(), wallNow.getUTCMonth(), wallNow.getUTCDate() + (7 - dow));
+  return new Date(nextMondayWall - offsetMs).toISOString();
 }
 
 /**
