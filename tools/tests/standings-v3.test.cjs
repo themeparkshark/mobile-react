@@ -252,7 +252,7 @@ test('r3: dock above the nav, climb reveal, Monday first, step on your row, Voic
   assert.match(board, /if \(next === 'rebuilt'\) \{ loadRef\.current\(true\); return; \}/, 'a rebuilt board refreshes, never appends');
   const store = read('src/screens/LeaderboardsScreen/standingsV2Store.ts');
   assert.match(store, /if \(!boardMatches\(model, board, parkId\)\) return;/, 'commitBoard refuses another park');
-  assert.match(store, /await refetchPages\(meId, board, parkId, fresh, previous\)/, "a new build refetches the scrolled pages");
+  assert.match(store, /await refetchPages\(meId, board, parkId, fresh, previous, renamed\)/, "a new build refetches the scrolled pages");
   assert.match(read('src/screens/LeaderboardsScreen/faceLayers.ts'), /if \(urgent\) waiting\.unshift\(go\)/, 'faces on screen decode first');
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', 8), true);
   assert.equal(model.boardMatches({ board: 'all_time', parkId: 8 }, 'all_time', null), false, 'another park never lands');
@@ -365,7 +365,7 @@ test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing la
   assert.match(board, /<WeekPill endsAt=\{model\?\.endsAt \?\? expectedWeekEnd\(now\)\} now=\{now\} \/>/);
   assert.match(board, /playKey="skeleton" loading/, 'first paint: shark-disc placeholders, never OPEN');
   assert.match(board, /onLoad=\{\(\) => setListDrawn\(true\)\}/, 'no blank frame between the skeleton and the board');
-  assert.match(board, /\{!listDrawn && <View pointerEvents="none"[^>]*><Skeleton \/><\/View>\}/);
+  assert.match(board, /\{\(!listDrawn \|\| !reacted\) && <View pointerEvents="none"[^>]*><Skeleton \/><\/View>\}/);
   const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
   assert.match(podium, /\) : loading \? \(/);
   assert.match(podium, /p3\.value = 0\.55; p2\.value = 0\.55; p1\.value = 0;/, 'never an empty stage at the rise');
@@ -420,4 +420,73 @@ test('r7: a revoked name on page 3 leaves on the next refresh; nothing is refetc
   assert.deepEqual(calls, ['first', 'page@50', 'page@100'], 'the scrolled pages are fetched again');
   assert.equal(nameAt(m, 120), 'P2120', 'the revoked name is gone on the next refresh');
   assert.equal(m.rows.length, 150);
+});
+
+test('r7 final: a failed refetch after a revoke never brings the old name back', async () => {
+  let names = 'v1';
+  let fail = false;
+  const rowsFor = (offset, revoked) => Array.from({ length: 50 }, (_, i) => {
+    const rank = offset + i + 1;
+    return { rank, id: 3000 + rank, screen_name: rank === 120 && !revoked ? 'realname' : (rank === 120 ? 'P3120' : `p${rank}`), score: 1000 - rank };
+  });
+  const dto = () => ({ board: 'week', metric: 'ride_wins', park_id: null, players_count: 400,
+    week: { starts_at: '2026-10-05T00:00:00-07:00', ends_at: '2026-10-12T00:00:00-07:00' },
+    rows: rowsFor(0, names === 'v2'), page_size: 50, next_offset: 50, build: 'b1', names, around_me: [], me: null, chase: null, goals: [] });
+  const store = loadTs('src/screens/LeaderboardsScreen/standingsV2Store.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined, removeItem: async () => undefined } },
+    '../../api/endpoints/parks/allParks': { __esModule: true, default: async () => [] },
+    '../../api/endpoints/me/standings': {
+      getStandings: async () => dto(),
+      getStandingsPage: async (_b, _p, offset, build) => {
+        if (fail) throw new Error('network down');
+        return { rows: rowsFor(offset, names === 'v2'), next_offset: offset + 50, build };
+      },
+    },
+    './faceLayers': { prefetchLayers: () => undefined },
+    './StandingsShark': { facePoints: () => [], faceLayerSources: () => [], wearsOwnLook: () => false },
+    './standingsCache': { standingsGeneration: () => 1, standingsSession: () => 1 },
+  });
+  let m = await store.loadBoard(8, 'week', null);
+  for (const _ of [1, 2]) { const next = await store.loadMore(8, 'week', null, m); store.commitBoard(8, 'week', null, next); m = next; }
+  assert.equal(m.rows.find(r => r.rank === 120).name, 'realname');
+  names = 'v2'; fail = true;
+  m = await store.loadBoard(8, 'week', null);
+  assert.equal(m.rows.some(r => r.name === 'realname'), false, 'the old pages are dropped, not kept');
+  assert.equal(m.rows.length, 50, 'the kid keeps the fresh first page and pages on from there');
+  assert.equal(m.nextOffset, 50);
+});
+
+test('r7 final: podium copy, teach the card, no spoiler flash on a cold open', async () => {
+  const base = { board: 'week', metric: 'ride_wins', rows: [] };
+  const step = (rank, landing, toPass) => model.nextStep({ ...base, me: { rank, score: 6 }, chase: { name: 'p', toPass, tied: false, passes: 1, targetRank: landing, rank: landing } });
+  assert.equal(step(3, 2, 1).text, '1 more ride moves you up to #2!', '#3 is already on the podium');
+  assert.equal(step(2, 1, 2).text, '2 more rides takes the top spot!');
+  assert.equal(step(5, 3, 1).text, '1 more ride puts you on the podium!', 'off the podium it still says so');
+
+  const saved = new Map();
+  const store = loadTs('src/screens/LeaderboardsScreen/standingsV2Store.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: {
+      getItem: async k => saved.get(k) ?? null, setItem: async (k, v) => { saved.set(k, v); }, removeItem: async k => { saved.delete(k); } } },
+    '../../api/endpoints/parks/allParks': { __esModule: true, default: async () => [] },
+    '../../api/endpoints/me/standings': { getStandings: async () => null, getStandingsPage: async () => null },
+    './faceLayers': { prefetchLayers: () => undefined },
+    './StandingsShark': { facePoints: () => [], faceLayerSources: () => [], wearsOwnLook: () => false },
+    './standingsCache': { standingsGeneration: () => 1, standingsSession: () => 1 },
+  });
+  const mon = Date.parse('2026-10-05T18:00:00Z');
+  assert.equal(await store.cardLessonDue(5, mon), true, 'first visit of the week');
+  store.cardLessonDone(5, mon);
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(await store.cardLessonDue(5, mon + 3 * 86_400_000), false, 'once a week');
+  assert.equal(await store.cardLessonDue(5, mon + 7 * 86_400_000), true, 'again next week');
+  assert.equal(await store.cardLessonDue(6, mon), true, 'per player');
+
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /if \(reduced\) \{ onTaught\?\.\(\); return undefined; \}/, 'no bounce with reduced motion');
+  assert.match(board, /bounce\.value = withSequence\(withTiming\(-14/, 'one bounce');
+  assert.match(board, /\{tapHint && \(/, 'with a tap glyph');
+  assert.match(board, /if \(!reacted \|\| !active \|\| results \|\| climbing\) return undefined;/, 'never during the card or a climb');
+  assert.match(board, /\{\(!listDrawn \|\| !reacted\) && <View pointerEvents="none"/, 'the skeleton holds until the card and climb are decided');
+  assert.match(board, /try \{ await reactTo\(next\); \} finally \{ setReacted\(true\); \}/);
+  assert.match(board, /setTimeout\(\(\) => setReacted\(true\), 1500\)/, 'and never longer than 1.5 s');
 });

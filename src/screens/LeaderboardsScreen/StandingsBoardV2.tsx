@@ -25,7 +25,7 @@ import {
   type ViewToken,
 } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeInRight, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
+  Easing, FadeIn, FadeInRight, FadeOut, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
   withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
 } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
@@ -44,7 +44,7 @@ import StandingsShark from './StandingsShark';
 import { onStandingsDemo } from './standingsDemo';
 import { perfMark, StandingsPerfLog, startPerfScroll, STANDINGS_PERF_ON } from './standingsPerf';
 import {
-  cachedBoard, cachedParks, chooseAllTimePark, chosenAllTimePark, commitBoard, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
+  cachedBoard, cachedParks, cardLessonDone, cardLessonDue, chooseAllTimePark, chosenAllTimePark, commitBoard, loadBoard, loadMore, loadParks, podiumChanged, prefetchBoards, readSeenRank, writeSeenRank,
 } from './standingsV2Store';
 import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
@@ -333,7 +333,10 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught }: {
+  /** The week's first visit: bounce once with a tap glyph, so a kid learns the row opens their card (r7). */
+  readonly teach?: boolean;
+  readonly onTaught?: () => void;
   /** The crown finale follows (you reached the podium): "Up N!" gets a light tick, the crown gets the success haptic. */
   readonly finaleFollows: boolean;
   /** "Up N!" just landed: the podium finale may play. */
@@ -362,6 +365,8 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   const me = model.me;
   const step = nextStep(model, inPark);
   const shown = useSharedValue(reduced ? 1 : 0);
+  const bounce = useSharedValue(0);
+  const [tapHint, setTapHint] = useState(false);
   const [step2, setStep2] = useState(-1);
   const urgent = model.board !== 'all_time' && weekLeft(model.endsAt, now).urgency !== 'calm' && step.kind !== 'join' && step.kind !== 'leader' && step.kind !== 'review';
 
@@ -371,6 +376,21 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
     lastSnap.current = snapId;
     shown.value = reduced || snap ? (hidden ? 0 : 1) : withSpring(hidden ? 0 : 1, { damping: 16, stiffness: 190 });
   }, [hidden, reduced, shown, snapId]);
+
+  // Teach the card once a week: one bounce and a tap glyph, after the dock has settled.
+  // Reduced motion: no bounce (the lesson still counts as given).
+  useEffect(() => {
+    if (!teach || hidden) return undefined;
+    if (reduced) { onTaught?.(); return undefined; }
+    const start = setTimeout(() => {
+      setTapHint(true);
+      bounce.value = withSequence(withTiming(-14, { duration: 170 }), withSpring(0, { damping: 7, stiffness: 260 }));
+    }, 700);
+    // Counted as given once it has played (a dock that hides first gets it next time).
+    const end = setTimeout(() => { setTapHint(false); onTaught?.(); }, 2900);
+    return () => { clearTimeout(start); clearTimeout(end); setTapHint(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teach, hidden, reduced]);
 
   // The overtake: each player you passed slides by with a tick, then "Up N!" lands.
   useEffect(() => {
@@ -415,7 +435,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   // text never ghosts over a row (r2).
   const dockStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, Math.max(0, shown.value) * 4),
-    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) }],
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value }],
   }));
   const joining = step.kind === 'join';
   const reviewing = step.kind === 'review';
@@ -434,6 +454,14 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
       {/* The dock: rows fade out above it. It stops above the nav's raised icons
           (r2: a strip down to the screen edge erased them). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
+      {tapHint && (
+        <Animated.View pointerEvents="none" entering={FadeIn.duration(150)} exiting={FadeOut.duration(200)} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+          style={{ position: 'absolute', top: -18, right: 28, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: 15,
+            backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white }}>
+          <Text maxFontSizeMultiplier={1.1} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>TAP</Text>
+          <GameIcon name="arrow" size={16} style={{ transform: [{ rotate: '90deg' }] }} />
+        </Animated.View>
+      )}
       {/* Cream from the dock down to the nav's top edge, full width, so no row ever shows
           between dock and nav. The nav (compass included) draws above this screen, so the
           compass sits on the cream (r6 captures: a round cutout showed a row through it). */}
@@ -564,6 +592,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // The skeleton stays over the list until FlashList has drawn its first rows (r7: one
   // blank ocean frame showed between the skeleton and the board).
   const [listDrawn, setListDrawn] = useState(false);
+  // ...and until the first answer has been checked for a Monday card and a climb, so a cold
+  // open never flashes the final board before the card (r7 art: the climb was spoiled).
+  const [reacted, setReacted] = useState(false);
+  const [lesson, setLesson] = useState(false);
   const request = useRef(0);
   const entered = useRef(false);
   const scrollY = useSharedValue(0);
@@ -600,6 +632,10 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const activeRef = useRef(active);
   activeRef.current = active;
   const react = useCallback(async (next: StandingsBoardModel) => {
+    try { await reactTo(next); } finally { setReacted(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId]);
+  const reactTo = async (next: StandingsBoardModel) => {
     // A hidden board saves its moments for when the kid opens it.
     if (!activeRef.current) return;
     const seen = await readSeenRank(meId, next);
@@ -628,7 +664,20 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
       resultsShown = `${meId}:${next.lastWeek.weekStart}`;
       setResults(true);
     }
-  }, [meId]);
+  };
+  // A safety net: the gate never holds the board for more than 1.5 s.
+  useEffect(() => {
+    if (reacted || status !== 'ready') return undefined;
+    const timer = setTimeout(() => setReacted(true), 1500);
+    return () => clearTimeout(timer);
+  }, [reacted, status]);
+  // Teach the card on the week's first visit, when nothing else is playing (r7).
+  useEffect(() => {
+    if (!reacted || !active || results || climbing) return undefined;
+    let live = true;
+    void cardLessonDue(meId).then(due => { if (live && due) setLesson(true); });
+    return () => { live = false; };
+  }, [reacted, active, results, climbing, meId]);
 
   const load = useCallback((force: boolean) => {
     // A new board, park or refresh: any page in flight or held for the old one must
@@ -996,7 +1045,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
           onLoad={() => setListDrawn(true)}
         />
-        {!listDrawn && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
+        {(!listDrawn || !reacted) && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
         {/* Rows soften into the strip instead of a hard cut (r2 art): a cream fade and a hairline shadow. */}
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }, topShade]}>
           <View style={{ height: 2, backgroundColor: 'rgba(5,52,110,0.18)' }} />
@@ -1007,6 +1056,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         finaleFollows={meJoined}
+        teach={lesson} onTaught={() => { setLesson(false); cardLessonDone(meId); }}
         onClimbLanded={() => {
           if (landedTimer.current) clearTimeout(landedTimer.current);
           landedTimer.current = setTimeout(() => setPodiumHold(false), 250);

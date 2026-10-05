@@ -425,7 +425,10 @@ export function nextStep(
   // A podium landing is a milestone too (r6: a goal hid a 1-ride podium step).
   options.push({ kind: 'jump', plus: n, order: landing <= 3 ? -1 : 2,
     target: far ? passes.toLocaleString('en-US') : `#${landing}`, icon: far ? 'up' : landing <= 3 ? 'crown' : null,
-    text: landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
+    // Already on the podium (#2, #3): the step moves you up it, it does not put you on it (r7).
+    text: landing <= 3 && (model.me?.rank ?? 99) <= 3
+      ? (landing === 1 ? `${n} more ${unit(n)} takes the top spot!` : `${n} more ${unit(n)} moves you up to #${landing}!`)
+      : landing <= 3 ? `${n} more ${unit(n)} puts you on the podium!`
       : passes > 1 ? `${n} more ${unit(n)} ${n === 1 ? 'jumps' : 'jump'} you past ${passes.toLocaleString('en-US')} players!` : `${n} more ${unit(n)} to pass ${model.chase.name}!` });
   // Milestones first (r5): a podium landing, the top 10 within 3, or a weekly goal within 2,
   // beats any jump (#13 two rides from #12 but three from the top 10 sees TOP 10). Between
