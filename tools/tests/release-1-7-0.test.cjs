@@ -36,13 +36,14 @@ test('adsAvailable() is false whenever ads are off, before touching the native m
   assert.match(ads, /if \(!ADS_ENABLED \|\| Platform\.OS !== 'ios'\) return false;/);
 });
 
-test('version 1.7.0 everywhere and 120 Hz off', () => {
-  assert.match(read('app.config.js'), /version: '1\.7\.0'/);
+test('version 1.7.1 everywhere and 120 Hz off', () => {
+  // 1.7.1: the native MapLibre marker-frame patch (binary only, new fingerprint).
+  assert.match(read('app.config.js'), /version: '1\.7\.1'/);
   const plist = read('ios/ThemeParkShark/Info.plist');
-  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.0<\/string>/);
+  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.1<\/string>/);
   assert.doesNotMatch(plist, /CADisableMinimumFrameDurationOnPhone/);
   const pbx = read('ios/ThemeParkShark.xcodeproj/project.pbxproj');
-  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.0;/g) || []).length, 4);
+  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.1;/g) || []).length, 4);
   assert.doesNotMatch(pbx, /MARKETING_VERSION = 1\.6\.0;/);
 });
 
@@ -86,7 +87,7 @@ test('App Review mode: only the review account gets the simulated location, play
 
 test('react-native-audio-api ships patched and linked (studio audio engine)', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.match(pkg.scripts.postinstall, /^node tools\/audio\/patch-audio-api\.mjs( \&\& |$)/, 'EAS npm ci runs the JSI_DEBUG_ALLOCATIONS fix');
+  assert.equal(pkg.scripts.postinstall, 'node tools/audio/patch-audio-api.mjs && node tools/maplibre/patch-marker-frame.mjs', 'npm ci runs the JSI_DEBUG_ALLOCATIONS fix and the marker-frame patch');
   assert.match(read('ios/Podfile.lock'), /^  - RNAudioAPI \(0\.6\.5\)/m);
   // Xcode 26 (EAS image): Constants.h needs <cstddef> for size_t.
   assert.match(read('tools/audio/patch-audio-api.mjs'), /#include <cstddef>/);
