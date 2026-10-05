@@ -1,3 +1,4 @@
+import { shareFileExternal } from '../../services/external';
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
@@ -128,7 +129,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       const uri = await viewShotRef.current?.capture?.();
       if (!uri) throw new Error('Card capture unavailable');
 
-      await Sharing.shareAsync(uri, {
+      await shareFileExternal(uri, {
         mimeType: 'image/png',
         dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
       });

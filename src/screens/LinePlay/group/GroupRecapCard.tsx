@@ -3,6 +3,7 @@
  * real wait vs the sign. It sits inside the queue recap and shows only
  * server-confirmed Parts; a crew never earns more than the same wait solo.
  */
+import { shareFileExternal } from '../../../services/external';
 import { useCallback, useRef, useState } from 'react';
 import { PixelRatio, Platform, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
@@ -62,7 +63,7 @@ export default function GroupRecapCard({ group, realMinutes, postedMinutes, part
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your line crew' });
+      await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your line crew' });
     } catch {
       gameAlert('Card not made', 'Your crew results are saved. Try sharing again.', undefined, { icon: 'retry' });
     } finally {

@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import { openMembership } from './GrownUpGate';
 import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
@@ -506,7 +507,7 @@ export default function PostWinRewardsModal({
               {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
                   accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
-                  onPress={() => closeTo(() => RootNavigation.navigate('Membership'))}>
+                  onPress={() => closeTo(() => { void openMembership(); })}>
                   <GameIcon name="member" size={26} />
                   <Text style={styles.vipChipText} numberOfLines={1}>
                     VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? `, +${coinsEarned} coins` : ''}

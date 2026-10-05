@@ -8,6 +8,7 @@
  * VoiceOver: the backdrop is a separate "Dismiss" control and the card is a
  * modal view, so every control inside is reachable.
  */
+import { shareFileExternal } from '../../services/external';
 import { Image } from 'expo-image';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
@@ -67,7 +68,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         if (!live || !shareRef.current) return;
         const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
-        await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' });
+        await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' });
       } catch {
         gameAlert('Card not made', 'Your Ride Photo is saved. Try sharing again.', undefined, { icon: 'retry' });
       } finally {

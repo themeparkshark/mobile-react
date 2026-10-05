@@ -48,7 +48,6 @@ const state: {
   environment: string;
   release?: string;
   dist?: string;
-  userId?: string;
   breadcrumbs: Breadcrumb[];
   lastSentAt: Map<string, number>;
   transport: Transport;
@@ -91,10 +90,6 @@ export function initTelemetry(options: TelemetryOptions = {}): boolean {
   return true;
 }
 
-export function setTelemetryUser(playerId: number | string | null | undefined): void {
-  // Only the opaque player id: never username, email or device name.
-  state.userId = playerId == null ? undefined : String(playerId);
-}
 
 export function addBreadcrumb(category: string, message: string, data?: Breadcrumb['data'], level: Breadcrumb['level'] = 'info'): void {
   state.breadcrumbs.push({ timestamp: state.now() / 1000, category, message, level, ...(data ? { data } : {}) });
@@ -150,7 +145,6 @@ function send(level: Level, body: Partial<TelemetryEvent>, tags: Record<string, 
     release: state.release,
     dist: state.dist,
     environment: state.environment,
-    ...(state.userId ? { user: { id: state.userId } } : {}),
     tags: { platform: Platform.OS, ...tags },
     contexts: {
       os: { name: Platform.OS === 'ios' ? 'iOS' : Platform.OS, version: Device.osVersion ?? undefined },
@@ -279,7 +273,6 @@ function installGlobalHandlers(): void {
 /** Test-only reset. */
 export function __resetTelemetryForTests(): void {
   state.dsn = null;
-  state.userId = undefined;
   state.breadcrumbs = [];
   state.lastSentAt = new Map();
   state.transport = defaultTransport;

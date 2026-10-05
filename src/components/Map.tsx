@@ -1,8 +1,9 @@
+import { openExternal } from '../services/external';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
-import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
+import { Animated, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../ui';
@@ -675,7 +676,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       {/* Kept mounted; it fades with the controls on the catch's shared value and ignores taps under a catch. */}
       <Reanimated.View pointerEvents={chromeHidden ? 'none' : 'box-none'} style={[styles.attribution, chromeStyle]}>
         <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
-          onPress={() => { if (isCatchShown()) return; void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
+          onPress={() => { if (isCatchShown()) return; void openExternal('https://www.openstreetmap.org/copyright'); }}
           hitSlop={8}>
           <Text style={styles.attributionText}>© OpenStreetMap</Text>
         </Pressable>

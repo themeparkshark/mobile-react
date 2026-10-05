@@ -9,9 +9,9 @@
  * Full opacity always; no pulsing.
  */
 import { Image } from 'expo-image';
+import { openMembership } from '../GrownUpGate';
 import { useContext, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import * as RootNavigation from '../../RootNavigation';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -90,7 +90,8 @@ export default function StatusBadges({ isVip, isVerified, own }: {
           sub="#7a4f00"
           label={own ? 'VIP member' : 'This player is a VIP member'}
           hint={own ? 'Opens your VIP perks' : 'Opens VIP membership'}
-          onPress={() => RootNavigation.navigate('Membership')}
+          // The paywall decides the gate from the signed-in player (a member opens perks), not from whose badge this is.
+          onPress={() => { void openMembership(); }}
         />
       )}
       {isVerified && (

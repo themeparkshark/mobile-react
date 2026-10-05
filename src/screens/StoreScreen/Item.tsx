@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
+import { openMembership } from '../../components/GrownUpGate';
 import { useContext } from 'react';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
-import * as RootNavigation from '../../RootNavigation';
 import { AuthContext } from '../../context/AuthProvider';
 import config from '../../config';
 import { BRAND, GameIcon } from '../../ui';
@@ -26,9 +26,9 @@ export default function Item({
         if (!player) {
           return;
         }
-        // VIP gear opens the membership page instead of a checkout that must fail.
+        // VIP gear opens the membership page (behind the grown-up gate) instead of a checkout that must fail.
         if (vipLocked && !item.has_purchased) {
-          RootNavigation.navigate('Membership');
+          void openMembership();
           return;
         }
 

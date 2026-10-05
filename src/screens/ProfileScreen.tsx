@@ -1,4 +1,5 @@
 import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native';
+import { openMembership } from '../components/GrownUpGate';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -195,7 +196,7 @@ export default function ProfileScreen() {
     const { sharkShop, others } = profileStores(stores);
     const openStore = (store: StoreType) => {
       if (store.is_secret_store && !player?.is_subscribed) {
-        RootNavigation.navigate('Membership');
+        void openMembership();
         return;
       }
       RootNavigation.navigate('Store', { store: store.id });

@@ -7,8 +7,9 @@
  * buttons). The flow model lives in src/services/accountRecovery/model.ts; the
  * server decides everything about accounts.
  */
+import { openExternal } from '../services/external';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Linking, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import {
   requestRecoveryCode, verifyRecoveryCode,
 } from '../api/endpoints/me/account-recovery';
@@ -95,10 +96,7 @@ export default function FindOriginalAccount({ visible, onClose }: Props) {
       reason: state.supportReason ?? 'other',
     });
     try {
-      if (await Linking.canOpenURL(url)) {
-        await Linking.openURL(url);
-        return;
-      }
+      if (await openExternal(url, 'system')) return;
     } catch { /* show the address instead */ }
     gameAlert('Email support', `Write to ${SUPPORT_EMAIL} with your new player ID.`, undefined, { icon: 'info' });
   };

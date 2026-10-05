@@ -1,4 +1,5 @@
 import { createContext, FC, ReactNode, useContext, useEffect, useState } from 'react';
+import { openMembership } from '../components/GrownUpGate';
 import { useTimeoutWhen } from 'rooks';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
 import { ws7Preview } from '../dev/ws7Preview';
@@ -44,7 +45,8 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
     if (!isReady || !player) return;
     const timer = setTimeout(() => {
       if (preview === 'store' || preview === 'store-poor') RootNavigation.navigate('Store', { store: 'shark-shop' });
-      if (preview === 'vip') RootNavigation.navigate('Membership');
+      // Dev QA only (ws7Preview is empty outside __DEV__): straight to the page, no gate.
+      if (preview === 'vip') void openMembership({ devPreview: true });
     }, 2500);
     return () => clearTimeout(timer);
   }, [isReady, player?.id, preview]);

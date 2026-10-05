@@ -7,6 +7,7 @@
  * matches the dot on Profile. Every answer is instant (optimistic, shared with
  * the bell and profiles through the social store) and undone on failure.
  */
+import { shareExternal } from '../services/external';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,7 +68,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   const invite = useCallback(async () => {
     playSfx('tap');
     try {
-      await Share.share({ message: `Play Theme Park Shark with me! Add me as a friend: ${player?.screen_name ?? ''}\n${APP_LINK}`, url: APP_LINK });
+      await shareExternal({ message: `Play Theme Park Shark with me! Add me as a friend: ${player?.screen_name ?? ''}\n${APP_LINK}`, url: APP_LINK });
     } catch { /* closed */ }
   }, [player?.screen_name]);
 

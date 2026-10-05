@@ -1,7 +1,7 @@
+import { openExternal } from '../services/external';
 import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -182,8 +182,8 @@ export default function WatchScreen() {
       return;
     }
     // Very old rows without a YouTube id: open the link, then pay as before.
-    void WebBrowser.openBrowserAsync(post.permalink).then(() => {
-      if (!post.has_watched) save(post);
+    void openExternal(post.permalink).then(opened => {
+      if (opened && !post.has_watched) save(post);
     });
   // save, record and deliverSoon only touch refs, setters and context.
   }, [playSound]);

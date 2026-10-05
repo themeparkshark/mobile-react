@@ -1,6 +1,6 @@
+import { openExternal, shareExternal } from '../services/external';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
 import { decode } from 'html-entities';
 import { useContext } from 'react';
 import {
@@ -81,7 +81,7 @@ export default function ArticleScreen({ route, navigation }: any) {
 
   const onShare = async () => {
     playSound(tapSound);
-    await Share.share({
+    await shareExternal({
       message: `${decode(entry.title)} ${entry.url}`,
       url: entry.url,
     });
@@ -89,7 +89,7 @@ export default function ArticleScreen({ route, navigation }: any) {
 
   const openInBrowser = () => {
     playSound(tapSound);
-    WebBrowser.openBrowserAsync(entry.url);
+    void openExternal(entry.url);
   };
 
   const heroImage = entry.featured_image_full || entry.featured_image;
@@ -239,7 +239,7 @@ export default function ArticleScreen({ route, navigation }: any) {
               renderersProps={{
                 a: {
                   onPress: (_: any, href: string) => {
-                    WebBrowser.openBrowserAsync(href);
+                    void openExternal(href);
                   },
                 },
                 img: {

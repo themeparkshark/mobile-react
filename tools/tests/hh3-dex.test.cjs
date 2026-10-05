@@ -206,7 +206,7 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
   assert.match(card, /photo && shareMount &&/);
   assert.match(card, /captureRef\(shareRef, \{ format: 'jpg', quality: 0\.92, \.\.\.parkDayCaptureSize/);
-  assert.match(card, /Sharing\.shareAsync\(uri/);
+  assert.match(card, /shareFileExternal\(uri/, 'the share sheet goes through the grown-up gate');
   assert.match(src, /ShareCardArtwork/);
   assert.doesNotMatch(src, /water_background/, 'the TASKS-sign background is gone');
 });

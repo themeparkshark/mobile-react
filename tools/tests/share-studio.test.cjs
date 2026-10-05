@@ -23,6 +23,8 @@ const capture = loadTs('src/share/capture.ts', {
     Share: { sharedAction: 'sharedAction', dismissedAction: 'dismissedAction', share: async () => shared.result },
   },
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
+  // The grown-up gate passes here; its own tests cover a no.
+  '../services/external': { shareExternal: async () => shared.result, shareFileExternal: async () => true },
 });
 
 const MONTHS = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;

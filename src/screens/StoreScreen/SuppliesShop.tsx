@@ -18,9 +18,11 @@
  * Works on the 1.7.0 binary only (StoreKit module). On 1.6.0 it asks for an
  * update; VIP players can still claim the free Ticket there (no ad needed).
  */
+import { openExternal } from '../../services/external';
 import * as Haptics from 'expo-haptics';
+import { askGrownUp } from '../../components/GrownUpGate';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
 import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
@@ -81,6 +83,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const [ads, setAds] = useState<AdSummary | null>(null);
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [busy, setBusy] = useState<string | null>(null);
+  const buyingRef = useRef(false);
   const [attempt, setAttempt] = useState(0);
   const scroll = useRef<ScrollView>(null);
   const sectionY = useRef<Partial<Record<SuppliesFocus, number>>>({});
@@ -123,7 +126,18 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   };
 
   const buy = async (product: ShopProduct) => {
-    if (busy || !catalog) return;
+    // A ref, not state: a second tap while the gate is up must never start a second purchase.
+    if (busy || buyingRef.current || !catalog) return;
+    buyingRef.current = true;
+    try {
+      // Real money: a grown-up answers first (Apple Kids category, guideline 1.3).
+      if (!(await askGrownUp())) return;
+      await buyNow(product, catalog);
+    } finally {
+      buyingRef.current = false;
+    }
+  };
+  const buyNow = async (product: ShopProduct, catalog: ShopCatalog) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setBusy(product.product_id);
     const outcome = await buyShopProduct(product.product_id, { accountToken: catalog.account_token, shownDay: catalog.day });
@@ -232,7 +246,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
       {!canBuy ? (
         <Notice icon="info" title="Update to shop" body="Update Theme Park Shark to buy Supplies."
-          action={{ label: 'Update the app', onPress: () => void Linking.openURL(APP_STORE_URL) }} />
+          action={{ label: 'Update the app', onPress: () => void openExternal(APP_STORE_URL, 'system') }} />
       ) : !catalog.enabled ? (
         <Notice icon="timer" title="Back soon" body="Supplies are closed for a moment. Check back later." />
       ) : (
