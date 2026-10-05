@@ -232,11 +232,16 @@ test('rig clocks stop off screen, under the try-on, in the background and for st
   assert.match(stage, /Math\.min\(info\.timeSincePreviousFrame \?\? 16, 50\)/, 'a hitch never teleports a particle');
 });
 
-test('equip cues use Chris\'s existing SFX only (no new AI audio without Dustin\'s ear)', () => {
+test('cues are Chris\'s SFX or a sound Dustin approved by ear; unpicked pieces are silent', () => {
   const layers = src('src/fx/FxLayers.tsx');
   const files = [...layers.matchAll(/require\('\.\.\/\.\.\/assets\/sounds\/([^']+)'\)/g)].map(m => m[1]);
-  assert.ok(files.length >= 6);
   for (const file of files) assert.ok(fs.existsSync(path.join(root, 'assets/sounds', file)), file);
+  // The only new sound is Dustin's pick (October 5): ss_jet_boost v2.
+  const approved = ['ss_jet_boost.m4a'];
+  assert.deepEqual(files.filter(f => f.startsWith('ss_')), approved);
+  assert.match(layers, /boost: \{ file: JET_BOOST,/);
+  for (const moment of ['swing', 'beam', 'peek']) assert.match(layers, new RegExp(`${moment}: \\{ file: null,`), `${moment} stays silent until Dustin picks`);
+  assert.match(layers, /if \(cue\.file != null\) ref\.current\?\.\(cue\.file/);
   assert.match(src('src/components/Playercard.tsx'), /fxKick\.value = fxClock\.value \+ 400;/, 'equipping plays the moment once, 400 ms later, as the only cue');
   assert.doesNotMatch(src('src/fx/rigs/GhostLantern.tsx') + src('src/fx/rigs/Saucer.tsx') + src('src/fx/rigs/MidwayFireworks.tsx')
     + src('src/fx/rigs/PlasmaBlade.tsx') + src('src/fx/rigs/Jetpack.tsx'), /shadow(Radius|Opacity|Color)/, 'no shadow on any animated view');

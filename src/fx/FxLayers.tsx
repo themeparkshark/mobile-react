@@ -111,26 +111,31 @@ function FloatShadow({ t, kick, height, children }: { t: SharedValue<number>; ki
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>{children}</Animated.View>;
 }
 
-type Cue = { file: number; rate: number; volume: number; haptic?: 'light' | 'medium' | 'rigid' | 'selection' };
+/** file null: silent until Dustin picks its sound (round 2 candidates); the haptic still plays. */
+type Cue = { file: number | null; rate: number; volume: number; haptic?: 'light' | 'medium' | 'rigid' | 'selection' };
+
+/** Dustin's pick (October 5): ss_jet_boost v2, "the only sound that wasn't jarring". */
+const JET_BOOST = require('../../assets/sounds/ss_jet_boost.m4a');
 
 /** Equip cues (DESIGN.md 7): Chris's SFX at a rate per rig. */
 export const FX_EQUIP_SOUNDS: Record<FxKey, Cue> = {
-  jetpack: { file: require('../../assets/sounds/whoosh.mp3'), rate: 0.8, volume: 0.9, haptic: 'medium' },
-  plasma_blade: { file: require('../../assets/sounds/whoosh.mp3'), rate: 1.6, volume: 0.8, haptic: 'light' },
+  jetpack: { file: JET_BOOST, rate: 1, volume: 0.9, haptic: 'medium' },
+  plasma_blade: { file: null, rate: 1, volume: 0.8, haptic: 'light' },
   reef_halo: { file: require('../../assets/sounds/inventory_item_tap.mp3'), rate: 1.5, volume: 0.8, haptic: 'light' },
-  saucer: { file: require('../../assets/sounds/reveal.mp3'), rate: 1.4, volume: 0.7, haptic: 'light' },
+  saucer: { file: null, rate: 1, volume: 0.7, haptic: 'light' },
   midway_fireworks: { file: require('../../assets/sounds/firework_pop.mp3'), rate: 1, volume: 0.8, haptic: 'medium' },
-  ghost_lantern: { file: require('../../assets/sounds/reveal.mp3'), rate: 0.8, volume: 0.7, haptic: 'light' },
+  ghost_lantern: { file: null, rate: 1, volume: 0.7, haptic: 'light' },
 };
 
 /** One quiet cue per moment, on stages only (game feel round 2). Chris's SFX, new rates. */
 export const FX_MOMENT_CUES: Record<string, Cue> = {
-  boost: { file: require('../../assets/sounds/whoosh.mp3'), rate: 1.25, volume: 0.5, haptic: 'rigid' },
-  swing: { file: require('../../assets/sounds/whoosh.mp3'), rate: 1.9, volume: 0.45, haptic: 'light' },
+  boost: { file: JET_BOOST, rate: 1, volume: 0.6, haptic: 'rigid' },
+  // Silent until Dustin picks from round 2 (studio/audio/for-dustin/secret-shop/round2).
+  swing: { file: null, rate: 1, volume: 0.45, haptic: 'light' },
   flip: { file: require('../../assets/sounds/inventory_item_tap.mp3'), rate: 1.6, volume: 0.45, haptic: 'selection' },
-  beam: { file: require('../../assets/sounds/reveal.mp3'), rate: 1.5, volume: 0.35 },
+  beam: { file: null, rate: 1, volume: 0.35 },
   finale: { file: require('../../assets/sounds/firework_pop.mp3'), rate: 1, volume: 0.55, haptic: 'medium' },
-  peek: { file: require('../../assets/sounds/reveal.mp3'), rate: 0.8, volume: 0.4, haptic: 'light' },
+  peek: { file: null, rate: 1, volume: 0.4, haptic: 'light' },
 };
 
 const STYLES = Haptics.ImpactFeedbackStyle as unknown as Record<string, string>;
@@ -151,7 +156,7 @@ export function useFxCuePlayer() {
     if (!cue) return;
     // Dev builds log every cue with a timestamp, so captures can prove sound and haptic sync.
     if (__DEV__) console.log(`[fx-cue] ${Date.now()} rate=${cue.rate} haptic=${cue.haptic ?? 'none'}`);
-    ref.current?.(cue.file, { rate: cue.rate, volume: cue.volume });
+    if (cue.file != null) ref.current?.(cue.file, { rate: cue.rate, volume: cue.volume });
     haptic(cue.haptic);
   }, []);
 }
