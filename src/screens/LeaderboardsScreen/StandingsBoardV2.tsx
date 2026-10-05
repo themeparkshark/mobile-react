@@ -596,6 +596,14 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // open never flashes the final board before the card (r7 art: the climb was spoiled).
   const [reacted, setReacted] = useState(false);
   const [lesson, setLesson] = useState(false);
+  // FlashList's onLoad fires before its first rows reach the screen; the skeleton lifts a
+  // beat later so no bare-ocean frame shows between them (r7 captures).
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (revealed || !listDrawn || !reacted) return undefined;
+    const timer = setTimeout(() => setRevealed(true), 120);
+    return () => clearTimeout(timer);
+  }, [revealed, listDrawn, reacted]);
   const request = useRef(0);
   const entered = useRef(false);
   const scrollY = useSharedValue(0);
@@ -1045,7 +1053,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
           onLoad={() => setListDrawn(true)}
         />
-        {(!listDrawn || !reacted) && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
+        {!revealed && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
         {/* Rows soften into the strip instead of a hard cut (r2 art): a cream fade and a hairline shadow. */}
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }, topShade]}>
           <View style={{ height: 2, backgroundColor: 'rgba(5,52,110,0.18)' }} />

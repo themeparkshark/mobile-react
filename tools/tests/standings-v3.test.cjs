@@ -365,7 +365,8 @@ test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing la
   assert.match(board, /<WeekPill endsAt=\{model\?\.endsAt \?\? expectedWeekEnd\(now\)\} now=\{now\} \/>/);
   assert.match(board, /playKey="skeleton" loading/, 'first paint: shark-disc placeholders, never OPEN');
   assert.match(board, /onLoad=\{\(\) => setListDrawn\(true\)\}/, 'no blank frame between the skeleton and the board');
-  assert.match(board, /\{\(!listDrawn \|\| !reacted\) && <View pointerEvents="none"[^>]*><Skeleton \/><\/View>\}/);
+  assert.match(board, /\{!revealed && <View pointerEvents="none"[^>]*><Skeleton \/><\/View>\}/);
+  assert.match(board, /if \(revealed \|\| !listDrawn \|\| !reacted\) return undefined;/);
   const podium = read('src/screens/LeaderboardsScreen/MiniPodium.tsx');
   assert.match(podium, /\) : loading \? \(/);
   assert.match(podium, /p3\.value = 0\.55; p2\.value = 0\.55; p1\.value = 0;/, 'never an empty stage at the rise');
@@ -486,7 +487,7 @@ test('r7 final: podium copy, teach the card, no spoiler flash on a cold open', a
   assert.match(board, /bounce\.value = withSequence\(withTiming\(-14/, 'one bounce');
   assert.match(board, /\{tapHint && \(/, 'with a tap glyph');
   assert.match(board, /if \(!reacted \|\| !active \|\| results \|\| climbing\) return undefined;/, 'never during the card or a climb');
-  assert.match(board, /\{\(!listDrawn \|\| !reacted\) && <View pointerEvents="none"/, 'the skeleton holds until the card and climb are decided');
+  assert.match(board, /setTimeout\(\(\) => setRevealed\(true\), 120\)/, 'the skeleton holds until the card and climb are decided, plus a beat for the first paint');
   assert.match(board, /try \{ await reactTo\(next\); \} finally \{ setReacted\(true\); \}/);
   assert.match(board, /setTimeout\(\(\) => setReacted\(true\), 1500\)/, 'and never longer than 1.5 s');
 });
