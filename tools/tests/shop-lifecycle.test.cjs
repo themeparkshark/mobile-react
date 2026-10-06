@@ -68,7 +68,7 @@ test('closet badges: RETIRED for a piece that will never return, a pearl alone f
   assert.match(item, /const life = useMemo\(\(\) => closetBadge\(item\.lifecycle\), \[item\.lifecycle\]\);/);
   assert.match(item, /closetBadgeSay\(item\.lifecycle\)/, 'VoiceOver hears it too');
   assert.match(item, /life && styles\.artInset/, 'the art steps down so nothing touches the badge');
-  assert.match(item, /onLongPress=\{life \? \(\) => setTip\(true\) : undefined\}/, 'hold a badged card for its sentence');
+  assert.match(item, /onLongPress=\{life \? \(\) => setTip\('hold'\) : undefined\}/, 'hold a badged card for its sentence');
 });
 
 test('the try-on says when it leaves, whether it comes back, and the forever promise', () => {
@@ -117,7 +117,8 @@ test('the closet teaches its badge once: exactly one card ever claims the tip', 
   const again = loadTs('src/helpers/closetTip.ts', { '@react-native-async-storage/async-storage': AsyncStorage });
   assert.equal(await again.claimClosetTeach(), false, 'remembered across launches');
   const item = src('src/components/Item.tsx');
-  assert.match(item, /claimClosetTeach\(\)\.then\(first => \{ if \(live && first\) setTip\(true\); \}/);
+  assert.match(item, /claimClosetTeach\(\)\.then\(first => \{ if \(live && first\) setTip\('teach'\); \}/);
+  assert.match(item, /tip === 'teach' \? 8000 : 4000/, 'the taught sentence stays long enough for a 7-year-old to read');
   assert.match(item, /Haptics\.selectionAsync/, 'a light tick when the sentence shows');
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /<Text maxFontSizeMultiplier=\{MAX_FONT\} style=\{styles\.newTagText\}>/, 'YOURS FOREVER! never outgrows the stage');

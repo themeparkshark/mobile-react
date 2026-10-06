@@ -40,18 +40,19 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
   // A badged card keeps its height: the art steps down and shrinks by the chip's zone (chip + 6 pt).
   const art = life ? artSize - 18 : artSize;
-  const [tip, setTip] = useState(false);
+  // 'teach': the once-ever first sight (long enough for a 7-year-old to read 14 words); 'hold': a held card.
+  const [tip, setTip] = useState<false | 'teach' | 'hold'>(false);
   // Taught once: the first badged card shows its sentence by itself (most kids tap, few hold).
   useEffect(() => {
     if (!life || typeof claimClosetTeach !== 'function') return;
     let live = true;
-    void claimClosetTeach().then(first => { if (live && first) setTip(true); }, () => undefined);
+    void claimClosetTeach().then(first => { if (live && first) setTip('teach'); }, () => undefined);
     return () => { live = false; };
   }, [!!life]);
   useEffect(() => {
     if (!tip) return;
-    try { void Haptics.selectionAsync?.(); } catch { /* haptics are decoration */ }
-    const t = setTimeout(() => setTip(false), 2600);
+    void Haptics.selectionAsync?.()?.catch?.(() => undefined);
+    const t = setTimeout(() => setTip(false), tip === 'teach' ? 8000 : 4000);
     return () => clearTimeout(t);
   }, [tip]);
   const lifeSay = useMemo(() => closetBadgeSay(item.lifecycle), [item.lifecycle]);
@@ -81,9 +82,9 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         disabled={!onToggle}
         style={({ pressed }) => [styles.card, compact && styles.cardCompact, { borderColor: badge.border },
           pressed && styles.cardPressed]}
-        onPress={() => onToggle?.(item)}
+        onPress={() => { if (tip) setTip(false); onToggle?.(item); }}
         // A badged card explains itself: hold it for the same calm sentence VoiceOver reads.
-        onLongPress={life ? () => setTip(true) : undefined}
+        onLongPress={life ? () => setTip('hold') : undefined}
       >
         {!!badge.inner && <View pointerEvents="none" style={[styles.innerStroke, { borderColor: badge.inner }]} />}
         {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
