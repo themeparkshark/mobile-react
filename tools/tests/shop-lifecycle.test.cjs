@@ -32,7 +32,7 @@ test('bad or missing data never shows a label', () => {
   assert.deepEqual(plain(life.leavingOf({ leaving: { on: '2026-11-30', forever: false } })), { on: '2026-11-30', forever: false });
   assert.equal(life.rarityOf({ rarity: { tier: 'legendary', label: 'x' } }), null);
   assert.equal(life.rarityOf({ rarity: { tier: 'rare', label: ' ' } }), null);
-  assert.equal(life.rarityOf({ rarity: { tier: 'rare', label: 'Rare: few sharks have this' } }).tier, 'rare');
+  assert.equal(life.rarityOf({ rarity: { tier: 'rare', label: 'Rare find: few sharks have this' } }).tier, 'rare');
 });
 
 test('tile ribbons: LEAVING SOON / LAST RUN outrank BACK AGAIN and NEW, owned tiles stay clean', () => {
@@ -45,14 +45,14 @@ test('tile ribbons: LEAVING SOON / LAST RUN outrank BACK AGAIN and NEW, owned ti
   assert.match(tile, /leaving: \{ label: 'LEAVING SOON', color: BRAND\.navy, ink: BRAND\.gold \}/, 'calm navy and gold, never red');
 });
 
-test('closet badges: RETIRED for a piece that will never return, RARE for a rare one, nothing otherwise', () => {
-  const rare = { tier: 'rare', label: 'Rare: few sharks have this' };
+test('closet badges: RETIRED for a piece that will never return, RARE FIND for a rare one (never confused with the RARE tier chip)', () => {
+  const rare = { tier: 'rare', label: 'Rare find: few sharks have this' };
   assert.deepEqual(plain(life.closetBadge({ retired: true, forever: true, rarity: rare })), { label: 'RETIRED', pearl: 'white' });
   assert.deepEqual(plain(life.closetBadge({ retired: true, forever: true })), { label: 'RETIRED', pearl: null });
-  assert.deepEqual(plain(life.closetBadge({ retired: true, forever: false, rarity: { tier: 'ultra_rare', label: 'u' } })), { label: 'RARE', pearl: 'gold' });
+  assert.deepEqual(plain(life.closetBadge({ retired: true, forever: false, rarity: { tier: 'ultra_rare', label: 'u' } })), { label: 'RARE FIND', pearl: 'gold' });
   assert.equal(life.closetBadge({ retired: true, forever: false }), null, 'resting for a while is not news in the closet');
   assert.equal(life.closetBadge(null), null);
-  assert.match(life.closetBadgeSay({ retired: true, forever: true, rarity: rare }), /retired: it won't come back to the shop\. Rare: few sharks have this/);
+  assert.match(life.closetBadgeSay({ retired: true, forever: true, rarity: rare }), /retired: it won't come back to the shop\. Rare find: few sharks have this/);
   const item = src('src/components/Item.tsx');
   assert.match(item, /const life = closetBadge\(item\.lifecycle\);/);
   assert.match(item, /closetBadgeSay\(item\.lifecycle\)/, 'VoiceOver hears it too');

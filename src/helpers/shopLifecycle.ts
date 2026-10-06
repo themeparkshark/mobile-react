@@ -19,7 +19,10 @@ export type RarityTier = 'rare' | 'very_rare' | 'ultra_rare';
 
 export interface ShopRarity {
   readonly tier: RarityTier;
-  /** Server copy, e.g. "Rare: few sharks have this". */
+  /**
+   * Server copy, e.g. "Rare find: few sharks have this". Always "find", so it never reads as the
+   * piece's own tier chip (Common, Uncommon, RARE, Epic) on the tile.
+   */
   readonly label: string;
 }
 
@@ -78,12 +81,12 @@ export function pearlFor(tier: RarityTier): 'white' | 'silver' | 'gold' {
   return tier === 'ultra_rare' ? 'gold' : tier === 'very_rare' ? 'silver' : 'white';
 }
 
-/** The closet card's corner badge: RETIRED for a piece that won't come back, else RARE for a rare one. */
-export function closetBadge(lifecycle: OwnedLifecycle | null | undefined): { label: 'RETIRED' | 'RARE'; pearl: 'white' | 'silver' | 'gold' | null } | null {
+/** The closet card's corner badge: RETIRED for a piece that won't come back, else RARE FIND for one few sharks own. */
+export function closetBadge(lifecycle: OwnedLifecycle | null | undefined): { label: 'RETIRED' | 'RARE FIND'; pearl: 'white' | 'silver' | 'gold' | null } | null {
   if (!lifecycle) return null;
   const rarity = rarityOf(lifecycle);
   if (lifecycle.retired && lifecycle.forever) return { label: 'RETIRED', pearl: rarity ? pearlFor(rarity.tier) : null };
-  if (rarity) return { label: 'RARE', pearl: pearlFor(rarity.tier) };
+  if (rarity) return { label: 'RARE FIND', pearl: pearlFor(rarity.tier) };
   return null;
 }
 

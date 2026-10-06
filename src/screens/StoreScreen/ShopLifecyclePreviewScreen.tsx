@@ -34,9 +34,9 @@ const WARDROBE = 'file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wav
 const uri = (asset: number) => RNImage.resolveAssetSource(asset).uri;
 const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/images/coingold.png')) };
 const TYPES: Record<number, string> = { 1: 'Head', 2: 'Face', 3: 'Neck', 4: 'Body', 5: 'Hand', 6: 'Background', 7: 'Skin', 8: 'Pin' };
-const rare: ShopRarity = { tier: 'rare', label: 'Rare: few sharks have this' };
-const veryRare: ShopRarity = { tier: 'very_rare', label: 'Very rare: hardly any sharks have this' };
-const ultraRare: ShopRarity = { tier: 'ultra_rare', label: 'Ultra rare: almost no sharks have this' };
+const rare: ShopRarity = { tier: 'rare', label: 'Rare find: few sharks have this' };
+const veryRare: ShopRarity = { tier: 'very_rare', label: 'Super rare find: hardly any sharks have this' };
+const ultraRare: ShopRarity = { tier: 'ultra_rare', label: 'Ultra rare find: almost no sharks have this' };
 
 type Life = { leaving?: ShopLeaving; returning?: boolean; isNew?: boolean; rarity?: ShopRarity; owned?: boolean };
 
