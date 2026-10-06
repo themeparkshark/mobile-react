@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FxFloat, FxRigLayers, FxScene, FxSceneLight, FxShadow, useFxMomentCue, wornFx } from '../fx/FxLayers';
 import { FxBox, useFxClock, useFxKick, useFxRunning } from '../fx/FxStage';
 import { JetpackFloorLight, boostAt } from '../fx/rigs/Jetpack';
-import { FX_MOMENT, FxLod, NO_KICK, containBox } from '../fx/registry';
+import { kitBusy } from '../fx/kit';
+import { FX_KIT, FX_MOMENT, FxLod, NO_KICK, containBox } from '../fx/registry';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 /** Per-card SVG ids: two cards on one screen never share a gradient. */
@@ -164,11 +165,15 @@ export default function Playercard({
   // moment are ignored, so spam-taps never freeze a pose). A buy replays them as a Secret
   // unlock: after the landing settles, twice, sound without a second haptic (game feel round 2).
   const momentMs = Math.max(0, ...fx.rigs.map(r => FX_MOMENT[r.key].ms), fx.scene ? FX_MOMENT[fx.scene].ms : 0);
+  const kitWorn = useMemo(() => [...fx.rigs.map(r => FX_KIT[r.key]), fx.scene && showBackground ? FX_KIT[fx.scene] : undefined]
+    .filter(Boolean), [fx, showBackground]);
   const playFx = useCallback((kind: 'tap' | 'unlock' = 'tap') => {
     onFxPlay?.(kind);
     if (!fx.any || !fxRunning) return;
     // On the frame clock (the one the motion runs on), so a hitch never lets a tap in early.
     if (kind === 'tap' && fxClock.value - fxKick.value < momentMs * 0.6) return;
+    // A wave 2 kit piece takes no tap mid-moment (a restart would snap its pose; DESIGN-WAVE2.md 5).
+    if (kind === 'tap' && kitBusy(kitWorn, fxClock.value, fxKick.value)) return;
     // The jetpack never restarts a lift mid-air (that would drop the shark): a tap or a buy
     // during a boost just waits for it to settle (Dustin: no jumps, ever).
     const airborne = fx.floats && boostAt(fxClock.value, fxKick.value) > 0;
@@ -189,7 +194,7 @@ export default function Playercard({
         if (cue) fxPlayCue(cue, false);
       }, 450 + momentMs * (fx.floats ? 1.05 : 0.75)));
     }
-  }, [fx, fxRunning, momentMs, showBackground, onFxPlay]);
+  }, [fx, fxRunning, momentMs, showBackground, onFxPlay, kitWorn]);
   const unlockTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => unlockTimers.current.forEach(clearTimeout), []);
   const lookKey = [fx.scene, ...fx.rigs.map(r => r.key)].join(',');

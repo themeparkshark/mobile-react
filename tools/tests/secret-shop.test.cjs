@@ -22,7 +22,9 @@ test('only rig keys this build ships play; anything else falls back to the rest-
   assert.equal(fx.fxKeyOf({ fx_key: 'warp_drive' }), null, 'a newer server key draws paper_url');
   assert.equal(fx.fxKeyOf({ fx_key: null }), null);
   assert.equal(fx.fxKeyOf(null), null);
-  assert.deepEqual(plain(fx.FX_KEYS), ['jetpack', 'plasma_blade', 'reef_halo', 'saucer', 'midway_fireworks', 'ghost_lantern']);
+  assert.deepEqual(plain(fx.CORE_KEYS), ['jetpack', 'plasma_blade', 'reef_halo', 'saucer', 'midway_fireworks', 'ghost_lantern']);
+  // Wave 2 rides along after the launch set (secret-shop-wave2.test.cjs covers its kit).
+  assert.deepEqual(plain(fx.FX_KEYS), [...plain(fx.CORE_KEYS), ...plain(fx.WAVE2_KEYS)]);
   assert.equal(fx.isSecretItem({ source: 'secret' }), true);
   assert.equal(fx.isSecretItem({ fx_key: 'saucer' }), true);
   assert.equal(fx.isSecretItem({ source: 'shop' }), false);
@@ -30,7 +32,8 @@ test('only rig keys this build ships play; anything else falls back to the rest-
 
 test('every rig has geometry, a slot, a layer side and its bundled art', () => {
   for (const key of fx.FX_KEYS) {
-    assert.ok(geometry.rigs[key], `${key} geometry`);
+    // Kit items keep their geometry in kit.json (secret-shop-wave2.test.cjs); hand-written rigs in geometry.json.
+    assert.ok(geometry.rigs[key] || fx.FX_KIT[key], `${key} geometry`);
     assert.ok(fx.FX_SLOT[key], `${key} slot`);
     assert.ok(fx.FX_SIDES[key].length > 0, `${key} side`);
     assert.ok(fx.FX_FOCUS[key], `${key} tile focus`);
@@ -47,7 +50,7 @@ test('every rig has geometry, a slot, a layer side and its bundled art', () => {
     assert.ok(fs.existsSync(full), `assets/fx/${file}`);
     bytes += fs.statSync(full).size;
   }
-  // The OTA asset budget for the six launch rigs (DESIGN.md 8.1).
+  // The OTA asset budget for the hand-written rigs (DESIGN.md 8.1); kit art has its own (wave 2 test).
   assert.ok(bytes < 1.3 * 1024 * 1024, `rig art is ${Math.round(bytes / 1024)} KB`);
 });
 
@@ -65,8 +68,10 @@ test('rig art ships as WebP (the OTA asset budget)', () => {
   const files = fs.readdirSync(path.join(root, 'assets/fx'));
   assert.deepEqual(files.filter(f => !f.endsWith('.webp')), []);
   const bytes = files.reduce((n, f) => n + fs.statSync(path.join(root, 'assets/fx', f)).size, 0);
-  // 480 KB: the gold burst went to 768 px so the unlock reads crisp on 3x screens (perf panel round 5).
-  assert.ok(bytes < 480 * 1024, `assets/fx is ${Math.round(bytes / 1024)} KB`);
+  // 480 KB for the launch set (the gold burst went to 768 px so the unlock reads crisp on 3x screens,
+  // perf panel round 5), plus wave 2: 30 pieces at about 40 KB each on average (DESIGN-WAVE2.md 6), so
+  // the whole folder stays under 1.8 MB.
+  assert.ok(bytes < 1.8 * 1024 * 1024, `assets/fx is ${Math.round(bytes / 1024)} KB`);
 });
 
 test('part aspects in geometry match the bundled art, so the live rig lines up with the rest frame', () => {
@@ -96,8 +101,10 @@ test('a part lands with its anchor on (cx, cy), the same math as compose.py plac
   assert.ok(Math.abs(l.left + spec.ax * l.width - (10 + spec.cx * 1353)) < 1e-6);
   assert.ok(Math.abs(l.top + spec.ay * l.height - (20 + spec.cy * 1530)) < 1e-6);
   assert.ok(Math.abs(l.height - l.width * spec.aspect) < 1e-6);
-  // The anchor in whole pixels: React Native's transformOrigin parser reads integers only.
+  // The transform origin is the anchor in whole pixels: React Native's parser reads integers only, so a
+  // percentage like '56.88%' silently became '88%' and the flame stretched about the wrong point.
   assert.equal(l.origin, `${Math.round(spec.ax * l.width)}px ${Math.round(spec.ay * l.height)}px`);
+  assert.match(l.origin, /^\d+px \d+px$/);
 });
 
 test('both jetpack flames leave their nozzles (geometry stays attached)', () => {
@@ -708,7 +715,10 @@ test('the jetpack motion and its framing read the same lift numbers', () => {
   assert.doesNotMatch(code, /0\.09 \+ 0\.011/, 'no second copy of the lift numbers');
   const layers = src('src/fx/FxLayers.tsx');
   assert.match(layers, /liftFraming\(props\.fx, props\.width, props\.height, props\.room \?\? 0, props\.floored \?\? false, props\.hat \?\? true\)/);
-  assert.match(layers, /\{ translateY: w \* shift \},\s*\{ scale: 1 - w \* \(1 - scale\) \},\s*\{ translateY: w > 0 \? w \* lift \* jetpackFloat/);
+  // Release 2.1: the float line also carries the wave 2 kit move (secret-shop-more).
+  assert.match(layers, /\{ translateY: w \* shift \},\s*\{ scale: 1 - w \* \(1 - scale\) \},\s*\{ translateY: \(w > 0 \? w \* lift \* jetpackFloat\(t\.value, kick\.value, height\) : 0\) \+ kitMove\.y \* height \}/);
+  // The pumpkin pack floats on jetpackFloat, so it frames with its own FX_LIFT row.
+  assert.match(src('src/fx/registry.ts'), /pumpkin_pack: \{ rest: 0\.09, bob: 0\.011, boost: 0\.033, lean: 2\.3 \}/);
   assert.match(src('src/components/Playercard.tsx'), /<FxFloat fx=\{fx\} t=\{fxClock\} kick=\{fxKick\} width=\{stageW\} height=\{stageH\} room=\{liftRoom\} floored=\{!!shadowAt\} hat=\{!!inventory\?\.head_item\}>/);
 });
 
