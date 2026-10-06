@@ -3,8 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
-import { closetBadge, closetBadgeSay } from '../helpers/shopLifecycle';
+import { closetBadge, closetBadgeSay, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 
 const PEARL = {
   white: require('../../assets/shop-life/pearl-white.webp'),
