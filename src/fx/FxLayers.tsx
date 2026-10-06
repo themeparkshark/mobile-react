@@ -4,7 +4,10 @@ import Animated, { Easing, SharedValue, runOnJS, useAnimatedStyle, useSharedValu
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import * as Haptics from '../helpers/haptics';
 import { FxBox, RigProps } from './FxStage';
-import { FxKey, FxLod, LiftFraming, WornFx, coverBox, containBox, liftFraming, liftScaleFor, wornFx } from './registry';
+import { kitSharkMove } from './kit';
+import { FX_KIT, FxKey, FxLod, LiftFraming, WornFx, coverBox, containBox, liftFraming, liftScaleFor, wornFx } from './registry';
+import { kitBack, kitFront, kitHasLayer, kitScene, kitSceneFront } from './rigs/Kit';
+import { PumpkinPackFront } from './rigs/PumpkinPack';
 import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
 import { JetpackFront, jetpackBody, jetpackFloat } from './rigs/Jetpack';
 import { MidwayFireworksScene, SceneFlashOnShark } from './rigs/MidwayFireworks';
@@ -26,6 +29,16 @@ const FRONT: Partial<Record<FxKey, Rig>> = {
   ghost_lantern: GhostLanternFront,
 };
 const SCENE: Partial<Record<FxKey, Rig>> = { midway_fireworks: MidwayFireworksScene };
+/** A scene's light layer in front of the shark (stages only). */
+const SCENE_FRONT: Partial<Record<FxKey, Rig>> = { midway_fireworks: SceneFlashOnShark };
+FRONT.pumpkin_pack = PumpkinPackFront;
+// Wave 2 kit items: one component per layer they draw, made once (stable identity).
+for (const key of Object.keys(FX_KIT) as FxKey[]) {
+  if (kitHasLayer(key, 'back')) BACK[key] = kitBack(key);
+  if (kitHasLayer(key, 'front')) FRONT[key] = kitFront(key);
+  if (kitHasLayer(key, 'scene')) SCENE[key] = kitScene(key);
+  if (kitHasLayer(key, 'scenefront')) SCENE_FRONT[key] = kitSceneFront(key);
+}
 
 type Shared = { t: SharedValue<number>; kick: SharedValue<number>; lod: FxLod; cue?: (moment: string) => void };
 
@@ -61,8 +74,9 @@ export function FxScene({ fx, ...shared }: Shared & { fx: WornFx }) {
 
 /** A worn scene's light on the shark (in front of it): the fireworks flash. */
 export function FxSceneLight({ fx, ...shared }: Shared & { fx: WornFx }) {
-  if (fx.scene !== 'midway_fireworks') return null;
-  return <FxBox>{({ width, height }) => <SceneFlashOnShark {...shared} box={containBox(width, height)} />}</FxBox>;
+  const Front = fx.scene ? SCENE_FRONT[fx.scene] : undefined;
+  if (!Front) return null;
+  return <FxBox>{({ width, height }) => <Front {...shared} box={containBox(width, height)} />}</FxBox>;
 }
 
 /**
@@ -76,7 +90,7 @@ export function FxFloat(props: { fx: WornFx; t: SharedValue<number>; kick: Share
   // The whole flight stays inside this card (registry liftFraming, from the rig's own FX_LIFT).
   const framing = useMemo(() => liftFraming(props.fx, props.width, props.height, props.room ?? 0, props.floored ?? false, props.hat ?? true),
     [props.fx, props.width, props.height, props.room, props.floored, props.hat]);
-  const moves = lift.active || props.fx.rigs.some(r => r.key === 'plasma_blade');
+  const moves = lift.active || props.fx.rigs.some(r => r.key === 'plasma_blade' || !!FX_KIT[r.key]?.shark);
   if (!moves) return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>{props.children}</View>;
   return <MovingShark {...props} framing={framing} weight={lift.w} />;
 }
@@ -103,17 +117,20 @@ function MovingShark({ fx, t, kick, height, weight, framing, children }: { fx: W
   weight: SharedValue<number>; framing: LiftFraming; children: React.ReactNode }) {
   const leans = fx.rigs.some(r => r.key === 'plasma_blade');
   const { scale, shift, lift } = framing;
+  // Wave 2 pieces that move the shark in their moment (a gentle lift or rock): the first one worn.
+  const mover = fx.rigs.map(r => FX_KIT[r.key]).find(item => !!item?.shark);
   const style = useAnimatedStyle(() => {
     // The jetpack: a steady lift, a slow boost and a lazy lean, scaled by the ease in/out weight.
     // Framing first (a small sink, then a slight shrink about the tail), so the peak stays in the card.
     const w = weight.value;
     const body = w > 0 ? jetpackBody(t.value, kick.value) : { rot: 0 };
+    const kitMove = kitSharkMove(mover, t.value, kick.value);
     return {
       transform: [
         { translateY: w * shift },
         { scale: 1 - w * (1 - scale) },
-        { translateY: w > 0 ? w * lift * jetpackFloat(t.value, kick.value, height) : 0 },
-        { rotate: `${(leans ? bladeLean(t.value, kick.value) : 0) + w * body.rot}deg` },
+        { translateY: (w > 0 ? w * lift * jetpackFloat(t.value, kick.value, height) : 0) + kitMove.y * height },
+        { rotate: `${(leans ? bladeLean(t.value, kick.value) : 0) + w * body.rot + kitMove.rot}deg` },
       ],
     };
   });
@@ -145,14 +162,18 @@ type Cue = { file: number | null; rate: number; volume: number; haptic?: 'light'
 const JET_BOOST = require('../../assets/sounds/ss_jet_boost.m4a');
 
 /** Equip cues (DESIGN.md 7): Chris's SFX at a rate per rig. */
-export const FX_EQUIP_SOUNDS: Record<FxKey, Cue> = {
+export const FX_EQUIP_SOUNDS = {
   jetpack: { file: JET_BOOST, rate: 1, volume: 0.9, haptic: 'medium' },
   plasma_blade: { file: null, rate: 1, volume: 0.8, haptic: 'light' },
   reef_halo: { file: require('../../assets/sounds/inventory_item_tap.mp3'), rate: 1.5, volume: 0.8, haptic: 'light' },
   saucer: { file: null, rate: 1, volume: 0.7, haptic: 'light' },
   midway_fireworks: { file: require('../../assets/sounds/firework_pop.mp3'), rate: 1, volume: 0.8, haptic: 'medium' },
   ghost_lantern: { file: null, rate: 1, volume: 0.7, haptic: 'light' },
-};
+  // Wave 2: the Pumpkin Rocket Pack rides Dustin's approved jet boost (same rig, same gentle sound).
+  pumpkin_pack: { file: JET_BOOST, rate: 1, volume: 0.9, haptic: 'medium' },
+  // Every other wave 2 piece is silent until Dustin picks its sound by ear (haptic only).
+  ...Object.fromEntries(Object.keys(FX_KIT).map(k => [k, { file: null, rate: 1, volume: 0.7, haptic: 'light' } as Cue])),
+} as Record<FxKey, Cue>;
 
 /** One quiet cue per moment, on stages only (game feel round 2). Chris's SFX, new rates. */
 export const FX_MOMENT_CUES: Record<string, Cue> = {
@@ -163,6 +184,9 @@ export const FX_MOMENT_CUES: Record<string, Cue> = {
   beam: { file: null, rate: 1, volume: 0.35 },
   finale: { file: require('../../assets/sounds/firework_pop.mp3'), rate: 1, volume: 0.55, haptic: 'medium' },
   peek: { file: null, rate: 1, volume: 0.4, haptic: 'light' },
+  pumpkin_boost: { file: JET_BOOST, rate: 1, volume: 0.6, haptic: 'rigid' },
+  // Wave 2 kit moments: silent (a light haptic) until Dustin picks each sound by ear.
+  ...Object.fromEntries(Object.values(FX_KIT).map(item => [item!.moment.cue, { file: null, rate: 1, volume: 0.4, haptic: 'light' } as Cue])),
 };
 
 const STYLES = Haptics.ImpactFeedbackStyle as unknown as Record<string, string>;
