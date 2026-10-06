@@ -45,6 +45,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ProfilePreview', getComponent: () => require('./screens/ProfilePreviewScreen').default },
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
+      { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
     ]
   : [];
@@ -102,6 +103,7 @@ export function devInitialRoute(): string | null {
     [on(process.env.EXPO_PUBLIC_POST_WIN_REWARDS_PREVIEW) || on(process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW), 'PostWinRewardsPreview'],
     [on(process.env.EXPO_PUBLIC_UI_KIT_PREVIEW), 'UiKitGym'],
     [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
+    [on(process.env.EXPO_PUBLIC_SET_REVEAL_PREVIEW), 'SetRevealPreview'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;
 }

@@ -9,12 +9,20 @@
  *   chain and a level-up pops the LV badge.
  *
  * Buttons: one chunky "WEAR IT ALL" (title and look) that turns green and
- * hops the shark when done, a "Just the title" link, and "Awesome!" to dismiss.
+ * hops the shark when done, a "Just the title" link, and a clear second
+ * button to leave without wearing anything: "Not now" (it reads "Done" once
+ * something is on). Leaving is easy every way: the X in the corner, "Not now",
+ * a swipe down, or Android back. The reveal fills the screen, so there is no
+ * "outside" to tap: a tap in a gap between its parts never closes it (panel r1).
+ * "Not now" (where the buy button was) and the swipe wait out REVEAL_GUARD_MS so
+ * the buy tap carrying over never skips the reveal. Leaving while a wear is
+ * saving waits for the save: it closes on success and stays open on a failure,
+ * so "Try again" is seen.
  * Reduce Motion: no rays, stamp or confetti, a plain fade.
  */
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -41,6 +49,25 @@ const CARD = stageCard(STAGE - 8, STAGE - 8, HOP + 6);
 const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
+
+/** A tap or swipe this soon after the reveal opens is the buy tap carrying over: ignored. */
+export const REVEAL_GUARD_MS = 900;
+/** A downward swipe this long (or a fast flick) closes the reveal. */
+export const SWIPE_CLOSE_DY = 140;
+/** A flick this fast (pt/ms) closes too, but only after at least SWIPE_MIN_DY. */
+export const SWIPE_FLICK_VY = 1.4;
+export const SWIPE_MIN_DY = 60;
+
+/** Does this downward drag close the reveal? Mostly vertical, long enough or a real flick. */
+export function swipeCloses(dy: number, dx: number, vy: number): boolean {
+  if (dy <= 0 || Math.abs(dy) < Math.abs(dx) * 2) return false;
+  return dy > SWIPE_CLOSE_DY || (vy > SWIPE_FLICK_VY && dy > SWIPE_MIN_DY);
+}
+
+/** The leave button: "Not now" until something is on, then "Done". */
+export function leaveLabel(wornAll: boolean, titleOn: boolean): string {
+  return wornAll || titleOn ? 'Done' : 'Not now';
+}
 
 
 export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
@@ -107,6 +134,36 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     { rotate: `${Math.sin(hop.value * Math.PI * 4) * 8 * (1 - hop.value)}deg` },
   ] }));
 
+  // Close paths share one guard: the X, Not now and Android back always work; a stray
+  // backdrop tap or swipe in the first REVEAL_GUARD_MS is the buy tap carrying over.
+  const openedAt = useRef(Date.now());
+  useEffect(() => { openedAt.current = Date.now(); }, [reward?.slug]);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+  // Saves in flight (WEAR IT ALL, Just the title). Leaving waits for them (see the header).
+  const saving = useRef(0);
+  const leaveAfterSave = useRef(false);
+  const [waiting, setWaiting] = useState(false);
+  const leave = (guarded: boolean) => {
+    if (guarded && Date.now() - openedAt.current < REVEAL_GUARD_MS) return;
+    void Haptics.selectionAsync().catch(() => undefined);
+    if (saving.current > 0) { leaveAfterSave.current = true; setWaiting(true); return; }
+    doneRef.current();
+  };
+  const settle = (ok: boolean) => {
+    saving.current = Math.max(0, saving.current - 1);
+    if (saving.current > 0) return;
+    if (ok && leaveAfterSave.current) { doneRef.current(); return; }
+    leaveAfterSave.current = false;
+    setWaiting(false);
+  };
+  const leaveRef = useRef(leave);
+  leaveRef.current = leave;
+  const swipe = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => g.dy > 16 && Math.abs(g.dy) > Math.abs(g.dx) * 2,
+    onPanResponderRelease: (_e, g) => { if (swipeCloses(g.dy, g.dx, g.vy)) leaveRef.current(true); },
+  })).current;
+
   if (!reward) return null;
 
   // Optimistic: the hop and NOW WEARING play on tap; one look save (all slots) and the title go in
@@ -117,6 +174,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     playSound(require('../../../assets/sounds/whoosh.mp3'));
     if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    saving.current += 1;
     try {
       const slots = wearAllSlots(pieces.map(p => ({ id: p.id, worn: isItemWorn(player?.inventory, p),
         slot: slotForItem({ item_type: { id: p.item_type_id } } as never) })));
@@ -130,21 +188,27 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         : Promise.resolve();
       await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
       void refreshPlayer();
-    } catch { setAll(s => wearAllNext(s, 'fail')); }
+      settle(true);
+    } catch { setAll(s => wearAllNext(s, 'fail')); settle(false); }
   };
 
   const justTitle = async () => {
     if (titleOnly === 'busy' || !reward.title) return;
     setTitleOnly('busy');
-    try { await equipShopTitle(reward.slug); await refreshPlayer(); setTitleOnly('done'); }
-    catch { setTitleOnly('failed'); }
+    saving.current += 1;
+    try { await equipShopTitle(reward.slug); await refreshPlayer(); setTitleOnly('done'); settle(true); }
+    catch { setTitleOnly('failed'); settle(false); }
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onDone} onShow={onShown} statusBarTranslucent>
+    <Modal visible transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown} statusBarTranslucent>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
-      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill}>
+      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
+        <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
+          style={[styles.close, { top: insets.top + 10 }]}>
+          <GameIcon name="close" size={40} />
+        </Pressable>
         <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
@@ -199,8 +263,11 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 </Text>
               </Pressable>
             )}
-            <Pressable onPress={onDone} accessibilityRole="button" style={styles.textButton}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.dismiss}>Awesome!</Text>
+            {/* Leave without wearing anything: a real button, not a link (Dustin: "tap off easier"). */}
+            <Pressable onPress={() => leave(true)} disabled={waiting} accessibilityRole="button"
+              accessibilityHint={all === 'done' || titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'}
+              style={({ pressed }) => [styles.leave, { width: Math.min(320, W - 48) }, pressed && styles.leavePressed]}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaveText}>{waiting ? 'Saving...' : leaveLabel(all === 'done', titleOnly === 'done')}</Text>
             </Pressable>
           </View>
         </View>
@@ -263,9 +330,13 @@ const styles = StyleSheet.create({
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
-  buttons: { width: '100%', alignItems: 'center', gap: 2, marginTop: 'auto' },
+  buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
+  close: { position: 'absolute', right: 14, zIndex: 3 },
+  leave: { minHeight: 52, borderRadius: 18, borderWidth: 3, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center',
+    justifyContent: 'center', marginTop: 4 },
+  leavePressed: { transform: [{ scale: 0.97 }], backgroundColor: 'rgba(255,255,255,0.08)' },
+  leaveText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, letterSpacing: 0.5 },
   textButton: { minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   link: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, textDecorationLine: 'underline' },
-  dismiss: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white },
   bit: { position: 'absolute', top: 0, left: 0, height: 12, borderRadius: 2 },
 });
