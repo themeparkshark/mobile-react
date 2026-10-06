@@ -29,6 +29,7 @@ function gateModule(store = {}, navigated = [], dev = true) {
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
     '../RootNavigation': { navigate: (...args) => navigated.push(args) },
     '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
+    '../ui/modalLayers': { useModalLayer: () => true },
   }, { __DEV__: dev });
 }
 

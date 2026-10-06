@@ -18,6 +18,8 @@ let pending: Promise<boolean> | null = null;
 export function loadSecretShopFlag(read: typeof getFeatureFlags = getFeatureFlags, now: () => number = Date.now,
   readMine: typeof getMySecretShop = getMySecretShop): Promise<boolean> {
   if (cached && now() - cached.at < TTL_MS) return Promise.resolve(cached.on);
+  // Only a real answer is cached: a network hiccup reads as off for this call but never pins the
+  // shop to its legacy grid for 5 minutes (the next open asks again).
   pending ??= readMine()
     .then(mine => mine.secret_shop_v2 === true)
     .catch(() => read().then(payload => payload?.flags?.secret_shop_v2 === true))

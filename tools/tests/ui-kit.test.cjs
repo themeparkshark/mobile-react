@@ -352,6 +352,8 @@ function dialogView(props, reduced = false) {
     'expo-blur': { BlurView: 'BlurView' },
     './gameDialogModel': dialogModel,
     './tokens': tokens,
+    // Nothing else is open: the dialog is the front layer (ui/modalLayers.ts has its own tests).
+    './modalLayers': { useModalLayer: () => true, modalLayers: { count: () => 0 } },
   }, { visible: true, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...props },
   {}, { exportName: 'GameDialog' });
 }

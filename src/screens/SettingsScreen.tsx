@@ -346,11 +346,11 @@ export default function SettingsScreen() {
           {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
           <SettingsRow
             art="heart"
-            title="Wishlist Alerts"
+            title="Favorites Alerts"
             isLast
             accessory={
               <BrandSwitch
-                label="Wishlist alerts"
+                label="Favorites alerts"
                 value={!!wishlistAlerts}
                 onValueChange={async () => {
                   const next = !wishlistAlerts;
@@ -361,7 +361,7 @@ export default function SettingsScreen() {
                   } catch {
                     // Say so and put the switch back: never a silent save failure.
                     setWishlistAlerts(!next);
-                    showToast('Couldn’t save Wishlist Alerts. Try again.', 'warning');
+                    showToast('Couldn’t save Favorites Alerts. Try again.', 'warning');
                   }
                 }}
               />

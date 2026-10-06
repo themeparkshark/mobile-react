@@ -278,7 +278,7 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
     {coins != null && (
       <>
         <Pressable onPress={onWishlist} style={tabStyles.wish} accessibilityRole="button"
-          accessibilityLabel={`My wishlist, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
+          accessibilityLabel={`Favorites, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
           <WishHeart on={wishes > 0} size={20} />
           {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
         </Pressable>
@@ -307,7 +307,17 @@ const tabStyles = StyleSheet.create({
   wishText: { fontFamily: 'Shark', fontSize: 14, color: '#c2185b' },
 });
 
-export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
+/**
+ * One store per screen instance: a new store param (navigate('Store', ...) landing on a Store
+ * screen already in the stack) starts a fresh screen, so no tab, shelf, scroll fold, try-on or
+ * Secret Shop state carries over from the other store.
+ */
+export default function StoreScreen(props: NativeStackScreenProps<ParamListBase, 'Store'>) {
+  const store = (props.route.params as { store?: number | 'shark-shop' } | undefined)?.store;
+  return <StoreScreenBody key={String(store)} {...props} />;
+}
+
+function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
   const { store, tab: initialTab, focus, focus_item: focusItem } = route.params as {
     store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
     /** Wishlist push deep link: open this item's try-on. */
@@ -410,8 +420,11 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       const [nextRotation, nextCatalog, nextToday] = await Promise.all([
         getStoreRotation(id).catch(() => null),
         getCatalog(nextStore.current_catalog_id),
-        // Shop v2 shelves; null on an older backend, which keeps the classic grid.
-        nextStore.is_secret_store && !nextSecretV2 ? Promise.resolve(null) : getShopToday(id).catch(() => null),
+        // Shop v2 shelves; null on an older backend, which keeps the classic grid. The Secret Shop
+        // with its flag on never falls back to the legacy grid on a hiccup: a failed day is an error
+        // with a retry (getShopToday answers null only for "this store doesn't rotate").
+        nextStore.is_secret_store && !nextSecretV2 ? Promise.resolve(null)
+          : nextSecretV2 ? getShopToday(id) : getShopToday(id).catch(() => null),
       ]);
       const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
       if (!live) return;
@@ -579,7 +592,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusRequest={focusRequest} scrollY={v2 ? scrollY : undefined} onHandoff={setShopHandoff} secret={secretShelves} />
+                focusRequest={focusRequest} scrollY={v2 ? scrollY : undefined} onHandoff={setShopHandoff} secret={secretShelves}
+                onOpenFavorites={() => setWishlistOpen(true)} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (

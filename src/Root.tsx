@@ -130,7 +130,9 @@ export default function App() {
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="Store" getComponent={() => require('./screens/StoreScreen').default} />
+        {/* One screen per store: navigating to another store pushes it instead of rewriting this one. */}
+        <Stack.Screen name="Store" getComponent={() => require('./screens/StoreScreen').default}
+          getId={({ params }) => String((params as { store?: number | string } | undefined)?.store ?? '')} />
         <Stack.Screen name="PinCollections" getComponent={() => require('./screens/PinCollectionsScreen').default} />
         <Stack.Screen
           name="Profile"

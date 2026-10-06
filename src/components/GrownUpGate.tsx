@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
+import { useModalLayer } from '../ui/modalLayers';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -203,7 +204,9 @@ export function GrownUpGateHost() {
     showGate = r => { setTyped(''); setReq(r); };
     return () => { showGate = null; };
   }, []);
-  if (!req) return null;
+  // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
+  const front = useModalLayer(!!req, 'wait');
+  if (!req || !front) return null;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);

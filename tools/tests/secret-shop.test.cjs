@@ -96,7 +96,8 @@ test('a part lands with its anchor on (cx, cy), the same math as compose.py plac
   assert.ok(Math.abs(l.left + spec.ax * l.width - (10 + spec.cx * 1353)) < 1e-6);
   assert.ok(Math.abs(l.top + spec.ay * l.height - (20 + spec.cy * 1530)) < 1e-6);
   assert.ok(Math.abs(l.height - l.width * spec.aspect) < 1e-6);
-  assert.equal(l.origin, `${spec.ax * 100}% ${spec.ay * 100}%`);
+  // The anchor in whole pixels: React Native's transformOrigin parser reads integers only.
+  assert.equal(l.origin, `${Math.round(spec.ax * l.width)}px ${Math.round(spec.ay * l.height)}px`);
 });
 
 test('both jetpack flames leave their nozzles (geometry stays attached)', () => {
@@ -172,6 +173,7 @@ test('wornFx: animated pieces replace their paper layer, scenes replace the back
 function loadSecretUi() {
   return loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
     react: { memo: f => f, useContext: () => false, useEffect: () => undefined, useState: v => [v, () => undefined] },
+    '../ui/modalLayers': { useModalLayer: () => true },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
     'react-native-reanimated': { __esModule: true, default: { View: 'AView', Image: 'AImage' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
@@ -379,11 +381,14 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
     async () => ({ secret_shop_v2: false, preview: false })), false, 'the server decides per player');
   flagModule.resetSecretShopFlag();
   assert.equal(await flagModule.loadSecretShopFlag(async () => { throw new Error('offline'); }, Date.now, noMine), false);
+  // A hiccup is never cached: the next call asks again and gets the real answer.
+  assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: false } }), Date.now,
+    async () => ({ secret_shop_v2: true, preview: true })), true, 'a failed read does not pin the shop off');
   assert.match(src('src/context/AuthProvider.tsx'), /resetSecretShopFlag\(\)/, 'sign-out forgets the per-player answer');
 
   const store = src('src/screens/StoreScreen.tsx');
   assert.match(store, /const nextSecretV2 = !!nextStore\.is_secret_store && await loadSecretShopFlag\(\);/);
-  assert.match(store, /nextStore\.is_secret_store && !nextSecretV2 \? Promise\.resolve\(null\) : getShopToday\(id\)/,
+  assert.match(store, /nextStore\.is_secret_store && !nextSecretV2 \? Promise\.resolve\(null\)\s*: nextSecretV2 \? getShopToday\(id\)/,
     'with the flag off the secret store never asks for shelves');
   assert.match(store, /secret=\{secretShelves\}/);
 });
@@ -571,4 +576,52 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   assert.match(layers, /w\.value = withTiming\(floats \? 1 : 0, \{ duration: 700/);
   // A tap or a buy never restarts a lift mid-air.
   assert.match(src('src/components/Playercard.tsx'), /if \(kind === 'tap' && airborne\) return;/);
+});
+
+test('a store switch never reuses one Store screen: keyed by store, one screen per store id', () => {
+  const screen = src('src/screens/StoreScreen.tsx');
+  assert.match(screen, /export default function StoreScreen\(props[^)]*\) \{\s*const store = [^;]+;\s*return <StoreScreenBody key=\{String\(store\)\} \{\.\.\.props\} \/>;\s*\}/);
+  // The wrapper holds no state of its own (every hook lives in the keyed body).
+  const wrapper = /export default function StoreScreen\([\s\S]*?\n\}/.exec(screen)[0];
+  assert.doesNotMatch(wrapper, /\buse[A-Z]\w*\(/);
+  assert.match(src('src/Root.tsx'), /name="Store" getComponent=\{\(\) => require\('\.\/screens\/StoreScreen'\)\.default\}\s*getId=\{\(\{ params \}\) => String\(/);
+});
+
+test('the Secret Shop never falls back to the legacy grid on a network hiccup', () => {
+  const screen = src('src/screens/StoreScreen.tsx');
+  // With the flag on, a failed shop day is an error with a retry (not .catch(() => null) into the old grid).
+  assert.match(screen, /: nextSecretV2 \? getShopToday\(id\) : getShopToday\(id\)\.catch\(\(\) => null\),/);
+});
+
+// ------------------------------------------------------------------ transformOrigin
+
+test('transform origins are whole pixels or whole percents: RN reads "56.88%" as "88%"', () => {
+  const { partLayout } = loadTs('src/fx/registry.ts');
+  const box = { x: 3, y: 7, w: 331.7, h: 375.1 };
+  for (const [key, rig] of Object.entries(geometry.rigs)) {
+    const walk = (node) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== 'object') return;
+      if (typeof node.w === 'number') {
+        const { origin } = partLayout(box, node);
+        assert.match(origin, /^-?\d+px -?\d+px$/, `${key}: ${origin}`);
+      }
+      Object.values(node).forEach(walk);
+    };
+    walk(rig);
+  }
+  // No literal fractional percent anywhere in the app.
+  const files = [];
+  const scan = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(d => {
+    const full = path.join(dir, d.name);
+    if (d.isDirectory()) scan(full); else if (/\.(tsx?|js)$/.test(d.name)) files.push(full);
+  });
+  scan(path.join(root, 'src'));
+  for (const file of files) {
+    const code = fs.readFileSync(file, 'utf8');
+    for (const m of code.matchAll(/transformOrigin:\s*[`'"]([^`'"]*)[`'"]/g)) {
+      assert.doesNotMatch(m[1], /\d\.\d+%/, `${path.relative(root, file)}: ${m[1]}`);
+      assert.doesNotMatch(m[1], /\$\{[^}]*\}%/, `${path.relative(root, file)}: computed percent ${m[1]}`);
+    }
+  }
 });

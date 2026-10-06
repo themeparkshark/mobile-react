@@ -22,6 +22,7 @@
  * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { modalLayers, useModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -137,7 +138,11 @@ export function GameDialog({
   equalChoices = false,
 }: GameDialogProps) {
   const reducedMotion = useUiReducedMotion();
-  const [mounted, setMounted] = useState(visible);
+  const [mounted, setMounted] = useState(() => visible && modalLayers.count() === 0);
+  // Never a second sibling <Modal>: wait until every sheet or dialog opened before this one is gone
+  // (ui/modalLayers.ts; a sibling iOS refuses to present froze the shop).
+  const front = useModalLayer(visible || mounted, 'wait');
+  const shown = visible && front;
   const closing = useRef(false);
   const chosen = useRef<number | null>(null);
   const scrim = useSharedValue(0);
@@ -152,7 +157,7 @@ export function GameDialog({
   }, [visible, title, titleLayout.placement]);
 
   useEffect(() => {
-    if (visible) {
+    if (shown) {
       closing.current = false;
       chosen.current = null;
       setMounted(true);
@@ -164,7 +169,7 @@ export function GameDialog({
     }
     // Opening only depends on visibility; haptic kind and motion are read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [shown]);
 
   const finish = () => {
     setMounted(false);

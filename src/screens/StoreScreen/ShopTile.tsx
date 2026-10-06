@@ -198,7 +198,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       ) : (
         <Pressable onPress={() => onWish(item)} hitSlop={10} style={styles.corner}
           accessibilityRole="button" accessibilityState={{ selected: wished }}
-          accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}>
+          accessibilityLabel={wished ? `Remove ${name} from Favorites` : `Save ${name} to Favorites`}>
           <Animated.View style={[styles.heart, wished && styles.heartOn, heartStyle]}>
             <WishHeart on={wished} size={18} />
           </Animated.View>

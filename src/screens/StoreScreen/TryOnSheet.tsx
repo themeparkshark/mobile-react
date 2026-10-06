@@ -17,6 +17,7 @@
  * update (so the hero and the toast agree) and closes. Only the button's label
  * ever changes, so there is no blank button frame.
  */
+import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
 import { openMembership } from '../../components/GrownUpGate';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
@@ -177,6 +178,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly secret?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
+  // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
+  useModalLayer(!!item, 'show');
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
   const wished = useWished(item?.id ?? -1);
@@ -435,6 +438,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
 
   return (
     <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
+      <ModalLayerContext.Provider value>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
@@ -579,7 +583,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               <View style={styles.row}>
                 {row.showWish && (
                   <Pressable onPress={() => onWish(item)} style={[styles.wish, wished && styles.wishOn]} accessibilityRole="button"
-                    accessibilityState={{ selected: wished }} accessibilityLabel={wished ? 'Remove from wishlist' : 'Add to wishlist'}>
+                    accessibilityState={{ selected: wished }} accessibilityLabel={wished ? 'Remove from Favorites' : 'Save to Favorites'}>
                     <WishHeart on={wished} size={26} />
                   </Pressable>
                 )}
@@ -611,6 +615,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
           </Animated.View>
         </Animated.View>
       </GestureHandlerRootView>
+      </ModalLayerContext.Provider>
     </Modal>
   );
 }
