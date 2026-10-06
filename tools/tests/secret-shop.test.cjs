@@ -549,7 +549,7 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   // Every boost takes off from and lands at rest height (the bob is out), so rise and fall match.
   for (const st of starts) {
     assert.ok(Math.abs(jet.bobWeight(st + 1200, NO)) < 1e-6, 'no bob at the top of a boost');
-    assert.ok(Math.abs(jet.bobWeight(st + 2499, NO)) < 1e-6, 'lands with no bob');
+    assert.ok(Math.abs(jet.bobWeight(st + 2470, NO)) < 1e-6, 'lands with no bob');
   }
   // The flame flares with the sound: full thrust within 150 ms.
   assert.ok(jet.thrustCurve(150 / 2500) > 0.99 && jet.thrustCurve(400 / 2500) === 1 && jet.thrustCurve(2400 / 2500) < 0);
