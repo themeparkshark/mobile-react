@@ -273,6 +273,12 @@ export function lastChanceLine(season: string | null | undefined): string {
 }
 
 /**
+ * The member promise on every Secret and members-only piece (secret-shop/DESIGN.md 6.7, Dustin's member
+ * rule): it stays owned forever, and members can wear it. True whether or not the wear lock is on.
+ */
+export const MEMBER_PROMISE = 'Members can wear this. It stays in your closet forever.';
+
+/**
  * Honest Favorites copy (one name everywhere for the heart): it says where they went, and
  * alerts on promise a note while off or not asked promise nothing.
  */

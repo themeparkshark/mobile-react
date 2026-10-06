@@ -46,8 +46,76 @@ export const FX_MOMENT: Record<FxKey, { cue: string; ms: number }> = {
   ghost_lantern: { cue: 'peek', ms: 6000 * 0.4 },
 };
 
+/**
+ * Rigs that lift the shark, in fractions of the stage height: the steady hover (rest), the slow
+ * bob around it and the boost on top, plus the most it leans (degrees). The one source of truth:
+ * the rig's motion (jetpackFloat) and the framing that keeps it in frame (liftFraming) both read
+ * it, so a future lifting rig frames itself by adding a row here.
+ */
+export const FX_LIFT: Partial<Record<FxKey, { readonly rest: number; readonly bob: number; readonly boost: number; readonly lean: number }>> = {
+  jetpack: { rest: 0.09, bob: 0.011, boost: 0.033, lean: 2.3 },
+};
+
 /** Rigs that also move the shark itself. */
-export const FX_FLOATS: Partial<Record<FxKey, number>> = { jetpack: 1 };
+export const FX_FLOATS: Partial<Record<FxKey, number>> = Object.fromEntries(Object.keys(FX_LIFT).map(k => [k, 1]));
+
+/**
+ * Where the shark sits in a Playercard box, in fractions: the art starts 5% of the width down,
+ * moves about 55% / 85% (its tail), the tallest hat reaches the paper's top and the tail tip and
+ * the resting jet flame end at 86% of it. Pads keep the peak off the very edge.
+ */
+export const SHARK_FRAME = { inset: 0.05, originX: 0.55, originY: 0.85, artTop: 0, headTop: 0.183, artBottom: 0.86,
+  padTop: 0.06, padBottom: 0.02, sink: 0.05, rise: 0.07 } as const;
+
+/** Small cards (profile rows, recaps) float less: full lift from 240 pt tall, half at 120 pt or less. */
+export function liftScaleFor(height: number): number {
+  return height >= 240 ? 1 : Math.max(0.5, height / 240);
+}
+
+export interface LiftFraming {
+  /** Scale about the tail (1 = untouched). */
+  readonly scale: number;
+  /** px the resting shark moves: down into the room under the tail, or up (negative) over a plinth with headroom. */
+  readonly shift: number;
+  /** Multiplier on the rig's lift for this card size. */
+  readonly lift: number;
+}
+
+/**
+ * Keeps a lifting rig's whole flight inside its card: at the boost peak the tallest hat stays
+ * below the top pad, and at the lowest hover the tail and flame stay above the bottom pad.
+ * Uses the room under the tail first (a small sink, never over a plinth), then shrinks the shark
+ * slightly about its tail. Pure, so tests can check every card size.
+ */
+export function liftFraming(fx: Pick<WornFx, 'rigs'>, width: number, height: number, roomAbove = 0, floored = false,
+  hatWorn = true): LiftFraming {
+  const lifts = fx.rigs.map(r => FX_LIFT[r.key]).filter((l): l is NonNullable<typeof l> => !!l);
+  if (lifts.length === 0 || width <= 0 || height <= 0) return { scale: 1, shift: 0, lift: 1 };
+  const k = liftScaleFor(height);
+  const peak = Math.max(...lifts.map(l => l.rest + l.bob + l.boost)) * k * height;
+  const low = Math.min(...lifts.map(l => l.rest - l.bob)) * k * height;
+  const lean = Math.max(...lifts.map(l => l.lean));
+  const F = SHARK_FRAME;
+  const paper = containBox(width, height);
+  // Headroom for the tallest hat only when a head piece is worn; otherwise the head top.
+  const top = F.inset * width + paper.y + (hatWorn ? F.artTop : F.headTop) * paper.h;
+  const bottom = F.inset * width + paper.y + F.artBottom * paper.h;
+  const ya = F.originY * height;
+  // A lean swings the far top corner down or up by about this much.
+  const leanPad = Math.sin((lean * Math.PI) / 180) * Math.max(F.originX, 1 - F.originX) * width;
+  const reach = ya - top + peak + leanPad;
+  // The frame's top: the card's own top, or higher when the surface shows room above it (a stage's sky).
+  const limit = F.padTop * height - Math.max(0, roomAbove);
+  // Over a plinth, spare headroom becomes hover height, so the shark reads as flying, not parked.
+  const rise = (peakTop: number) => (floored ? Math.min(F.rise * k * height, Math.max(0, peakTop - limit)) : 0);
+  if (ya - reach >= limit) return { scale: 1, shift: -rise(ya - reach), lift: k };
+  // Room under the tail at the lowest hover, kept above the bottom pad.
+  const room = Math.max(0, (1 - F.padBottom) * height - (bottom - low));
+  // Over a plinth the hover gap is the point: never sink toward the floor there, only shrink.
+  const shift = floored ? 0 : Math.min(F.sink * k * height, room);
+  const scale = Math.min(1, (ya + shift - limit) / reach);
+  return { scale, shift: shift - rise(ya + shift - scale * reach), lift: k };
+}
 
 /** Rigs drawn as the backdrop (they replace the background paper). */
 export const FX_SCENES: readonly FxKey[] = ['midway_fireworks'];

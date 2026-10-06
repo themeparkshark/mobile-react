@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 import Svg, { Ellipse } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FxPart, RigProps, useMomentCue } from '../FxStage';
-import { FX_GEOMETRY, PaperBox, momentAt, phaseOf } from '../registry';
+import { FX_GEOMETRY, FX_LIFT, PaperBox, momentAt, phaseOf } from '../registry';
 
 const G = FX_GEOMETRY.rigs.jetpack;
 // Alex's hand-drawn Jetpack 3000 (items.id 436): the pack and its two cyan flames are cut
@@ -153,10 +153,15 @@ export function bobWeight(t: number, kick: number): number {
  * a small slow hover bob (a plain sine, 5.4 s), and the boost. The bob fades out during a boost,
  * so every boost peaks at the same height (0.033 of the card above rest).
  */
+const LIFT = FX_LIFT.jetpack!;
+const LIFT_REST = LIFT.rest;
+const LIFT_BOB = LIFT.bob;
+const LIFT_BOOST = LIFT.boost;
+
 export function jetpackFloat(t: number, kick: number, height: number): number {
   'worklet';
   const b = boostAt(t, kick);
-  return -height * (0.09 + 0.011 * idleBob(t, kick) * bobWeight(t, kick) + 0.033 * b);
+  return -height * (LIFT_REST + LIFT_BOB * idleBob(t, kick) * bobWeight(t, kick) + LIFT_BOOST * b);
 }
 
 

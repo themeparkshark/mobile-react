@@ -332,7 +332,9 @@ test('the try-on says "Unlock with VIP" on Secret pieces, and a members_only 403
   assert.equal(shelves.tryOnCta({ ...base, secret: true }).action, 'vip');
   assert.match(shelves.tryOnCta({ ...base, secret: true }).note, /VIP members can buy/);
   const tryOn = src('src/screens/StoreScreen/TryOnSheet.tsx');
-  assert.match(tryOn, /vipLocked \? 'Try it on as much as you like!' : "Once it's yours, it's yours forever\."/, 'the kid-fair promise on every Secret try-on');
+  // DESIGN.md 6.7 with Dustin's member rule: one promise on every Secret piece, members and not.
+  assert.match(tryOn, /const keepLine = MEMBER_PROMISE;/, 'the member promise on every Secret try-on');
+  assert.equal(shelves.MEMBER_PROMISE, 'Members can wear this. It stays in your closet forever.');
   assert.match(tryOn, /case 'vip': afterHiddenRef\.current = \(\) => \{ void openMembership\(\); \}; closeAnimated\(\);/, 'the paywall is behind a grown-up, after the sheet hides');
   assert.match(tryOn, /cta\.action === 'vip' && secretItem \? \(\s*\/\/ Not the gold Buy face/, 'the grown-up button is violet, not the Buy face');
   assert.match(tryOn, /vipLocked: vipLocked && !secretItem/, 'non-members can heart Secret pieces');
@@ -572,7 +574,7 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   const layers = src('src/fx/FxLayers.tsx');
   assert.doesNotMatch(layers, /scaleX: body\.sx/);
   // Equip and unequip ease the lift in and out from wherever it is (never a snap), hooks before the early return.
-  assert.match(layers, /const lift = useFloatWeight\(props\.fx\.floats\);\s*const moves = lift\.active/);
+  assert.match(layers, /const lift = useFloatWeight\(props\.fx\.floats\);[\s\S]{0,400}?const moves = lift\.active/);
   assert.match(layers, /w\.value = withTiming\(floats \? 1 : 0, \{ duration: 700/);
   // A tap or a buy never restarts a lift mid-air.
   assert.match(src('src/components/Playercard.tsx'), /if \(kind === 'tap' && airborne\) return;/);
@@ -624,4 +626,96 @@ test('transform origins are whole pixels or whole percents: RN reads "56.88%" as
       assert.doesNotMatch(m[1], /\$\{[^}]*\}%/, `${path.relative(root, file)}: computed percent ${m[1]}`);
     }
   }
+});
+
+// ------------------------------------------------------------------ lift framing
+
+test('the jetpack flight stays inside every card: tallest hat at the boost peak, tail and flame at the lowest hover', () => {
+  const reg = loadTs('src/fx/registry.ts', { './geometry.json': geometry });
+  const jet = loadJetpack();
+  const shelves = loadTs('src/helpers/shopShelves.ts');
+  const F = reg.SHARK_FRAME;
+  const fxJet = { rigs: [{ slot: 'neck_item', key: 'jetpack' }] };
+  // Every Playercard size the app draws: shop stages (from stageCard, as the screens call it),
+  // the Dressing Room, profile and player headers, recaps and tiny cards, plus odd aspects.
+  const cards = [];
+  for (const screenW of [375, 390, 430]) {
+    const sheetH = Math.min(844 * 0.9, 780);
+    const stageH = Math.round(Math.min(300, sheetH * 0.38));
+    const secretH = Math.round(Math.min(430, sheetH * 0.52));
+    for (const [w, h, name] of [[screenW - 34, stageH - 6, 'try-on'], [screenW - 34, secretH - 6, 'secret try-on'], [screenW - 40, 360, 'vault hero'], [screenW - 40, 260, 'hero']]) {
+      const c = shelves.stageCard(w, h, 18 + 0.04 * (h / 2) + 4);
+      // Stages pass their sky as liftRoom (box.top): the frame is the stage, not the card.
+      cards.push({ name: `${name} @${screenW}`, W: c.box.width, H: c.box.height, top: c.box.top, room: Math.max(0, c.box.top), stageH: h, floored: true, tailY: c.tailY - c.box.top });
+    }
+  }
+  for (const [W, H, name] of [[390, 460, 'dressing room'], [430, 460, 'dressing room max'], [390, 455, 'profile and player header'], [130, 180, 'line recap'],
+    [200, 226, 'gallery cell'], [160, 180, 'small'], [120, 136, 'smaller'], [80, 90, 'tiny'], [390, 300, 'wide'], [300, 520, 'tall']]) cards.push({ name, W, H, top: 0, room: 0, stageH: H });
+
+  const NO = -1e9;
+  for (const card of cards) for (const hat of [true, false]) {
+    const { W, H } = card;
+    const label = `${card.name} ${W.toFixed(0)}x${H.toFixed(0)} ${hat ? 'with a hat' : 'no hat'}`;
+    const fr = reg.liftFraming(fxJet, W, H, card.room, !!card.floored, hat);
+    assert.ok(fr.scale > 0.8 && fr.scale <= 1, `${label}: shrinks only slightly (${fr.scale.toFixed(3)})`);
+    if (card.floored) assert.ok(fr.shift <= 0, `${label}: never sinks toward the plinth`);
+    if (!hat && card.floored) assert.equal(fr.scale, 1, `${label}: full size when no hat needs the room`);
+    const paper = reg.containBox(W, H);
+    const artTop = F.inset * W + paper.y + (hat ? F.artTop : F.headTop) * paper.h;
+    const artBottom = F.inset * W + paper.y + F.artBottom * paper.h;
+    const pts = [];
+    for (const fx of [0.15, 0.5, 0.85]) {
+      pts.push({ x: paper.x + fx * paper.w, y: artTop, top: true });
+      pts.push({ x: paper.x + fx * paper.w, y: artBottom, top: false });
+    }
+    const ox = F.originX * W; const oy = F.originY * H;
+    let minTop = Infinity; let maxBottom = -Infinity; let lowestTail = -Infinity;
+    for (let t = 0; t < 60000; t += 1000 / 60) {
+      const lift = fr.lift * jet.jetpackFloat(t, NO, H);
+      const rot = (jet.jetpackBody(t, NO).rot * Math.PI) / 180;
+      for (const p of pts) {
+        const dx = p.x - ox; const dy = p.y - oy;
+        const ry = dx * Math.sin(rot) + dy * Math.cos(rot);
+        const y = oy + fr.shift + fr.scale * (ry + lift);
+        if (p.top) minTop = Math.min(minTop, y); else maxBottom = Math.max(maxBottom, y);
+      }
+      if (card.floored) lowestTail = Math.max(lowestTail, oy + fr.shift + fr.scale * (card.tailY - oy + lift));
+    }
+    assert.ok(minTop >= 0.02 * H - card.room, `${label}: peak top ${minTop.toFixed(1)} px is inside the frame`);
+    assert.ok(maxBottom <= H, `${label}: tail and flame ${maxBottom.toFixed(1)} px stay above the bottom (${H.toFixed(0)})`);
+    assert.ok(card.top + minTop >= 0, `${label}: inside the stage at the peak`);
+    if (card.floored) {
+      // Over a plinth it reads as flying: clear air under the tail at the lowest hover, more when no hat needs the room.
+      const air = (card.tailY - lowestTail) / H;
+      assert.ok(air >= (hat ? 0.06 : 0.1), `${label}: ${(air * 100).toFixed(1)}% of air under the tail`);
+    }
+  }
+  // No lifting rig, no change; a future lifting rig frames itself from FX_LIFT alone.
+  assert.deepEqual(plain(reg.liftFraming({ rigs: [{ slot: 'head_item', key: 'reef_halo' }] }, 390, 430)), { scale: 1, shift: 0, lift: 1 });
+  assert.ok(reg.FX_FLOATS.jetpack, 'FX_FLOATS follows FX_LIFT');
+  // A stage with sky to spare keeps the shark full size: the lift uses the room first.
+  assert.equal(reg.liftFraming(fxJet, 200, 226, 120).scale, 1);
+  assert.ok(reg.liftFraming(fxJet, 200, 226, 0).scale < 1);
+  // Hat headroom is reserved only when a head piece is worn.
+  assert.ok(reg.liftFraming(fxJet, 200, 226, 0, false, false).scale > reg.liftFraming(fxJet, 200, 226, 0, false, true).scale);
+  assert.equal(reg.liftScaleFor(500), 1);
+  assert.equal(reg.liftScaleFor(60), 0.5, 'small cards float half as high');
+});
+
+test('the jetpack motion and its framing read the same lift numbers', () => {
+  const code = src('src/fx/rigs/Jetpack.tsx');
+  assert.match(code, /const LIFT = FX_LIFT\.jetpack!;/);
+  assert.doesNotMatch(code, /0\.09 \+ 0\.011/, 'no second copy of the lift numbers');
+  const layers = src('src/fx/FxLayers.tsx');
+  assert.match(layers, /liftFraming\(props\.fx, props\.width, props\.height, props\.room \?\? 0, props\.floored \?\? false, props\.hat \?\? true\)/);
+  assert.match(layers, /\{ translateY: w \* shift \},\s*\{ scale: 1 - w \* \(1 - scale\) \},\s*\{ translateY: w > 0 \? w \* lift \* jetpackFloat/);
+  assert.match(src('src/components/Playercard.tsx'), /<FxFloat fx=\{fx\} t=\{fxClock\} kick=\{fxKick\} width=\{stageW\} height=\{stageH\} room=\{liftRoom\} floored=\{!!shadowAt\} hat=\{!!inventory\?\.head_item\}>/);
+});
+
+test('a try-on stage is never empty on open: a bundled shark stands in, and the look is prefetched', () => {
+  const card = src('src/components/Playercard.tsx');
+  assert.match(card, /placeholder=\{index === 0 \? CLASSIC_NO_EYE : undefined\}/, 'the base shark has a local placeholder');
+  const shelves = src('src/screens/StoreScreen/ShopShelves.tsx');
+  assert.match(shelves, /s\.items\.map\(i => i\.paper_url\)/, 'every piece on the shelves is prefetched');
+  assert.match(shelves, /player\?\.inventory\?\.skin_item\?\.no_eye_url, \.\.\.outfitLayerUrls\(player\?\.inventory\)/, "the player's own shark is prefetched");
 });
