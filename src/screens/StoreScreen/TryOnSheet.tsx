@@ -19,11 +19,15 @@
  */
 import * as Haptics from 'expo-haptics';
 import { openMembership } from '../../components/GrownUpGate';
+import { FxSceneBackdrop } from '../../fx/FxSolo';
+import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/registry';
+import { SECRET_THEME } from '../../fx/secretTheme';
+import { UnlockBeat } from './SecretShopUi';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, FadeIn, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, FadeIn, Keyframe, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -58,12 +62,20 @@ const PRIMARY_W = Math.min(300, Math.round(CTA_ROW * 0.62));
 const HOP = 18;
 const CARD = stageCard(SCREEN_W - 28 - 6, STAGE_H - 6, HOP + 0.04 * (STAGE_H / 2) + 4);
 const PLAYERCARD_STYLE = { position: 'absolute' as const, ...CARD.box };
+// The Secret Shop try-on: the piece is the point, so the stage takes about half the sheet (panel round 1).
+const SECRET_STAGE_H = Math.round(Math.min(430, SHEET_H * 0.52));
+const SECRET_CARD = stageCard(SCREEN_W - 28 - 6, SECRET_STAGE_H - 6, HOP + 0.04 * (SECRET_STAGE_H / 2) + 4);
+const SECRET_PLAYERCARD_STYLE = { position: 'absolute' as const, ...SECRET_CARD.box };
+/** The sheet's spring has settled by about now: moments wait for it, so every open shows a whole moment. */
+const SHEET_SETTLE_MS = 300;
 
 type Phase = TryOnPhase;
 type WearState = 'idle' | 'busy' | 'spinning' | 'failed';
 
 export type Wearable = { id: number; name: string; icon_url: string | null; paper_url: string | null; no_eye_url?: string | null;
-  item_type: { id: number; name?: string } };
+  item_type: { id: number; name?: string };
+  /** Secret Shop rig (animated piece). */
+  fx_key?: string | null };
 
 export const asWearable = (piece: ShopSetPiece): Wearable => ({ id: piece.id, name: piece.name, icon_url: piece.icon_url,
   paper_url: piece.paper_url, no_eye_url: piece.no_eye_url, item_type: { id: piece.item_type_id } });
@@ -75,19 +87,23 @@ export const asWearable = (piece: ShopSetPiece): Wearable => ({ id: piece.id, na
  * is falling in). The backdrop piece is returned separately: the stage draws it.
  */
 export function previewLook(base: InventoryType | undefined, items: Wearable[], from: 'player' | 'base' = 'player', empty: string[] = []):
-  { look: InventoryType; backdrop: string | null } | null {
+  { look: InventoryType; backdrop: string | null; scene: FxKey | null } | null {
   if (!base?.skin_item?.no_eye_url) return null;
   const look: Record<string, unknown> = from === 'player' ? { ...base } : { skin_item: base.skin_item, id: base.id };
   let backdrop: string | null = null;
+  // An animated backdrop plays behind the stage instead of its still paper (secret-shop/DESIGN.md 8.2).
+  let scene: FxKey | null = null;
   for (const item of items) {
     const slot = slotForItem(item as never);
     if (!slot) continue;
-    if (slot === 'background_item') { backdrop = item.paper_url ?? item.icon_url; continue; }
+    if (slot === 'background_item') { backdrop = item.paper_url ?? item.icon_url; scene = fxKeyOf(item); continue; }
     look[slot] = { id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
-      no_eye_url: item.no_eye_url, item_type: item.item_type };
+      no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null };
   }
+  // The player's own worn scene keeps playing on a 'player' stage.
+  if (from === 'player' && !backdrop) scene = fxKeyOf(base.background_item);
   for (const slot of empty) look[slot] = null;
-  return { look: look as unknown as InventoryType, backdrop };
+  return { look: look as unknown as InventoryType, backdrop, scene: scene && FX_SCENES.includes(scene) ? scene : null };
 }
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
@@ -128,7 +144,7 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false,
-  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false }: {
+  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -155,6 +171,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly buyPaused?: boolean;
   /** A set reward is waiting: close after the landing beat. */
   readonly rewardPending?: boolean;
+  /** Opened from the Secret Shop: midnight sheet, "Unlock with VIP" for non-members. */
+  readonly secret?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -166,6 +184,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const [wear, setWear] = useState<WearState>('idle');
   const [dropping, setDropping] = useState(false);
   const [landed, setLanded] = useState(0);
+  // VIP lapsed mid-sheet (a members_only 403): a kind note, and a short hold so a double tap can't open the paywall.
+  const [lapsed, setLapsed] = useState(false);
+  // A worn scene plays behind the stage, outside the Playercard: taps and the unlock reach it through here.
+  const [scenePlay, setScenePlay] = useState<{ n: number; kind: 'tap' | 'unlock' } | null>(null);
+  const onFxPlay = useCallback((kind: 'tap' | 'unlock') => setScenePlay(p => ({ n: (p?.n ?? 0) + 1, kind })), []);
+  const [hold, setHold] = useState(false);
   const [coins, setCoins] = useState(0);
   const [balanceAfter, setBalanceAfter] = useState<number | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -193,10 +217,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     if (!item) return null;
     const byId = new Map<number, Wearable>(pieces.map(p => [p.id, asWearable(p)]));
     byId.set(item.id, { id: item.id, name: item.name, icon_url: item.icon_url, paper_url: item.paper_url,
-      no_eye_url: item.no_eye_url, item_type: item.item_type });
-    // While the bought piece falls in, its slot is empty (never a flash of the old hat).
-    const wearing = ids.filter(id => !(dropping && id === item.id)).map(id => byId.get(id)).filter((w): w is Wearable => !!w);
-    return previewLook(player?.inventory, wearing, 'player', dropping && itemSlot ? [itemSlot] : []);
+      no_eye_url: item.no_eye_url, item_type: item.item_type, fx_key: item.fx_key ?? null });
+    // While the bought piece falls in, its slot is empty (never a flash of the old hat). A Secret piece
+    // was already on the shark in the try-on: it stays on through the buy (art panel round 4).
+    const empties = dropping && !secret;
+    const wearing = ids.filter(id => !(empties && id === item.id)).map(id => byId.get(id)).filter((w): w is Wearable => !!w);
+    return previewLook(player?.inventory, wearing, 'player', empties && itemSlot ? [itemSlot] : []);
   }, [player?.inventory, ids.join(','), item?.id, dropping]);
 
   // Stage reactions: a wiggle when a piece goes on, a hop with an absorb pop when coins land, a hop on wear.
@@ -271,8 +297,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   if (!item) return null;
   const badge = wearableBadge(item);
   const vipLocked = !!item.is_member_item && !player?.is_subscribed;
+  const secretItem = secret || isSecretItem(item);
   // While the piece is in flight the server's "owned" is ignored: the row holds still until it lands.
-  const row = tryOnLayout({ phase, startBought, vipLocked,
+  // Wishing is free: non-members can heart a Secret piece too (kids UX round 1).
+  const row = tryOnLayout({ phase, startBought, vipLocked: vipLocked && !secretItem,
     serverOwned: !!(item.shop?.is_owned ?? item.has_purchased) || !!pieces.find(p => p.id === item.id)?.owned });
   const owned = row.owned;
   const name = itemDisplayName(item);
@@ -280,7 +308,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
-  const cta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused });
+  const baseCta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem });
+  // VIP ran out while the sheet was open: say so kindly, coins untouched.
+  const cta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
+  const stageH = secret ? SECRET_STAGE_H : STAGE_H;
+  // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
+  const keepLine = vipLocked ? 'Try it on as much as you like!' : "Once it's yours, it's yours forever.";
+  const card = secret ? SECRET_CARD : CARD;
   const boughtNow = landed > 0;
 
   const toggleFull = () => {
@@ -323,6 +357,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       const data = (error as { response?: { data?: { code?: string } } })?.response?.data;
       if (data?.code === 'not_enough_currency') { void refreshPlayer(); setPhase('idle'); return; }
+      // Membership ran out while the sheet was open: the server said no (403) and nothing was charged.
+      // The fresh player flips the button to "Unlock with VIP".
+      if (data?.code === 'members_only') {
+        setLapsed(true); setPhase('idle'); setHold(true);
+        later(() => setHold(false), 600);
+        void refreshPlayer();
+        return;
+      }
       await settleUnknown('buy');
     }
   };
@@ -393,12 +435,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
           <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
-            style={[styles.sheet, { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
+            style={[styles.sheet, secret && { backgroundColor: SECRET_THEME.panel, borderColor: SECRET_THEME.border },
+              { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>
               <View>
                 <View style={styles.grabber} />
                 <View style={styles.topRow}>
-                  <View style={styles.balance} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
+                  <View style={[styles.balance, secret && { backgroundColor: SECRET_THEME.well, borderColor: SECRET_THEME.accent }]} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
                     <GameIcon name="coins" size={20} />
                     <CoinTicker value={balanceAfter ?? balance} still={still} />
                   </View>
@@ -406,20 +449,26 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <GameIcon name="close" size={30} />
                   </Pressable>
                 </View>
-                <View style={[styles.stage, { height: STAGE_H }]}>
-                  <ShopStage rim={glow} backdropUrl={stage?.backdrop} still={still}>
-                    <LandFlash color={glow} still={still} trigger={landed} />
+                <View style={[styles.stage, { height: stageH }]}>
+                  <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone={secret ? 'night' : 'sky'} still={still}
+                    backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} sound={secret} play={scenePlay} startDelay={SHEET_SETTLE_MS} /> : undefined}
+                    sky={secret ? SECRET_THEME.sky : undefined} plinth={stage?.scene ? 'none' : secret ? 'secret' : 'house'}>
+                    {!secret && <LandFlash color={glow} still={still} trigger={landed} />}
+                    {secret && <UnlockBeat trigger={landed} still={still} />}
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
-                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow}
-                          popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping} style={PLAYERCARD_STYLE} />
+                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow}
+                          popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
+                          style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
+                          fxPlay={secret ? landed : 0} fxHold={secret && HOLD_PHASES.has(phase)} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}
+                          onFxPlay={stage.scene ? onFxPlay : undefined} />
                       ) : (
                         <View style={styles.flatArt}><TileArt item={item} size={170} thumb={false} /></View>
                       )}
                     </Animated.View>
                   </ShopStage>
                   {boughtNow ? (
-                    <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
+                    <Animated.View entering={still ? undefined : secret ? NEW_POP : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
                       <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'NEW!'}</Text>
                     </Animated.View>
                   ) : owned ? (
@@ -450,9 +499,25 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   {badge.label && <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.rarityText}>{badge.label}</Text></View>}
                 </View>
+                {/* Non-members see the price too, with the lock (one marker everywhere). */}
+                {secretItem && vipLocked && !owned && (
+                  <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins, VIP members can buy`}>
+                    <GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.lockPriceText}>{formatCoins(item.cost)}</Text>
+                    <GameIcon name="lock" size={16} />
+                  </View>
+                )}
                 {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
                   {lastChanceLine(item.shop?.season)}</Text>}
                 {item.shop?.returning && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
+                {fxKeyOf(item) && (
+                  // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3).
+                  <View style={styles.fxCard} accessible accessibilityLabel={`${FX_BLURB[fxKeyOf(item)!]} ${keepLine}`}>
+                    <View style={styles.fxRow}><GameIcon name="sparkle" size={22} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKeyOf(item)!]}</Text></View>
+                    <View style={styles.fxRow}><GameIcon name="check" size={20} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{keepLine}</Text></View>
+                  </View>
+                )}
 
                 {set && pieces.length > 1 && (
                   <View style={[styles.setCard, { borderColor: set.color ?? BRAND.gold }]}>
@@ -478,12 +543,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     </View>
                   </View>
                 )}
-                {!owned && phase === 'idle' && (
+                {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && (
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{wishHintCopy(wished, wishStore.alerts())}</Text>
                 )}
               </ScrollView>
               {/* Nothing reads half-cut against the buttons. */}
-              <LinearGradient pointerEvents="none" colors={['rgba(10,79,150,0)', SHOP_SURFACE.panel]} style={styles.bodyFade} />
+              <LinearGradient pointerEvents="none" colors={secret ? ['rgba(18,48,108,0)', SECRET_THEME.panel] : ['rgba(10,79,150,0)', SHOP_SURFACE.panel]} style={styles.bodyFade} />
             </View>
 
             <View style={styles.actions}>
@@ -497,13 +562,22 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <WishHeart on={wished} size={26} />
                   </Pressable>
                 )}
+                {cta.action === 'vip' && secretItem ? (
+                  // Not the gold Buy face: this door leads to a grown-up, not to buying (kids UX round 2).
+                  <Pressable onPress={press} disabled={hold} style={({ pressed }) => [styles.grownUp, { width: PRIMARY_W }, pressed && { opacity: 0.8 }]}
+                    accessibilityRole="button" accessibilityLabel="Ask a grown-up about VIP">
+                    <GameIcon name="lock" size={24} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.grownUpText}>{cta.label.toUpperCase()}</Text>
+                  </Pressable>
+                ) : (
                 <View style={{ overflow: 'hidden', borderRadius: 18 }}>
-                  <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? 'member' : 'coins'}
+                  <ShopCta label={cta.label} icon={owned ? 'shark' : cta.action === 'earn' ? 'coins' : cta.action === 'vip' ? (secretItem ? 'lock' : 'member') : 'coins'}
                     width={PRIMARY_W} onPress={press} still={still}
                     loading={cta.look === 'busy' || cta.look === 'checking'} muted={cta.look === 'paused' || cta.look === 'checking'}
-                    disabled={wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
+                    disabled={hold || wear === 'spinning' || cta.look === 'paused' || cta.look === 'checking'} />
                   {cta.action === 'ask' && finishes && <Sheen still={still} delay={500} width={360} />}
                 </View>
+                )}
                 {secondary && (
                   <Pressable onPress={secondary.onPress} disabled={!row.secondaryEnabled} accessibilityState={{ disabled: !row.secondaryEnabled }}
                     style={[styles.secondary, !row.secondaryEnabled && { opacity: 0.45 }]} accessibilityRole="button" hitSlop={6}>
@@ -512,7 +586,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 )}
               </View>
             </View>
-            <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + STAGE_H * 0.5 }} still={still} trigger={coins} />
+            <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>
       </GestureHandlerRootView>
@@ -531,6 +605,20 @@ function CoinAmount({ n, label }: { n: number; label?: string }) {
 }
 
 const S = SHOP_SURFACE;
+/**
+ * Secret NEW!: hidden through the dim, then it pops in at full colour with the burst
+ * (0 to 1.15 to 1), never fading up grey under the dim (art panel round 5).
+ */
+/** From the confirm tap to the landing, no timer moment competes with the buy (game feel round 6). */
+const HOLD_PHASES = new Set(['checking', 'confirm', 'buying', 'landing']);
+
+const NEW_POP = new Keyframe({
+  // Full colour from the first frame: it grows from nothing, it never fades up grey.
+  0: { opacity: 1, transform: [{ scale: 0 }] },
+  60: { opacity: 1, transform: [{ scale: 1.15 }] },
+  100: { opacity: 1, transform: [{ scale: 1 }] },
+}).duration(260).delay(300);
+
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -575,6 +663,16 @@ const styles = StyleSheet.create({
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
   switchText: { fontFamily: FONT.display, fontSize: 15, color: S.ink },
   wishHint: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
+  grownUp: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18,
+    backgroundColor: SECRET_THEME.accent, borderWidth: 3, borderColor: SECRET_THEME.border },
+  grownUpText: { fontFamily: FONT.display, fontSize: 20, color: '#ffffff' },
+  lockPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+    backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.accent },
+  lockPriceText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card, borderWidth: 2, borderColor: SECRET_THEME.accent },
+  fxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fxText: { flex: 1, fontFamily: FONT.display, fontSize: 17, lineHeight: 21, color: SECRET_THEME.ink },
+  fxKeep: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft },
   actions: { paddingHorizontal: 16, paddingTop: 6, gap: 6 },
   note: { textAlign: 'center', fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
   alert: { alignSelf: 'center', backgroundColor: S.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: S.border },

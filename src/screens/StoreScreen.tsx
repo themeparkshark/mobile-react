@@ -46,6 +46,8 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import { useTutorial } from '../components/Tutorial';
+import { SECRET_THEME } from '../fx/secretTheme';
+import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -333,6 +335,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
     () => (focusItem ? { id: focusItem, nonce: 1 } : null));
   const shopStill = useReducedGameMotion();
   const [shopHandoff, setShopHandoff] = useState(false);
+  // Secret Shop v2 (secret-shop/DESIGN.md): the secret store on the shop engine, behind secret_shop_v2.
+  const [secretV2, setSecretV2] = useState(false);
   // The title bar folds into the tab row after 40pt of shop scroll.
   const scrollY = useSharedValue(0);
   const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
@@ -398,16 +402,19 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       if (!id) throw new Error('Shark Shop not found');
       const nextStore = await getStore(id);
       storeIdRef.current = id;
+      // The secret store only asks for shelves while secret_shop_v2 is on (the server checks it too).
+      const nextSecretV2 = !!nextStore.is_secret_store && await loadSecretShopFlag();
       const [nextRotation, nextCatalog, nextToday] = await Promise.all([
         getStoreRotation(id).catch(() => null),
         getCatalog(nextStore.current_catalog_id),
         // Shop v2 shelves; null on an older backend, which keeps the classic grid.
-        getShopToday(id).catch(() => null),
+        nextStore.is_secret_store && !nextSecretV2 ? Promise.resolve(null) : getShopToday(id).catch(() => null),
       ]);
       const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
       if (!live) return;
       if (nextToday) setClockSkew(clockOffset(nextToday.server_time, Date.now()));
       setToday(nextToday);
+      setSecretV2(nextSecretV2 && !!nextToday);
       setCurrentStore(nextStore);
       setRotation(nextRotation);
       setCatalog(nextCatalog);
@@ -434,6 +441,9 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const sharkShop = store === 'shark-shop' || currentStore?.name === 'Shark Shop';
   // Shop v2 shelves (the title bar folds away as the shelf scrolls).
   const v2 = !!today && sharkShop && tab === 'gear';
+  // The Secret Shop: the same shelves in midnight, with its own title bar (no tab row to fold into).
+  const secretShelves = !!today && secretV2 && !sharkShop;
+  const floor = secretShelves ? SECRET_THEME.floor : BRAND.blue;
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
@@ -457,16 +467,17 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       {purchaseModal}
       <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
         onOpenItem={id => setFocusRequest(r => ({ id, nonce: (r?.nonce ?? 0) + 1 }))} />
-      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: BRAND.blue }}>
+      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: floor }}>
       <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: winH + fold }, stackStyle] : { flex: 1 }}>
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
-      <Topbar purple={currentStore?.is_secret_store ?? false}>
+      {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
+      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves}>
         <TopbarColumn stretch={false}>
           {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
+          <TopbarText>{secretShelves ? 'Secret Shop' : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
           <InformationModal id={InformationModalEnums.StoreScreen} />
@@ -497,9 +508,9 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             flex: 1,
             marginTop: sharkShop ? 0 : -8,
             // Brand blue under the art, never white if a store has no background.
-            backgroundColor: BRAND.blue,
+            backgroundColor: floor,
           }}
-          source={currentStore?.background_url ? { uri: currentStore.background_url } : undefined}
+          source={currentStore?.background_url && !secretShelves ? { uri: currentStore.background_url } : undefined}
         >
           <SafeAreaView
             style={{
@@ -565,7 +576,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusRequest={focusRequest} scrollY={scrollY} onHandoff={setShopHandoff} />
+                focusRequest={focusRequest} scrollY={v2 ? scrollY : undefined} onHandoff={setShopHandoff} secret={secretShelves} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (
