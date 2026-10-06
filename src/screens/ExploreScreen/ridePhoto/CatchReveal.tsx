@@ -733,6 +733,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
     if (flags) flags.hidden.value = false;
     shown.value = 1;
     setPhase('playing');
+    // clarity-allow: catchMark is a timing trace (catchAudio trace), never shown to a player.
     catchMark(`reveal-start tier=${data.tier} grade=${data.grade} new=${data.isNew} compact=${compact}`);
     spin.value = 0;
     if (!reducedMotion) spin.value = withRepeat(withTiming(1, { duration: data.tier === 5 ? 20_000 : 14_000, easing: Easing.linear }), -1, false);
