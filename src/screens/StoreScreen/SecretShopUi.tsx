@@ -4,9 +4,9 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import { openMembership } from '../../components/GrownUpGate';
 import { FxPauseContext } from '../../fx/FxStage';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
+import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './shopUi';
-import { VaultPanel } from './SecretVault';
+import { VaultPanel, VaultSecondaryButton } from './SecretVault';
 
 /**
  * Secret Shop chrome (secret-shop/DESIGN.md 4.2 and 6).
@@ -27,18 +27,16 @@ export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerBody}>{SECRET_PREVIEW_COPY.body}</Text>
         </View>
       </View>
-      {/* The door to VIP: the house button, behind the grown-up gate. */}
-      <View style={{ paddingHorizontal: 14 }}>
-        <GameButton label="Ask a grown-up" icon="lock" size="compact" onPress={() => { void openMembership(); }}
-          accessibilityLabel="Ask a grown-up about VIP" />
-      </View>
+      {/* The door to VIP: the vault's navy secondary (gold stays for things a kid can do), behind the grown-up gate. */}
+      <VaultSecondaryButton label="Ask a grown-up" icon="lock" onPress={() => { void openMembership(); }}
+        accessibilityLabel="Ask a grown-up about VIP" />
     </VaultPanel>
   );
 });
 
 export const SECRET_PREVIEW_COPY = {
   title: 'Try anything on!',
-  body: 'VIP members can buy these. Every piece you buy is yours forever.',
+  body: 'VIP members can buy these. Each one is yours forever.',
 } as const;
 
 const STAR = require('../../../assets/fx/spark.webp');

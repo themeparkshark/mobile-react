@@ -101,6 +101,9 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
   const left = Date.parse(section.ends_at) - nowMs;
   if (left <= 0) return { label: 'New now', urgent: false, a11y: 'New featured items now' };
   if (left < DAY) return { label: 'New tonight', urgent: false, a11y: 'New featured items tonight' };
+  // A whole week away (flip day itself): "New in 7 days", never today's own weekday, which a kid reads as today.
+  const days = Math.ceil(left / DAY);
+  if (left > 6 * DAY) return { label: `New in ${days} days`, urgent: false, a11y: `New featured items in ${days} days` };
   const day = weekdayOf(section.ends_at) ?? 'soon';
   return { label: `New on ${day}`, urgent: false, a11y: `New featured items on ${day}` };
 }

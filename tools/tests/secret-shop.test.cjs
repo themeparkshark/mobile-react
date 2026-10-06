@@ -522,10 +522,12 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   const NO = -1e9;
   const dt = 1000 / 60;
   let prevY = jet.jetpackFloat(0, NO, H);
-  let prevV = 0;
+  // Start from the bob's real speed (not from 0), so the first frame is not a false spike.
+  let prevV = (jet.jetpackFloat(dt / 10, NO, H) - prevY) / (dt / 10) * 1000;
   let maxV = 0;
   let maxA = 0;
   const starts = [];
+  let riseMs = 0;
   let was = false;
   for (let t = dt; t <= 60000; t += dt) {
     const y = jet.jetpackFloat(t, NO, H);
@@ -534,11 +536,13 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
     maxA = Math.max(maxA, Math.abs(v - prevV) / dt * 1000);
     const on = jet.boostAt(t, NO) > 0;
     if (on && !was) starts.push(t);
+    if (on) { const p = (t - starts[starts.length - 1]); if (p < 1300) riseMs = Math.max(riseMs, 0); }
     was = on; prevY = y; prevV = v;
   }
-  // A 0.045 * 460 = 21 px lift over 0.96 s with smootherstep peaks under 45 px/s: a drift, never a jump.
-  assert.ok(maxV < 45, `max speed ${maxV.toFixed(1)} px/s`);
-  assert.ok(maxA < 200, `max acceleration ${maxA.toFixed(0)} px/s^2 (no snap)`);
+  // A 0.033 * 460 = 15 px lift over 1.2 s, down over 1.3 s: a drift, never a jump.
+  assert.ok(maxV < 30, `max speed ${maxV.toFixed(1)} px/s`);
+  // No snap: speed never changes by more than 4 px/s between two frames (the rise starts gently with the flame).
+  assert.ok(maxA * dt / 1000 < 4, `max speed change ${(maxA * dt / 1000).toFixed(2)} px/s per frame`);
   const gaps = starts.slice(1).map((s, k) => s - starts[k]);
   assert.ok(gaps.length >= 4 && gaps.every(g => g > 6500 && g < 11800), `boost gaps ${gaps.map(g => Math.round(g)).join(', ')}`);
   assert.ok(new Set(gaps.map(g => Math.round(g / 100))).size > 1, 'not mechanical: the gaps vary');

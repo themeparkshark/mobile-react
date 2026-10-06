@@ -236,6 +236,12 @@ export default function Playercard({
   useEffect(() => {
     // Reduce Motion (or a still preview): no idle bob at all.
     if (still || reduced) { translate.setValue(0); return; }
+    // The jetpack hovers on its own bob (it fades out during a boost): the card's bob eases to rest.
+    if (fx.floats) {
+      const settle = Animated.timing(translate, { toValue: 0, duration: 700, useNativeDriver: true });
+      settle.start();
+      return () => settle.stop();
+    }
     const bob = Animated.loop(
       Animated.sequence([
         Animated.timing(translate, {
@@ -252,7 +258,7 @@ export default function Playercard({
     );
     bob.start();
     return () => bob.stop();
-  }, [still, reduced]);
+  }, [still, reduced, fx.floats]);
 
   // Check if shark is "naked" (no wearable items)
   const isNaked = !inventory?.head_item && !inventory?.face_item &&

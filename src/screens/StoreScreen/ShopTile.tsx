@@ -124,7 +124,9 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <LinearGradient colors={plate} style={StyleSheet.absoluteFill} />
-        {(badge.rarity === 4 || secret) && !owned && <Sheen still={still} width={width + 60} every={secret ? 4200 : undefined} />}
+        {/* Vault tiles: the panels' top gloss, not a sweeping sheen. */}
+        {secret && <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
+        {badge.rarity === 4 && !secret && !owned && <Sheen still={still} width={width + 60} />}
       </View>
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
@@ -205,6 +207,7 @@ const styles = StyleSheet.create({
   tile: { borderRadius: 16, borderWidth: 3, paddingTop: 12, paddingBottom: 8, alignItems: 'center', overflow: 'visible',
     backgroundColor: BRAND.white, ...SHADOW.card },
   clip: { borderRadius: 13, overflow: 'hidden' },
+  gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '35%' },
   keyline: { borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255,255,255,0.95)' },
   ribbon: { position: 'absolute', top: 0, left: 0, right: 0, height: 20, borderTopLeftRadius: 13, borderTopRightRadius: 13,
     alignItems: 'center', justifyContent: 'center' },

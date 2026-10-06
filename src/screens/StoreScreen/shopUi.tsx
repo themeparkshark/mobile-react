@@ -319,6 +319,7 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
 
 function Rays({ still, color = '#ffffff' }: { still: boolean; color?: string }) {
   const spin = useSharedValue(0);
+  const fadeId = useSvgId('ray-fade');
   useEffect(() => {
     if (still) return;
     spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
@@ -332,7 +333,17 @@ function Rays({ still, color = '#ffffff' }: { still: boolean; color?: string }) 
   }).join(' ');
   return (
     <Animated.View pointerEvents="none" style={[styles.rays, style]}>
-      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill={color} fillOpacity={0.1} /></Svg>
+      {/* The rays fade to nothing well before any edge (a radial fill), so they never end on a straight line. */}
+      <Svg width="100%" height="100%" viewBox="0 0 200 200">
+        <Defs>
+          <RadialGradient id={fadeId} cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={color} stopOpacity={0.16} />
+            <Stop offset="0.35" stopColor={color} stopOpacity={0.08} />
+            <Stop offset="0.62" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Path d={rays} fill={`url(#${fadeId})`} />
+      </Svg>
     </Animated.View>
   );
 }

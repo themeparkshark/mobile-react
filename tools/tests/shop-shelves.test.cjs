@@ -35,6 +35,8 @@ test('featured names the day it changes, in the shop timezone', () => {
   const featured = { type: 'featured', ends_at: '2026-10-26T00:00:00-07:00' };
   assert.equal(shelves.featuredPill(featured, now).label, 'New on Monday');
   assert.equal(shelves.featuredPill(featured, Date.parse('2026-10-25T09:00:00-07:00')).label, 'New tonight');
+  // On flip day itself (a whole week away), never today's own weekday: a kid reads that as today.
+  assert.equal(shelves.featuredPill(featured, Date.parse('2026-10-19T06:52:00-07:00')).label, 'New in 7 days');
 });
 
 test('events carry two honest timers: next drop and the end date', () => {
@@ -751,7 +753,8 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
   assert.match(code, /<LinearGradient colors=\{\[\.\.\.NIGHT_SKY\]\} style=\{StyleSheet\.absoluteFill\} \/>/, 'the card is the night stage blue, so the stage has no seam');
   // The Secret Shop's Vault paints its own night sky on its stage (VaultHero).
-  assert.match(code, /tone="night" sky=\{SECRET_THEME\.sky\} rays=\{SECRET_THEME\.inkGold\} still=\{still\}/);
+  // No sky box of its own: the vault panel's navy runs behind the stage, so nothing ends on a straight line.
+  assert.match(code, /tone="night" sky=\{false\} rays=\{SECRET_THEME\.inkGold\} still=\{still\}/);
   const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
   const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {

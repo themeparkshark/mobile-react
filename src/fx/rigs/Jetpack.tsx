@@ -44,7 +44,7 @@ export const FLAME_FRAME_MS = 80;
  * and eases back down. No squash, no pop, no snap: zero velocity at both ends.
  */
 export const BOOST_PERIOD = 9000;
-export const BOOST_LENGTH = 2400 / BOOST_PERIOD;
+export const BOOST_LENGTH = 2500 / BOOST_PERIOD;
 export const BOOST_JITTER = 0.22;
 export const STILL_T = 800;
 
@@ -55,11 +55,44 @@ function smoother(k: number): number {
   return x * x * x * (x * (x * 6 - 15) + 10);
 }
 
-/** The boost lift, 0..1: a 40% ease up, then a slower 60% ease back down. */
+/** The rise: starts moving at once (gently, with the flame's flare) and arrives at rest at the top. */
+function rise(k: number): number {
+  'worklet';
+  const x = Math.min(1, Math.max(0, k));
+  return 0.1 * (1 - (1 - x) * (1 - x)) + 0.9 * (0.5 - 0.5 * Math.cos(Math.PI * x));
+}
+
+/** The fall: leaves the top at rest and lands at rest (no kink at the top, no snap at the bottom). */
+function fall(k: number): number {
+  'worklet';
+  const x = Math.min(1, Math.max(0, k));
+  return 0.5 - 0.5 * Math.cos(Math.PI * x);
+}
+
+/** The boost lift, 0..1: up over 1.2 s and back down over 1.3 s, near-symmetric, no hop. */
 export function boostCurve(p: number): number {
   'worklet';
   if (p < 0 || p >= 1) return 0;
-  return p < 0.4 ? smoother(p / 0.4) : 1 - smoother((p - 0.4) / 0.6);
+  return p < 0.48 ? rise(p / 0.48) : 1 - fall((p - 0.48) / 0.52);
+}
+
+/**
+ * The flame's thrust, -0.25..1: it flares with the sound (up over the first quarter, peak at 0.3,
+ * back to 0 by 0.45), then burns a little low (0.85x) while the shark settles. Drives the flame,
+ * so the flame visibly causes the rise.
+ */
+export function thrustCurve(p: number): number {
+  'worklet';
+  if (p < 0 || p >= 1) return 0;
+  if (p < 0.25) return smoother(p / 0.25);
+  if (p < 0.3) return 1;
+  if (p < 0.45) return 1 - 1.25 * smoother((p - 0.3) / 0.15);
+  return -0.25 * (1 - smoother((p - 0.45) / 0.55));
+}
+
+export function thrustAt(t: number, kick: number): number {
+  'worklet';
+  return thrustCurve(momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p);
 }
 
 export function boostAt(t: number, kick: number): number {
@@ -68,13 +101,14 @@ export function boostAt(t: number, kick: number): number {
 }
 
 /**
- * How high the shark floats at time t, in px of the stage height (negative is up). The gentle
- * hover bob is the Playercard's own idle bob (the same on every look); the jetpack only adds a
- * steady lift and the slow boost, so nothing ever jumps.
+ * How high the shark floats at time t, in px of the stage height (negative is up): a steady lift,
+ * a small slow hover bob (a plain sine, 5.4 s), and the boost. The bob fades out during a boost,
+ * so every boost peaks at the same height (0.033 of the card above rest).
  */
 export function jetpackFloat(t: number, kick: number, height: number): number {
   'worklet';
-  return -height * (0.09 + 0.045 * boostAt(t, kick));
+  const b = boostAt(t, kick);
+  return -height * (0.09 + 0.011 * Math.sin((t / 5400) * Math.PI * 2) * (1 - b) + 0.033 * b);
 }
 
 /** A lazy lean with the boost (never a squash or stretch). */
@@ -99,7 +133,8 @@ function Spark({ t, kick, box, i }: RigProps & { i: number }) {
   const style = useAnimatedStyle(() => {
     const p = phaseOf(t.value, 620 + i * 61, i / SPARKS.length);
     const side = ((i * 37) % 11) / 10 - 0.5;
-    const b = Math.max(0, boostAt(t.value, kick.value));
+    // A burst of drops with the thrust, not the height.
+    const b = Math.max(0, thrustAt(t.value, kick.value));
     const dir = side < 0 ? -1 : 1;
     const spread = (0.25 + Math.abs(side)) * box.w * (0.09 + 0.06 * b);
     const fall = box.h * (1 + 0.5 * b);
@@ -127,7 +162,7 @@ function Spark({ t, kick, box, i }: RigProps & { i: number }) {
  */
 export function frameAt(v: number, kick: number, delay: number): number {
   'worklet';
-  const fast = boostAt(v, kick) > 0.2 ? 2 : 1;
+  const fast = thrustAt(v, kick) > 0.2 ? 2 : 1;
   const n = Math.floor(((v + delay) * fast) / FLAME_FRAME_MS);
   return ((n % 3) + 3) % 3;
 }
@@ -151,11 +186,12 @@ function FlameFrame({ t, kick, box, lod, spec, delay, source, keyline, k }: Pick
     // Reduce Motion holds frame 0: Alex's paper drawing exactly.
     if (lod === 'still') return { opacity: k === 0 ? 1 : 0, transform: [{ scaleX: pad }, { scaleY: pad }] };
     const v = t.value;
-    const b = boostAt(v, kick.value);
+    const th = thrustAt(v, kick.value);
     return {
       opacity: frameAt(v, kick.value, delay) === k ? 1 : 0,
-      // Stretched from the nozzle (the part's anchor): squashed by the dip, 1.6x on the pop.
-      transform: [{ rotate: `${spec.rot}deg` }, { scaleX: pad * (1 + 0.08 * Math.max(0, b)) }, { scaleY: pad * (1 + 0.6 * b) }],
+      // Stretched from the nozzle (the part's anchor) by the thrust: 1.6x as it pushes, a little short as it settles.
+      transform: [{ rotate: `${spec.rot}deg` }, { scaleX: pad * (1 + 0.08 * Math.max(0, th)) },
+        { scaleY: pad * (1 + 0.6 * Math.max(0, th) + 0.6 * Math.min(0, th)) }],
     };
   };
   const style = useAnimatedStyle(() => shape(1));

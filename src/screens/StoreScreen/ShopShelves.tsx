@@ -56,7 +56,7 @@ function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () =>
 import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { SECRET_THEME } from '../../fx/secretTheme';
 import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
-import { VAULT, VaultKicker, VaultPanel, VaultRibbon } from './SecretVault';
+import { VAULT, VaultPanel, VaultRibbon } from './SecretVault';
 import { FxPauseContext } from '../../fx/FxStage';
 import { ShopProfile } from './shopProfile';
 import { wishStore } from './wishStore';
@@ -240,7 +240,6 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
       <VaultPanel>
         {section.event_key === 'halloween' && <Image source={MOON_BATS} style={styles.vaultSeasonArt} contentFit="contain" />}
         <View style={styles.vaultSectionHead}>
-          <VaultKicker text={eventKicker(section, true)} />
           <VaultRibbon title={section.title} width={Math.min(250, SCREEN_W * 0.62)} />
           <SectionPills section={section} offset={offset} still={still} single />
         </View>
@@ -426,7 +425,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
         accessibilityLabel={`The Vault: ${name}, moves on your shark. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.')
           : `${formatCoins(item.cost)} Shark Coins${member ? '' : ', VIP members can buy'}. Tap to try it on.`}`}
         style={{ height: VAULT_STAGE_H }}>
-        <ShopStage rim={SECRET_THEME.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={SECRET_THEME.sky} rays={SECRET_THEME.inkGold} still={still}
+        <ShopStage rim={SECRET_THEME.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} rays={SECRET_THEME.inkGold} still={still}
           plinth={stage?.scene ? 'none' : 'secret'}
           backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
           {!stage?.scene && <StarMotes still={still} />}
@@ -1006,7 +1005,7 @@ const styles = StyleSheet.create({
   // Same box as every chip; the active one scales (no layout change, the row never shifts).
   jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }] },
   vaultSectionHead: { alignItems: 'center', gap: 6, paddingTop: 10, paddingBottom: 8, paddingHorizontal: 12 },
-  vaultSeasonArt: { position: 'absolute', top: 8, right: 8, width: 64, height: 61, opacity: 0.95 },
+  vaultSeasonArt: { position: 'absolute', top: 12, right: 12, width: 50, height: 48 },
   vaultTop: { alignItems: 'center', paddingTop: 10, paddingBottom: 6, gap: 6 },
   vaultTimer: { alignItems: 'center' },
   vaultPlate: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 10, alignItems: 'stretch' },
@@ -1016,8 +1015,8 @@ const styles = StyleSheet.create({
   vaultPrice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 36, borderRadius: 18,
     backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.gold },
   vaultPriceText: { fontFamily: FONT.display, fontSize: 20, color: SECRET_THEME.inkGold },
-  vaultMoves: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 36, borderRadius: 18,
-    backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.accent },
+  // A label, not a button: no border, no fill.
+  vaultMoves: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, height: 36 },
   vaultMovesText: { fontFamily: FONT.display, fontSize: 15, color: SECRET_THEME.ink },
   heroStage: { position: 'absolute', left: HERO_L.stage.left, top: HERO_L.stage.top, height: HERO_L.stage.height, width: HERO_L.stage.width },
   heroKickerRow: { position: 'absolute', left: 0, right: 0, top: 0, height: HERO.kickerH, flexDirection: 'row', alignItems: 'center',

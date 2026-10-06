@@ -193,7 +193,8 @@ export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_mem
   const ui = wearableRarityUi[rarity];
   // Secret Shop pieces (animated) say so everywhere they show (secret-shop/DESIGN.md 6.5).
   if (item.source === 'secret' || item.fx_key) {
-    return { rarity, border: '#ffd34d', inner: '#8f6bff', glow: '#b48cff', label: 'SECRET', labelColor: '#5a2fc2' };
+    // The vault's colours: gold rim, navy keyline, no glow (Secret Shop redesign, no purple).
+    return { rarity, border: '#ffcf3b', inner: '#0b2156', glow: null, label: 'SECRET', labelColor: '#1a4590' };
   }
   const source = item.source === 'vip' || item.is_member_item ? 'VIP'
     : item.source === 'coin_code' || item.is_coin_code_item ? 'CODE' : null;

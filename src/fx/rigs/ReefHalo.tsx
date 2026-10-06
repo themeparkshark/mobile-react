@@ -15,6 +15,17 @@ export const ORBIT_MS = 5200;
 export const FLIP_PERIOD = 6500;
 const FLIP_LENGTH = 0.14;
 export const STILL_T = 0;
+/**
+ * The brow line (paper fraction): the eye starts at y 0.313 on the base shark. Near-side fish ride
+ * up over it (a soft clamp), so they pass above the brow and never cover the eye.
+ */
+export const BROW_Y = 0.232;
+
+/** A near fish's height on screen: its ring point, eased up above the brow line. */
+export function fishY(y: number, depth: number): number {
+  'worklet';
+  return depth > 0 ? y - Math.max(0, y - BROW_Y) * 0.8 : y;
+}
 
 /** A fish's spot on the tilted ring: x, y in box fractions and depth (-1 far, +1 near). */
 export function ringPoint(angle: number): { x: number; y: number; depth: number } {
@@ -68,7 +79,7 @@ function Fish({ t, kick, box, i, near, lod }: RigProps & { i: number; near: bool
       opacity: show ? (p.depth > 0 ? 1 : 0.7) : 0,
       transform: [
         { translateX: (p.x - 0.5) * box.w },
-        { translateY: (p.y - 0.5) * box.h - hop * box.h * 0.1 },
+        { translateY: (fishY(p.y, p.depth) - 0.5) * box.h - hop * box.h * 0.1 },
         { scale: scale * (1 + 0.15 * hop) },
         { scaleX: Math.abs(face) < 0.4 ? (face < 0 ? -0.4 : 0.4) : face },
         { rotate: `${flip < 0 ? 0 : flip * 360}deg` },
