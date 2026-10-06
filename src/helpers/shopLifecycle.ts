@@ -34,20 +34,7 @@ export interface OwnedLifecycle {
   readonly rarity?: ShopRarity | null;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-/** "Nov 30". */
-export function shortDay(ymd: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
-  return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : '';
-}
-
-/** "November 2026". */
-export function monthYear(ymd: string | null | undefined): string {
-  const m = /^(\d{4})-(\d{2})/.exec(ymd ?? '');
-  return m ? `${MONTHS_LONG[Number(m[2]) - 1]} ${m[1]}` : '';
-}
 
 /** A usable leaving block, or null (bad or missing data never shows a label). */
 export function leavingOf(shop: { leaving?: ShopLeaving | null } | null | undefined): ShopLeaving | null {
@@ -96,7 +83,7 @@ export const KEEP_LINE = 'Every piece you buy is yours forever.';
 
 /**
  * The tile's calm ribbon (navy and gold, never red), with a picture so it reads without words:
- * a moon for LEAVING (it rests and might come back), a star for RETIRING (a keeper: it won't).
+ * a moon for LEAVING (it rests and might come back), a star for RETIRING (it won't come back).
  * RETIRING pairs with the closet's RETIRED, so kids learn one word in two places.
  */
 export function leavingRibbon(leaving: ShopLeaving): string {

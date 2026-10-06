@@ -7,8 +7,8 @@
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-leaving  the try-on on a piece leaving for a while
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-rare     the try-on on a rare piece
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=secret         the Secret Shop with leaving animated pieces (secret-guest: as a non-member, no leaving marks)
- *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-owned    the try-on on an owned retiring piece (a keeper, and its rarity)
- *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=closet         the Dressing Room grid with RETIRED and RARE badges
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-owned    the try-on on an owned retiring piece (you keep it forever, and its rarity)
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=closet         the Dressing Room grid with RETIRED and pearl badges
  *   append -still for Reduce Motion
  *
  * Capture rigs can drive the mode from a local server (http://127.0.0.1:8799/mode) or a deep link

@@ -474,7 +474,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </ShopStage>
                   {boughtNow ? (
                     <Animated.View entering={still ? undefined : secret ? NEW_POP : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
-                      <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : goingAway?.forever ? 'YOURS FOREVER!' : 'NEW!'}</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : goingAway?.forever ? 'YOURS FOREVER!' : 'NEW!'}</Text>
                     </Animated.View>
                   ) : owned ? (
                     (worn || wear === 'spinning') && (
@@ -515,7 +515,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   {lastChanceLine(item.shop?.season)}</Text>}
                 {item.shop?.returning && !owned && !goingAway && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
                 {/* Items come and go: when it leaves, honestly whether it comes back, the forever promise, and (owned or retiring) how few sharks have it. */}
-                {!fxKeyOf(item) && (goingAway || rarity) && (
+                {!fxKey && (goingAway || rarity) && (
                   <View style={styles.lifeCard} accessible accessibilityLabel={lifeSay}>
                     {goingAway && <View style={styles.lifeRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leaveText}</Text></View>}
@@ -525,14 +525,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{sentence(rarity.label)}</Text></View>}
                   </View>
                 )}
-                {fxKeyOf(item) && (
+                {fxKey && (
                   // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3). Leaving and rarity join this one card.
-                  <View style={styles.fxCard} accessible accessibilityLabel={`${leaveText ? `${leaveText} ` : ''}${FX_BLURB[fxKey!]} ${keepLine}${rarity ? ` ${sentence(rarity.label)}` : ''}`}>
+                  <View style={styles.fxCard} accessible accessibilityLabel={`${leaveText ? `${leaveText} ` : ''}${FX_BLURB[fxKey]} ${keepLine}${rarity ? ` ${sentence(rarity.label)}` : ''}`}>
                     {goingAway && <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{leaveText}</Text></View>}
-                    <View style={styles.fxRow}><GameIcon name="sparkle" size={22} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKeyOf(item)!]}</Text></View>
-                    <View style={styles.fxRow}><GameIcon name="check" size={20} />
+                    <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="sparkle" size={22} /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKey]}</Text></View>
+                    <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name="check" size={20} /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={goingAway || rarity ? styles.fxText : styles.fxKeep}>{keepLine}</Text></View>
                     {rarity && <View style={styles.fxRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{sentence(rarity.label)}</Text></View>}

@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { claimClosetTeach } from '../helpers/closetTip';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -39,8 +41,16 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   // A badged card keeps its height: the art steps down and shrinks by the chip's zone (chip + 6 pt).
   const art = life ? artSize - 18 : artSize;
   const [tip, setTip] = useState(false);
+  // Taught once: the first badged card shows its sentence by itself (most kids tap, few hold).
+  useEffect(() => {
+    if (!life || typeof claimClosetTeach !== 'function') return;
+    let live = true;
+    void claimClosetTeach().then(first => { if (live && first) setTip(true); }, () => undefined);
+    return () => { live = false; };
+  }, [!!life]);
   useEffect(() => {
     if (!tip) return;
+    try { void Haptics.selectionAsync?.(); } catch { /* haptics are decoration */ }
     const t = setTimeout(() => setTip(false), 2600);
     return () => clearTimeout(t);
   }, [tip]);

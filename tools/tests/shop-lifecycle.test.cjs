@@ -106,3 +106,21 @@ test('rarity shows only on pieces you own, never beside a Buy button', () => {
   assert.equal(life.visibleLeaving({ leaving: { on: '2026-11-30', forever: true } }, { secret: true, vipLocked: true }), null);
   assert.equal(life.visibleLeaving({ leaving: { on: '2026-11-30', forever: true } }, { secret: true, vipLocked: false }).forever, true);
 });
+
+test('the closet teaches its badge once: exactly one card ever claims the tip', async () => {
+  const store = new Map();
+  const AsyncStorage = { __esModule: true, default: { getItem: async k => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); } } };
+  const tip = loadTs('src/helpers/closetTip.ts', { '@react-native-async-storage/async-storage': AsyncStorage });
+  const results = await Promise.all([tip.claimClosetTeach(), tip.claimClosetTeach(), tip.claimClosetTeach()]);
+  assert.deepEqual(results.filter(Boolean).length, 1, 'one card teaches');
+  assert.equal(await tip.claimClosetTeach(), false);
+  const again = loadTs('src/helpers/closetTip.ts', { '@react-native-async-storage/async-storage': AsyncStorage });
+  assert.equal(await again.claimClosetTeach(), false, 'remembered across launches');
+  const item = src('src/components/Item.tsx');
+  assert.match(item, /claimClosetTeach\(\)\.then\(first => \{ if \(live && first\) setTip\(true\); \}/);
+  assert.match(item, /Haptics\.selectionAsync/, 'a light tick when the sentence shows');
+  const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /<Text maxFontSizeMultiplier=\{MAX_FONT\} style=\{styles\.newTagText\}>/, 'YOURS FOREVER! never outgrows the stage');
+  assert.match(sheet, /<View style=\{styles\.lifeIcon\}><GameIcon name="sparkle" size=\{22\} \/><\/View>/, 'every Secret card line starts on one vertical');
+  assert.doesNotMatch(src('src/helpers/shopLifecycle.ts'), /shortDay|monthYear|keeper/i, 'no dead helpers or idioms');
+});
