@@ -155,7 +155,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>
             <ShopStage rim={color} backdropUrl={stage?.backdrop} tone="night" rays still={still}>
               <Animated.View style={[StyleSheet.absoluteFill, hopStyle]}>
-                {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} style={CARD_STYLE} />}
+                {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />}
               </Animated.View>
             </ShopStage>
             {allCopy.wearing && (

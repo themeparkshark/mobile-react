@@ -40,7 +40,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import {
   afterBuyError, completesSet, stageCard, formatCoins, lastChanceLine, pieceState, recoveredSetOutcome, revealHoldMs, setProgressText, settleBuyError,
-  shortfall as shortBy, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
+  MEMBER_PROMISE, shortfall as shortBy, tryOnCta, tryOnLayout, wearingIds, wishHintCopy, type TryOnPhase,
 } from '../../helpers/shopShelves';
 import { isItemWorn, itemDisplayName, slotForItem, wearableBadge } from '../../helpers/wardrobe';
 import { InventoryType } from '../../models/inventory-type';
@@ -321,7 +321,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const cta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   const stageH = secret ? SECRET_STAGE_H : STAGE_H;
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
-  const keepLine = vipLocked ? 'Try it on as much as you like!' : "Once it's yours, it's yours forever.";
+  const keepLine = MEMBER_PROMISE;
   const card = secret ? SECRET_CARD : CARD;
   const boughtNow = landed > 0;
 
@@ -466,7 +466,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     {secret && <UnlockBeat trigger={landed} still={still} />}
                     <Animated.View style={[StyleSheet.absoluteFill, stageStyle]}>
                       {stage ? (
-                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow}
+                        <Playercard inventory={stage.look} popLayers still={still} showBackground={false} pinAnchor="body" shadow shadowAt={card.shadow} liftRoom={card.box.top}
                           popFrom={landed || dropping ? 1.3 : 1.18} dropIn={landed > 0 || dropping}
                           style={secret ? SECRET_PLAYERCARD_STYLE : PLAYERCARD_STYLE} sceneGround={!!stage.scene}
                           fxPlay={secret ? landed : 0} fxHold={secret && HOLD_PHASES.has(phase)} fxTapToPlay fxStartDelay={secret ? SHEET_SETTLE_MS : 0}

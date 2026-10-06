@@ -140,15 +140,18 @@ function Shop({ member, focus, night = 1, gate = false, lapse = false }: { membe
 const W = Dimensions.get('window').width;
 
 /** The Dressing Room stage: your shark wearing one hero, full LOD. Tap to wear the next. */
-function Stage() {
+function Stage({ withHat = false }: { withHat?: boolean }) {
   const [index, setIndex] = useState(0);
   const hero = HEROES[index];
   const look = useMemo(() => {
     const base = baseInventory() as unknown as Record<string, unknown>;
+    // 'stage-hat': the halo rides along (the tallest local head piece), for the framing check.
+    const halo = HEROES.find(h => h.fx === 'reef_halo');
+    if (withHat && halo) base.head_item = heroItem(halo);
     const slot = { 1: 'head_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' }[hero.slot]!;
     base[slot] = heroItem(hero);
     return base as unknown as InventoryType;
-  }, [index]);
+  }, [index, withHat]);
   return (
     <AuthFixture member>
       <Pressable style={{ flex: 1, backgroundColor: '#0a4f96' }} onPress={() => setIndex(i => (i + 1) % HEROES.length)}>
@@ -164,6 +167,36 @@ function Stage() {
         <Text style={styles.stageName}>{hero.name}</Text>
         <Text style={styles.stageHint}>Tap for the next piece ({index + 1} of {HEROES.length})</Text>
       </Pressable>
+    </AuthFixture>
+  );
+}
+
+/** 'framing': the jetpack shark (with the halo on) in the small cards the app draws (line recap 130x180, smaller, tiny, wide), each frame outlined. */
+function Framing() {
+  const look = useMemo(() => {
+    const base = baseInventory() as unknown as Record<string, unknown>;
+    base.neck_item = heroItem(HEROES[0]);
+    // The tallest head piece we ship locally rides along, so the peak check includes a hat.
+    const halo = HEROES.find(h => h.fx === 'reef_halo');
+    if (halo) base.head_item = heroItem(halo);
+    return base as unknown as InventoryType;
+  }, []);
+  const card = (w: number, h: number, label: string) => (
+    <View key={label} style={{ alignItems: 'center', gap: 4 }}>
+      <View style={{ width: w, height: h, borderWidth: 1, borderColor: '#ffcf3b' }}>
+        <Playercard inventory={look} style={{ position: 'absolute', width: w, height: h }} />
+      </View>
+      <Text style={styles.cellName}>{label}</Text>
+    </View>
+  );
+  return (
+    <AuthFixture member>
+      <View style={{ flex: 1, backgroundColor: '#0a4f96', paddingTop: 60, gap: 14, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
+          {card(130, 180, 'Line recap 130x180')}{card(120, 136, '120x136')}{card(80, 90, '80x90')}
+        </View>
+        {card(W - 40, 300, `Wide ${Math.round(W - 40)}x300`)}
+      </View>
     </AuthFixture>
   );
 }
@@ -235,6 +268,8 @@ function PreviewBody({ mode }: { mode: string }) {
   if (mode === 'realstore' || mode === 'realstore-guest') return <RealStore member={mode === 'realstore'} />;
   if (mode === 'realswitch') return <RealStore member switching />;
   if (mode === 'stage') return <Stage />;
+  if (mode === 'stage-hat') return <Stage withHat />;
+  if (mode === 'framing') return <Framing />;
   if (mode === 'gallery' || mode === 'still') return <Gallery still={mode === 'still'} />;
   const tryOn = /^tryon-([a-z_]+?)(-guest)?$/.exec(mode);
   if (tryOn) {

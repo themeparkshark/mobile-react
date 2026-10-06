@@ -40,7 +40,7 @@ import {
   heroChips, heroPriceRow, inkOn, newCountLabel, pieceState, queueReveal, readySummary, restockBackoffMs, rewardPendingFor, sectionAccent, setA11y, setProgressText,
   settleClaims, shortDate, stableOrder, stageCard, startFallbackPoll, wishSavedCopy,
 } from '../../helpers/shopShelves';
-import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
+import { isItemWorn, itemDisplayName, outfitLayerUrls, wearableBadge } from '../../helpers/wardrobe';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { ShopItem, ShopSection, ShopSetReward, ShopSetSummary, ShopTease, ShopToday } from '../../models/shop-today';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW, type GameIconName } from '../../ui';
@@ -344,7 +344,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
           <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
             plinth={stage?.scene ? 'none' : 'house'}
             backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
-            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} style={HERO_CARD_STYLE} />
+            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} liftRoom={Math.max(0, HERO_CARD.box.top - STAGE_TOP_CLEAR)} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
         </View>
@@ -402,6 +402,8 @@ const VAULT_STAGE_H = Math.round(Math.min(330, VAULT_INNER_W * 0.86));
 // Room for the jetpack's lift (up to 0.135 of the card) so a floating shark never leaves the stage.
 const VAULT_CARD = stageCard(VAULT_INNER_W, VAULT_STAGE_H, 0.16 * VAULT_STAGE_H);
 const VAULT_CARD_STYLE = { position: 'absolute' as const, ...VAULT_CARD.box };
+// The kicker and timer pill sit right above a hero stage: a lifting rig keeps this much clear of them (art panel, framing round 3).
+const STAGE_TOP_CLEAR = 16;
 
 /**
  * The Members' Vault hero (redesign): ribbon title, the stage with your shark wearing the piece,
@@ -444,7 +446,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
           plinth={stage?.scene ? 'none' : 'secret'}
           backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
           {!stage?.scene && <StarMotes still={still} />}
-          {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={VAULT_CARD.shadow} style={VAULT_CARD_STYLE} />
+          {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={VAULT_CARD.shadow} liftRoom={Math.max(0, VAULT_CARD.box.top - STAGE_TOP_CLEAR)} style={VAULT_CARD_STYLE} />
             : <View style={styles.heroFlat}><TileArt item={item} size={190} thumb={false} /></View>}
         </ShopStage>
       </Pressable>
@@ -559,12 +561,15 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const todayIds = useMemo(() => allItems.map(i => i.id), [allItems]);
   const setsBySlug = useMemo(() => new Map([...(today.sets ?? []), ...(today.ready_sets ?? [])].map(s => [s.slug, s])), [today.sets, today.ready_sets]);
 
-  // Prefetch the hero and event art so try-on and banners never pop in.
+  // Prefetch what a try-on draws so its stage is never empty on open: banner art, every piece
+  // on today's shelves, and the player's own shark (skin and worn outfit).
   useEffect(() => {
-    const urls = sections.flatMap(s => [s.art_url, ...(s.type === 'event' || s.type === 'featured' ? s.items.slice(0, 4).map(i => i.paper_url) : [])])
-      .filter((u): u is string => typeof u === 'string' && u.length > 0);
-    if (urls.length) void Image.prefetch(urls, 'memory-disk').catch(() => undefined);
-  }, [today.shop_day]);
+    const urls = [
+      ...sections.flatMap(s => [s.art_url, ...s.items.map(i => i.paper_url)]),
+      player?.inventory?.skin_item?.no_eye_url, ...outfitLayerUrls(player?.inventory),
+    ].filter((u): u is string => typeof u === 'string' && u.length > 0);
+    if (urls.length) void Image.prefetch([...new Set(urls)], 'memory-disk').catch(() => undefined);
+  }, [today.shop_day, player?.inventory?.skin_item?.no_eye_url]);
 
   const openItem = useCallback<OpenFn>((item, opts = {}) => {
     playSound(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
