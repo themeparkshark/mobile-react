@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useMemo, useRef } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { PEARLS, closetBadge, closetBadgeSay, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
+import { PEARLS, closetBadge, closetBadgeSay, closetTip, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
@@ -36,6 +36,12 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const isNew = !isEquipped && item.seen === false;
   // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
   const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
+  const [tip, setTip] = useState(false);
+  useEffect(() => {
+    if (!tip) return;
+    const t = setTimeout(() => setTip(false), 2600);
+    return () => clearTimeout(t);
+  }, [tip]);
   const lifeSay = useMemo(() => closetBadgeSay(item.lifecycle), [item.lifecycle]);
   const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
   const pulse = useRef(new Animated.Value(1)).current;
@@ -64,6 +70,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         style={({ pressed }) => [styles.card, compact && styles.cardCompact, { borderColor: badge.border },
           pressed && styles.cardPressed]}
         onPress={() => onToggle?.(item)}
+        // A badged card explains itself: hold it for the same calm sentence VoiceOver reads.
+        onLongPress={life ? () => setTip(true) : undefined}
       >
         {!!badge.inner && <View pointerEvents="none" style={[styles.innerStroke, { borderColor: badge.inner }]} />}
         {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
@@ -130,6 +138,11 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         )}
       </Pressable>
       {highlighted && <View pointerEvents="none" style={styles.highlightRing} />}
+      {tip && life && (
+        <View pointerEvents="none" style={styles.tip}>
+          <Text maxFontSizeMultiplier={1.3} style={styles.tipText}>{closetTip(item.lifecycle)}</Text>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -151,8 +164,11 @@ const styles = StyleSheet.create({
     borderRadius: 8, backgroundColor: '#123e65', borderWidth: 1.5, borderColor: '#ffd44c', paddingHorizontal: 4, paddingVertical: 2 },
   lifeText: { color: '#ffd44c', fontFamily: 'Knockout', fontSize: 13 },
   pearl: { width: 15, height: 15 },
-  // Room under the corner badge, so no art ever touches it.
-  artInset: { paddingTop: 14 },
+  // A reserved zone under the corner badge (chip height + 6), so no art ever touches it.
+  artInset: { paddingTop: 26, paddingHorizontal: 10 },
+  tip: { position: 'absolute', left: 4, right: 4, bottom: 10, zIndex: 30, backgroundColor: '#123e65', borderRadius: 10, borderWidth: 1.5,
+    borderColor: '#ffd44c', paddingHorizontal: 6, paddingVertical: 5 },
+  tipText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14, textAlign: 'center' },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },

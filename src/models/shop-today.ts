@@ -49,7 +49,7 @@ export interface ShopItemMeta {
   readonly set: (ShopSetProgress & { readonly color?: string | null }) | null;
   /** Items come and go (cp-catalogs): this piece's run ends on a date, and whether it ever comes back. */
   readonly leaving?: ShopLeaving | null;
-  /** A calm, aggregate fact: "Rare: few sharks have this". */
+  /** A calm, aggregate fact: "Rare find: few sharks have this" (owned pieces only). */
   readonly rarity?: ShopRarity | null;
 }
 

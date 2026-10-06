@@ -24,7 +24,7 @@ import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/regi
 import { SECRET_THEME } from '../../fx/secretTheme';
 import { UnlockBeat } from './SecretShopUi';
 import { Image } from 'expo-image';
-import { KEEP_LINE, PEARLS, leavingIcon, leavingLine, pearlFor, retiringWishHint, visibleLeaving, visibleRarity } from '../../helpers/shopLifecycle';
+import { PEARLS, leavingIcon, lifeLines, pearlFor, retiringWishHint, sentence } from '../../helpers/shopLifecycle';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -306,10 +306,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     serverOwned: !!(item.shop?.is_owned ?? item.has_purchased) || !!pieces.find(p => p.id === item.id)?.owned });
   const owned = row.owned;
   const name = itemDisplayName(item);
-  // Items come and go (cp-catalogs): computed once per render.
-  const goingAway = visibleLeaving(item.shop, { secret: secretItem, vipLocked });
-  const rarity = visibleRarity(item.shop, owned);
-  const lifeSay = [goingAway ? leavingLine(goingAway) : null, goingAway ? (owned ? 'It is yours, forever.' : KEEP_LINE) : null, rarity?.label].filter(Boolean).join(' ');
+  // Items come and go (cp-catalogs): the lines and what VoiceOver says are the same strings.
+  const fxKey = fxKeyOf(item);
+  const { goingAway, rarity, leaveText, keepText, lifeSay } = lifeLines(item.shop, { secret: secretItem, vipLocked, owned });
   const short = shortBy(balance, item.cost);
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
@@ -475,7 +474,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </ShopStage>
                   {boughtNow ? (
                     <Animated.View entering={still ? undefined : secret ? NEW_POP : FadeIn.duration(160)} style={[styles.tag, styles.newTag]} pointerEvents="none">
-                      <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : 'NEW!'}</Text>
+                      <Text style={styles.newTagText}>{wear === 'spinning' ? 'NOW WEARING' : goingAway?.forever ? 'YOURS FOREVER!' : 'NEW!'}</Text>
                     </Animated.View>
                   ) : owned ? (
                     (worn || wear === 'spinning') && (
@@ -518,25 +517,25 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 {/* Items come and go: when it leaves, honestly whether it comes back, the forever promise, and (owned or retiring) how few sharks have it. */}
                 {!fxKeyOf(item) && (goingAway || rarity) && (
                   <View style={styles.lifeCard} accessible accessibilityLabel={lifeSay}>
-                    {goingAway && <View style={styles.lifeRow}><GameIcon name={leavingIcon(goingAway)} size={22} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leavingLine(goingAway)}</Text></View>}
-                    {goingAway && <View style={styles.lifeRow}><GameIcon name="check" size={20} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{owned ? (goingAway.forever ? 'It’s yours. A keeper, forever.' : 'It’s yours. Forever.') : KEEP_LINE}</Text></View>}
-                    {rarity && <View style={styles.lifeRow}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{rarity.label}</Text></View>}
+                    {goingAway && <View style={styles.lifeRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leaveText}</Text></View>}
+                    {goingAway && <View style={styles.lifeRow}><View style={styles.lifeIcon}><GameIcon name="check" size={20} /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{keepText}</Text></View>}
+                    {rarity && <View style={styles.lifeRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{sentence(rarity.label)}</Text></View>}
                   </View>
                 )}
                 {fxKeyOf(item) && (
                   // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3). Leaving and rarity join this one card.
-                  <View style={styles.fxCard} accessible accessibilityLabel={`${goingAway ? `${leavingLine(goingAway)} ` : ''}${FX_BLURB[fxKeyOf(item)!]} ${keepLine}${rarity ? ` ${rarity.label}` : ''}`}>
-                    {goingAway && <View style={styles.fxRow}><GameIcon name={leavingIcon(goingAway)} size={22} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{leavingLine(goingAway)}</Text></View>}
+                  <View style={styles.fxCard} accessible accessibilityLabel={`${leaveText ? `${leaveText} ` : ''}${FX_BLURB[fxKey!]} ${keepLine}${rarity ? ` ${sentence(rarity.label)}` : ''}`}>
+                    {goingAway && <View style={styles.fxRow}><View style={styles.lifeIcon}><GameIcon name={leavingIcon(goingAway)} size={22} /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{leaveText}</Text></View>}
                     <View style={styles.fxRow}><GameIcon name="sparkle" size={22} />
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKeyOf(item)!]}</Text></View>
                     <View style={styles.fxRow}><GameIcon name="check" size={20} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{keepLine}</Text></View>
-                    {rarity && <View style={styles.fxRow}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{rarity.label}</Text></View>}
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={goingAway || rarity ? styles.fxText : styles.fxKeep}>{keepLine}</Text></View>
+                    {rarity && <View style={styles.fxRow}><View style={styles.lifeIcon}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" /></View>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{sentence(rarity.label)}</Text></View>}
                   </View>
                 )}
 
@@ -646,6 +645,8 @@ const styles = StyleSheet.create({
   lifeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lifeText: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
   lifePearl: { width: 22, height: 22 },
+  // One 24 pt icon slot, so every line's text starts on the same vertical.
+  lifeIcon: { width: 24, alignItems: 'center' },
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderWidth: 3, borderColor: S.border, ...SHADOW.card },
@@ -665,7 +666,8 @@ const styles = StyleSheet.create({
   wearTagText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white, letterSpacing: 1 },
   equation: { marginHorizontal: 14, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, backgroundColor: S.well, borderRadius: 999, paddingVertical: 6, borderWidth: 2, borderColor: S.line },
-  body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 24 },
+  // The last row (the heart hint) always rests fully above the fade: fade height + 12.
+  body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 36 },
   bodyFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 24 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flexShrink: 1, fontFamily: FONT.display, fontSize: 24, color: S.ink },

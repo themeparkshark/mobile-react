@@ -1,7 +1,7 @@
 'use strict';
 /**
- * Items that come and go (next-wave/cp-catalogs/DESIGN.md): leaving dates, last runs,
- * seasonal returns, rarity, and the closet's RETIRED / RARE badges, in the existing shop style.
+ * Items that come and go (next-wave/cp-catalogs/DESIGN.md): leaving and retiring dates,
+ * seasonal returns, owned rarity, and the closet's RETIRED and pearl badges, in the existing shop style.
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -16,8 +16,11 @@ const life = loadTs('src/helpers/shopLifecycle.ts');
 const shelves = loadTs('src/helpers/shopShelves.ts', {}, {});
 
 test('leaving copy: a date, honest about coming back, never a countdown or pressure', () => {
-  assert.equal(life.leavingLine({ on: '2026-11-30', forever: true }), "Leaving after Nov 30. Won't come back.");
-  assert.equal(life.leavingLine({ on: '2026-11-14', forever: false }), 'Leaving after Nov 14. It might come back someday.');
+  assert.equal(life.leavingLine({ on: '2026-11-30', forever: true }), "Leaving after November 30. Won't come back.");
+  assert.equal(life.leavingLine({ on: '2026-11-14', forever: false }), 'Leaving after November 14. It might come back someday.');
+  assert.equal(life.OWNED_LINE, 'It’s yours. You keep it forever.', 'plain words, no idioms');
+  assert.equal(life.sentence('Rare find: few sharks have this'), 'Rare find: few sharks have this.');
+  assert.equal(life.sentence('Done!'), 'Done!');
   assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: true }), 'RETIRING');
   assert.equal(life.leavingIcon({ on: '2026-11-30', forever: true }), 'star');
   assert.equal(life.leavingIcon({ on: '2026-11-30', forever: false }), 'moon', 'a different picture for each case');
@@ -50,6 +53,7 @@ test('tile ribbons: LEAVING / RETIRING outrank LAST CHANCE, BACK AGAIN and NEW, 
   assert.match(tile, /leaving: \{ label: 'LEAVING', color: BRAND\.navy, ink: BRAND\.gold \}/, 'calm navy and gold, never red');
   assert.match(tile, /visibleLeaving\(item\.shop, \{ secret: isSecretItem\(item\), vipLocked \}\)/, 'no retiring nudge on members-only pieces for non-members');
   assert.match(tile, /leavingSay\(leaving\)/, 'VoiceOver says what is shown, with the date');
+  assert.match(tile, /ribbon === 'leaving' && styles\.ribbonClearOfHeart/, 'the label centres clear of the heart');
 });
 
 test('closet badges: RETIRED for a piece that will never return, a pearl alone for a rare one (no word that reads as the RARE tier chip)', () => {
@@ -64,12 +68,15 @@ test('closet badges: RETIRED for a piece that will never return, a pearl alone f
   assert.match(item, /const life = useMemo\(\(\) => closetBadge\(item\.lifecycle\), \[item\.lifecycle\]\);/);
   assert.match(item, /closetBadgeSay\(item\.lifecycle\)/, 'VoiceOver hears it too');
   assert.match(item, /life && styles\.artInset/, 'the art steps down so nothing touches the badge');
+  assert.match(item, /onLongPress=\{life \? \(\) => setTip\(true\) : undefined\}/, 'hold a badged card for its sentence');
 });
 
 test('the try-on says when it leaves, whether it comes back, and the forever promise', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
-  assert.match(sheet, /const goingAway = visibleLeaving\(item\.shop, \{ secret: secretItem, vipLocked \}\);/);
-  assert.match(sheet, /const rarity = visibleRarity\(item\.shop, owned\);/);
+  assert.match(sheet, /const \{ goingAway, rarity, leaveText, keepText, lifeSay \} = lifeLines\(item\.shop, \{ secret: secretItem, vipLocked, owned \}\);/);
+  assert.match(sheet, /accessibilityLabel=\{lifeSay\}/, 'VoiceOver reads the exact lines on screen');
+  assert.match(sheet, /goingAway\?\.forever \? 'YOURS FOREVER!' : 'NEW!'/, 'buying a retiring piece lands YOURS FOREVER!');
+  assert.match(sheet, /body: \{ paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 36 \}/, 'the heart hint rests above the 24 pt fade');
   assert.match(sheet, /item\.shop\?\.last_chance && !owned && !goingAway/, 'never "comes back next Fall" beside "won\'t come back"');
   assert.match(sheet, /item\.shop\?\.returning && !owned && !goingAway/, 'no mixed messages on a returning piece that is leaving');
   assert.match(sheet, /goingAway\?\.forever \? retiringWishHint\(wished\) : wishHintCopy/, 'no "we\'ll tell you next time" on a piece that won\'t return');
@@ -83,12 +90,17 @@ test('no catalog screens ship: the premise lives in the existing shops', () => {
   assert.doesNotMatch(src('src/Root.tsx'), /name="Catalog"|CollectionLog/);
 });
 
-test('rarity shows only on pieces you own or pieces retiring forever, never on a fresh piece for sale', () => {
+test('rarity shows only on pieces you own, never beside a Buy button', () => {
   const rarity = { tier: 'very_rare', label: 'Super rare find: hardly any sharks have this' };
-  assert.equal(life.visibleRarity({ rarity }, false), null, 'new and for sale: no scarcity line');
+  assert.equal(life.visibleRarity({ rarity }, false), null, 'for sale: no scarcity line');
   assert.equal(life.visibleRarity({ rarity }, true).tier, 'very_rare');
-  assert.equal(life.visibleRarity({ rarity, leaving: { on: '2026-11-30', forever: true } }, false).tier, 'very_rare');
-  assert.equal(life.visibleRarity({ rarity, leaving: { on: '2026-11-30', forever: false } }, false), null);
+  assert.equal(life.visibleRarity({ rarity, leaving: { on: '2026-11-30', forever: true } }, false), null, 'retiring and for sale: "won\'t come back" is enough');
+  const unowned = life.lifeLines({ rarity, leaving: { on: '2026-11-30', forever: true } }, { secret: false, vipLocked: false, owned: false });
+  assert.equal(unowned.lifeSay, "Leaving after November 30. Won't come back. Every piece you buy is yours forever.");
+  const mine = life.lifeLines({ rarity, leaving: { on: '2026-11-30', forever: true } }, { secret: false, vipLocked: false, owned: true });
+  assert.equal(mine.lifeSay, "Leaving after November 30. Won't come back. It’s yours. You keep it forever. Super rare find: hardly any sharks have this.");
+  assert.equal(life.closetTip({ retired: true, forever: true, rarity }), "Retired: it won't come back to the shop. Super rare find: hardly any sharks have this.");
+  assert.equal(life.closetTip({ retired: false, forever: false, rarity }), 'Super rare find: hardly any sharks have this.');
   assert.equal(life.retiringWishHint(false), 'Heart it to save it for later.');
   assert.doesNotMatch(life.retiringWishHint(true), /next time/);
   assert.equal(life.visibleLeaving({ leaving: { on: '2026-11-30', forever: true } }, { secret: true, vipLocked: true }), null);

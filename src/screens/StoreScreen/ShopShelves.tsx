@@ -352,8 +352,8 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       {/* Kicker row: the label and the timer pill share one line above the stage, never on the hat. */}
       <View style={styles.heroKickerRow} pointerEvents="none">
         <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
-        <LeavingChip item={item} />
         <SectionPills section={section} offset={offset} still={still} />
+        <LeavingChip item={item} member={!!player?.is_subscribed} />
       </View>
       <View style={styles.heroText} pointerEvents="box-none">
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.heroName} numberOfLines={2}>{itemDisplayName(item)}</Text>
@@ -408,9 +408,8 @@ const VAULT_CARD_STYLE = { position: 'absolute' as const, ...VAULT_CARD.box };
  * then one calm plate (name, price, a "moves" chip) and one CTA. One focal point.
  */
 /** The hero cards carry the same calm LEAVING / RETIRING mark as the tiles (members-only pieces: members only). */
-function LeavingChip({ item }: { item: ShopItem }) {
-  const { player } = useContext(AuthContext);
-  const leaving = visibleLeaving(item.shop, { secret: isSecretItem(item), vipLocked: !!item.is_member_item && !player?.is_subscribed });
+function LeavingChip({ item, member }: { item: ShopItem; member: boolean }) {
+  const leaving = visibleLeaving(item.shop, { secret: isSecretItem(item), vipLocked: !!item.is_member_item && !member });
   if (!leaving || (item.shop?.is_owned ?? item.has_purchased)) return null;
   return (
     <View style={styles.leavingChip} accessible accessibilityLabel={leavingSay(leaving)}>
@@ -452,7 +451,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
       <View style={styles.vaultPlate}>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
         <View style={styles.vaultMeta}>
-          <LeavingChip item={item} />
+          <LeavingChip item={item} member={member} />
           {!owned && (
             <View style={styles.vaultPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins${member ? '' : ', VIP members can buy'}`}>
               <GameIcon name="coins" size={20} />

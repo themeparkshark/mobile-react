@@ -37,6 +37,6 @@ export interface ItemType {
   /** Owned rows: whether this item has ever been worn. */
   readonly first_worn?: boolean;
   readonly acquired_at?: string | null;
-  /** Owned rows: retired (and whether forever) and rarity, for the closet's RETIRED / RARE badge. */
+  /** Owned rows: retired (and whether forever) and rarity, for the closet's RETIRED / pearl badge. */
   readonly lifecycle?: OwnedLifecycle | null;
 }

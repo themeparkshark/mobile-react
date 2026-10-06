@@ -2,8 +2,8 @@
  * Dev-only fixture preview of items that come and go (cp-catalogs/DESIGN.md), for captures and
  * the critic panel. Never ships (devRoutes.tsx is __DEV__ only).
  *
- *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=shelves        the Shark Shop's shelves with leaving, last-run, back-again and rare pieces
- *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-forever  the try-on on a last-run piece (won't come back)
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=shelves        the Shark Shop's shelves with leaving, retiring, back-again and owned rare pieces
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-forever  the try-on on a retiring piece (won't come back)
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-leaving  the try-on on a piece leaving for a while
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-rare     the try-on on a rare piece
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=secret         the Secret Shop with leaving animated pieces (secret-guest: as a non-member, no leaving marks)
@@ -54,10 +54,10 @@ function piece(slug: string, name: string, rarity: number, type: number, cost: n
   } as ShopItem;
 }
 
-const LAST_RUN = piece('passport-stamp-visor', 'Passport Stamp Visor', 1, 1, 50, { leaving: { on: '2026-11-30', forever: true } });
+const RETIRING_PIECE = piece('passport-stamp-visor', 'Passport Stamp Visor', 1, 1, 50, { leaving: { on: '2026-11-30', forever: true } });
 const LEAVING = piece('rope-drop-visor', 'Rope Drop Visor', 1, 1, 50, { leaving: { on: '2026-11-14', forever: false } });
 const KEEPER = piece('festival-passport-tee', 'Festival Passport Tee', 1, 4, 50, { owned: true, leaving: { on: '2026-11-30', forever: true }, rarity: { tier: 'rare', label: 'Rare find: few sharks have this' } });
-const RARE = piece('triceratops-frill-helmet', 'Triceratops Frill Helmet', 4, 1, 280, { rarity: veryRare, isNew: true });
+const RARE = piece('triceratops-frill-helmet', 'Triceratops Frill Helmet', 4, 1, 280, { rarity: veryRare, leaving: { on: '2026-11-20', forever: false } });
 
 function at(days: number): string {
   const d = new Date();
@@ -90,7 +90,7 @@ function sharkToday(): ShopToday {
         piece('monorail-nose-hat', 'Monorail Nose Hat', 3, 1, 140),
       ] }),
       section({ key: 'daily', type: 'daily', title: 'Daily', ends_at: at(1), items: [
-        LAST_RUN, LEAVING, KEEPER,
+        RETIRING_PIECE, LEAVING, KEEPER,
         piece('pirate-tricorn-feathered', 'Pirate Tricorn', 3, 1, 140, { returning: true }),
         piece('glow-fin-ears', 'Glow Fin Ears', 3, 1, 140),
         piece('cozy-knit-beanie-crimson', 'Crimson Knit Beanie', 1, 1, 50, { owned: true }),
@@ -221,7 +221,7 @@ function Body({ mode }: { mode: string }) {
   if (mode === 'closet') return <Closet />;
   if (mode === 'secret') return <Shop secret focus={null} />;
   if (mode === 'secret-tryon') return <Shop secret focus={9004} />;
-  if (mode === 'tryon-forever') return <Shop secret={false} focus={LAST_RUN.id} />;
+  if (mode === 'tryon-forever') return <Shop secret={false} focus={RETIRING_PIECE.id} />;
   if (mode === 'tryon-leaving') return <Shop secret={false} focus={LEAVING.id} />;
   if (mode === 'tryon-rare') return <Shop secret={false} focus={RARE.id} />;
   if (mode === 'tryon-owned') return <Shop secret={false} focus={KEEPER.id} />;

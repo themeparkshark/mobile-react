@@ -55,11 +55,40 @@ export function leavingOf(shop: { leaving?: ShopLeaving | null } | null | undefi
   return l && /^\d{4}-\d{2}-\d{2}$/.test(l.on) ? l : null;
 }
 
+/** "November 30" (the try-on has room for the whole month; early readers stumble on "Nov"). */
+export function longDay(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
+  return m ? `${MONTHS_LONG[Number(m[2]) - 1]} ${Number(m[3])}` : '';
+}
+
 /** The try-on line: when it leaves, and honestly whether it comes back. */
 export function leavingLine(leaving: ShopLeaving): string {
   return leaving.forever
-    ? `Leaving after ${shortDay(leaving.on)}. Won't come back.`
-    : `Leaving after ${shortDay(leaving.on)}. It might come back someday.`;
+    ? `Leaving after ${longDay(leaving.on)}. Won't come back.`
+    : `Leaving after ${longDay(leaving.on)}. It might come back someday.`;
+}
+
+/** The owner's line: plain words, no idioms. */
+export const OWNED_LINE = 'It’s yours. You keep it forever.';
+
+/** A label as a sentence (ends with a period). */
+export function sentence(text: string): string {
+  const t = text.trim();
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
+/**
+ * Everything the try-on says about a piece's run, computed once: the visible leaving block,
+ * the visible rarity, the two lines, and the exact same words for VoiceOver.
+ */
+export function lifeLines(shop: { leaving?: ShopLeaving | null; rarity?: ShopRarity | null } | null | undefined,
+  opts: { secret: boolean; vipLocked: boolean; owned: boolean }) {
+  const goingAway = visibleLeaving(shop, opts);
+  const rarity = visibleRarity(shop, opts.owned);
+  const leaveText = goingAway ? leavingLine(goingAway) : null;
+  const keepText = goingAway ? (opts.owned ? OWNED_LINE : KEEP_LINE) : null;
+  const lifeSay = [leaveText, keepText, rarity ? sentence(rarity.label) : null].filter(Boolean).join(' ');
+  return { goingAway, rarity, leaveText, keepText, lifeSay };
 }
 
 /** The promise that follows any leaving line. */
@@ -81,8 +110,7 @@ export function leavingIcon(leaving: ShopLeaving): 'star' | 'moon' {
 
 /** VoiceOver: exactly what the ribbon shows, plus the date. */
 export function leavingSay(leaving: ShopLeaving): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(leaving.on);
-  const day = m ? `${MONTHS_LONG[Number(m[2]) - 1]} ${Number(m[3])}` : '';
+  const day = longDay(leaving.on);
   return leaving.forever ? `retiring after ${day}, it won't come back` : `leaving after ${day}`;
 }
 
@@ -96,14 +124,12 @@ export function visibleLeaving(shop: { leaving?: ShopLeaving | null } | null | u
 }
 
 /**
- * Ownership rarity shows on pieces you own, or on a piece retiring forever. Never on a fresh
- * piece for sale: a new piece has few owners only because it is new, and "hardly any sharks
- * have this" beside a Buy button is scarcity selling.
+ * Ownership rarity shows only on pieces you own. Never beside a Buy button: "hardly any sharks
+ * have this" next to a price is scarcity selling (and a new piece has few owners only because
+ * it is new). "Won't come back" already says enough on a piece for sale.
  */
-export function visibleRarity(shop: { rarity?: ShopRarity | null; leaving?: ShopLeaving | null } | null | undefined, owned: boolean): ShopRarity | null {
-  const rarity = rarityOf(shop);
-  if (!rarity) return null;
-  return owned || leavingOf(shop)?.forever ? rarity : null;
+export function visibleRarity(shop: { rarity?: ShopRarity | null } | null | undefined, owned: boolean): ShopRarity | null {
+  return owned ? rarityOf(shop) : null;
 }
 
 /** The heart hint never promises a return for a piece that is retiring forever. */
@@ -150,4 +176,13 @@ export function closetBadgeSay(lifecycle: OwnedLifecycle | null | undefined): st
   return badge.label === 'RETIRED'
     ? `, retired: it won't come back to the shop${rarity ? `. ${rarity.label}` : ''}`
     : `, ${rarity!.label}`;
+}
+
+/** The closet card's held tip: the same calm sentence VoiceOver reads. */
+export function closetTip(lifecycle: OwnedLifecycle | null | undefined): string {
+  const badge = closetBadge(lifecycle);
+  if (!badge) return '';
+  const rarity = rarityOf(lifecycle);
+  if (badge.label === 'RETIRED') return `Retired: it won't come back to the shop.${rarity ? ` ${sentence(rarity.label)}` : ''}`;
+  return rarity ? sentence(rarity.label) : '';
 }

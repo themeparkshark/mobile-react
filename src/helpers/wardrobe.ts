@@ -230,5 +230,5 @@ export function pinnedItemIndex(page: number, pin: number | undefined, items: re
   return items.findIndex((item) => item.id === pin);
 }
 
-/** Closet RETIRED / RARE badges (items that come and go, cp-catalogs). */
-export { PEARLS, closetBadge, closetBadgeSay } from './shopLifecycle';
+/** Closet RETIRED and pearl badges (items that come and go, cp-catalogs). */
+export { PEARLS, closetBadge, closetBadgeSay, closetTip } from './shopLifecycle';
