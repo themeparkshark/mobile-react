@@ -9,6 +9,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FrightRun, FrightSpot, FrightTonight } from '../../../api/endpoints/fright';
+import type { FrightShopStall } from '../../../api/endpoints/fright/types';
+import { gameAlert } from '../../../ui';
+import { AWAY_LINE, awayHeadline, awayMessage } from '../halloweenShop';
 import type { RideControlPark } from '../../../api/endpoints/parks/rideControl';
 import Map from '../../Map';
 import RideControlBar from '../../RideControlBar';
@@ -24,13 +27,20 @@ import RankCard from '../RankCard';
 import type { FrightEngine } from '../useFrightEngine';
 
 export const APP_PREVIEW_STATES = ['map-chips', 'sheet-focus', 'in-line', 'survive-ready', 'rank', 're-swim', 'coach-pill',
-  'marquee-retry', 'marquee-zero-gate'] as const;
+  'marquee-retry', 'marquee-zero-gate', 'shop-stall', 'shop-away'] as const;
 export type AppPreviewState = typeof APP_PREVIEW_STATES[number];
 /** Seconds each state holds in the 'cycle' (the Marquee waits out the 12 s load timeout). */
 export const APP_PREVIEW_SECONDS: Readonly<Record<AppPreviewState, number>> = {
   'map-chips': 8, 'sheet-focus': 8, 'in-line': 8, 'survive-ready': 8, rank: 8, 're-swim': 8, 'coach-pill': 8,
-  'marquee-retry': 16, 'marquee-zero-gate': 8,
+  'marquee-retry': 16, 'marquee-zero-gate': 8, 'shop-stall': 8, 'shop-away': 8,
 };
+
+/** The Halloween Shop stall (USF config point): open for a player at the event, the away teaser otherwise. */
+function stallFor(now: number, open: boolean): FrightShopStall {
+  return { store_id: 19, name: 'Halloween Shop', subtitle: 'Fin-ister Nights · ends Nov 2', tag: 'LIMITED',
+    ends_at: new Date(now + 29 * 86_400_000).toISOString(), latitude: 28.47818, longitude: -81.46763, icon_url: null,
+    open, reason: open ? 'open' : 'not_event_hours', away_line: 'Only at Fin-ister Nights' };
+}
 
 const ROBOT = 'usf26-robot-city';
 const PLAYER = { latitude: 28.47805, longitude: -81.4692 };
@@ -50,12 +60,12 @@ const CHECKS: Record<string, ReturnType<FrightEngine['enterCheck']>> = {
   'usf26-puzzle-box': { ok: false, reason: 'no_fix' },
 };
 
-function tonightFor(now: number, runs: readonly FrightRun[], openRun: FrightRun | null): FrightTonight {
+function tonightFor(now: number, runs: readonly FrightRun[], openRun: FrightRun | null, shop: FrightShopStall | null = null): FrightTonight {
   const base = usfFrightFixture(now, 'live');
   const spots: FrightSpot[] = USF_FRIGHT_SPOTS.map(spot => spot.kind === 'haunt'
     ? { ...spot, posted_minutes: WAITS[spot.key] ?? spot.posted_minutes } : spot);
   return {
-    ...base, spots, encounter: null,
+    ...base, spots, encounter: null, shop,
     me: { runs, open_run: openRun, haunts_tonight: runs.filter(run => run.done_at).length, haunts_season: 0, haunts_total: 0,
       side: null, lantern: { level: 1, parts: 0, next_at: 10 }, found_tonight: [], recap_seen: false, seen: {}, returning: false },
   };
@@ -85,7 +95,8 @@ export default function FrightAppPreview({ state }: { readonly state: AppPreview
   }, [state]);
 
   const openRun = state === 'in-line' ? runAt(now, 12, 12) : state === 'survive-ready' ? runAt(now, 26, -2) : null;
-  const tonight = useMemo(() => tonightFor(now, openRun ? [openRun] : [], openRun), [now, state]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shop = state === 'shop-stall' ? stallFor(now, true) : state === 'shop-away' ? stallFor(now, false) : null;
+  const tonight = useMemo(() => tonightFor(now, openRun ? [openRun] : [], openRun, shop), [now, state]); // eslint-disable-line react-hooks/exhaustive-deps
   const robot = tonight.spots.find(spot => spot.key === ROBOT) ?? null;
 
   const night: FrightNight = {
@@ -113,6 +124,9 @@ export default function FrightAppPreview({ state }: { readonly state: AppPreview
   const mapInput: FrightMapInput = {
     tonight, active: true, nowOffsetMs: 0, player: PLAYER, spooky: true, doneKeys: [], quiet: engine.quiet,
     cinematic: null, onHauntPress: noop, tierCap: 'lite', ambience: false,
+    onShopPress: stall => gameAlert(stall.open ? 'Halloween Shop' : awayHeadline(stall.reason, tonight.night, Date.now()),
+      stall.open ? 'DEV: opens the Halloween Shop (Store screen).'
+        : `${stall.away_line || AWAY_LINE}. ${awayMessage(stall.reason, tonight.night, Date.now())}`, [{ text: 'Got it' }], { icon: 'lock' }),
   };
 
   return (

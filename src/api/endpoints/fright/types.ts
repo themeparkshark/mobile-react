@@ -164,6 +164,27 @@ export interface FrightTonight {
   readonly config: FrightConfig | null;
   /** Art manifest (art/MANIFEST.json with every path resolved to a URL). */
   readonly assets?: FrightAssets | null;
+  /** The Halloween Shop stall on the event map (older servers leave it out). */
+  readonly shop?: FrightShopStall | null;
+}
+
+/**
+ * The event-only Halloween Shop's stall. `open` is for this player right now:
+ * in the event park during event hours. Otherwise the stall shows `away_line`
+ * and no buy button; the server refuses the store and every purchase anyway.
+ */
+export interface FrightShopStall {
+  readonly store_id: number;
+  readonly name: string;
+  readonly subtitle: string;
+  readonly tag: string;
+  readonly ends_at: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly icon_url: string | null;
+  readonly open: boolean;
+  readonly reason: 'open' | 'missing' | 'off_season' | 'not_at_event' | 'not_event_hours';
+  readonly away_line: string;
 }
 
 /* ---- Art manifest (server-hosted; every path is a URL) ---- */

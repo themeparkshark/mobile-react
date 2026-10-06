@@ -128,8 +128,8 @@ test('GPS jump or resume: markers re-lay out and Skia canvases repaint on reveal
   assert.match(src, /if \(on && Date\.now\(\) - lastRelayout\.current < RELAYOUT_REVEAL_MS\) setToken/);
   // Every ShowWhen has a constant box (no zoom-sized native frames).
   const shows = src.match(/<ShowWhen [^>]*>/g) || [];
-  assert.equal(shows.length, 6);
-  for (const tag of shows) assert.match(tag, /^<ShowWhen box=\{(REEF|PROPS|HAUNT|LAGOON|RING|CRITTER)_BOX\}/, tag);
+  assert.equal(shows.length, 7);
+  for (const tag of shows) assert.match(tag, /^<ShowWhen box=\{(REEF|PROPS|HAUNT|LAGOON|RING|CRITTER|STALL)_BOX\}/, tag);
   assert.match(repaint, /<Group opacity=\{repaintOpacity\(token\)\}>\{children\}<\/Group>/);
   const sprites = read('src/components/map/fright/FrightSprites.tsx');
   assert.doesNotMatch(sprites, /<Canvas[\s>]/, 'sprites draw through FrightCanvas');

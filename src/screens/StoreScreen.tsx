@@ -45,6 +45,7 @@ import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
+import { AWAY_LINE, HALLOWEEN_SHOP_NAME, awayMessage, isEventShop } from '../components/fright/halloweenShop';
 import { useTutorial } from '../components/Tutorial';
 import { SECRET_THEME } from '../fx/secretTheme';
 import { loadSecretShopFlag } from '../services/secretShopFlag';
@@ -327,7 +328,9 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();
   const [items, setItems] = useState<ItemType[]>([]);
-  const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'ready' | 'away'>('loading');
+  /** Why the server kept this player out of the event-only Halloween Shop (403 only_at_event). */
+  const [awayReason, setAwayReason] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const reducedMotion = useReducedGameMotion();
@@ -439,7 +442,16 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       setHasMore(firstPage.length > 0);
       setStatus('ready');
     // A failed background restock keeps the shelves the player is browsing.
-    })().catch(() => { if (live && !silent) setStatus('error'); });
+    })().catch((error: unknown) => {
+      // The Halloween Shop opens only at a Fin-ister event: say so, never offer a buy button.
+      const refused = (error as { response?: { status?: number; data?: { only_at_event?: boolean; reason?: string } } })?.response;
+      if (live && !silent && refused?.status === 403 && refused.data?.only_at_event) {
+        setAwayReason(refused.data.reason ?? null);
+        setStatus('away');
+        return;
+      }
+      if (live && !silent) setStatus('error');
+    });
     return () => { live = false; };
   }, [store, attempt]);
 
@@ -493,7 +505,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{secretShelves ? 'Secret Shop' : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
+          <TopbarText>{secretShelves ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
+            : status === 'away' ? HALLOWEEN_SHOP_NAME : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
           <InformationModal id={InformationModalEnums.StoreScreen} />
@@ -511,7 +524,12 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
           <SuppliesShop focus={focus} />
         </View>
       )}
-      {(!sharkShop || tab === 'gear') && status !== 'ready' && (
+      {status === 'away' && (
+        <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
+          <SharkLoader tone="onBlue" state="empty" title={AWAY_LINE} message={awayMessage(awayReason)} />
+        </View>
+      )}
+      {(!sharkShop || tab === 'gear') && status !== 'ready' && status !== 'away' && (
         <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
           <SharkLoader tone="onBlue" state={status === 'error' ? 'error' : 'loading'}
             title={status === 'error' ? 'The Shark Shop couldn’t open' : undefined}
@@ -596,7 +614,11 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
                 onOpenFavorites={() => setWishlistOpen(true)} />
             )}
             {/* Countdown Timer */}
-            {!today && rotation?.next_rotation_at && (
+            {!today && currentStore?.event?.ends_at ? (
+              <StoreCountdown nextRotationAt={currentStore.event.ends_at} event={{ header: 'SHOP CLOSES IN',
+                tag: currentStore.event.tag || 'LIMITED', subtitle: currentStore.event.subtitle,
+                elapsed: 'The Halloween Shop is closed for the season.' }} />
+            ) : !today && rotation?.next_rotation_at && (
               <StoreCountdown nextRotationAt={rotation.next_rotation_at} onElapsed={() => setRestockPending(true)} />
             )}
             {!today && <View
