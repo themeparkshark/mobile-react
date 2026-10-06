@@ -4,8 +4,9 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import { openMembership } from '../../components/GrownUpGate';
 import { FxPauseContext } from '../../fx/FxStage';
 import { SECRET_THEME } from '../../fx/secretTheme';
-import { BRAND, FONT, GameIcon } from '../../ui';
+import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import { MAX_FONT } from './shopUi';
+import { VaultPanel } from './SecretVault';
 
 /**
  * Secret Shop chrome (secret-shop/DESIGN.md 4.2 and 6).
@@ -17,19 +18,21 @@ export { askGrownUp, grownUpQuestion, judgeGate, GATE_REST_MS } from '../../comp
 /** Non-members: one calm line and a door to VIP, behind the grown-up gate. No countdown, no pressure. */
 export const SecretPreviewBanner = memo(function SecretPreviewBanner() {
   return (
-    <View style={styles.banner} accessible accessibilityRole="summary"
-      accessibilityLabel={`${SECRET_PREVIEW_COPY.title}. ${SECRET_PREVIEW_COPY.body}`}>
-      <View style={styles.bannerIcon}><GameIcon name="member" size={30} /></View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerTitle}>{SECRET_PREVIEW_COPY.title}</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerBody}>{SECRET_PREVIEW_COPY.body}</Text>
+    <VaultPanel style={{ marginBottom: 14 }}>
+      <View style={styles.banner} accessible accessibilityRole="summary"
+        accessibilityLabel={`${SECRET_PREVIEW_COPY.title}. ${SECRET_PREVIEW_COPY.body}`}>
+        <View style={styles.bannerIcon}><GameIcon name="member" size={34} /></View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerTitle}>{SECRET_PREVIEW_COPY.title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerBody}>{SECRET_PREVIEW_COPY.body}</Text>
+        </View>
       </View>
-      <Pressable onPress={() => { void openMembership(); }} style={styles.bannerCta} hitSlop={6}
-        accessibilityRole="button" accessibilityLabel="Ask a grown-up about VIP">
-        <GameIcon name="lock" size={18} />
-        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.bannerCtaText}>GROWN-UPS</Text>
-      </Pressable>
-    </View>
+      {/* The door to VIP: the house button, behind the grown-up gate. */}
+      <View style={{ paddingHorizontal: 14 }}>
+        <GameButton label="Ask a grown-up" icon="lock" size="compact" onPress={() => { void openMembership(); }}
+          accessibilityLabel="Ask a grown-up about VIP" />
+      </View>
+    </VaultPanel>
   );
 });
 
@@ -138,14 +141,14 @@ export const StarMotes = memo(function StarMotes({ still }: { still: boolean }) 
 });
 
 const styles = StyleSheet.create({
-  banner: { marginHorizontal: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 20,
-    backgroundColor: SECRET_THEME.card, borderWidth: 3, borderColor: SECRET_THEME.gold },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10 },
   bannerIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: SECRET_THEME.well },
-  bannerTitle: { fontFamily: FONT.display, fontSize: 18, color: SECRET_THEME.ink },
+  bannerTitle: { fontFamily: FONT.display, fontSize: 20, color: SECRET_THEME.ink,
+    textShadowColor: SECRET_THEME.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   bannerBody: { fontFamily: FONT.body, fontSize: 14, lineHeight: 18, color: SECRET_THEME.inkSoft },
   // Violet, not the gold BUY face: this door leads to grown-ups, not to buying.
   bannerCta: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 999,
-    backgroundColor: SECRET_THEME.violet, borderWidth: 2, borderColor: SECRET_THEME.border },
+    backgroundColor: SECRET_THEME.accent, borderWidth: 2, borderColor: SECRET_THEME.border },
   bannerCtaText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   mote: { position: 'absolute' },
   flare: { borderRadius: 19, borderWidth: 6, borderColor: SECRET_THEME.gold },

@@ -182,8 +182,9 @@ function loadSecretUi() {
     '../RootNavigation': { navigate: () => undefined },
     '../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' },
     '../../fx/FxStage': { FxPauseContext: {} },
-    '../../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' },
+    '../../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon', GameButton: 'GameButton' },
     './shopUi': { MAX_FONT: 1.3 },
+    './SecretVault': { VaultPanel: 'VaultPanel' },
   });
 }
 

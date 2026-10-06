@@ -441,7 +441,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               <View>
                 <View style={styles.grabber} />
                 <View style={styles.topRow}>
-                  <View style={[styles.balance, secret && { backgroundColor: SECRET_THEME.well, borderColor: SECRET_THEME.violet }]} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
+                  <View style={[styles.balance, secret && { backgroundColor: SECRET_THEME.well, borderColor: SECRET_THEME.accent }]} accessible accessibilityLabel={`${formatCoins(balanceAfter ?? balance)} Shark Coins`}>
                     <GameIcon name="coins" size={20} />
                     <CoinTicker value={balanceAfter ?? balance} still={still} />
                   </View>
@@ -548,7 +548,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 )}
               </ScrollView>
               {/* Nothing reads half-cut against the buttons. */}
-              <LinearGradient pointerEvents="none" colors={secret ? ['rgba(42,29,110,0)', SECRET_THEME.panel] : ['rgba(10,79,150,0)', SHOP_SURFACE.panel]} style={styles.bodyFade} />
+              <LinearGradient pointerEvents="none" colors={secret ? ['rgba(18,48,108,0)', SECRET_THEME.panel] : ['rgba(10,79,150,0)', SHOP_SURFACE.panel]} style={styles.bodyFade} />
             </View>
 
             <View style={styles.actions}>
@@ -664,12 +664,12 @@ const styles = StyleSheet.create({
   switchText: { fontFamily: FONT.display, fontSize: 15, color: S.ink },
   wishHint: { fontFamily: FONT.body, fontSize: 15, color: S.inkSoft },
   grownUp: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18,
-    backgroundColor: SECRET_THEME.violet, borderWidth: 3, borderColor: SECRET_THEME.border },
+    backgroundColor: SECRET_THEME.accent, borderWidth: 3, borderColor: SECRET_THEME.border },
   grownUpText: { fontFamily: FONT.display, fontSize: 20, color: '#ffffff' },
   lockPrice: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
-    backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.violet },
+    backgroundColor: SECRET_THEME.well, borderWidth: 2, borderColor: SECRET_THEME.accent },
   lockPriceText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
-  fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card, borderWidth: 2, borderColor: SECRET_THEME.violet },
+  fxCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: SECRET_THEME.card, borderWidth: 2, borderColor: SECRET_THEME.accent },
   fxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fxText: { flex: 1, fontFamily: FONT.display, fontSize: 17, lineHeight: 21, color: SECRET_THEME.ink },
   fxKeep: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: SECRET_THEME.inkSoft },

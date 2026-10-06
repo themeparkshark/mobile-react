@@ -124,7 +124,8 @@ function Shop({ member, focus, night = 1, gate = false, lapse = false }: { membe
   return (
     <AuthFixture member={member} lapseOnRefresh={lapse}>
       <View style={{ flex: 1, backgroundColor: SECRET_THEME.floor }}>
-        <Topbar purple>
+        {/* Same top bar as the real vault (StoreScreen: the house bar, not the legacy purple one). */}
+        <Topbar>
           <TopbarColumn stretch={false}><BackButton onPress={() => undefined} /></TopbarColumn>
           <TopbarColumn><TopbarText>Secret Shop</TopbarText></TopbarColumn>
           <TopbarColumn stretch={false}><View style={{ width: 35 }} /></TopbarColumn>

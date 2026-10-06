@@ -118,6 +118,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       accessibilityLabel={a11y}
       style={({ pressed }) => [styles.tile, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
         transform: [{ scale: pressed ? 0.95 : 1 }] },
+        // The vault tile: gold rim with the gold button's darker lip under it (the house 3D edge).
+        secret ? { borderBottomWidth: 6, borderBottomColor: SECRET_THEME.goldLip } : null,
         badge.glow ? { shadowColor: badge.glow, shadowOpacity: 0.9, shadowRadius: 10 } : null]}
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
@@ -211,11 +213,11 @@ const styles = StyleSheet.create({
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
   rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
-  // The Secret corner tag (DESIGN.md 6.5): violet with a gold keyline, in the corner of every Secret tile.
+  // The Secret corner tag (DESIGN.md 6.5): gold plate with the vault-navy ink, in the corner of every Secret tile.
   // Drawn after the art, so nothing (a scene, a peeking ghost) ever covers it.
   secretTag: { position: 'absolute', top: 3, left: 3, zIndex: 5, borderTopLeftRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 10,
-    height: 22, backgroundColor: '#6a3fd1', borderBottomRightRadius: 12, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#ffd34d' },
-  secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
+    height: 22, backgroundColor: '#ffcf3b', borderBottomRightRadius: 12, borderRightWidth: 2, borderBottomWidth: 3, borderColor: '#d99a00' },
+  secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#0b2156' },
   // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
   secretInk: { color: '#ffffff' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },

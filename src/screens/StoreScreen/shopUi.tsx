@@ -263,7 +263,8 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
 /** Plinth fills: the house blue-and-ice, or the Secret Shop's violet-and-lilac. */
 const PLINTH = {
   house: { side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' },
-  secret: { side: '#4a2fa8', line: '#1d1052', band: '#6d4fd6', top: '#e9ddff' },
+  // The vault plinth: navy drum, gold band, a cool white top (no purple).
+  secret: { side: '#163e86', line: '#06102e', band: '#ffcf3b', top: '#eaf3ff' },
   // A worn scene is the ground: no plinth floating on the plaza (art panel round 1).
   none: { side: '', line: '', band: '', top: '' },
 } as const;
@@ -274,7 +275,9 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
   /** An animated backdrop (a Secret Shop scene); wins over backdropUrl and the sky. */
   backdrop?: ReactNode;
   /** false: no sky of its own (the hero card is already the night sky), so there is no seam. A pair of colours paints that sky. */
-  sky?: boolean | readonly [string, string]; rays?: boolean; still: boolean; children?: ReactNode;
+  sky?: boolean | readonly [string, string];
+  /** Slow light rays behind the plinth; a colour tints them (the vault's are soft gold). */
+  rays?: boolean | string; still: boolean; children?: ReactNode;
 }) {
   const sky: readonly [string, string] = typeof paintSky === 'object' ? paintSky : tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'];
   const lightId = useSvgId('stage-light');
@@ -285,7 +288,7 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
       ) : paintSky ? (
         <LinearGradient colors={[...sky]} style={StyleSheet.absoluteFill} />
       ) : null}
-      {rays && <Rays still={still} />}
+      {rays && <Rays still={still} color={typeof rays === 'string' ? rays : undefined} />}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <RadialGradient id={lightId} cx="50%" cy="44%" r="46%">
@@ -314,7 +317,7 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, t
   );
 });
 
-function Rays({ still }: { still: boolean }) {
+function Rays({ still, color = '#ffffff' }: { still: boolean; color?: string }) {
   const spin = useSharedValue(0);
   useEffect(() => {
     if (still) return;
@@ -329,7 +332,7 @@ function Rays({ still }: { still: boolean }) {
   }).join(' ');
   return (
     <Animated.View pointerEvents="none" style={[styles.rays, style]}>
-      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill="#ffffff" fillOpacity={0.1} /></Svg>
+      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill={color} fillOpacity={0.1} /></Svg>
     </Animated.View>
   );
 }
