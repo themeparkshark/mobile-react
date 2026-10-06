@@ -66,6 +66,12 @@ const WAVE2: (typeof HEROES[number] & { batch: number })[] = [
   { batch: 2, id: 9204, name: 'Heartbeat Halo', fx: 'heart_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/heart-red.webp'), season: 'valentines' },
   { batch: 2, id: 9205, name: 'Party Hat', fx: 'party_hat', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/party-hat.webp'), season: 'park_birthday' },
   { batch: 2, id: 9206, name: 'Shimmer Cape', fx: 'holo_cape', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/holo-cape.webp') },
+  { batch: 3, id: 9301, name: 'Top Hat Surprise', fx: 'top_hat', slot: 1, rarity: 4, cost: 280, art: require('../../../assets/fx/magic-top-hat.webp') },
+  { batch: 3, id: 9302, name: 'Snow Beanie', fx: 'snow_beanie', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/snow-beanie.webp'), season: 'winter' },
+  { batch: 3, id: 9303, name: 'Glow Boppers', fx: 'glow_boppers', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/bopper-band.webp') },
+  { batch: 3, id: 9304, name: 'Cocoa Mug', fx: 'cocoa_mug', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/cocoa-mug.webp'), season: 'winter' },
+  { batch: 3, id: 9305, name: 'Love Bug Buddy', fx: 'love_bug', slot: 3, rarity: 3, cost: 140, art: require('../../../assets/fx/love-bug.webp'), season: 'valentines' },
+  { batch: 3, id: 9306, name: 'Thunder Cove', fx: 'storm_surge', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/storm-cove.webp') },
 ];
 const ALL = [...HEROES, ...WAVE2];
 const SLOT_KEYS: Record<number, string> = { 1: 'head_item', 2: 'face_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' };

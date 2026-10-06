@@ -17,6 +17,8 @@ export const WAVE2_KEYS = [
   'pumpkin_pack', 'plaid_backpack', 'swirl_specs', 'bubble_wand', 'pocket_dragon', 'snow_globe',
   // Batch 2 (Dustin: "spinny propeller hat as well as more animated head items")
   'propeller_hat', 'wizard_hat', 'firework_crown', 'heart_halo', 'party_hat', 'holo_cape',
+  // Batch 3
+  'top_hat', 'snow_beanie', 'glow_boppers', 'cocoa_mug', 'love_bug', 'storm_surge',
 ] as const;
 export const FX_KEYS = [...CORE_KEYS, ...WAVE2_KEYS] as const;
 export type FxKey = typeof FX_KEYS[number];
