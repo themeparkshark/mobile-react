@@ -106,7 +106,7 @@ function motion(sample, card = 460, wantMax) {
       const v = { x: q.x - prev.x, y: q.y - prev.y, r: q.r - prev.r, s: q.s - prev.s };
       // Spin loops wrap 360 -> 0: compare modulo a turn.
       const turn = 2 * Math.PI * card * 0.1;
-      if (Math.abs(v.r) > turn / 2) v.r -= Math.sign(v.r) * turn;
+      v.r = ((((v.r + turn / 2) % turn) + turn) % turn) - turn / 2;
       const speed = Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.r), Math.abs(v.s));
       maxV = Math.max(maxV, speed);
       if (prevV) {
@@ -148,7 +148,8 @@ test('calm motion: every kit part and group moves smoothly, with no jolt (veloci
     }
     if (item.shark) {
       const m = motion(t => { const s = kit.kitSharkMove(item, t, NO); return { x: 0, y: s.y, rot: s.rot, s: 1 }; });
-      assert.ok(m.maxV < 1.2 && m.maxDV < 0.08, `${key} moves the shark too hard: ${m.maxV.toFixed(2)} / ${m.maxDV.toFixed(3)}`);
+      rows.push(`${key}.SHARK: ${m.maxV.toFixed(2)} pt/frame, ${m.maxDV.toFixed(3)} change`);
+      assert.ok(m.maxV < 1.2 && m.maxDV < 0.05, `${key} moves the shark too hard: ${m.maxV.toFixed(2)} / ${m.maxDV.toFixed(3)}`);
     }
   }
   fs.mkdirSync(path.join(root, 'tools/tests/.out'), { recursive: true });

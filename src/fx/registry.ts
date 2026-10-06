@@ -12,7 +12,12 @@ export const CORE_KEYS = ['jetpack', 'plasma_blade', 'reef_halo', 'saucer', 'mid
  * Wave 2 (secret-shop/DESIGN-WAVE2.md): the Pumpkin Rocket Pack rides the jetpack rig; the rest
  * are kit items (src/fx/kit.json, drawn by rigs/Kit.tsx). A test checks this list against kit.json.
  */
-export const WAVE2_KEYS = ['pumpkin_pack', 'plaid_backpack', 'swirl_specs', 'bubble_wand', 'pocket_dragon', 'snow_globe'] as const;
+export const WAVE2_KEYS = [
+  // Batch 1
+  'pumpkin_pack', 'plaid_backpack', 'swirl_specs', 'bubble_wand', 'pocket_dragon', 'snow_globe',
+  // Batch 2 (Dustin: "spinny propeller hat as well as more animated head items")
+  'propeller_hat', 'wizard_hat', 'firework_crown', 'heart_halo', 'party_hat', 'holo_cape',
+] as const;
 export const FX_KEYS = [...CORE_KEYS, ...WAVE2_KEYS] as const;
 export type FxKey = typeof FX_KEYS[number];
 

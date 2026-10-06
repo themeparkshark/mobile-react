@@ -60,6 +60,12 @@ const WAVE2: (typeof HEROES[number] & { batch: number })[] = [
   { batch: 1, id: 9104, name: 'Bubble Wand', fx: 'bubble_wand', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/bubble-wand.webp'), season: 'park_birthday' },
   { batch: 1, id: 9105, name: 'Pocket Dragon', fx: 'pocket_dragon', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/dragon-body.webp') },
   { batch: 1, id: 9106, name: 'Snow Globe', fx: 'snow_globe', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/snowglobe-backdrop.webp'), season: 'holiday' },
+  { batch: 2, id: 9201, name: 'Spinny Propeller Hat', fx: 'propeller_hat', slot: 1, rarity: 4, cost: 280, art: require('../../../assets/fx/prop-cap.webp') },
+  { batch: 2, id: 9202, name: 'Wizard Hat', fx: 'wizard_hat', slot: 1, rarity: 4, cost: 280, art: require('../../../assets/fx/wizard-hat.webp') },
+  { batch: 2, id: 9203, name: 'Firework Crown', fx: 'firework_crown', slot: 1, rarity: 4, cost: 280, art: require('../../../assets/fx/fw-crown.webp'), season: 'new_year' },
+  { batch: 2, id: 9204, name: 'Heartbeat Halo', fx: 'heart_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/heart-red.webp'), season: 'valentines' },
+  { batch: 2, id: 9205, name: 'Party Hat', fx: 'party_hat', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/party-hat.webp'), season: 'park_birthday' },
+  { batch: 2, id: 9206, name: 'Shimmer Cape', fx: 'holo_cape', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/holo-cape.webp') },
 ];
 const ALL = [...HEROES, ...WAVE2];
 const SLOT_KEYS: Record<number, string> = { 1: 'head_item', 2: 'face_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' };
