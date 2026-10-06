@@ -22,7 +22,7 @@ import { markerBadge } from './mapMarkerPresentation';
 
 /** TaskMarker: 72x96 box anchored at (0.5, 0.9). */
 export const RIDE_BOX = { width: 72, height: 96, anchor: { x: 36, y: 86.4 } } as const;
-/** The landmark (64), its ground ring and the floating coin's headroom: 72 x 88. */
+/** The landmark (64) down to its island base and ground ring, with the floating coin's headroom: 72 x 88, base on the anchor. */
 export const RIDE_BODY: Rect = { x: -36, y: -84, w: 72, h: 88 };
 /** Coin, key and redeemable finds: a square box anchored at its centre. */
 export const FIND_BOX = { width: 80, height: 80, anchor: { x: 40, y: 40 } } as const;
@@ -232,7 +232,7 @@ export function buildParkLayout(input: ParkLayoutInput): LayoutItem[] {
     items.push({
       id: hauntLayoutId(haunt.key), latitude: haunt.latitude, longitude: haunt.longitude,
       priority: haunt.closed ? PRIORITY.hauntClosed : nightMode ? PRIORITY.hauntOpen : PRIORITY.ride + 10,
-      body: HAUNT_BODY, extras: [HAUNT_CHIP], group: 'haunt', recedeScale: HAUNT_RECEDE,
+      body: HAUNT_BODY, extras: [HAUNT_CHIP], group: 'haunt', recedeScale: HAUNT_RECEDE, recedeUnderPlayer: true,
       forceRecede: haunt.closed ? true : undefined,
     });
   }
@@ -261,6 +261,8 @@ export function buildParkLayout(input: ParkLayoutInput): LayoutItem[] {
 /* ── HUD insets ───────────────────────────────────────────────────────── */
 
 export const FULL = 9999;
+/** Clear space kept around every button (art and chips). */
+export const BUTTON_GAP = 6;
 
 /**
  * Where the HUD sits over the map view: the one status row (and whatever the
@@ -282,8 +284,9 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
   const insets: EdgeInset[] = [{ left: 0, top: 0, width: FULL, height: hudBottom, share: 0.1 }];
   if (left) insets.push({ left: 0, top: left.top, width: left.stub ? 72 : 196, height: left.stub ? 60 : 112 });
   if (right) insets.push({ right: 0, top: right.top, width: right.stub ? 72 : 184, height: right.stub ? 60 : 100 });
-  if (bottomLeft > 0) insets.push({ left: 0, bottom: 0, width: 104, height: bottomLeft });
-  if (bottomRight > 0) insets.push({ right: 0, bottom: 0, width: 150, height: bottomRight });
+  // Buttons are hard insets: no art under them at all (share 0), with a 6 pt gap around them.
+  if (bottomLeft > 0) insets.push({ left: 0, bottom: 0, width: 104 + BUTTON_GAP, height: bottomLeft + BUTTON_GAP, share: 0 });
+  if (bottomRight > 0) insets.push({ right: 0, bottom: 0, width: 150 + BUTTON_GAP, height: bottomRight + BUTTON_GAP, share: 0 });
   return insets;
 }
 
@@ -291,5 +294,9 @@ export function parkMapInsets({ hudBottom, left, right, bottomLeft, bottomRight 
 export function bottomLeftColumnHeight(stores: number): number {
   return 32 + 54 + 80 + Math.max(0, stores) * 83;
 }
-/** Bottom-right column: 32 pt margin, energy and swords pills (~88), the avatar (~96). */
-export const BOTTOM_RIGHT_COLUMN = 32 + 88 + 96;
+/** Bottom-right column: 32 pt margin, the energy pill (44) and the swords pill (44) when the gym and swords are on, the avatar (~96). */
+export function bottomRightColumnHeight(swords: boolean): number {
+  return 32 + (swords ? 88 : 44) + 96;
+}
+/** With both pills (previews and tests). */
+export const BOTTOM_RIGHT_COLUMN = bottomRightColumnHeight(true);

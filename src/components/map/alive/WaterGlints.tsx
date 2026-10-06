@@ -7,7 +7,7 @@
 import { memo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { Marker } from '../Marker';
+import { Marker, PARKED } from '../Marker';
 import { hash01 } from './ambientBudget';
 import { useMapAlive } from './MapAliveContext';
 
@@ -32,14 +32,14 @@ export const WaterGlints = memo(function WaterGlints({ spots }: {
   const count = light.glints > 0.02 && running ? Math.min(caps.waterGlints, spots.length) : 0;
   // A fixed pool of slots keyed by index: panning moves glints between slots instead of
   // mounting new markers mid-list (MapLibre insertReactSubview crash). Empty slots draw nothing.
-  const parked = useRef<{ latitude: number; longitude: number } | null>(null);
-  if (!parked.current && spots.length) parked.current = spots[0];
-  if (!parked.current) return null;
+  // Mounted from the map's first render (parked until water is found), so nothing inserts later.
+  const parked = useRef<{ latitude: number; longitude: number }>(PARKED);
+  if (parked.current === PARKED && spots.length) parked.current = spots[0];
   return <>
     {Array.from({ length: GLINT_SLOTS }, (_, slot) => {
       const spot = slot < count ? spots[slot] : undefined;
       return (
-        <Marker key={`glint-${slot}`} coordinate={spot ?? parked.current!}>
+        <Marker key={`glint-${slot}`} hidden={!spot} coordinate={spot ?? parked.current}>
           <View style={styles.box}>{spot ? <Glint key={spot.seed} clock={clock} seed={spot.seed} strength={0.9 * light.glints} /> : null}</View>
         </Marker>
       );

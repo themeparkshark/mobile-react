@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Marker } from '../map/Marker';
+import { ButtonFade, useUnderButton } from '../map/declutter/Placed';
 import Animated, {
   cancelAnimation,
   useSharedValue,
@@ -18,7 +19,7 @@ interface Props {
   longitude: number;
   expiresAt: string;
   onPress: () => void;
-  /** Mounted but hidden and still (the map_gym_swords flag is off). */
+  /** Mounted but parked and still: an empty pool slot, no gym here yet, or the map_gym_swords flag is off. */
   hidden?: boolean;
 }
 
@@ -31,7 +32,8 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
   // also rests in the calm tier.
   const alive = useMapAlive();
   // Hidden (flag off): no countdown, no bounce, no GIF.
-  const active = alive.active && !hidden, running = alive.running && !hidden;
+  const underButton = useUnderButton(`sword:${id}`);
+  const active = alive.active && !hidden && !underButton, running = alive.running && !hidden && !underButton;
 
   // Calculate time remaining
   useEffect(() => {
@@ -113,8 +115,10 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
       coordinate={{ latitude, longitude }}
       onPress={onPress}
       hidden={hidden}
+      touchEnabled={!underButton}
       anchor={{ x: 0.5, y: 1 }}
     >
+      <ButtonFade hidden={underButton}>
       <View style={styles.container}>
         {/* Glow */}
         <Animated.View style={[styles.glow, glowStyle]} />
@@ -136,6 +140,7 @@ export default function SwordMarker({ id, latitude, longitude, expiresAt, onPres
           </Text>
         </View>
       </View>
+      </ButtonFade>
     </Marker>
   );
 }

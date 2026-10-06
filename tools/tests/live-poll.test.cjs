@@ -127,7 +127,7 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   assert.match(sword, /if \(!active\) return;\s*const interval = setInterval\(updateTime, 1000\)/);
   assert.match(sword, /autoplay=\{running\}/);
   // A vault the declutter hid stops decoding too.
-  assert.match(read('src/screens/ExploreScreen/VaultMarker.tsx'), /autoplay=\{running && placement\.visible\}/);
+  assert.match(read('src/screens/ExploreScreen/VaultMarker.tsx'), /autoplay=\{running && placement\.visible && !!vault\}/);
   const gym = read('src/components/GymBattle/GymMarker.tsx');
   assert.match(gym, /if \(!running\) \{\s*cancelAnimation\(pulseScale\)/);
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');

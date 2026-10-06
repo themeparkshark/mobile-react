@@ -1,8 +1,12 @@
 import { FillLayer, LineLayer, ShapeSource } from '@maplibre/maplibre-react-native';
 import { useId, useMemo } from 'react';
 
+const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
 /** Geographic circle (radius in meters), replacing react-native-maps' <Circle>. */
-export function Circle({ center, radius, fillColor, strokeColor, strokeWidth = 1 }: {
+export function Circle({ center, radius, fillColor, strokeColor, strokeWidth = 1, hidden = false }: {
+  /** Hidden: the source stays mounted with no shape (map sources never mount mid-list). */
+  readonly hidden?: boolean;
   readonly center: { latitude: number; longitude: number };
   readonly radius: number;
   readonly fillColor?: string;
@@ -21,7 +25,7 @@ export function Circle({ center, radius, fillColor, strokeColor, strokeWidth = 1
     return { type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [ring] } };
   }, [center.latitude, center.longitude, radius]);
   return (
-    <ShapeSource id={id} shape={shape}>
+    <ShapeSource id={id} shape={hidden ? EMPTY : shape}>
       <FillLayer id={`${id}-fill`} style={{ fillColor: fillColor ?? 'transparent' }} />
       <LineLayer id={`${id}-line`} style={{ lineColor: strokeColor ?? 'transparent', lineWidth: strokeWidth }} />
     </ShapeSource>

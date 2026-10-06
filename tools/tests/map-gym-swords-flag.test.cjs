@@ -26,17 +26,18 @@ test('map_gym_swords: absent or false reads as off, true turns it on, a failed r
 test('map_gym_swords off: Gym and Sword markers stay mounted but hidden, still and untouchable', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const mapFlags = useMapFlags\(\);/);
-  // Rendered exactly as before (no flag in the mount condition), only hidden.
-  assert.match(explore, /\{gymData && \(\s*<GymMarker\s*hidden=\{!mapFlags\.gymSwords\}/);
-  assert.match(explore, /\{swords\.map\(\(sword\) => \(\s*<SwordMarker\s*key=\{sword\.id\}\s*hidden=\{!mapFlags\.gymSwords\}/);
+  // Always mounted (declutter: fixed slots, never a conditional marker list); the flag only hides them.
+  assert.match(explore, /<GymMarker hidden=\{!gymData \|\| !mapFlags\.gymSwords\}/);
+  assert.match(explore, /\{swordSlots\.map\(\(sword, slot\) => \(\s*<SwordMarker key=\{`sword-\$\{slot\}`\} hidden=\{!sword \|\| !mapFlags\.gymSwords\}/);
   assert.doesNotMatch(explore, /mapFlags\.gymSwords && \(?\s*<(GymMarker|SwordMarker)/);
-  // The Community Center marker is untouched.
-  assert.match(explore, /\{communityCenter && \(\s*<CommunityCenterMarker/);
+  // The Community Center marker: always mounted too, parked with no center.
+  assert.match(explore, /<CommunityCenterMarker center=\{communityCenter\}/);
+  // The hidden swords pill frees its no-go space on the map.
+  assert.match(explore, /bottomRight: bottomRightColumnHeight\(mapFlags\.gymSwords\)/);
   const marker = read('src/components/map/Marker.tsx');
-  // Hidden always takes no touches (the Fin-ister touchEnabled gate is folded into the same expression).
-  assert.match(marker, /pointerEvents=\{(?:hidden \? 'none' : 'auto'|touchEnabled && !hidden \? 'auto' : 'none')\}/);
-  assert.match(marker, /style=\{hidden \? HIDDEN : undefined\}/);
-  assert.match(read('src/components/GymBattle/GymMarker.tsx'), /const running = alive && !hidden;/);
-  assert.match(read('src/components/GymBattle/SwordMarker.tsx'), /const active = alive\.active && !hidden, running = alive\.running && !hidden;/);
+  assert.match(marker, /pointerEvents=\{tappable \? 'auto' : 'none'\}/);
+  assert.match(marker, /style=\{off \? HIDDEN : undefined\}/);
+  assert.match(read('src/components/GymBattle/GymMarker.tsx'), /const running = alive && !hidden( && !underButton)?;/);
+  assert.match(read('src/components/GymBattle/SwordMarker.tsx'), /const active = alive\.active && !hidden( && !underButton)?, running = alive\.running && !hidden( && !underButton)?;/);
   assert.match(read('src/api/endpoints/platform/feature-flags.ts'), /\| 'map_gym_swords'/);
 });

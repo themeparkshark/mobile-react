@@ -77,6 +77,8 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
       {open && <Pressable testID="status-stack-scrim" accessibilityLabel="Close the status list" onPress={() => setOpen(false)}
         style={styles.scrim} />}
       <View style={styles.wrap} pointerEvents="box-none">
+        {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
+        {open && <View pointerEvents="none" style={styles.backing} />}
         <View style={styles.row} pointerEvents="box-none">
           <View style={styles.lead}>{lead.node}</View>
           {rest.length > 0 && (
@@ -118,6 +120,8 @@ function StackGlyph({ ink }: { readonly ink: string }) {
 }
 
 const styles = StyleSheet.create({
+  backing: { position: 'absolute', top: -8, left: -8, right: -8, bottom: -8, borderRadius: 22,
+    backgroundColor: 'rgba(5,16,48,0.94)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)' },
   scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 24, backgroundColor: 'rgba(5,16,48,0.38)' },
   wrap: { position: 'absolute', top: HUD_TOP, left: 12, right: 12, zIndex: 25 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: HUD_ROW_HEIGHT },

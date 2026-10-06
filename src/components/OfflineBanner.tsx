@@ -33,6 +33,9 @@ const MAP_CHIP_TOP = 0.43;
 // card would cover them, so the banner is only the small chip, docked on the
 // right edge of the map under the recenter button like the other map controls.
 export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore']);
+// The map declutter preview mirrors Explore, so its captures show the real docked chip, in internal
+// Release builds too (the route only exists when the preview is registered; store builds never have it).
+const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['MapDeclutterPreview']);
 
 function currentRouteName(): string | undefined {
   try {
@@ -92,7 +95,7 @@ export default function OfflineBanner() {
     sync();
     return navigationRef.addListener('state', sync);
   }, []);
-  const chipOnly = routeName !== undefined && CHIP_ONLY_ROUTES.has(routeName);
+  const chipOnly = routeName !== undefined && (CHIP_ONLY_ROUTES.has(routeName) || DEV_CHIP_ONLY_ROUTES.has(routeName));
   const compact = timedCompact;
 
   // Full card first so the player learns what happened, then the small chip.

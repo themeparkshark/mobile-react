@@ -391,8 +391,12 @@ test('cities, lowercase areas and leftover region numbers never print; catalog n
     assert.equal(copy.cleanName(t), '', t);
   assert.equal(copy.cleanName('Region 5 Champ'), 'Champ');
   assert.equal(copy.cleanName('Orlando Hero'), 'Hero');
-  const catalog = JSON.parse(fs.readFileSync(pathMod.join(repo, '../../tps-prime-time-audit/next-wave/home-hunt-v3/catalog.json'), 'utf8'));
-  for (const name of [...catalog.items.map(i => i.name), ...catalog.sets.map(s => s.name)]) assert.equal(copy.cleanName(name), name, name);
+  // The audit catalog lives outside the repo; resolve it from home so any worktree depth works, and skip when absent (CI).
+  const catalogPath = pathMod.join(require('node:os').homedir(), 'apps/tps-prime-time-audit/next-wave/home-hunt-v3/catalog.json');
+  if (fs.existsSync(catalogPath)) {
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    for (const name of [...catalog.items.map(i => i.name), ...catalog.sets.map(s => s.name)]) assert.equal(copy.cleanName(name), name, name);
+  }
   for (const city of ['Tampa', 'Phoenix', 'Winter Park']) {
     for (const sample of FLEX_SAMPLES) {
       const c = copy.flexCopy(sample.kind, poison(sample.payload, `${city} Legend`));

@@ -129,7 +129,11 @@ export function buildDecorations(input: DecoInput, b: Bounds, zoom: number): Geo
   const features: GeoJSON.Feature[] = [];
   const spacing = treeSpacing(zoom);
   if (spacing === null) return { type: 'FeatureCollection', features };
-  const lat = (b.north + b.south) / 2;
+  // The longitude step uses a latitude snapped to 0.05 degrees (about 5 km), not the view's centre:
+  // with the centre, every camera move nudged every tree a hair, so MapLibre could not match the
+  // rebuilt symbols to the ones on screen and swapped the whole layer (old trees vanished for a
+  // frame, then the new set faded in). Snapped, a tree keeps its exact spot across rebuilds.
+  const lat = Math.round(((b.north + b.south) / 2) * 20) / 20;
   const mLat = 1 / 111320;
   const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
   const green = toAreas(input.green);

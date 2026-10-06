@@ -79,7 +79,7 @@ test('projection: the camera centre is the view centre; bearing turns the map un
 });
 
 test('footprints are the drawn art with its glow: islands 72 x 88, coins and keys 48, the haunt facade 96 x 100 plus its name chip', () => {
-  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -84, w: 72, h: 88 });
+  assert.deepEqual(plain(L.RIDE_BODY), { x: -36, y: -84, w: 72, h: 88 }, 'down to the island base');
   assert.equal(L.COIN_BODY.w, 48);
   assert.equal(L.COIN_BODY.h, 48);
   assert.deepEqual(plain(L.HAUNT_BODY), { x: -48, y: -82, w: 96, h: 100 });
@@ -112,14 +112,24 @@ test('USF and the 154-marker stress set at z15.8, 16.4, 17.6, 18.8 and 19.4: zer
           for (const other of chips) if (other !== chip) assert.equal(s.overlapArea(chip.rect, other.rect), 0, `${name}: chips ${chip.id} and ${other.id}`);
           for (const inset of INSETS) assert.equal(s.overlapArea(chip.rect, inset), 0, `${name}: chip ${chip.id} under the HUD`);
         }
+        // Buttons are hard insets: no art at all under the bottom columns (6 pt gap included).
+        for (const a of art) {
+          if (a.item.pinned) continue;
+          // Fixed art keeps its core (central 120 pt) clear; its wide ring or mist may pass under.
+          const r = a.item.fixed && !a.extra ? { x: a.rect.x + (a.rect.w - Math.min(a.rect.w, s.FIXED_CORE)) / 2,
+            y: a.rect.y + (a.rect.h - Math.min(a.rect.h, s.FIXED_CORE)) / 2, w: Math.min(a.rect.w, s.FIXED_CORE), h: Math.min(a.rect.h, s.FIXED_CORE) } : a.rect;
+          for (const inset of INSETS.filter(inset => inset.share === 0)) {
+            assert.equal(s.overlapArea(r, inset), 0, `${name} z${zoom}: ${a.id} under a button`);
+          }
+        }
         // Nothing vanishes without a reason, and a fold always lands on a shown host.
         for (const item of items) {
           const placement = out.get(item.id);
           if (!placement.visible) assert.ok(['collision', 'folded', 'inset', 'zoom', 'offscreen'].includes(placement.reason));
           if (placement.reason === 'folded') assert.equal(out.get(placement.foldedInto).visible, true);
         }
-        // The Fin-ister encounter is fixed art: always drawn.
-        assert.equal(out.get('encounter').visible, true);
+        // The Fin-ister encounter is fixed art: drawn unless it would sit under a button or off screen.
+        assert.ok(out.get('encounter').visible || ['inset', 'offscreen'].includes(out.get('encounter').reason));
       }
     }
   }
@@ -181,10 +191,19 @@ test('insets: the HUD row hides art that barely reaches under it (10 %), the but
   assert.equal(INSETS[0].share, 0.1);
 });
 
-test('off screen: art wholly outside the view hides (iOS parks it at the top-left); art reaching in stays', () => {
-  const out = s.solveLayout([rideAt(1, 0, 500), rideAt(2, -225, 0), rideAt(3, 0, 0)], frame());
+test('off screen: art more than half outside the view hides (no clipped facade, no lone chip); half in stays; shown art keeps to 60 % off', () => {
+  // ride:2 body x = 196.5 - 225 - 36: 10 % in view. ride:4 is 75 % in.
+  const out = s.solveLayout([rideAt(1, 0, 500), rideAt(2, -225, 0), rideAt(3, 0, 0), rideAt(4, -178.5, 0)], frame());
   assert.equal(out.get('ride:1').reason, 'offscreen');
-  assert.equal(out.get('ride:2').visible, true);
+  assert.equal(out.get('ride:2').reason, 'offscreen');
+  assert.equal(out.get('ride:4').visible, true);
+  // 45 % in view: a fresh marker waits, a shown one stays (hysteresis).
+  const edge = [rideAt(5, -200.1, 0)];
+  assert.equal(s.solveLayout(edge, frame()).get('ride:5').visible, false);
+  const shown = new Map([['ride:5', { visible: true, scale: 1, folded: 0, foldedInto: null, reason: null }]]);
+  assert.equal(s.solveLayout(edge, frame(), { previous: shown, previousZoom: 17.6 }).get('ride:5').visible, true);
+  // The z17.6 capture: a haunt more than half off the left edge hides with its name chip.
+  assert.equal(s.solveLayout([hauntAt('robot', -230, 0, { extras: [L.HAUNT_CHIP] })], frame()).get('haunt:robot').reason, 'offscreen');
 });
 
 test('no popping: during a gesture shown markers never change; a small settle keeps them; a zoom change re-solves by priority', () => {
@@ -199,6 +218,21 @@ test('no popping: during a gesture shown markers never change; a small settle ke
   assert.equal(settled.get('ride:1').visible, true, 'a settle at the same zoom keeps what is on screen');
   const zoomed = s.solveLayout([a, moved], frame({ zoom: 18.2 }), { previous: held, previousZoom: 17.6 });
   assert.equal(zoomed.get('ride:2').visible, true, 'a new zoom lets priority win again');
+});
+
+test('during a gesture chips neither move nor appear; they keep last pass\'s slot until the settle', () => {
+  const coin = coinAt(1, 0, 0);
+  const blocker = { id: 'x', ...at(0, -50), priority: 900, fixed: true, body: { x: -40, y: -20, w: 80, h: 40 } };
+  const first = s.solveLayout([coin], frame());
+  assert.equal(first.get('coin:1').tag.side, 'top');
+  // Mid-pan something now sits where the chip is: held, it stays put instead of jumping.
+  const held = s.solveLayout([coin, blocker], frame(), { previous: first, previousZoom: 17.6, hold: true });
+  assert.equal(held.get('coin:1').tag.side, 'top');
+  const fresh = s.solveLayout([coinAt(2, 60, 0)], frame(), { previous: new Map([['coin:2', s.VISIBLE]]), previousZoom: 17.6, hold: true });
+  assert.equal(fresh.get('coin:2').tag, null, 'no chip appears mid-gesture');
+  const settled = s.solveLayout([coin, blocker], frame(), { previous: held, previousZoom: 17.6 });
+  assert.notEqual(settled.get('coin:1').tag.side, 'top', 'the settle moves it');
+  assert.ok(settled.get('coin:1').tag.leader, 'a chip beside its art points at it');
 });
 
 test('chip sides are sticky: last pass\'s side is kept while it is free', () => {
@@ -275,6 +309,148 @@ test('ride chips: one chip per island, badge first, sized to its text', () => {
   assert.equal(L.rideTagKind({ badge: 'new', showTimer: true }), 'timer');
   assert.equal(L.rideTagKind({ badge: 'level', showTimer: false }), null);
   assert.ok(L.rideTagSize('limited', 'LIMITED · LEAVES OCT 31').w >= 150);
+});
+
+test('the player shark standing on a haunt recedes it (never hides it); it grows back once the shark walks off', () => {
+  const player = (dx, dy) => ({ id: 'player', ...at(dx, dy), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } });
+  const haunt = hauntAt('barn', 0, 0, { recedeUnderPlayer: true });
+  const on = s.solveLayout([haunt, player(-30, -20)], frame());
+  assert.equal(on.get('haunt:barn').visible, true);
+  assert.equal(on.get('haunt:barn').scale, L.HAUNT_RECEDE, 'the haunt yields to the shark');
+  // A small step keeps it receded (no flicker); walking well off grows it back at the same zoom.
+  const near = s.solveLayout([haunt, player(-52, -20)], frame(), { previous: on, previousZoom: 17.6 });
+  assert.equal(near.get('haunt:barn').scale, L.HAUNT_RECEDE);
+  const off = s.solveLayout([haunt, player(-160, -20)], frame(), { previous: near, previousZoom: 17.6 });
+  assert.equal(off.get('haunt:barn').scale, 1);
+  // Rides do not opt in: the shark may stand on an island.
+  const ride = s.solveLayout([rideAt('a', 0, 0), player(-10, -20)], frame());
+  assert.equal(ride.get('ride:a').scale, 1);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/parkMapLayout.ts'), 'utf8'),
+    /group: 'haunt', recedeScale: HAUNT_RECEDE, recedeUnderPlayer: true/, 'haunts opt in');
+});
+
+test('z15.8: island footprints line up with the art, and an island base clears the energy pill by the 6 pt gap', () => {
+  // TaskMarker: a 72 x 96 box, art bottom at 86 (paddingBottom 10), anchored at 86.4. The body reaches the base.
+  assert.equal(L.RIDE_BOX.anchor.y, 86.4);
+  const base = 86 - L.RIDE_BOX.anchor.y;
+  assert.ok(L.RIDE_BODY.y + L.RIDE_BODY.h >= base && L.RIDE_BODY.y + L.RIDE_BODY.h <= base + 6, 'body bottom sits on the island base');
+  assert.ok(L.RIDE_BODY.y <= -L.RIDE_BOX.anchor.y + 4, 'body top covers the landmark and coin headroom');
+  const f = frame({ zoom: 15.8 });
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  assert.ok(pill, 'the bottom-right column (energy, swords, avatar) is a hard inset');
+  const rideScreen = (y, x = pill.x + 40) => {
+    const k = mpp(15.8);
+    return { id: 'ride:rocket', latitude: USF.latitude - ((y - 350) * k) / 111320,
+      longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+      priority: 300, body: L.RIDE_BODY, group: 'ride' };
+  };
+  // The inset already carries the 6 pt gap: a base 2 pt above it would put art within 4 pt of the pill.
+  assert.equal(s.solveLayout([rideScreen(pill.y - 2)], f, { insets: INSETS }).get('ride:rocket').visible, false);
+  const clear = s.solveLayout([rideScreen(pill.y - 6)], f, { insets: INSETS });
+  assert.equal(clear.get('ride:rocket').visible, true, 'base 6 pt above the gap line: shown, 12 pt from the pill');
+});
+
+test('marker art is anchored where the solver thinks: the anchor is re-sent after layout, scale origins are numbers', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const marker = fs.readFileSync(path.join(__dirname, '../../src/components/map/Marker.tsx'), 'utf8');
+  // MLRNPointAnnotation drops an anchor that arrives before the view has a size (new-arch interop):
+  // islands drew centred on their point, about 38 pt low.
+  assert.match(marker, /anchor=\{laidOut \? a : \{ x: a\.x, y: a\.y \+ ANCHOR_NUDGE \}\}/);
+  assert.match(marker, /onLayout=\{onLayout\}/);
+  const placed = fs.readFileSync(path.join(__dirname, '../../src/components/map/declutter/Placed.tsx'), 'utf8');
+  // RN parses transform-origin strings with an integer-only regex ("86.4px" read as 4 px).
+  assert.match(placed, /transformOrigin: anchor \? \[anchor\.x, anchor\.y, 0\] : 'center'/);
+  assert.doesNotMatch(placed, /transformOrigin: [^\n]*px/);
+});
+
+test('zooming out mid-gesture folds what now collides (fade only, no scale or chip moves); a plain hold keeps everything', () => {
+  // Two rides 80 pt apart at z17.6 collide once the camera is at z16.4.
+  const a = rideAt('a', -40, 0, { priority: 320, tag: { w: 56, h: 22 } });
+  const b = rideAt('b', 40, 0, { priority: 300 });
+  const settled = s.solveLayout([a, b], frame());
+  assert.equal(settled.get('ride:a').visible && settled.get('ride:b').visible, true);
+  const far = frame({ zoom: 16.4 });
+  const held = s.solveLayout([a, b], far, { previous: settled, previousZoom: 17.6, hold: true });
+  assert.equal(held.get('ride:b').visible, true, 'a plain held pass never changes shown art');
+  const folded = s.solveLayout([a, b], far, { previous: settled, previousZoom: 17.6, hold: true, fold: true });
+  assert.equal(folded.get('ride:a').visible, true);
+  assert.equal(folded.get('ride:b').reason, 'folded', 'the weaker island folds into the stronger one');
+  assert.equal(folded.get('ride:a').folded, 1, '+1 on the host');
+  assert.equal(folded.get('ride:a').scale, settled.get('ride:a').scale, 'no scale change mid-gesture');
+  const settledTag = settled.get('ride:a').tag, foldedTag = folded.get('ride:a').tag;
+  assert.ok(foldedTag === null || (foldedTag.x === settledTag.x && foldedTag.y === settledTag.y), 'the chip never moves mid-gesture');
+  const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/map/declutter/useMapDeclutter.ts'), 'utf8');
+  assert.match(hook, /const fold = holding\.current && lastZoom\.current !== null && full\.zoom < lastZoom\.current - FOLD_DURING_ZOOM;/);
+});
+
+test('fixed art (encounter, gym, boss, the reef under the encounter) fades under any inset instead of drawing beneath it (z15.8, z18.2)', () => {
+  const f = frame({ zoom: 15.8 });
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  const fixedAt = (id, y, x, extra = {}, k = mpp(15.8)) => ({ id, latitude: USF.latitude - ((y - 350) * k) / 111320,
+    longitude: USF.longitude + ((x - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+    priority: L.PRIORITY.fixed, fixed: true, ...extra });
+  const encBody = L.encounterBody(40, USF.latitude);
+  const enc = (y, zoom = 15.8, x = pill.x + 60) => fixedAt('encounter', y, x, { body: encBody(zoom), bodyFor: encBody }, mpp(zoom));
+  // Centre 20 pt above the energy pill: its core reaches the button, so it fades (reason inset).
+  const near = s.solveLayout([enc(pill.y + 6 - 20)], f, { insets: INSETS }).get('encounter');
+  assert.equal(near.visible, false);
+  assert.equal(near.reason, 'inset');
+  // Centre 140 pt above: the core (half of FIXED_CORE = 60 pt) clears the gap line by 80 pt: drawn.
+  assert.ok(140 - s.FIXED_CORE / 2 > s.FIXED_KEEP, 'the 140 pt case is genuinely clear');
+  assert.equal(s.solveLayout([enc(pill.y + 6 - 140)], f, { insets: INSETS }).get('encounter').visible, true);
+  // z18.2: the ring box is ~300 pt; a ring edge under the pill does not hide it while the critter is clear.
+  const z18 = frame({ zoom: 18.2 });
+  assert.ok(encBody(18.2).h > 2 * 100, 'the ring reaches under the pill in this case');
+  assert.equal(s.solveLayout([enc(pill.y + 6 - 100, 18.2, pill.x - 30)], z18, { insets: INSETS }).get('encounter').visible, true);
+  // Any inset, not just buttons: the offline chip under the compass and the HUD row hide fixed art too.
+  const chip = { x: 393 - 16 - 44, y: 300, w: 44, h: 44, share: 0.35 };
+  const underChip = s.solveLayout([enc(322, 18.2, 393 - 16 - 22)], z18, { insets: [...INSETS, chip] }).get('encounter');
+  assert.equal(underChip.visible, false, 'the critter never draws under the offline chip');
+  assert.equal(underChip.reason, 'inset');
+  assert.equal(s.solveLayout([enc(322, 18.2, 393 - 16 - 22)], z18, { insets: INSETS }).get('encounter').visible, true, 'without the chip it draws');
+  const gym = fixedAt('gym', 40, 196.5, { body: L.GYM_BODY });
+  assert.equal(s.solveLayout([gym], f, { insets: INSETS }).get('gym').reason, 'inset', 'not under the HUD row either');
+  // The selected ride (pinned) always draws.
+  const pinnedUnder = { ...rideAt('sel', 0, 0), pinned: true, latitude: enc(pill.y + 20).latitude, longitude: enc(pill.y + 20).longitude };
+  assert.equal(s.solveLayout([pinnedUnder], f, { insets: INSETS }).get('ride:sel').visible, true);
+});
+
+test('fixed art obeys the zoom limit and the half-off-screen rule, and never blinks at an inset edge under GPS jitter', () => {
+  const host = { key: 'kelp', ...at(0, 0, 15.8), radius: 40 };
+  const items = L.buildParkLayout({ rides: [], finds: [], haunts: [], reefs: [host], fixed: [{ id: 'encounter', ...at(0, 0, 15.8), kind: 'encounter', radius: 40 }], nightMode: true });
+  const reef = items.find(i => i.id === 'reef:kelp');
+  assert.equal(reef.fixed, true);
+  assert.equal(s.solveLayout(items, frame({ zoom: 15.8 })).get('reef:kelp').reason, 'zoom', 'the host reef keeps its zoom limit: no empty box at z15.8');
+  assert.equal(s.solveLayout(items, frame({ zoom: 17.6 })).get('reef:kelp').visible, true);
+  // Half off screen: hidden like any marker.
+  const gymAt = dx => ({ id: 'gym', ...at(dx, 0), priority: L.PRIORITY.fixed, fixed: true, body: L.GYM_BODY });
+  assert.equal(s.solveLayout([gymAt(-205)], frame()).get('gym').reason, 'offscreen');
+  // GPS jitter: the gym walks 1 pt at a time across the energy pill's top edge and back; it changes
+  // state at most once each way (6 pt hysteresis), never flickering on a 1 to 3 pt wobble.
+  const pill = INSETS.find(inset => inset.share === 0 && inset.x > 200);
+  const k = mpp(17.6);
+  const gymY = y => ({ id: 'gym', latitude: USF.latitude - ((y - 350) * k) / 111320,
+    longitude: USF.longitude + ((pill.x + 75 - 196.5) * k) / (111320 * Math.cos(USF.latitude * Math.PI / 180)),
+    priority: L.PRIORITY.fixed, fixed: true, body: L.GYM_BODY });
+  // Gym core: 90 x 100 body, core is the body (both under 120): bottom edge = anchor + 20.
+  const edgeY = pill.y - 20;
+  let prev = null, changes = 0, last = null;
+  const wobble = [-12, -10, -8, -6, -4, -2, 0, 2, 1, 3, 2, 4, 3, 5, 4, 6, 5, 7, 8, 10, 9, 10, 8, 6, 4, 2, 3, 1, 2, 0, -2, -1, -3, -2, -4, -6, -8, -10, -12];
+  for (const d of wobble) {
+    const out = s.solveLayout([gymY(edgeY + d)], frame(), { insets: INSETS, previous: prev, previousZoom: 17.6 });
+    const v = out.get('gym').visible;
+    if (last !== null && v !== last) changes++;
+    last = v; prev = out;
+  }
+  assert.equal(changes, 2, `exactly one hide and one show across the sweep (got ${changes})`);
+  // And a few points of jitter either side of the edge never changes state.
+  let p2 = s.solveLayout([gymY(edgeY - 10)], frame(), { insets: INSETS });
+  const start = p2.get('gym').visible;
+  assert.equal(start, true);
+  for (const d of [-1, 2, -3, 4, -2, 3, 5, -1]) {
+    p2 = s.solveLayout([gymY(edgeY + d)], frame(), { insets: INSETS, previous: p2, previousZoom: 17.6 });
+    assert.equal(p2.get('gym').visible, start, `jitter at ${d} pt`);
+  }
 });
 
 test('the reef the Fin-ister encounter swims at is drawn with it (fixed), never hidden under the encounter; other reefs unchanged', () => {

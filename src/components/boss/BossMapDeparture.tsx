@@ -13,7 +13,7 @@ import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import type { BossMapImpact } from '../../services/boss/mapImpact';
 import { BRAND, GameIcon } from '../../ui';
-import { Marker } from '../map/Marker';
+import { Marker, PARKED } from '../map/Marker';
 import RideTeamFlag from '../map/RideTeamFlag';
 import { BOSS_ART, BOSS_FX } from './bossArt';
 
@@ -42,6 +42,17 @@ export const MAP_BEAT = {
  * flag and fighters in place, and a shorter hold before handing back to the map.
  */
 export default function BossMapDeparture({ impact, flag, onComplete }: {
+  /** Null between boss moments: the marker stays mounted, parked and empty (MapView children never mount mid-list). */
+  readonly impact: BossMapImpact | null;
+  readonly flag?: RideControlClaim | null;
+  readonly onComplete: (key: string) => void;
+}) {
+  return <Marker hidden={!impact} coordinate={impact?.coordinate ?? PARKED} anchor={{ x: 0.5, y: RIDE.y / H }}>
+    {impact ? <DepartureBody key={impact.key} impact={impact} flag={flag} onComplete={onComplete} /> : <View style={styles.parked} />}
+  </Marker>;
+}
+
+export function DepartureBody({ impact, flag, onComplete }: {
   readonly impact: BossMapImpact;
   /** The verified claim from useBossMapMoment; falls back to the receipt's own claim. */
   readonly flag?: RideControlClaim | null;
@@ -148,7 +159,7 @@ export default function BossMapDeparture({ impact, flag, onComplete }: {
   // Around the landmark, never on it: left, right, and up high on the left.
   const spots = [{ x: RIDE.x - 104, y: RIDE.y - 78 }, { x: RIDE.x + 104, y: RIDE.y - 70 }, { x: RIDE.x - 92, y: RIDE.y - 160 }];
 
-  return <Marker coordinate={impact.coordinate} anchor={{ x: 0.5, y: RIDE.y / H }}>
+  return (
     <View style={styles.wrap} accessibilityLabel={`Boss cleared at ${impact.rideName}. Your ${impact.yourDamage} damage helped.${team
       ? held ? ` ${teamName(team)} held the ride.` : ` ${teamName(team)} raised its flag.` : ''}`}>
       {kind === 'kraken' && !reduced && <>
@@ -175,10 +186,11 @@ export default function BossMapDeparture({ impact, flag, onComplete }: {
       ))}
       {!reduced && <ParticleField ref={particles} width={W} height={H} style={StyleSheet.absoluteFill} />}
     </View>
-  </Marker>;
+  );
 }
 
 const styles = StyleSheet.create({
+  parked: { width: 1, height: 1 },
   wrap: { width: W, height: H },
   boss: { position: 'absolute', left: RIDE.x + 34 - 34, top: RIDE.y - 92 - 34, width: 68, height: 68, zIndex: 3 },
   bossReduced: { opacity: 0.45 },

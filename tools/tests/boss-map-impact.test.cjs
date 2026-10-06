@@ -102,11 +102,12 @@ function departure(boss,reduced,extra={}){
  const completed=[],sounds=[],haptics=[],bursts=[];
  const view=runtime('src/components/boss/BossMapDeparture.tsx',{
   '../../hooks/useReducedGameMotion':{default:()=>reduced},'./bossArt':{BOSS_ART:{[boss]:'approved-art'},BOSS_FX:{[boss]:{particles:['#fff']}}},
-  '../map/Marker':{Marker:'Marker'},'../map/RideTeamFlag':{default:'RideTeamFlag'},'../../ui':uiStub,
+  '../map/Marker':{Marker:'Marker',PARKED:{latitude:0,longitude:0}},'../map/RideTeamFlag':{default:'RideTeamFlag'},'../../ui':uiStub,
   '../../gamekit/Particles':{ParticleField:'ParticleField'},'../../gamekit/SFX':{playSfx:v=>sounds.push(v)},'../../gamekit/Haptics':{haptic:v=>haptics.push(v)},
   '../../constants/teams':{TEAMS:{mouse:{color:'#F59E0B'},globe:{color:'#22C55E'},shark:{color:'#3B82F6'}},teamName:t=>`Team ${t}`},
  },{impact:{...m.createBossMapImpact(5,1,{...raid(),top:[{username:'finn',damage:900,you:true,team:'mouse'},{username:'ana',damage:500,you:false,team:'globe'}]}),boss},
-  onComplete:key=>completed.push(key),...extra});
+  onComplete:key=>completed.push(key),...extra},{},{exportName:'DepartureBody'});
+ // The always-mounted marker shell (parked between moments) wraps this body; the body is the beat.
  return {view,completed,sounds,haptics,bursts};
 }
 test('each departure is one bounded signature beat: exit, flag and fighters, then hands back once; unmount cancels it',()=>{
