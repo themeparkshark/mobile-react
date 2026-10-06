@@ -313,7 +313,7 @@ export default function DefendMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: friendlyActionError(error, 'Something went wrong!'),
+        message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
       });
       setGameState('finished');
     }

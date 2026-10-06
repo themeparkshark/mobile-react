@@ -646,7 +646,7 @@ export default function CoinLevelingModal({
                         marginBottom: 10,
                         textAlign: 'center',
                       }}>
-                        Upgrade Cost
+                        Level-Up Cost
                       </Text>
 
                       {/* Cost Row */}
@@ -720,7 +720,7 @@ export default function CoinLevelingModal({
                         marginBottom: 8,
                         textAlign: 'center',
                       }}>
-                        Your Balance
+                        You Have
                       </Text>
 
                       {/* Balance Row */}
@@ -831,10 +831,10 @@ export default function CoinLevelingModal({
                     {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && (
                       <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
                         accessibilityRole="button" hitSlop={8}
-                        accessibilityLabel={!hasParts ? 'Get Park Tickets for more ride challenges' : 'See Supplies packs with Energy'}>
+                        accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
                         <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#0B5FA8', textAlign: 'center',
                           marginTop: 6, textDecorationLine: 'underline' }}>
-                          {!hasParts ? 'Out of Tickets for ride challenges? Get Tickets' : 'Short on Energy? Supplies packs include Energy'}
+                          {!hasParts ? 'Out of tickets? Get more in Supplies (real money)' : 'Need energy? Supplies packs have it (real money)'}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -940,7 +940,7 @@ export default function CoinLevelingModal({
                             letterSpacing: 1,
                             marginBottom: 6,
                           }}>
-                            New Perks Unlocked
+                            New Bonuses Unlocked
                           </Text>
                           {rideCoin.next_level_perks.map((perk) => (
                             <Text key={perk.id} style={{
@@ -989,11 +989,11 @@ export default function CoinLevelingModal({
                         textAlign: 'center',
                         marginBottom: 12,
                       }}>
-                        This coin has reached maximum power!
+                        This coin is at its top level!
                       </Text>
                       {typeof rideCoin.parts_banked === 'number' && (
                         <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#19496B', textAlign: 'center', marginBottom: 8 }}>
-                          Parts banked: {rideCoin.parts_banked}{rideCoin.polish?.next_cost ? `. Next Trophy Polish: ${rideCoin.polish.next_cost} Parts` : ''}
+                          Parts saved: {rideCoin.parts_banked}{rideCoin.polish?.next_cost ? `. Next Trophy Polish: ${rideCoin.polish.next_cost} Parts` : ''}
                         </Text>
                       )}
 
@@ -1023,7 +1023,7 @@ export default function CoinLevelingModal({
                     }}>
                       {rideCoin.editions?.length
                         ? `${rideCoin.editions.length} project editions earned`
-                        : `${rideCoin.current_level}/${rideCoin.max_level} levels mastered`}
+                        : `Level ${rideCoin.current_level} of ${rideCoin.max_level}`}
                     </Text>
 
                     <YellowButton text="Nice!" onPress={handleClose} />

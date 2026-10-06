@@ -100,7 +100,7 @@ export default function TaskCoinModal({
         setCoinUnavailable(true);
         setVisible(true);
       } else {
-        gameAlert('Coin unavailable', 'Your coin could not load. Try again when your connection returns.', undefined, { icon: 'retry' });
+        gameAlert('Coin did not load', 'Your coin did not load. Check your internet and try again.', undefined, { icon: 'retry' });
       }
     } finally {
       opening.current = false;
@@ -128,7 +128,7 @@ export default function TaskCoinModal({
     <>
       <Button onPress={() => handleOpen()} accessibilityLabel={readOnly
         ? `${task.name} ride coin, collected${knownLevel ? `, ${coinLevelLabel(shownLevel)}` : ''}. View collection details`
-        : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. View mastery and upgrades`}>
+        : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. See how to level it up`}>
         {trigger ?? <ShelfCoin coinUrl={task.coin_url} level={shownLevel} size={size} phase={phase} igniteKey={ignite} />}
       </Button>
 
@@ -155,7 +155,7 @@ export default function TaskCoinModal({
                 textShadowRadius: 0.1 }}>{task.name}</Text>
               {coinUnavailable && <Text style={{ color: '#e4f7ff', fontFamily: 'Knockout',
                 fontSize: 16, textAlign: 'center', marginTop: 12 }}>
-                Upgrade details are unavailable right now. Queue games are still ready to play.
+                Could not load this coin’s level-up info. Line games still work.
               </Text>}
               {!coinUnavailable && <View style={{ backgroundColor: '#ffcf3b', borderRadius: 12,
                 borderBottomWidth: 4, borderBottomColor: '#d99a00',

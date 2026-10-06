@@ -171,17 +171,17 @@ export default function HomeLive({ top = 12, onBarChange }: {
               <Text style={styles.cheerLine}>
                 {live.cheers_left > 0
                   ? `${live.cheers_left} defend${live.cheers_left === 1 ? '' : 's'} left today  ·  keep your team's rides from home`
-                  : 'Out of defends today  ·  they reset tomorrow'}
+                  : 'No defends left today  ·  more tomorrow'}
               </Text>
             </View>
           )}
           <PushSoftAsk />
           <ScrollView style={{ maxHeight: 380 }}>
             {yours && live.parks.every(p => p.cheers.length === 0) && live.parks.length > 0 && (
-              <Text style={styles.hint}>Rides your team holds (with coins you own) show up here to defend. Taking rides happens at the park!</Text>
+              <Text style={styles.hint}>Your team’s rides show up here if you own their coin. Defend them from home. Win new rides at the park!</Text>
             )}
             {live.parks.length === 0 && (
-              <Text style={styles.empty}>Quiet at the parks right now. Bosses surface five times a day at every park.</Text>
+              <Text style={styles.empty}>Quiet at the parks right now. Bosses show up five times a day at every park.</Text>
             )}
             {live.parks.map(park => (
               <View key={park.park_id} style={styles.park}>

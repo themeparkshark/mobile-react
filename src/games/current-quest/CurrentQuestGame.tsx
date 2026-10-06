@@ -1283,7 +1283,7 @@ export default function CurrentQuestGame({
       setSummary({
         title: done ? (place === 1 ? (tie ? 'Shared crown!' : 'Ghost Race won!') : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
         grid: shellsRef.current.map((x) => x.slice()), stars, failed: false, newBest: false, nextStar: null,
-        stamp: tie && place === 1 ? 'DEAD HEAT' : null, coinPour: 0, line: `Ranked on shells, then strokes, undos, Riptides and golden reach. Never time.`,
+        stamp: tie && place === 1 ? 'DEAD HEAT' : null, coinPour: 0, line: 'Most shells wins. Ties go to fewer strokes, then fewer undos. Time never counts.',
         podium, shareLabel: null,
       });
       setResult({
@@ -1828,7 +1828,7 @@ export default function CurrentQuestGame({
     else if (ch === 's') text = b.P ? `Sandbar: ${low ? 'dry' : 'underwater'} now, ${low ? 'floods' : 'dries'} in ${k} move${k === 1 ? '' : 's'}` : 'Sandbar';
     else if ('^>v<'.includes(ch)) text = `Current flowing ${['up', 'right', 'down', 'left']['^>v<'.indexOf(ch)]}: free ride, can't swim against it`;
     if (b.pearls.includes(i) && !(v.mask & (1 << b.pearls.indexOf(i)))) text = `Pearl. ${text === 'Open water' ? 'Needed to open the chest' : text}`;
-    if (i === b.golden && !v.golden) text = 'Golden pearl: optional, worth a shell';
+    if (i === b.golden && !v.golden) text = 'Golden pearl: a bonus shell if you grab it';
     const p = cellCenter(l, i);
     setInspect({ text, x: p.x, y: p.y });
     CQH.tick();
@@ -2169,7 +2169,7 @@ export default function CurrentQuestGame({
   const run = runRef.current;
   const board = run && boards ? boards[Math.min(voyageIdx, boards.length - 1)] : null;
   const objective = showdown
-    ? 'Ghost Race: 3 voyages vs the crew. Par clears send Splashes.'
+    ? 'Ghost Race: 3 voyages vs the crew. Clear one at par to Splash a rival.'
     : context === 'daily' ? `Daily Tide #${dailyNumber(today)}: one scored try today.`
       : context === 'chart' ? `${node?.name ?? 'Chart'}: one voyage.`
         : trial ? 'Every stroke counts. A life ring gives 2 strokes.' : `${voyagesN} voyages. Beat par, find the gold.`;

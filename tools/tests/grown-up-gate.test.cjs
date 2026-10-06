@@ -25,6 +25,7 @@ function gateModule(store = {}, navigated = [], dev = true) {
       getItem: async k => store[k] ?? null, setItem: async (k, v) => { store[k] = v; } } },
     react: { useEffect() {}, useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
+    '../ui/iconNames': {}, './RealMoneyMark': { default: 'RealMoneyMark' },
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
     '../RootNavigation': { navigate: (...args) => navigated.push(args) },
     '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
@@ -49,7 +50,7 @@ test('the grown-up question: 2-digit times 1-digit, too hard for a 9 or 10 year 
   const ui = read('src/components/GrownUpGate.tsx');
   assert.match(ui, /const KEYS = \['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'\] as const;/, 'typed on a pad, no choices');
   assert.match(ui, /'Ask a grown-up'/);
-  assert.match(ui, /Let's try again in a little while\./, 'calm, nothing scolds');
+  assert.match(ui, /That wasn't right\. A grown-up can try again in 30 seconds\./, 'calm, says what happened and when');
 });
 
 test('a wrong answer rests the gate for 30 s, and the rest survives a relaunch', async () => {
@@ -60,7 +61,7 @@ test('a wrong answer rests the gate for 30 s, and the rest survives a relaunch',
   assert.equal(Number(store['grown-up-gate:rest-until']), 1000 + gate.GATE_REST_MS);
   const relaunched = gateModule(store);
   // No host mounted: the gate answers no, so a door never opens ungated.
-  assert.equal(await relaunched.askGrownUp(5, 2000), false);
+  assert.equal(await relaunched.askGrownUp(null, 5, 2000), false);
 });
 
 test('the paywall decides the gate from the signed-in player, not from the button', async () => {
@@ -75,7 +76,7 @@ test('the paywall decides the gate from the signed-in player, not from the butto
   assert.match(read('src/context/AuthProvider.tsx'), /setGateVipMember\(player\?\.is_subscribed === true\)/);
   assert.doesNotMatch(read('src/components/profile/StatusBadges.tsx'), /member: own/, 'never decided by whose badge was tapped');
   const paywall = read('src/screens/MembershipScreen.tsx');
-  assert.match(paywall, /if \(!\(await grownUpForNextStep\('vip'\)\)\) return;\s*Haptics[\s\S]{0,120}const outcome = await buyVip\(plan\);/);
+  assert.match(paywall, /if \(!\(await grownUpForNextStep\('vip', Date\.now\(\), vipGateReason\(plan\)\)\)\) return;\s*Haptics[\s\S]{0,120}const outcome = await buyVip\(plan\);/);
   assert.match(paywall, /if \(!plan \|\| busy \|\| buying\.current\) return;\s*buying\.current = true;/);
 });
 
@@ -83,15 +84,15 @@ test('a pass covers only its own flow\'s next step, once; other doors ask again;
   const src = read('src/components/GrownUpGate.tsx');
   // Only openMembership grants a pass, and only for the 'vip' flow.
   assert.equal((strip(src).match(/pass = \{/g) || []).length, 1);
-  assert.match(src, /if \(!\(await askGrownUp\(\)\)\) return false;\s*\/\/[^\n]*\n\s*pass = \{ flow: 'vip', until: Date\.now\(\) \+ GATE_PASS_MS \};/);
+  assert.match(src, /if \(!\(await askGrownUp\(await vipDoorReason\(\)\)\)\) return false;\s*\/\/[^\n]*\n\s*pass = \{ flow: 'vip', until: Date\.now\(\) \+ GATE_PASS_MS \};/);
   // Single use, flow-matched, fresh.
-  assert.match(src, /const held = pass;\s*pass = null;[^\n]*\n\s*if \(held && held\.flow === flow && now < held\.until\) return true;\s*return askGrownUp\(\);/);
+  assert.match(src, /const held = pass;\s*pass = null;[^\n]*\n\s*if \(held && held\.flow === flow && now < held\.until\) return true;\s*return askGrownUp\(reason\);/);
   assert.match(src, /if \(!ok\) \{\s*pass = null;/, 'a wrong answer cancels any pass');
   // The pass is read in exactly one place, the paywall's Buy; every other door asks fresh.
   assert.deepEqual(where(/grownUpForNextStep\(/).filter(f => f !== 'src/components/GrownUpGate.tsx'), ['src/screens/MembershipScreen.tsx']);
   assert.deepEqual(where(/ensureGrownUp/), [], 'no blanket pass helper');
   const external = strip(read('src/services/external.ts'));
-  assert.equal((external.match(/await askGrownUp\(\)/g) || []).length, 3, 'each exit asks');
+  assert.equal((external.match(/await askGrownUp\((exitReason\(url\)|SHARE)\)/g) || []).length, 3, 'each exit asks');
   const gate = gateModule();
   // No host mounted: a fresh ask answers no, and an unused pass of another flow never opens anything.
   assert.equal(await gate.grownUpForNextStep('vip'), false);
@@ -135,7 +136,7 @@ test('real money is bought in exactly two gated places', () => {
   assert.deepEqual(where(/\bbuyShopProduct\(/).filter(f => f !== 'src/services/purchases.ts'), ['src/screens/StoreScreen/SuppliesShop.tsx']);
   const supplies = read('src/screens/StoreScreen/SuppliesShop.tsx');
   // A ref, so a second tap while the gate is up never starts a second purchase.
-  assert.match(supplies, /if \(busy \|\| buyingRef\.current \|\| !catalog\) return;\s*buyingRef\.current = true;\s*try \{[\s\S]{0,140}if \(!\(await askGrownUp\(\)\)\) return;\s*await buyNow\(product, catalog\);/);
+  assert.match(supplies, /if \(busy \|\| buyingRef\.current \|\| !catalog\) return;\s*buyingRef\.current = true;\s*try \{[\s\S]{0,300}if \(!\(await askGrownUp\(gateReasonFor\(product, prices\[product\.product_id\]\)\)\)\) return;\s*await buyNow\(product, catalog\);/);
 });
 
 test('nothing leaves the app without a grown-up: one helper, an exact allowlist', () => {
@@ -146,7 +147,7 @@ test('nothing leaves the app without a grown-up: one helper, an exact allowlist'
   const external = read('src/services/external.ts');
   assert.doesNotMatch(external, /export \{ Share \}/, 'no re-export of the raw share API');
   for (const fn of ['openExternal', 'shareExternal', 'shareFileExternal']) {
-    assert.match(external, new RegExp(`export async function ${fn}\\([^)]*\\)[^{]*\\{\\s*if \\((!url \\|\\| )?!\\(await askGrownUp\\(\\)\\)\\)`), `${fn} asks a grown-up first`);
+    assert.match(external, new RegExp(`export async function ${fn}\\([^)]*\\)[^{]*\\{\\s*if \\((!url \\|\\| )?!\\(await askGrownUp\\((exitReason\\(url\\)|SHARE)\\)\\)\\)`), `${fn} asks a grown-up first`);
   }
   // Mail goes out only through the two support builders, and only into openExternal.
   assert.deepEqual(where(/['"`]mailto:/).sort(), ['src/screens/Settings/accountDeletion.ts', 'src/screens/threads/SocialHelp.tsx', 'src/services/accountRecovery/model.ts']);

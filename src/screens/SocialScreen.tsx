@@ -289,9 +289,9 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: Member, Merch, Pin Trading, Redeem" hitSlop={8} style={styles.more}>
+          <PressScale onPress={() => setShortcuts(true)} accessibilityLabel="More: VIP, Merch, Pin Trading, Coin Codes" hitSlop={8} style={styles.more}>
             <GameIcon name="chest" size={36} />
-            <Text style={styles.moreText}>{player && !player.is_subscribed ? 'Member' : 'More'}</Text>
+            <Text style={styles.moreText}>{player && !player.is_subscribed ? 'VIP' : 'More'}</Text>
           </PressScale>
         </TopbarColumn>
         <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
@@ -379,7 +379,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
               {
                 image: require('../../assets/images/screens/social/redeem.png'),
                 onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.RedeemCoinCodes)) navigation.navigate('RedeemCoinCode'); }),
-                text: 'Redeem',
+                text: 'Coin Codes',
                 permission: PermissionEnums.RedeemCoinCodes,
               },
               {
@@ -391,7 +391,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
               {
                 image: require('../../assets/images/screens/social/membership.png'),
                 onPress: () => runAfterShortcuts(() => { if (checkPermission(PermissionEnums.BecomeAMember)) void openMembership(); }),
-                text: 'Member',
+                text: 'VIP',
                 permission: PermissionEnums.BecomeAMember,
                 show: !player || Boolean(player && !player.is_subscribed),
               },

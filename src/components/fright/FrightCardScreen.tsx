@@ -119,7 +119,7 @@ export default function FrightCardScreen() {
       <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.back}><GameIcon name="back" size={34} /></Pressable>
         <Text style={styles.empty} accessibilityLiveRegion="polite">
-          {failed ? 'Couldn\'t load your Deep Lantern. Check your signal and try again.' : 'The Lantern is loading. Hang tight.'}</Text>
+          {failed ? 'Couldn\'t load your Deep Lantern. Check your internet and try again.' : 'The Lantern is loading. Hang tight.'}</Text>
         {failed && params.eventSlug && <NightButton label="Retry" icon="retry" onPress={() => setAttempt(value => value + 1)}
           style={{ marginTop: 16, alignSelf: 'center', minWidth: 160 }} />}
       </View>

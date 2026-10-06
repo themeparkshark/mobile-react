@@ -51,7 +51,7 @@ export function RallyLobby({ state, crew, onReady, onLeave, toLocal }: {
             </View>
           ))}
         </View>
-        <Text style={styles.body}>18 seconds, same course for everyone. Score is style: graze close, thread Perfects, keep your chain. Your Overdrive puffs a gift to the shark behind you.</Text>
+        <Text style={styles.body}>18 seconds. Same course for everyone. Skim close and hit Perfect rings for points. Keep your chain going. Your Overdrive sends a gift to the shark behind you.</Text>
         {state.phase === 'lobby' ? (
           <>
             <TouchableOpacity accessibilityRole="button" style={[styles.btn, me?.ready && styles.btnDone]} onPress={onReady} disabled={!!me?.ready}>
@@ -131,7 +131,7 @@ export function RallyPodium({ results, you, verdict, nextAtMs, toLocal, onAgain,
       <View style={styles.scrim}>
         <View style={styles.card}>
           <Text style={styles.title}>FINISH!</Text>
-          <Text style={styles.body}>{verdict === 'ok' ? 'Your run is VERIFIED. Waiting for the other sharks...' : 'Checking your run...'}</Text>
+          <Text style={styles.body}>{verdict === 'ok' ? 'Your score is in! Waiting for the other sharks...' : 'Checking your run...'}</Text>
         </View>
       </View>
     );
@@ -155,7 +155,7 @@ export function RallyPodium({ results, you, verdict, nextAtMs, toLocal, onAgain,
                 {r.filledBy === 'ghost' ? '  ·  ghost finished' : r.kind === 'bot' ? '  ·  GHOST' : ''}
               </Text>
             </View>
-            <View style={styles.verified}><Text style={styles.verifiedText}>{r.verified ? 'VERIFIED' : 'PROVISIONAL'}</Text></View>
+            <View style={styles.verified}><Text style={styles.verifiedText}>{r.verified ? 'COUNTED' : 'CHECKING'}</Text></View>
           </View>
         ))}
         <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={onAgain}>

@@ -94,7 +94,7 @@ export default function MiniGameSelector({
     exitPromptOpen.current = true;
     Alert.alert(
       'End ride challenge?',
-      'Ending now counts as a loss. Your Ticket may be spent.',
+      'If you quit now, it counts as a loss. Your ticket is already used.',
       [
         { text: 'Keep playing', style: 'cancel', onPress: () => {
           exitPromptOpen.current = false;

@@ -182,12 +182,12 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (term) { explain(term, { count }); return; }
     setShowTooltip(prev => !prev);
   };
-  const label = term ? glossary[term].label : name || 'Currency';
+  const label = term ? glossary[term].label : name || 'Your stuff';
 
   return (
     <View style={styles.container} ref={containerRef} onLayout={measureAndRegister}>
       <TouchableOpacity onPress={handlePress} activeOpacity={0.7} accessibilityRole="button"
-        accessibilityLabel={`${label}: ${count.toLocaleString()}`} accessibilityHint={term ? 'Explains what this is and how to get more' : undefined}>
+        accessibilityLabel={`${label}: ${count.toLocaleString()}`} accessibilityHint={term ? 'Tells you what this is and how to get more' : undefined}>
         <View style={styles.currencyRow}>
           <Animated.View
             style={{
@@ -232,7 +232,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       >
         <View style={styles.tooltipArrow} />
         <View style={styles.tooltipContent}>
-          <Text style={styles.tooltipName}>{name || 'Currency'}</Text>
+          <Text style={styles.tooltipName}>{name || 'Your stuff'}</Text>
           <Text style={styles.tooltipCount}>{count.toLocaleString()}</Text>
         </View>
       </Animated.View>

@@ -13,21 +13,21 @@ export default function BossAttackStatus({ snapshot, onRetry }: {
   const confirmed = !!snapshot.receipt && (snapshot.receipt.result.ok || snapshot.receipt.result.error !== 'network');
   const title = snapshot.phase === 'loading' ? 'Checking your last round'
     : snapshot.phase === 'saving' ? 'Saving your brawl'
-      : snapshot.phase === 'sending' ? 'Confirming your hit'
-        : confirmed ? snapshot.receipt?.result.ok ? 'Your round is confirmed' : 'Your round is checked'
+      : snapshot.phase === 'sending' ? 'Checking your hit'
+        : confirmed ? snapshot.receipt?.result.ok ? 'Your round counted!' : 'Your round is checked'
           : snapshot.phase === 'storage_error' ? 'Keep this round safe'
             : 'Your brawl is waiting';
   const detail = snapshot.phase === 'loading' ? 'A quick check before your next fight.'
-    : snapshot.phase === 'saving' ? 'Keeping your finished round ready to reconnect.'
-      : snapshot.phase === 'sending' ? 'The park is checking this exact round.'
-        : confirmed ? 'Finish saving its receipt before another attack.'
-          : snapshot.phase === 'storage_error' ? 'We couldn’t read or save the receipt. Retry before another fight.'
-            : 'The reply didn’t arrive. Confirm this round before spending more Energy.';
+    : snapshot.phase === 'saving' ? 'Saving your round so it is not lost.'
+      : snapshot.phase === 'sending' ? 'We are checking this round now.'
+        : confirmed ? 'Tap below to finish saving it before you attack again.'
+          : snapshot.phase === 'storage_error' ? 'We couldn’t save this round. Tap Try again before you fight again.'
+            : 'We didn’t hear back. Check this round before you spend more energy.';
   return <View style={styles.card} accessibilityLiveRegion="polite">
     <View style={styles.head}>
       {snapshot.pending && <Image source={BOSS_ART[snapshot.pending.boss]} contentFit="contain" style={styles.art} />}
       <View style={styles.copy}>
-        <Text style={styles.kicker}>BRAWL RECEIPT</Text>
+        <Text style={styles.kicker}>YOUR LAST BRAWL</Text>
         <Text style={styles.title}>{title}</Text>
         {snapshot.pending && <Text style={styles.where} numberOfLines={2}>
           {BOSS_NAMES[snapshot.pending.boss]}{snapshot.pending.rideName ? `  ·  ${snapshot.pending.rideName}` : ''}
@@ -36,7 +36,7 @@ export default function BossAttackStatus({ snapshot, onRetry }: {
     </View>
     <Text style={styles.detail}>{detail}</Text>
     {!busy && <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}>
-      <Text style={styles.buttonText}>{confirmed ? 'Finish saving receipt' : snapshot.pending ? 'Confirm saved round' : 'Retry receipt check'}</Text>
+      <Text style={styles.buttonText}>{confirmed ? 'Finish saving' : snapshot.pending ? 'Check this round' : 'Try again'}</Text>
     </Pressable>}
   </View>;
 }

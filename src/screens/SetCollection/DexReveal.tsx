@@ -150,7 +150,7 @@ function RevealBody({ set, reward, onClose }: { readonly set: DexSet; readonly r
       <StatusBar barStyle="light-content" animated />
       <Animated.View style={[StyleSheet.absoluteFill, styles.scrimBase, fadeStyle]}>
         <Image source={SCRIM} style={StyleSheet.absoluteFill} contentFit="fill" />
-        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={backdrop} style={StyleSheet.absoluteFill} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={backdrop} style={StyleSheet.absoluteFill} />
         {!reduced && (
           <Animated.View pointerEvents="none" style={[styles.rays, { width: rays, height: rays, left: (width - rays) / 2, top: height * 0.44 - rays / 2 }, raysStyle]}>
             <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="fill" />

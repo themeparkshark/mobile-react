@@ -11,15 +11,15 @@ export default function NewRoundsBanner({ count, paused, onJump }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${count} new optional LinePlay rounds. ${paused ? 'Resume play to jump to them.' : 'Jump to the first new round.'}`}
+      accessibilityLabel={`${count} new LinePlay rounds. ${paused ? 'Tap play to jump to them.' : 'Jump to the first new round.'}`}
       disabled={paused}
       onPress={onJump}
       style={styles.banner}>
       <Image source={require('../../../../assets/images/screens/pin-collections/shark.png')}
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       <View style={styles.text}>
-        <Text style={styles.kicker}>YOUR WAIT CHAPTER EXPANDED</Text>
-        <Text style={styles.title}>{count} new optional round{count === 1 ? '' : 's'}</Text>
+        <Text style={styles.kicker}>MORE GAMES FOR YOUR WAIT</Text>
+        <Text style={styles.title}>{count} new round{count === 1 ? '' : 's'} to play</Text>
       </View>
       {paused ? <Text style={styles.action}>PAUSED</Text> : <GameIcon name="play" size={40} />}
     </Pressable>

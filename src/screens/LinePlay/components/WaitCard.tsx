@@ -200,7 +200,7 @@ export default function WaitCard({
   const atDailyCap = partsRemainingToday === 0;
   const atCap = atSessionCap || atDailyCap;
   const earnedLabel = `${creditedParts ?? 0} earned Part${creditedParts === 1 ? '' : 's'}`;
-  const nextPartLabel = `about ${fmt(countdown.remainingSeconds)} eligible time`;
+  const nextPartLabel = `about ${fmt(countdown.remainingSeconds)} near the ride`;
   const entranceAgeMinutes = entranceWaitObservedAt == null ? null :
     Math.max(0, Math.floor((Date.now() - entranceWaitObservedAt) / 60_000));
   const entranceFresh = entranceAgeMinutes != null && entranceAgeMinutes < 10;
@@ -220,7 +220,7 @@ export default function WaitCard({
   // Games still work everywhere; say plainly when this ride pays no Parts.
   const noPartsHere = !completed && !rewardTrackingAvailable && (lineRewardsReady === false || rewardUnavailable);
   // One plain status line; the fine print lives behind the details toggle.
-  const headline = completed ? 'Session complete' : paused
+  const headline = completed ? 'Wait complete' : paused
     ? 'Paused'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable ? 'PLAY ANYTIME'
@@ -237,12 +237,12 @@ export default function WaitCard({
         ? 'Ride Parts aren’t available at this ride right now.'
         : rewardConnectionIssue === 'nearby' ? 'Ride Parts start near this ride.'
           : rewardConnectionIssue === 'sign_in' ? 'Sign in again to earn Ride Parts.'
-            : rewardConnectionIssue === 'network' ? 'Games work while we retry rewards.'
-              : 'Play while we check your queue location.'
+            : rewardConnectionIssue === 'network' ? 'Games still work. We will try rewards again soon.'
+              : 'Play while we check that you are in line.'
       : atCap
-        ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'Session limit reached. Great wait!'
+        ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'You got the most Parts for one wait. Great job!'
         : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
-          : countdown.checking ? 'Keep playing. Your next check adds it.'
+          : countdown.checking ? 'Keep playing. It shows up soon.'
           : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
 
   return (
@@ -350,26 +350,26 @@ export default function WaitCard({
             <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>
           </>}
           <Text style={styles.waitSourceHint}>
-            {waitSource === 'posted' ? 'Start plan based on the entrance wait when you started.' :
-              waitSource === 'last_known' ? 'Start plan based on an older entrance wait.' :
-                'Activity plan only; no posted wait was available.'}
+            {waitSource === 'posted' ? 'Games are planned from the posted wait when you started.' :
+              waitSource === 'last_known' ? 'Games are planned from an older posted wait.' :
+                'No posted wait was found. Games are planned anyway.'}
           </Text>
           {entranceWaitMinutes != null && entranceWaitObservedAt != null && (
             <Text style={styles.entranceHint}>
-              {entranceFresh ? `Latest entrance board ${entranceWaitMinutes}m` :
-                `Entrance board last seen ${entranceWaitMinutes}m · ${entranceAgeMinutes}m ago`}
+              {entranceFresh ? `The sign at the line says ${entranceWaitMinutes}m` :
+                `The sign at the line said ${entranceWaitMinutes}m, ${entranceAgeMinutes}m ago`}
               {entranceFresh && Math.abs(entranceWaitChangeMinutes) >= 5
                 ? ` · ${entranceWaitChangeMinutes > 0 ? 'up' : 'down'} ${Math.abs(entranceWaitChangeMinutes)}m` : ''}
-              . This is not your remaining time.
+              . This is not how long you have left.
             </Text>
           )}
           {rewardTrackingAvailable && !bonusOn && <Text style={styles.waitSourceHint}>
-            {`Verified time near the ride: ${fmt(verifiedEligibleSeconds)}. One Ride Part per ${Math.round(interval / 60)} minutes, up to ${sessionPartCap} per line.`}
+            {`Time near the ride: ${fmt(verifiedEligibleSeconds)}. You get 1 Ride Part every ${Math.round(interval / 60)} minutes, up to ${sessionPartCap} per wait.`}
           </Text>}
           {bonusOn && <View style={styles.hintLine}>
             <GameIcon name="info" size={18} />
             <Text style={[styles.waitSourceHint, styles.hintLineText]}>
-              {`Verified time ${fmt(verifiedEligibleSeconds)}. ${ringInfoCopy(interval, sessionPartCap, true)}`}
+              {`Time near the ride: ${fmt(verifiedEligibleSeconds)}. ${ringInfoCopy(interval, sessionPartCap, true)}`}
             </Text>
           </View>}
           {rewardTrackingAvailable && masteryBonusAvailable && (
@@ -377,8 +377,8 @@ export default function WaitCard({
           )}
           {rewardTrackingAvailable && currentQuestBonusEnabled && !bonusOn && (
             <HintLine icon="shark">
-              {currentQuestVerified ? 'Current Quest verified: bonus Part on the way.'
-                : currentQuestProofPending ? 'Current Quest played. Checking your route.'
+              {currentQuestVerified ? 'Current Quest done! Your bonus Part is on the way.'
+                : currentQuestProofPending ? 'Current Quest played. We are checking it.'
                   : 'Finish Current Quest for a bonus Part.'}
             </HintLine>
           )}
@@ -386,9 +386,9 @@ export default function WaitCard({
             <HintLine icon="ticket">
               {ticketAvailable
                 ? verifiedEligibleSeconds >= ticketIntervalSeconds
-                  ? 'Park Ticket ready when this line ends.'
-                  : `Park Ticket in ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more.`
-                : 'Today’s Ticket for this ride is collected.'}
+                  ? 'You get a ticket when this wait ends.'
+                  : `Stay near the ride ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more for a ticket.`
+                : 'You already got today’s ticket for this ride.'}
             </HintLine>
           )}
         </>}

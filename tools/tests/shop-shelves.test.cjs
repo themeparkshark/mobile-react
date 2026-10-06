@@ -22,12 +22,12 @@ const now = Date.parse('2026-10-20T10:00:00-07:00');
 
 const plain = v => JSON.parse(JSON.stringify(v));
 
-test('daily stays calm until the last hour, then counts down in red', () => {
+test('daily stays calm to the end: no countdown, never red', () => {
   const daily = { type: 'daily', ends_at: '2026-10-21T00:00:00-07:00' };
   assert.deepEqual(plain(shelves.dailyPill(daily, now)), { label: 'New stuff tonight', urgent: false, a11y: 'New items arrive tonight' });
   const late = shelves.dailyPill(daily, Date.parse('2026-10-20T23:18:00-07:00'));
-  assert.equal(late.label, 'Leaving in 42m');
-  assert.equal(late.urgent, true);
+  assert.equal(late.label, 'New stuff tonight');
+  assert.equal(late.urgent, false);
   assert.equal(shelves.dailyPill(daily, Date.parse('2026-10-21T00:00:01-07:00')).label, 'New stuff now');
 });
 
@@ -40,20 +40,21 @@ test('featured names the day it changes, in the shop timezone', () => {
 test('events carry two honest timers: next drop and the end date', () => {
   const halloween = { type: 'event', ends_at: '2026-10-23T00:00:00-07:00', event_ends_at: '2026-11-02T00:00:00-08:00',
     event_last_day: '2026-11-01', last_chance: false, final_shelf: false };
-  assert.equal(shelves.eventDropPill(halloween, now).label, 'New drop in 3 days');
-  assert.equal(shelves.eventDropPill(halloween, Date.parse('2026-10-21T10:00:00-07:00')).label, 'New drop in 2 days');
-  assert.equal(shelves.eventDropPill(halloween, Date.parse('2026-10-22T10:00:00-07:00')).label, 'New drop tonight');
+  assert.equal(shelves.eventDropPill(halloween, now).label, 'New items in 3 days');
+  assert.equal(shelves.eventDropPill(halloween, Date.parse('2026-10-21T10:00:00-07:00')).label, 'New items in 2 days');
+  assert.equal(shelves.eventDropPill(halloween, Date.parse('2026-10-22T10:00:00-07:00')).label, 'New items tonight');
   assert.equal(shelves.eventEndPill(halloween, now).label, 'Ends Nov 1');
   assert.equal(shelves.eventEndPill(halloween, now).urgent, false);
   const finale = { ...halloween, final_shelf: true, last_chance: true };
   assert.equal(shelves.eventDropPill(finale, now), null, 'no fake drop on the final shelf');
-  assert.equal(shelves.eventEndPill(finale, Date.parse('2026-10-30T10:00:00-07:00')).label, 'Last chance: ends Nov 1');
-  assert.equal(shelves.eventEndPill(finale, Date.parse('2026-11-01T18:30:00-08:00')).label, 'Last day!');
+  assert.equal(shelves.eventEndPill(finale, Date.parse('2026-10-30T10:00:00-07:00')).label, 'Ends Nov 1');
+  assert.equal(shelves.eventEndPill(finale, Date.parse('2026-11-01T18:30:00-08:00')).label, 'Ends today');
+  assert.equal(shelves.eventEndPill(finale, Date.parse('2026-11-01T23:30:00-08:00')).urgent, false, 'never a red hurry');
 });
 
 test('LAST CHANCE only when true; otherwise the wave name', () => {
   assert.equal(shelves.eventKicker({ type: 'event', ends_at: '', last_chance: false, wave: { title: 'Pumpkin Patch Week' } }), 'PUMPKIN PATCH WEEK');
-  assert.equal(shelves.eventKicker({ type: 'event', ends_at: '', last_chance: true, wave: { title: 'Last Chance Weekend' } }), 'LAST CHANCE');
+  assert.equal(shelves.eventKicker({ type: 'event', ends_at: '', last_chance: false, wave: { title: 'Halloween Finale Weekend' } }), 'HALLOWEEN FINALE WEEKEND', 'the server never sends last_chance now');
   assert.equal(shelves.eventKicker({ type: 'event', ends_at: '' }), 'SHARK SHOP EVENT');
 });
 
@@ -156,8 +157,8 @@ test('round 3: honest wishlist copy', () => {
 });
 
 test('round 3: calm last-chance copy names the season', () => {
-  assert.equal(shelves.lastChanceLine('halloween'), 'Last chance! It comes back next Halloween.');
-  assert.equal(shelves.lastChanceLine(null), 'Last chance! It comes back another time.');
+  assert.equal(shelves.lastChanceLine('halloween'), 'It leaves soon. It comes back next Halloween.');
+  assert.equal(shelves.lastChanceLine(null), 'It leaves soon. It comes back another time.');
 });
 
 test('round 3: ready sets collapse into one card', () => {
@@ -285,7 +286,7 @@ test('round 6 B1: the first error confirmed not charged says so; Try again goes 
   assert.equal(shelves.settleBuyError(outcome, 'buy'), 'failed');
   const failed = shelves.tryOnCta({ ...base6, phase: 'failed' });
   assert.equal(failed.label, 'Try again');
-  assert.match(failed.note, /You weren’t charged/);
+  assert.match(failed.note, /You still have all your coins/, 'coins, not real-money words');
   assert.equal(failed.action, 'ask', 'Try again returns to the confirm step, never a direct buy');
   // Only the recheck path returns quietly to idle.
   assert.equal(shelves.settleBuyError(outcome, 'recheck'), 'idle');

@@ -15,12 +15,12 @@ const SQUARES: readonly CrewGridSquare[] = [
   { id: 'prediction', title: 'Ride theory', prompt: 'Predict one thing you will remember about this ride. Check your theory afterward.' },
   { id: 'three-words', title: 'Three words', prompt: 'Describe the mood of this queue in three words. Ask a crewmate, or compare with your own answer later.' },
   { id: 'pattern', title: 'Pattern maker', prompt: 'Notice a repeated shape, color, or sound from your place. If none appears, invent a three-step shark signal.' },
-  { id: 'vote', title: 'Crew vote', prompt: 'Vote on your next park adventure. If you are solo, choose your own route.' },
-  { id: 'story', title: 'Tiny tale', prompt: 'Tell a ten-second shark story using a detail you notice or a detail you imagine.' },
+  { id: 'vote', title: 'Crew vote', prompt: 'Vote on your next park adventure. Playing alone? Pick your own.' },
+  { id: 'story', title: 'Tiny tale', prompt: 'Tell a ten-second shark story. Use something you see or something you imagine.' },
   { id: 'symbol', title: 'Shark symbol', prompt: 'Choose one symbol for your crew: fin, wave, star, or compass. Why that one?' },
   { id: 'question', title: 'Ask the crew', prompt: 'Ask what someone hopes to remember today. Solo? Write the answer in your head and check after the ride.' },
-  { id: 'direction', title: 'Secret route', prompt: 'Invent a two-step route for your shark: where does it go first, and what clue sends it onward?' },
-  { id: 'snack', title: 'Snack debate', prompt: 'Which park snack would power a shark expedition? Give it a ridiculous superpower.' },
+  { id: 'direction', title: 'Secret route', prompt: 'Make up a two-step path for your shark. Where does it go first? What clue sends it on?' },
+  { id: 'snack', title: 'Snack debate', prompt: 'Which park snack would power a shark adventure? Give it a silly superpower.' },
   { id: 'pose', title: 'Fin pose', prompt: 'Make a tiny, seated or standing fin gesture without bumping anyone. Give it a crew name.' },
 ];
 

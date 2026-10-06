@@ -152,7 +152,7 @@ export default function RadialStatsMenu() {
   const explainStat = (key: GlossaryKey, count: number) => { closeMenu(); explain(key, { count }); };
   const items = [
     { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => explainStat('energy', energy) },
-    { icon: 'ticket' as const, label: 'Park Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
+    { icon: 'ticket' as const, label: 'Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
     { icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat('day_streak', streak) },
   ];
 

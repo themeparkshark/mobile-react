@@ -45,7 +45,7 @@ function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, o
       )}
       {parkStory && (
         <Pressable accessibilityRole="button" hitSlop={HIT} onPress={parkStory.onPress} style={styles.chip}
-          accessibilityLabel={`Park story: ${parkStory.title}. ${parkStory.points} of ${parkStory.goal} signals. Open story.`}>
+          accessibilityLabel={`Park story: ${parkStory.title}. ${parkStory.points} of ${parkStory.goal} points. Open story.`}>
           <Image source={STORY} style={styles.story} contentFit="contain" />
           <Text style={styles.text}>{parkStory.points}/{parkStory.goal}</Text>
         </Pressable>

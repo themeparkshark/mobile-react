@@ -144,7 +144,7 @@ export const STANDINGS_EMPTY_COPY = {
   },
   xp: {
     title: 'Be the first on the podium',
-    message: 'Play ride challenges and queue games to earn XP and claim the top spot.',
+    message: 'Play ride challenges and LinePlay games to earn XP and take the top spot.',
     action: 'Start playing',
   },
 } as const;

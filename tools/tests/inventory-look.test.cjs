@@ -286,7 +286,7 @@ test('cards: a deep-linked item pulses a gold ring twice, and only the ring unde
 
 test('Inventory: same screen, NEW is reported in batches, the deep link pins its item, copy has no em dashes', () => {
   const screen = fs.readFileSync('src/screens/InventoryScreen.tsx', 'utf8');
-  assert.match(screen, /<TopbarText>Inventory<\/TopbarText>/);
+  assert.match(screen, /<TopbarText>Closet<\/TopbarText>/);
   assert.match(screen, /height: 400,/);
   assert.match(screen, /itemVisiblePercentThreshold: 60, minimumViewTime: 800/);
   assert.match(screen, /markItemsSeen\(ids\)/);

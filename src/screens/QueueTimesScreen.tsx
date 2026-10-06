@@ -131,7 +131,7 @@ const RideCard = ({
               onPress={() => onStartSession(entry)}
               accessibilityRole="button"
               accessibilityLabel={entry.status === 'DOWN'
-                ? `Play queue games for ${entry.name}. Temporarily down; no Ride Parts this session.`
+                ? `Play line games for ${entry.name}. The ride is down right now, so no Ride Parts this time.`
                 : `Start LinePlay for ${entry.name}`}
               style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
               hitSlop={6}
@@ -396,9 +396,9 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 
       {!loading && feedError && attractions.length > 0 && (
         <Pressable onPress={() => void fetchData(false)} accessibilityRole="button"
-          accessibilityLabel="Retry wait times refresh; showing the last loaded times"
+          accessibilityLabel="Try loading wait times again. These may be old."
           style={styles.feedAlert}>
-          <Text style={styles.feedAlertText}>Wait feed unavailable · showing last loaded times. Tap to retry.</Text>
+          <Text style={styles.feedAlertText}>Could not update wait times. These may be old. Tap to try again.</Text>
         </Pressable>
       )}
 
@@ -438,7 +438,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       ) : attractions.length > 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>NO OPEN ATTRACTIONS</Text>
-          <Text style={styles.emptyBody}>This park has no rides listed as operating or temporarily down right now.</Text>
+          <Text style={styles.emptyBody}>No ride wait times to show for this park right now. Check back later.</Text>
           <Pressable onPress={() => setFilterMode('all')} accessibilityRole="button"
             accessibilityLabel="Show all attractions" style={styles.retryButton}>
             <Text style={styles.retryText}>SHOW ALL</Text>
@@ -446,10 +446,10 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         </View>
       ) : (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{feedError ? 'WAIT TIMES UNAVAILABLE' : 'NO TIMES POSTED'}</Text>
+          <Text style={styles.emptyTitle}>{feedError ? 'NO WAIT TIMES RIGHT NOW' : 'NO TIMES POSTED'}</Text>
           <Text style={styles.emptyBody}>{feedError
-            ? 'The last request did not load. Check back or choose another park.'
-            : 'No attraction times were returned for this park. Try another park or refresh.'}</Text>
+            ? 'Wait times did not load. Check your internet or pick another park.'
+            : 'This park has no wait times right now. Try another park or check back later.'}</Text>
           <Pressable onPress={() => void fetchData(true)} accessibilityRole="button"
             accessibilityLabel="Retry wait times" style={styles.retryButton}>
             <Text style={styles.retryText}>TRY AGAIN</Text>

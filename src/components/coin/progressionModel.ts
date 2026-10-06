@@ -143,13 +143,13 @@ export function levelRibbon(level: number): string {
   return `LEVEL ${level} · ${coinTier(level).name.toUpperCase()}`;
 }
 
-/** The reveal card under the ribbon ("NEW PERK: Ride Regular"). */
+/** The reveal card under the ribbon ("NEW BONUS: Ride Regular"). */
 export function revealCard(unlocks: LevelUpUnlocks | null, xp: number): { title: string; line: string; chips: string[] } | null {
   if (!unlocks) return null;
-  const title = unlocks.kind === 'perk' ? `NEW PERK: ${unlocks.name ?? ''}`
+  const title = unlocks.kind === 'perk' ? `NEW BONUS: ${unlocks.name ?? ''}`
     : unlocks.kind === 'boss' ? 'BOSS SHARK AWAKE'
       : `NEW LOOK: ${unlocks.name ?? unlocks.tier}`;
-  const chips = [xp > 0 ? `+${xp} XP` : null, unlocks.coins > 0 ? `+${unlocks.coins} Shark Coins` : null,
+  const chips = [xp > 0 ? `+${xp} XP` : null, unlocks.coins > 0 ? `+${unlocks.coins} coins` : null,
     unlocks.glimpse_unlocked ? 'Boss Glimpse unlocked' : null].filter((chip): chip is string => chip !== null);
   return { title, line: unlocks.short ?? coinTier(unlocks.level).look, chips };
 }
@@ -258,8 +258,8 @@ export function remintCard(notice: RemintNotice | null | undefined) {
   const totals = [notice.total_parts > 0 ? `${notice.total_parts} Ride Part${notice.total_parts === 1 ? '' : 's'}` : null,
     notice.total_energy > 0 ? `${notice.total_energy} Energy` : null].filter(Boolean).join(' and ');
   return {
-    title: 'YOUR COINS GREW',
-    subtitle: totals ? `Coins now climb to Level 10. ${totals} back for coins you already paid for.` : 'Coins now climb to Level 10.',
+    title: 'YOUR RIDE COINS GREW',
+    subtitle: totals ? `Ride coins now go up to Level 10. You got ${totals} back for levels you already paid for.` : 'Ride coins now go up to Level 10.',
     rows,
     button: 'See my shelf',
   };

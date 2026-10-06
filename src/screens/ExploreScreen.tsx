@@ -1052,13 +1052,13 @@ function ExploreScreen() {
               .map((currency) => (
                 <TopbarColumn key={currency.id}>
                   <Currency image={currency.icon_url} count={currencyBalance(player, currency.name)}
-                    name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
+                    name={currency.name === 'Coins' ? 'Coins' : currency.name}
                     flyTarget={currency.name === 'Coins' ? 'coins' : currency.name === 'Keys' ? 'keys' : undefined} />
                 </TopbarColumn>
               ))}
             {park && (
               <TopbarColumn>
-                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
+                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
             {/* TRAVEL MODE: Coins | TRAVEL MODE | Tickets */}
@@ -1067,7 +1067,7 @@ function ExploreScreen() {
                 <TopbarColumn>
                   {currencies[0] && (
                     <Currency image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
-                      name="Shark Coins" flyTarget="coins" />
+                      name="Coins" flyTarget="coins" />
                   )}
                 </TopbarColumn>
                 <TopbarColumn>
@@ -1087,7 +1087,7 @@ function ExploreScreen() {
                   </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
+                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
@@ -1379,14 +1379,14 @@ function ExploreScreen() {
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
-            {tripGoalStale ? 'LAST CONFIRMED GOAL' : tripGoalData?.goal_plan?.maxed ? 'MAX LEVEL REACHED'
+            {tripGoalStale ? 'YOUR LAST SAVED GOAL' : tripGoalData?.goal_plan?.maxed ? 'MAX LEVEL REACHED'
               : tripGoal.coin_owned ? 'MASTERY GOAL' : 'YOUR RIDE GOAL'}
           </Text>
           <Text style={{ color: 'white', fontFamily: 'Shark', fontSize: 14 }} numberOfLines={1}>{tripGoal.ride_name}</Text>
           <Text style={{ color: '#dff4ff', fontFamily: 'Knockout', fontSize: 11, marginTop: 2 }} numberOfLines={2}>
             {tripGoal.coin_owned && tripGoalData?.goal_plan && !tripGoalData.goal_plan.maxed
-              ? `Level ${tripGoalData.goal_plan.current_level}/${tripGoalData.goal_plan.max_level} · ${tripGoalData.goal_plan.parts_needed} Parts to upgrade`
-              : tripGoal.coin_owned ? 'Current max reached · Choose another ride' : tripGoal.park_id !== park.id
+              ? `Level ${tripGoalData.goal_plan.current_level}/${tripGoalData.goal_plan.max_level} · ${tripGoalData.goal_plan.parts_needed} Parts to level up`
+              : tripGoal.coin_owned ? 'Top level for now · Pick another ride' : tripGoal.park_id !== park.id
               ? `View at ${tripGoal.park_name}` : tripGoalTask
                 ? `${tripGoalData?.wallet.tickets_needed ? `${tripGoalData.wallet.tickets_needed} more Tickets needed` : 'Tickets ready'} · Tap to spot it`
                 : 'Open Ride Guide for its coin'}
@@ -1395,7 +1395,7 @@ function ExploreScreen() {
         {suggestionSlots.right === 'ride' && selectedTask && queueRide && <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
-            ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
+            ? 'Ride Parts are not set up here yet.' : 'Wait in line near the ride to get Ride Parts.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
           style={{ position: 'absolute', top: player ? slotTop : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
@@ -1407,7 +1407,7 @@ function ExploreScreen() {
             {selectedTask.name}
           </Text>
           <Text style={{ color: '#dff4ff', fontFamily: 'Knockout', fontSize: 10 }} numberOfLines={1}>
-            {queueRide.lineRewardsReady === false ? 'Games only · Parts not set up' : 'Parts need a verified wait'}
+            {queueRide.lineRewardsReady === false ? 'Games only · No Parts here' : 'Wait in line to earn Parts'}
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}

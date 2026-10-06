@@ -295,7 +295,7 @@ test('round 4: a real grown-up gate, honest Off copy, rows leave inside the cell
   assert.match(gate, /label="Keep it off" tone="gold"/, 'Keep it off is the primary button');
   const friends = read('src/screens/FriendsScreen.tsx');
   assert.match(friends, /grown_up_confirmed: true/);
-  assert.match(friends, /or taps you on a leaderboard or post, can still ask/);
+  assert.match(friends, /So can a shark who taps you on a leaderboard or post/);
   assert.doesNotMatch(friends, /LayoutAnimation/, 'LayoutAnimation does not animate FlashList cells on the new architecture');
   assert.match(friends, /leaving: leavingAs\(p, 'incoming'\)/, 'a refused row is drawn frozen, never as Add');
   const bell = read('src/screens/NotificationsScreen.tsx');

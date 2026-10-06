@@ -28,7 +28,7 @@ export function MilestonePickSheet({ view, busy, onConfirm, onClose, overlay }: 
     <Modal visible={view != null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={{ flex: 1, backgroundColor: BRAND.scrim }} />
       <View style={{ backgroundColor: BRAND.cream, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: 3, borderBottomWidth: 0, borderColor: BRAND.white, padding: 18, paddingBottom: 28 }}>
-        <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textTransform: 'uppercase', textAlign: 'center' }}>Choose your wearable</Text>
+        <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textTransform: 'uppercase', textAlign: 'center' }}>Pick a shark item</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginVertical: 12 }}>
           {(view?.choices ?? []).map(choice => {
             const selected = picked === choice.id;
@@ -55,7 +55,7 @@ export function MilestonePickSheet({ view, busy, onConfirm, onClose, overlay }: 
   );
 }
 
-/** After a claim: "Added to your Inventory" with WEAR IT, or the pending line. */
+/** After a claim: "Added to your closet" with WEAR IT, or the pending line. */
 export function ClaimResultCard({ outcome, wearing, onWear, onDismiss }: {
   readonly outcome: ClaimOutcome | null;
   readonly wearing: boolean;
@@ -74,7 +74,7 @@ export function ClaimResultCard({ outcome, wearing, onWear, onDismiss }: {
       )}
       {!!outcome.pendingLine && <Text style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.white }}>{outcome.pendingLine}</Text>}
       {!!outcome.ticketNote && <Text style={{ fontFamily: 'Knockout', fontSize: 15, color: BRAND.white, marginTop: 4 }}>{outcome.ticketNote}</Text>}
-      <GameButton label="Dismiss" variant="ghost" tone="onBlue" onPress={onDismiss} />
+      <GameButton label="Close" variant="ghost" tone="onBlue" onPress={onDismiss} />
     </View>
   );
 }

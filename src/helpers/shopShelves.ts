@@ -84,15 +84,10 @@ export function weekdayOf(iso: string): string | null {
   return WEEKDAYS[new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()];
 }
 
-function minutes(ms: number): string {
-  return `${Math.max(1, Math.ceil(ms / 60_000))}m`;
-}
-
-/** Daily: calm until the last hour, then a real countdown in red. */
+/** Daily: always calm. No countdown on anything you can buy. */
 export function dailyPill(section: SectionLike, nowMs: number): Pill {
   const left = Date.parse(section.ends_at) - nowMs;
   if (left <= 0) return { label: 'New stuff now', urgent: false, a11y: 'New items are arriving now' };
-  if (left < HOUR) return { label: `Leaving in ${minutes(left)}`, urgent: true, a11y: `These leave in ${minutes(left).replace('m', ' minutes')}` };
   return { label: 'New stuff tonight', urgent: false, a11y: 'New items arrive tonight' };
 }
 
@@ -109,11 +104,11 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
 export function eventDropPill(section: SectionLike, nowMs: number): Pill | null {
   if (section.final_shelf) return null;
   const left = Date.parse(section.ends_at) - nowMs;
-  if (left <= 0) return { label: 'New drop now', urgent: false, a11y: 'A new drop is arriving now' };
-  if (left < HOUR) return { label: `New drop in ${minutes(left)}`, urgent: false, a11y: 'New drop in under an hour' };
-  if (left < DAY) return { label: 'New drop tonight', urgent: false, a11y: 'New drop tonight' };
+  if (left <= 0) return { label: 'New items now', urgent: false, a11y: 'New items are arriving now' };
+  if (left < HOUR) return { label: 'New items soon', urgent: false, a11y: 'New items soon' };
+  if (left < DAY) return { label: 'New items tonight', urgent: false, a11y: 'New items tonight' };
   const days = Math.ceil(left / DAY);
-  const label = days === 1 ? 'New drop tomorrow' : `New drop in ${days} days`;
+  const label = days === 1 ? 'New items tomorrow' : `New items in ${days} days`;
   return { label, urgent: false, a11y: label };
 }
 
@@ -122,10 +117,8 @@ export function eventEndPill(section: SectionLike, nowMs: number): Pill {
   const end = Date.parse(section.event_ends_at ?? section.ends_at);
   const left = end - nowMs;
   const date = shortDate(section.event_last_day) ?? '';
-  if (left <= 0) return { label: 'Ending now', urgent: true, a11y: 'This event is ending now' };
-  if (left < HOUR) return { label: `Ends in ${minutes(left)}`, urgent: true, a11y: 'This event ends in under an hour' };
-  if (left < DAY) return { label: 'Last day!', urgent: true, a11y: 'Today is the last day of this event' };
-  if (section.last_chance) return { label: `Last chance: ends ${date}`, urgent: true, a11y: `Last chance, ends ${date}` };
+  // Calm and true, never a countdown or a red "hurry": just the day it ends.
+  if (left < DAY) return { label: 'Ends today', urgent: false, a11y: 'This event ends today' };
   return { label: `Ends ${date}`, urgent: false, a11y: `This event ends ${date}` };
 }
 
@@ -164,7 +157,7 @@ export function tileTag(item: ItemLike): TileTag {
 
 export const TILE_TAG_LABEL: Record<Exclude<TileTag, null>, string> = {
   owned: 'OWNED',
-  last_chance: 'LAST CHANCE',
+  last_chance: 'LEAVING',
   returning: 'BACK AGAIN',
 };
 
@@ -261,10 +254,10 @@ const SEASON_NAME: Record<string, string> = {
   harvest: 'fall', winter: 'winter', mardi_gras: 'Mardi Gras', park_birthday: 'park birthday',
 };
 
-/** Calm, true last-chance copy for the try-on ("It comes back next Halloween."). */
+/** Calm, true leaving-soon copy for the try-on ("It comes back next Halloween."). No hurry words. */
 export function lastChanceLine(season: string | null | undefined): string {
   const name = season ? SEASON_NAME[season] : null;
-  return name ? `Last chance! It comes back next ${name}.` : 'Last chance! It comes back another time.';
+  return name ? `It leaves soon. It comes back next ${name}.` : 'It leaves soon. It comes back another time.';
 }
 
 /** Honest wishlist copy: alerts on promise a note; off or not asked promise nothing. */
@@ -380,11 +373,11 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   // Its own state: asking the server never shows "Yes, buy it!".
   if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };
   // Confirmed not charged: Try again goes back to the confirm step (two taps, never a silent buy).
-  if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t go through. You weren’t charged.', look: 'go' };
+  if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t work. You still have all your coins.', look: 'go' };
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
   if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
-  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Catch ride coins or open your daily chest to earn more.', look: 'go' };
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win ride coins at the park or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
   if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };

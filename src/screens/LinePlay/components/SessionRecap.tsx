@@ -177,10 +177,10 @@ export default function SessionRecap({
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           <Text style={styles.recapTime} accessibilityLabel={`${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds`}>
             {minutes}m {secs}s</Text>
-          <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of queue play, all saved' : 'session time'}</Text>
+          <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of line games, all saved' : 'time played'}</Text>
         </View>
         {heroInventory && onOpenInventory ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Your shark. Open Inventory"
+          <Pressable accessibilityRole="button" accessibilityLabel="Your shark. Open your closet"
             onPress={onOpenInventory} style={styles.recapSharkWrap}>
             <Playercard inventory={heroInventory} showBackground={false} style={styles.heroCard} />
           </Pressable>
@@ -198,7 +198,7 @@ export default function SessionRecap({
             <GameIcon name="queue" size={34} />
             <View style={styles.stillInLineCopy}>
               <Text style={styles.stillInLineTitle}>Still in line?</Text>
-              <Text style={styles.stillInLineBody}>Pick up where you left off. This recap keeps its rewards.</Text>
+              <Text style={styles.stillInLineBody}>Pick up where you left off. You keep what you earned.</Text>
             </View>
           </View>
           <GameButton label="Keep playing" icon="arrow" onPress={onStillInLine} fullWidth
@@ -208,7 +208,7 @@ export default function SessionRecap({
 
       {groupSlot}
 
-      <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'YOUR VERIFIED HAUL' : 'YOUR LINEPLAY ADVENTURE'}</Text>
+      <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       <View style={styles.recapStats}>
         <RecapStat icon="star" value={activityCount} label={activityCount === 1 ? 'activity' : 'activities'}
           index={stat++} reducedMotion={reducedMotion} />
@@ -221,7 +221,7 @@ export default function SessionRecap({
 
       {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
         <Animated.View entering={enter(0)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Open Queue Navigator in Stamp Book"
+          <Pressable accessibilityRole="button" accessibilityLabel="See your Queue Navigator stamp"
             onPress={onOpenStampBook} style={styles.queueStampCard}>
             <Image source={QUEUE_STAMP_IMAGE} style={styles.queueStampImage} contentFit="contain" />
             <View style={styles.queueStampCopy}>
@@ -241,13 +241,13 @@ export default function SessionRecap({
       </View>}
 
       {!bonusMode && rewardsConfirmed && masteryBonusParts > 0 && (
-        <BonusLine icon="star">{`Coin mastery added ${masteryBonusParts} Ride Part to this verified session.`}</BonusLine>
+        <BonusLine icon="star">{`Coin mastery gave you ${masteryBonusParts} extra Ride Part.`}</BonusLine>
       )}
       {!bonusMode && rewardsConfirmed && crewPuzzleBonusParts > 0 && (
-        <BonusLine icon="lock">{`Your Crew Codebreaker guess added ${crewPuzzleBonusParts} Ride Part.`}</BonusLine>
+        <BonusLine icon="lock">{`Your Crew Codebreaker guess gave you ${crewPuzzleBonusParts} Ride Part.`}</BonusLine>
       )}
       {!bonusMode && rewardsConfirmed && currentQuestBonusParts > 0 && (
-        <BonusLine icon="shark">{`Current Quest added ${currentQuestBonusParts} Ride Part to this verified wait.`}</BonusLine>
+        <BonusLine icon="shark">{`Current Quest gave you ${currentQuestBonusParts} extra Ride Part.`}</BonusLine>
       )}
 
       {crewRelay?.step === 'complete' && (
@@ -272,39 +272,39 @@ export default function SessionRecap({
           <View style={styles.bonusLine}>
             <GameIcon name={resolution.correct ? 'check' : 'timer'} size={26} />
             <Text style={styles.recapPredictionText}>
-              {resolution.correct ? 'Nailed the prediction! ' : 'Prediction missed. '}
+              {resolution.correct ? 'Your wait guess was right! ' : 'Your wait guess missed. '}
               {resolution.beat
                 ? `You beat the posted wait by ${Math.max(0, Math.round(resolution.postedWaitMinutes - resolution.actualWaitMinutes))}m.`
-                : `The line held near the posted ${resolution.postedWaitMinutes}m.`}
+                : `The wait was about the posted ${resolution.postedWaitMinutes}m.`}
             </Text>
           </View>
         </Animated.View>
       )}
 
       {predictionUnscored && (
-        <Text style={styles.recapPending}>Your wait prediction was saved but not scored because boarding was not confirmed.</Text>
+        <Text style={styles.recapPending}>Your wait guess did not count. It only counts if you get to the ride.</Text>
       )}
 
       {crewPuzzle && (
         <View style={styles.recapPrediction}>
           <Text style={styles.recapPredictionText}>
             {crewPuzzle.completed
-              ? `Your ride’s crew opened all ${crewPuzzle.total_stages} codebreaker gates together.`
-              : `Your ride’s crew opened ${crewPuzzle.stage - 1} of ${crewPuzzle.total_stages} codebreaker gates.`}
-            {' '}{crewPuzzle.participants} players contributed clues.
+              ? `Your crew opened all ${crewPuzzle.total_stages} code gates together.`
+              : `Your crew opened ${crewPuzzle.stage - 1} of ${crewPuzzle.total_stages} code gates.`}
+            {' '}{crewPuzzle.participants} players shared clues.
           </Text>
         </View>
       )}
 
       {/* One message, never two that disagree: offline sync only applies when this wait could earn. */}
       {rewardsPending && rewardTrackingAvailable && (
-        <Text style={styles.recapPending}>Rewards will sync when you&apos;re back online.</Text>
+        <Text style={styles.recapPending}>No internet. Your rewards will show up when you&apos;re back online.</Text>
       )}
       {rewardTrackingAvailable && !rewardsConfirmed && !rewardsPending && (
-        <Text style={styles.recapPending}>Checking eligible nearby time...</Text>
+        <Text style={styles.recapPending}>Checking your time near the ride...</Text>
       )}
       {!rewardTrackingAvailable && (
-        <Text style={styles.recapPending}>Games done! This session earned no Ride Parts. They count only near a ride that pays them.</Text>
+        <Text style={styles.recapPending}>Games done! No Ride Parts this time. You only earn Parts near a ride that has them.</Text>
       )}
 
       {rewardsConfirmed && coinState === 'loading' && (
@@ -316,18 +316,18 @@ export default function SessionRecap({
           <Text style={styles.coinNextLabel}>YOUR NEXT COIN MOVE</Text>
           <Text style={styles.coinNextTitle}>{coin.ride_name} · Level {coin.current_level}/{coin.max_level}</Text>
           {coin.current_level >= coin.max_level ? (
-            <Text style={styles.coinNextBody}>This coin is fully mastered. Its Ride Parts stay in your collection.</Text>
+            <Text style={styles.coinNextBody}>This coin is at its top level. Its Ride Parts stay with you.</Text>
           ) : (
             <>
               <Text style={styles.coinNextBody}>
                 {coin.available_parts ?? 0}/{coin.parts_to_next_level} Ride Parts · {playerEnergy == null
-                  ? energyUnavailable ? 'Energy balance unavailable' : 'Checking Energy balance'
+                  ? energyUnavailable ? 'Can’t load your energy' : 'Checking your energy'
                   : `${playerEnergy}/${coin.energy_to_next_level} Energy`}
                 {'\n'}{playerEnergy == null
-                  ? energyUnavailable ? 'Check this coin when you are connected.' : 'Checking your next upgrade.'
+                  ? energyUnavailable ? 'Check this coin when you are back online.' : 'Checking your next level up.'
                   : upgradeReady
                     ? 'Ready to level up now.'
-                    : `Next upgrade needs ${Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0))} more Parts and ${Math.max(0, coin.energy_to_next_level - playerEnergy)} more Energy.`}
+                    : `Next level needs ${Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0))} more Parts and ${Math.max(0, coin.energy_to_next_level - playerEnergy)} more energy.`}
               </Text>
               {coin.next_level_perks.length > 0 && (
                 <Text style={styles.coinNextBody}>Next unlock: {coin.next_level_perks.map(perk => perk.name).join(' · ')}</Text>
@@ -349,14 +349,14 @@ export default function SessionRecap({
           <Text style={styles.coinNextLabel}>{partsCount > 0 ? 'PARTS SAVED' : 'YOUR NEXT PARK MOVE'}</Text>
           <Text style={styles.coinNextTitle}>{rideName}</Text>
           <Text style={styles.coinNextBody}>{partsCount > 0
-            ? 'Collect this ride’s coin to spend the Parts you earned in line.'
-            : 'Collect this ride’s coin to start mastering it. Your queue games still count in this recap.'}</Text>
+            ? 'Win this ride’s coin to use the Parts you earned in line.'
+            : 'Win this ride’s coin to start leveling it up. Your line games still count here.'}</Text>
           <GameButton label={parkAvailable ? 'Open ride checklist' : 'Open Coin Shelf'} icon="map" variant="secondary"
             onPress={onOpenPark} style={styles.coinNextButton} />
         </Animated.View>
       )}
       {rewardsConfirmed && coinState === 'unavailable' && (
-        <Text style={styles.recapPending}>Coin progress is unavailable right now. Check the Coin Shelf when you&apos;re back online.</Text>
+        <Text style={styles.recapPending}>We can&apos;t load this coin right now. Check your Coin Shelf when you&apos;re back online.</Text>
       )}
 
       {feedbackEnabled && (

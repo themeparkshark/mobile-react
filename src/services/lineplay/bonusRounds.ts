@@ -103,7 +103,7 @@ export function pickerBadge(bonus: LineBonusSummary | null | undefined, secondsT
       text: secondsToNext != null ? `Win saved. Next bonus in ${formatClock(secondsToNext)}` : 'Win saved' };
   }
   if (secondsToNext != null) {
-    return { kind: 'pays_later', text: `Win now, pays at ${formatClock(secondsToNext)}`, reward: '+1 RIDE PART' };
+    return { kind: 'pays_later', text: `Win now. Part in ${formatClock(secondsToNext)}`, reward: '+1 RIDE PART' };
   }
   return { kind: 'encore', text: `ENCORE +${encoreXp} XP`, reward: `+${encoreXp} XP` };
 }
@@ -309,6 +309,6 @@ export function parkDayLine(input: RecapRewardsInput): string | null {
 /** Ring info sheet copy (the card itself carries only the ring, the row and one CTA). */
 export function ringInfoCopy(intervalSeconds: number, sessionCap: number, bonusEnabled: boolean): string {
   const minutes = Math.max(1, Math.round(intervalSeconds / 60));
-  const base = `Verified time near the ride earns one Ride Part every ${minutes} minutes, up to ${sessionCap} per line.`;
+  const base = `You get 1 Ride Part every ${minutes} minutes near the ride, up to ${sessionCap} per wait.`;
   return bonusEnabled ? `${base} Win bonus games for up to 3 more.` : base;
 }

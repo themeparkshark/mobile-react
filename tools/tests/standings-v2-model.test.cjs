@@ -103,9 +103,9 @@ test('day dots replace "2d 6h": today glows, the last day turns gold, the last h
   assert.equal(thursday.spoken, 'New week in 4 days');
   const sunday = model.weekDots(end, Date.parse('2026-10-04T19:00:00Z'));
   assert.equal(sunday.dots[6].state, 'today');
-  assert.deepEqual(plain([sunday.urgency, sunday.label]), ['last_day', 'Last day!']);
+  assert.deepEqual(plain([sunday.urgency, sunday.label]), ['last_day', 'Ends today']);
   const late = model.weekDots(end, Date.parse('2026-10-05T04:20:00Z'));
-  assert.deepEqual(plain([late.urgency, late.label]), ['last_hours', 'Last chance! 2h 40m']);
+  assert.deepEqual(plain([late.urgency, late.label]), ['last_hours', 'Ends in 2h 40m']);
   assert.equal(model.weekDots(null, 0).label, '');
 });
 

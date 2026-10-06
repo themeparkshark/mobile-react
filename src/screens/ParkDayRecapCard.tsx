@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
+import GameRichText from '../ui/GameRichText';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
@@ -71,11 +72,11 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
       </View>
-      {recap.line_play_sessions > 0 && <Text style={styles.copy}>
-        {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Part{recap.ride_parts_earned === 1 ? '' : 's'}
-      </Text>}
+      {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
+        {`[icon:queue] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
+      </GameRichText>}
       {recap.park_project_points > 0 && <Text style={styles.copy}>
-        +{recap.park_project_points} points toward the shared Park Project
+        +{recap.park_project_points} points for the Park Project
       </Text>}
       <Pressable style={styles.action} accessibilityRole="button" onPress={() => setExpanded(value => !value)}>
         <Text style={styles.actionText}>{expanded ? 'Hide moments' : 'See recent moments'}</Text>
@@ -109,7 +110,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
       </Pressable>
     </> : <Text style={styles.copy}>
       {atPark ? "Your first ride challenge will start this day's story. LinePlay and coin upgrades add more moments."
-        : 'No confirmed game moments here today. Your earlier park story is still available.'}
+        : 'No game wins here today yet. You can still see your earlier park days.'}
     </Text>}
     {recap.previous_active_day && <Pressable style={styles.link} accessibilityRole="button"
       onPress={() => showEarlier(recap.previous_active_day!)}>
@@ -120,7 +121,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
       <Text style={styles.linkText}>Back to today</Text>
       <GameIcon name="arrow" size={20} />
     </Pressable>}
-    <Text style={styles.note}>Your game wins and verified queue time form this story. Ride memories live in your ride journal.</Text>
+    <Text style={styles.note}>This story comes from your game wins and time in line. Your ride memories are in your ride journal.</Text>
   </View>;
 }
 

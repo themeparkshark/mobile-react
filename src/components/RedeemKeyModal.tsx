@@ -210,7 +210,7 @@ export default function RedeemKeyModal({
                   await redeemKey(redeemable.model as KeyType);
                 } catch {
                   setCollecting(false);
-                  gameAlert('Could not collect this Key', 'It is still here. Check your connection and try again.');
+                  gameAlert('Could not collect this key', 'It is still here. Check your internet and try again.');
                   return;
                 }
                 setCollecting(false);

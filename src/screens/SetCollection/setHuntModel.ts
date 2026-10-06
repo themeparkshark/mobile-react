@@ -6,8 +6,8 @@
  */
 import type { MilestoneClaimResult, SetMilestone, SetWearableChoice } from '../../api/endpoints/me/prep-item-sets';
 
-export const ADDED_TO_INVENTORY = 'Added to your Inventory';
-export const WEARABLE_PENDING = 'Your wearable is on the way';
+export const ADDED_TO_INVENTORY = 'Added to your closet';
+export const WEARABLE_PENDING = 'Your shark item is on the way';
 export const WEAR_IT = 'WEAR IT';
 
 export interface MilestoneView {

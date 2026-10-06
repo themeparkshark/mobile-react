@@ -11,7 +11,7 @@ import config from '../config';
 import * as Haptics from '../helpers/haptics';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
-import { GameButton, GameIcon, GameRichText, SharkLoader } from '../ui';
+import { GameButton, GameIcon, GameRichText, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { formatCooldown, ticketsEarnedFrom } from '../screens/CommunityCenter/communityCenterRewards';
 
@@ -23,6 +23,9 @@ interface CenterData {
   can_claim: boolean;
   give_cooldown_remaining: number;
   claim_cooldown_remaining: number;
+  /** From the server (older servers leave them out: 350 coins for 2 tickets). */
+  give_cost?: number;
+  give_tickets?: number;
 }
 
 interface Props {
@@ -49,9 +52,19 @@ export default function CommunityCenterModal({
   
   const { player, refreshPlayer } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
+  const cost = center?.give_cost ?? 350;
+  const gets = center?.give_tickets ?? 2;
 
   const handleGive = async () => {
     if (!center) return;
+    // Say the cost again before any coins leave: what you pay, what you get, what is left.
+    const coinsLeft = Math.max(0, (player?.coins ?? 0) - cost);
+    const ok = await confirmGame({
+      title: 'Leave a gift?',
+      message: `It costs ${cost} coins. You get ${gets} tickets. You’ll have ${coinsLeft} coins left.`,
+      icon: 'gift', confirmLabel: 'Leave Gift', cancelLabel: 'Not now',
+    });
+    if (!ok) return;
     
     setLoading(true);
     try {
@@ -73,7 +86,7 @@ export default function CommunityCenterModal({
       setResult({
         type: 'give',
         success: false,
-        message: error.response?.data?.error || 'Failed to leave gift',
+        message: error.response?.data?.error || 'Could not leave your gift. Check your internet and try again.',
       });
     } finally {
       setLoading(false);
@@ -104,7 +117,7 @@ export default function CommunityCenterModal({
       setResult({
         type: 'claim',
         success: false,
-        message: error.response?.data?.error || 'Failed to claim gift',
+        message: error.response?.data?.error || 'Could not open this gift. Check your internet and try again.',
       });
     } finally {
       setLoading(false);
@@ -118,7 +131,7 @@ export default function CommunityCenterModal({
 
   if (!center) return null;
 
-  const hasEnoughCoins = (player?.coins ?? 0) >= 350;
+  const hasEnoughCoins = (player?.coins ?? 0) >= cost;
 
   return (
     <Modal
@@ -174,7 +187,7 @@ export default function CommunityCenterModal({
                 <View style={styles.actionSection}>
                   <Text style={styles.actionTitle}>Leave a Gift</Text>
                   <GameRichText preset="bodySmall" tone="onBlue" style={styles.actionDesc}>
-                    {'Costs 350 [icon:coin]\nGet 2 [icon:ticket]'}
+                    {`Costs ${cost} [icon:coins]\nGet ${gets} [icon:ticket]`}
                   </GameRichText>
                   
                   {center.can_give ? (
@@ -186,7 +199,7 @@ export default function CommunityCenterModal({
                       />
                     ) : (
                       <Text style={styles.disabledText}>
-                        Need 350 coins ({player?.coins ?? 0} available)
+                        Need {cost} coins (you have {player?.coins ?? 0})
                       </Text>
                     )
                   ) : (

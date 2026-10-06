@@ -168,8 +168,8 @@ export async function watchForReward(
 /** "+60 Shark Coins", "+1 Park Ticket", "+20 Energy". */
 export function rewardText(reward: AdReward['reward']): string {
   const parts: string[] = [];
-  if (reward.tickets) parts.push(`+${reward.tickets} Park Ticket${reward.tickets === 1 ? '' : 's'}`);
-  if (reward.coins) parts.push(`+${reward.coins} Shark Coins`);
-  if (reward.energy) parts.push(`+${reward.energy} Energy`);
+  if (reward.tickets) parts.push(`+${reward.tickets} ticket${reward.tickets === 1 ? '' : 's'}`);
+  if (reward.coins) parts.push(`+${reward.coins} coins`);
+  if (reward.energy) parts.push(`+${reward.energy} energy`);
   return parts.join(' and ');
 }

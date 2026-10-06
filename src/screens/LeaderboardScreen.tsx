@@ -94,7 +94,7 @@ function StandingsTabs({ tabs, active, onChange, dot, ready = true }: {
             style={tabStyle}>
             {tabContent(tab, BRAND.white, true)}
             {tab.key === 'hunt' && dot && !selected && (
-              <View accessibilityLabel="Unclaimed results" style={{ position: 'absolute', top: 4, right: 10, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white }} />
+              <View accessibilityLabel="New results to see" style={{ position: 'absolute', top: 4, right: 10, width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white }} />
             )}
           </Pressable>
         );

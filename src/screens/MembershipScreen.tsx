@@ -5,7 +5,9 @@
  * to the server, which verifies Apple's signature and switches VIP on before we
  * celebrate. A binary without the StoreKit module asks for an app update.
  */
-import { clearGrownUpPass, grownUpForNextStep } from '../components/GrownUpGate';
+import { clearGrownUpPass, grownUpForNextStep, type GateReason } from '../components/GrownUpGate';
+import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../components/RealMoneyMark';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { openExternal, openLegal } from '../services/external';
 import * as Haptics from 'expo-haptics';
@@ -33,12 +35,37 @@ import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName 
 // (vip_perks, built from the server's economy.vip flags), so flipping a VIP
 // multiplier on the server changes this copy too.
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
-  { icon: 'xp', title: '2x XP and Shark Coins', body: 'On every ride coin you win at the park.' },
-  { icon: 'gift', title: '+2 finds on every home hunt', body: 'More Energy and Ticket chances on your map.' },
-  { icon: 'member', title: 'VIP badge on your profile', body: 'Show every shark you’re part of the crew.' },
+  { icon: 'xp', title: '2x XP and coins', body: 'Every time you win a ride coin at the park.' },
+  { icon: 'search', title: '2 extra finds on every home hunt', body: '2x energy, tickets and XP from every find.' },
+  { icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see you’re VIP.' },
 ];
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
+
+/** "Free for 1 week. Then $4.99 a month." The deal, said once, right above the button. */
+export function dealLine(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
+  const billing = priceText(plan);
+  return plan.trial
+    ? `${capitalize(plan.trial)}. Then ${billing}.`
+    : `${billing}.`;
+}
+/** The buy button: the free part first when there is one. */
+export function ctaLabel(trial: string | null): string {
+  return trial ? `TRY ${trial.replace(/\s*free$/i, '').toUpperCase()} FREE` : 'BECOME VIP';
+}
+
+/** "a month", or "every 3 months". */
+function perPeriod(period: string): string {
+  return /\s/.test(period) ? `every ${period}` : `a ${period}`;
+}
+function capitalize(text: string): string {
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
+/** What the grown-up gate restates before the App Store sheet. */
+export function vipGateReason(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): GateReason {
+  return { kind: 'money', price: plan.trial ? `${plan.trial}. Then ${priceText(plan)}` : priceText(plan), gets: 'VIP' };
+}
 
 export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
   const { intro } = route.params ?? {};
@@ -54,7 +81,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const canBuy = storeAvailable();
   useEffect(() => {
     let live = true;
-    getVipPerks().then(next => { if (live && next) setPerks(next); });
+    getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
     return () => { live = false; };
   }, []);
 
@@ -78,12 +105,12 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const celebrate = async () => {
     await refreshPlayer().catch(() => undefined);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    gameAlert('Welcome to VIP!', labels.payment_complete ?? 'Your VIP perks are live.');
+    gameAlert('Welcome to VIP!', labels.payment_complete ?? 'Your VIP boosts are on.');
     RootNavigation.navigate('Profile');
   };
 
   const ownedElsewhere = () => gameAlert('VIP is on another account',
-    'This Apple ID’s VIP is linked to a different Theme Park Shark account. Sign in to that account to use it.');
+    'This Apple ID’s VIP belongs to a different Theme Park Shark account. Sign in to that account to use it.');
 
   // Leaving the paywall (blur or unmount) drops the pass from its entry: only this visit's Buy may use it.
   useFocusEffect(useCallback(() => () => clearGrownUpPass(), []));
@@ -95,7 +122,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     try {
       // The paywall itself is gated: the pass from the door that opened it covers this one Buy
       // (once, within 2 minutes); otherwise a grown-up answers here. Nothing is bought without one.
-      if (!(await grownUpForNextStep('vip'))) return;
+      if (!(await grownUpForNextStep('vip', Date.now(), vipGateReason(plan)))) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBusy('buy');
       const outcome = await buyVip(plan);
@@ -108,10 +135,10 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
 
   const reportBuy = async (outcome: Awaited<ReturnType<typeof buyVip>>) => {
     if (outcome === 'success') await celebrate();
-    else if (outcome === 'pending') gameAlert('Waiting for approval', 'Your purchase is pending. VIP switches on once it’s approved.');
-    else if (outcome === 'unverified') gameAlert('Almost there', 'Your purchase went through. VIP switches on as soon as we can confirm it with Apple, at the latest the next time you open the app.');
+    else if (outcome === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. VIP turns on after that.');
+    else if (outcome === 'unverified') gameAlert('Almost there', 'It worked! VIP turns on in a minute. If not, it turns on next time you open the game.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();
-    else if (outcome === 'failed') gameAlert('Purchase didn’t go through', 'You weren’t charged. Please try again.');
+    else if (outcome === 'failed') gameAlert('That didn’t work', `You weren’t charged. Check your internet, then tap ${ctaLabel(plan?.trial ?? null)} again.`);
   };
 
   const restore = async () => {
@@ -120,10 +147,10 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     const outcome = await restoreVip();
     setBusy(null);
     if (outcome === 'restored') await celebrate();
-    else if (outcome === 'nothing') gameAlert('Nothing to restore', 'We couldn’t find an active VIP membership on this Apple ID.');
+    else if (outcome === 'nothing') gameAlert('Nothing to bring back', 'We couldn’t find VIP on this Apple ID. Ask a grown-up to sign in with the Apple ID that bought it.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();
-    else if (outcome === 'unavailable') gameAlert('Update to restore', 'Update Theme Park Shark in the App Store to restore VIP.');
-    else gameAlert('Couldn’t restore', 'Check your connection and try again.');
+    else if (outcome === 'unavailable') gameAlert('Update the game', 'Update Theme Park Shark in the App Store to bring back VIP.');
+    else gameAlert('That didn’t work', 'Check your internet and try again.');
   };
 
   const close = () => (intro ? RootNavigation.navigate('Explore') : RootNavigation.goBack());
@@ -135,13 +162,16 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeAreaView style={{ flex: 1 }}>
-        <Pressable style={s.close} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-          <GameIcon name="close" size={40} />
-        </Pressable>
+        {/* The X sits in its own row, so nothing ever scrolls under it. */}
+        <View style={s.closeRow}>
+          <Pressable style={s.close} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
+            <GameIcon name="close" size={40} />
+          </Pressable>
+        </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <Hero />
           <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>GO VIP</Animated.Text>
-          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more out of every park day and every hunt.</Animated.Text>
+          <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more from every park day and every hunt.</Animated.Text>
 
           <View style={s.benefits}>
             {perks.map((b, i) => (
@@ -158,7 +188,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           {!player ? (
             // Guests see the perks and a way in, never a dead purchase button.
             <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
-              <Text style={s.guestText}>Sign in to join VIP. Your perks follow your shark to every device.</Text>
+              <Text style={s.guestText}>Sign in first. Then VIP stays with your shark on every phone.</Text>
               <GameButton label="Sign in to join VIP" onPress={() => RootNavigation.navigate('Login')} />
             </Animated.View>
           ) : !canBuy ? (
@@ -171,8 +201,8 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             <SharkLoader compact tone="onBlue" style={{ marginTop: 20 }} />
           ) : !plan ? (
             <SharkLoader compact tone="onBlue" state="error" style={{ marginTop: 20 }}
-              title={loadFailed ? 'VIP couldn’t load' : 'VIP isn’t available right now'}
-              message="Check your connection and try again." onRetry={() => setAttempt(a => a + 1)} />
+              title={loadFailed ? 'VIP couldn’t load' : 'VIP isn’t here right now'}
+              message="Check your internet and try again." onRetry={() => setAttempt(a => a + 1)} />
           ) : (
             <Animated.View entering={FadeInUp.delay(620)} style={{ width: '100%' }}>
               <View style={s.plans}>
@@ -183,7 +213,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
                       style={[s.planCard, selected && s.planCardSelected]}
                       accessibilityRole="radio" accessibilityState={{ selected }}
                       accessibilityLabel={`${p.period === 'year' ? 'Yearly' : 'Monthly'}, ${priceText(p)}`}>
-                      {p.period === 'year' && savings && <Text style={s.planBadge}>{savings}</Text>}
+                      {p.period === 'year' && savings && <Text style={s.planBadge}>COSTS LESS</Text>}
                       <Text style={[s.planName, selected && s.planNameSelected]}>{p.period === 'year' ? 'YEARLY' : 'MONTHLY'}</Text>
                       <Text style={[s.planPrice, selected && s.planNameSelected]}>{priceText(p)}</Text>
                       {p.trial && <Text style={s.planTrial}>{p.trial}</Text>}
@@ -191,10 +221,20 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
                   );
                 })}
               </View>
-              <Text style={s.cancel}>Cancel anytime in your Apple ID settings.</Text>
+              {/* Before the button: the whole deal in plain words. Real money, what it costs, when, and how to stop. */}
+              <View style={s.deal} accessible accessibilityLabel={`${dealLine(plan)} It keeps going until a grown-up turns it off in Apple\u00A0ID settings.`}>
+                <RealMoneyMark size={36} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.dealHead}>REAL MONEY</Text>
+                  <Text style={s.dealBody}>{dealLine(plan)}</Text>
+                  <Text style={s.dealBody}>{'It keeps going until a grown-up turns it off in Apple\u00A0ID settings.'}</Text>
+                </View>
+              </View>
               <Pressable style={({ pressed }) => [s.cta, pressed && s.ctaPressed]} onPress={() => void buy()}
                 disabled={!!busy} accessibilityRole="button">
-                <Text style={s.ctaText}>{busy === 'buy' ? 'ONE MOMENT…' : trial ? 'START FREE TRIAL' : 'BECOME VIP'}</Text>
+                <Text style={s.ctaText}>{busy === 'buy' ? 'ONE MOMENT…' : ctaLabel(trial)}</Text>
+                {/* The billed price sits inside the button, as loud as the free part (App Store 3.1.2). */}
+                {busy !== 'buy' && <Text style={s.ctaSub}>{`${trial ? 'Then ' : ''}${priceText(plan)}`}</Text>}
               </Pressable>
             </Animated.View>
           )}
@@ -222,7 +262,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       {busy && (
         <View style={s.overlay}>
           <SharkLoader compact tone="onBlue" />
-          <Text style={s.overlayText}>{busy === 'buy' ? (labels?.processing_payment ?? 'Switching on your VIP perks…') : 'Checking your Apple ID…'}</Text>
+          <Text style={s.overlayText}>{busy === 'buy' ? (labels?.processing_payment ?? 'Turning on VIP…') : 'Checking your Apple ID…'}</Text>
         </View>
       )}
     </View>
@@ -230,13 +270,16 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
 }
 
 function Hero() {
+  const still = useUiReducedMotion();
   const bob = useSharedValue(0);
   const spin = useSharedValue(0);
   useEffect(() => {
+    // Reduce Motion: the hero holds still.
+    if (still) return () => undefined;
     bob.value = withRepeat(withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.sin) }), -1, true);
     spin.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
     return () => { cancelAnimation(bob); cancelAnimation(spin); };
-  }, [bob, spin]);
+  }, [bob, spin, still]);
   const hero = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 8 }] }));
   const burst = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
   return (
@@ -252,12 +295,12 @@ function Hero() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0768b9' },
   tint: { backgroundColor: 'rgba(7, 104, 185, 0.35)' },
-  close: { position: 'absolute', top: 50, right: 14, zIndex: 5, width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center' },
+  closeRow: { height: 44, alignItems: 'flex-end', paddingRight: 14 },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scroll: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 40 },
-  heroStage: { width: 260, height: 230, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  heroStage: { width: 200, height: 120, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   burst: { position: 'absolute', width: 340, height: 340, opacity: 0.18 },
-  hero: { width: 230, height: 230 },
+  hero: { width: 120, height: 120 },
   title: { fontFamily: 'Shark', fontSize: 46, color: '#ffcf3b', textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 2 },
   benefits: { width: '100%', gap: 8, marginTop: 16 },
@@ -268,16 +311,20 @@ const s = StyleSheet.create({
   guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
   guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
   plans: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  planCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.88)', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 8,
+  planCard: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 8,
     alignItems: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)' },
   planCardSelected: { backgroundColor: '#fff', borderColor: '#ffcf3b' },
   planBadge: { position: 'absolute', top: -12, backgroundColor: BRAND.greenLip, color: '#fff', fontFamily: 'Shark', fontSize: 12,
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden' },
-  planName: { fontFamily: 'Shark', fontSize: 16, color: '#64748b' },
+  planName: { fontFamily: 'Shark', fontSize: 16, color: '#09268f' },
   planNameSelected: { color: '#09268f' },
-  planPrice: { fontFamily: 'Shark', fontSize: 18, color: '#64748b', marginTop: 2 },
+  planPrice: { fontFamily: 'Shark', fontSize: 18, color: '#09268f', marginTop: 2 },
   planTrial: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.greenLip, marginTop: 2 },
-  cancel: { fontFamily: 'Knockout', fontSize: 13, color: '#dbeafe', marginTop: 8, textAlign: 'center' },
+  deal: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, backgroundColor: REAL_MONEY_TINT, borderRadius: 16,
+    borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 12, paddingVertical: 8 },
+  dealHead: { fontFamily: 'Shark', fontSize: 18, color: REAL_MONEY_INK },
+  ctaSub: { fontFamily: 'Shark', fontSize: 18, color: '#6a3b00', marginTop: 2 },
+  dealBody: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, lineHeight: 19 },
   cta: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 20, paddingVertical: 17, alignItems: 'center',
     borderBottomWidth: 5, borderBottomColor: '#d99a00' },
   ctaPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
@@ -285,7 +332,8 @@ const s = StyleSheet.create({
   links: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
   link: { fontFamily: 'Knockout', fontSize: 15, color: '#fff', textDecorationLine: 'underline' },
   dot: { color: 'rgba(255,255,255,0.6)' },
-  legal: { fontFamily: 'Knockout', fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 12, lineHeight: 15 },
+  legal: { fontFamily: 'Knockout', fontSize: 13, color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 12, lineHeight: 18,
+    backgroundColor: 'rgba(5,52,110,0.6)', borderRadius: 12, padding: 10, overflow: 'hidden' },
   skip: { fontFamily: 'Knockout', fontSize: 16, color: '#fff', marginTop: 14 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.82)', alignItems: 'center', justifyContent: 'center', gap: 14 },
   overlayText: { fontFamily: 'Knockout', fontSize: 16, color: '#fff' },

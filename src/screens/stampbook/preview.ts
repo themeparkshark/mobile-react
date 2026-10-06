@@ -446,7 +446,7 @@ const STAMPS: StampData[] = [
   "slug": "first-ride-coin",
   "name": "First Ride Coin",
   "category": "rides",
-  "goal": "Collect your first park coin",
+  "goal": "Collect your first ride coin",
   "metric": "",
   "target_value": 1,
   "rarity": "common",
@@ -470,14 +470,14 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Collect your first park coin"
+  "how_to": "Collect your first ride coin"
  },
  {
   "id": 915,
   "slug": "ride-coin-collector",
   "name": "Ride Coin Collector",
   "category": "rides",
-  "goal": "Collect five different park coins",
+  "goal": "Collect five different ride coins",
   "metric": "",
   "target_value": 5,
   "rarity": "rare",
@@ -501,7 +501,7 @@ const STAMPS: StampData[] = [
   },
   "section": "rides",
   "icon_url": null,
-  "how_to": "Collect five different park coins"
+  "how_to": "Collect five different ride coins"
  },
  {
   "id": 916,

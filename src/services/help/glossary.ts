@@ -38,10 +38,10 @@ export const SERVER_CURRENCY_KEYS: readonly GlossaryKey[] = [
 ];
 
 const TERMS: readonly GlossaryTerm[] = [
-  { key: 'coins', label: 'Shark Coins', icon: 'coins', topic: 'basics',
+  { key: 'coins', label: 'Coins', icon: 'coins', topic: 'basics',
     what: 'Spend them in the Shark Shop and at the Community Center.',
     earn: 'Catch ride coins, open your daily chest and win raids.' },
-  { key: 'tickets', label: 'Park Tickets', icon: 'ticket', topic: 'basics',
+  { key: 'tickets', label: 'Tickets', icon: 'ticket', topic: 'basics',
     what: 'Each ride challenge costs one Ticket.',
     earn: 'Grab home finds and open your day 7 daily chest.' },
   { key: 'energy', label: 'Energy', icon: 'energy', topic: 'basics',
@@ -51,11 +51,11 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Belong to one ride. Use them to level that ride coin up.',
     earn: 'Win at that ride, or play LinePlay while you wait in its line.' },
   { key: 'ride_coins', label: 'Ride Coins', icon: 'coin', topic: 'park',
-    what: 'Your collection: one coin for every ride you conquer, shown on your park shelf.',
+    what: 'You win one for each ride. They sit on your park shelf.',
     earn: 'Win a ride challenge at the ride.' },
-  { key: 'rescue_pass', label: 'Rescue Pass', icon: 'ticket', topic: 'ride_challenge',
-    what: 'One free try at a ride coin you do not have yet, once per park day.',
-    earn: 'Given automatically when you are out of Tickets at the park. Supplies sells them too.' },
+  { key: 'rescue_pass', label: 'Rescue Pass', icon: 'retry', topic: 'ride_challenge',
+    what: 'One more try at a ride coin you do not have yet. You get one free each park day.',
+    earn: 'You get it when you run out of tickets at the park. Supplies sells them too.' },
   { key: 'keys', label: 'Keys', icon: 'lock', topic: 'park',
     what: 'Open treasure vaults on the park map.',
     earn: 'Pick up keys you spot on the park map.' },
@@ -63,11 +63,11 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Attack another team at a park gym. One attack costs 2 Swords.',
     earn: 'Pick up swords you spot on the park map.' },
   { key: 'xp', label: 'XP', icon: 'xp', topic: 'basics',
-    what: 'Experience points. They raise your shark level.',
-    earn: 'Almost everything: home finds, ride wins, LinePlay and chests.' },
+    what: 'Points that raise your shark level.',
+    earn: 'You get it for home finds, ride wins, LinePlay and chests.' },
   { key: 'coin_levels', label: 'Coin levels', icon: 'star', topic: 'coins_levels',
-    what: 'Every ride coin can level up, from Level 1 Classic to Level 10 Shark Crown. Each level changes its look.',
-    earn: 'Tap a coin on your park shelf and spend Energy plus that ride\'s Ride Parts.' },
+    what: 'Every ride coin can level up, from Level 1 to Level 10. Each level gives it a new look.',
+    earn: 'Tap a coin on your park shelf. Then spend Energy and that ride\'s Ride Parts.' },
   { key: 'limited_coins', label: 'Limited coins', icon: 'timer', topic: 'park',
     what: 'Special ride coins that are only out for a while.',
     earn: 'Win the ride challenge before the date on the coin.' },
@@ -84,7 +84,7 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'The list of every ride and coin at this park.',
     earn: 'Open a park\'s shelf and scroll to Coin Guide. Search by ride name.' },
   { key: 'adventure_ticket', label: 'Adventure Ticket', icon: 'map', topic: 'park',
-    what: 'A three-step park-day quest at one ride: win its coin, play its LinePlay story, then celebrate.',
+    what: 'A 3-step quest at one ride. Win its coin, play its LinePlay story, then celebrate.',
     earn: 'Tap the Adventure card at the top of the park map.' },
   { key: 'park_goal', label: 'Park goal', icon: 'map', topic: 'home',
     what: 'The ride coin you plan to catch next. It waits on your map when you get to the park.',
@@ -94,40 +94,40 @@ const TERMS: readonly GlossaryTerm[] = [
     earn: 'See them all in your Stamp Book, from the menu or your profile.' },
   { key: 'sets', label: 'Sets', icon: 'gift', topic: 'collections',
     what: 'Every home find belongs to a set, like the Churro Collection.',
-    earn: 'Finish a set for Energy, Tickets, XP and a profile title. Open Collections from the menu.' },
+    earn: 'Finish a set to win energy, tickets, XP and a title. Open Collections from the menu.' },
   { key: 'pins', label: 'Pins', icon: 'pin', topic: 'extras',
     what: 'Collectible pins for your profile.',
     earn: 'Open Pin Packs from your profile, or swap with players in Pin Trading.' },
   { key: 'home_finds', label: 'Home finds', icon: 'gift', topic: 'home',
-    what: 'Snacks and souvenirs that pop up on the map near you, even at home. Each one leaves after a while.',
+    what: 'Snacks and treasures that pop up on the map near you, even at home. Each one leaves after a while.',
     earn: 'Walk close to a find, then tap it to catch it.' },
   { key: 'crew', label: 'Crew', icon: 'heart', topic: 'lineplay',
     what: 'The people in line with you. Your crew plays together on one phone.',
     earn: 'In LinePlay, tap Add your crew and pass the phone.' },
   { key: 'standings', label: 'Standings', icon: 'trophy', topic: 'standings',
-    what: 'Leaderboards for coins won at a park, ride wins and XP.',
+    what: 'Lists that rank players by ride coins, ride wins and XP.',
     earn: 'Tap Standings in the bottom bar.' },
   { key: 'daily_chest', label: 'Daily chest', icon: 'chest', topic: 'basics',
-    what: 'A free chest every day. Day 7 holds a Park Ticket.',
+    what: 'A free chest every day. Day 7 has a Ticket inside.',
     earn: 'It opens on the home map once a day.' },
   { key: 'day_streak', label: 'Day streak', icon: 'streak', topic: 'basics',
     what: 'How many days in a row you have played.',
     earn: 'Open the game every day to keep it growing.' },
   { key: 'travel_mode', label: 'Travel Mode', icon: 'map', topic: 'home',
     what: 'You are away from a park. The map shows home finds around you.',
-    earn: 'Hunt home finds now to stock up Tickets and Energy for your next park day.' },
+    earn: 'Hunt home finds now to stock up tickets and energy for your next park day.' },
   { key: 'ride_control', label: 'Teams and Ride Control', icon: 'crown', topic: 'teams',
     what: 'Three teams race to control the rides at each park.',
     earn: 'Pick a team. Your ride wins claim rides for it. Tap the team bar on the park map.' },
   { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
-    what: 'A membership that boosts your rewards. VIP players get every bonus ad reward without watching an ad.',
-    earn: 'Tap Member on the Social screen to see the perks.' },
+    what: 'A monthly plan a grown-up buys with real money. VIP members get bigger rewards and skip bonus ads.',
+    earn: 'Tap Member on the Social screen to see what VIP gives you.' },
   { key: 'supplies', label: 'Supplies', icon: 'gift', topic: 'shop',
-    what: 'The Shark Shop tab for Park Tickets, Shark Coins, Energy and Rescue Passes. Every pack lists exactly what it holds.',
+    what: 'Packs of tickets, coins, energy and Rescue Passes. A grown-up buys them with real money.',
     earn: 'Open the Shark Shop and tap Supplies. Ride Parts, ride coins and coin levels are never sold.' },
   { key: 'bonus_ads', label: 'Bonus ads', icon: 'play', topic: 'shop',
-    what: 'Optional short ads for a small bonus: a free daily Ticket, double coins after a win, one more try, or Energy after a wait.',
-    earn: 'Tap a Watch button when you see one. Skipping costs nothing, and each one has a daily limit.' },
+    what: 'Short, optional ads. Each one gives a small bonus, like a free ticket.',
+    earn: 'Tap a Watch button when you see one. Skipping is fine. Each one works a few times a day.' },
 ];
 
 export const LOCAL_GLOSSARY: Readonly<Record<GlossaryKey, GlossaryTerm>> =
@@ -145,6 +145,17 @@ function cleanLine(value: unknown, max = 220): string | null {
   if (!text || text.length > max) return null;
   // House rule: no em dashes in player copy, even if the server sends one.
   return text.replace(/\s*—\s*/g, ', ');
+}
+
+/** Old names an older server may still send. The app says the one glossary name. */
+const RETIRED_LABELS: Readonly<Record<string, string>> = {
+  'shark coins': 'Coins', 'shark coin': 'Coins', 'park tickets': 'Tickets', 'park ticket': 'Tickets',
+  'park coins': 'Ride Coins', 'park coin': 'Ride Coins',
+};
+
+function cleanLabel(value: unknown): string | null {
+  const text = cleanLine(value, 40);
+  return text ? RETIRED_LABELS[text.toLowerCase()] ?? text : null;
 }
 
 /**
@@ -166,7 +177,7 @@ export function mergeServerGlossary(
       const base = merged[key];
       merged[key] = {
         ...base,
-        label: cleanLine((entry as { label?: unknown }).label, 40) ?? base.label,
+        label: cleanLabel((entry as { label?: unknown }).label) ?? base.label,
         what: cleanLine((entry as { what?: unknown }).what) ?? base.what,
         earn: cleanLine((entry as { earn?: unknown }).earn) ?? base.earn,
       };
@@ -208,7 +219,7 @@ export function glossaryKeyForName(name: string | null | undefined): GlossaryKey
   return NAME_ALIASES[normal] ?? null;
 }
 
-/** "You have 377 Shark Coins" style line for a sheet opened from a balance. */
+/** "You have 377 Coins" style line for a sheet opened from a balance. */
 export function balanceLine(term: Pick<GlossaryTerm, 'label'>, count: number | null | undefined): string | null {
   if (typeof count !== 'number' || !Number.isFinite(count)) return null;
   return `You have ${Math.max(0, Math.floor(count)).toLocaleString('en-US')} ${term.label}.`;

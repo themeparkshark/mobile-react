@@ -224,7 +224,7 @@ export default function RideTrackerScreen() {
           {loadUnavailable && (
             <Text style={{ color: '#315C7C', fontFamily: 'Knockout', fontSize: 15,
               textAlign: 'center', marginBottom: 14 }}>
-              Ride details are unavailable. Pull down to retry.
+              Could not load your rides. Check your internet, then pull down to try again.
             </Text>
           )}
 

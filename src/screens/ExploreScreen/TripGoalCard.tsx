@@ -94,7 +94,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
     } catch {
       if (!mounted.current || version !== requestVersion.current) return;
       setStale(true);
-      setError('Could not refresh your park goal. Try again when connected.');
+      setError('Could not refresh your park goal. Check your internet and try again.');
       retryAction.current = () => void load();
     } finally {
       if (mounted.current && version === requestVersion.current) setLoading(false);
@@ -219,7 +219,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
       <Image source={require('../../../assets/images/coingold.png')} style={styles.pillCoin} contentFit="contain" />
       <Text style={styles.pillTitle} numberOfLines={1}>
         {busy ? 'Saving your goal…' : loading && !data ? 'Loading park goal…' : goal ? goal.ride_name
-          : data?.goal_unavailable ? 'Choose a new ride' : data ? 'Choose a park goal' : 'Park goals unavailable'}
+          : data?.goal_unavailable ? 'Choose a new ride' : data ? 'Choose a park goal' : 'Could not load park goals'}
       </Text>
       <Text style={styles.pillDetail} numberOfLines={1}>
         {goal && wallet ? plan?.maxed ? 'PARK GOAL · MAX LEVEL'
@@ -276,13 +276,13 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
             </View>
           </View>
           <Text style={styles.resourceHint}>{goal?.coin_owned
-            ? plan?.maxed ? 'This coin is at its current max. Choose another ride to keep collecting.'
-              : plan?.energy_needed ? `${plan.energy_needed} Energy to find at home for your next upgrade`
-              : upgradeReady ? 'Your next coin upgrade is ready.'
-              : 'Energy is ready; collect the remaining Ride Parts.'
+            ? plan?.maxed ? 'This coin is at its top level for now. Pick another ride to keep collecting.'
+              : plan?.energy_needed ? `Find ${plan.energy_needed} more energy at home for your next level up`
+              : upgradeReady ? 'Your coin is ready to level up.'
+              : 'You have the energy. Now get the rest of the Ride Parts.'
             : wallet.tickets_needed > 0
-              ? `${wallet.tickets_needed} more ${wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} for a ride attempt`
-              : 'You have enough Tickets for one ride attempt'}</Text>
+              ? `${wallet.tickets_needed} more ${wallet.tickets_needed === 1 ? 'ticket' : 'tickets'} for one ride try`
+              : 'You have enough tickets for one ride try'}</Text>
         </View>}
         {goal && !pickerMode && <Pressable accessibilityRole="button" style={styles.changeRide}
           onPress={() => setPickerMode(true)}>
@@ -305,7 +305,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
             : goal.coin_owned ? `Level ${plan.current_level} to ${plan.next_level}`
             : 'Your first level-up'}</Text>
           <Text style={styles.planHint}>{plan.maxed
-            ? 'This coin has reached its current maximum level. Choose another ride to keep collecting.'
+            ? 'This coin is at its top level for now. Pick another ride to keep collecting.'
             : goal.coin_owned
               ? `${plan.parts_needed === 0 ? 'Ride Parts ready' : `${plan.parts_needed} ${plan.parts_needed === 1 ? 'Ride Part' : 'Ride Parts'} to collect`} · ${plan.energy_needed === 0 ? 'Energy ready' : `${plan.energy_needed} Energy to find at home`}`
               : `${plan.energy_needed === 0 ? 'Energy ready for your first upgrade' : `${plan.energy_needed} Energy to find at home for your first upgrade`}. Earn the coin and its Ride Parts at the park.`}</Text>
@@ -317,11 +317,11 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           <GameRichText style={styles.huntTitle} iconSize={16}>{rewardReady ? '[icon:gift] HOME REWARD READY'
             : collectionHelpsGoal ? '[icon:map] HOME PREP FOR THIS GOAL' : '[icon:map] HOME COLLECTION'}</GameRichText>
           <Text style={styles.huntName}>{suggestedSet.name}</Text>
-          <Text style={styles.huntHint}>{rewardReady
-            ? 'Open this set to claim your earned trip prep reward.'
+          <GameRichText style={styles.huntHint} iconSize={14}>{rewardReady
+            ? 'Open this set to get your reward.'
             : starter && !starter.rewards_claimed
-              ? `${starter.collected}/${starter.target} unique finds toward a shark item and ${starter.rewards.tickets} ${starter.rewards.tickets === 1 ? 'Ticket' : 'Tickets'} · ${starter.rewards.energy} Energy`
-              : `${suggestedSet.collected_count}/${suggestedSet.total_items} found · ${suggestedSet.completion_rewards.tickets} Tickets and ${suggestedSet.completion_rewards.energy} Energy on completion`}</Text>
+              ? `${starter.collected}/${starter.target} different finds. Finish for a shark item, [icon:ticket] ${starter.rewards.tickets} ${starter.rewards.tickets === 1 ? 'ticket' : 'tickets'} and [icon:energy] ${starter.rewards.energy} energy.`
+              : `${suggestedSet.collected_count}/${suggestedSet.total_items} found. Finish for [icon:ticket] ${suggestedSet.completion_rewards.tickets} tickets and [icon:energy] ${suggestedSet.completion_rewards.energy} energy.`}</GameRichText>
           <GameRichText style={styles.huntAction} iconSize={14}>{'View collection [icon:arrow]'}</GameRichText>
         </Pressable>}
         {busy && <View style={styles.saving} accessibilityLiveRegion="polite">
@@ -361,7 +361,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
                 </Pressable>)}
               </View>;
             })}
-            {data && data.rides.length === 0 && <Text style={styles.empty}>No available ride coins yet. Check back when a park is ready.</Text>}
+            {data && data.rides.length === 0 && <Text style={styles.empty}>No ride coins to pick yet. Check back soon.</Text>}
             {goal && <Pressable disabled={busy} onPress={() => void clear()} accessibilityRole="button">
               <Text style={styles.clear}>Clear this goal</Text>
             </Pressable>}

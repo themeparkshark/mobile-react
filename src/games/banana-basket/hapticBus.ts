@@ -85,7 +85,7 @@ export const HAPTIC_TABLE: [string, string][] = [
   ['PERFECT', 'impact Light'],
   ['Bunch, POP, BONK, coin pip', 'impact Medium'],
   ['Lucky Bunch POP', 'Medium + Light at +90 ms'],
-  ['Tier-up, gate unlock', 'notification Success'],
+  ['Tier-up, gate unlock', 'notification Success'], // clarity-allow: haptic table label
   ['Star notch passed', 'impact Light'],
   ['Ball bounce', 'selection on bounces 1-3 of each life and on Gold Ball bounces'],
   ['Pail save', 'impact Light'],

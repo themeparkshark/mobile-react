@@ -7,16 +7,16 @@ import { isGhostFinished, isNoContest } from '../net/partyTypes';
 
 const n = (v: number) => v.toLocaleString('en-US');
 
-/** The explain() sentence: "The lure in bar 10 cost you 410." */
+/** The explain() sentence: "A lure cost you 410." */
 export function keyMomentLine(m: KeyMoment | null | undefined): string | null {
   if (!m || m.kind === 'none' || m.cost <= 0) return null;
   switch (m.kind) {
-    case 'lure': return `The lure in bar ${m.bar} cost you ${n(m.cost)}.`;
-    case 'butterfingers': return `Butterfingers in bar ${m.bar} cost you ${n(m.cost)}.`;
-    case 'golden_escaped': return `The golden in bar ${m.bar} got away: ${n(m.cost)}.`;
-    case 'shared_missed': return `The Shared Golden in bar ${m.bar} was worth ${n(m.cost)}.`;
-    case 'snatch_missed': return `Snatch missed by ${m.byMs}ms in bar ${m.bar}.`;
-    case 'splashed': return `Splashed in bar ${m.bar}: -${n(m.cost)}.`;
+    case 'lure': return `A lure cost you ${n(m.cost)}.`;
+    case 'butterfingers': return `Tapping too fast cost you ${n(m.cost)}.`;
+    case 'golden_escaped': return `A golden got away. It was worth ${n(m.cost)}.`;
+    case 'shared_missed': return `You missed a Shared Golden. It was worth ${n(m.cost)}.`;
+    case 'snatch_missed': return 'So close! You just missed a snatch.';
+    case 'splashed': return `You got splashed: -${n(m.cost)}.`;
     default: return null;
   }
 }
@@ -49,7 +49,7 @@ export function starLabel(s: StarHighlight | null | undefined): string | null {
     case 'longest_streak': return `LONGEST STREAK ${s.value}`;
     case 'goldens': return `${s.value} GOLDENS`;
     case 'cleanest': return `CLEANEST  ${s.value} HITS, NO LURES`;
-    case 'best_bar': return `BEST BAR  BAR ${s.bar ?? 1}, ${n(s.value)}`;
+    case 'best_bar': return `BEST STRETCH  ${n(s.value)} POINTS`;
     default: return null;
   }
 }

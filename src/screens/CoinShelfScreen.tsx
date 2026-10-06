@@ -153,7 +153,7 @@ export default function CoinShelfScreen({ route }: {
           <View style={styles.summary}>
             <GameIcon name="coins" size={44} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.summaryEyebrow}>{catalogStale ? 'LAST KNOWN COLLECTION' : 'ACROSS ALL PARKS'}</Text>
+              <Text style={styles.summaryEyebrow}>{catalogStale ? 'SAVED ON YOUR PHONE' : 'ACROSS ALL PARKS'}</Text>
               <Text style={styles.summaryCount}>{catalog ? `${ownedCount}/${catalogRides.length}` : coins.length} RIDE COINS</Text>
               {catalog && catalogRides.length > 0 && <View style={styles.track}>
                 <View style={[styles.fill, { width: `${Math.round(ownedCount / catalogRides.length * 100)}%` }]} />
@@ -176,7 +176,7 @@ export default function CoinShelfScreen({ route }: {
             <Text style={styles.readyTitle}>READY TO LEVEL UP</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 6 }}>
               {ready.map((coin, index) => <Pressable key={coin.id} accessibilityRole="button"
-                accessibilityLabel={`${coin.ride_name} is ready to power up. Open it on its park shelf.`}
+                accessibilityLabel={`${coin.ride_name} is ready to level up. Open it on its park shelf.`}
                 onPress={() => openPark(coin.park_id ?? null, coin.id)} style={{ alignItems: 'center', width: 70 }}>
                 <ShelfCoin coinUrl={coin.coin_url} level={coin.current_level} size={56} phase={index} />
                 <Text style={styles.readyName} numberOfLines={1}>{coin.ride_name}</Text>

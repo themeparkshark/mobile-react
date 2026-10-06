@@ -61,7 +61,7 @@ export const STAMP_CATEGORY_CONFIG = {
     label: 'Explorer',
     color: '#4CAF50',
     icon: '🗺️',
-    description: 'Discover new places and collect items',
+    description: 'Find new places and collect items',
   },
   collection: {
     label: 'Collector',
@@ -79,7 +79,7 @@ export const STAMP_CATEGORY_CONFIG = {
     label: 'Social Shark',
     color: '#E91E63',
     icon: '👥',
-    description: 'Connect with other players',
+    description: 'Play with other sharks',
   },
   trivia: {
     label: 'Trivia Master',
@@ -91,7 +91,7 @@ export const STAMP_CATEGORY_CONFIG = {
     label: 'Dedicated',
     color: '#FF5722',
     icon: '🔥',
-    description: 'Maintain daily streaks',
+    description: 'Play day after day',
   },
   leveling: {
     label: 'Power Player',
@@ -103,13 +103,13 @@ export const STAMP_CATEGORY_CONFIG = {
     label: 'Special',
     color: '#00BCD4',
     icon: '⭐',
-    description: 'Limited time events',
+    description: 'Special events',
   },
   secret: {
     label: 'Secret',
     color: '#607D8B',
     icon: '🔮',
-    description: 'Hidden achievements',
+    description: 'Hidden surprises',
   },
 } as const;
 

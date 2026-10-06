@@ -85,22 +85,22 @@ export const SUPPORT_EMAIL = 'contact@themeparkshark.com';
 export const DELETION_COPY = {
   confirmTitle: 'Delete your account?',
   confirmMessage:
-    'This permanently deletes your shark, coins, collection, friends and progress. It cannot be undone. Apple may ask you to confirm it is you.',
+    'This deletes your shark, coins, collection, friends and progress forever. You can’t get them back. Apple may ask to check it’s you.',
   confirmLabel: 'Delete forever',
   keepLabel: 'Keep my account',
   busy: 'Deleting your account',
   doneTitle: 'Account deleted',
-  doneMessage: 'Your account and all of your game progress have been permanently deleted. Thanks for playing.',
+  doneMessage: 'Your account and game progress are deleted. Thanks for playing.',
   failTitle: "Couldn't delete your account",
-  failMessage: `Nothing was deleted. Check your connection and try again. If it keeps happening, email ${SUPPORT_EMAIL}.`,
+  failMessage: `Nothing was deleted. Check your internet and tap Try again. Still stuck? Email ${SUPPORT_EMAIL}.`,
   retryLabel: 'Try again',
   emailTitle: 'Check your email',
   emailMessage: 'We sent a link to the email on your Apple Account. Tap it to finish deleting your account.',
-  deactivateTitle: 'Deactivate your account?',
+  deactivateTitle: 'Pause your account?',
   deactivateMessage: 'Your shark takes a break. Sign in again any time to pick up where you left off.',
-  deactivateLabel: 'Deactivate',
-  deactivateFailTitle: "Couldn't deactivate",
-  deactivateFailMessage: 'Your account is still active. Check your connection and try again.',
+  deactivateLabel: 'Pause account',
+  deactivateFailTitle: "Couldn't pause your account",
+  deactivateFailMessage: 'Your account is still on. Check your internet and try again.',
 } as const;
 
 /** The success message, with the server's VIP billing notice when there is one. */

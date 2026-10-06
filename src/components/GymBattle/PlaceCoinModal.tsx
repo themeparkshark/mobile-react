@@ -111,7 +111,7 @@ export default function PlaceCoinModal({
     } catch (err) {
       console.error('Failed to load coins:', err);
       setState('error');
-      setError('Failed to load your coins');
+      setError('Could not load your ride coins. Check your internet and try again.');
     }
   };
 
@@ -131,7 +131,7 @@ export default function PlaceCoinModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
-      setError(friendlyActionError(err, 'Failed to place coin!'));
+      setError(friendlyActionError(err, 'Could not place your coin. Check your internet and try again.'));
       setState('error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
@@ -168,7 +168,7 @@ export default function PlaceCoinModal({
               <GameIcon name="coin" size={64} />
               <Text style={styles.emptyTitle}>No Coins Yet!</Text>
               <Text style={styles.emptyMessage}>
-                Collect coins by completing tasks at attractions in this park first!
+                Win ride coins at rides in this park first!
               </Text>
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
                 <Text style={styles.doneText}>GOT IT</Text>

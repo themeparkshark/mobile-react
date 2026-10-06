@@ -49,7 +49,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
       style={styles.savedShark} contentFit="contain" />
     <View style={styles.savedCopy}>
       <Text style={styles.savedTitle}>SAVED MAP</Text>
-      <Text style={styles.savedDetail}>Reconnect to collect these finds.</Text>
+      <Text style={styles.savedDetail}>Check your internet to collect these finds.</Text>
       <RankLine line={rankLine} onPress={onOpenStandings} light />
     </View>
     {onRetry && <Pressable accessibilityRole="button"
@@ -62,10 +62,10 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
   const title = mode === 'park_check' ? 'CHECKING YOUR MAP'
     : mode === 'loading' ? 'SCOUTING THE MAP'
     : mode === 'error' ? 'MAP SIGNAL LOST' : 'THE HUNT IS QUIET';
-  const detail = mode === 'park_check' ? 'Home finds return when your location is confirmed outside a park.'
+  const detail = mode === 'park_check' ? 'Home finds come back once we see you are outside a park.'
     : mode === 'loading' ? 'Looking for nearby finds...'
-    : mode === 'error' ? 'Could not refresh nearby finds.'
-      : 'Check your collection while new finds appear.';
+    : mode === 'error' ? 'Could not load nearby finds. Check your internet. We will try again.'
+      : 'New finds will show up soon. Check your collection while you wait.';
 
   return <View style={[styles.card, inline && styles.inline]}>
     <Animated.View style={[styles.sharkFrame, { transform: [{ translateY: sharkFloat }] }]}>

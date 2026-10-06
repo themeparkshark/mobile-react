@@ -116,7 +116,7 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     kicker: 'My Crowned Ride Coin',
     title: 'Shark Crown',
     big: 'LV 10',
-    stat: ownedLine(owned, 'have crowned one') ?? 'Maxed out, the top tier',
+    stat: ownedLine(owned, 'have crowned one') ?? 'Maxed out, the top level',
     sub: count(p.timesCollected) ? `Ridden and won ${plural(count(p.timesCollected), 'time')}` : null,
     cta: 'Can you crown one?',
     frame: 'royal',
@@ -216,13 +216,13 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
 
   coin_level: (p, owned) => {
     const level = Math.max(1, Math.min(10, count(p.level) || 1));
-    const tier = cleanName(p.tierName || 'New', 20);
+    const look = cleanName(p.tierName || 'New', 20);
     return {
       ribbon: 'COIN LEVEL UP!',
       kicker: 'My Ride Coin',
-      title: `${tier} Coin`,
+      title: `${look} Coin`,
       big: `LV ${level}`,
-      stat: ownedLine(owned, 'have one this high') ?? `${tier} tier unlocked`,
+      stat: ownedLine(owned, 'have one this high') ?? `${look} look unlocked`,
       sub: count(p.timesCollected) ? `Ridden and won ${plural(count(p.timesCollected), 'time')}` : null,
       cta: 'Level up yours!',
       frame: 'coins',
@@ -318,7 +318,7 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       title: p.edition?.name ? cleanName(p.edition.name) || 'Ride Coin Edition' : p.limited ? 'Limited Ride Coin' : 'New Ride Coin',
       big: show ? `${pct}%` : null,
       bigLabel: show ? "OF THIS PARK'S COINS" : null,
-      stat: p.limited ? 'Here for a limited time only' : 'Ridden and won',
+      stat: p.limited ? 'Only here for a while' : 'Ridden and won',
       sub: show && pct === 100 ? 'Every coin, collected' : null,
       cta: 'Ride and win your own!',
       frame: 'coins',

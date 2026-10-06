@@ -858,7 +858,7 @@ export class PartyClient {
   private toError(e: any): PartyApiError {
     const status = e?.response?.status ?? 0;
     const data = e?.response?.data ?? {};
-    return { status, code: data.code ?? (status ? `HTTP_${status}` : 'NETWORK'), message: data.message ?? 'Connection trouble. Retrying.', room: data.room };
+    return { status, code: data.code ?? (status ? `HTTP_${status}` : 'NETWORK'), message: data.message ?? 'Lost the signal. Trying again...', room: data.room };
   }
 
   private derivePhase(s: PartyState): PartyPhase {

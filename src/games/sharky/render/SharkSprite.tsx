@@ -271,7 +271,7 @@ export const SharkSprite = React.memo(function SharkSprite({
     const sincePop = p.fx - p.tierT;
     const pop = sincePop >= 0 && sincePop < 250 ? 1 + 0.25 * Math.sin((sincePop / 250) * Math.PI) : 1;
     const fpop = p.fx - p.frenzyT < 300 ? 1 + 0.5 * Math.sin(((p.fx - p.frenzyT) / 300) * Math.PI) : 1;
-    const text = s.frenzy > 0 ? 'FRENZY' : `x${multiplier(s)}`;
+    const text = s.frenzy > 0 ? 'FRENZY' : 'x' + String(multiplier(s));
     const k = s.frenzy > 0 ? s.frenzy / FRENZY_STEPS : s.chainTimer / CHAIN_WINDOW;
     const color = s.frenzy > 0 ? REWARD : TIER_COLORS[t];
     return { show: show ? 1 : 0, scale: pop * fpop, text, k, color, white: !s.frenzy && s.chainTimer < 30 ? 1 : 0 };

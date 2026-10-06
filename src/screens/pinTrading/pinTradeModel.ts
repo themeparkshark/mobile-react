@@ -120,10 +120,10 @@ export const PIN_TRADE_COPY = {
   pickFirst: 'Tap one of your pins',
   yourPin: 'Your pin',
   noPinsTitle: 'No pins to trade yet',
-  noPinsMessage: 'Collect pins around the parks, then come back to swap.',
+  noPinsMessage: 'Get pins at the parks first. Then come back to swap.',
   backToBoard: 'Back to board',
   notNow: 'Not now',
-  confirmMessage: (give: string, get: string) => `Give your ${give} for the ${get}?`,
+  confirmMessage: (give: string, get: string) => `Give your ${give} for the ${get}? You can’t undo a trade.`,
   confirmLabel: 'Yes, trade!',
   sendingLabel: 'Trading...',
   confirmBack: 'Wait, go back',
@@ -143,18 +143,17 @@ export const PIN_TRADE_COPY = {
   newStamp: 'New!',
   gotIt: 'Got it',
   fromYou: 'From you',
-  hurry: 'Hurry!',
-  noPinsHint: 'You need a pin of your own to trade. Collect pins around the parks!',
+  noPinsHint: 'You need a pin of your own to trade. Get pins at the parks!',
   takenTitle: 'Pin is taken',
   ownedTitle: 'You have this one',
   yoursTitle: 'That one is yours',
   yoursMessage: 'You just put this pin on the board. Pick a different one!',
   ownedMessage: "Pick a pin you don't have yet.",
-  ownedEndMessage: 'This pin is already in your collection. Pick a different one on the board!',
-  networkTitle: 'No connection',
-  networkMessage: 'Check your connection and try again.',
-  genericTitle: 'Something went wrong',
-  genericMessage: 'Try again in a moment.',
+  ownedEndMessage: 'You already have this pin. Pick a different one on the board!',
+  networkTitle: 'No internet',
+  networkMessage: 'Your pins are safe. Check your internet and try again.',
+  genericTitle: 'That didn’t work',
+  genericMessage: 'Your pins are safe. Try again in a moment.',
   signedOutTitle: 'Sign in to trade pins',
   signIn: 'Sign in',
 } as const;
@@ -168,15 +167,16 @@ export function isHolding(phase: TradePhase): boolean {
 
 export type StatusChip = { readonly label: string; readonly icon: GameIconName; readonly tone: 'gold' | 'blue' | 'red' | 'green' };
 
-/** The status chip on the trade sheet for each phase. `hurry` turns the picking chip red under 30 s. */
-export function statusChip(phase: TradePhase, hurry = false): StatusChip {
+/** The status chip on the trade sheet for each phase. `_hurry` is kept for callers; the chip never turns red. */
+export function statusChip(phase: TradePhase, _hurry = false): StatusChip {
   switch (phase) {
-    case 'confirming': return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'Ready to trade', icon: 'swap', tone: 'blue' };
+    // No red hurry chip: the clock shows the time, and a kid deciding is never pushed (clarity pass).
+    case 'confirming': return { label: 'Ready to trade', icon: 'swap', tone: 'blue' };
     case 'sending': return { label: 'Trading', icon: 'swap', tone: 'blue' };
     case 'expired': return { label: "Time's up", icon: 'timer', tone: 'red' };
     case 'failed': return { label: 'Not traded', icon: 'retry', tone: 'red' };
     case 'taken': return { label: 'Taken', icon: 'search', tone: 'red' };
-    default: return hurry ? { label: 'Hurry!', icon: 'timer', tone: 'red' } : { label: 'On hold for you', icon: 'lock', tone: 'gold' };
+    default: return { label: 'On hold for you', icon: 'lock', tone: 'gold' };
   }
 }
 

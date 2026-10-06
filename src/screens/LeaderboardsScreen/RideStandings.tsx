@@ -144,7 +144,7 @@ export default function RideStandings() {
       <View style={{ paddingHorizontal: 16 }}>
         <View style={{ marginBottom: 12 }}>
           <StandingsPicker
-            title="Select Park"
+            title="Pick a Park"
             value={parkId}
             onValueChange={setChosenParkId}
             items={parks.map(park => ({ label: park.display_name ?? park.name, value: park.id }))}

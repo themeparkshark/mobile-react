@@ -244,7 +244,7 @@ export function SetHeader({ set, onFocus, focusBusy, onOdds, stamp }: {
             <GameIcon name="search" size={26} />
           </SpringPress>
         )}
-        <SpringPress onPress={onOdds} accessibilityLabel="Drop odds" style={styles.iconButton}>
+        <SpringPress onPress={onOdds} accessibilityLabel="How rare is each find?" style={styles.iconButton}>
           <GameIcon name="info" size={26} />
         </SpringPress>
       </View>

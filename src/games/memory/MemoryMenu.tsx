@@ -186,7 +186,7 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
         </View>
         <View style={[styles.cards, { paddingBottom: insets.bottom + 14 }]}>
           <BoothCard index={0} reducedMotion={reducedMotion} onPress={() => go({ kind: 'timeAttack' })}
-            title="Time Attack" body="Race the clock. Every clean board grows." icon={STOPWATCH}
+            title="Time Attack" body="Race the clock. Each board you clear, the next one gets bigger." icon={STOPWATCH}
             right={heatOk ? (
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
                 <Text style={styles.badge}>{`HEAT${heat.seagull && heat.tide ? ' +60%' : heat.seagull || heat.tide ? ' +25%' : ''}`}</Text>
@@ -201,7 +201,7 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
             icon={SHARK_TOKEN}
             right={<Text style={styles.badge}>{lobbyOnline ? `0:${String(tick).padStart(2, '0')}` : 'PRACTICE'}</Text>} />
           <BoothCard index={2} reducedMotion={reducedMotion} onPress={startDaily} gold
-            title="Daily Deck" body={rec ? (rec.cleared ? `Cleared in ${rec.turns} turns. Practice runs are open.` : 'Ranked try played. Practice runs are open.') : `Two slips and you're out. ${ghost ? `Race ${ghost.name}.` : 'Beat the par shark.'}`}
+            title="Daily Deck" body={rec ? (rec.cleared ? `Cleared in ${rec.turns} turns. You can still practice.` : 'You used your scored try. You can still practice.') : `Two slips and you're out. ${ghost ? `Race ${ghost.name}.` : 'Beat the par shark.'}`}
             icon={STREAK}
             right={<View style={{ alignItems: 'flex-end' }}>
               <View style={{ flexDirection: 'row' }}>

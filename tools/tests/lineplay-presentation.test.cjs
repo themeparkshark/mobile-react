@@ -66,10 +66,10 @@ test('the visible live action advances from vote to player unlocked game to shar
   assert.match(crewLivePrompt(base, new Set()).title, /Choose/);
   const waiting = { ...base, can_choose: false, seconds_until_eligible: 45 };
   assert.match(crewLivePrompt(waiting, new Set()).title, /Play now/);
-  assert.equal(crewLivePrompt(waiting, new Set()).action, 'SEE CREW ROUTE');
+  assert.equal(crewLivePrompt(waiting, new Set()).action, 'SEE CREW PATH');
   const soloPending = { ...base, can_choose: false, player_choice: 'route_a', seconds_until_solo: 120 };
-  assert.match(crewLivePrompt(soloPending, new Set()).title, /solo route opens/);
-  assert.equal(crewLivePrompt(soloPending, new Set()).action, 'VIEW YOUR ROUTE');
+  assert.match(crewLivePrompt(soloPending, new Set()).title, /path opens/);
+  assert.equal(crewLivePrompt(soloPending, new Set()).action, 'SEE YOUR PATH');
   const opened = { ...base, participants: 3, unlocked_route: 'route_b',
     puzzle: { stage: 1, total_stages: 3, completed: false } };
   assert.match(crewLivePrompt(opened, new Set()).title, /Starlight Route/);

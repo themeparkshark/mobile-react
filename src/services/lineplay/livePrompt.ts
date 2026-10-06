@@ -17,11 +17,11 @@ export function crewLivePrompt(
   if (!route) {
     const waitingForVote = !signal.player_choice && !signal.can_choose;
     return {
-      label: `CREW ROUTE · ${signal.participants}/${signal.community_target} SIGNALS`,
-      title: signal.player_choice ? 'Your solo route opens as you wait'
+      label: `CREW PATH · ${signal.participants}/${signal.community_target} VOTES`,
+      title: signal.player_choice ? 'Your path opens while you wait'
         : waitingForVote ? 'Play now · your vote opens soon' : 'Choose the next round',
-      action: signal.player_choice ? 'VIEW YOUR ROUTE'
-        : waitingForVote ? 'SEE CREW ROUTE' : 'CAST YOUR SIGNAL',
+      action: signal.player_choice ? 'SEE YOUR PATH'
+        : waitingForVote ? 'SEE CREW PATH' : 'VOTE NOW',
       pageId: 'crew-signal',
     };
   }

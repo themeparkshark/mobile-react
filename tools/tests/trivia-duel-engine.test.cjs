@@ -491,7 +491,7 @@ test('near-miss finds the smallest single change', () => {
   const results = plan.rounds.map(() => ({ me: { correct: true, speed: 20, stake: 0, points: 120, streak: { streak: 1 } }, opp: {} }));
   const out = nm.nearMiss(plan, t, results);
   assert.equal(out.kind, 'speed');
-  assert.match(out.line, /^Lost by 35\. A GREAT lock on Q1 wins it\.$/);
+  assert.match(out.line, /^Lost by 35\. A GREAT answer on question 1 wins it\.$/);
   t.opp.score = 499;
   assert.equal(nm.nearMiss(plan, t, results).kind, 'none');
 });

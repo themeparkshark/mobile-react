@@ -76,7 +76,7 @@ test('tier progress, countdown and rank movement', () => {
   assert.equal(model.tierProgressLine({ next_tier: { label: 'Top 25%', points_needed: 18 } }), '18 points to Top 25%');
   assert.equal(model.tierProgressLine({ next_tier: { label: 'Top 25%', points_needed: 1 } }), '1 point to Top 25%');
   assert.equal(model.tierProgressLine({ unranked: true }), 'Not ranked this week.');
-  assert.equal(model.tierProgressLine({ tier: { key: 'hunter', label: 'Hunter' }, next_tier: null }), 'Hunter tier');
+  assert.equal(model.tierProgressLine({ tier: { key: 'hunter', label: 'Hunter' }, next_tier: null }), 'Hunter rank');
   const now = Date.parse('2026-11-02T00:00:00Z');
   assert.equal(model.countdownText('2026-11-05T04:30:00Z', now), '3d 4h');
   assert.equal(model.countdownText('2026-11-02T05:12:00Z', now), '5h 12m');

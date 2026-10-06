@@ -89,7 +89,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value}%` }));
 
   const goal = nextRideName ? {
-    eyebrow: goalStale ? 'LAST CONFIRMED GOAL' : goalReportedDown ? 'YOUR GOAL IS REPORTED DOWN'
+    eyebrow: goalStale ? 'YOUR LAST SAVED GOAL' : goalReportedDown ? 'YOUR GOAL RIDE IS DOWN'
       : nextRideOwned ? 'COIN MASTERY GOAL' : nextCoinEyebrow(nextCoinKind),
     name: nextRideName,
     hint: goalReportedDown
@@ -132,7 +132,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           </Pressable>}
         {limitedAvailable > 0 && <Pressable style={styles.chip} onPress={onBrowseLimited} disabled={!onBrowseLimited}
           hitSlop={6} accessibilityRole={onBrowseLimited ? 'button' : undefined}
-          accessibilityLabel={`Limited coins this rotation, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}${onBrowseLimited ? '. View limited shelf.' : ''}`}>
+          accessibilityLabel={`Limited coins here now, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}${onBrowseLimited ? '. View limited shelf.' : ''}`}>
           <GameIcon name="timer" size={18} />
           <Text style={styles.chipText}>LIMITED {limitedCollected}/{limitedAvailable}</Text>
         </Pressable>}

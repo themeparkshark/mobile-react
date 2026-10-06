@@ -10,6 +10,8 @@ export interface CommunityCenter {
   can_claim: boolean;
   give_cooldown_remaining: number;
   claim_cooldown_remaining: number;
+  give_cost?: number;
+  give_tickets?: number;
 }
 
 export default async function getCommunityCenter(parkId: number): Promise<CommunityCenter | null> {

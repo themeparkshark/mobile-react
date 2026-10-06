@@ -145,7 +145,7 @@ export function Breather(p: BreatherProps) {
           </View>
         ) : null}
         {p.incomingSplats > 0 ? (
-          <Text style={styles.incoming}>{`INCOMING: ${p.incomingSplats} CANDY SPLAT${p.incomingSplats > 1 ? 'S' : ''}. 3 QUICKS IN A ROW BLOCK ONE`}</Text>
+          <Text style={styles.incoming}>{`INCOMING: ${p.incomingSplats} CANDY SPLAT${p.incomingSplats > 1 ? 'S' : ''}. 3 QUICK HITS IN A ROW BLOCK ONE`}</Text>
         ) : null}
         <Text style={[styles.next, p.bossNext && { color: CORAL }]}>{p.bossNext ? `BOSS RUN: ${p.nextBanner}` : `NEXT: ${p.nextBanner}`}</Text>
         {p.feverReady ? <Text style={styles.feverHint}>FEVER READY: SAVE IT FOR THE FINALE FOR UP TO x8</Text> : null}

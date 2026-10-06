@@ -98,8 +98,8 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
     ? `${team.name.toUpperCase()} TOOK ${result.ride_name.toUpperCase()}`
     : result.controller === result.team ? `${team.name.toUpperCase()} HOLDS IT` : `+${result.points} FOR ${team.name.toUpperCase()}`;
   const body = [
-    result.flipped || result.controller === result.team ? `+${result.points} power` : 'Keep going to take this ride',
-    result.underdog ? 'underdog 1.5x' : null,
+    result.flipped || result.controller === result.team ? `+${result.points} points` : 'Keep going to take this ride',
+    result.underdog ? 'extra points because your team is behind' : null,
     captain ? 'you’re the Captain' : null,
   ].filter(Boolean).join(', ');
   return (
@@ -188,10 +188,10 @@ function DoubleCoinsOffer({ attemptId, vip, coins, onGranted }: {
   return (
     <Pressable style={styles.doubleChip} onPress={() => void press()} disabled={state !== 'offer'}
       accessibilityRole="button"
-      accessibilityLabel={note ?? (vip ? `Double your coins: plus ${coins} Shark Coins, VIP perk` : `Watch an ad to double your coins: plus ${coins} Shark Coins`)}>
+      accessibilityLabel={note ?? (vip ? `VIP gift: tap to get ${coins} more coins` : `Watch a short ad to get ${coins} more coins. You don't have to.`)}>
       <GameIcon name={state === 'done' ? 'check' : 'coins'} size={26} />
       <Text style={styles.doubleChipText} numberOfLines={2}>
-        {note ?? (state === 'busy' ? 'One moment...' : vip ? `Double coins: +${coins}, VIP perk` : `Watch an ad: double coins, +${coins}`)}
+        {note ?? (state === 'busy' ? 'One moment...' : vip ? `VIP gift: tap for +${coins} coins` : `Watch an ad for +${coins} coins`)}
       </Text>
       {state === 'offer' && <GameIcon name={vip ? 'member' : 'play'} size={20} />}
     </Pressable>
@@ -429,7 +429,7 @@ export default function PostWinRewardsModal({
               {nextRideTicketEarned > 0 && (
                 <View style={styles.ticketReward}>
                   <GameIcon name="ticket" size={26} />
-                  <Text style={styles.nextRideTicket}>+{nextRideTicketEarned} Park Ticket, your next ride is ready</Text>
+                  <Text style={styles.nextRideTicket}>+{nextRideTicketEarned} {nextRideTicketEarned === 1 ? 'ticket' : 'tickets'} for your next ride</Text>
                 </View>
               )}
             </Animated.View>
@@ -450,7 +450,7 @@ export default function PostWinRewardsModal({
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rushBonusTitle}>RUSH BONUS</Text>
                     <Text style={styles.rushBonusBody}>
-                      Caught at {rush.wait} min (usually {rush.typical}), +{rush.bonus_parts} Parts{rush.bonus_xp ? `, +${rush.bonus_xp} XP` : ''}
+                      Short line: {rush.wait} min, not the usual {rush.typical}. +{rush.bonus_parts} Parts{rush.bonus_xp ? `, +${rush.bonus_xp} XP` : ''}
                     </Text>
                   </View>
                 </View>
@@ -458,7 +458,7 @@ export default function PostWinRewardsModal({
 
               {/* Repeat wins fill the coin's Ride Parts meter toward its next level. */}
               {parts && !isNewCoin && <View style={styles.partsCard}
-                accessible accessibilityLabel={parts.ready ? 'Ready to power up' : `${parts.have} of ${parts.need} Ride Parts for level ${parts.nextLevel}`}>
+                accessible accessibilityLabel={parts.ready ? 'Ready to level up' : `${parts.have} of ${parts.need} Ride Parts for level ${parts.nextLevel}`}>
                 <View style={styles.partsHead}>
                   <GameIcon name="parts" size={24} />
                   <Text style={styles.partsTitle}>{parts.maxed ? 'MAX LEVEL' : `LEVEL ${parts.nextLevel} PARTS`}</Text>
@@ -482,14 +482,14 @@ export default function PostWinRewardsModal({
               {earnedStamp && (
                 <TouchableOpacity style={styles.stampUnlock} onPress={onViewStampBook}
                   disabled={!onViewStampBook} accessibilityRole="button"
-                  accessibilityLabel={`${earnedStamp.name} stamp unlocked. Open Stamp Book to claim its rewards.`}>
+                  accessibilityLabel={`You got the ${earnedStamp.name} stamp. Open your Stamp Book to collect its prize.`}>
                   <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
                     style={styles.stampImage} contentFit="contain" />
                   <View style={styles.stampCopy}>
-                    <Text style={styles.stampEyebrow}>STAMP BOOK UNLOCK</Text>
+                    <Text style={styles.stampEyebrow}>NEW STAMP</Text>
                     <Text style={styles.stampName}>{earnedStamp.name}</Text>
                     <Text style={styles.stampReward}>
-                      {`Claim +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP`}
+                      {`Get +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP in your Stamp Book`}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -506,11 +506,11 @@ export default function PostWinRewardsModal({
 
               {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
                 <Pressable style={styles.vipChip} accessibilityRole="button"
-                  accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
+                  accessibilityLabel="VIP members get extra XP and coins when they win. Tap to learn about VIP."
                   onPress={() => closeTo(() => { void openMembership(); })}>
                   <GameIcon name="member" size={26} />
                   <Text style={styles.vipChipText} numberOfLines={1}>
-                    VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? `, +${coinsEarned} coins` : ''}
+                    VIP members get extra XP and coins
                   </Text>
                   <GameIcon name="arrow" size={20} />
                 </Pressable>
@@ -545,7 +545,7 @@ export default function PostWinRewardsModal({
             onPress={hasCoin && onViewCoin ? () => onViewCoin(upgradeReady && !isNewCoin) : onClose} />
           {hasCoin && onViewCoin && (
             <TouchableOpacity onPress={onClose} accessibilityRole="button"
-              accessibilityLabel="Continue exploring the park" style={styles.continuePark}>
+              accessibilityLabel="Go back to the park map" style={styles.continuePark}>
               <Text style={styles.continueParkText}>Continue Park</Text>
             </TouchableOpacity>
           )}

@@ -119,15 +119,15 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
       </View>}
       <Text style={styles.body}>
         {!puzzle
-          ? 'Crew signals at this ride open a code the whole line can solve together, even in a quiet line.'
+          ? 'Everyone in line at this ride can crack this code together. It works even in a quiet line.'
           : route === 'route_a'
-            ? 'The Shadow Trail has three sealed gates. Combine the clues from everyone’s guesses to open the next one.'
-            : 'The Starlight beacon has three frequencies. Use the crew’s shared clues to align them.'}
+            ? 'The Shadow Trail has three locked gates. Use clues from everyone’s guesses to open the next one.'
+            : 'The Starlight beacon has three locks. Use your crew’s clues to open them.'}
       </Text>
       {bonusAvailable && puzzle?.lonely === undefined && !puzzle?.completed && <View style={styles.bonusRow}>
         <GameIcon name="gift" size={28} />
         <Text style={styles.bonus}>
-          Send a guess, then stay near the ride for {Math.ceil(partIntervalSeconds / 60)} verified minutes: 1 bonus Ride Part. Once per ride coin each park day.
+          Send a guess. Then stay near the ride for {Math.ceil(partIntervalSeconds / 60)} minutes to get 1 bonus Ride Part. You can do this once per ride each day.
         </Text>
       </View>}
 
@@ -187,8 +187,8 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
               {!paused && !puzzle.can_guess && !retryPending && (
                 <Text style={styles.note}>
                   {puzzle.needs_nearby_sample
-                    ? 'Waiting for a current nearby location sample.'
-                    : `Next guess opens after about ${Math.ceil(puzzle.seconds_until_guess / 60)} more minute${puzzle.seconds_until_guess > 60 ? 's' : ''} of nearby time.`}
+                    ? 'Checking that you are near the ride…'
+                    : `Stay near the ride about ${Math.ceil(puzzle.seconds_until_guess / 60)} more minute${puzzle.seconds_until_guess > 60 ? 's' : ''}. Then you can guess again.`}
                 </Text>
               )}
             </>

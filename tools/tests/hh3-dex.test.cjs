@@ -289,7 +289,7 @@ test('VoiceOver and Reduce Motion: modals expose every control, reveal guards ea
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
   const reveal = read('src/screens/SetCollection/DexReveal.tsx');
   for (const src of [card, reveal]) {
-    assert.match(src, /accessibilityLabel="Dismiss" onPress=\{[^}]+\} style=\{StyleSheet\.absoluteFill\} \/>/, 'backdrop is a sibling, not a wrapper');
+    assert.match(src, /accessibilityLabel="Close" onPress=\{[^}]+\} style=\{StyleSheet\.absoluteFill\} \/>/, 'backdrop is a sibling, not a wrapper');
     assert.match(src, /accessibilityViewIsModal/);
     assert.match(src, /useUiReducedMotion/);
   }

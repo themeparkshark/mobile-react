@@ -6,15 +6,20 @@ import { GameIcon } from '../ui';
 /** "Never miss a boss": shown only while notifications are undecided. */
 export default function PushSoftAsk({ dark = false }: { readonly dark?: boolean }) {
   const [state, setState] = useState<PushState | null>(null);
+  const [hidden, setHidden] = useState(false);
   useEffect(() => { pushState().then(setState).catch(() => setState('unsupported')); }, []);
-  if (state !== 'undetermined') return null;
+  if (state !== 'undetermined' || hidden) return null;
   return (
     <View style={[styles.card, dark && styles.cardDark]}>
       <GameIcon name="bell" size={30} />
-      <Text style={styles.text} numberOfLines={2}>Get a heads-up when a boss surfaces or a ride goes on Rush.</Text>
-      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+      <Text style={styles.text} numberOfLines={2}>Want an alert when a boss shows up or a ride has a Rush bonus?</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Turn on alerts" style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
         onPress={() => { enablePush().then(setState).catch(() => undefined); }}>
         <Text style={styles.btnText}>TURN ON</Text>
+      </Pressable>
+      {/* A clear way out: hides the ask for now; nothing changes on the phone. */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8} onPress={() => setHidden(true)}>
+        <GameIcon name="close" size={20} />
       </Pressable>
     </View>
   );

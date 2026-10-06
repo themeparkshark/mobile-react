@@ -120,12 +120,12 @@ test('a limited coin out of rotation explains itself and cannot be played', () =
     react: { useContext() {}, useState() {} }, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
-    './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../hooks/useReducedGameMotion': {},
+    './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
   });
   const base = { isSecret: false, isArchived: false, isResting: false, kind: 'ride' };
   assert.equal(unfoundCoinCopy({ ...base, limited: IN }).ribbon, 'Limited Coin');
-  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Oct 31. Win its challenge before it rotates out.');
-  assert.match(unfoundCoinCopy({ ...base, limited: OUT }).hint, /returns in a later rotation/);
+  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Oct 31. Win its challenge before then.');
+  assert.match(unfoundCoinCopy({ ...base, limited: OUT }).hint, /comes back later/);
   assert.equal(unfoundCoinCopy({ ...base, limited: OUT }).challenge, 'Ride Challenge');
   assert.equal(unfoundCoinCopy(base).ribbon, 'Ride Coin');
   const source = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');

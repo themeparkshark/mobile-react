@@ -30,13 +30,13 @@ export default function HomeTicketProgress({ findsUntilTicket, streakCurrent = 0
   }, [remaining, ticketScale]);
 
   return <View style={styles.card} accessible accessibilityRole="text"
-    accessibilityLabel={`Park Ticket guaranteed within ${remaining} ${remaining === 1 ? 'pickup' : 'pickups'}${streak > 0 ? `. ${streakAtRisk ? `Your ${streak}-day hunt streak needs a find today` : `${streak}-day hunt streak`}` : ''}`}>
+    accessibilityLabel={`You get a ticket within ${remaining} ${remaining === 1 ? 'find' : 'finds'}${streak > 0 ? `. ${streakAtRisk ? `Your ${streak}-day hunt streak needs a find today` : `${streak}-day hunt streak`}` : ''}`}>
     <Animated.View style={[styles.ticketIcon, { transform: [{ scale: ticketScale }] }]}>
       <Image source={require('../../../assets/images/ticket-icon.png')}
         style={styles.ticketImage} contentFit="contain" />
     </Animated.View>
     <View style={styles.copy}>
-      <Text style={styles.kicker}>PARK TICKET GUARANTEE</Text>
+      <Text style={styles.kicker}>A TICKET IS COMING</Text>
       <Text style={styles.headline}>WITHIN {remaining} {remaining === 1 ? 'FIND' : 'FINDS'}</Text>
       <View style={styles.pips} accessibilityElementsHidden>
         {[0, 1, 2].map(index => <View key={index}

@@ -330,8 +330,9 @@ export const RunBar = React.memo(function RunBar({ shells, voyages, tiers, voyag
     }
   }
   const notchX = (t: number) => Math.min(width - NOTCH + 4, xOf(t - 1) + segW + (t % 3 === 0 ? divider / 2 : gap / 2) - NOTCH / 2);
+  const starAt = tiers;
   return (
-    <View style={[styles.runBar, { width }]} accessibilityLabel={`${have} of ${total} shells. ${tiers[0]} and ${tiers[1]} shells are the next tiers.`}>
+    <View style={[styles.runBar, { width }]} accessibilityLabel={`${have} of ${total} shells. More stars at ${starAt[0]} and ${starAt[1]} shells.`}>
       {segs}
       {tiers.map((t, i) => (
         <Animated.View key={`n${i}`} style={[styles.notch, { left: notchX(t) }, i === 0 ? n0 : n1]}

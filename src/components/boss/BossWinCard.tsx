@@ -21,11 +21,11 @@ export function lootFor(raid: BossRaid): Loot[] {
   const r = raid.you.reward;
   if (!r) return [];
   return [
-    { key: 'coins', icon: 'coins' as const, amount: r.coins, label: 'Shark Coins' },
+    { key: 'coins', icon: 'coins' as const, amount: r.coins, label: 'Coins' },
     { key: 'xp', icon: 'xp' as const, amount: r.xp, label: 'XP' },
     { key: 'energy', icon: 'energy' as const, amount: r.energy, label: 'Energy' },
     { key: 'parts', icon: 'parts' as const, amount: r.parts, label: 'Ride Parts', detail: raid.ride_name ?? undefined },
-    { key: 'tickets', icon: 'ticket' as const, amount: r.tickets, label: r.tickets === 1 ? 'Park Ticket' : 'Park Tickets' },
+    { key: 'tickets', icon: 'ticket' as const, amount: r.tickets, label: r.tickets === 1 ? 'Ticket' : 'Tickets' },
   ].filter(item => item.amount > 0);
 }
 
@@ -182,7 +182,7 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
       <View style={styles.lootGrid}>
         {loot.map((item, i) => <LootChip key={item.key} item={item} index={i} reduced={reduced} collecting={collecting} />)}
       </View>
-      {reward.remote && <Text style={styles.fine}>You fought from home: loot at {Math.round((raid.remote.reward_rate ?? 0.6) * 100)}%, and Ride Parts come from being at the ride.</Text>}
+      {reward.remote && <Text style={styles.fine}>You fought from home, so you get {Math.round((raid.remote.reward_rate ?? 0.6) * 100)}% of the loot. Ride Parts only come from being at the ride.</Text>}
       <GameButton label={loot.length ? 'Collect' : 'Back to the park'} onPress={collect} style={{ marginTop: 12 }} />
       {!reduced && <ParticleField ref={particles} width={CARD_W} height={CARD_H} style={styles.particles} />}
     </View>

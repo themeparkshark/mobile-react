@@ -119,7 +119,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, stamps, activ
       scale.value = withTiming(1, { duration: 160 });
       queueHaptic('failBuzz');
       const status = (caught as { response?: { status?: number } })?.response?.status;
-      setError(status === 409 ? 'This coin changed. Open your shelf to refresh it.' : 'Could not level up. Try again when connected.');
+      setError(status === 409 ? 'This coin changed. Open your shelf to refresh it.' : 'Could not level up. Check your internet and try again.');
       timers.current.push(setTimeout(() => setError(null), 3500));
     } finally {
       setBusy(false);

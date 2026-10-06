@@ -25,7 +25,7 @@ export function outOfTicketsCopy({ sources, rescuePassUsedToday }: {
 }): { title: string; body: string } {
   const lead = rescuePassUsedToday ? 'Today’s Rescue Pass is used. ' : '';
   if (!sources) {
-    return { title: 'NEED A PARK TICKET?', body: `${lead}LinePlay and home finds can earn Tickets. Refresh once you have one.` };
+    return { title: 'NEED A TICKET?', body: `${lead}LinePlay and home finds can earn Tickets. Come back when you have one.` };
   }
   const lineOpen = !!sources.line && (sources.line_remaining_today === undefined || sources.line_remaining_today === null
     || sources.line_remaining_today > 0);
@@ -33,7 +33,7 @@ export function outOfTicketsCopy({ sources, rescuePassUsedToday }: {
     return { title: 'EARN ONE IN LINE', body: `${lead}Play LinePlay while you wait to earn a Ticket.${sources.home ? ' Home finds earn them too.' : ''}` };
   }
   if (sources.home) {
-    return { title: 'NEED A PARK TICKET?', body: `${lead}${sources.line ? 'Today’s queue Tickets are collected. ' : ''}Home finds earn Tickets for your next park day.` };
+    return { title: 'NEED A TICKET?', body: `${lead}${sources.line ? 'You got all of today’s line Tickets. ' : ''}Home finds earn Tickets for your next park day.` };
   }
-  return { title: 'NEED A PARK TICKET?', body: `${lead}New Tickets arrive with your next park day.` };
+  return { title: 'NEED A TICKET?', body: `${lead}New Tickets arrive with your next park day.` };
 }

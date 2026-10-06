@@ -251,7 +251,7 @@ export default function StampBookScreen() {
         const confirmed = Object.values(freshData.stamps).flat().find(s => s.id === id);
         if (confirmed?.reward_claimed) { pendingPatch.current.push(id); refreshPlayer().catch(() => undefined); return { ok: true }; }
         haptic('warning');
-        setMessage('That did not go through. Try again.');
+        setMessage('Your prize didn’t come through. Tap Claim again.');
       } catch {
         setMessage('Not sure that went through. Reopen the Stamp Book to check.');
       }

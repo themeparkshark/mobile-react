@@ -97,13 +97,13 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
     </View>;
   }
   if (pendingAttack || receiptNeedsCheck) return <Pressable accessibilityRole="button" onPress={onBoss}
-    accessibilityLabel="Your boss brawl receipt needs confirmation. Open saved round."
+    accessibilityLabel="We still need to check your last boss brawl. Tap to open it."
     style={[styles.pillShadow, inline && styles.inline]}>
     <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.pill, styles.bossPill]}>
       {pendingAttack && <Image source={BOSS_ART[pendingAttack.boss]} style={styles.bossIcon} contentFit="contain" />}
       <View style={{ flex: 1 }}>
         <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>YOUR SAVED BRAWL</Text>
-        <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>Confirm your round before another attack</Text>
+        <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>Check your last round before you attack again</Text>
       </View>
       <Text style={[styles.go, styles.bossGo]}>CHECK</Text>
       <GameIcon name="arrow" size={18} />

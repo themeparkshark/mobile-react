@@ -510,9 +510,9 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
   const hours = Math.floor(msLeft / 3_600_000);
   const minutes = Math.floor((msLeft % 3_600_000) / 60_000);
   const urgency: WeekUrgency = msLeft <= 3 * 3_600_000 ? 'last_hours' : msLeft <= dayMs ? 'last_day' : 'calm';
-  const label = urgency === 'last_hours' ? `Last chance! ${hours}h ${minutes}m`
-    : urgency === 'last_day' ? 'Last day!' : `${daysLeft} days left`;
-  const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `Last chance, ${hours} hours ${minutes} minutes left this week`;
+  const label = urgency === 'last_hours' ? `Ends in ${hours}h ${minutes}m`
+    : urgency === 'last_day' ? 'Ends today' : `${daysLeft} days left`;
+  const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `This week ends in ${hours} hours ${minutes} minutes`;
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
 }
 

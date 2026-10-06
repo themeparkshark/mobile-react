@@ -280,7 +280,7 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
           <WishHeart on={wishes > 0} size={20} />
           {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
         </Pressable>
-        <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} Shark Coins`}>
+        <View style={tabStyles.coins} accessible accessibilityLabel={`${formatCoins(coins)} coins`}>
           <GameIcon name="coins" size={20} />
           <Text maxFontSizeMultiplier={1.3} style={tabStyles.coinsText}>{formatCoins(coins)}</Text>
         </View>
@@ -353,7 +353,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
     return true;
   }, []);
   // The classic grid (older backends, park stores) keeps the dialog purchase flow.
-  const { purchaseItem, purchaseModal } = usePurchaseItem();
+  // A bought item shows as owned right away, so a second tap says "Already yours", never "Buy this?" again.
+  const { purchaseItem, purchaseModal } = usePurchaseItem({
+    onPurchased: bought => setItems(prev => prev.map(i => (i.id === bought.id ? { ...i, has_purchased: true } : i))),
+  });
   const [page, setPage] = useState<number>(1);
   // One page request at a time: two quick onEndReached calls must not skip a page.
   const loadingMore = useRef(false);
@@ -586,7 +589,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>}
             {!today && items.length === 0 && (
               <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way"
-                message="The Shark Shop restocks soon. Check back after the countdown." />
+                message="New gear comes soon. Check back later." />
             )}
             {!today && items && items?.length > 0 && (
               <View

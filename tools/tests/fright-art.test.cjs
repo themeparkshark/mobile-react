@@ -59,6 +59,6 @@ test('no "35 Case Files" assumption anywhere (the deck is 36: 1991 to 2026); no 
     // The wardrobe line exists only in rewards.ts, gated on a real item (pin/cosmetic with item_id).
     if (file.endsWith('services/fright/rewards.ts')) continue;
     const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    assert.doesNotMatch(code, /added to your wardrobe/i, file);
+    assert.doesNotMatch(code, /added to your (wardrobe|closet)/i, file);
   }
 });

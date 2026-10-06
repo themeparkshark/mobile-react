@@ -10,9 +10,9 @@ export type StandingsTabKey = 'coins' | 'rides' | 'xp' | 'hunt';
 export interface StandingsTabSpec { readonly key: StandingsTabKey; readonly label: string; readonly icon: GameIconName }
 
 const BASE_TABS: readonly StandingsTabSpec[] = [
-  { key: 'coins', label: 'Coins Won', icon: 'coin' },
+  { key: 'coins', label: 'Ride Coins', icon: 'coin' },
   { key: 'rides', label: 'Rides', icon: 'ride' },
-  { key: 'xp', label: 'Experience', icon: 'xp' },
+  { key: 'xp', label: 'XP', icon: 'xp' },
 ];
 const HUNT_TAB: StandingsTabSpec = { key: 'hunt', label: 'Home Hunt', icon: 'map' };
 
@@ -113,7 +113,7 @@ export function tierProgressLine(week: Pick<HomeHuntWeek, 'next_tier' | 'tier' |
     const n = Math.max(0, Math.ceil(next.points_needed));
     return `${n} ${n === 1 ? 'point' : 'points'} to ${next.label}`;
   }
-  return week.tier?.label ? `${week.tier.label} tier` : '';
+  return week.tier?.label ? `${week.tier.label} rank` : '';
 }
 
 /** 0 to 1 progress toward the next tier: points over points plus what is still needed. */

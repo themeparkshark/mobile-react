@@ -24,8 +24,8 @@ type ModalState =
 /** Player-facing currency names (docs/economy-glossary.md). */
 export function currencyLabel(name: string, amount = 2): string {
   const key = name.toLowerCase();
-  if (key === 'coins') return amount === 1 ? 'Shark Coin' : 'Shark Coins';
-  if (key === 'tickets') return amount === 1 ? 'Park Ticket' : 'Park Tickets';
+  if (key === 'coins') return amount === 1 ? 'coin' : 'coins';
+  if (key === 'tickets') return amount === 1 ? 'ticket' : 'tickets';
   if (amount === 1 && key.endsWith('s')) return name.slice(0, -1);
   return name;
 }
@@ -34,12 +34,30 @@ export function currencyLabel(name: string, amount = 2): string {
 export function earnAction(name: string): { label: string; hint: string; icon: GameIconName } {
   switch (name.toLowerCase()) {
     case 'coins':
-      return { label: 'Earn Shark Coins', hint: 'Catch a ride coin or open your daily chest to earn more.', icon: 'coins' };
+      return { label: 'Go find coins', hint: 'Win ride coins at the park or open your daily chest.', icon: 'ride' };
     case 'keys':
-      return { label: 'Find Keys', hint: 'Keys turn up on the park map. Walk the park to find more.', icon: 'map' };
+      return { label: 'Find keys', hint: 'Keys turn up on the park map. Walk the park to find more.', icon: 'map' };
     default:
-      return { label: 'Keep exploring', hint: 'Play at the park and at home to earn more.', icon: 'map' };
+      return { label: 'Keep exploring', hint: 'Play at the park and at home to get more.', icon: 'map' };
   }
+}
+
+/** The icon for a game price, so the Buy button shows coins as a picture too. */
+export function currencyIcon(name: string): GameIconName {
+  const key = name.toLowerCase();
+  if (key === 'tickets') return 'ticket';
+  if (key === 'keys') return 'lock';
+  return 'coins';
+}
+
+/**
+ * The confirm step says the whole deal in plain words before anything is spent:
+ * what it costs, what you have, and what is left after. Game money, never real money.
+ */
+export function confirmLine(item: Pick<ItemType, 'cost' | 'currency'>, balance: number): string {
+  const name = item.currency.name;
+  const left = Math.max(0, balance - item.cost);
+  return `It costs ${item.cost} ${currencyLabel(name, item.cost)}. You have ${balance}. You’ll have ${left} left.`;
 }
 
 /** Balance, shortfall and what an item costs in its own currency. */
@@ -83,11 +101,7 @@ export default function usePurchaseItem(options: PurchaseOptions = {}) {
       return;
     }
 
-    const label = currencyLabel(item.currency.name, item.cost);
-    const text =
-      item.cost === 0
-        ? vsprintf(prompts.redeem_item, [item.name])
-        : `You have ${balance} ${currencyLabel(item.currency.name, balance)}. This costs ${item.cost} ${label}.`;
+    const text = item.cost === 0 ? vsprintf(prompts.redeem_item, [item.name]) : confirmLine(item, balance);
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
     setModal({ type: 'confirm', item, text });
@@ -162,13 +176,13 @@ function dialogFor(modal: ModalState, actions: {
     case 'none':
       return null;
     case 'owned':
-      return { title: 'Already yours', message: `${modal.item.name} is already in your inventory.`,
+      return { title: 'Already yours', message: `${modal.item.name} is already in your closet.`,
         buttons: [{ text: 'Got it' }], body: <ItemArt item={modal.item} /> };
     case 'poor': {
       const need = currencyLabel(modal.item.currency.name, modal.shortfall);
       const earn = earnAction(modal.item.currency.name);
       return {
-        title: `${modal.shortfall} more ${need}`,
+        title: `You need ${modal.shortfall} more ${need}`,
         message: `${modal.item.name} costs ${modal.item.cost} ${currencyLabel(modal.item.currency.name, modal.item.cost)}. ${earn.hint}`,
         icon: earn.icon,
         buttons: [
@@ -180,11 +194,12 @@ function dialogFor(modal: ModalState, actions: {
     }
     case 'confirm':
       return {
-        title: modal.item.cost === 0 ? 'Free for you' : 'Buy this?',
-        message: `${modal.item.name}. ${modal.text}`,
+        title: modal.item.cost === 0 ? 'Free for you' : `Buy ${modal.item.name}?`,
+        message: modal.text,
         buttons: [
-          { text: modal.item.cost === 0 ? 'Take it' : 'Buy', onPress: () => void actions.confirmPurchase(modal.item) },
-          { text: 'Cancel', style: 'cancel',
+          { text: modal.item.cost === 0 ? 'Take it' : `Buy for ${modal.item.cost}`, icon: modal.item.cost === 0 ? undefined : currencyIcon(modal.item.currency.name),
+            onPress: () => void actions.confirmPurchase(modal.item) },
+          { text: 'Not now', style: 'cancel',
             onPress: () => actions.playSound(require('../../assets/sounds/purchase_item_cancel.mp3')) },
         ],
         body: <ItemArt item={modal.item} price />,
@@ -205,12 +220,12 @@ function dialogFor(modal: ModalState, actions: {
           body: <ItemArt item={modal.item} />, haptic: 'success',
         };
       }
-      return { title: 'It’s yours!', message: `${modal.item.name} is in your inventory. Dress your shark on your profile.`,
-        buttons: [{ text: 'Awesome!' }], body: <ItemArt item={modal.item} />, haptic: 'success' };
+      return { title: 'It’s yours!', message: `${modal.item.name} is in your closet.`,
+        buttons: [{ text: 'Go to my closet', onPress: () => RootNavigation.navigate('Inventory') }, { text: 'Keep shopping', style: 'cancel' }], body: <ItemArt item={modal.item} />, haptic: 'success' };
     }
     case 'failed':
       return {
-        title: 'Purchase didn’t go through', message: 'You weren’t charged. Check your connection and try again.',
+        title: 'That didn’t work', message: `You still have all your ${currencyLabel(modal.item.currency.name)}. Check your internet and try again.`,
         buttons: [
           { text: 'Try again', onPress: () => void actions.confirmPurchase(modal.item) },
           { text: 'Not now', style: 'cancel' },

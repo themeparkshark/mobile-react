@@ -163,10 +163,10 @@ export default function InventoryScreen() {
       setItemTypes(response);
       setCurrentItemType(response.find((itemType) => itemType.id === requestedItemTypeId) ?? response[0]);
       setLoading(false);
-      if (response.length === 0) setLoadError('No wardrobe categories are available yet.');
+      if (response.length === 0) setLoadError('Your closet isn’t ready yet.');
     } catch {
       setLoading(false);
-      setLoadError('Could not load your wardrobe. Try again.');
+      setLoadError('Your closet didn’t load.');
     }
   }, [typeLoadAttempt]);
 
@@ -199,7 +199,7 @@ export default function InventoryScreen() {
       })
       .catch(() => {
         if (!cancelled && generation === requestGeneration.current) {
-          setLoadError('Could not load these items. Try again.');
+          setLoadError('These items didn’t load.');
         }
       })
       .finally(() => {
@@ -215,14 +215,14 @@ export default function InventoryScreen() {
           <BackButton />
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>Inventory</TopbarText>
+          <TopbarText>Closet</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
       {!loading && !currentItemType && loadError && (
         <Pressable onPress={() => { setLoading(true); setLoadError(null); setTypeLoadAttempt((value) => value + 1); }} style={{ padding: 24, alignItems: 'center' }}>
-          <Text style={{ color: 'white', textAlign: 'center' }}>{loadError} Tap to retry.</Text>
+          <Text style={{ color: 'white', textAlign: 'center' }}>{loadError} Tap to try again.</Text>
         </Pressable>
       )}
       {!loading && !player?.inventory && currentItemType && (
@@ -377,7 +377,7 @@ export default function InventoryScreen() {
               )}
               {!itemsLoading && loadError && items.length === 0 && (
                 <Pressable onPress={() => { setItemsLoading(true); setItemLoadAttempt((value) => value + 1); }} style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#15395B', textAlign: 'center', fontWeight: '700' }}>{loadError} Tap to retry.</Text>
+                  <Text style={{ color: '#15395B', textAlign: 'center', fontWeight: '700' }}>{loadError} Tap to try again.</Text>
                 </Pressable>
               )}
               {items.length > 0 || (!itemsLoading && !loadError) ? (
@@ -387,12 +387,12 @@ export default function InventoryScreen() {
                   extraData={worn}
                   viewabilityConfig={SEEN_VIEWABILITY}
                   onViewableItemsChanged={onViewableItemsChanged}
-                  ListEmptyComponent={<Text style={{ color: '#15395B', textAlign: 'center', padding: 20 }}>No items in this wardrobe category yet.</Text>}
+                  ListEmptyComponent={<Text style={{ color: '#15395B', textAlign: 'center', padding: 20 }}>Nothing here yet. Find gear in the Shark Shop.</Text>}
                   ListFooterComponent={items.length > 0 && itemsLoading ? (
                     <ActivityIndicator size="small" color="#15395B" style={{ paddingVertical: 16 }} />
                   ) : items.length > 0 && loadError ? (
                     <Pressable onPress={() => { setItemsLoading(true); setItemLoadAttempt((value) => value + 1); }} style={{ padding: 16, alignItems: 'center' }}>
-                      <Text style={{ color: '#15395B', fontWeight: '700' }}>More items could not load. Tap to retry.</Text>
+                      <Text style={{ color: '#15395B', fontWeight: '700' }}>More items didn’t load. Tap to try again.</Text>
                     </Pressable>
                   ) : null}
                   renderItem={({ item }) => <Item item={item}

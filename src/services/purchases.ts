@@ -136,10 +136,13 @@ function periodText(count: string | number | undefined, unit: string | undefined
   return n === 1 ? word : `${n} ${word}s`;
 }
 
-/** "1 week", "3 days". */
+const SMALL_NUMBERS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+
+/** "One week", "Three days": in words, because the body font's 1 reads as a capital I. */
 function trialLength(count: string | number | undefined, unit: string | undefined): string {
   const n = Number(count) || 1;
-  return `${n} ${unitWord(unit)}${n === 1 ? '' : 's'}`;
+  const word = SMALL_NUMBERS[n] ?? String(n);
+  return `${word[0].toUpperCase()}${word.slice(1)} ${unitWord(unit)}${n === 1 ? '' : 's'}`;
 }
 
 /** Builds a plan from the App Store product; exported for tests. */
@@ -162,10 +165,27 @@ export async function loadVipPlans(): Promise<VipPlan[]> {
   const store = await connect();
   const products = await store.getSubscriptions({ skus: [...VIP_PRODUCT_IDS] });
   const eligible = await store.IapIosSk2.isEligibleForIntroOffer(VIP_SUBSCRIPTION_GROUP_ID).then(Boolean).catch(() => false);
-  return VIP_PRODUCT_IDS
+  const plans = VIP_PRODUCT_IDS
     .map(id => products.find(p => p.productId === id))
     .filter((p): p is StoreSubscription => !!p)
     .map(p => toPlan(p, eligible));
+  if (plans.length) lastVipPlans = plans;
+  return plans;
+}
+
+let lastVipPlans: VipPlan[] | null = null;
+let vipPlansInFlight: Promise<VipPlan[] | null> | null = null;
+
+/** The last plans the App Store gave, for the VIP door gate's price line. Null until one load works. */
+export function cachedVipPlans(): VipPlan[] | null {
+  return lastVipPlans;
+}
+
+/** Loads the plans once in the background (Supplies and the paywall warm it). One load at a time; never throws. */
+export function warmVipPlans(): Promise<VipPlan[] | null> {
+  if (!storeAvailable()) return Promise.resolve(null);
+  vipPlansInFlight ??= loadVipPlans().catch(() => null).finally(() => { vipPlansInFlight = null; });
+  return vipPlansInFlight;
 }
 
 export type PurchaseOutcome =
@@ -357,6 +377,8 @@ export function syncVipOnLaunch(playerId: number | string | null | undefined): v
     const store = await connect();
     const entitlements = await currentVipEntitlements(store);
     if (entitlements.length) await deliver(store, entitlements);
+    // Warm the VIP prices so the VIP door gate can say them at once (clarity pass).
+    else void warmVipPlans();
   })().catch(() => {
     if (launchSyncedFor === id) launchSyncedFor = null;
   });
@@ -367,8 +389,9 @@ export function syncVipOnLaunch(playerId: number | string | null | undefined): v
  * period and any free trial. Says "Apple ID" (not iTunes).
  */
 export function legalText(plan: Pick<VipPlan, 'price' | 'period' | 'trial'>): string {
-  const billing = `${plan.price} per ${plan.period}`;
+  const billing = priceText(plan);
   const lead = plan.trial ? `${plan.trial}, then ${billing}.` : `${billing}.`;
+  // clarity-allow: Apple's required subscription terms (grown-up copy)
   return `${lead} Payment is charged to your Apple ID ${plan.trial ? 'when the free trial ends' : 'when you confirm the purchase'}. `
     + 'VIP renews automatically unless it is turned off at least 24 hours before the end of the current period, '
     + 'and your account is charged for renewal within 24 hours before that. '
@@ -388,6 +411,7 @@ export function savingsText(plans: readonly Pick<VipPlan, 'period' | 'amount'>[]
   return percent >= 5 ? `SAVE ${percent}%` : null;
 }
 
+/** "$4.99 a month" (or "every 3 months"): words, not a slash. */
 export function priceText(plan: Pick<VipPlan, 'price' | 'period'>): string {
-  return `${plan.price} / ${plan.period}`;
+  return `${plan.price} ${/\s/.test(plan.period) ? 'every' : 'a'} ${plan.period}`;
 }

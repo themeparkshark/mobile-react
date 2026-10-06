@@ -24,10 +24,10 @@ test('a wearable_pick claim needs an unowned pick before it is sent', () => {
 
 test('claim outcome: Added to your Inventory with WEAR IT, or the wearable on the way', () => {
   const outcome = plain(model.claimOutcome({ rewards_granted: { item: { id: 9, name: 'Scarf', item_type_id: 3 } } }));
-  assert.equal(outcome.toast, 'Added to your Inventory');
+  assert.equal(outcome.toast, 'Added to your closet');
   assert.deepEqual(outcome.wear, { itemId: 9, itemTypeId: 3, name: 'Scarf' });
   const pending = plain(model.claimOutcome({ rewards_granted: { pending_wearable: 'Scarf' } }));
-  assert.equal(pending.pendingLine, 'Your wearable is on the way');
+  assert.equal(pending.pendingLine, 'Your shark item is on the way');
   assert.equal(pending.toast, null);
   assert.equal(pending.wear, null);
   assert.equal(model.WEAR_IT, 'WEAR IT');

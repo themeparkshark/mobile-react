@@ -119,8 +119,8 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   if (item?.kind === 'trivia') return chapter?.navigationPanel && id === `${chapter.id}-trivia`
     ? 'Starport navigation repair' : 'Ride trivia';
   if (item?.kind === 'lore') return chapter?.fieldNotes[item.seed % chapter.fieldNotes.length]?.title ?? 'Queue clue';
-  if (item?.kind === 'prediction') return 'Wait prediction';
-  if (id.startsWith('pred-')) return 'Wait prediction';
+  if (item?.kind === 'prediction') return 'Wait guess';
+  if (id.startsWith('pred-')) return 'Wait guess';
   if (item?.kind === 'crew_relay') return 'Crew relay';
   if (id.endsWith('-route-alpha')) return chapter?.relay.routeNames[0] ?? 'Crew route';
   if (id.endsWith('-route-omega')) return chapter?.relay.routeNames[1] ?? 'Crew route';
@@ -139,7 +139,7 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     case 'puzzle': return 'Codebreaker';
     case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? 'Signal repair' : 'Shark Trivia';
     case 'lore': return 'Field Note';
-    case 'prediction': return 'Wait Prediction';
+    case 'prediction': return 'Wait Guess';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
   }
 }
@@ -206,7 +206,7 @@ export default function LinePlayScreen() {
       let permission = await Location.getBackgroundPermissionsAsync();
       if (!permission.granted && !permission.canAskAgain) {
         gameAlert('Play while locked',
-          'Allow Always location in iPhone Settings so verified queue time can continue while LinePlay is in the background.',
+          'To keep earning with your phone locked, tap Open Settings. Then set Location to Always.',
           [{ text: 'Keep app open', style: 'cancel' },
             { text: 'Open Settings', onPress: () => { openAppSettings(); } }], { icon: 'settings' });
         return;
@@ -215,11 +215,11 @@ export default function LinePlayScreen() {
       if (permission.granted) {
         const ready = await session.retryBackgroundTracking();
         if (!ready) gameAlert('Keep LinePlay open',
-          'Background tracking could not start. Keep the app open while you wait to earn verified queue progress.');
+          'Locked-phone play did not turn on. Keep the app open while you wait. Your time in line still counts.');
       }
     } catch {
       gameAlert('Keep LinePlay open',
-        'Background tracking is unavailable right now. You can still play and earn verified queue progress with the app open.');
+        'Locked-phone play is not working right now. Keep the app open while you wait. Your time in line still counts.');
     } finally {
       setBackgroundPermissionBusy(false);
     }
@@ -307,7 +307,7 @@ export default function LinePlayScreen() {
       const saved = await saveLinePlayFeedback(id, rating, completedActivityIds.size, favorite);
       setFeedback(saved);
     } catch {
-      setFeedbackError('Could not save your answer. Tap again when connected.');
+      setFeedbackError('Could not save your answer. Check your internet and tap again.');
     } finally {
       setFeedbackSaving(false);
     }
@@ -541,7 +541,7 @@ export default function LinePlayScreen() {
   };
 
   const finishFailed = useCallback(() =>
-    gameAlert('Could not finish', 'Stay on this recap and try again.'), []);
+    gameAlert('Could not end your wait', 'Check your internet, then try again.'), []);
 
   /** One branded sheet for every way a guest can end a wait by hand. */
   const handleEndSession = useCallback(() => setWaitEndPrompt({ tab: null }), []);
@@ -762,7 +762,7 @@ export default function LinePlayScreen() {
     lineMovePolicy: 'passive' as const,
     // Client-scored games never pay Parts; their win card points to the bonus games.
     justForFunNote: bonus && activeGame && activeGame.gameId !== 'current' ? {
-      text: 'Bonus Parts come from Current Quest and Codebreaker',
+      text: 'Play Current Quest or Codebreaker for bonus Parts',
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
@@ -803,7 +803,7 @@ export default function LinePlayScreen() {
   if (!ride) {
     return (
       <SafeAreaView style={styles.centered}>
-        <Text style={styles.errorText}>No ride selected for this session.</Text>
+        <Text style={styles.errorText}>No ride picked. Go back and pick a ride.</Text>
         <Pressable onPress={() => navigation.goBack()} style={styles.ghostBtn}>
           <Text style={styles.ghostBtnText}>Go back</Text>
         </Pressable>
@@ -871,7 +871,7 @@ export default function LinePlayScreen() {
           <TopbarColumn stretch={false}>
             {snapshot.state === 'active' || snapshot.state === 'paused' ? (
               <Pressable onPress={handleEndSession} hitSlop={12} style={styles.endBtn}
-                accessibilityRole="button" accessibilityLabel="End LinePlay session">
+                accessibilityRole="button" accessibilityLabel="End LinePlay">
                 <Text style={styles.endBtnText}>End</Text>
               </Pressable>
             ) : <View style={styles.endPlaceholder} />}
@@ -881,15 +881,15 @@ export default function LinePlayScreen() {
           snapshot.state !== 'complete' && (
             <View style={styles.queueTrackingHint}>
               <Text style={styles.queueTrackingHintText}>
-                Keep LinePlay open for Parts, or enable play while your phone is locked.
+                Keep LinePlay open to earn Parts. Or tap Turn on to play with your phone locked.
               </Text>
               <Pressable onPress={() => void enableLockedScreenPlay()}
                 disabled={backgroundPermissionBusy}
                 accessibilityRole="button"
-                accessibilityLabel="Enable background location for locked-screen LinePlay"
+                accessibilityLabel="Turn on LinePlay while your phone is locked"
                 style={styles.queueTrackingButton}>
                 <Text style={styles.queueTrackingButtonText}>
-                  {backgroundPermissionBusy ? 'Checking…' : 'Enable'}
+                  {backgroundPermissionBusy ? 'Checking…' : 'Turn on'}
                 </Text>
               </Pressable>
             </View>
@@ -1157,7 +1157,7 @@ export default function LinePlayScreen() {
               progressAccessibilityLabel={storyStep ? `Story clue ${storyStep} of 3`
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro'
                   ? 'Ride story. Choose a clue to begin.'
-                  : 'Optional queue activity. Explore at your own pace.'}
+                  : 'Free play. Play any game you like.'}
               nextLabel={pageName(activityPages[nextPageIndex], snapshot.chapter)}
               onFirst={() => jumpToPage(0)} onNext={() => jumpToPage(nextPageIndex)}
               moreAvailable={snapshot.playlist.length < MAX_SESSION_ACTIVITY_SLOTS}
@@ -1278,12 +1278,12 @@ export default function LinePlayScreen() {
         visible={waitEndPrompt != null && (snapshot.state === 'active' || snapshot.state === 'paused')}
         title="How did your wait end?"
         message={waitEndPrompt?.tab
-          ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep eligible queue rewards either way.`
-          : 'You keep eligible queue rewards either way. A wait prediction counts only when you reach boarding.'}
+          ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep what you earned either way.`
+          : 'You keep what you earned either way. Your wait guess only counts if you got to the ride.'}
         icon="queue"
         buttons={[
           { text: 'I left the line' },
-          { text: 'I reached boarding' },
+          { text: 'I got to the ride' },
           { text: 'Keep playing', style: 'cancel' },
         ]}
         onAnswer={index => answerWaitEnd(index === 1 ? true : index === 0 ? false : null)}
@@ -1310,11 +1310,11 @@ export default function LinePlayScreen() {
       <GameDialog
         visible={lineDone}
         title="Line done?"
-        message={`Looks like you left the queue area. Your games and wait time are saved. Wrapping up in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
+        message={`Looks like you left the line. Your games and wait time are saved. This wait ends in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
         icon="queue"
         haptic="none"
         buttons={[
-          { text: 'I reached boarding', variant: 'secondary' },
+          { text: 'I got to the ride', variant: 'secondary' },
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
           { text: 'I left the line' },
         ]}

@@ -135,7 +135,7 @@ export function recoverySupportMailto(email: string, details: {
     `My new player ID: ${typeof details.playerId === 'number' ? `#${details.playerId}` : 'unknown'}`,
     `My old username or email: ${details.typedIdentifier?.trim() || ''}`,
     '',
-    'Anything else that shows the old account is mine (friends, parks, purchases):',
+    'Anything else that shows the old account is mine (friends, parks, things I bought):',
     '',
     `(reason: ${details.reason})`,
   ];

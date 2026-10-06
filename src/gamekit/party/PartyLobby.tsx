@@ -99,7 +99,7 @@ function PartyLobby({ state, serverNow, onReady, onStart, onEmote, onLeave, titl
           </Animated.View>
         ) : null}
         <Text style={styles.hint}>
-          {state.connection === 'live' ? 'Play while you walk. The line never pauses the race.' : 'Syncing over the park network...'}
+          {state.connection === 'live' ? 'Play while you walk. The line never pauses the race.' : 'Getting everyone ready...'}
         </Text>
       </View>
 

@@ -31,19 +31,19 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
           resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       </View>
       <Text style={styles.day}>TODAY AT THIS RIDE · {signal.park_day}</Text>
-      <Text style={styles.title}>{active ? `${ROUTES[active].name} is open` : 'Choose the crew’s next route'}</Text>
+      <Text style={styles.title}>{active ? `${ROUTES[active].name} is open` : 'Vote for the crew’s next path'}</Text>
       <Text style={styles.body}>
         {shared
-          ? `${signal.participants} players at this ride opened a shared chapter. Their choice unlocked ${ROUTES[shared].game} for everyone playing LinePlay here.`
+          ? `${signal.participants} players at this ride voted together. Now everyone here can play ${ROUTES[shared].game}.`
           : active
-            ? `Your personal chapter is open. ${ROUTES[active].game} is next; other players can still open a shared route.`
-            : 'After one verified minute near this ride, choose a signal. Three different guests voting today open a shared round. Playing alone? Your chosen route opens after three eligible minutes.'}
+            ? `Your path is open. Play ${ROUTES[active].game} next. Other players can still open a path for everyone.`
+            : 'Stay near this ride for 1 minute. Then vote for a path. If 3 players vote today, it opens for everyone. Playing alone? Your path opens after 3 minutes.'}
       </Text>
 
       <View style={styles.meter}>
         <Text style={styles.meterCount}>{signal.participants}/{signal.community_target}</Text>
         <View style={styles.meterCopy}>
-          <Text style={styles.meterTitle}>CREW SIGNALS</Text>
+          <Text style={styles.meterTitle}>CREW VOTES</Text>
           <Text style={styles.meterText}>{signal.route_a_count} shadow · {signal.route_b_count} starlight</Text>
         </View>
       </View>
@@ -52,8 +52,8 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
         <Text style={styles.note}>
           You chose {ROUTES[signal.player_choice].name}.
           {!active && (signal.seconds_until_solo > 0
-            ? ` Your solo route opens after ${Math.ceil(signal.seconds_until_solo / 60)} more eligible minute${signal.seconds_until_solo > 60 ? 's' : ''}; a shared route may open sooner.`
-            : ' Your solo route opens when the next verified nearby update arrives.')}
+            ? ` Your path opens after ${Math.ceil(signal.seconds_until_solo / 60)} more minute${signal.seconds_until_solo > 60 ? 's' : ''} near the ride. It may open sooner if others vote.`
+            : ' Your path opens very soon. Keep playing.')}
         </Text>
       ) : (
         <View style={styles.choices}>
@@ -76,8 +76,8 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
       {!signal.player_choice && !signal.can_choose && (
         <Text style={styles.note}>
           {signal.seconds_until_eligible > 0
-            ? `${signal.seconds_until_eligible}s of eligible nearby time until you can choose.`
-            : 'Waiting for a current nearby location sample.'}
+            ? `Stay near the ride ${signal.seconds_until_eligible}s more. Then you can vote.`
+            : 'Checking that you are near the ride…'}
         </Text>
       )}
       {active && (

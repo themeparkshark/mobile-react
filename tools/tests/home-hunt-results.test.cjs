@@ -18,7 +18,7 @@ const result = (week, status = 'claimable', extra = {}) => ({
 });
 
 test('held results show the neutral checking copy and no Claim', () => {
-  assert.equal(model.HELD_COPY, 'Your reward is being checked. It arrives within 72 hours.');
+  assert.equal(model.HELD_COPY, 'We are checking your reward. It shows up within 3 days.');
   assert.equal(model.isHeld(result('2026-W45', 'held')), true);
   assert.equal(model.canClaim(result('2026-W45', 'held')), false);
   assert.equal(model.canClaim(result('2026-W45')), true);

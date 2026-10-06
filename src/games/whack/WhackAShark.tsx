@@ -930,7 +930,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     : format === 'duel' ? `Bonk Battle vs ${duel?.rival.name ?? 'Captain Fin'}: best of 3 Bursts. Goldens send candy splats!`
       : format === 'raid' ? 'Crew Raid: bonk the tentacles, swipe the ink, take the boss down together.'
         : lineRun ? 'Line of the Day: everyone in this line today plays this board. Beat the sharks just above you!'
-          : 'Bonk the sharks, skip anything with teeth. Fill the meter, then GO FEVER. Look up any time: the board waits.';
+          : 'Bonk the sharks. Skip anything with teeth. Fill the meter, then GO FEVER. Look up any time. The game waits for you.';
   const capacity = Math.min(Math.max(48, Math.round(140 * tierScale.particles)), thermalScale.particleCap);
 
   return (

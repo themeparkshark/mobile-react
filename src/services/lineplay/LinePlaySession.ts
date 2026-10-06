@@ -1756,7 +1756,7 @@ export class LinePlaySession {
       this.applySignal(await chooseLineSignal(this.serverSessionId, route));
     } catch (error) {
       const data = (error as { response?: { data?: { message?: string } } })?.response?.data;
-      this.signalError = data?.message ?? 'Could not save your signal. Try again when connected.';
+      this.signalError = data?.message ?? 'Could not save your vote. Check your internet and try again.';
     } finally {
       this.signalPending = false;
       this.emit();
@@ -1773,7 +1773,7 @@ export class LinePlaySession {
       this.applyParkProject(await voteParkProject(this.parkProject.id, chapter));
     } catch (error) {
       const data = (error as { response?: { data?: { message?: string } } })?.response?.data;
-      this.projectError = data?.message ?? 'Could not save your chapter vote. Try again when connected.';
+      this.projectError = data?.message ?? 'Could not save your chapter vote. Check your internet and try again.';
     } finally {
       this.projectPending = false;
       this.emit();
@@ -1804,7 +1804,7 @@ export class LinePlaySession {
       this.puzzleRequest = null;
     } catch (error) {
       const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
-      this.puzzleError = response?.data?.message ?? 'Could not confirm your guess. Tap Retry safely.';
+      this.puzzleError = response?.data?.message ?? 'Could not check your guess. Tap Retry. You won’t lose it.';
       if (response?.status === 422 || response?.status === 409 || response?.status === 404) {
         this.puzzleRequest = null;
       }
