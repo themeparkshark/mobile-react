@@ -4,6 +4,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { claimClosetTeach } from '../helpers/closetTip';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { GameIcon } from '../ui';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { PEARLS, closetBadge, closetBadgeSay, closetTip, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
@@ -17,13 +18,15 @@ export const COMPACT_HEIGHT = 700;
  * WORN is the yellow pill plus a navy check stamp. Cards never lock: a tap
  * always reaches the screen, which decides what it means.
  */
-export default function Item({ item, onToggle, inventory, highlighted = false }: {
+export default function Item({ item, onToggle, inventory, highlighted = false, memberLocked = false }: {
   readonly item: ItemType;
   readonly onToggle?: (item: ItemType) => void;
   /** The look on the stage, including taps not saved yet. Defaults to the profile. */
   readonly inventory?: InventoryType;
   /** Deep-link target: a gold ring that pulses twice. */
   readonly highlighted?: boolean;
+  /** A member piece the player owns but can't wear until they rejoin (secret-shop/DESIGN.md 4.3). */
+  readonly memberLocked?: boolean;
 }) {
   const { player } = useContext(AuthContext);
   const reduceMotion = useReducedGameMotion();
@@ -37,7 +40,10 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const name = itemDisplayName(item);
   const isNew = !isEquipped && item.seen === false;
   // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
-  const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
+  const showMemberLock = memberLocked && !isEquipped;
+  // The gold member lock owns the top-left corner when it shows (the piece cannot be worn right now);
+  // the lifecycle words still reach VoiceOver through lifeSay.
+  const life = useMemo(() => (showMemberLock ? null : closetBadge(item.lifecycle)), [item.lifecycle, showMemberLock]);
   // A badged card keeps its height: the art steps down and shrinks by the chip's zone (chip + 6 pt).
   const art = life ? artSize - 18 : artSize;
   // 'teach': the once-ever first sight (long enough for a 7-year-old to read 14 words); 'hold': a held card.
@@ -56,7 +62,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
     return () => clearTimeout(t);
   }, [tip]);
   const lifeSay = useMemo(() => closetBadgeSay(item.lifecycle), [item.lifecycle]);
-  const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
+  const isVip = !isEquipped && !isNew && !memberLocked && (item.is_member_item || item.source === 'vip');
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -76,7 +82,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
-          : isEquipped ? `Remove ${name} from your shark${lifeSay}` : `Wear ${name} on your shark${lifeSay}`}
+          : isEquipped ? `Remove ${name} from your shark${lifeSay}`
+          : showMemberLock ? `${name}, member item. In your closet. VIP members can wear it.${lifeSay}` : `Wear ${name} on your shark${lifeSay}`}
         accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
         accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
         disabled={!onToggle}
@@ -100,7 +107,11 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
           <Image source={require('../../assets/images/screens/profile/subscribed.png')}
             style={[styles.cornerIcon]} contentFit="contain" />
         )}
-        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }, life && styles.artInset]}>
+        {showMemberLock && (
+          // Gold lock: still yours, worn again when you rejoin.
+          <View pointerEvents="none" style={styles.memberLock}><GameIcon name="lock" size={14} /></View>
+        )}
+        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }, life && styles.artInset, showMemberLock && styles.artLocked]}>
           {!!badge.glow && (
             <View pointerEvents="none" style={[styles.glow, {
               width: artSize * 0.8, height: artSize * 0.8, borderRadius: artSize * 0.4,
@@ -184,6 +195,9 @@ const styles = StyleSheet.create({
   tipText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14, textAlign: 'center' },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
+  memberLock: { zIndex: 12, position: 'absolute', top: 4, left: 4, width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#123e65', borderWidth: 2, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center' },
+  artLocked: { opacity: 0.6 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },
   artArea: { width: '100%', alignItems: 'center', justifyContent: 'center' },
   glow: { position: 'absolute', opacity: 0.55, shadowOpacity: 1, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },

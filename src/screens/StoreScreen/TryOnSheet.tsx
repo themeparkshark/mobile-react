@@ -49,6 +49,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { CoinArc, LandFlash, MAX_FONT, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, WishHeart } from './shopUi';
 import { wearItem } from './inventoryQueue';
+import { isMemberWearItem, memberWearLocked, useMemberWearLock } from '../../services/memberLook';
 import { TileArt } from './ShopTile';
 import { useWished, wishStore } from './wishStore';
 
@@ -180,6 +181,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const { player, refreshPlayer } = useContext(AuthContext);
   // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
   useModalLayer(!!item, 'show');
+  const memberLockOn = useMemberWearLock();
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
   const wished = useWished(item?.id ?? -1);
@@ -316,9 +318,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
   const glow = badge.border === '#FFFFFF' ? BRAND.gold : badge.border;
-  const baseCta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem });
+  // Member pieces are worn only while a member (DESIGN.md 4.3); the server enforces it too.
+  const memberItem = isMemberWearItem(item);
+  const wearLocked = memberWearLocked(item, player?.is_subscribed === true, memberLockOn);
+  const baseCta = tryOnCta({ owned, worn, vipLocked, short, phase, wear, finishes, cost: item.cost, paused: buyPaused, secret: secretItem, wearLocked });
   // VIP ran out while the sheet was open: say so kindly, coins untouched.
-  const cta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
+  const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
+  // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
+  const cta = !lapsedCta.note && phase === 'confirm' && memberItem ? { ...lapsedCta, note: MEMBER_PROMISE } : lapsedCta;
   const stageH = secret ? SECRET_STAGE_H : STAGE_H;
   // The kid-fair promise, in a 7-year-old's words (kids UX round 1).
   const keepLine = MEMBER_PROMISE;
@@ -543,6 +550,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </View>
                 )}
 
+                {!fxKeyOf(item) && memberItem && (
+                  // VIP gear without a rig: the same member promise as the Secret pieces.
+                  <View style={styles.fxCard} accessible accessibilityLabel={MEMBER_PROMISE}>
+                    <View style={styles.fxRow}><GameIcon name="member" size={20} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{MEMBER_PROMISE}</Text></View>
+                  </View>
+                )}
                 {set && pieces.length > 1 && (
                   <View style={[styles.setCard, { borderColor: set.color ?? BRAND.gold }]}>
                     <View style={styles.setHead}>

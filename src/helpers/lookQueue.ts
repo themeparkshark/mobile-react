@@ -28,7 +28,9 @@ type SlotMap = Partial<Record<SlotKey, Worn>>;
 export type LookNotice =
   | { readonly kind: 'other_device'; readonly slots: SlotKey[] }
   | { readonly kind: 'save_failed'; readonly slots: SlotKey[] }
-  | { readonly kind: 'not_owned'; readonly slots: SlotKey[] };
+  | { readonly kind: 'not_owned'; readonly slots: SlotKey[] }
+  /** A member piece while not a member: still in the closet (secret-shop/DESIGN.md 4.3). */
+  | { readonly kind: 'member_locked'; readonly slots: SlotKey[] };
 
 export interface LookQueueDeps {
   save(version: number, slots: Partial<Record<SlotKey, number | null>>): Promise<SaveLookResult>;
@@ -199,7 +201,7 @@ export class LookQueue {
         }
         this.inFlight = {};
         const reverted = changedSlots(before, this.display());
-        this.deps.onNotice({ kind: 'not_owned', slots: reverted.length ? reverted : result.slots });
+        this.deps.onNotice({ kind: result.memberLocked ? 'member_locked' : 'not_owned', slots: reverted.length ? reverted : result.slots });
         return;
       }
       case 'unsupported': {
@@ -255,8 +257,10 @@ export class LookQueue {
         // a later failure never resends (and undoes) it.
         this.saved = { ...this.saved, slots };
       } catch (error) {
-        const status = (error as { response?: { status?: number } })?.response?.status;
-        if (status === 422) return { kind: 'rejected', slots: [slot] };
+        const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
+        if (response?.status === 422) {
+          return { kind: 'rejected', slots: [slot], ...(response.data?.code === 'member_wear_locked' ? { memberLocked: true } : {}) };
+        }
         throw error;
       }
     }
