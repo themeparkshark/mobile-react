@@ -10,7 +10,7 @@ export async function getLook(): Promise<SharkLook> {
 export type SaveLookResult =
   | { readonly kind: 'saved'; readonly look: SharkLook }
   | { readonly kind: 'conflict'; readonly look: SharkLook }
-  | { readonly kind: 'rejected'; readonly slots: SlotKey[] }
+  | { readonly kind: 'rejected'; readonly slots: SlotKey[]; readonly memberLocked?: boolean }
   | { readonly kind: 'unsupported' };
 
 /**
@@ -23,7 +23,7 @@ export async function putLook(version: number, slots: Partial<Record<SlotKey, nu
     const { data } = await client.put<ApiResponseType<SharkLook>>('/me/look', { version, slots });
     return { kind: 'saved', look: data.data };
   } catch (error) {
-    const response = (error as { response?: { status: number; data?: { data?: SharkLook; errors?: Record<string, unknown> } } })?.response;
+    const response = (error as { response?: { status: number; data?: { code?: string; data?: SharkLook; errors?: Record<string, unknown> } } })?.response;
     if (!response) throw error;
     const { status, data } = response;
     if (status === 409 && data?.data) return { kind: 'conflict', look: data.data };
@@ -32,7 +32,9 @@ export async function putLook(version: number, slots: Partial<Record<SlotKey, nu
       const rejected = Object.keys(data?.errors ?? {})
         .map((key) => key.replace(/^slots\./, ''))
         .filter((key): key is SlotKey => key.endsWith('_item'));
-      return { kind: 'rejected', slots: rejected.length ? rejected : (Object.keys(slots) as SlotKey[]) };
+      return { kind: 'rejected', slots: rejected.length ? rejected : (Object.keys(slots) as SlotKey[]),
+        // A member piece on a lapsed member (secret-shop/DESIGN.md 4.3): still owned, just not wearable now.
+        ...(data?.code === 'member_wear_locked' ? { memberLocked: true } : {}) };
     }
     throw error;
   }

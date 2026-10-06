@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useContext, useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { GameIcon } from '../ui';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
@@ -15,13 +16,15 @@ export const COMPACT_HEIGHT = 700;
  * WORN is the yellow pill plus a navy check stamp. Cards never lock: a tap
  * always reaches the screen, which decides what it means.
  */
-export default function Item({ item, onToggle, inventory, highlighted = false }: {
+export default function Item({ item, onToggle, inventory, highlighted = false, memberLocked = false }: {
   readonly item: ItemType;
   readonly onToggle?: (item: ItemType) => void;
   /** The look on the stage, including taps not saved yet. Defaults to the profile. */
   readonly inventory?: InventoryType;
   /** Deep-link target: a gold ring that pulses twice. */
   readonly highlighted?: boolean;
+  /** A member piece the player owns but can't wear until they rejoin (secret-shop/DESIGN.md 4.3). */
+  readonly memberLocked?: boolean;
 }) {
   const { player } = useContext(AuthContext);
   const reduceMotion = useReducedGameMotion();
@@ -34,7 +37,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const badge = wearableBadge(item);
   const name = itemDisplayName(item);
   const isNew = !isEquipped && item.seen === false;
-  const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
+  const isVip = !isEquipped && !isNew && !memberLocked && (item.is_member_item || item.source === 'vip');
+  const showMemberLock = memberLocked && !isEquipped;
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -54,7 +58,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
-          : isEquipped ? `Remove ${name} from your shark` : `Wear ${name} on your shark`}
+          : isEquipped ? `Remove ${name} from your shark`
+          : showMemberLock ? `${name}, member item. In your closet. Members can wear it.` : `Wear ${name} on your shark`}
         accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
         accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
         disabled={!onToggle}
@@ -69,7 +74,11 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
           <Image source={require('../../assets/images/screens/profile/subscribed.png')}
             style={[styles.cornerIcon]} contentFit="contain" />
         )}
-        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }]}>
+        {showMemberLock && (
+          // Gold lock: still yours, worn again when you rejoin.
+          <View pointerEvents="none" style={styles.memberLock}><GameIcon name="lock" size={14} /></View>
+        )}
+        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }, showMemberLock && styles.artLocked]}>
           {!!badge.glow && (
             <View pointerEvents="none" style={[styles.glow, {
               width: artSize * 0.8, height: artSize * 0.8, borderRadius: artSize * 0.4,
@@ -139,6 +148,9 @@ const styles = StyleSheet.create({
   newBadge: { backgroundColor: '#e8412c' },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
+  memberLock: { zIndex: 12, position: 'absolute', top: 4, left: 4, width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#123e65', borderWidth: 2, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center' },
+  artLocked: { opacity: 0.6 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },
   artArea: { width: '100%', alignItems: 'center', justifyContent: 'center' },
   glow: { position: 'absolute', opacity: 0.55, shadowOpacity: 1, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
