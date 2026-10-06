@@ -72,6 +72,12 @@ const WAVE2: (typeof HEROES[number] & { batch: number })[] = [
   { batch: 3, id: 9304, name: 'Cocoa Mug', fx: 'cocoa_mug', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/cocoa-mug.webp'), season: 'winter' },
   { batch: 3, id: 9305, name: 'Love Bug Buddy', fx: 'love_bug', slot: 3, rarity: 3, cost: 140, art: require('../../../assets/fx/love-bug.webp'), season: 'valentines' },
   { batch: 3, id: 9306, name: 'Thunder Cove', fx: 'storm_surge', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/storm-cove.webp') },
+  { batch: 4, id: 9401, name: 'Pumpkin Cap', fx: 'pumpkin_cap', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/pumpkin-cap.webp'), season: 'halloween' },
+  { batch: 4, id: 9402, name: 'Blossom Crown', fx: 'blossom_crown', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/blossom-crown.webp'), season: 'spring' },
+  { batch: 4, id: 9403, name: 'Rainbow Cloud', fx: 'cloud_halo', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/cloud-puff.webp'), season: 'spring' },
+  { batch: 4, id: 9404, name: 'Butterfly Wing Pack', fx: 'butterfly_wings', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/bfly-wing.webp'), season: 'spring' },
+  { batch: 4, id: 9405, name: 'Heart Balloon', fx: 'heart_balloon', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/heart-balloon.webp'), season: 'valentines' },
+  { batch: 4, id: 9406, name: 'Starlight Wand', fx: 'starlight_wand', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/starlight-wand.webp') },
 ];
 const ALL = [...HEROES, ...WAVE2];
 const SLOT_KEYS: Record<number, string> = { 1: 'head_item', 2: 'face_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' };

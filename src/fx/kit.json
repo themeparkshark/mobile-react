@@ -656,7 +656,7 @@
   },
   "pocket_dragon": {
    "slot": "neck_item",
-   "blurb": "A tiny dragon perches on your head and puffs sparkly smoke rings.",
+   "blurb": "A tiny dragon rides on your shoulder and puffs sparkly smoke rings.",
    "moment": {
     "cue": "dragon_puff",
     "period": 7400,
@@ -665,16 +665,16 @@
    },
    "stillP": 0.5,
    "focus": {
-    "cx": 0.69,
-    "cy": 0.18,
+    "cx": 0.76,
+    "cy": 0.29,
     "span": 0.32
    },
    "groups": [
     {
      "id": "dragon",
      "pivot": [
-      0.68,
-      0.265
+      0.75,
+      0.375
      ],
      "calm": 0.5,
      "loops": [
@@ -720,8 +720,8 @@
      "id": "wing",
      "src": "dragon-wing.webp",
      "layer": "front",
-     "cx": 0.7034,
-     "cy": 0.1538,
+     "cx": 0.7734,
+     "cy": 0.2638,
      "w": 0.15,
      "aspect": 0.9375,
      "ax": 0.14,
@@ -772,8 +772,8 @@
      "id": "body",
      "src": "dragon-body.webp",
      "layer": "front",
-     "cx": 0.68,
-     "cy": 0.1639,
+     "cx": 0.75,
+     "cy": 0.2739,
      "w": 0.195,
      "aspect": 1.1722,
      "group": "dragon"
@@ -788,8 +788,8 @@
      "mode": "moment",
      "life": 1500,
      "from": [
-      0.6313,
-      0.1275
+      0.7013,
+      0.2375
      ],
      "follow": "dragon",
      "vel": [
@@ -829,8 +829,8 @@
      "mode": "moment",
      "life": 1300,
      "from": [
-      0.6313,
-      0.1275
+      0.7013,
+      0.2375
      ],
      "follow": "dragon",
      "vel": [
@@ -1097,8 +1097,8 @@
     {
      "id": "prop",
      "pivot": [
-      0.671,
-      0.1227
+      0.6979,
+      0.1471
      ],
      "squash": [
       1,
@@ -1114,7 +1114,7 @@
      "cx": 0.61,
      "cy": 0.205,
      "w": 0.29,
-     "rot": 12,
+     "rot": 33,
      "aspect": 0.7438
     },
     {
@@ -1122,8 +1122,8 @@
      "src": "prop-blade.webp",
      "layer": "front",
      "group": "prop",
-     "cx": 0.671,
-     "cy": 0.1227,
+     "cx": 0.6979,
+     "cy": 0.1471,
      "w": 0.25,
      "aspect": 0.3812,
      "loops": [
@@ -1157,8 +1157,8 @@
      "mode": "moment",
      "life": 1100,
      "from": [
-      0.671,
-      0.1227
+      0.6979,
+      0.1471
      ],
      "vel": [
       0.0,
@@ -1270,7 +1270,7 @@
      "w": 0.28,
      "ax": 0.5,
      "ay": 0.92,
-     "rot": 10,
+     "rot": 17,
      "aspect": 1.0213
     },
     {
@@ -1278,8 +1278,8 @@
      "src": "spark.webp",
      "layer": "front",
      "group": "hat",
-     "cx": 0.7108,
-     "cy": 0.1883,
+     "cx": 0.7255,
+     "cy": 0.1989,
      "w": 0.04,
      "aspect": 1.0186,
      "rot": 0,
@@ -1298,8 +1298,8 @@
      "src": "spark.webp",
      "layer": "front",
      "group": "hat",
-     "cx": 0.6,
-     "cy": 0.1808,
+     "cx": 0.6166,
+     "cy": 0.1795,
      "w": 0.04,
      "aspect": 1.0186,
      "rot": 15,
@@ -1318,8 +1318,8 @@
      "src": "spark.webp",
      "layer": "front",
      "group": "hat",
-     "cx": 0.6386,
-     "cy": 0.1396,
+     "cx": 0.6606,
+     "cy": 0.1428,
      "w": 0.04,
      "aspect": 1.0186,
      "rot": 30,
@@ -1338,8 +1338,8 @@
      "src": "spark.webp",
      "layer": "front",
      "group": "hat",
-     "cx": 0.6821,
-     "cy": 0.2283,
+     "cx": 0.6915,
+     "cy": 0.2355,
      "w": 0.04,
      "aspect": 1.0186,
      "rot": 45,
@@ -1363,8 +1363,8 @@
      "mode": "moment",
      "life": 1700,
      "from": [
-      0.7058,
-      0.0977
+      0.7331,
+      0.1084
      ],
      "follow": "hat",
      "vel": [
@@ -1434,7 +1434,7 @@
      "cx": 0.65,
      "cy": 0.215,
      "w": 0.24,
-     "rot": 14,
+     "rot": 21,
      "aspect": 0.9437
     },
     {
@@ -1443,8 +1443,8 @@
      "layer": "front",
      "group": "crown",
      "lod": "full",
-     "cx": 0.6271,
-     "cy": 0.2347,
+     "cx": 0.6246,
+     "cy": 0.2321,
      "w": 0.06,
      "aspect": 1,
      "tint": "#ff5a6a",
@@ -1461,8 +1461,8 @@
      "src": "sparkler.webp",
      "layer": "front",
      "group": "crown",
-     "cx": 0.5809,
-     "cy": 0.1327,
+     "cx": 0.5928,
+     "cy": 0.1259,
      "w": 0.075,
      "aspect": 1.901,
      "ax": 0.5,
@@ -1507,7 +1507,7 @@
      "src": "sparkler.webp",
      "layer": "front",
      "group": "crown",
-     "cx": 0.644,
+     "cx": 0.6558,
      "cy": 0.1301,
      "w": 0.075,
      "aspect": 1.901,
@@ -1553,8 +1553,8 @@
      "src": "sparkler.webp",
      "layer": "front",
      "group": "crown",
-     "cx": 0.693,
-     "cy": 0.1696,
+     "cx": 0.6989,
+     "cy": 0.1745,
      "w": 0.075,
      "aspect": 1.901,
      "ax": 0.5,
@@ -1599,8 +1599,8 @@
      "src": "sparkler.webp",
      "layer": "front",
      "group": "crown",
-     "cx": 0.7314,
-     "cy": 0.2123,
+     "cx": 0.7312,
+     "cy": 0.2211,
      "w": 0.075,
      "aspect": 1.901,
      "ax": 0.5,
@@ -1645,8 +1645,8 @@
      "src": "sparkler.webp",
      "layer": "front",
      "group": "crown",
-     "cx": 0.7401,
-     "cy": 0.2516,
+     "cx": 0.7344,
+     "cy": 0.261,
      "w": 0.075,
      "aspect": 1.901,
      "ax": 0.5,
@@ -1696,8 +1696,8 @@
      "mode": "moment",
      "life": 1200,
      "from": [
-      0.6664,
-      0.1567
+      0.6743,
+      0.1589
      ],
      "follow": "crown",
      "vel": [
@@ -1729,8 +1729,8 @@
      "mode": "moment",
      "life": 1100,
      "from": [
-      0.6664,
-      0.1567
+      0.6743,
+      0.1589
      ],
      "follow": "crown",
      "vel": [
@@ -2144,8 +2144,8 @@
     {
      "id": "pom",
      "pivot": [
-      0.7087,
-      0.0979
+      0.7859,
+      0.1589
      ],
      "calm": 0.5,
      "loops": [
@@ -2179,7 +2179,7 @@
      "cx": 0.675,
      "cy": 0.2,
      "w": 0.2,
-     "rot": -10,
+     "rot": 41,
      "aspect": 1.1722
     },
     {
@@ -2187,8 +2187,8 @@
      "src": "pompom.webp",
      "layer": "front",
      "group": "pom",
-     "cx": 0.7087,
-     "cy": 0.1079,
+     "cx": 0.7859,
+     "cy": 0.16890000000000002,
      "w": 0.06,
      "aspect": 1.0127,
      "ax": 0.5,
@@ -2204,8 +2204,8 @@
      "mode": "moment",
      "life": 2200,
      "from": [
-      0.7087,
-      0.0779
+      0.7859,
+      0.13890000000000002
      ],
      "vel": [
       0.0,
@@ -2240,8 +2240,8 @@
      "mode": "moment",
      "life": 2200,
      "from": [
-      0.7087,
-      0.0779
+      0.7859,
+      0.13890000000000002
      ],
      "vel": [
       0.0,
@@ -2276,8 +2276,8 @@
      "mode": "moment",
      "life": 2200,
      "from": [
-      0.7087,
-      0.0779
+      0.7859,
+      0.13890000000000002
      ],
      "vel": [
       0.0,
@@ -2312,8 +2312,8 @@
      "mode": "moment",
      "life": 2200,
      "from": [
-      0.7087,
-      0.0779
+      0.7859,
+      0.13890000000000002
      ],
      "vel": [
       0.0,
@@ -2361,8 +2361,8 @@
     {
      "id": "cape",
      "pivot": [
-      0.705,
-      0.305
+      0.69,
+      0.33
      ],
      "calm": 0.3,
      "loops": [
@@ -2401,27 +2401,27 @@
     {
      "id": "cape",
      "src": "holo-cape.webp",
-     "layer": "back",
+     "layer": "front",
      "group": "cape",
-     "cx": 0.705,
-     "cy": 0.305,
-     "w": 0.32,
+     "cx": 0.69,
+     "cy": 0.33,
+     "w": 0.3,
      "ax": 0.155,
      "ay": 0.114,
-     "rot": 10,
+     "rot": 4,
      "aspect": 0.9219
     },
     {
      "id": "cape-b",
      "src": "holo-cape-b.webp",
-     "layer": "back",
+     "layer": "front",
      "group": "cape",
-     "cx": 0.705,
-     "cy": 0.305,
-     "w": 0.32,
+     "cx": 0.69,
+     "cy": 0.33,
+     "w": 0.3,
      "ax": 0.155,
      "ay": 0.114,
-     "rot": 10,
+     "rot": 4,
      "aspect": 0.9219,
      "loops": [
       {
@@ -2434,14 +2434,14 @@
     {
      "id": "cape-c",
      "src": "holo-cape-c.webp",
-     "layer": "back",
+     "layer": "front",
      "group": "cape",
-     "cx": 0.705,
-     "cy": 0.305,
-     "w": 0.32,
+     "cx": 0.69,
+     "cy": 0.33,
+     "w": 0.3,
      "ax": 0.155,
      "ay": 0.114,
-     "rot": 10,
+     "rot": 4,
      "aspect": 0.9219,
      "loops": [
       {
@@ -2457,13 +2457,13 @@
     {
      "id": "shimmer",
      "src": "spark.webp",
-     "layer": "back",
+     "layer": "front",
      "n": 9,
      "mode": "moment",
      "life": 1500,
      "from": [
-      0.8255,
-      0.426
+      0.8157,
+      0.4324
      ],
      "follow": "cape",
      "vel": [
@@ -2548,13 +2548,13 @@
      "src": "bunny.webp",
      "layer": "front",
      "group": "hat",
-     "cx": 0.6767,
-     "cy": 0.1098,
+     "cx": 0.7087,
+     "cy": 0.121,
      "w": 0.11,
      "aspect": 1.2308,
      "ax": 0.5,
      "ay": 0.95,
-     "rot": 12,
+     "rot": 31,
      "momentOnly": true,
      "keys": [
       [
@@ -2624,7 +2624,7 @@
      "cx": 0.655,
      "cy": 0.2,
      "w": 0.27,
-     "rot": 12,
+     "rot": 31,
      "aspect": 0.9656
     }
    ],
@@ -2637,8 +2637,8 @@
      "mode": "moment",
      "life": 1000,
      "from": [
-      0.6767,
-      0.1098
+      0.7087,
+      0.121
      ],
      "follow": "hat",
      "vel": [
@@ -2834,8 +2834,8 @@
     {
      "id": "spring0",
      "pivot": [
-      0.5372,
-      0.1918
+      0.5403,
+      0.1691
      ],
      "loops": [
       {
@@ -2849,8 +2849,8 @@
     {
      "id": "spring1",
      "pivot": [
-      0.701,
-      0.2309
+      0.6855,
+      0.2467
      ],
      "loops": [
       {
@@ -2870,7 +2870,7 @@
      "cx": 0.63,
      "cy": 0.19,
      "w": 0.26,
-     "rot": 10,
+     "rot": 26,
      "aspect": 0.5813
     },
     {
@@ -2879,8 +2879,8 @@
      "layer": "front",
      "group": "spring0",
      "lod": "full",
-     "cx": 0.5348,
-     "cy": 0.1114,
+     "cx": 0.563,
+     "cy": 0.0912,
      "w": 0.13,
      "aspect": 1,
      "tint": "#b6ff3a",
@@ -2920,8 +2920,8 @@
      "src": "bopper-ball.webp",
      "layer": "front",
      "group": "spring0",
-     "cx": 0.5348,
-     "cy": 0.1114,
+     "cx": 0.563,
+     "cy": 0.0912,
      "w": 0.045,
      "aspect": 0.9896,
      "keys": [
@@ -2952,8 +2952,8 @@
      "layer": "front",
      "group": "spring1",
      "lod": "full",
-     "cx": 0.7488,
-     "cy": 0.1637,
+     "cx": 0.7523,
+     "cy": 0.1937,
      "w": 0.13,
      "aspect": 1,
      "tint": "#ff5fc8",
@@ -2993,8 +2993,8 @@
      "src": "bopper-ball-pink.webp",
      "layer": "front",
      "group": "spring1",
-     "cx": 0.7488,
-     "cy": 0.1637,
+     "cx": 0.7523,
+     "cy": 0.1937,
      "w": 0.045,
      "aspect": 0.9896,
      "keys": [
@@ -3505,6 +3505,795 @@
        }
       ]
      ]
+    }
+   ]
+  },
+  "pumpkin_cap": {
+   "slot": "head_item",
+   "blurb": "A jack-o-lantern cap that glows from inside. A tiny bat visits!",
+   "moment": {
+    "cue": "bat_circle",
+    "period": 8200,
+    "length": 0.44,
+    "jitter": 0.2
+   },
+   "stillP": 0.42,
+   "focus": {
+    "cx": 0.65,
+    "cy": 0.17,
+    "span": 0.36
+   },
+   "parts": [
+    {
+     "id": "cap",
+     "src": "pumpkin-cap.webp",
+     "layer": "front",
+     "cx": 0.596,
+     "cy": 0.224,
+     "w": 0.3,
+     "rot": 0,
+     "aspect": 0.8156
+    },
+    {
+     "id": "candle",
+     "src": "glow.webp",
+     "layer": "front",
+     "cx": 0.635,
+     "cy": 0.2197,
+     "w": 0.14,
+     "aspect": 1,
+     "tint": "#ffe066",
+     "o": 1,
+     "loops": [
+      {
+       "type": "glow",
+       "min": 0.75,
+       "period": 1400
+      },
+      {
+       "type": "glow",
+       "min": 0.85,
+       "period": 2300,
+       "phase": 0.3
+      }
+     ],
+     "keys": [
+      [
+       0.2,
+       {
+        "s": 1.25,
+        "o": 1.0
+       }
+      ],
+      [
+       0.7,
+       {
+        "s": 1.15,
+        "o": 1.0,
+        "hold": true
+       }
+      ]
+     ]
+    },
+    {
+     "id": "bat",
+     "src": "mini-bat.webp",
+     "layer": "front",
+     "lod": "full",
+     "cx": 0.64,
+     "cy": 0.1,
+     "w": 0.11,
+     "aspect": 0.6125,
+     "momentOnly": true,
+     "keys": [
+      [
+       0.08,
+       {
+        "x": 0.09,
+        "y": 0.03,
+        "o": 0,
+        "hold": true
+       }
+      ],
+      [
+       0.16,
+       {
+        "x": 0.08,
+        "y": 0.01,
+        "o": 1
+       }
+      ],
+      [
+       0.36,
+       {
+        "x": 0.0,
+        "y": -0.03,
+        "o": 1
+       }
+      ],
+      [
+       0.56,
+       {
+        "x": -0.07,
+        "y": 0.0,
+        "o": 1
+       }
+      ],
+      [
+       0.76,
+       {
+        "x": 0.0,
+        "y": 0.025,
+        "o": 1
+       }
+      ],
+      [
+       0.9,
+       {
+        "x": 0.07,
+        "y": 0.0,
+        "o": 0,
+        "hold": true
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "blossom_crown": {
+   "slot": "head_item",
+   "blurb": "A flower crown. Petals drift, and a butterfly stops by.",
+   "moment": {
+    "cue": "butterfly_visit",
+    "period": 8400,
+    "length": 0.46,
+    "jitter": 0.2
+   },
+   "stillP": 0.5,
+   "focus": {
+    "cx": 0.63,
+    "cy": 0.17,
+    "span": 0.38
+   },
+   "parts": [
+    {
+     "id": "crown",
+     "src": "blossom-crown.webp",
+     "layer": "front",
+     "cx": 0.62,
+     "cy": 0.222,
+     "w": 0.27,
+     "rot": 14,
+     "aspect": 0.8031
+    },
+    {
+     "id": "butterfly",
+     "src": "butterfly.webp",
+     "layer": "front",
+     "cx": 0.6593,
+     "cy": 0.1813,
+     "w": 0.075,
+     "aspect": 0.7812,
+     "ax": 0.5,
+     "ay": 0.85,
+     "momentOnly": true,
+     "loops": [
+      {
+       "type": "flap",
+       "amp": 0.55,
+       "period": 600,
+       "axis": "x"
+      }
+     ],
+     "calm": 0.6,
+     "keys": [
+      [
+       0.08,
+       {
+        "x": 0.16,
+        "y": -0.09,
+        "o": 0,
+        "hold": true
+       }
+      ],
+      [
+       0.14,
+       {
+        "x": 0.14,
+        "y": -0.08,
+        "o": 1
+       }
+      ],
+      [
+       0.36,
+       {
+        "x": 0.0,
+        "y": 0.0,
+        "o": 1,
+        "hold": true
+       }
+      ],
+      [
+       0.66,
+       {
+        "x": 0.0,
+        "y": 0.0,
+        "o": 1,
+        "hold": true
+       }
+      ],
+      [
+       0.88,
+       {
+        "x": -0.14,
+        "y": -0.1,
+        "o": 1
+       }
+      ],
+      [
+       0.94,
+       {
+        "x": -0.16,
+        "y": -0.11,
+        "o": 0,
+        "hold": true
+       }
+      ]
+     ]
+    }
+   ],
+   "emitters": [
+    {
+     "id": "petals",
+     "src": "petal.webp",
+     "layer": "front",
+     "lod": "lite",
+     "n": 3,
+     "mode": "loop",
+     "life": 4200,
+     "from": [
+      0.66,
+      0.2
+     ],
+     "vel": [
+      0.03,
+      0.03
+     ],
+     "spread": [
+      0.05,
+      0.01
+     ],
+     "gravity": 0.004,
+     "wobble": [
+      0.014,
+      1600
+     ],
+     "size": [
+      0.02,
+      0.028
+     ],
+     "spin": 70,
+     "fade": [
+      0.15,
+      0.35
+     ]
+    }
+   ]
+  },
+  "cloud_halo": {
+   "slot": "head_item",
+   "blurb": "Your own little rain cloud. It rains sparkles and makes a rainbow!",
+   "moment": {
+    "cue": "sparkle_rain",
+    "period": 7600,
+    "length": 0.4,
+    "jitter": 0.2
+   },
+   "stillP": 0.62,
+   "focus": {
+    "cx": 0.64,
+    "cy": 0.1,
+    "span": 0.36
+   },
+   "groups": [
+    {
+     "id": "cloud",
+     "pivot": [
+      0.6,
+      0.135
+     ],
+     "calm": 0.5,
+     "loops": [
+      {
+       "type": "bob",
+       "dx": 0.008,
+       "dy": 0.008,
+       "period": 4600,
+       "py": 3200
+      }
+     ]
+    }
+   ],
+   "parts": [
+    {
+     "id": "rainbow",
+     "src": "mini-rainbow.webp",
+     "layer": "back",
+     "group": "cloud",
+     "cx": 0.66,
+     "cy": 0.09,
+     "w": 0.24,
+     "aspect": 0.7188,
+     "momentOnly": true,
+     "keys": [
+      [
+       0.3,
+       {
+        "o": 0,
+        "s": 0.8,
+        "hold": true
+       }
+      ],
+      [
+       0.45,
+       {
+        "o": 1,
+        "s": 1.0
+       }
+      ],
+      [
+       0.82,
+       {
+        "o": 1,
+        "s": 1.0,
+        "hold": true
+       }
+      ],
+      [
+       0.95,
+       {
+        "o": 0,
+        "s": 0.95,
+        "hold": true
+       }
+      ]
+     ]
+    },
+    {
+     "id": "cloud",
+     "src": "cloud-puff.webp",
+     "layer": "front",
+     "group": "cloud",
+     "cx": 0.6,
+     "cy": 0.14,
+     "w": 0.25,
+     "aspect": 0.7891
+    }
+   ],
+   "emitters": [
+    {
+     "id": "rain",
+     "src": "mini-star.webp",
+     "layer": "front",
+     "n": 8,
+     "mode": "moment",
+     "life": 1400,
+     "from": [
+      0.6,
+      0.165
+     ],
+     "follow": "cloud",
+     "vel": [
+      0.0,
+      0.08
+     ],
+     "spread": [
+      0.07,
+      0.01
+     ],
+     "gravity": 0.03,
+     "size": [
+      0.014,
+      0.022
+     ],
+     "spin": 90,
+     "fade": [
+      0.1,
+      0.4
+     ],
+     "stagger": 110,
+     "startP": 0.1
+    }
+   ]
+  },
+  "butterfly_wings": {
+   "slot": "neck_item",
+   "blurb": "A butterfly wing pack that flaps slowly and leaves sparkle dust.",
+   "moment": {
+    "cue": "wing_dust",
+    "period": 7600,
+    "length": 0.4,
+    "jitter": 0.2
+   },
+   "stillP": 0.3,
+   "focus": {
+    "cx": 0.74,
+    "cy": 0.38,
+    "span": 0.42
+   },
+   "parts": [
+    {
+     "id": "far",
+     "src": "bfly-wing.webp",
+     "layer": "back",
+     "cx": 0.68,
+     "cy": 0.45,
+     "w": 0.17,
+     "ax": 0.08,
+     "ay": 0.88,
+     "rot": -6,
+     "aspect": 1.2403,
+     "o": 0.92,
+     "loops": [
+      {
+       "type": "flap",
+       "amp": 0.22,
+       "period": 2400,
+       "axis": "x",
+       "phase": 0.05
+      }
+     ],
+     "keys": [
+      [
+       0.2,
+       {
+        "sx": 0.6
+       }
+      ],
+      [
+       0.4,
+       {
+        "sx": 1.05
+       }
+      ],
+      [
+       0.6,
+       {
+        "sx": 0.65
+       }
+      ],
+      [
+       0.8,
+       {
+        "sx": 1.0,
+        "hold": true
+       }
+      ]
+     ]
+    },
+    {
+     "id": "near",
+     "src": "bfly-wing.webp",
+     "layer": "front",
+     "cx": 0.66,
+     "cy": 0.47,
+     "w": 0.23,
+     "ax": 0.08,
+     "ay": 0.88,
+     "rot": 18,
+     "aspect": 1.2403,
+     "loops": [
+      {
+       "type": "flap",
+       "amp": 0.22,
+       "period": 2400,
+       "axis": "x"
+      }
+     ],
+     "keys": [
+      [
+       0.2,
+       {
+        "sx": 0.6
+       }
+      ],
+      [
+       0.4,
+       {
+        "sx": 1.05
+       }
+      ],
+      [
+       0.6,
+       {
+        "sx": 0.65
+       }
+      ],
+      [
+       0.8,
+       {
+        "sx": 1.0,
+        "hold": true
+       }
+      ]
+     ]
+    }
+   ],
+   "emitters": [
+    {
+     "id": "dust",
+     "src": "spark.webp",
+     "layer": "back",
+     "n": 8,
+     "mode": "moment",
+     "life": 1600,
+     "from": [
+      0.8161,
+      0.3875
+     ],
+     "vel": [
+      0.04,
+      0.03
+     ],
+     "spread": [
+      0.05,
+      0.05
+     ],
+     "gravity": 0.03,
+     "size": [
+      0.014,
+      0.022
+     ],
+     "spin": 90,
+     "fade": [
+      0.1,
+      0.45
+     ],
+     "stagger": 100,
+     "startP": 0.18
+    }
+   ]
+  },
+  "heart_balloon": {
+   "slot": "hand_item",
+   "blurb": "A heart balloon that bobs on its string and does a slow twirl.",
+   "moment": {
+    "cue": "balloon_twirl",
+    "period": 7400,
+    "length": 0.4,
+    "jitter": 0.2
+   },
+   "stillP": -1,
+   "focus": {
+    "cx": 0.25,
+    "cy": 0.3,
+    "span": 0.4
+   },
+   "groups": [
+    {
+     "id": "balloon",
+     "pivot": [
+      0.322,
+      0.49
+     ],
+     "calm": 0.5,
+     "loops": [
+      {
+       "type": "sway",
+       "amp": 4,
+       "period": 4200
+      },
+      {
+       "type": "bob",
+       "dy": 0.006,
+       "period": 3000
+      }
+     ]
+    }
+   ],
+   "parts": [
+    {
+     "id": "balloon",
+     "src": "heart-balloon.webp",
+     "layer": "front",
+     "group": "balloon",
+     "cx": 0.322,
+     "cy": 0.49,
+     "w": 0.17,
+     "ax": 0.537,
+     "ay": 0.961,
+     "rot": -45,
+     "aspect": 2.2857,
+     "keys": [
+      [
+       0.25,
+       {
+        "sx": 0.25
+       }
+      ],
+      [
+       0.5,
+       {
+        "sx": -1.0
+       }
+      ],
+      [
+       0.75,
+       {
+        "sx": 0.25
+       }
+      ],
+      [
+       0.98,
+       {
+        "sx": 1.0,
+        "hold": true
+       }
+      ]
+     ]
+    },
+    {
+     "id": "glint",
+     "src": "spark.webp",
+     "layer": "front",
+     "group": "balloon",
+     "lod": "full",
+     "cx": 0.0745,
+     "cy": 0.3002,
+     "w": 0.04,
+     "aspect": 1.0186,
+     "momentOnly": true,
+     "keys": [
+      [
+       0.52,
+       {
+        "o": 0,
+        "s": 0.6,
+        "hold": true
+       }
+      ],
+      [
+       0.72,
+       {
+        "o": 1,
+        "s": 1.0,
+        "rot": 15
+       }
+      ],
+      [
+       0.92,
+       {
+        "o": 0,
+        "s": 0.8,
+        "rot": 30,
+        "hold": true
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "starlight_wand": {
+   "slot": "hand_item",
+   "blurb": "A star wand. One wave leaves a trail of tiny stars.",
+   "moment": {
+    "cue": "star_trail",
+    "period": 7000,
+    "length": 0.4,
+    "jitter": 0.2
+   },
+   "stillP": 0.55,
+   "focus": {
+    "cx": 0.24,
+    "cy": 0.36,
+    "span": 0.4
+   },
+   "groups": [
+    {
+     "id": "wand",
+     "pivot": [
+      0.325,
+      0.49
+     ],
+     "calm": 0.3,
+     "loops": [
+      {
+       "type": "sway",
+       "amp": 3,
+       "period": 4000
+      }
+     ],
+     "keys": [
+      [
+       0.25,
+       {
+        "rot": 10
+       }
+      ],
+      [
+       0.6,
+       {
+        "rot": -16
+       }
+      ],
+      [
+       0.85,
+       {
+        "rot": -8,
+        "hold": true
+       }
+      ]
+     ]
+    }
+   ],
+   "parts": [
+    {
+     "id": "tipglow",
+     "src": "glow.webp",
+     "layer": "front",
+     "group": "wand",
+     "lod": "full",
+     "cx": 0.165,
+     "cy": 0.3671,
+     "w": 0.11,
+     "aspect": 1,
+     "tint": "#ffe27a",
+     "loops": [
+      {
+       "type": "glow",
+       "min": 0.5,
+       "period": 2200
+      }
+     ]
+    },
+    {
+     "id": "wand",
+     "src": "starlight-wand.webp",
+     "layer": "front",
+     "group": "wand",
+     "cx": 0.325,
+     "cy": 0.49,
+     "w": 0.18,
+     "ax": 0.18,
+     "ay": 0.9,
+     "rot": -30,
+     "flip": true,
+     "aspect": 1.7391
+    }
+   ],
+   "emitters": [
+    {
+     "id": "trail",
+     "src": "mini-star.webp",
+     "layer": "front",
+     "n": 9,
+     "mode": "moment",
+     "life": 1500,
+     "from": [
+      0.165,
+      0.3671
+     ],
+     "follow": "wand",
+     "vel": [
+      0.0,
+      0.01
+     ],
+     "spread": [
+      0.01,
+      0.01
+     ],
+     "gravity": 0.02,
+     "size": [
+      0.022,
+      0.032
+     ],
+     "spin": 60,
+     "fade": [
+      0.08,
+      0.5
+     ],
+     "stagger": 90,
+     "startP": 0.24
     }
    ]
   }
