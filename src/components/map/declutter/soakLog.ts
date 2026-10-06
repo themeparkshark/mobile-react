@@ -16,6 +16,7 @@ export function soakLog(message: string): void {
 let soakTier = '?';
 /** The living map's current tier (full, lite, calm), reported with every perf sample. */
 export function noteSoakTier(tier: string): void {
+  // clarity-allow: soak/dev trace line for the device log, never shown to a player.
   if (SOAK_TRACE && tier !== soakTier) { soakTier = tier; soakLog(`perf tier=${tier}`); }
 }
 
