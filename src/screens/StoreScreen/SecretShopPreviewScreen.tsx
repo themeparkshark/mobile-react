@@ -168,6 +168,36 @@ function Stage() {
   );
 }
 
+/** 'framing': the jetpack shark (with the halo on) in the small cards the app draws (line recap 130x180, smaller, tiny, wide), each frame outlined. */
+function Framing() {
+  const look = useMemo(() => {
+    const base = baseInventory() as unknown as Record<string, unknown>;
+    base.neck_item = heroItem(HEROES[0]);
+    // The tallest head piece we ship locally rides along, so the peak check includes a hat.
+    const halo = HEROES.find(h => h.fx === 'reef_halo');
+    if (halo) base.head_item = heroItem(halo);
+    return base as unknown as InventoryType;
+  }, []);
+  const card = (w: number, h: number, label: string) => (
+    <View key={label} style={{ alignItems: 'center', gap: 4 }}>
+      <View style={{ width: w, height: h, borderWidth: 1, borderColor: '#ffcf3b' }}>
+        <Playercard inventory={look} style={{ position: 'absolute', width: w, height: h }} />
+      </View>
+      <Text style={styles.cellName}>{label}</Text>
+    </View>
+  );
+  return (
+    <AuthFixture member>
+      <View style={{ flex: 1, backgroundColor: '#0a4f96', paddingTop: 60, gap: 14, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
+          {card(130, 180, 'Line recap 130x180')}{card(120, 136, '120x136')}{card(80, 90, '80x90')}
+        </View>
+        {card(W - 40, 300, `Wide ${Math.round(W - 40)}x300`)}
+      </View>
+    </AuthFixture>
+  );
+}
+
 function Gallery({ still }: { still: boolean }) {
   const cell = (W - 24) / 2;
   return (
@@ -235,6 +265,7 @@ function PreviewBody({ mode }: { mode: string }) {
   if (mode === 'realstore' || mode === 'realstore-guest') return <RealStore member={mode === 'realstore'} />;
   if (mode === 'realswitch') return <RealStore member switching />;
   if (mode === 'stage') return <Stage />;
+  if (mode === 'framing') return <Framing />;
   if (mode === 'gallery' || mode === 'still') return <Gallery still={mode === 'still'} />;
   const tryOn = /^tryon-([a-z_]+?)(-guest)?$/.exec(mode);
   if (tryOn) {
