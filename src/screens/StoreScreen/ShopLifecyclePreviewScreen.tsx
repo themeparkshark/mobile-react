@@ -139,6 +139,13 @@ function AuthFixture({ member, children }: { member: boolean; children: React.Re
 
 function Shop({ secret, focus, guest = false }: { secret: boolean; focus: number | null; guest?: boolean }) {
   const [today, setToday] = useState<ShopToday | null>(() => (secret ? secretToday() : sharkToday()));
+  // Open the try-on once the shelves have settled (their entrance animation owns the first second).
+  const [request, setRequest] = useState<{ id: number; nonce: number } | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    const t = setTimeout(() => setRequest({ id: focus, nonce: 1 }), 1200);
+    return () => clearTimeout(t);
+  }, [focus]);
   return (
     <AuthFixture member={secret && !guest}>
       <View style={{ flex: 1, backgroundColor: secret ? SECRET_THEME.floor : BRAND.blue }}>
@@ -148,7 +155,7 @@ function Shop({ secret, focus, guest = false }: { secret: boolean; focus: number
           <TopbarColumn stretch={false}><View style={{ width: 35 }} /></TopbarColumn>
         </Topbar>
         {today && <ShopShelves today={today} setToday={setToday} onRefresh={async () => true} offset={0} secret={secret}
-          focusRequest={focus ? { id: focus, nonce: 1 } : null} />}
+          focusRequest={request} />}
       </View>
     </AuthFixture>
   );
