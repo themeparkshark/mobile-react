@@ -31,6 +31,9 @@ import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
+import TitleSheet, { TitleArt, equipEarned } from '../components/profile/TitleSheet';
+import TitleUndoBar from '../components/profile/TitleUndoBar';
+import type { EarnedTitle } from '../components/profile/titleModel';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
 import useCardOnScreen from '../components/profile/useCardOnScreen';
 import Topbar from '../components/Topbar';
@@ -59,6 +62,14 @@ export default function ProfileScreen() {
   const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
+  // Dev captures only (constant-folded out of release): open the title sheet on launch.
+  const [titleSheet, setTitleSheet] = useState(() => __DEV__ && !!process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET
+    && process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET !== 'undo');
+  /** The title that just came off, while its Undo is offered. */
+  const [undoTitle, setUndoTitle] = useState<EarnedTitle | null>(() => (__DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'undo'
+    ? { key: 'set:churro_collection:starter', title: 'Churro Finder', meaning: '', equip: { kind: 'set', slug: 'churro_collection', tier: 'starter' }, iconUrl: null }
+    : null));
+  const clearUndo = useCallback(() => setUndoTitle(null), []);
   const [loading, setLoading] = useState<boolean>(true);
   const { player, refreshPlayer } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
@@ -269,6 +280,8 @@ export default function ProfileScreen() {
 
   return (
     <Wrapper>
+      <TitleSheet visible={titleSheet} title={player.title} onClose={() => setTitleSheet(false)}
+        onChanged={() => refreshPlayer()} onRemoved={previous => setUndoTitle(previous)} />
       <Topbar>
         <TopbarColumn stretch={false}>
           <Button
@@ -500,7 +513,12 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ marginTop: 12 }}>
-                <TitlePill title={player.title} trophy={<ProfileEventChip />} />
+                <TitlePill title={player.title} trophy={<ProfileEventChip />} onPress={() => setTitleSheet(true)}
+                  art={<TitleArt entry={null} title={player.title} size={28} />} />
+                {!player.title && (
+                  <TitleUndoBar previous={undoTitle} onDone={clearUndo}
+                    onUndo={async previous => { await equipEarned(previous); await refreshPlayer(); }} />
+                )}
               </View>
               <View style={{ paddingTop: 10 }}>
               <View

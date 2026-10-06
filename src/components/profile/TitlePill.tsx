@@ -6,26 +6,43 @@
  * renders nothing until the player has earned one.
  */
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import GameIcon from '../../ui/GameIcon';
+import { haptic } from '../../gamekit/Haptics';
+import { playSfx } from '../../gamekit/SFX';
 
-export default function TitlePill({ title, trophy }: {
+export default function TitlePill({ title, trophy, onPress, art }: {
   readonly title?: string | null;
   /** The single event trophy slot (renders nothing without data). */
   readonly trophy?: ReactNode;
+  /** Your own profile only: opens the title sheet (what it means, change, remove). */
+  readonly onPress?: () => void;
+  /** The title's own art (your profile: the book badge); the crown when absent. */
+  readonly art?: ReactNode;
 }) {
   if (!title && !trophy) return null;
+  const label = (
+    <>
+      {art ?? <GameIcon name="crown" size={22} />}
+      <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
+        maxFontSizeMultiplier={1.3}>
+        {title}
+      </Text>
+      {onPress && <GameIcon name="swap" size={20} />}
+    </>
+  );
   return (
     <View style={styles.row}>
-      {!!title && (
+      {!!title && (onPress ? (
+        <Pressable style={({ pressed }) => [styles.pill, pressed && styles.pressed]} onPress={() => { haptic('tapLight'); playSfx('ui.tap', 0.6); onPress(); }} hitSlop={6}
+          accessibilityRole="button" accessibilityLabel={`Title: ${title}`} accessibilityHint="Shows what your title means and lets you change or remove it">
+          {label}
+        </Pressable>
+      ) : (
         <View style={styles.pill} accessible accessibilityRole="text" accessibilityLabel={`Title: ${title}`}>
-          <GameIcon name="crown" size={22} />
-          <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
-            maxFontSizeMultiplier={1.3}>
-            {title}
-          </Text>
+          {label}
         </View>
-      )}
+      ))}
       {trophy}
     </View>
   );
@@ -54,4 +71,5 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   text: { color: '#05346e', fontFamily: 'Shark', fontSize: 18, flexShrink: 1 },
+  pressed: { transform: [{ scale: 0.96 }] },
 });

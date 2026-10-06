@@ -30,6 +30,8 @@ import { ENCOUNTER_CRITTER_PT, EncounterCritter, EncounterRing, HAUNT_ANCHOR, HA
 import { RepaintContext, repaintWidth } from './frightRepaint';
 import type { FrightMapInput } from './types';
 import { prefetchFrightImages } from './useFrightImage';
+import { HalloweenStall, STALL_ANCHOR, STALL_BOX } from './HalloweenStall';
+import { HALLOWEEN_SHOP_NAME, stallLine } from '../../fright/halloweenShop';
 import { useFrightState } from './useFrightState';
 
 /** Deep night over the tiles (night-tint.json overlay, a touch lighter so paths stay legible). */
@@ -324,6 +326,15 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
   encounterTapRef.current = encounterOnScreen && encounter ? encounter.key : null;
   // One encounter Marker, always mounted; it parks on the first spot when no encounter is live.
   const encounterAt = encounter && validPoint(encounter) ? encounter : stable.all[0] ?? PARKED;
+  // The Halloween Shop stall: ONE Marker for the payload's life, like the encounter. No shop
+  // (older server, off season) parks it on the first spot at opacity 0 with no touches.
+  const stall = input.tonight.shop && validPoint(input.tonight.shop) ? input.tonight.shop : null;
+  const stallOn = !!stall && visible > 0 && nearView(stall, bounds, 1)
+    && onScreen(stall, cameraCenter(player, bounds), zoom, heading, screenW, screenH, ON_SCREEN_SLACK);
+  const stallRef = useRef(stall);
+  stallRef.current = stallOn ? stall : null;
+  const onShopPressRef = useRef(input.onShopPress);
+  onShopPressRef.current = input.onShopPress;
   return (
     <RelayoutContext.Provider value={relayout}>
       {stable.reefs.map(reef => {
@@ -427,6 +438,16 @@ export const FrightMapSources = memo(function FrightMapSources({ input, zoom, ma
             clock={alive.clock} animated={encounterOnScreen && !!encounter && animate}
             sparkToken={encounter ? tokens[`sparks:${encounter.key}`] ?? 0 : 0}
             sparks={assets?.ambient?.['skid-fin-sparks'] ?? null} />
+        </ShowWhen>
+      </Marker>
+      {/* Always mounted and always a Pressable (never swapped): no stall on screen = opacity 0, no touches. */}
+      <Marker key="fs" coordinate={pin(stall ?? stable.all[0] ?? PARKED)} anchor={STALL_ANCHOR}
+        onPress={() => { if (stallRef.current) onShopPressRef.current?.(stallRef.current); }}
+        touchEnabled={stallOn && !!input.onShopPress}
+        accessibilityLabel={stall ? `${HALLOWEEN_SHOP_NAME}, ${stallLine(stall, input.tonight.night, st.serverNow)}` : HALLOWEEN_SHOP_NAME}>
+        <ShowWhen box={STALL_BOX} on={stallOn}>
+          <HalloweenStall name={stall?.name || HALLOWEEN_SHOP_NAME} tag={stall?.tag || 'LIMITED'} open={!!stall?.open}
+            line={stall ? stallLine(stall, input.tonight.night, st.serverNow) : ''} />
         </ShowWhen>
       </Marker>
       {/* Always a Pressable (never swapped): no encounter on screen = no touches. */}
