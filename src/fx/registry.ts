@@ -21,6 +21,8 @@ export const WAVE2_KEYS = [
   'top_hat', 'snow_beanie', 'glow_boppers', 'cocoa_mug', 'love_bug', 'storm_surge',
   // Batch 4
   'pumpkin_cap', 'blossom_crown', 'cloud_halo', 'butterfly_wings', 'heart_balloon', 'starlight_wand',
+  // Batch 5
+  'chef_hat', 'party_popper', 'neon_visor', 'snorkel_mask', 'coaster_buddy', 'splash_zone',
 ] as const;
 export const FX_KEYS = [...CORE_KEYS, ...WAVE2_KEYS] as const;
 export type FxKey = typeof FX_KEYS[number];

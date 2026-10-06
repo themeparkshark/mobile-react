@@ -78,6 +78,12 @@ const WAVE2: (typeof HEROES[number] & { batch: number })[] = [
   { batch: 4, id: 9404, name: 'Butterfly Wing Pack', fx: 'butterfly_wings', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/bfly-wing.webp'), season: 'spring' },
   { batch: 4, id: 9405, name: 'Heart Balloon', fx: 'heart_balloon', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/heart-balloon.webp'), season: 'valentines' },
   { batch: 4, id: 9406, name: 'Starlight Wand', fx: 'starlight_wand', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/starlight-wand.webp') },
+  { batch: 5, id: 9501, name: 'Chef Hat', fx: 'chef_hat', slot: 1, rarity: 3, cost: 140, art: require('../../../assets/fx/chef-hat.webp') },
+  { batch: 5, id: 9502, name: 'Party Popper', fx: 'party_popper', slot: 5, rarity: 3, cost: 140, art: require('../../../assets/fx/party-popper.webp'), season: 'new_year' },
+  { batch: 5, id: 9503, name: 'Neon Visor', fx: 'neon_visor', slot: 2, rarity: 3, cost: 140, art: require('../../../assets/fx/neon-visor.webp') },
+  { batch: 5, id: 9504, name: 'Snorkel Mask', fx: 'snorkel_mask', slot: 2, rarity: 3, cost: 140, art: require('../../../assets/fx/snorkel-mask.webp'), season: 'summer' },
+  { batch: 5, id: 9505, name: 'Coaster Buddy', fx: 'coaster_buddy', slot: 3, rarity: 4, cost: 280, art: require('../../../assets/fx/coaster-car.webp'), season: 'park_birthday' },
+  { batch: 5, id: 9506, name: 'Splash Zone', fx: 'splash_zone', slot: 6, rarity: 4, cost: 280, art: require('../../../assets/fx/splash-backdrop.webp'), season: 'summer' },
 ];
 const ALL = [...HEROES, ...WAVE2];
 const SLOT_KEYS: Record<number, string> = { 1: 'head_item', 2: 'face_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' };

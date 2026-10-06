@@ -974,6 +974,7 @@ const SEASON_ART: Record<string, number> = {
   new_year: require('../../../assets/fx/fw-crown.webp'),
   park_birthday: require('../../../assets/fx/party-hat.webp'),
   spring: require('../../../assets/fx/blossom-crown.webp'),
+  summer: require('../../../assets/fx/snorkel-mask.webp'),
 };
 /** The season drop's timer icon: never a pumpkin outside Halloween (kids UX, wave 2). */
 function seasonIcon(key: string | null | undefined): GameIconName {
