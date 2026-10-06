@@ -35,6 +35,8 @@ test('featured names the day it changes, in the shop timezone', () => {
   const featured = { type: 'featured', ends_at: '2026-10-26T00:00:00-07:00' };
   assert.equal(shelves.featuredPill(featured, now).label, 'New on Monday');
   assert.equal(shelves.featuredPill(featured, Date.parse('2026-10-25T09:00:00-07:00')).label, 'New tonight');
+  // On flip day itself (a whole week away), never today's own weekday: a kid reads that as today.
+  assert.equal(shelves.featuredPill(featured, Date.parse('2026-10-19T06:52:00-07:00')).label, 'New in 7 days');
 });
 
 test('events carry two honest timers: next drop and the end date', () => {
@@ -573,7 +575,8 @@ test('round 6: stage geometry is tied to the real shark PNG and the drawn plinth
   assert.equal(Number(wrap[3]) / 100, shelves.PLINTH.bottom);
   assert.equal(Number(wrap[4]) / Number(wrap[5]), shelves.PLINTH.aspect);
   assert.match(ui, /viewBox="0 0 200 64"/);
-  const face = /<Ellipse cx="100" cy="(\d+)" rx="94" ry="22" fill="#d6ecfb"/.exec(ui);
+  const face = /<Ellipse cx="100" cy="(\d+)" rx="94" ry="22" fill=\{PLINTH\[plinth\]\.top\}/.exec(ui);
+  assert.match(ui, /house: \{ side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' \}/, 'the house plinth keeps its colours');
   assert.ok(face, 'top face ellipse found');
   assert.equal(Number(face[1]) / 64, shelves.PLINTH.faceY);
 });
@@ -740,14 +743,18 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
   for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
-  assert.match(code, /<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
+  // (The Secret Shop's four short shelves have no jump bar; the Shark Shop always does.)
+  assert.match(code, /\{!secret && <JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\}\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);
   assert.match(code, /accessibilityLabel=\{`Jump to \$\{chip\.label\}`\}/);
   for (const key of ['hero', 'featured', 'daily']) assert.match(code, new RegExp(`onLayout=\\{measure\\('${key}'\\)\\}`));
 });
 
 test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the next-week placeholder', () => {
   const code = src('src/screens/StoreScreen/ShopShelves.tsx');
-  assert.match(code, /colors=\{\[\.\.\.NIGHT_SKY\]\}/, 'the card is the night stage blue, so the stage has no seam');
+  assert.match(code, /<LinearGradient colors=\{\[\.\.\.NIGHT_SKY\]\} style=\{StyleSheet\.absoluteFill\} \/>/, 'the card is the night stage blue, so the stage has no seam');
+  // The Secret Shop's Vault paints its own night sky on its stage (VaultHero).
+  // No sky box of its own: the vault panel's navy runs behind the stage, so nothing ends on a straight line.
+  assert.match(code, /tone="night" sky=\{false\} rays=\{SECRET_THEME\.inkGold\} still=\{still\}/);
   const sky = /NIGHT_SKY = \['(#[0-9a-f]{6})', '(#[0-9a-f]{6})'\]/i.exec(src('src/screens/StoreScreen/shopUi.tsx'));
   const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { const q = v / 255; return q <= 0.03928 ? q / 12.92 : ((q + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   for (const bg of [sky[1], sky[2]]) for (const ink of ['#ffffff', '#e2f6ff', '#ffe07a']) {
@@ -764,7 +771,7 @@ test('pre-launch 3 and 4: the hero is house blue, and a fallback day hides the n
 test('pre-launch 6: Checking uses the muted face', () => {
   const sheet = src('src/screens/StoreScreen/TryOnSheet.tsx');
   assert.match(sheet, /muted=\{cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
-  assert.match(sheet, /disabled=\{wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
+  assert.match(sheet, /disabled=\{hold \|\| wear === 'spinning' \|\| cta\.look === 'paused' \|\| cta\.look === 'checking'\}/);
 });
 
 test('pre-launch 5: the buy hand-off bridges into the reveal on navy (no idle shelf)', () => {
