@@ -362,3 +362,65 @@ export function drawFarProps(canvas: SkCanvas, crop: { x: number; y: number; w: 
     canvas.drawCircle(mx, my, mr, rim);
   }
 }
+
+/**
+ * R6 gameplay gull: a chunky, friendly gull in the house style (thick navy ink, flat fills, orange beak and
+ * feet) that flies through the camera window. `ms` is wall ms from its crossing of the window's centre
+ * (negative before), `dir` 1 flies left to right. It enters from the edge GULL_LEAD_MS ahead of the
+ * crossing, so it is seen coming. `flap` is 0..1 (the photo freezes it). Worklet.
+ */
+export function paintGull(canvas: SkCanvas, ms: number, dir: number, box: { x: number; y: number; w: number; h: number },
+  width: number, flap: number, leadMs: number): void {
+  'worklet';
+  if (!Number.isFinite(ms)) return;
+  const cx = box.x + box.w / 2;
+  const enter = dir > 0 ? -40 : width + 40;
+  const speed = Math.abs(cx - enter) / Math.max(1, leadMs);
+  const x = cx + dir * ms * speed;
+  if (x < -60 || x > width + 60) return;
+  const y = box.y + box.h * 0.36 + Math.sin(ms / 95) * 4 - Math.abs(ms) * 0.012;
+  const ink = Skia.Paint(); ink.setAntiAlias(true); ink.setStyle(PaintStyle.Stroke); ink.setStrokeWidth(3);
+  ink.setStrokeJoin(StrokeJoin.Round); ink.setStrokeCap(StrokeCap.Round); ink.setColor(Skia.Color('#1b3a5c'));
+  const fill = Skia.Paint(); fill.setAntiAlias(true);
+  const s = 1.15;
+  const up = -14 * s + flap * 26 * s;
+  const wing = (front: boolean) => {
+    const p = Skia.Path.Make();
+    const sx = x - dir * 2 * s, sy = y - 2 * s;
+    p.moveTo(sx - dir * 6 * s, sy);
+    p.quadTo(sx - dir * 14 * s, sy + up * 0.6 - 4 * s, sx - dir * 26 * s, sy + up);
+    p.quadTo(sx - dir * 10 * s, sy + up * 0.3 + 2 * s, sx + dir * 6 * s, sy + 1 * s);
+    p.close();
+    fill.setColor(Skia.Color(front ? '#ffffff' : '#d9e3ee'));
+    canvas.drawPath(p, fill); canvas.drawPath(p, ink);
+    // Grey wing tip.
+    const tip = Skia.Path.Make();
+    tip.moveTo(sx - dir * 20 * s, sy + up * 0.85);
+    tip.lineTo(sx - dir * 26 * s, sy + up);
+    tip.lineTo(sx - dir * 17 * s, sy + up * 0.55 + 1 * s);
+    tip.close();
+    fill.setColor(Skia.Color('#8a9bb3'));
+    canvas.drawPath(tip, fill);
+  };
+  wing(false);
+  // Tucked orange feet, the body, the tail, the head.
+  fill.setColor(Skia.Color('#ff9f1c'));
+  canvas.drawCircle(x - dir * 4 * s, y + 9 * s, 2.6 * s, fill);
+  canvas.drawCircle(x + dir * 1 * s, y + 9.5 * s, 2.6 * s, fill);
+  const tail = Skia.Path.Make();
+  tail.moveTo(x - dir * 12 * s, y - 3 * s); tail.lineTo(x - dir * 22 * s, y - 1 * s); tail.lineTo(x - dir * 12 * s, y + 5 * s); tail.close();
+  fill.setColor(Skia.Color('#ffffff')); canvas.drawPath(tail, fill); canvas.drawPath(tail, ink);
+  const body = Skia.XYWHRect(x - 15 * s, y - 8 * s, 30 * s, 17 * s);
+  canvas.drawOval(body, fill); canvas.drawOval(body, ink);
+  const hx = x + dir * 13 * s, hy = y - 7 * s;
+  const beak = Skia.Path.Make();
+  beak.moveTo(hx + dir * 5 * s, hy - 1.5 * s); beak.lineTo(hx + dir * 15 * s, hy + 1.5 * s); beak.lineTo(hx + dir * 5 * s, hy + 4 * s); beak.close();
+  fill.setColor(Skia.Color('#ffb02e')); canvas.drawPath(beak, fill); canvas.drawPath(beak, ink);
+  fill.setColor(Skia.Color('#ffffff'));
+  canvas.drawCircle(hx, hy, 8 * s, fill); canvas.drawCircle(hx, hy, 8 * s, ink);
+  fill.setColor(Skia.Color('#1b3a5c'));
+  canvas.drawCircle(hx + dir * 2.5 * s, hy - 1.5 * s, 2.4 * s, fill);
+  fill.setColor(Skia.Color('#ffffff'));
+  canvas.drawCircle(hx + dir * 3.2 * s, hy - 2.3 * s, 0.9 * s, fill);
+  wing(true);
+}

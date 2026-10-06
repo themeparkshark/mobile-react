@@ -140,7 +140,7 @@ export function seasonFor(date: Date): Season {
 /**
  * The scene for one ride, seeded by the find so a reopen looks the same.
  * Spooky sets and the dark ride are always night; the Golden Hour shiny wins
- * the sky. Photobombs are rare: a gull by day (1 in 8), fireworks at night (1 in 4).
+ * the sky. Scenery photobombs: fireworks at night (1 in 4); the gull is a gameplay photobomb (gullFor).
  */
 export function sceneVariant(opts: { seed: number; kind: RideKind; setName?: string | null; golden?: boolean; date?: Date }): SceneVariant {
   const slug = setSlug(opts.setName);
@@ -149,7 +149,8 @@ export function sceneVariant(opts: { seed: number; kind: RideKind; setName?: str
   if (slug === 'spooky-snacks' || slug === 'night-glow' || opts.kind === 'dark_ride') sky = 'night';
   if (opts.golden) sky = 'sunset';
   const bomb = seeded(opts.seed, 13);
-  const photobomb: Photobomb = sky === 'night' ? (bomb < 0.25 ? 'fireworks' : 'none') : bomb < 0.125 ? 'gull' : 'none';
+  // R6: the gull is gameplay now (a per-pass photobomb on Rare and up, see gullFor), so the scenery never sends one.
+  const photobomb: Photobomb = sky === 'night' ? (bomb < 0.25 ? 'fireworks' : 'none') : 'none';
   const shifts = [0, -0.6, 0.6];
   return {
     sky,
