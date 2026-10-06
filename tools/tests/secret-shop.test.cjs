@@ -551,6 +551,14 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
     assert.ok(Math.abs(jet.bobWeight(st + 1200, NO)) < 1e-6, 'no bob at the top of a boost');
     assert.ok(Math.abs(jet.bobWeight(st + 2470, NO)) < 1e-6, 'lands with no bob');
   }
+  // The landing flows straight into the first bob: no shelf, no step (height moves one way for 400 ms).
+  for (const st of starts.slice(0, -1)) {
+    const land = st + 2500;
+    const h = [];
+    for (let k = 0; k <= 24; k++) h.push(jet.jetpackFloat(land + k * dt, NO, H));
+    const d = h.slice(1).map((y, k) => y - h[k]);
+    assert.ok(d.every(x => x <= 1e-9) || d.every(x => x >= -1e-9), `monotonic after landing at ${Math.round(land)}`);
+  }
   // The flame flares with the sound: full thrust within 150 ms.
   assert.ok(jet.thrustCurve(150 / 2500) > 0.99 && jet.thrustCurve(400 / 2500) === 1 && jet.thrustCurve(2400 / 2500) < 0);
   // No squash or stretch on the shark.

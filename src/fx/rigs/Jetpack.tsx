@@ -109,6 +109,34 @@ export function boostAt(t: number, kick: number): number {
  * out through it (so every boost takes off and lands at rest height, 16 pt each way), and fades
  * back in over 1 s after the landing.
  */
+/**
+ * When the last boost landed (ms on the clock), or null with none in the last 12 s. Boosts are
+ * 2.5 s long and come at most every 11.8 s, so a 400 ms step backwards always finds the last one.
+ */
+export function lastLanding(t: number, kick: number): number | null {
+  'worklet';
+  let from = t;
+  // Mid-boost, the bob's phase keeps the previous landing (the boost itself never resets it).
+  const now = momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
+  if (now >= 0) from = t - now * BOOST_MS - 1;
+  for (let d = 0; d <= 12000; d += 400) {
+    const p = momentAt(from - d, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
+    if (p >= 0) return from - d + (1 - p) * BOOST_MS;
+  }
+  return null;
+}
+
+/**
+ * The idle bob, -1..1. It restarts at each landing (at 0, rising), so the landing flows straight
+ * into the first bob with no step (game feel round 3).
+ */
+export function idleBob(t: number, kick: number): number {
+  'worklet';
+  const landing = lastLanding(t, kick);
+  const since = landing === null ? t : t - landing;
+  return Math.sin((since / 5400) * Math.PI * 2);
+}
+
 export function bobWeight(t: number, kick: number): number {
   'worklet';
   const now = momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
@@ -128,7 +156,7 @@ export function bobWeight(t: number, kick: number): number {
 export function jetpackFloat(t: number, kick: number, height: number): number {
   'worklet';
   const b = boostAt(t, kick);
-  return -height * (0.09 + 0.011 * Math.sin((t / 5400) * Math.PI * 2) * bobWeight(t, kick) + 0.033 * b);
+  return -height * (0.09 + 0.011 * idleBob(t, kick) * bobWeight(t, kick) + 0.033 * b);
 }
 
 
