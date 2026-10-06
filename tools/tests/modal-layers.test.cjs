@@ -43,7 +43,8 @@ test('every shop sheet registers as a layer and marks its children nested', () =
   for (const file of ['src/screens/StoreScreen/TryOnSheet.tsx', 'src/screens/StoreScreen/WishlistSheet.tsx', 'src/screens/StoreScreen/SetCompleteReveal.tsx']) {
     const code = src(file);
     assert.match(code, /useModalLayer\([^)]*'show'\)/, `${file} registers`);
-    assert.match(code, /<Modal[^>]*>\s*<ModalLayerContext\.Provider value>/, `${file} marks what it presents as nested`);
+    // `(?:=>|[^>])*`: a prop may hold an arrow handler (the reveal's onRequestClose={() => leave(false)}).
+    assert.match(code, /<Modal\b(?:=>|[^>])*>\s*<ModalLayerContext\.Provider value>/, `${file} marks what it presents as nested`);
   }
 });
 
