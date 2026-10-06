@@ -17,6 +17,16 @@ const { plain } = require('./helpers/plain.cjs');
 
 const root = path.join(__dirname, '../..');
 const wardrobe = loadTs('src/helpers/wardrobe.ts');
+// Secret Shop rigs (src/fx): the real pure wornFx, and an idle clock. No rig is worn in these tests.
+const fxRegistry = loadTs('src/fx/registry.ts');
+const fxStubs = {
+  '../fx/FxLayers': { wornFx: fxRegistry.wornFx, FxFloat: 'FxFloat', FxRigLayers: 'FxRigLayers', FxScene: 'FxScene',
+    useFloatShadowStyle: () => ({}), useFxEquipSound: () => undefined,
+    useFxMomentCue: () => ({ cue: undefined, touch: () => undefined, play: () => undefined }), FxShadow: 'FxShadow' },
+  '../fx/FxStage': { useFxClock: () => ({ value: 0 }), useFxKick: () => ({ value: 0 }), useFxRunning: () => false },
+  '../hooks/useReducedGameMotion': { default: () => false },
+  '../fx/registry': fxRegistry,
+};
 const CLASSIC = '../../assets/images/screens/inventory/classic-no-eye.png';
 const EYES = '../../assets/images/screens/inventory/blink.png';
 
@@ -66,7 +76,7 @@ test('no shark-drawing component falls back to the shark-colored-v2 drawing', ()
 });
 
 test('the Playercard stage draws Classic + eyes under a face item when no skin is worn', () => {
-  const app = runtime('src/components/Playercard.tsx', { '../helpers/wardrobe': wardrobe },
+  const app = runtime('src/components/Playercard.tsx', { '../helpers/wardrobe': wardrobe, ...fxStubs },
     { inventory: { skin_item: null, face_item: item(77, 2, { paper_url: 'red-shades' }) } });
   const drawn = sources(app.tree);
   const classic = drawn.indexOf(CLASSIC), eyes = drawn.indexOf(EYES);

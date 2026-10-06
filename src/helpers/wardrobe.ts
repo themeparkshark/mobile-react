@@ -188,9 +188,14 @@ export interface WearableBadge {
  * Card border, glow and label for a wearable (dressing-room.md 9.1, 9.2).
  * VIP and code items show where they came from instead of a rarity name.
  */
-export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_member_item' | 'is_coin_code_item'>): WearableBadge {
+export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_member_item' | 'is_coin_code_item'> & { fx_key?: string | null }): WearableBadge {
   const rarity = (item.rarity && item.rarity >= 1 && item.rarity <= 5 ? item.rarity : 1) as WearableRarity;
   const ui = wearableRarityUi[rarity];
+  // Secret Shop pieces (animated) say so everywhere they show (secret-shop/DESIGN.md 6.5).
+  if (item.source === 'secret' || item.fx_key) {
+    // The vault's colours: gold rim, navy keyline, no glow (Secret Shop redesign, no purple).
+    return { rarity, border: '#ffcf3b', inner: '#0b2156', glow: null, label: 'SECRET', labelColor: '#1a4590' };
+  }
   const source = item.source === 'vip' || item.is_member_item ? 'VIP'
     : item.source === 'coin_code' || item.is_coin_code_item ? 'CODE' : null;
   return {

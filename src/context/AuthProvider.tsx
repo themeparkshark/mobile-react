@@ -188,6 +188,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const logout = async () => {
     // Friend answers and hearts belong to this player only.
     try { require('../screens/social/socialStore').resetSocialStore(); } catch { /* not loaded */ }
+    // Secret Shop v2 can be on for one account only (the preview list).
+    try { require('../services/secretShopFlag').resetSecretShopFlag(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
     // Standings boards (friends' photos included) never outlive the session.
     endStandingsSession();

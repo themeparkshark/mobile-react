@@ -1,0 +1,171 @@
+{
+  "canvas": [
+    1353,
+    1530
+  ],
+  "note": "Rig part placement in paper-canvas fractions. Shared by the app rigs (src/fx) and the rest-frame compositor (next-wave/secret-shop/art/tools/compose.py). cx/cy: where the part's anchor (ax, ay, fractions of the part) sits; w: part width as a fraction of canvas width; aspect: part height / width; rot: degrees clockwise about the anchor.",
+  "rigs": {
+    "jetpack": {
+      "_source": "Alex's hand-drawn Jetpack 3000 (items.id 436), cut from his paper (1352x1528): the pack, and his own 3-frame flame loop from his 2023 GIF (JET_PACK_GIF.gif), placed at the paper's nozzles",
+      "body": {
+        "file": "jetpack.webp",
+        "aspect": 0.6895,
+        "cx": 0.62611,
+        "cy": 0.49673,
+        "w": 0.51997,
+        "ax": 0.5,
+        "ay": 0.5,
+        "rot": 0,
+        "nozzles": [
+          {
+            "x": 0.7681,
+            "y": 0.9876
+          },
+          {
+            "x": 0.6188,
+            "y": 0.9277
+          }
+        ]
+      },
+      "flame": {
+        "file": "jet-flame-0.webp",
+        "frames": [
+          "jet-flame-0.webp",
+          "jet-flame-1.webp",
+          "jet-flame-2.webp"
+        ],
+        "aspect": 1.4174,
+        "cx": 0.76553,
+        "cy": 0.65118,
+        "w": 0.16124,
+        "ax": 0.5688,
+        "ay": 0.1683,
+        "rot": 0,
+        "keys": [
+          "jet-flame-0-key.webp",
+          "jet-flame-1-key.webp",
+          "jet-flame-2-key.webp"
+        ]
+      },
+      "flame2": {
+        "file": "jet-flame-side-0.webp",
+        "frames": [
+          "jet-flame-side-0.webp",
+          "jet-flame-side-1.webp",
+          "jet-flame-side-2.webp"
+        ],
+        "aspect": 1.0241,
+        "cx": 0.68787,
+        "cy": 0.6322,
+        "w": 0.06139,
+        "ax": 0.7831,
+        "ay": 0.1647,
+        "rot": 0,
+        "keys": [
+          "jet-flame-side-0-key.webp",
+          "jet-flame-side-1-key.webp",
+          "jet-flame-side-2-key.webp"
+        ]
+      }
+    },
+    "plasma_blade": {
+      "blade": {
+        "file": "blade.webp",
+        "aspect": 2.0317,
+        "cx": 0.31,
+        "cy": 0.515,
+        "w": 0.19,
+        "ax": 0.5,
+        "ay": 0.86,
+        "rot": -42
+      }
+    },
+    "reef_halo": {
+      "ring": {
+        "cx": 0.6,
+        "cy": 0.198,
+        "rx": 0.145,
+        "ry": 0.0667,
+        "tilt": 17,
+        "stroke": 0.012,
+        "aspect": 0.5651,
+        "scale": 1.02
+      },
+      "fishA": {
+        "file": "fish-yellow.webp",
+        "aspect": 0.875,
+        "w": 0.1
+      },
+      "fishB": {
+        "file": "fish-pink.webp",
+        "aspect": 0.8906,
+        "w": 0.1
+      },
+      "fishC": {
+        "file": "fish-yellow.webp",
+        "aspect": 0.875,
+        "w": 0.088
+      }
+    },
+    "saucer": {
+      "ufo": {
+        "file": "ufo.webp",
+        "aspect": 0.776,
+        "cx": 0.82,
+        "cy": 0.255,
+        "w": 0.25,
+        "ax": 0.5,
+        "ay": 0.5,
+        "rot": 6
+      }
+    },
+    "midway_fireworks": {
+      "backdrop": {
+        "file": "backdrop.webp"
+      },
+      "bursts": [
+        {
+          "file": "burst-gold.webp",
+          "cx": 0.26,
+          "cy": 0.17,
+          "w": 0.21
+        },
+        {
+          "file": "burst-pink.webp",
+          "cx": 0.76,
+          "cy": 0.14,
+          "w": 0.19
+        },
+        {
+          "file": "burst-gold.webp",
+          "cx": 0.52,
+          "cy": 0.09,
+          "w": 0.13
+        },
+        {
+          "file": "burst-pink.webp",
+          "cx": 0.2,
+          "cy": 0.36,
+          "w": 0.11
+        }
+      ]
+    },
+    "ghost_lantern": {
+      "lantern": {
+        "file": "lantern.webp",
+        "aspect": 1.6623,
+        "cx": 0.305,
+        "cy": 0.455,
+        "w": 0.155,
+        "ax": 0.5,
+        "ay": 0.04,
+        "rot": 0
+      },
+      "ghost": {
+        "file": "ghost.webp",
+        "aspect": 0.9323,
+        "w": 0.13
+      }
+    }
+  }
+}
