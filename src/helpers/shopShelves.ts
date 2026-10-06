@@ -374,6 +374,8 @@ export type TryOnState = {
   readonly paused?: boolean;
   /** A Secret Shop piece (secret-shop/DESIGN.md 4.2). */
   readonly secret?: boolean;
+  /** Owned member piece, membership ended: still in the closet, worn again after rejoining (DESIGN.md 4.3). */
+  readonly wearLocked?: boolean;
 };
 
 export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' | 'ask' | 'none';
@@ -385,6 +387,7 @@ export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' 
  */
 export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; note: string | null; look: 'go' | 'busy' | 'paused' | 'checking' } {
   if (s.owned) {
+    if (s.wearLocked && !s.worn) return { label: 'Ask a grown-up', action: 'vip', note: MEMBER_PROMISE, look: 'go' };
     if (s.wear === 'failed') return { label: 'Try again', action: 'wear', note: 'Couldn’t put it on. Try again.', look: 'go' };
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
     return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };

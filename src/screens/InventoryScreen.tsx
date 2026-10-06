@@ -34,6 +34,8 @@ import { SLOT_KEYS } from '../models/look-type';
 import useLook from '../hooks/useLook';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { LookNotice } from '../helpers/lookQueue';
+import { explainMemberLock } from '../components/MemberLookHost';
+import { MEMBER_WEAR_COPY, memberWearLocked, refreshMemberLook, useMemberWearLock } from '../services/memberLook';
 
 /** What the player reads when a save does not go through (dressing-room.md 7.10). */
 export function lookNoticeCopy(notice: LookNotice): string {
@@ -41,6 +43,7 @@ export function lookNoticeCopy(notice: LookNotice): string {
     case 'other_device': return 'Updated from your other device.';
     case 'not_owned': return "That item isn't in your closet.";
     case 'save_failed': return "Couldn't save. Your shark is back to your last look.";
+    case 'member_locked': return MEMBER_WEAR_COPY;
   }
 }
 
@@ -81,6 +84,10 @@ export default function InventoryScreen() {
   // the same frame and nothing ever locks (dressing-room.md 13.3).
   const look = useLook();
   const worn = look.inventory;
+  // Member pieces: owned forever, worn only while a member (secret-shop/DESIGN.md 4.3).
+  const memberLockOn = useMemberWearLock();
+  const isMember = player?.is_subscribed === true;
+  useEffect(() => { void refreshMemberLook(); }, [isMember]);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,7 +111,13 @@ export default function InventoryScreen() {
       playSound(require('../../assets/sounds/nope.mp3'));
       HapticPatterns.warning();
     }
-    showToast(lookNoticeCopy(look.notice), look.notice.kind === 'save_failed' ? 2500 : 2000);
+    if (look.notice.kind === 'member_locked') {
+      // The server said no (membership ended on another screen): explain, never a dead end.
+      void refreshMemberLook();
+      void explainMemberLock();
+    } else {
+      showToast(lookNoticeCopy(look.notice), look.notice.kind === 'save_failed' ? 2500 : 2000);
+    }
     look.clearNotice();
   }, [look.notice]);
 
@@ -121,6 +134,12 @@ export default function InventoryScreen() {
       // The shark always keeps a skin and a backdrop.
       playSound(require('../../assets/sounds/nope.mp3'));
       showToast(requiredSlotCopy(slot), 1200);
+      return;
+    }
+    if (!isWorn && memberWearLocked(item, isMember, memberLockOn)) {
+      // Still in the closet; taking one off always works, putting one on needs membership.
+      playSound(require('../../assets/sounds/nope.mp3'));
+      void explainMemberLock();
       return;
     }
     playSound(fromAvatar
@@ -398,6 +417,7 @@ export default function InventoryScreen() {
                   renderItem={({ item }) => <Item item={item}
                     inventory={worn}
                     highlighted={highlightedId === item.id}
+                    memberLocked={memberWearLocked(item, isMember, memberLockOn)}
                     onToggle={changeOutfit} />}
                   estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}

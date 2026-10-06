@@ -65,7 +65,8 @@ test('closet badges: RETIRED for a piece that will never return, a pearl alone f
   assert.equal(life.closetBadge(null), null);
   assert.match(life.closetBadgeSay({ retired: true, forever: true, rarity: rare }), /retired: it won't come back to the shop\. Rare find: few sharks have this/);
   const item = src('src/components/Item.tsx');
-  assert.match(item, /const life = useMemo\(\(\) => closetBadge\(item\.lifecycle\), \[item\.lifecycle\]\);/);
+  // Release 2: the gold member lock owns the corner when it shows (member-wear-lock-app).
+  assert.match(item, /const life = useMemo\(\(\) => \(showMemberLock \? null : closetBadge\(item\.lifecycle\)\), \[item\.lifecycle, showMemberLock\]\);/);
   assert.match(item, /closetBadgeSay\(item\.lifecycle\)/, 'VoiceOver hears it too');
   assert.match(item, /life && styles\.artInset/, 'the art steps down so nothing touches the badge');
   assert.match(item, /onLongPress=\{life \? \(\) => setTip\('hold'\) : undefined\}/, 'hold a badged card for its sentence');

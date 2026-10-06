@@ -1,5 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { GrownUpGateHost } from './components/GrownUpGate';
+import MemberLookHost from './components/MemberLookHost';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
@@ -323,6 +324,8 @@ export default function App() {
     <GameDialogHost />
     {/* The grown-up gate in front of every paywall and real-money purchase. */}
     <GrownUpGateHost />
+    {/* Member items: the lapse note and the rejoin offer (secret-shop/DESIGN.md 4.3). */}
+    {player && !isStandalonePreview && <MemberLookHost />}
     {/* Tester reports: Settings > Report a Problem, or shake on the internal channel. */}
     {!isStandalonePreview && <FeedbackHost />}
     {cleanRecording ? null : (__DEV__ || player?.is_app_reviewer) && !isStandalonePreview && player && devMode && <DevJoystickHost />}
