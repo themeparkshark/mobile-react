@@ -204,3 +204,38 @@ real: iOS asks for it when a player taps Save Image in the share sheet on the
 park day or ride card (expo-sharing), and the app crashes there without the
 key. If a TestFlight upload goes through without that warning after
 expo-camera is configured with `microphonePermission: false`, drop the key.
+
+## 1.7.2 store binary (Release 2, claude/release-2)
+
+1.7.2 is the App Store binary for Release 2. It carries one native change, the
+MapLibre marker-frame patch from claude/binary-1.7.1 (`tools/maplibre/patch-marker-frame.mjs`,
+run by `postinstall`). It stops a React layout pass from moving a marker that
+MapLibre owns to the map's top-left corner. The patch changes the iOS runtime
+fingerprint, so 1.7.0 and 1.7.2 are separate OTA lines:
+
+| Binary | Runtime | Publish OTAs from |
+|---|---|---|
+| 1.7.0 (20260930.11 to .14), App Store today | `f7aa10f3...` | `claude/release-2-ota170` (Release 2 JS without the native patch), or `claude/release-rc` |
+| 1.7.1 (20260930.15), TestFlight only | `92c961be...` | none (superseded by 1.7.2) |
+| 1.7.2 (20260930.16), the Release 2 store binary | `637d0595...` at the version commit (re-check after any later merge) | `claude/release-2` |
+
+- **Until Apple approves 1.7.2,** production OTAs keep publishing on `f7aa10f3`
+  from `claude/release-2-ota170`. Never publish from `claude/release-2`: no
+  production binary has its runtime.
+- **After 1.7.2 is live,** production OTAs publish from `claude/release-2` on
+  the new runtime. 1.7.0 players keep their runtime and get only what is
+  published from `claude/release-2-ota170`. A JS fix that both lines need is
+  published twice, once from each branch.
+- Any JS-only change merged into `claude/release-2` after this point is
+  merged into `claude/release-2-ota170` too, so the two lines stay the same
+  apart from the native patch and the version.
+- Check the runtime before every publish:
+  `API_URL=<profile URL> npx expo-updates fingerprint:generate --platform ios`.
+  It must print the runtime of the binary you target.
+- After the 1.7.2 build, set `tools/ota-base.json` `production` to the
+  build's commit, `1.7.2 (<build>)` and its runtime (the 1.7.0 entry moves
+  to the release-2-ota170 line).
+- Build numbers: the EAS remote counter is still at 20260930.14 unless
+  someone moved it. The local project says 20260930.16 (1.7.1 used .15). For
+  an EAS build, run `eas build:version:set -p ios` to .16 or higher first.
+  A local archive (app-store-submit skill) uses .16 as committed.

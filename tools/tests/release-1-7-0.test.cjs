@@ -36,13 +36,14 @@ test('adsAvailable() is false whenever ads are off, before touching the native m
   assert.match(ads, /if \(!ADS_ENABLED \|\| Platform\.OS !== 'ios'\) return false;/);
 });
 
-test('version 1.7.0 everywhere and 120 Hz off', () => {
-  assert.match(read('app.config.js'), /version: '1\.7\.0'/);
+test('version 1.7.2 everywhere and 120 Hz off', () => {
+  // 1.7.2: Release 2 store binary with the native MapLibre marker-frame patch (new fingerprint).
+  assert.match(read('app.config.js'), /version: '1\.7\.2'/);
   const plist = read('ios/ThemeParkShark/Info.plist');
-  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.0<\/string>/);
+  assert.match(plist, /<key>CFBundleShortVersionString<\/key>\n\t<string>1\.7\.2<\/string>/);
   assert.doesNotMatch(plist, /CADisableMinimumFrameDurationOnPhone/);
   const pbx = read('ios/ThemeParkShark.xcodeproj/project.pbxproj');
-  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.0;/g) || []).length, 4);
+  assert.equal((pbx.match(/MARKETING_VERSION = 1\.7\.2;/g) || []).length, 4);
   assert.doesNotMatch(pbx, /MARKETING_VERSION = 1\.6\.0;/);
 });
 
