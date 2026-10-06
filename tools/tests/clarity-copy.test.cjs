@@ -39,7 +39,6 @@ function walk(dir, out = []) {
 const PENDING = [
   { file: 'src/screens/ProfileScreen.tsx', text: 'VIP members only. Opens VIP membership', spec: 'AUDIT.md S1' },
   { file: 'src/screens/StoreScreen/TryOnSheet.tsx', text: '{x} Shark Coins', spec: 'AUDIT.md S5' },
-  { file: 'src/screens/StoreScreen/ShopTile.tsx', text: '{cost)} Shark Coins{x}', spec: 'AUDIT.md S5' },
   { file: 'src/screens/StoreScreen/ShopShelves.tsx', text: '{cost)} Shark Coins. Tap to try it on.', spec: 'AUDIT.md S5' },
   // Unreachable since the server stopped sending section last_chance (clarity-pass-be); the line goes with S8.
   { file: 'src/helpers/shopShelves.ts', text: 'LAST CHANCE', spec: 'AUDIT.md S8' },

@@ -113,8 +113,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   }, [justBought]);
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-10deg' }] }));
 
-  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked && secret ? `${formatCoins(item.cost)} Shark Coins, VIP members can buy` : vipLocked ? 'VIP only'
-    : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? `, ${leavingSay(leaving)}` : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
+  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked && secret ? `${formatCoins(item.cost)} coins, VIP members can buy` : vipLocked ? 'VIP only'
+    : `${formatCoins(item.cost)} coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? `, ${leavingSay(leaving)}` : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
     <Pressable

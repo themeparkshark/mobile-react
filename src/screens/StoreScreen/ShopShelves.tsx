@@ -438,7 +438,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
       </View>
       <Pressable onPress={() => onOpen(item, { bought: owned })} accessibilityRole="button"
         accessibilityLabel={`The Vault: ${name}, moves on your shark. ${owned ? (worn ? "You're wearing it." : 'Yours. Tap to wear it.')
-          : `${formatCoins(item.cost)} Shark Coins${member ? '' : ', VIP members can buy'}. Tap to try it on.`}`}
+          : `${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}. Tap to try it on.`}`}
         style={{ height: VAULT_STAGE_H }}>
         <ShopStage rim={SECRET_THEME.gold} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} rays={SECRET_THEME.inkGold} still={still}
           plinth={stage?.scene ? 'none' : 'secret'}
@@ -453,7 +453,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
         <View style={styles.vaultMeta}>
           <LeavingChip item={item} member={member} />
           {!owned && (
-            <View style={styles.vaultPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins${member ? '' : ', VIP members can buy'}`}>
+            <View style={styles.vaultPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} coins${member ? '' : ', VIP members can buy'}`}>
               <GameIcon name="coins" size={20} />
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultPriceText}>{formatCoins(item.cost)}</Text>
               {!member && <GameIcon name="lock" size={18} />}

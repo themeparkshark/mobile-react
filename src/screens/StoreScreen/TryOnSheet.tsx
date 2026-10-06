@@ -506,7 +506,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 </View>
                 {/* Non-members see the price too, with the lock (one marker everywhere). */}
                 {secretItem && vipLocked && !owned && (
-                  <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins, VIP members can buy`}>
+                  <View style={[styles.lockPrice, { alignSelf: 'flex-start', marginTop: -2 }]} accessible accessibilityLabel={`${formatCoins(item.cost)} coins, VIP members can buy`}>
                     <GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.lockPriceText}>{formatCoins(item.cost)}</Text>
                     <GameIcon name="lock" size={16} />
                   </View>
