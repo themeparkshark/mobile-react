@@ -272,15 +272,19 @@ export function lastChanceLine(season: string | null | undefined): string {
   return name ? `Last chance! It comes back next ${name}.` : 'Last chance! It comes back another time.';
 }
 
-/** Honest wishlist copy: alerts on promise a note; off or not asked promise nothing. */
+/**
+ * Honest Favorites copy (one name everywhere for the heart): it says where they went, and
+ * alerts on promise a note while off or not asked promise nothing.
+ */
+export const FAVORITES_WHERE = 'See them in Favorites at the top of the shop.';
 export function wishSavedCopy(alerts: boolean | null | undefined): string {
-  return alerts ? 'Saved! We’ll tell you next time it’s in the shop.' : 'Saved to your wishlist.';
+  return alerts ? `Saved to Favorites! We’ll tell you when it’s in the shop. ${FAVORITES_WHERE}` : `Saved to Favorites! ${FAVORITES_WHERE}`;
 }
 
 /** Hint under the try-on buttons. */
 export function wishHintCopy(wished: boolean, alerts: boolean | null | undefined): string {
-  if (wished) return alerts ? 'Saved. We’ll tell you next time it’s in the shop.' : 'Saved to your wishlist.';
-  return alerts ? 'Heart it to save it. We’ll tell you next time it’s in the shop.' : 'Heart it to save it for later.';
+  if (wished) return alerts ? `Saved to Favorites. We’ll tell you when it’s in the shop. ${FAVORITES_WHERE}` : `Saved to Favorites. ${FAVORITES_WHERE}`;
+  return alerts ? 'Tap the heart to save it to Favorites. We’ll tell you when it’s in the shop.' : 'Tap the heart to save it to Favorites.';
 }
 
 export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;

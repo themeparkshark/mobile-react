@@ -96,7 +96,8 @@ test('a part lands with its anchor on (cx, cy), the same math as compose.py plac
   assert.ok(Math.abs(l.left + spec.ax * l.width - (10 + spec.cx * 1353)) < 1e-6);
   assert.ok(Math.abs(l.top + spec.ay * l.height - (20 + spec.cy * 1530)) < 1e-6);
   assert.ok(Math.abs(l.height - l.width * spec.aspect) < 1e-6);
-  assert.equal(l.origin, `${spec.ax * 100}% ${spec.ay * 100}%`);
+  // The anchor in whole pixels: React Native's transformOrigin parser reads integers only.
+  assert.equal(l.origin, `${Math.round(spec.ax * l.width)}px ${Math.round(spec.ay * l.height)}px`);
 });
 
 test('both jetpack flames leave their nozzles (geometry stays attached)', () => {
@@ -172,6 +173,7 @@ test('wornFx: animated pieces replace their paper layer, scenes replace the back
 function loadSecretUi() {
   return loadTs('src/screens/StoreScreen/SecretShopUi.tsx', {
     react: { memo: f => f, useContext: () => false, useEffect: () => undefined, useState: v => [v, () => undefined] },
+    '../ui/modalLayers': { useModalLayer: () => true },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, Text: 'Text', View: 'View' },
     'react-native-reanimated': { __esModule: true, default: { View: 'AView', Image: 'AImage' }, Easing: { inOut: () => 0, sin: 0 }, cancelAnimation: () => undefined,
@@ -589,4 +591,37 @@ test('the Secret Shop never falls back to the legacy grid on a network hiccup', 
   const screen = src('src/screens/StoreScreen.tsx');
   // With the flag on, a failed shop day is an error with a retry (not .catch(() => null) into the old grid).
   assert.match(screen, /: nextSecretV2 \? getShopToday\(id\) : getShopToday\(id\)\.catch\(\(\) => null\),/);
+});
+
+// ------------------------------------------------------------------ transformOrigin
+
+test('transform origins are whole pixels or whole percents: RN reads "56.88%" as "88%"', () => {
+  const { partLayout } = loadTs('src/fx/registry.ts');
+  const box = { x: 3, y: 7, w: 331.7, h: 375.1 };
+  for (const [key, rig] of Object.entries(geometry.rigs)) {
+    const walk = (node) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== 'object') return;
+      if (typeof node.w === 'number') {
+        const { origin } = partLayout(box, node);
+        assert.match(origin, /^-?\d+px -?\d+px$/, `${key}: ${origin}`);
+      }
+      Object.values(node).forEach(walk);
+    };
+    walk(rig);
+  }
+  // No literal fractional percent anywhere in the app.
+  const files = [];
+  const scan = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(d => {
+    const full = path.join(dir, d.name);
+    if (d.isDirectory()) scan(full); else if (/\.(tsx?|js)$/.test(d.name)) files.push(full);
+  });
+  scan(path.join(root, 'src'));
+  for (const file of files) {
+    const code = fs.readFileSync(file, 'utf8');
+    for (const m of code.matchAll(/transformOrigin:\s*[`'"]([^`'"]*)[`'"]/g)) {
+      assert.doesNotMatch(m[1], /\d\.\d+%/, `${path.relative(root, file)}: ${m[1]}`);
+      assert.doesNotMatch(m[1], /\$\{[^}]*\}%/, `${path.relative(root, file)}: computed percent ${m[1]}`);
+    }
+  }
 });

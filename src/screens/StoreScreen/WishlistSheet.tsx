@@ -2,6 +2,7 @@
  * My Wishlist: every hearted item, marked "In the shop today" or "Comes back
  * later", with a way to unheart. Opened from the heart pill in the tab row.
  */
+import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,8 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
   readonly onOpenItem: (id: number) => void;
 }) {
   const insets = useSafeAreaInsets();
+  // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
+  const layerUp = useModalLayer(visible, 'show');
   const [items, setItems] = useState<WishlistItem[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -44,26 +47,27 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
     }
   };
 
-  if (!visible) return null;
+  if (!layerUp) return null;
   const alerts = wishStore.alerts();
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <ModalLayerContext.Provider value>
       <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.scrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close wishlist" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close Favorites" />
         <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18)}
           style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
           <View style={styles.head}>
             <WishHeart on size={24} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>My Wishlist</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>Favorites</Text>
             <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"><GameIcon name="close" size={30} /></Pressable>
           </View>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.note}>
-            {alerts ? 'Items come back. We’ll tell you next time one of these is in the shop.' : 'Items come back. Check the shop each day, or turn on Wishlist Alerts in Settings.'}
+            {alerts ? 'Your hearted items. They come back, and we’ll tell you when one is in the shop.' : 'Your hearted items. They come back: check the shop each day, or turn on Favorites Alerts in Settings.'}
           </Text>
           {items === null && !failed && <ActivityIndicator color={BRAND.white} style={{ marginVertical: 24 }} />}
           {note && <View style={styles.alert}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{note}</Text></View>}
-          {failed && <Text style={styles.empty}>Couldn’t load your wishlist. Try again in a moment.</Text>}
-          {items && items.length === 0 && <Text style={styles.empty}>Heart anything in the shop to save it here.</Text>}
+          {failed && <Text style={styles.empty}>Couldn’t load your Favorites. Try again in a moment.</Text>}
+          {items && items.length === 0 && <Text style={styles.empty}>Tap the heart on anything in the shop to save it here.</Text>}
           {items && items.length > 0 && (
             <FlatList data={items} keyExtractor={i => String(i.id)} style={{ maxHeight: 420 }}
               renderItem={({ item }) => (
@@ -84,6 +88,7 @@ export default function WishlistSheet({ visible, still, onClose, onOpenItem }: {
           )}
         </Animated.View>
       </Animated.View>
+      </ModalLayerContext.Provider>
     </Modal>
   );
 }
