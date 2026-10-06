@@ -121,7 +121,7 @@ test('real money: the shop and the VIP page say "real money" before any price, a
     react: { useEffect() {}, useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
-    '../RootNavigation': { navigate() {} }, '../ui/iconNames': {},
+    '../RootNavigation': { navigate() {} }, '../ui/iconNames': {}, '../ui/modalLayers': { useModalLayer: () => true },
     '../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' }, './RealMoneyMark': { default: 'RealMoneyMark' },
   });
   const money = gate.gateReasonLines({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' });
