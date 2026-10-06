@@ -76,18 +76,22 @@ export function boostCurve(p: number): number {
   return p < 0.48 ? rise(p / 0.48) : 1 - fall((p - 0.48) / 0.52);
 }
 
+/** The boost window in ms. */
+const BOOST_MS = BOOST_PERIOD * BOOST_LENGTH;
+
 /**
- * The flame's thrust, -0.25..1: it flares with the sound (up over the first quarter, peak at 0.3,
- * back to 0 by 0.45), then burns a little low (0.85x) while the shark settles. Drives the flame,
- * so the flame visibly causes the rise.
+ * The flame's thrust, -0.25..1, in real time: it flares with the sound (full within 150 ms),
+ * holds to 450 ms, eases off by 900 ms, then burns a little low (0.85x) while the shark settles.
+ * Drives the flame, so the flame visibly causes the rise.
  */
 export function thrustCurve(p: number): number {
   'worklet';
   if (p < 0 || p >= 1) return 0;
-  if (p < 0.25) return smoother(p / 0.25);
-  if (p < 0.3) return 1;
-  if (p < 0.45) return 1 - 1.25 * smoother((p - 0.3) / 0.15);
-  return -0.25 * (1 - smoother((p - 0.45) / 0.55));
+  const ms = p * BOOST_MS;
+  if (ms < 150) return smoother(ms / 150);
+  if (ms < 450) return 1;
+  if (ms < 900) return 1 - 1.25 * smoother((ms - 450) / 450);
+  return -0.25 * (1 - smoother((ms - 900) / (BOOST_MS - 900)));
 }
 
 export function thrustAt(t: number, kick: number): number {
@@ -101,6 +105,22 @@ export function boostAt(t: number, kick: number): number {
 }
 
 /**
+ * How much of the idle bob applies, 0..1: it fades out over the first second of a boost, stays
+ * out through it (so every boost takes off and lands at rest height, 16 pt each way), and fades
+ * back in over 1 s after the landing.
+ */
+export function bobWeight(t: number, kick: number): number {
+  'worklet';
+  const now = momentAt(t, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
+  if (now >= 0) return 1 - smoother((now * BOOST_MS) / 1000);
+  // Landed within the last second? A boost lasts 2.5 s, so 1 s ago it was still under way.
+  const back = momentAt(t - 1000, kick, BOOST_PERIOD, BOOST_LENGTH, 350, BOOST_JITTER).p;
+  if (back < 0) return 1;
+  const landedAgo = 1000 - (1 - back) * BOOST_MS;
+  return landedAgo <= 0 ? 0 : smoother(landedAgo / 1000);
+}
+
+/**
  * How high the shark floats at time t, in px of the stage height (negative is up): a steady lift,
  * a small slow hover bob (a plain sine, 5.4 s), and the boost. The bob fades out during a boost,
  * so every boost peaks at the same height (0.033 of the card above rest).
@@ -108,8 +128,9 @@ export function boostAt(t: number, kick: number): number {
 export function jetpackFloat(t: number, kick: number, height: number): number {
   'worklet';
   const b = boostAt(t, kick);
-  return -height * (0.09 + 0.011 * Math.sin((t / 5400) * Math.PI * 2) * (1 - b) + 0.033 * b);
+  return -height * (0.09 + 0.011 * Math.sin((t / 5400) * Math.PI * 2) * bobWeight(t, kick) + 0.033 * b);
 }
+
 
 /** A lazy lean with the boost (never a squash or stretch). */
 export function jetpackBody(t: number, kick: number): { sx: number; sy: number; rot: number } {

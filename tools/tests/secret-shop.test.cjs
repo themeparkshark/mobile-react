@@ -546,6 +546,13 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   const gaps = starts.slice(1).map((s, k) => s - starts[k]);
   assert.ok(gaps.length >= 4 && gaps.every(g => g > 6500 && g < 11800), `boost gaps ${gaps.map(g => Math.round(g)).join(', ')}`);
   assert.ok(new Set(gaps.map(g => Math.round(g / 100))).size > 1, 'not mechanical: the gaps vary');
+  // Every boost takes off from and lands at rest height (the bob is out), so rise and fall match.
+  for (const st of starts) {
+    assert.ok(Math.abs(jet.bobWeight(st + 1200, NO)) < 1e-6, 'no bob at the top of a boost');
+    assert.ok(Math.abs(jet.bobWeight(st + 2499, NO)) < 1e-6, 'lands with no bob');
+  }
+  // The flame flares with the sound: full thrust within 150 ms.
+  assert.ok(jet.thrustCurve(150 / 2500) > 0.99 && jet.thrustCurve(400 / 2500) === 1 && jet.thrustCurve(2400 / 2500) < 0);
   // No squash or stretch on the shark.
   const body = jet.jetpackBody(3000, NO);
   assert.equal(body.sx, 1); assert.equal(body.sy, 1);
