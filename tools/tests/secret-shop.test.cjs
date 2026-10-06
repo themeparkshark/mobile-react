@@ -379,11 +379,14 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
     async () => ({ secret_shop_v2: false, preview: false })), false, 'the server decides per player');
   flagModule.resetSecretShopFlag();
   assert.equal(await flagModule.loadSecretShopFlag(async () => { throw new Error('offline'); }, Date.now, noMine), false);
+  // A hiccup is never cached: the next call asks again and gets the real answer.
+  assert.equal(await flagModule.loadSecretShopFlag(async () => ({ flags: { secret_shop_v2: false } }), Date.now,
+    async () => ({ secret_shop_v2: true, preview: true })), true, 'a failed read does not pin the shop off');
   assert.match(src('src/context/AuthProvider.tsx'), /resetSecretShopFlag\(\)/, 'sign-out forgets the per-player answer');
 
   const store = src('src/screens/StoreScreen.tsx');
   assert.match(store, /const nextSecretV2 = !!nextStore\.is_secret_store && await loadSecretShopFlag\(\);/);
-  assert.match(store, /nextStore\.is_secret_store && !nextSecretV2 \? Promise\.resolve\(null\) : getShopToday\(id\)/,
+  assert.match(store, /nextStore\.is_secret_store && !nextSecretV2 \? Promise\.resolve\(null\)\s*: nextSecretV2 \? getShopToday\(id\)/,
     'with the flag off the secret store never asks for shelves');
   assert.match(store, /secret=\{secretShelves\}/);
 });
@@ -571,4 +574,19 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
   assert.match(layers, /w\.value = withTiming\(floats \? 1 : 0, \{ duration: 700/);
   // A tap or a buy never restarts a lift mid-air.
   assert.match(src('src/components/Playercard.tsx'), /if \(kind === 'tap' && airborne\) return;/);
+});
+
+test('a store switch never reuses one Store screen: keyed by store, one screen per store id', () => {
+  const screen = src('src/screens/StoreScreen.tsx');
+  assert.match(screen, /export default function StoreScreen\(props[^)]*\) \{\s*const store = [^;]+;\s*return <StoreScreenBody key=\{String\(store\)\} \{\.\.\.props\} \/>;\s*\}/);
+  // The wrapper holds no state of its own (every hook lives in the keyed body).
+  const wrapper = /export default function StoreScreen\([\s\S]*?\n\}/.exec(screen)[0];
+  assert.doesNotMatch(wrapper, /\buse[A-Z]\w*\(/);
+  assert.match(src('src/Root.tsx'), /name="Store" getComponent=\{\(\) => require\('\.\/screens\/StoreScreen'\)\.default\}\s*getId=\{\(\{ params \}\) => String\(/);
+});
+
+test('the Secret Shop never falls back to the legacy grid on a network hiccup', () => {
+  const screen = src('src/screens/StoreScreen.tsx');
+  // With the flag on, a failed shop day is an error with a retry (not .catch(() => null) into the old grid).
+  assert.match(screen, /: nextSecretV2 \? getShopToday\(id\) : getShopToday\(id\)\.catch\(\(\) => null\),/);
 });
