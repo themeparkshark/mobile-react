@@ -1,4 +1,5 @@
 import { ItemType } from './item-type';
+import type { ShopLeaving, ShopRarity } from '../helpers/shopLifecycle';
 
 /** Shark Shop v2 (shop-v2/CONTRACT.md). Every field is optional-safe: old backends 404 the endpoint. */
 export interface ShopSetProgress {
@@ -46,6 +47,10 @@ export interface ShopItemMeta {
   readonly season: string | null;
   readonly tags: string[];
   readonly set: (ShopSetProgress & { readonly color?: string | null }) | null;
+  /** Items come and go (cp-catalogs): this piece's run ends on a date, and whether it ever comes back. */
+  readonly leaving?: ShopLeaving | null;
+  /** A calm, aggregate fact: "Rare find: few sharks have this" (owned pieces only). */
+  readonly rarity?: ShopRarity | null;
 }
 
 export type ShopItem = ItemType & {

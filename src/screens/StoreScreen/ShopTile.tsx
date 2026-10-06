@@ -12,6 +12,9 @@
  * re-renders this tile only.
  */
 import { Image } from 'expo-image';
+import { FxTileArt } from '../../fx/FxSolo';
+import { fxKeyOf, isSecretItem } from '../../fx/registry';
+import { SECRET_THEME } from '../../fx/secretTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,9 +25,12 @@ import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 import { useWished } from './wishStore';
+import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
   last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
+  // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING or RETIRING) with its icon.
+  leaving: { label: 'LEAVING', color: BRAND.navy, ink: BRAND.gold },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
@@ -34,11 +40,18 @@ const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; 
  * paper layer, then resizes: sharp, no mini shark); the flat icon is the
  * fallback. Everything else uses the 256 px icon thumbnail.
  */
-export function TileArt({ item, size, thumb = true }: {
-  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_torso_thumb_url?: string | null };
+export function TileArt({ item, size, thumb = true, still = false }: {
+  readonly item: Pick<ShopItem, 'id' | 'item_type' | 'icon_url' | 'paper_url'> & { icon_thumb_url?: string | null; paper_torso_thumb_url?: string | null;
+    fx_key?: string | null };
   readonly size: number; readonly thumb?: boolean;
+  /** Secret Shop pieces animate in their tile (secret-shop/DESIGN.md 6); Reduce Motion holds the rest pose. */
+  readonly still?: boolean;
 }) {
   const h = size * 0.8;
+  const fx = fxKeyOf(item);
+  if (fx) {
+    return <View style={{ width: size, height: h, alignItems: 'center', justifyContent: 'center' }}><FxTileArt fxKey={fx} size={h} still={still} /></View>;
+  }
   const source = item.item_type?.id === 4
     ? (item.paper_torso_thumb_url || item.icon_url)
     : ((thumb && item.icon_thumb_url) || item.icon_url);
@@ -62,9 +75,13 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const wished = useWished(item.id);
   const badge = wearableBadge(item);
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
-  const { ribbon } = tileLanes(item, quiet);
+  // A members-only piece never tells a non-member it is retiring (that would be a VIP nudge).
+  const leaving = visibleLeaving(item.shop, { secret: isSecretItem(item), vipLocked });
+  const { ribbon } = tileLanes(leaving || !item.shop?.leaving ? item : { ...item, shop: { ...item.shop, leaving: null } }, quiet);
+  const ribbonLabel = ribbon === 'leaving' && leaving ? leavingRibbon(leaving) : ribbon ? RIBBON[ribbon].label : '';
   const name = itemDisplayName(item);
-  const plate = plateFor(item.rarity);
+  const secret = isSecretItem(item);
+  const plate = secret ? SECRET_THEME.tilePlate : plateFor(item.rarity);
   const set = item.shop?.set;
   const artSize = width - 18;
   // The band is decided from the tile's measured width (the prop is the first guess, so the first
@@ -96,8 +113,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   }, [justBought]);
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-10deg' }] }));
 
-  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked ? 'VIP only'
-    : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
+  const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked && secret ? `${formatCoins(item.cost)} Shark Coins, VIP members can buy` : vipLocked ? 'VIP only'
+    : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? `, ${leavingSay(leaving)}` : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
     <Pressable
@@ -105,28 +122,41 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
-      style={({ pressed }) => [styles.tile, { width, borderColor: badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
+      style={({ pressed }) => [styles.tile, { width, borderColor: secret ? SECRET_THEME.gold : badge.border === '#FFFFFF' ? '#c9dbeb' : badge.border,
         transform: [{ scale: pressed ? 0.95 : 1 }] },
+        // The vault tile: gold rim with the gold button's darker lip under it (the house 3D edge).
+        secret ? { borderBottomWidth: 6, borderBottomColor: SECRET_THEME.goldLip } : null,
         badge.glow ? { shadowColor: badge.glow, shadowOpacity: 0.9, shadowRadius: 10 } : null]}
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <LinearGradient colors={plate} style={StyleSheet.absoluteFill} />
-        {badge.rarity === 4 && !owned && <Sheen still={still} width={width + 60} />}
+        {/* Vault tiles: the panels' top gloss, not a sweeping sheen. */}
+        {secret && <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0)']} style={styles.gloss} />}
+        {badge.rarity === 4 && !secret && !owned && <Sheen still={still} width={width + 60} />}
       </View>
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
       {ribbon && (
-        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }]}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{RIBBON[ribbon].label}</Text>
+        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }, ribbon === 'leaving' && styles.ribbonClearOfHeart]}>
+          {ribbon === 'leaving' && leaving && <GameIcon name={leavingIcon(leaving)} size={13} />}
+          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{ribbonLabel}</Text>
         </View>
       )}
-      <View style={[styles.art, { marginTop: ribbon ? 10 : 0 }, owned && { opacity: 0.6 }]}>
-        <TileArt item={item} size={artSize} />
+      <View style={[styles.art, { marginTop: ribbon ? 10 : secret ? 8 : 0 }, owned && { opacity: 0.6 }]}>
+        <TileArt item={item} size={artSize} still={still} />
       </View>
+      {/* Secret: a violet-and-gold corner tag (DESIGN.md 6.5), so a Secret tile reads from across a room. */}
+      {secret && (
+        <View style={styles.secretTag}>
+          <GameIcon name="sparkle" size={12} />
+          <Text maxFontSizeMultiplier={1} style={styles.secretTagText}>SECRET</Text>
+        </View>
+      )}
       {/* Reserved chip band: rarity and SET never sit on the art. */}
-      <View style={styles.band}>
+      {/* Secret tiles carry their badge in the corner tag, so the chip band shrinks (no dead gap under the art). */}
+      <View style={[styles.band, secret && !set && { height: 6 }]}>
         {/* When rarity plus SET would not fit the measured tile, rarity shows as a dot (the label still says it). */}
-        {badge.label && !owned && (band === 'dot' ? (
+        {badge.label && !owned && !secret && (band === 'dot' ? (
           <View style={[styles.rarityDot, { backgroundColor: badge.labelColor }]} accessibilityLabel={badge.label} />
         ) : (
           <View style={[styles.rarity, { backgroundColor: badge.labelColor }]}>
@@ -140,16 +170,23 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
           </View>
         )}
       </View>
-      <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
+      <Text style={[styles.name, secret && styles.secretInk]} numberOfLines={2} ellipsizeMode="tail" maxFontSizeMultiplier={1.15}>{name}</Text>
       <View style={styles.priceRow}>
         {owned ? (
           slam ? null : <Text maxFontSizeMultiplier={MAX_FONT} style={styles.ownedText}>Owned</Text>
+        ) : vipLocked && secret ? (
+          // One price marker everywhere: the coin and the price, with a lock for non-members (kids UX round 1).
+          <>
+            {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={styles.coin} contentFit="contain" /> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, styles.secretInk]}>{formatCoins(item.cost)} </Text>
+            <GameIcon name="lock" size={16} />
+          </>
         ) : vipLocked ? (
           <><GameIcon name="member" size={15} /><Text maxFontSizeMultiplier={MAX_FONT} style={styles.price}> VIP</Text></>
         ) : (
           <>
             {item.currency?.icon_url ? <Image source={{ uri: item.currency.icon_url }} style={[styles.coin, !affordable && { opacity: 0.45 }]} contentFit="contain" /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.price, secret && styles.secretInk, !affordable && styles.priceShort]}>{formatCoins(item.cost)}</Text>
           </>
         )}
       </View>
@@ -177,14 +214,24 @@ const styles = StyleSheet.create({
   tile: { borderRadius: 16, borderWidth: 3, paddingTop: 12, paddingBottom: 8, alignItems: 'center', overflow: 'visible',
     backgroundColor: BRAND.white, ...SHADOW.card },
   clip: { borderRadius: 13, overflow: 'hidden' },
+  gloss: { position: 'absolute', left: 0, right: 0, top: 0, height: '35%' },
   keyline: { borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255,255,255,0.95)' },
   ribbon: { position: 'absolute', top: 0, left: 0, right: 0, height: 20, borderTopLeftRadius: 13, borderTopRightRadius: 13,
-    alignItems: 'center', justifyContent: 'center' },
+    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 },
+  // The label centres in the space left of the heart (heart 30 pt, sitting 9 pt outside the tile, plus 4).
+  ribbonClearOfHeart: { paddingRight: 25, paddingLeft: 4 },
   ribbonText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 0.6 },
   art: { marginHorizontal: 6 },
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },
   rarityDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: BRAND.white },
   name: { fontFamily: FONT.body, fontSize: 14, lineHeight: 16, height: 32, color: BRAND.navy, paddingHorizontal: 6, textAlign: 'center' },
+  // The Secret corner tag (DESIGN.md 6.5): gold plate with the vault-navy ink, in the corner of every Secret tile.
+  // Drawn after the art, so nothing (a scene, a peeking ghost) ever covers it.
+  secretTag: { position: 'absolute', top: 3, left: 3, zIndex: 5, borderTopLeftRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 10,
+    height: 22, backgroundColor: '#ffcf3b', borderBottomRightRadius: 12, borderRightWidth: 2, borderBottomWidth: 3, borderColor: '#d99a00' },
+  secretTagText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: '#0b2156' },
+  // Secret tiles are midnight, so their ink is white (art panel round 1: animated pieces glow on dark).
+  secretInk: { color: '#ffffff' },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, minHeight: 19 },
   coin: { width: 17, height: 17, marginRight: 3 },
   price: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy },

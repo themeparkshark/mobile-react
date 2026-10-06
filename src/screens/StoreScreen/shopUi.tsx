@@ -5,10 +5,11 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { FxPauseContext } from '../../fx/FxStage';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming,
+  Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, cancelAnimation,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
@@ -149,12 +150,21 @@ export const PieceChip = memo(function PieceChip({ piece, state, size = 58, sele
 });
 
 /** One diagonal sheen sweep (Epic tiles, the "complete the look" CTA). Runs once, never loops off screen. */
-export function Sheen({ still, delay = 300, width = 140 }: { still: boolean; delay?: number; width?: number }) {
+export function Sheen({ still, delay = 300, width = 140, every }: { still: boolean; delay?: number; width?: number;
+  /** Sweep again every this many ms (Secret tiles: a slow shimmer along the gold), paused with the shelf. */
+  every?: number }) {
   const x = useSharedValue(-1);
+  const paused = useContext(FxPauseContext);
   useEffect(() => {
-    if (still) return;
-    x.value = withDelay(delay, withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }));
-  }, [still]);
+    // Paused or still: the band rests off the tile, never frozen across it.
+    if (still || (every && paused)) { cancelAnimation(x); x.value = -1; return; }
+    const sweep = withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) });
+    x.value = -1;
+    x.value = every
+      ? withDelay(delay, withRepeat(withSequence(sweep, withTiming(1, { duration: every - 900 }), withTiming(-1, { duration: 0 })), -1))
+      : withDelay(delay, sweep);
+    return () => cancelAnimation(x);
+  }, [still, paused]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value * width }, { rotate: '20deg' }] }));
   if (still) return null;
   return (
@@ -250,21 +260,35 @@ export function useShopToast(ms = 2200): [string | null, (m: string) => void] {
  * - a cel-shaded round plinth with a top-left highlight band and a gloss tick
  * Children (the Playercard, which draws its own bobbing contact shadow) sit on top.
  */
-export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky', sky: paintSky = true, rays = false, still, children }: {
+/** Plinth fills: the house blue-and-ice, or the Secret Shop's violet-and-lilac. */
+const PLINTH = {
+  house: { side: '#2b679e', line: '#123a63', band: '#3f84bf', top: '#d6ecfb' },
+  // The vault plinth: navy drum, gold band, a cool white top (no purple).
+  secret: { side: '#163e86', line: '#06102e', band: '#ffcf3b', top: '#eaf3ff' },
+  // A worn scene is the ground: no plinth floating on the plaza (art panel round 1).
+  none: { side: '', line: '', band: '', top: '' },
+} as const;
+
+export const ShopStage = memo(function ShopStage({ rim, backdropUrl, backdrop, tone = 'sky', sky: paintSky = true, rays = false, still, children, plinth = 'house' }: {
   rim: string; backdropUrl?: string | null; tone?: 'sky' | 'night';
-  /** false: no sky of its own (the hero card is already the night sky), so there is no seam. */
-  sky?: boolean; rays?: boolean; still: boolean; children?: ReactNode;
+  plinth?: keyof typeof PLINTH;
+  /** An animated backdrop (a Secret Shop scene); wins over backdropUrl and the sky. */
+  backdrop?: ReactNode;
+  /** false: no sky of its own (the hero card is already the night sky), so there is no seam. A pair of colours paints that sky. */
+  sky?: boolean | readonly [string, string];
+  /** Slow light rays behind the plinth; a colour tints them (the vault's are soft gold). */
+  rays?: boolean | string; still: boolean; children?: ReactNode;
 }) {
-  const sky = tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'] as const;
+  const sky: readonly [string, string] = typeof paintSky === 'object' ? paintSky : tone === 'night' ? NIGHT_SKY : ['#e3f4ff', '#a4d8f8'];
   const lightId = useSvgId('stage-light');
   return (
     <View style={StyleSheet.absoluteFill}>
-      {backdropUrl ? (
+      {backdrop ? backdrop : backdropUrl ? (
         <Image source={backdropUrl} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : paintSky ? (
         <LinearGradient colors={[...sky]} style={StyleSheet.absoluteFill} />
       ) : null}
-      {rays && <Rays still={still} />}
+      {rays && <Rays still={still} color={typeof rays === 'string' ? rays : undefined} />}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <RadialGradient id={lightId} cx="50%" cy="44%" r="46%">
@@ -275,26 +299,27 @@ export const ShopStage = memo(function ShopStage({ rim, backdropUrl, tone = 'sky
         </Defs>
         <Ellipse cx="50" cy="44" rx="46" ry="44" fill={`url(#${lightId})`} />
       </Svg>
-      <View pointerEvents="none" style={styles.plinthWrap}>
+      {plinth !== 'none' && <View pointerEvents="none" style={styles.plinthWrap}>
         <Svg width="100%" height="100%" viewBox="0 0 200 64">
           {/* Side band, then the top face. Dark slate outlines, flat cel fills. */}
-          <Ellipse cx="100" cy="36" rx="94" ry="24" fill="#2b679e" stroke="#123a63" strokeWidth={3} />
-          <Path d="M8 36 A92 22 0 0 0 192 36" fill="none" stroke="#3f84bf" strokeWidth={5} strokeOpacity={0.9} />
-          <Ellipse cx="100" cy="27" rx="94" ry="22" fill="#d6ecfb" stroke="#123a63" strokeWidth={3} />
+          <Ellipse cx="100" cy="36" rx="94" ry="24" fill={PLINTH[plinth].side} stroke={PLINTH[plinth].line} strokeWidth={3} />
+          <Path d="M8 36 A92 22 0 0 0 192 36" fill="none" stroke={PLINTH[plinth].band} strokeWidth={5} strokeOpacity={0.9} />
+          <Ellipse cx="100" cy="27" rx="94" ry="22" fill={PLINTH[plinth].top} stroke={PLINTH[plinth].line} strokeWidth={3} />
           {/* Rarity rim light on the back edge only. */}
           <Path d="M12 25 A90 19 0 0 1 188 25" fill="none" stroke={rim} strokeWidth={4.5} />
           {/* Top-left cel highlight band and a gloss tick. */}
           <Path d="M30 22 A70 13 0 0 1 120 12" fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" strokeOpacity={0.85} />
           <Path d="M134 13 L146 14" stroke="#ffffff" strokeWidth={4} strokeLinecap="round" />
         </Svg>
-      </View>
+      </View>}
       {children}
     </View>
   );
 });
 
-function Rays({ still }: { still: boolean }) {
+function Rays({ still, color = '#ffffff' }: { still: boolean; color?: string }) {
   const spin = useSharedValue(0);
+  const fadeId = useSvgId('ray-fade');
   useEffect(() => {
     if (still) return;
     spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
@@ -308,7 +333,17 @@ function Rays({ still }: { still: boolean }) {
   }).join(' ');
   return (
     <Animated.View pointerEvents="none" style={[styles.rays, style]}>
-      <Svg width="100%" height="100%" viewBox="0 0 200 200"><Path d={rays} fill="#ffffff" fillOpacity={0.1} /></Svg>
+      {/* The rays fade to nothing well before any edge (a radial fill), so they never end on a straight line. */}
+      <Svg width="100%" height="100%" viewBox="0 0 200 200">
+        <Defs>
+          <RadialGradient id={fadeId} cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={color} stopOpacity={0.16} />
+            <Stop offset="0.35" stopColor={color} stopOpacity={0.08} />
+            <Stop offset="0.62" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Path d={rays} fill={`url(#${fadeId})`} />
+      </Svg>
     </Animated.View>
   );
 }

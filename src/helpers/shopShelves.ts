@@ -43,6 +43,7 @@ interface ItemLike {
     readonly last_chance?: boolean;
     readonly returning?: boolean;
     readonly set?: { readonly slug: string } | null;
+    readonly leaving?: { readonly on: string; readonly forever: boolean } | null;
   };
 }
 
@@ -96,6 +97,9 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
   const left = Date.parse(section.ends_at) - nowMs;
   if (left <= 0) return { label: 'New now', urgent: false, a11y: 'New featured items now' };
   if (left < DAY) return { label: 'New tonight', urgent: false, a11y: 'New featured items tonight' };
+  // A whole week away (flip day itself): "New in 7 days", never today's own weekday, which a kid reads as today.
+  const days = Math.ceil(left / DAY);
+  if (left > 6 * DAY) return { label: `New in ${days} days`, urgent: false, a11y: `New featured items in ${days} days` };
   const day = weekdayOf(section.ends_at) ?? 'soon';
   return { label: `New on ${day}`, urgent: false, a11y: `New featured items on ${day}` };
 }
@@ -123,8 +127,10 @@ export function eventEndPill(section: SectionLike, nowMs: number): Pill {
 }
 
 /** The small line above an event title: LAST CHANCE only when true, else the wave or "EVENT". */
-export function eventKicker(section: SectionLike): string {
+export function eventKicker(section: SectionLike, secret = false): string {
   if (section.last_chance) return 'LAST CHANCE';
+  // The Secret Shop's seasonal shelf (secret-shop/DESIGN.md 5): its own name, not the Shark Shop's waves.
+  if (secret) return 'SECRET SEASON DROP';
   return section.wave?.title ? section.wave.title.toUpperCase() : 'SHARK SHOP EVENT';
 }
 
@@ -271,7 +277,7 @@ export function wishHintCopy(wished: boolean, alerts: boolean | null | undefined
   return alerts ? 'Heart it to save it. We’ll tell you next time it’s in the shop.' : 'Heart it to save it for later.';
 }
 
-export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
+export type TileRibbon = 'new' | 'last_chance' | 'leaving' | 'returning' | null;
 
 /**
  * Fixed tile lanes: rarity top-left, heart or owned check top-right, and one
@@ -281,8 +287,10 @@ export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
 export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?: boolean } }, quiet = false): { ribbon: TileRibbon } {
   if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null };
   // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
-  const ribbon: TileRibbon = item.shop?.last_chance && !quiet ? 'last_chance' : item.shop?.returning ? 'returning'
-    : item.shop?.is_new ? 'new' : null;
+  // LEAVING / RETIRING is calm navy and says a date in the try-on: it outranks BACK AGAIN and NEW.
+  // A dated LEAVING / RETIRING (calm navy) outranks the red event LAST CHANCE, so one piece never says both.
+  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.last_chance && !quiet ? 'last_chance'
+    : item.shop?.returning ? 'returning' : item.shop?.is_new ? 'new' : null;
   return { ribbon };
 }
 
@@ -354,6 +362,8 @@ export type TryOnState = {
   readonly wear: 'idle' | 'busy' | 'spinning' | 'failed'; readonly finishes: boolean; readonly cost: number;
   /** Today's shop is still building (fallback): buying waits a moment. */
   readonly paused?: boolean;
+  /** A Secret Shop piece (secret-shop/DESIGN.md 4.2). */
+  readonly secret?: boolean;
 };
 
 export type TryOnAction = 'wear' | 'close' | 'vip' | 'recheck' | 'earn' | 'buy' | 'ask' | 'none';
@@ -369,6 +379,7 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
     if (s.wear === 'spinning' || s.worn) return { label: 'Wearing it', action: 'close', note: null, look: 'go' };
     return { label: 'Wear it now', action: 'wear', note: null, look: s.wear === 'busy' ? 'busy' : 'go' };
   }
+  if (s.vipLocked && s.secret) return { label: 'Ask a grown-up', action: 'vip', note: 'VIP members can buy Secret Shop pieces.', look: 'go' };
   if (s.vipLocked) return { label: 'VIP only: see VIP', action: 'vip', note: null, look: 'go' };
   // Its own state: asking the server never shows "Yes, buy it!".
   if (s.phase === 'checking') return { label: 'Checking…', action: 'none', note: 'Asking the shop if it went through.', look: 'checking' };

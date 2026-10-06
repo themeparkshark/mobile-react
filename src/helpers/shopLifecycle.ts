@@ -1,0 +1,175 @@
+/**
+ * Items that come and go (cp-catalogs/DESIGN.md): the shop's pieces have runs. Some leave
+ * for a while and come back, seasonal ones return every year (the existing BACK AGAIN
+ * ribbon), and a few retire forever, which makes them rare. Nothing is ever taken away.
+ *
+ * Copy rules (kid-safe, calm): a date, never a countdown; "won't come back" said once,
+ * plainly, never in red; rarity is a calm fact, never "only" or "hurry". Pure functions,
+ * tested in tools/tests/shop-lifecycle.test.cjs.
+ */
+
+export interface ShopLeaving {
+  /** The last day it's in the shop (YYYY-MM-DD). */
+  readonly on: string;
+  /** Retires forever after that day. */
+  readonly forever: boolean;
+}
+
+export type RarityTier = 'rare' | 'very_rare' | 'ultra_rare';
+
+export interface ShopRarity {
+  readonly tier: RarityTier;
+  /**
+   * Server copy, e.g. "Rare find: few sharks have this". Always "find", so it never reads as the
+   * piece's own tier chip (Common, Uncommon, RARE, Epic) on the tile.
+   */
+  readonly label: string;
+}
+
+/** On owned items in the closet. */
+export interface OwnedLifecycle {
+  readonly retired: boolean;
+  readonly forever: boolean;
+  readonly first_released_on?: string | null;
+  readonly rarity?: ShopRarity | null;
+}
+
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** A usable leaving block, or null (bad or missing data never shows a label). */
+export function leavingOf(shop: { leaving?: ShopLeaving | null } | null | undefined): ShopLeaving | null {
+  const l = shop?.leaving;
+  return l && /^\d{4}-\d{2}-\d{2}$/.test(l.on) ? l : null;
+}
+
+/** "November 30" (the try-on has room for the whole month; early readers stumble on "Nov"). */
+export function longDay(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
+  return m ? `${MONTHS_LONG[Number(m[2]) - 1]} ${Number(m[3])}` : '';
+}
+
+/** The try-on line: when it leaves, and honestly whether it comes back. */
+export function leavingLine(leaving: ShopLeaving): string {
+  return leaving.forever
+    ? `Leaving after ${longDay(leaving.on)}. Won't come back.`
+    : `Leaving after ${longDay(leaving.on)}. It might come back someday.`;
+}
+
+/** The owner's line: plain words, no idioms. */
+export const OWNED_LINE = 'It’s yours. You keep it forever.';
+
+/** A label as a sentence (ends with a period). */
+export function sentence(text: string): string {
+  const t = text.trim();
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
+/**
+ * Everything the try-on says about a piece's run, computed once: the visible leaving block,
+ * the visible rarity, the two lines, and the exact same words for VoiceOver.
+ */
+export function lifeLines(shop: { leaving?: ShopLeaving | null; rarity?: ShopRarity | null } | null | undefined,
+  opts: { secret: boolean; vipLocked: boolean; owned: boolean }) {
+  const goingAway = visibleLeaving(shop, opts);
+  const rarity = visibleRarity(shop, opts.owned);
+  const leaveText = goingAway ? leavingLine(goingAway) : null;
+  const keepText = goingAway ? (opts.owned ? OWNED_LINE : KEEP_LINE) : null;
+  const lifeSay = [leaveText, keepText, rarity ? sentence(rarity.label) : null].filter(Boolean).join(' ');
+  return { goingAway, rarity, leaveText, keepText, lifeSay };
+}
+
+/** The promise that follows any leaving line. */
+export const KEEP_LINE = 'Every piece you buy is yours forever.';
+
+/**
+ * The tile's calm ribbon (navy and gold, never red), with a picture so it reads without words:
+ * a moon for LEAVING (it rests and might come back), a star for RETIRING (it won't come back).
+ * RETIRING pairs with the closet's RETIRED, so kids learn one word in two places.
+ */
+export function leavingRibbon(leaving: ShopLeaving): string {
+  // Short: the tile ribbon shares its row with the heart.
+  return leaving.forever ? 'RETIRING' : 'LEAVING';
+}
+
+export function leavingIcon(leaving: ShopLeaving): 'star' | 'moon' {
+  return leaving.forever ? 'star' : 'moon';
+}
+
+/** VoiceOver: exactly what the ribbon shows, plus the date. */
+export function leavingSay(leaving: ShopLeaving): string {
+  const day = longDay(leaving.on);
+  return leaving.forever ? `retiring after ${day}, it won't come back` : `leaving after ${day}`;
+}
+
+/**
+ * The leaving block a player should see. A members-only Secret piece shows nothing to a
+ * non-member: "won't come back" next to a paywall would be a subscription nudge.
+ */
+export function visibleLeaving(shop: { leaving?: ShopLeaving | null } | null | undefined, opts: { secret: boolean; vipLocked: boolean }): ShopLeaving | null {
+  if (opts.secret && opts.vipLocked) return null;
+  return leavingOf(shop);
+}
+
+/**
+ * Ownership rarity shows only on pieces you own. Never beside a Buy button: "hardly any sharks
+ * have this" next to a price is scarcity selling (and a new piece has few owners only because
+ * it is new). "Won't come back" already says enough on a piece for sale.
+ */
+export function visibleRarity(shop: { rarity?: ShopRarity | null } | null | undefined, owned: boolean): ShopRarity | null {
+  return owned ? rarityOf(shop) : null;
+}
+
+/** The heart hint never promises a return for a piece that is retiring forever. */
+export function retiringWishHint(wished: boolean): string {
+  return wished ? 'Saved to your wishlist.' : 'Heart it to save it for later.';
+}
+
+/** Rarity pearls (Codex GPT Image 2.5 with Alex's references, cp-catalogs/art), 64 px. */
+export const PEARLS = {
+  white: require('../../assets/shop-life/pearl-white.webp'),
+  silver: require('../../assets/shop-life/pearl-silver.webp'),
+  gold: require('../../assets/shop-life/pearl-gold.webp'),
+} as const;
+
+/** A usable rarity block, or null. */
+export function rarityOf(value: { rarity?: ShopRarity | null } | null | undefined): ShopRarity | null {
+  const r = value?.rarity;
+  return r && ['rare', 'very_rare', 'ultra_rare'].includes(r.tier) && typeof r.label === 'string' && r.label.trim() ? r : null;
+}
+
+/** Pearl colour per tier: white (rare), silver (very rare), gold (ultra rare). */
+export function pearlFor(tier: RarityTier): 'white' | 'silver' | 'gold' {
+  return tier === 'ultra_rare' ? 'gold' : tier === 'very_rare' ? 'silver' : 'white';
+}
+
+/**
+ * The closet card's corner badge, one chip style: RETIRED (word plus pearl) for a piece that
+ * won't come back, else a pearl alone for one few sharks own. No word "rare" here, so it never
+ * reads as the RARE tier chip; the full sentence is on VoiceOver.
+ */
+export function closetBadge(lifecycle: OwnedLifecycle | null | undefined): { label: 'RETIRED' | null; pearl: 'white' | 'silver' | 'gold' | null } | null {
+  if (!lifecycle) return null;
+  const rarity = rarityOf(lifecycle);
+  if (lifecycle.retired && lifecycle.forever) return { label: 'RETIRED', pearl: rarity ? pearlFor(rarity.tier) : null };
+  if (rarity) return { label: null, pearl: pearlFor(rarity.tier) };
+  return null;
+}
+
+/** VoiceOver words for the closet badge. */
+export function closetBadgeSay(lifecycle: OwnedLifecycle | null | undefined): string {
+  const badge = closetBadge(lifecycle);
+  if (!badge) return '';
+  const rarity = rarityOf(lifecycle);
+  return badge.label === 'RETIRED'
+    ? `, retired: it won't come back to the shop${rarity ? `. ${rarity.label}` : ''}`
+    : `, ${rarity!.label}`;
+}
+
+/** The closet card's held tip: the same calm sentence VoiceOver reads. */
+export function closetTip(lifecycle: OwnedLifecycle | null | undefined): string {
+  const badge = closetBadge(lifecycle);
+  if (!badge) return '';
+  const rarity = rarityOf(lifecycle);
+  if (badge.label === 'RETIRED') return `Retired: it won't come back to the shop.${rarity ? ` ${sentence(rarity.label)}` : ''}`;
+  return rarity ? sentence(rarity.label) : '';
+}

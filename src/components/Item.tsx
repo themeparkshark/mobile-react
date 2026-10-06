@@ -1,9 +1,11 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { claimClosetTeach } from '../helpers/closetTip';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
+import { PEARLS, closetBadge, closetBadgeSay, closetTip, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
@@ -34,6 +36,26 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const badge = wearableBadge(item);
   const name = itemDisplayName(item);
   const isNew = !isEquipped && item.seen === false;
+  // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
+  const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
+  // A badged card keeps its height: the art steps down and shrinks by the chip's zone (chip + 6 pt).
+  const art = life ? artSize - 18 : artSize;
+  // 'teach': the once-ever first sight (long enough for a 7-year-old to read 14 words); 'hold': a held card.
+  const [tip, setTip] = useState<false | 'teach' | 'hold'>(false);
+  // Taught once: the first badged card shows its sentence by itself (most kids tap, few hold).
+  useEffect(() => {
+    if (!life || typeof claimClosetTeach !== 'function') return;
+    let live = true;
+    void claimClosetTeach().then(first => { if (live && first) setTip('teach'); }, () => undefined);
+    return () => { live = false; };
+  }, [!!life]);
+  useEffect(() => {
+    if (!tip) return;
+    void Haptics.selectionAsync?.()?.catch?.(() => undefined);
+    const t = setTimeout(() => setTip(false), tip === 'teach' ? 8000 : 4000);
+    return () => clearTimeout(t);
+  }, [tip]);
+  const lifeSay = useMemo(() => closetBadgeSay(item.lifecycle), [item.lifecycle]);
   const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -54,22 +76,31 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
-          : isEquipped ? `Remove ${name} from your shark` : `Wear ${name} on your shark`}
+          : isEquipped ? `Remove ${name} from your shark${lifeSay}` : `Wear ${name} on your shark${lifeSay}`}
         accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
         accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
         disabled={!onToggle}
         style={({ pressed }) => [styles.card, compact && styles.cardCompact, { borderColor: badge.border },
           pressed && styles.cardPressed]}
-        onPress={() => onToggle?.(item)}
+        onPress={() => { if (tip) setTip(false); onToggle?.(item); }}
+        // A badged card explains itself: hold it for the same calm sentence VoiceOver reads.
+        onLongPress={life ? () => setTip('hold') : undefined}
       >
         {!!badge.inner && <View pointerEvents="none" style={[styles.innerStroke, { borderColor: badge.inner }]} />}
         {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
         {isNew && <View style={[styles.cornerBadge, styles.newBadge]}><Text style={styles.newText}>NEW</Text></View>}
+        {life && (
+          // One chip style for the family (navy, gold keyline): RETIRED with its pearl, or a pearl alone.
+          <View style={styles.lifeBadge} accessibilityElementsHidden>
+            {life.pearl && <Image source={PEARLS[life.pearl]} style={styles.pearl} contentFit="contain" />}
+            {life.label && <Text maxFontSizeMultiplier={1.2} style={styles.lifeText}>{life.label}</Text>}
+          </View>
+        )}
         {isVip && (
           <Image source={require('../../assets/images/screens/profile/subscribed.png')}
             style={[styles.cornerIcon]} contentFit="contain" />
         )}
-        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }]}>
+        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }, life && styles.artInset]}>
           {!!badge.glow && (
             <View pointerEvents="none" style={[styles.glow, {
               width: artSize * 0.8, height: artSize * 0.8, borderRadius: artSize * 0.4,
@@ -77,7 +108,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
             }]} />
           )}
           {item.item_type?.id === 4 && !!item.paper_url ? (
-            <View style={{ width: artSize, height: artSize }}>
+            <View style={{ width: art, height: art }}>
               {sharkBaseLayers(worn).map((source, index) => (
                 <Image key={`base-${index}`} source={source} style={StyleSheet.absoluteFill} contentFit="contain" />
               ))}
@@ -86,7 +117,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
           ) : (
             <Image
               source={item.icon_url}
-              style={{ width: artSize, height: artSize }}
+              style={{ width: art, height: art }}
               contentFit="contain"
             />
           )}
@@ -120,6 +151,11 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         )}
       </Pressable>
       {highlighted && <View pointerEvents="none" style={styles.highlightRing} />}
+      {tip && life && (
+        <View pointerEvents="none" style={styles.tip}>
+          <Text maxFontSizeMultiplier={1.3} style={styles.tipText}>{closetTip(item.lifecycle)}</Text>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -137,6 +173,15 @@ const styles = StyleSheet.create({
     borderRadius: 7, backgroundColor: '#ffd44c', borderWidth: 1, borderColor: '#fff',
     paddingHorizontal: 5, paddingVertical: 3 },
   newBadge: { backgroundColor: '#e8412c' },
+  lifeBadge: { zIndex: 12, position: 'absolute', top: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 8, backgroundColor: '#123e65', borderWidth: 1.5, borderColor: '#ffd44c', paddingHorizontal: 4, paddingVertical: 2 },
+  lifeText: { color: '#ffd44c', fontFamily: 'Knockout', fontSize: 13 },
+  pearl: { width: 15, height: 15 },
+  // A reserved zone under the corner badge (chip height + 6), so no art ever touches it.
+  artInset: { paddingTop: 18 },
+  tip: { position: 'absolute', left: 4, right: 4, bottom: 10, zIndex: 30, backgroundColor: '#123e65', borderRadius: 10, borderWidth: 1.5,
+    borderColor: '#ffd44c', paddingHorizontal: 6, paddingVertical: 5 },
+  tipText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14, textAlign: 'center' },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },
