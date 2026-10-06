@@ -150,8 +150,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       </Pressable>
       <Text style={styles.footer}>
         {chapter.adaptive
-          ? 'Keep playing as the line moves. The shark story is original fiction and the trivia is general park knowledge.'
-          : 'Keep playing as the line moves. The shark story is original; ride facts were checked against official park pages.'}
+          ? 'Keep playing as the line moves. The shark story is made up. The trivia is about parks in general.'
+          : 'Keep playing as the line moves. The shark story is made up. We checked the ride facts on the park’s own website.'}
       </Text>
     </ScrollView>
   );

@@ -81,7 +81,7 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
         <GameIcon name="sparkle" size={18} />
       </View>
       <View style={styles.body}>
-        <Text style={styles.instruction}>{hasLine ? 'A finished line is in your crew log!' : 'Optional talk-and-notice prompts. Finish any line of three.'}</Text>
+        <Text style={styles.instruction}>{hasLine ? 'A finished row is in your crew log!' : 'Talk and look-around games. Finish any row of three.'}</Text>
         <View style={styles.progressTrack} accessibilityLabel={`${marks.length} of 9 bingo squares marked`}>
           <View style={[styles.progressFill, { width: `${Math.round(marks.length / 9 * 100)}%` }]} />
         </View>
@@ -131,7 +131,7 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
           </View>}
           {paused && !hasLine && <Text style={styles.pause}>Paused. Resume to mark squares.</Text>}
         </View>
-        <Text style={styles.rewardNote}>Play from your place in line. Verified nearby time determines Ride Parts.</Text>
+        <Text style={styles.rewardNote}>Play from your place in line. Your time near the ride earns Ride Parts.</Text>
       </View>
     </ImageBackground>
   </ScrollView>;

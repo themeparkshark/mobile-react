@@ -220,7 +220,7 @@ export default function PrepItemRedeemModal({
       }
       setCollectError(typeof serverError === 'string'
         ? serverError
-        : 'Could not confirm this pickup. Tap Retry to check it safely.');
+        : 'Could not finish this pickup. Check your internet and tap Retry.');
     } finally {
       setIsCollecting(false);
     }

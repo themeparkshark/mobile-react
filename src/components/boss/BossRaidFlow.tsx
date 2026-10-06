@@ -98,7 +98,7 @@ export const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string
   bad_proof: "That brawl didn't count. No Energy was spent. Try again.",
   bad_round: 'That round timed out. No Energy was spent. Tap FIGHT for a new one.',
   raid_over: 'The fight is over!',
-  no_remote_pass: 'Joining from home costs 1 Park Ticket. Hunt at home to earn more!',
+  no_remote_pass: 'Joining from home costs 1 ticket. Hunt at home to get more!',
   not_found: 'This fight is no longer available.',
   damage_cap: "You've dealt the most one shark can in this raid. No Energy was spent. Your team can finish it!",
   network: 'Your round is awaiting confirmation.',
@@ -255,7 +255,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     : atThisPark && !validLocation && !away ? 'Waiting for your location…'
     : raid.you.attacks_left <= 0 ? `You've used all ${maxAttacks} attacks. Cheer them on!`
       : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack`
-        : needsPass && tickets < raid.remote.ticket_cost ? 'Joining from home needs 1 Park Ticket' : null;
+        : needsPass && tickets < raid.remote.ticket_cost ? 'Joining from home needs 1 ticket' : null;
   const fightLabel = !remote ? 'FIGHT' : !needsPass ? 'FIGHT FROM HERE' : 'JOIN FROM HOME';
 
   const startBrawl = async () => {
@@ -275,7 +275,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
       if (result.error === 'too_far') {
         setAwayFor({ raidId: raid.id, reason: result.reason ?? 'far' });
         setNote(PRESENCE[result.reason ?? 'far']);
-      } else setNote(result.error === 'network' ? 'Could not reach the fight. Check your connection and try again.' : ERRORS[result.error]);
+      } else setNote(result.error === 'network' ? 'Could not reach the fight. Check your internet and try again.' : ERRORS[result.error]);
       return;
     }
     // Lock GPS, the explicit join choice and the server round at the action the player approved.
@@ -365,7 +365,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
                 {blocked && <Text style={styles.blocked}>{blocked}</Text>}
                 <GameButton testID="boss-fight" label={fightLabel} variant="danger" disabled={!!blocked} loading={starting}
                   onPress={() => { void startBrawl(); }}
-                  accessibilityHint={remote ? `Costs ${needsPass ? `${raid.remote.ticket_cost} Park Ticket and ` : ''}${raid.energy_cost} Energy` : `Costs ${raid.energy_cost} Energy`} />
+                  accessibilityHint={remote ? `Costs ${needsPass ? `${raid.remote.ticket_cost} ticket and ` : ''}${raid.energy_cost} energy` : `Costs ${raid.energy_cost} Energy`} />
                 <View style={styles.cost}>
                   {needsPass && <><GameIcon name="ticket" size={20} /><Text style={styles.costText}>{raid.remote.ticket_cost}  +</Text></>}
                   <GameIcon name="energy" size={20} /><Text style={styles.costText}>{raid.energy_cost} per attack</Text>
@@ -374,7 +374,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             <Text style={styles.fine}>
               {remote
                 ? `From here you deal ${Math.round(raid.remote.damage_rate * 100)}% damage and can't be MVP. ${raid.remote.joined ? "You're in! " : ''}Everyone who lands a hit gets the loot.`
-                : 'Beat it together before time runs out: everyone who lands a hit gets the loot, the top hitter is MVP.'}
+                : 'Beat it together before time runs out. Everyone who lands a hit gets the loot. The top hitter is MVP.'}
             </Text>
           </ScrollView> : emptyView)}
       </Modal>

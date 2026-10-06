@@ -195,7 +195,7 @@ export default function TriviaMiniGame({
       subtitle={taskName}
       timeLimit={timeLimitSeconds}
       score={correctRef.current}
-      objective={`Answer all ${totalQuestions} questions correctly!\nOne wrong answer = FAIL`}
+      objective={`Get all ${totalQuestions} questions right!\nOne wrong answer and the game is over.`}
       objectiveIcon="?"
       onTimeUp={handleTimeUp}
       onClose={onClose}
@@ -240,7 +240,7 @@ export default function TriviaMiniGame({
               );
             })}
           </View>
-          <Text style={qs.hint}>Get ALL {totalQuestions} correct to pass!</Text>
+          <Text style={qs.hint}>Get ALL {totalQuestions} right to win!</Text>
         </Animated.View>
       )}
     </MiniGameShell>

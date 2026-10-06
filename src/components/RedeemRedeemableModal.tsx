@@ -454,7 +454,7 @@ export default function RedeemRedeemableModal({
     try {
       await refreshPlayer?.();
     } catch {
-      setStartError('Could not refresh your Tickets. Try again when connected.');
+      setStartError('Could not refresh your Tickets. Check your internet and try again.');
     }
   }, [refreshPlayer]);
 
@@ -641,9 +641,9 @@ export default function RedeemRedeemableModal({
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           {flowState === 'recovering' && <ChallengeStatusCard title="Checking" art="loading"
-            message="Restoring any Ticket and game already in progress." />}
+            message="Getting back your ticket and any game you started." />}
           {flowState === 'auth-required' && <ChallengeStatusCard title="Sign In to Play"
-            message="Ride challenges and Tickets need a player account. Sign in from the map to start."
+            message="You need to sign in to play ride challenges. Go back to the map to sign in."
             primary={{ label: 'Return to Map', onPress: handleLostClose }} />}
           
           {/* PREVIEW STATE */}
@@ -758,13 +758,13 @@ export default function RedeemRedeemableModal({
                           </View>
                           <Text style={styles.ticketHelpCopy}>{ticketHelp.body}</Text>
                           {storeAvailable() && !previewOnly && <Pressable onPress={openSupplies} style={styles.getTickets}
-                            accessibilityRole="button" accessibilityLabel="Get Park Tickets in the Shark Shop">
+                            accessibilityRole="button" accessibilityLabel="Get tickets in Supplies. A grown-up buys these with real money.">
                             <GameIcon name="ticket" size={20} />
-                            <Text style={styles.getTicketsText}>Get Tickets in the Shark Shop</Text>
+                            <Text style={styles.getTicketsText}>Get Tickets in Supplies (real money)</Text>
                           </Pressable>}
                         </View>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
-                        <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} Park Ticket${playerTickets === 1 ? '' : 's'}`}>
+                        <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} ticket${playerTickets === 1 ? '' : 's'}`}>
                           <GameIcon name="ticket" size={24} />
                           <Text style={styles.ticketCount}>{playerTickets} {playerTickets === 1 ? 'Ticket' : 'Tickets'}</Text>
                         </View>
@@ -814,19 +814,19 @@ export default function RedeemRedeemableModal({
             />
           )}
           {flowState === 'wheel' && <ChallengeStatusCard title="Challenge Ready"
-            message="Your Ticket is spent and your game is waiting. Update the app if it does not start."
+            message="Your ticket is used and your game is ready. If it does not start, update the app."
             primary={{ label: 'Play Now', onPress: handlePlayNow }} />}
           {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
-            message="We could not confirm whether this challenge started. Reconnect to resume it. No second Ticket is spent."
+            message="We could not tell if this challenge started. Check your internet and tap Reconnect. You will not pay another ticket."
             primary={{ label: 'Reconnect', onPress: handleStartWheel }}
             quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
           {flowState === 'save-error' && <ChallengeStatusCard title="Not Started"
-            message="No Ticket was spent. This challenge could not be prepared safely. Try again."
+            message="This challenge did not start. No ticket was used. Tap Try Again."
             primary={{ label: 'Try Again', onPress: (firstCoinTicketReturned || rescueRetryAvailable) &&
               ['lost', 'expired'].includes(attemptRef.current?.status ?? '') ? handleProtectedRetry : handleStartWheel }}
             quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
           {flowState === 'retrying' && <ChallengeStatusCard title="Setting Up" art="loading"
-            message="Checking your Ticket and starting a fresh ride challenge." />}
+            message="Checking your ticket and starting a new ride challenge." />}
           {flowState === 'expired' && <ChallengeStatusCard title="Time Ran Out"
             message={usedRescuePass
               ? rescueRetryAvailable
@@ -836,11 +836,11 @@ export default function RedeemRedeemableModal({
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
             quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
             guardRetry={rescueRetryAvailable} />}
-          {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Result Pending'}
+          {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Checking Your Score'}
             art={proofRejected ? 'none' : 'loading'}
             message={proofRejected
-              ? 'This result did not pass the challenge check. Your attempt is still open. Replay the game, no new Ticket needed.'
-              : 'We could not confirm your result yet. Reconnect to check the same attempt. No extra Ticket is spent.'}
+              ? 'We could not count that game. Your try is still open. Play it again. It costs no new ticket.'
+              : 'We could not check your score yet. Check your internet and tap Reconnect. You will not pay another ticket.'}
             primary={{ label: proofRejected ? 'Replay Game' : 'Reconnect', onPress: () => {
               if (proofRejected) {
                 proofRef.current = null;

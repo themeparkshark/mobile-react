@@ -7,6 +7,7 @@ import config from '../../config';
 import { BRAND, GameIcon } from '../../ui';
 import useCrumbs from '../../hooks/useCrumbs';
 import { ItemType } from '../../models/item-type';
+import { currencyLabel } from '../../hooks/usePurchaseItem';
 
 export default function Item({
   item,
@@ -35,7 +36,7 @@ export default function Item({
         onPurchase?.(item);
       }}
       accessibilityRole="button"
-      accessibilityLabel={`${item.name}, ${item.has_purchased ? 'owned' : vipLocked ? 'VIP only' : `${item.cost} ${item.currency.name}`}`}
+      accessibilityLabel={`${item.name}, ${item.has_purchased ? 'owned' : vipLocked ? 'VIP only' : `${item.cost} ${currencyLabel(item.currency.name, item.cost)}`}`}
       style={({ pressed }) => ({
         position: 'relative',
         width: '100%',

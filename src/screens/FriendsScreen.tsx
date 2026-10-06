@@ -516,11 +516,11 @@ function MyNameCard({ name, onInvite }: { readonly name: string; readonly onInvi
 function FindMeCard({ on, onToggle }: { readonly on: boolean; readonly onToggle: () => void }) {
   return (
     <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }}
-      accessibilityLabel="Let sharks find me" accessibilityHint={on ? 'On: sharks can find you by part of your name. Tap to turn off.' : "Off: sharks can't search for you, but a shark who knows your exact name or taps you on a leaderboard or post can still ask. Turning it on needs a grown-up."}>
+      accessibilityLabel="Let sharks find me" accessibilityHint={on ? 'On: sharks can find you by part of your name. Tap to turn off.' : "Off: sharks can't search for you. Some sharks can still ask to be friends. Turning it on needs a grown-up."}>
       <View style={[kit.card, styles.findCard, styles.findMe]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>Let sharks find me</Text>
-          <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Sharks can find you by part of your name.' : "Sharks can't search for you. A shark who knows your exact name, or taps you on a leaderboard or post, can still ask. You pick Yes or No."}</Text>
+          <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Sharks can find you by part of your name.' : "Sharks can't search for you. A shark who knows your exact name can still ask to be friends. So can a shark who taps you on a leaderboard or post. You pick Yes or No."}</Text>
         </View>
         <View style={[styles.switch, on && styles.switchOn]}>
           <View style={[styles.knob, on && styles.knobOn]} />

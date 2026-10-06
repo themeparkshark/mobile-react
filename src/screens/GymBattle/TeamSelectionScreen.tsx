@@ -175,7 +175,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <View style={s.warn}>
               <Text style={s.warnText}>This is for keeps: you can’t switch teams later.</Text>
             </View>
-            {stage === 'error' && <Text style={s.error}>Couldn’t join just now. Check your connection and try again.</Text>}
+            {stage === 'error' && <Text style={s.error}>Couldn’t join just now. Check your internet and try again.</Text>}
             <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={() => void join()}
               disabled={stage === 'joining'} accessibilityRole="button">
               {stage === 'joining' ? <ActivityIndicator color="#fff" />
@@ -206,7 +206,7 @@ function TeamCard({ team, held, leader, underdog, onPress }: {
         <Text style={s.cardLine}>{VIBE[team].line}</Text>
         {held !== undefined && (
           <Text style={s.cardHeld}>
-            Holds {held} ride{held === 1 ? '' : 's'} today{leader ? '  ·  leading' : underdog ? '  ·  underdog bonus' : ''}
+            Holds {held} ride{held === 1 ? '' : 's'} today{leader ? '  ·  leading' : underdog ? '  ·  extra points (behind)' : ''}
           </Text>
         )}
       </View>

@@ -945,7 +945,7 @@ function BananaRun({
   const images = useFieldImages();
   const twistName = cfg.twist && (mode === 'heat' || (mode === 'queue' && cfg.unlock >= 3)) ? TWIST_NAMES[cfg.twist] : '';
   const objective = mode === 'ride'
-    ? 'CATCH! AIM! DODGE! Lift your thumb any time: the park freezes with you.'
+    ? 'CATCH! AIM! DODGE! Lift your thumb any time to pause.'
     : mode === 'heat'
       ? `Same line, same race. ${twistName ? `Today: ${twistName}.` : ''}`
       : `Three quick sets. Lift your thumb any time.${twistName ? ` Park Twist: ${twistName}.` : ''}`;

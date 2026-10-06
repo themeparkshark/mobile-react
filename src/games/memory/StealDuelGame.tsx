@@ -194,8 +194,8 @@ export default function StealDuelGame({ visible, deckId, seed, onClose, onQuit }
           { label: 'STEALS', value: `${me.steals}` },
           { label: 'BEST STREAK', value: `${me.bestStreak}` },
         ],
-        tally: null, chip: 'Practice duel vs the house shark. Live duels open with your line.', grades: null,
-        tip: me.steals ? 'Stealing pairs your rival revealed takes their streak.' : 'Open with a card you know: you reveal one new card instead of two.',
+        tally: null, chip: 'Practice duel vs the house shark. Live duels are with sharks in your line.', grades: null,
+        tip: me.steals ? 'Match a pair your rival flipped to steal their streak.' : 'Start your turn on a card you know. Then you only flip one new card.',
         newBest: false, rewards: null, daily: null, extraRewards: [], againLabel: 'PLAY AGAIN',
       });
       setResult({ score: me.points, stars: won ? 3 : winner === 2 ? 2 : 1, message: won ? 'YOU WIN' : 'RIVAL WINS', meta: { game: 'memory', mode: 'stealDuel', practice: true, local: true, log: s.log.slice() } });

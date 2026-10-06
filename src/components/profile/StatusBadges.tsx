@@ -83,13 +83,13 @@ export default function StatusBadges({ isVip, isVerified, own }: {
         <Chip
           icon={require('../../../assets/images/screens/profile/subscribed.png')}
           title="VIP Member"
-          caption={own ? 'See your perks' : 'Has VIP perks'}
+          caption={own ? 'See your VIP bonuses' : 'Has VIP bonuses'}
           fill="#ffcf3b"
           lip="#d99a00"
           ink="#05346e"
           sub="#7a4f00"
           label={own ? 'VIP member' : 'This player is a VIP member'}
-          hint={own ? 'Opens your VIP perks' : 'Opens VIP membership'}
+          hint={own ? 'Shows your VIP bonuses' : 'Shows what VIP is'}
           // The paywall decides the gate from the signed-in player (a member opens perks), not from whose badge this is.
           onPress={() => { void openMembership(); }}
         />
@@ -97,14 +97,14 @@ export default function StatusBadges({ isVip, isVerified, own }: {
       {isVerified && (
         <Chip
           icon={require('../../../assets/images/screens/profile/verified.png')}
-          title="Verified"
+          title="Official"
           caption="Official shark"
           fill="#1aa3f0"
           lip="#0b6db3"
           ink="#ffffff"
           sub="#e3f5ff"
-          label="Verified account"
-          hint="Explains what verified means"
+          label="Official account"
+          hint="Tells you what official means"
           onPress={() => setVerifiedOpen(true)}
         />
       )}
@@ -114,9 +114,9 @@ export default function StatusBadges({ isVip, isVerified, own }: {
           <View style={styles.card} accessibilityViewIsModal>
             <Image source={require('../../../assets/images/screens/profile/verified.png')}
               style={{ width: 64, height: 64, marginBottom: 12 }} contentFit="contain" />
-            <Text style={styles.cardTitle}>Verified shark</Text>
+            <Text style={styles.cardTitle}>Official shark</Text>
             <Text style={styles.cardBody}>
-              The Theme Park Shark team checked this account. It really is who it says it is.
+              The Theme Park Shark team checked this account. It really is who it says.
             </Text>
             <Pressable onPress={() => setVerifiedOpen(false)} accessibilityRole="button" accessibilityLabel="Got it"
               style={styles.cardButton}>

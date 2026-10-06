@@ -10,7 +10,7 @@ import { BRAND, SHADOW } from '../../ui';
 
 export const GUEST_COPY = {
   title: 'Your park adventure starts here',
-  body: 'Sign in to catch ride coins, dress up your shark and play games while you wait in line.',
+  body: 'Sign in to catch ride coins and dress up your shark. You can play games in line too.',
 } as const;
 
 /**

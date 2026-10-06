@@ -654,7 +654,7 @@ function ConnectionChip({ connection }: { connection: string }) {
   if (connection === 'live') return null;
   return (
     <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.conn} pointerEvents="none">
-      <Text style={styles.connText}>{connection === 'connecting' ? 'CONNECTING' : 'SYNCING'}</Text>
+      <Text style={styles.connText}>{connection === 'connecting' ? 'CONNECTING' : 'CATCHING UP'}</Text>
     </Animated.View>
   );
 }

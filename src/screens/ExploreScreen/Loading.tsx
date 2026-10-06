@@ -4,7 +4,7 @@ export default function Loading() {
   return (
     <WarningMessage
       title="Loading..."
-      message="Please wait whilst we load your location"
+      message="Finding where you are…"
     />
   );
 }

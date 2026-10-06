@@ -11,7 +11,7 @@ import type { HomeHuntResult } from '../../api/endpoints/me/homeHunt';
 
 export const HOME_HUNT_MODAL_CAP = 2;
 export const RANK_COUNTDOWN_MS = 900;
-export const HELD_COPY = 'Your reward is being checked. It arrives within 72 hours.';
+export const HELD_COPY = 'We are checking your reward. It shows up within 3 days.';
 
 /** Stable queue id, so a re-fetched result is never queued twice. */
 export function resultPresentationId(result: Pick<HomeHuntResult, 'week_key' | 'status'>): string {

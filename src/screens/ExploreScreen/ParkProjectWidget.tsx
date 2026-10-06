@@ -123,7 +123,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       if (!focused.current || version !== requestVersion.current) return;
       // Keep the last confirmed world state; the next focus or refresh retries.
       setOffline(true);
-      if (open) setError('Could not refresh the project. Try again when connected.');
+      if (open) setError('Could not refresh the project. Check your internet and try again.');
     }
   }, [open, parkId, onActiveProjectChange, loadProjects]);
 
@@ -163,7 +163,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       await load();
     } catch (cause) {
       const message = (cause as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(message ?? 'Could not save that choice. Try again when connected.');
+      setError(message ?? 'Could not save that choice. Check your internet and try again.');
     } finally {
       setBusy(false);
     }
@@ -180,7 +180,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
         parkDay: project.remote_challenge?.park_day ?? '',
         message: result.correct
           ? `${result.points_awarded ? '+1 project point. ' : 'Challenge complete. '} ${result.explanation ?? ''}`
-          : 'That route did not match the clue. Try another answer.',
+          : 'That answer did not match the clue. Try another one.',
       } }));
       if (result.correct) await load();
     } catch (cause) {
@@ -188,7 +188,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       if (status === 422) await load();
       setError(status === 422
         ? 'The story clue changed. Check today’s question and try again.'
-        : 'Could not check that answer. Try again when connected.');
+        : 'Could not check that answer. Check your internet and try again.');
     } finally {
       setBusy(false);
     }
@@ -197,12 +197,12 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
   return (
     <>
       {!pillHidden && pillCollapsed && <MapSuggestionStub side="right" top={topOffset} zIndex={30}
-        label={`Park story: ${featured.title}. ${featured.total_points} of ${featured.goal_points} signals. Open story.`}
+        label={`Park story: ${featured.title}. ${featured.total_points} of ${featured.goal_points} points. Open story.`}
         badge={`${featured.total_points}/${featured.goal_points}`} onPress={() => { setOpen(true); setNotice(null); }}>
         <GameIcon name="sparkle" size={30} />
       </MapSuggestionStub>}
       {!pillHidden && !pillCollapsed && <AnimatedPressable accessibilityRole="button"
-        accessibilityLabel={`${offline ? 'Last confirmed park story' : 'Park story'}: ${featured.title}. ${featured.total_points} of ${featured.goal_points} signals.${offline ? ' Progress may have changed.' : ''} Open story.`}
+        accessibilityLabel={`${offline ? 'Last confirmed park story' : 'Park story'}: ${featured.title}. ${featured.total_points} of ${featured.goal_points} points.${offline ? ' This may be old.' : ''} Open story.`}
         style={[styles.pill, compactHome && styles.pillCompact,
           { top: topOffset, transform: [{ scale: pulse }] }]}
         onPress={() => { setOpen(true); setNotice(null); }}>
@@ -214,7 +214,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
         </Text>
         {!compactHome && <Text style={styles.pillTitle} numberOfLines={2}>{notice ?? featured.title}</Text>}
         <Text style={styles.pillProgress}>{compactHome
-          ? featured.ended ? 'Tap to revisit' : `${featured.total_points}/${featured.goal_points} signals`
+          ? featured.ended ? 'Tap to revisit' : `${featured.total_points}/${featured.goal_points} points`
           : `${featured.total_points}/${featured.goal_points} · ${notice ? 'Tap to see what changed' : featured.ended ? 'Your park story' : projectStageLabel(featured)}`}</Text>
       </AnimatedPressable>}
       <Modal isVisible={open} onBackdropPress={() => setOpen(false)} onBackButtonPress={() => setOpen(false)}>
@@ -230,7 +230,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.list}>
-            {offline && <Text style={styles.hint}>Showing the last confirmed project update. Progress may have changed.</Text>}
+            {offline && <Text style={styles.hint}>No internet. This may be old. Check your internet to see the newest.</Text>}
             {visible.map((project) => {
               const fraction = Math.min(100, Math.round(100 * project.total_points / Math.max(1, project.goal_points)));
               const milestone = projectNextMilestone(project);
@@ -255,7 +255,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                         <Text style={styles.target}>{project.remote_challenge.index != null &&
                           project.remote_challenge.total != null &&
                           project.remote_challenge.index + 1 >= project.remote_challenge.total
-                          ? 'Final clue solved. Your crew can still shape the project until it closes.'
+                          ? 'Final clue solved! Your crew can still help the story until it ends.'
                           : 'Clue solved. The next one opens on the park’s next day.'}</Text>
                         : project.remote_challenge.choices.map((choice, index) =>
                           <Pressable key={`${project.id}-${index}`} accessibilityRole="button"
@@ -265,7 +265,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                           </Pressable>)}
                       {answerFeedback[project.id]?.parkDay === project.remote_challenge.park_day &&
                         <Text style={styles.hint}>{answerFeedback[project.id].message}</Text>}
-                      <Text style={styles.hint}>Up to one shared point per park day · play anywhere. Ride coins come from rides.</Text>
+                      <Text style={styles.hint}>You can add 1 point each park day from anywhere. Ride coins come from rides.</Text>
                     </View>
                   )}
                   {project.previous_story && (
@@ -283,7 +283,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                     <Text style={styles.hint}>This story reaches the whole park. Join in wherever your day takes you.</Text>}
                   <Text style={styles.story}>{project.story_text}</Text>
                   <View style={styles.progressCard} accessible accessibilityRole="text"
-                    accessibilityLabel={`${offline ? 'Last confirmed progress. ' : ''}${project.total_points} of ${project.goal_points} shared signals. ${milestone.remaining > 0 ? `${milestone.remaining} more until ${milestone.label.toLowerCase()}` : milestone.label.toLowerCase()}. Your contribution ${project.my_points}`}>
+                    accessibilityLabel={`${offline ? 'Last confirmed progress. ' : ''}${project.total_points} of ${project.goal_points} points. ${milestone.remaining > 0 ? `${milestone.remaining} more until ${milestone.label.toLowerCase()}` : milestone.label.toLowerCase()}. You added ${project.my_points}`}>
                     <View style={styles.progressTop}>
                       <GameRichText style={styles.progressKicker} iconSize={13}>{`[icon:sparkle] ${projectStageLabel(project).toUpperCase()}`}</GameRichText>
                       <Text style={styles.progressCount}>{project.total_points}/{project.goal_points}</Text>
@@ -309,8 +309,8 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                   {parkId == null && !project.ended && project.targeted && (
                     <Text style={styles.target}>
                       {project.stage === 3
-                        ? 'YOUR HOME PROJECT · The meter is full. A nearby prep pickup still lets a new fan vote.'
-                        : 'YOUR HOME PROJECT · Nearby prep pickups add a signal point.'}
+                        ? 'YOUR HOME PROJECT · The meter is full. New fans can still vote after a home find.'
+                        : 'YOUR HOME PROJECT · Home finds add a point.'}
                     </Text>
                   )}
                   {project.personal_clue && (
@@ -319,7 +319,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                   {project.stage >= 2 && (
                     <View style={styles.voteBox}>
                       <Text style={styles.voteTitle}>{project.ended ? 'The next chapter chosen' : 'Choose the next chapter'}</Text>
-                      {!project.ended && <Text style={styles.meta}>Your vote helps choose what the community sees next.</Text>}
+                      {!project.ended && <Text style={styles.meta}>Your vote helps pick what happens next for everyone.</Text>}
                       {(['a', 'b'] as const).map((chapter) => (
                         <Pressable key={chapter} style={[styles.vote, project.my_chapter === chapter && styles.selectedVote]}
                           disabled={busy || offline || !project.can_vote}
@@ -330,12 +330,12 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                           </Text>
                         </Pressable>
                       ))}
-                      {!project.participated && <Text style={styles.hint}>Complete a verified activity before voting.</Text>}
+                      {!project.participated && <Text style={styles.hint}>Help fill the meter first. Then you can vote.</Text>}
                       {project.my_chapter && <Text style={styles.target}>Your choice is locked in.</Text>}
-                      {!project.ended && project.leading_chapter && <Text style={styles.hint}>Currently leading: {project.leading_chapter === 'a' ? project.chapter_a_title : project.chapter_b_title}</Text>}
-                      {!project.ended && <Text style={styles.hint}>A tie follows {project.chapter_a_title}.</Text>}
+                      {!project.ended && project.leading_chapter && <Text style={styles.hint}>Most votes so far: {project.leading_chapter === 'a' ? project.chapter_a_title : project.chapter_b_title}</Text>}
+                      {!project.ended && <Text style={styles.hint}>If votes tie, {project.chapter_a_title} wins.</Text>}
                       {project.ended && project.final_chapter && (
-                        <Text style={styles.target}>Community choice: {project.final_chapter === 'a' ? project.chapter_a_title : project.chapter_b_title}</Text>
+                        <Text style={styles.target}>Everyone picked: {project.final_chapter === 'a' ? project.chapter_a_title : project.chapter_b_title}</Text>
                       )}
                     </View>
                   )}
@@ -343,13 +343,13 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                     <View style={styles.crewBox}>
                       <Text style={styles.crewTitle}>YOUR FRIEND CREW</Text>
                       <Text style={styles.meta}>
-                        {project.crew.points}/{project.crew.target} verified points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
+                        {project.crew.points}/{project.crew.target} points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
                       </Text>
                       <View style={styles.track}><View style={[styles.crewFill, {
                         width: `${Math.min(100, Math.round(100 * project.crew.points / Math.max(1, project.crew.target)))}%` as `${number}%`,
                       }]} /></View>
                       {project.crew.clue ? <Text style={styles.clueText}>CREW CLUE: {project.crew.clue}</Text>
-                        : <Text style={styles.hint}>You and accepted friends can uncover this clue together. You can also reach it on your own.</Text>}
+                        : <Text style={styles.hint}>You and your friends can find this clue together. You can also find it on your own.</Text>}
                       {!project.crew.clue && <Pressable accessibilityRole="button" style={styles.crewAction}
                         onPress={() => { setOpen(false); RootNavigation.navigate('Friends'); }}>
                         <Text style={styles.crewActionText}>See friends</Text>
@@ -360,8 +360,8 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                   {parkId != null && !project.ended && (
                     <Text style={styles.hint}>
                       {project.stage === 3
-                        ? 'The shared meter is full. A verified ride or LinePlay activity still lets a new guest vote.'
-                        : 'Winning ride challenges and earning LinePlay Parts help this project.'}
+                        ? 'The meter is full! New players can still vote after they help once.'
+                        : 'Win ride challenges and earn Ride Parts to help fill the meter.'}
                     </Text>
                   )}
 

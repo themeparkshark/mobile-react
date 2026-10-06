@@ -38,10 +38,10 @@ export default function LineSnackOffer({ sessionId }: { sessionId: string }) {
 
   return (
     <Pressable style={styles.chip} onPress={() => void press()} disabled={state !== 'offer'} accessibilityRole="button"
-      accessibilityLabel={note ?? (vip ? 'Line snack: claim bonus Energy, VIP perk' : 'Line snack: watch an ad for bonus Energy')}>
+      accessibilityLabel={note ?? (vip ? 'Line snack: tap for free bonus energy. A VIP member extra.' : 'Line snack: watch an ad for bonus Energy')}>
       <GameIcon name={state === 'done' ? 'check' : 'energy'} size={26} />
       <Text style={styles.text} numberOfLines={2}>
-        {note ?? (state === 'busy' ? 'One moment...' : vip ? 'Line snack: bonus Energy, VIP perk' : 'Line snack: watch an ad for bonus Energy')}
+        {note ?? (state === 'busy' ? 'One moment...' : vip ? 'Line snack: tap for free bonus energy (VIP)' : 'Line snack: watch an ad for bonus Energy')}
       </Text>
       {state === 'offer' && <GameIcon name={vip ? 'member' : 'play'} size={20} />}
     </Pressable>

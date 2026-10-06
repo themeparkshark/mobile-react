@@ -144,8 +144,8 @@ test('claiming disables dismissal, and the reveal uses the confirmed ladder rewa
     ladder: [{ day: 1, coins: 25, energy: 0, tickets: 0 }, { day: 2, coins: 0, energy: 20, tickets: 0 }] });
   await daily.settle(); daily.reveal();
   const text = node => Array.isArray(node.props.children) ? node.props.children.join('') : node.props.children;
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+20 Energy'));
-  assert.equal(daily.find(node => node.type === 'Text' && text(node) === '+25 Shark Coins'), undefined);
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+20 energy'));
+  assert.equal(daily.find(node => node.type === 'Text' && text(node) === '+25 coins'), undefined);
 });
 test('turning on reduced motion during a claim prevents delayed spring celebration', async () => {
   const daily = chest(); daily.open();
@@ -163,7 +163,7 @@ test('the celebration shows exactly what the server granted and never a coin pil
   daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-30T00:12:00Z', day: 2, ladder, streak: 2,
     reward: { coins: 0, energy: 20, tickets: 0 }, granted: { coins: 0, energy: 5, tickets: 0 } });
   await daily.settle(); daily.reveal();
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+5 Energy'), 'granted, not the ladder 20');
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+5 energy'), 'granted, not the ladder 20');
   const chestArt = daily.find(node => node.type === 'Image' && node.props.style?.width > 100);
   assert.match(chestArt.props.source, /chest-closed/, 'no pile of coins for an Energy prize');
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === '2 day streak'));
@@ -177,8 +177,8 @@ test('day 7 punches a Park Ticket and lists its coins, then flies both to the he
     granted: { coins: 250, energy: 0, tickets: 2 }, milestone: { label: 'Two-week souvenir', coins: 150, energy: 0, tickets: 1 },
     next_milestone: { day: 30, days_away: 16, label: 'Monthly souvenir', coins: 300, energy: 0, tickets: 2 } });
   await daily.settle(); daily.reveal();
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+2 Park Tickets'));
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+250 Shark Coins'));
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+2 tickets'));
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+250 coins'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === 'Two-week souvenir bonus!'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === '16 more days to your Monthly souvenir'));
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === 'SEE YOU AT THE PARK!'));

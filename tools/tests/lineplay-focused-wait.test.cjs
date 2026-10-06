@@ -34,5 +34,5 @@ test('focused reward status uses confirmed credited Parts, with verification det
   assert.ok(c.app.find(node => node.type === 'Text' && [].concat(node.props.children).join('') === '1:30 · 2 Parts'));
   assert.ok(c.control('Open queue games for bonus rewards'));
   c.control('Show wait and reward details').props.onPress(); c.app.render();
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Verified time near the ride: 7:30. One Ride Part per 5 minutes, up to 3 per line.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Time near the ride: 7:30. You get 1 Ride Part every 5 minutes, up to 3 per wait.'));
 });

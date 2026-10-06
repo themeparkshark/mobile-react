@@ -322,7 +322,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
         celebrate(reward);
         void refreshPlayer().catch(() => undefined);
       } else {
-        setError('That reward did not go through. Try again.');
+        setError('Your prize didn’t come through. Tap Claim again.');
         playSfx('fx.nopeShort', 0.6);
       }
     } finally {
@@ -341,7 +341,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       await equipInventoryItem({ id: wear.itemId } as ItemType);
       await refreshPlayer().catch(() => undefined);
     } catch {
-      showToast('Could not put it on. Open Inventory to wear it.', 'warning');
+      showToast('Could not put it on. Open your closet to wear it.', 'warning');
     } finally {
       setWearing(false);
     }
@@ -589,7 +589,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
 
       <Modal visible={giftItem != null} transparent animationType="fade" onRequestClose={() => setGiftItem(null)}>
         <View style={styles.sheetOverlay}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" style={StyleSheet.absoluteFill} onPress={() => setGiftItem(null)} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => setGiftItem(null)} />
           <View style={styles.giftCard} accessibilityViewIsModal>
             {giftItem && (
               <GiftPrepVariantPanel item={{ id: giftItem.id, name: giftItem.name } as PrepItemSetItem} imageSource={itemArt(giftItem)}
@@ -631,7 +631,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
-      <HomeHuntInfoSheet visible={oddsOpen} title="Drop odds" sections={oddsInfoSections(huntInfo)}
+      <HomeHuntInfoSheet visible={oddsOpen} title="How rare is each find?" sections={oddsInfoSections(huntInfo)}
         loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />
     </Wrapper>
   );
@@ -699,7 +699,7 @@ function SparesSheet({ visible, items, onClose, onShare }: {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sparesCard} accessibilityViewIsModal>
           <Text style={styles.sparesTitle} accessibilityRole="header">Spares are extra copies</Text>
           {spare && (

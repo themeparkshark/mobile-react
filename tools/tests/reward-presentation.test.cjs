@@ -121,7 +121,7 @@ test('the win footer sits on a solid plate so the tab bar compass never reads ov
   const link = (function find(node) {
     if (!node || typeof node !== 'object') return undefined;
     if (Array.isArray(node)) return node.map(find).find(Boolean);
-    if (node.props?.accessibilityLabel === 'Continue exploring the park') return node;
+    if (node.props?.accessibilityLabel === 'Go back to the park map') return node;
     return find(node.props?.children);
   })(footer);
   assert.ok(link, 'Continue Park lives inside the plate');
@@ -231,7 +231,7 @@ test('first souvenir shows every confirmed payout as a chip and chooses the shel
   const chips = [];
   (function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
     if (node.props?.label && typeof node.props.amount === 'number') chips.push([node.props.label, node.props.amount]); walk(node.props?.children); })(rewards.tree);
-  assert.deepEqual(chips, [['Shark Coins', 10], ['XP', 25], ['Ride Parts', 4], ['Energy', 40]]);
+  assert.deepEqual(chips, [['Coins', 10], ['XP', 25], ['Ride Parts', 4], ['Energy', 40]]);
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
   const button = rewards.find(node => node.type === './YellowButton');
   assert.equal(button.props.text, 'See It On Your Shelf');
@@ -249,7 +249,7 @@ test('a repeat coin uses a short once-only deposit and cancels pending feedback 
 test('a challenge with no confirmed ride coin skips the coin catch and exposes its receipt', () => {
   const view=rewardView(true); view.change({coinTimesCollected:null});
   assert.equal(view.find(node=>node.type==='./CoinCatchReveal'),undefined);
-  assert.ok(view.find(node=>node.props?.label==='Shark Coins'&&node.props.amount===10));
+  assert.ok(view.find(node=>node.props?.label==='Coins'&&node.props.amount===10));
   assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Continue Park');
 });
 
@@ -265,7 +265,7 @@ test('receipt navigation waits for native dismissal and fires only once', () => 
   }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
     ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
-  view.find(n=>n.props?.accessibilityLabel?.startsWith('VIP would')).props.onPress();
+  view.find(n=>n.props?.accessibilityLabel?.startsWith('VIP members get')).props.onPress();
   assert.equal(closes,1);assert.deepEqual(navigated,[]);assert.equal(view.timers.size,0);
   view.tree.props.onModalHide();view.tree.props.onModalHide();assert.deepEqual(navigated,[['Membership']]);
 });
@@ -288,8 +288,8 @@ test('post-win model: milestone headline, next unlock and parts meter use only c
   assert.ok(!/stamp/i.test(postWinModel.milestoneHeadline({milestones:[{type:'park_complete',park_id:1,percent:100}],progress,next:null}).body));
   assert.deepEqual([...postWinModel.rewardChips({coinsEarned:0,xpEarned:0,ridePartsEarned:1,energyEarned:0}).map(c=>c.label)],['Ride Part']);
   assert.deepEqual([...postWinModel.rewardChips({coinsEarned:0,xpEarned:0,ridePartsEarned:2,energyEarned:0}).map(c=>c.label)],['Ride Parts']);
-  assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:100,coins_needed:1}}),'1 more coin to complete the shelf.');
-  assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:50,coins_needed:3}}),'3 more coins for 50% of the shelf.');
+  assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:100,coins_needed:1}}),'1 more ride coin to complete the shelf.');
+  assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:50,coins_needed:3}}),'3 more ride coins for 50% of the shelf.');
   const parts=postWinModel.partsProgress({current_level:2,max_level:5,is_unlocked:true,available_parts:3,parts_to_next_level:6,energy_to_next_level:25},10,2);
   assert.equal(parts.ready,false); assert.equal(parts.before,1/6); assert.equal(parts.after,0.5);
   assert.equal(parts.hint,'3 more Ride Parts and 15 Energy for Level 3.');

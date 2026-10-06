@@ -62,7 +62,7 @@ export function adventurePrompt(ticket: AdventureTicket, closed = false,
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {
       return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play the queue adventure',
-        detail: 'Your story is done. Finish it in this ride\'s queue to punch the Play stamp.', intent: gate.state === 'far' ? 'find_line' : 'play' };
+        detail: 'Your story part is done. Play in this ride\'s line to punch the Play stamp.', intent: gate.state === 'far' ? 'find_line' : 'play' };
     }
     if (gate.state === 'far') {
       return { title: 'A story for your next wait', chip: 'Walk to its line', action: 'Show me the line',
@@ -131,7 +131,7 @@ export function adventureErrorMessage(cause: unknown): string {
     const first = Object.values(response.data?.errors ?? {})[0]?.[0];
     if (first || response.data?.message) return String(first ?? response.data?.message);
   }
-  return 'Your ticket is safe. Reconnect and try again.';
+  return 'Your ticket is safe. Check your internet and try again.';
 }
 
 /** Hand-off for WS3's measured shelf arrival on the Park screen (won coins only). */

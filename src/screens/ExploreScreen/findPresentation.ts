@@ -211,7 +211,7 @@ export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadErr
 }): MapStatusLine | null {
   if (!homeLocationConfirmed) return { text: 'Checking your map...', tone: 'info', action: null };
   if (isLoading) return { text: 'Scouting for finds...', tone: 'info', action: null };
-  if (empty && loadError) return { text: 'Map signal lost · tap to retry', tone: 'error', action: 'retry' };
+  if (empty && loadError) return { text: 'Map didn’t load · tap to try again', tone: 'error', action: 'retry' };
   // A quiet map still shows this week's standing when there is one (tap opens the board).
   if (empty) return rankLine ? { text: `All quiet · ${rankLine}`, tone: 'info', action: 'standings' }
     : { text: 'All quiet · tap for your collection', tone: 'info', action: 'collections' };

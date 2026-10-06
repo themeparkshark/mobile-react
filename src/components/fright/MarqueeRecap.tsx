@@ -54,7 +54,7 @@ export function MarqueeBody({ eventSlug, nightOn, playerId, background, inModal 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 52 }}>
         {recap ? <FrightRecapCard ref={card} recap={recap} background={background ?? frightArt().recapBg} />
           : <Text style={styles.wait} accessibilityLiveRegion="polite">
-            {failed ? 'Couldn\'t load your night. Check your signal and try again.' : 'Lighting the marquee...'}</Text>}
+            {failed ? 'Couldn\'t load your night. Check your internet and try again.' : 'Lighting the marquee...'}</Text>}
         {failed && <NightButton label="Retry" icon="retry" onPress={() => setAttempt(value => value + 1)}
           style={{ marginTop: 14, alignSelf: 'center', minWidth: 160 }} />}
         {recap && !playerId && (!inModal || SHARE_IN_MODALS) && (

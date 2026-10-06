@@ -1,7 +1,7 @@
 /**
  * Near-miss line for a loss (design 11.9): find the smallest single change
  * that flips the result and say it in one friendly line.
- *   speed: "Lost by 35. A GREAT lock on Q2 wins it."
+ *   speed: "Lost by 35. A GREAT answer on question 2 wins it."
  *   wager: "Lost by 120. ALL IN on the Final wins it."
  *   miss:  "Lost by 60. One more right answer wins it."
  */
@@ -36,7 +36,8 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
   });
   if (bestSpeed) {
     const b = bestSpeed as { round: number; tier: string; add: number };
-    return { gap, kind: 'speed', line: `Lost by ${gap}. A ${b.tier} lock on Q${b.round + 1} wins it.` };
+    const word = b.tier;
+    return { gap, kind: 'speed', line: `Lost by ${gap}. A ${word} answer on question ${b.round + 1} wins it.` };
   }
 
   // 2) Wager: a bigger stake on a correct Final.

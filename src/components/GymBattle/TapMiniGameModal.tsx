@@ -113,7 +113,7 @@ export default function TapMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: friendlyActionError(error, 'Something went wrong!'),
+        message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
       });
       setGameState('finished');
     }
@@ -152,7 +152,7 @@ export default function TapMiniGameModal({
               {isUnderdog && (
                 <View style={styles.underdogBanner}>
                   <Text style={styles.underdogText}>
-                    UNDERDOG BONUS: 1.5x Points!
+                    EXTRA POINTS: YOUR TEAM IS BEHIND!
                   </Text>
                 </View>
               )}
@@ -210,7 +210,7 @@ export default function TapMiniGameModal({
               </Text>
               {isUnderdog && result.points > 0 && (
                 <Text style={styles.bonusText}>
-                  (Includes 1.5x underdog bonus!)
+                  (Includes extra points because your team is behind!)
                 </Text>
               )}
               <Text style={styles.nextCheckin}>

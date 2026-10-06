@@ -339,7 +339,7 @@ export default function RideBatchConfirmScreen() {
         </Text>
         <Text style={batchStyles.summaryXp}>
           {failedRideIds.size === selectedRides.length
-            ? 'The journal could not connect. Try again when you have a signal.'
+            ? 'Could not save to your journal. Check your internet and try again.'
             : failedRideIds.size > 0
             ? `${failedRideIds.size} ${failedRideIds.size === 1 ? 'ride is' : 'rides are'} still waiting to save`
             : 'Added to your ride journal'}

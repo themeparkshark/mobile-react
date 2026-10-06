@@ -142,7 +142,7 @@ export const KIND_LOOK: Readonly<Record<NotificationKind, KindLook>> = {
   friend_accepted: { color: '#3CB85C', lip: '#237A3B', tint: '#E3F7E1', spoken: 'New friend' },
   compliment: { color: '#FF8A3D', lip: '#C25A12', tint: '#FFEBDD', spoken: 'Compliment' },
   reply: { color: '#1E9BF0', lip: '#0B5FA0', tint: '#DDF1FF', spoken: 'Reply' },
-  park_coins: { color: '#F2B21B', lip: '#B57F00', tint: '#FFF3CF', spoken: 'Park coins' },
+  park_coins: { color: '#F2B21B', lip: '#B57F00', tint: '#FFF3CF', spoken: 'Ride coins' },
   prize: { color: '#EF4A3C', lip: '#B3261B', tint: '#FFE4E1', spoken: 'Prize' },
   news: { color: '#0879CA', lip: '#05468F', tint: '#DDEBFA', spoken: 'News' },
 };

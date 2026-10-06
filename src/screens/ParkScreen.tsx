@@ -163,10 +163,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     ? tripGoalData.goal : null;
   const goalPlan = parkTripGoal?.coin_owned ? tripGoalData?.goal_plan : null;
   const ownedGoalHint = goalPlan
-    ? goalPlan.maxed ? 'Current max reached. Choose another ride coin.'
+    ? goalPlan.maxed ? 'Top level for now. Pick another ride coin.'
       : goalPlan.parts_needed === 0 && goalPlan.energy_needed === 0
         ? 'Ready to level up. Open this coin on your shelf.'
-        : `${goalPlan.parts_needed ?? 0} Parts for this coin · ${goalPlan.energy_needed} Energy to upgrade.`
+        : `Level up needs ${goalPlan.parts_needed ?? 0} Parts · ${goalPlan.energy_needed} energy.`
     : null;
   const inThisPark = Number(locationPark?.id) === Number(park);
   useEffect(() => {
@@ -408,8 +408,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 borderWidth: 2, borderColor: '#ffc932' }}>
               <Text style={{ color: '#075b9b', textAlign: 'center', fontFamily: 'Knockout', fontSize: 16 }}>
                 {currentPark
-                  ? 'Park progress could not refresh. Showing the last loaded view. Tap to retry.'
-                  : 'Park progress could not load. Tap to retry.'}
+                  ? 'Could not update your park progress. This may be old. Tap to try again.'
+                  : 'Could not load your park progress. Tap to try again.'}
               </Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (

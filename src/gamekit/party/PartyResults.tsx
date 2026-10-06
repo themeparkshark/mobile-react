@@ -69,7 +69,7 @@ function Crown() {
 }
 
 function detailFor(r: SeatResult): string {
-  if (isDq(r.verdict)) return 'NOT VERIFIED';
+  if (isDq(r.verdict)) return "DIDN'T COUNT";
   if (r.verdict === 'no_contest:desync' || r.verdict === 'no_contest:late') return 'LOCKS IN AFTER AN UPDATE';
   if (isNoContest(r.verdict)) return 'ROUND SKIPPED';
   if (isGhostFinished(r.verdict) || r.filled_by === 'ghost') return 'YOUR GHOST TOOK THIS ONE';
@@ -139,7 +139,7 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
       <Animated.Text entering={FadeInDown.springify().damping(12)} style={styles.headline}>{headline}</Animated.Text>
       <View style={styles.verified}>
         <GameIcon name="sparkle" size={18} />
-        <Text style={styles.verifiedText}>{room.round?.status === 'locked' ? 'SCORES LOCK IN AFTER AN UPDATE' : room.round?.final ? 'FINAL ROUND  ·  DOUBLE POINTS  ·  VERIFIED' : 'VERIFIED  ·  EVERY BOARD REPLAYED'}</Text>
+        <Text style={styles.verifiedText}>{room.round?.status === 'locked' ? 'SCORES LOCK IN AFTER AN UPDATE' : room.round?.final ? 'FINAL ROUND  ·  DOUBLE POINTS  ·  SCORES CHECKED' : 'SCORES CHECKED  ·  FAIR FOR EVERYONE'}</Text>
       </View>
       {finished && series ? <SeriesCrown series={series} nameOf={nameOf} me={state.userId} /> : (
         <View style={styles.list}>

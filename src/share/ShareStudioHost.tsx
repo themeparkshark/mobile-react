@@ -169,7 +169,7 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       }
     } catch {
       event('failed');
-      gameAlert('Card not made', 'Your stuff is safe. Try sharing again.', undefined, { icon: 'retry' });
+      gameAlert('Your card didn’t get made', 'Nothing was lost. Tap Share to try again.', undefined, { icon: 'retry' });
     } finally {
       busyRef.current = false;
       setBusy(false);

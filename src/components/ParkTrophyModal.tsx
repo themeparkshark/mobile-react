@@ -94,7 +94,7 @@ export default function ParkTrophyModal({
                   textAlign: 'center',
                 }}
               >
-                Unlocks at {trophy.unlockCount} park coins
+                Unlocks at {trophy.unlockCount} ride coins
               </Text>
             </View>
           </View>

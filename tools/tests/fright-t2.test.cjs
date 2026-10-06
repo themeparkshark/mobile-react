@@ -99,7 +99,7 @@ test('T3 rewards: render what the server sends; "Added to your wardrobe" only fo
   const pin = { kind: 'pin', name: 'I Survived Pin', image: null, item_id: 9, key: 'haunts_5' };
   const coat = { kind: 'cosmetic', name: 'Ringmaster of Frights Coat', image: null, item_id: 12, key: 'all_haunts' };
   const xp = { kind: 'xp', name: 'XP', image: null, amount: 25 };
-  assert.equal(rewards.wardrobeLine(pin), 'Added to your wardrobe');
+  assert.equal(rewards.wardrobeLine(pin), 'Added to your closet');
   assert.equal(rewards.wardrobeLine({ ...pin, item_id: null }), null, 'no item, no wardrobe promise');
   assert.equal(rewards.wardrobeLine(xp), null);
   assert.equal(rewards.lanternLine(pin), 'On your Deep Lantern too');

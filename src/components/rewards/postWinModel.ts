@@ -14,7 +14,7 @@ export function rewardChips({ coinsEarned, xpEarned, ridePartsEarned, energyEarn
   coinsEarned: number; xpEarned: number; ridePartsEarned: number; energyEarned: number;
 }): RewardChipModel[] {
   return ([
-    { icon: 'coins', amount: coinsEarned, label: 'Shark Coins' },
+    { icon: 'coins', amount: coinsEarned, label: 'Coins' },
     { icon: 'xp', amount: xpEarned, label: 'XP' },
     { icon: 'parts', amount: ridePartsEarned, label: ridePartsEarned === 1 ? 'Ride Part' : 'Ride Parts' },
     { icon: 'energy', amount: energyEarned, label: 'Energy' },
@@ -51,12 +51,12 @@ export function milestoneHeadline(result: CollectionMilestones | null): Mileston
   return null;
 }
 
-/** "2 more coins for 50% of the shelf". Null when the shelf is complete or unknown. */
+/** "2 more ride coins for 50% of the shelf". Null when the shelf is complete or unknown. */
 export function nextUnlockLine(result: CollectionMilestones | null): string | null {
   if (!result?.progress || !result.next) return null;
   const { coins_needed: needed, percent } = result.next;
   const what = percent >= 100 ? 'to complete the shelf' : `for ${percent}% of the shelf`;
-  return `${needed} more ${needed === 1 ? 'coin' : 'coins'} ${what}.`;
+  return `${needed} more ${needed === 1 ? 'ride coin' : 'ride coins'} ${what}.`;
 }
 
 export interface PartsProgress {
@@ -85,7 +85,7 @@ export function partsProgress(coin: Pick<RideCoinLevelType, 'current_level' | 'm
   const missingParts = Math.max(0, need - have);
   const ready = !maxed && coin.is_unlocked && energyKnown && missingParts === 0 && missingEnergy === 0;
   const nextLevel = Math.min(coin.max_level, coin.current_level + 1);
-  const hint = maxed ? 'Max level. Feature it on your profile.'
+  const hint = maxed ? 'Top level! Show it off on your profile.'
     : missingParts > 0 && missingEnergy > 0 ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} and ${missingEnergy} Energy for Level ${nextLevel}.`
     : missingParts > 0 ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} for Level ${nextLevel}.`
     : missingEnergy > 0 ? `${missingEnergy} more Energy for Level ${nextLevel}. Find it on your home map.`

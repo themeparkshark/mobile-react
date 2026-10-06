@@ -2397,7 +2397,7 @@ export default function MemoryGame({
                 <Pressable onPress={tryAgain} style={styles.tryBtn} accessibilityRole="button">
                   <Text style={styles.tryBtnText}>TRY AGAIN</Text>
                 </Pressable>
-                <Text style={styles.tryLeft}>{`${tryScreen.left} ${tryScreen.left === 1 ? 'try' : 'tries'} left on this Ticket`}</Text>
+                <Text style={styles.tryLeft}>{`${tryScreen.left} ${tryScreen.left === 1 ? 'try' : 'tries'} left on this ticket`}</Text>
                 <Pressable onPress={giveUp} hitSlop={10} accessibilityRole="button">
                   <Text style={styles.tryQuit}>End challenge</Text>
                 </Pressable>

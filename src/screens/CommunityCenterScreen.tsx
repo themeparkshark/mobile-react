@@ -556,7 +556,7 @@ export default function CommunityCenterScreen() {
         slotAnims[slotIndex].setValue(0);
       } else {
         // Generic error
-        setErrorMessage(errorData?.error || 'Something went wrong. Try again!');
+        setErrorMessage(errorData?.error || 'That didn’t work. Check your internet and try again.');
         setShowErrorModal(true);
       }
       console.error('Claim failed:', errorData || error);
@@ -687,7 +687,7 @@ export default function CommunityCenterScreen() {
         setShowNotEnoughCoinsModal(true);
       } else {
         // Generic error
-        setErrorMessage(errorData?.error || 'Something went wrong. Try again!');
+        setErrorMessage(errorData?.error || 'That didn’t work. Check your internet and try again.');
         setShowErrorModal(true);
       }
       console.error('Give failed:', errorData || error);
@@ -1081,7 +1081,7 @@ export default function CommunityCenterScreen() {
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Leave a Gift, Get Tickets!</Text>
             <Text style={styles.confirmModalMessage}>
-              Spend coins to leave a gift for another shark, and get Tickets right away as a thank you!
+              Spend coins to leave a gift for another shark. You get tickets right away as a thank you!
             </Text>
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
@@ -1170,12 +1170,12 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.notEnoughModalContainer}>
           <View style={styles.notEnoughModalIcon}>
-            <GameIcon name="coin" size={56} />
+            <GameIcon name="coins" size={56} />
           </View>
           <View style={styles.notEnoughModalContent}>
             <Text style={styles.notEnoughModalTitle}>Not Enough Coins!</Text>
             <Text style={styles.notEnoughModalMessage}>
-              You need 350 coins to leave a gift for the community.
+              You need 350 coins to leave a gift for another player.
             </Text>
             <View style={styles.coinCompareContainer}>
               <View style={styles.coinCompareItem}>
@@ -1203,7 +1203,7 @@ export default function CommunityCenterScreen() {
               </View>
             </View>
             <Text style={styles.notEnoughHint}>
-              Collect more coins by completing tasks around the park!
+              Win ride challenges around the park to get more coins!
             </Text>
             <TouchableOpacity
               style={styles.notEnoughButton}

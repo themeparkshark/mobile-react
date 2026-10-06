@@ -60,7 +60,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
     try {
       await replayAllTutorials();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      gameAlert('Tutorials ready', 'Finn will show every tip again as you play: at home, at the park and in line.',
+      gameAlert('Tutorials ready', 'Finn will show every tip again as you play.',
         undefined, { icon: 'retry' });
     } finally {
       setReplaying(false);
@@ -117,7 +117,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
         })}
       </View>
 
-      <Text style={styles.section}>Need a refresher?</Text>
+      <Text style={styles.section}>Want the tips again?</Text>
       <View style={[styles.card, { alignItems: 'stretch' }]}>
         <Text style={styles.cardLine}>Replay every tutorial and tip. Finn shows each one again the next time it comes up.</Text>
         <GameButton label="Replay tutorials" icon="retry" loading={replaying} onPress={() => { void replay(); }}

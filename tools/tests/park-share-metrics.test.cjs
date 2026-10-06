@@ -13,12 +13,12 @@ const { parkDayShareMetrics, parkDayCaptureSize } = moduleUnderTest.exports;
 const day = { new_coins: 1, coin_upgrades: 1, eligible_line_minutes: 0, ride_parts_earned: 0, ride_wins: 1, park_project_points: 0 };
 test('a first-coin park story emphasizes earned activity without empty queue stats', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(parkDayShareMetrics(day))), [
-    { value: 1, label: 'new coin' }, { value: 1, label: 'upgrade' }, { value: 1, label: 'ride win' },
+    { value: 1, label: 'new ride coin' }, { value: 1, label: 'upgrade' }, { value: 1, label: 'ride win' },
   ]);
 });
 test('queue parts stay distinct from ride-win parts and only positive confirmed metrics appear', () => {
   const stats = parkDayShareMetrics({ ...day, new_coins: 0, coin_upgrades: 0, eligible_line_minutes: 12, ride_parts_earned: 2 });
-  assert.equal(stats[0].label, 'verified min'); assert.equal(stats[1].label, 'Queue Parts');
+  assert.equal(stats[0].label, 'min in line'); assert.equal(stats[1].label, 'Ride Parts');
   assert.ok(stats.every(stat => stat.value > 0)); assert.equal(stats.length, 3);
 });
 test('iOS native capture options produce exactly 1080 by 1920 pixels at each display density', () => {

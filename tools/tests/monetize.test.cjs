@@ -53,7 +53,7 @@ test('on a 1.6.0 binary the shop never loads StoreKit and asks for an update', a
 
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.match(shop, /!canBuy \?/);
-  assert.match(shop, /Update to shop/);
+  assert.match(shop, /title="Update the game" body="Update Theme Park Shark to buy Supplies."/);
 });
 
 test('a purchase carries the buyer token, is granted by the server, then finished once', async () => {
@@ -226,7 +226,7 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
   for (const file of ['src/services/ads.ts', 'src/screens/LinePlay/components/LineSnackOffer.tsx', 'src/components/PostWinRewardsModal.tsx']) {
     assert.doesNotMatch(read(file), /—/, file);
   }
-  const { grantsText, countdownText } = loadTs('src/screens/StoreScreen/SuppliesShop.tsx', {
+  const { grantsText } = loadTs('src/screens/StoreScreen/SuppliesShop.tsx', {
     'expo-haptics': {}, react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: s => s } },
     'react-native-reanimated': { default: {}, FadeInUp: {} }, '../../context/AuthProvider': {}, '../../api/endpoints/me/shop': {},
     '../../api/endpoints/me/ad-rewards': {}, '../../services/purchases': {}, '../../services/ads': {}, '../../ui': { BRAND: {} }, '../../components/help/OneTimeTip': {}, '../../components/help/HelpProvider': {},
@@ -234,7 +234,6 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
     '../../services/external': { openExternal: async () => true },
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
-    '15 Park Tickets, 1,500 Shark Coins, 150 Energy and 2 Rescue Passes');
+    '15 tickets, 1,500 coins, 150 energy and 2 Rescue Passes');
   assert.equal(grantsText({ rescue_passes: 1 }), '1 Rescue Pass');
-  assert.equal(countdownText('2026-10-02T07:00:00Z', Date.parse('2026-10-01T20:30:00Z')), '10h 30m');
 });

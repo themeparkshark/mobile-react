@@ -66,8 +66,8 @@ test('SHIP-1 an earned cosmetic is the hero (large art, its name) ahead of a spo
 test('SHIP-2 duplicate gear: owned rows read "Already yours", never "Added to your wardrobe"; the coins still show', () => {
   const owned = item('cosmetic', { key: 'all_haunts', owned: true });
   assert.equal(rewards.wardrobeLine(owned), 'Already yours');
-  assert.equal(rewards.wardrobeLine(item('cosmetic')), 'Added to your wardrobe');
-  assert.equal(rewards.wardrobeLine({ ...owned, owned: null }), 'Added to your wardrobe', 'old servers: no field, no change');
+  assert.equal(rewards.wardrobeLine(item('cosmetic')), 'Added to your closet');
+  assert.equal(rewards.wardrobeLine({ ...owned, owned: null }), 'Added to your closet', 'old servers: no field, no change');
   assert.equal(rewards.lanternLine(item('pin', { owned: true })), null, 'a duplicate pin is already on the Lantern');
   const reveal = rewards.rewardReveal([owned, { kind: 'coins', name: 'Coins', image: null, amount: 25, owned: true }]);
   assert.equal(plain(reveal.chips).join('|'), '+25 Coins');

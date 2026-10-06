@@ -48,7 +48,7 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
           <View style={styles.progressBox}>
             <View style={styles.stageRow}>
               <Text style={styles.progress}>STAGE {project.stage}/3</Text>
-              <Text style={styles.progress}>{project.total_points}/{project.goal_points} SIGNAL POINTS</Text>
+              <Text style={styles.progress}>{project.total_points}/{project.goal_points} POINTS</Text>
             </View>
             <View style={styles.stageTrack}>
               {[1, 2, 3].map(stage => <View key={stage}
@@ -64,24 +64,24 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
             <View style={styles.clueBox}>
               <GameIcon name="heart" size={22} />
               <Text style={styles.clue}>
-                FRIEND CREW: {project.crew.points}/{project.crew.target} verified points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
-                {project.crew.clue ? `\nCREW CLUE: ${project.crew.clue}` : '\nThe clue opens when your crew reaches the target. Solo progress counts too.'}
+                FRIEND CREW: {project.crew.points}/{project.crew.target} points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
+                {project.crew.clue ? `\nCREW CLUE: ${project.crew.clue}` : '\nYour crew clue opens when your crew hits the goal. Playing alone counts too.'}
               </Text>
             </View>
           )}
 
           <View style={styles.mission}>
             <Text style={styles.missionKicker}>WHAT THE CREW CAN PLAY NOW</Text>
-            <Text style={styles.missionTitle}>{mission?.title ?? 'Mission unavailable'}</Text>
+            <Text style={styles.missionTitle}>{mission?.title ?? 'No game right now'}</Text>
             <Text style={styles.story}>
-              {mission?.prompt ?? 'This chapter is being updated. The queue timer and other games still work.'}
+              {mission?.prompt ?? 'This part of the story is changing. The wait timer and other games still work.'}
             </Text>
             {project.stage >= 2 && (
               <Text style={styles.context}>
                 {project.leading_chapter
-                  ? `The current vote is leading toward ${current === 'b' ? project.chapter_b_title : project.chapter_a_title}.`
-                  : `Votes are tied; ${project.chapter_a_title} is the current route.`}
-                {' '}A later vote can change this round for everyone in line.
+                  ? `Most votes so far are for ${current === 'b' ? project.chapter_b_title : project.chapter_a_title}.`
+                  : `Votes are tied, so ${project.chapter_a_title} wins for now.`}
+                {' '}New votes can still change it for everyone in line.
               </Text>
             )}
             {mission && (
@@ -90,7 +90,7 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
                 <Text style={styles.playText}>{completedIds.has(mission.game.id) ? 'Play again' : `Play ${mission.gameName}`}</Text>
               </Pressable>
             )}
-            <Text style={styles.context}>This round is for fun; verified nearby LinePlay time earns Parts and project points.</Text>
+            <Text style={styles.context}>This game is just for fun. Your time near the ride earns Parts and points.</Text>
           </View>
 
           {project.stage >= 2 && (
@@ -107,8 +107,8 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
                 </Pressable>
               ))}
               {project.my_chapter && <Text style={styles.context}>Your choice is locked in.</Text>}
-              {!project.participated && <Text style={styles.context}>Earn a ride coin or LinePlay Part here to vote.</Text>}
-              <Text style={styles.context}>A tie follows {project.chapter_a_title}.</Text>
+              {!project.participated && <Text style={styles.context}>Win a ride coin or Ride Part here to vote.</Text>}
+              <Text style={styles.context}>If votes tie, {project.chapter_a_title} wins.</Text>
             </View>
           )}
           {paused && <Text style={styles.context}>Paused. Resume to play or vote.</Text>}

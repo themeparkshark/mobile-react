@@ -85,7 +85,7 @@ export default function GiftPrepVariantPanel({ item, imageSource, onBack, onClos
       </Text>
       <Text style={{ color: '#53718B', fontSize: 12, lineHeight: 17,
         textAlign: 'center', marginTop: 10 }}>
-        Your first copy stays with you. This gift adds no map-discovery credit or currency.
+        You keep your own copy. Gifts don’t give coins or map credit.
       </Text>
       <TouchableOpacity accessibilityRole="button" onPress={onClose}
         style={{ marginTop: 22, borderRadius: 14, backgroundColor: '#FFCA36',

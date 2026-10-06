@@ -180,7 +180,7 @@ export default function Stats({ player, hideBalances = false }: {
       iconIndex: 0,
     },
     {
-      label: 'Park Coins',
+      label: 'Ride Coins',
       value: visibleCount(player.park_coins_count),
       iconIndex: 1,
     },
@@ -190,7 +190,7 @@ export default function Stats({ player, hideBalances = false }: {
       iconIndex: 2,
     },
     {
-      label: 'Shark Coins',
+      label: 'Coins',
       value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
     },

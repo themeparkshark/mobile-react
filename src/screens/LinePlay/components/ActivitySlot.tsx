@@ -189,10 +189,10 @@ function MiniGameSlot({
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
-            ? 'Route verified · bonus Part can settle with an eligible wait.'
+            ? 'Quest done! Your bonus Part counts once you have 10 minutes in line.'
             : currentQuestBonusStatus === 'pending'
-              ? 'Route played · verification pending. No bonus counted yet.'
-              : 'Complete once for a possible bonus Part after 10 eligible minutes.'}
+              ? 'Quest played. We are still checking it. No bonus yet.'
+              : 'Finish this once. You can get a bonus Part after 10 minutes in line.'}
         </Text>
       )}
     </View>
@@ -272,7 +272,7 @@ function TriviaSlot({
           transform: [{ translateY: answerReveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
         }]}>{picked === q.correctIndex
           ? 'Correct! Your crew found the answer.'
-          : `The answer is ${q.choices[q.correctIndex]}. Your next clue awaits.`}</Animated.Text>}
+          : `The answer is ${q.choices[q.correctIndex]}. Pick your next clue.`}</Animated.Text>}
       <View style={styles.choices}>
         {q.choices.map((choice, i) => {
           const isPicked = picked === i;
@@ -310,7 +310,7 @@ function TriviaSlot({
           {factSourceLine(q.source) && <Text style={styles.factSource}>{factSourceLine(q.source)}</Text>}
         </View>
       )}
-      {completed && picked == null ? <Text style={styles.note}>Answered earlier in this session</Text> : null}
+      {completed && picked == null ? <Text style={styles.note}>You already answered this one</Text> : null}
     </ScrollView>
   );
 }
@@ -427,7 +427,7 @@ function PredictionSlot({
 
   return (
     <View style={styles.card}>
-      <ActivityHero kicker="MAKE YOUR CALL" title="Wait Prediction" />
+      <ActivityHero kicker="MAKE YOUR GUESS" title="Wait Guess" />
       <Text style={styles.question}>{card.prompt}</Text>
       <View style={styles.predictRow}>
         <Pressable
@@ -460,7 +460,7 @@ function PredictionSlot({
         </Pressable>
       </View>
       {lockedGuess ? (
-        <Text style={styles.predictHint}>Locked in. Resolves when your session ends.</Text>
+        <Text style={styles.predictHint}>Locked in. You find out when your wait ends.</Text>
       ) : null}
     </View>
   );

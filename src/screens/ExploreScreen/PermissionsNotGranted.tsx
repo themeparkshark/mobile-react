@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as RootNavigation from '../../RootNavigation';
 import Animated, {
   Easing, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming,
 } from 'react-native-reanimated';
@@ -52,7 +53,7 @@ export default function PermissionsNotGranted() {
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} />)}
         </View>
         <Text style={styles.body}>
-          Finds pop up around you, even at home. At the park, walk up to a ride to catch its coin.
+          Treasures pop up around you, even at home. At the park, walk up to a ride to win its ride coin.
         </Text>
         <Text style={styles.small}>Your location is only used to place items and rides near you.</Text>
         <View style={{ width: '82%', marginTop: 16 }}>
@@ -62,6 +63,11 @@ export default function PermissionsNotGranted() {
             try { await requestPermission(); } finally { setAsking(false); }
           }} />
         </View>
+        {/* The way out: the map needs location, but News, Standings, Social and Profile never do. */}
+        <Pressable onPress={() => RootNavigation.navigate('News')} hitSlop={8} accessibilityRole="button"
+          accessibilityHint="Opens News. You can turn on location later." style={styles.notNow}>
+          <Text style={styles.notNowText}>Not now</Text>
+        </Pressable>
       </Animated.View>
     </View>
   );
@@ -81,5 +87,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
   findImg: { width: 46, height: 46 },
   body: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 12, lineHeight: 23 },
+  notNow: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, marginTop: 4 },
+  notNowText: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff' },
   small: { fontFamily: 'Knockout', fontSize: 14, color: '#cdeaff', textAlign: 'center', marginTop: 8 },
 });

@@ -661,7 +661,7 @@ export default function MiniGameShell({
               colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
               style={styles.objectiveBox}
             >
-              <Text style={styles.objectiveLabel}>🎯 OBJECTIVE</Text>
+              <Text style={styles.objectiveLabel}>🎯 YOUR GOAL</Text>
               <Text style={styles.objectiveText}>{objective}</Text>
             </LinearGradient>
 

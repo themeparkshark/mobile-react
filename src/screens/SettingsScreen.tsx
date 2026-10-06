@@ -174,22 +174,33 @@ export default function SettingsScreen() {
       let permission = await Location.getBackgroundPermissionsAsync();
       if (permission.granted) {
         await syncBackgroundRideDetection();
-        gameAlert('Background Park Play',
-          'Background ride detection is on. You can change location access in iPhone Settings.', undefined, { icon: 'pin' });
+        gameAlert('Ride Finder is on',
+          'Your phone can find rides even when it is locked. You can turn this off in iPhone Settings.', undefined, { icon: 'pin' });
         return;
       }
       if (!permission.granted && !permission.canAskAgain) {
-        gameAlert('Background Park Play',
-          'Enable Always location in iPhone Settings to detect rides and keep LinePlay progress while your phone is locked.',
+        gameAlert('Turn on Ride Finder',
+          'Ride Finder needs location set to Always. Tap Open Settings, then Location, then Always.',
           [{ text: 'Not now', style: 'cancel' },
             { text: 'Open Settings', onPress: () => { openAppSettings(); } }], { icon: 'pin' });
         return;
       }
-      if (!permission.granted) permission = await Location.requestBackgroundPermissionsAsync();
+      if (!permission.granted) {
+        // Say why in kid words before iPhone asks, and give a clear way out.
+        const ok = await confirmGame({
+          title: 'Find rides with your phone locked?',
+          message: 'At the park, your phone can tell which ride you are near, even in your pocket. LinePlay keeps counting too. Say no and you can still play with the app open.',
+          confirmLabel: 'Turn it on',
+          cancelLabel: 'Not now',
+          icon: 'pin',
+        });
+        if (!ok) return;
+        permission = await Location.requestBackgroundPermissionsAsync();
+      }
       setBackgroundLocationEnabled(permission.granted);
       if (permission.granted) await syncBackgroundRideDetection();
     } catch {
-      gameAlert('Location unavailable', 'Background park play could not be enabled. You can still play with the app open.');
+      gameAlert('Ride Finder is off', 'Ride Finder didn’t turn on. You can still play with the app open.');
     } finally {
       setBackgroundLocationBusy(false);
     }
@@ -209,7 +220,7 @@ export default function SettingsScreen() {
     try {
       if (await openExternal(url, 'system')) return;
     } catch { /* fall through to the address */ }
-    gameAlert(kind === 'bug' ? 'Report a bug' : 'Need help?', `Email us at ${SUPPORT_EMAIL} and we will get back to you.`,
+    gameAlert(kind === 'bug' ? 'Report a bug' : 'Need help?', `Email us at ${SUPPORT_EMAIL}. We will write back.`,
       undefined, { icon: 'info' });
   };
 
@@ -260,7 +271,7 @@ export default function SettingsScreen() {
         destructive: true,
       });
       if (!confirmed) return;
-      setAccountBusy('Deactivating your account');
+      setAccountBusy('Pausing your account');
       try {
         await deletePlayer();
       } catch {
@@ -361,10 +372,10 @@ export default function SettingsScreen() {
         <Section title="Park Play" index={2}>
           <SettingsRow
             art="pin"
-            title="Background Ride Detection"
-            detail={backgroundLocationBusy ? 'Checking permission'
-              : backgroundLocationEnabled ? 'On: rides and LinePlay while locked'
-                : 'Off: tap to turn on for park visits'}
+            title="Ride Finder"
+            detail={backgroundLocationBusy ? 'Checking...'
+              : backgroundLocationEnabled ? 'On: finds rides while your phone is locked'
+                : 'Off: tap to turn on for park days'}
             isLast
             onPress={enableBackgroundLocation}
           />
@@ -399,7 +410,7 @@ export default function SettingsScreen() {
           <SettingsRow
             art="retry"
             title="Replay Tutorials"
-            detail="See every tip again: home, park and LinePlay"
+            detail="See every tip again"
             onPress={() => {
               void replayAllTutorials().then(() => {
                 gameAlert('Tutorials ready', 'Finn will show every tip again as you play.', undefined, { icon: 'retry' });
@@ -414,12 +425,12 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Account" index={5}>
-          <SettingsRow art="search" title={RECOVERY_COPY.entryDetail} detail="Played the original game? Bring it back"
+          <SettingsRow art="search" title={RECOVERY_COPY.entryDetail} detail="Played the old Theme Park Shark app? Get that account back"
             onPress={() => setFindingOriginal(true)} />
           <SettingsRow art="back" title="Sign Out" onPress={() => { void signOut(); }} />
-          <SettingsRow art="pause" title="Deactivate My Account" detail="Take a break, sign in again any time" destructive
+          <SettingsRow art="pause" title="Pause My Account" detail="Take a break. Sign in again any time" destructive
             onPress={() => { void deactivateAccount(); }} />
-          <SettingsRow art="trash" title="Permanently Delete My Account" detail="Deletes your account and progress now" destructive
+          <SettingsRow art="trash" title="Delete My Account Forever" detail="Deletes your account and progress now" destructive
             isLast onPress={() => { void deleteAccount(); }} />
         </Section>
 

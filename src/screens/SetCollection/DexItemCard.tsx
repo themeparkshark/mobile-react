@@ -62,7 +62,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
     void (async () => {
       try {
         if (!await Sharing.isAvailableAsync()) {
-          gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+          gameAlert('Can’t share right now', 'This phone can’t share right now. Try again later.');
           return;
         }
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -70,7 +70,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
         const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
         await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your Ride Photo' });
       } catch {
-        gameAlert('Card not made', 'Your Ride Photo is saved. Try sharing again.', undefined, { icon: 'retry' });
+        gameAlert('Your card didn’t get made', 'Your Ride Photo is still saved. Tap Share to try again.', undefined, { icon: 'retry' });
       } finally {
         if (live) { setSharing(false); setShareMount(false); setShareReady(false); }
       }
@@ -85,7 +85,7 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error }: {
   return (
     <Modal visible={item != null} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.overlay}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={onClose} style={StyleSheet.absoluteFill} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} />
         {item && look && (
           <Animated.View style={[styles.cardWrap, cardStyle]} accessibilityViewIsModal>
             <View style={styles.ribbon}>

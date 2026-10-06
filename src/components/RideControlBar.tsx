@@ -101,9 +101,9 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
           <Text style={styles.sheetSub}>
             {yours
               ? control?.your_team_is_underdog
-                ? `${teamName(yours, names)} is the underdog today: your points count 1.5x!`
+                ? `${teamName(yours, names)} has the fewest rides today, so your points count extra!`
                 : `Catch coins and earn Parts in line to win rides for ${teamName(yours, names)}.`
-              : 'Pick a team to start claiming rides.'}
+              : 'Pick a team to start winning rides.'}
           </Text>
           <View style={styles.standings}>
             {TEAM_ORDER.map(team => (

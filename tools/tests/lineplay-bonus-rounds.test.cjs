@@ -61,7 +61,7 @@ test('the pip row draws only real slots and says when this ride is done for the 
 test('picker badges promise exactly what a win pays now, with no fractions', () => {
   assert.equal(bonus.pickerBadge(summary(), 252).text, 'BONUS');
   const waiting = summary({ slots: [{ index: 1, opens_at_eligible_seconds: 300, state: 'locked', source: null }] });
-  assert.equal(bonus.pickerBadge(waiting, 252).text, 'Win now, pays at 4:12');
+  assert.equal(bonus.pickerBadge(waiting, 252).text, 'Win now. Part in 4:12');
   const saved = { ...waiting, saved: { source: 'current_quest', saved_at: null } };
   assert.equal(bonus.pickerBadge(saved, 252).text, 'Win saved. Next bonus in 4:12');
   assert.equal(bonus.pickerBadge(saved, 252).reward, '+10 XP');
@@ -119,7 +119,7 @@ test('the recap rows tick Wait, Bonus, Mastery and Encore, and the park-day line
   assert.equal(bonus.parkDayLine({ parts: 0, bonusParkDayUsed: 5, bonusParkDayCap: 12 }), 'Bonus today: 5 of 12');
   assert.deepEqual(plain(bonus.recapRows({ parts: 2, liveParts: 2, bonusRoundParts: 0 }).map(row => row.key)), ['wait', 'bonus']);
   assert.equal(bonus.ringInfoCopy(600, 12, true),
-    'Verified time near the ride earns one Ride Part every 10 minutes, up to 12 per line. Win bonus games for up to 3 more.');
+    'You get 1 Ride Part every 10 minutes near the ride, up to 12 per wait. Win bonus games for up to 3 more.');
 });
 
 test('Current Quest tiers mirror the server replay exactly', () => {
@@ -145,7 +145,7 @@ test('games never pause for walking: GameShellV2 is passive unless a preview opt
 test('client-scored wins never fly a Part: only server bonus events feed the flight', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /event=\{fxHead && fxHead\.kind !== 'perk' \? fxHead : null\}/);
-  assert.match(screen, /activeGame\.gameId !== 'current' \? \{\s*text: 'Bonus Parts come from Current Quest and Codebreaker'/);
+  assert.match(screen, /activeGame\.gameId !== 'current' \? \{\s*text: 'Play Current Quest or Codebreaker for bonus Parts'/);
   const session = read('src/services/lineplay/LinePlaySession.ts');
   // Only applyBonus (server responses) pushes celebrations.
   assert.equal((session.match(/this\.bonusFx\.push/g) ?? []).length, 3);

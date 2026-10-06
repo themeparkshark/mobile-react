@@ -342,7 +342,7 @@ export default function RideLogScreen() {
               <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
                 style={s.unavailableShark} contentFit="contain" />
               <Text style={s.unavailableTitle}>Ride list is taking a break</Text>
-              <Text style={s.unavailableBody}>Your journal is safe. Reconnect and try loading this park again.</Text>
+              <Text style={s.unavailableBody}>Your journal is safe. Check your internet and try again.</Text>
               <Pressable onPress={() => selectedPark && loadParkRides(selectedPark)}
                 accessibilityRole="button" style={s.retryButton}>
                 <Text style={s.retryText}>Try Again</Text>
@@ -377,7 +377,7 @@ export default function RideLogScreen() {
           <View>
             <Text style={s.stepEyebrow}>RIDE JOURNAL · 3 OF 3</Text>
             <Text style={s.stepTitle}>{stepTitle}</Text>
-            <Text style={s.detailsHint}>A personal memory for your collection.</Text>
+            <Text style={s.detailsHint}>A memory to keep with your rides.</Text>
           </View>
           <View style={s.selectedRideCard}>
             <RideTypeIcon type={selectedRide.type} size={24} />
@@ -395,7 +395,7 @@ export default function RideLogScreen() {
           <Text style={s.sectionLabel}>Wait time (minutes)</Text>
           <TextInput
             style={s.input}
-            placeholder="e.g. 45"
+            placeholder="Like 45"
             placeholderTextColor="#94a3b8"
             keyboardType="number-pad"
             value={waitTime}

@@ -6,7 +6,7 @@ export default function currencyBalance(player: PlayerType, name: string): numbe
     case 'keys': return player.keys ?? 0;
     case 'tickets': return player.tickets ?? 0;
     case 'energy': return player.energy ?? 0;
-    case 'park coins': return player.park_coins_count;
+    case 'park coins': return player.park_coins_count; // clarity-allow: the server's old currency name
     default: {
       const key = name.toLowerCase().replace(/\s+/g, '_');
       const value = (player as unknown as Record<string, unknown>)[key];

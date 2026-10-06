@@ -75,7 +75,7 @@ const SLIDES: SlideData[] = [
     ],
     title: 'Share & Compete',
     subtitle:
-      'Share beautiful ride cards, compare stats with friends, and earn achievement badges as you level up.',
+      'Share cool ride cards and compare stats with friends. Earn badges as you level up.',
     gradient: ['#0768b9', '#0a5ea8'],
     accentIcon: 'medal2',
   },

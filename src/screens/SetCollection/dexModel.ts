@@ -462,7 +462,7 @@ export function tabStatus(set: DexSet, now: Date = new Date()): { readonly text:
       ? `Opens ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Soon';
     return { text, live: false };
   }
-  if (set.spawningNow === false || set.status === 'resting') return { text: set.spawnHint ?? 'Resting', live: false };
+  if (set.spawningNow === false || set.status === 'resting') return { text: set.spawnHint ?? 'Not on the map now', live: false };
   if (set.spawnHint) return { text: set.spawnHint, live: true };
   return null;
 }

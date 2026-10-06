@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { GameIconName } from '../ui/iconNames';
+import RealMoneyMark from './RealMoneyMark';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
@@ -39,7 +41,7 @@ let pass: { flow: GateFlow; until: number } | null = null;
 let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
-type GateRequest = { resolve: (ok: boolean) => void; seed: number };
+type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null };
 let showGate: ((r: GateRequest | null) => void) | null = null;
 let open: Promise<boolean> | null = null;
 
@@ -48,11 +50,36 @@ async function loadRest() {
   try { gateRestUntil = Math.max(gateRestUntil, Number(await AsyncStorage.getItem(REST_KEY)) || 0); } catch { /* storage is best effort */ }
 }
 
+/**
+ * What the grown-up is saying yes to, in plain words, shown above the sum so
+ * nobody answers blind: "This costs real money. $4.99 for 10 tickets."
+ * - money: a real-money buy (Supplies, VIP). `price` and `gets` are shown as is.
+ * - vip: opening the VIP page (nothing is bought yet).
+ * - leave: a link that leaves the game (`where`: "a website", "the App Store", "email").
+ * - share: the share sheet.
+ */
+export type GateReason =
+  | { readonly kind: 'money'; readonly price: string; readonly gets: string }
+  | { readonly kind: 'vip'; readonly prices?: string }
+  | { readonly kind: 'leave'; readonly where: string }
+  | { readonly kind: 'share' };
+
+/** The two lines the gate shows for a reason. Exported for tests. */
+export function gateReasonLines(reason: GateReason | null | undefined): { head: string; line: string | null; icon: GameIconName | 'money' } | null {
+  if (!reason) return null;
+  switch (reason.kind) {
+    case 'money': return { head: 'This costs real money.', line: `${reason.price} for ${reason.gets}`, icon: 'money' };
+    case 'vip': return { head: 'VIP costs real money.', line: reason.prices ?? 'The prices are on the next screen.', icon: 'money' };
+    case 'leave': return { head: 'This leaves the game.', line: `It opens ${reason.where}.`, icon: 'arrow' };
+    case 'share': return { head: 'This shares outside the game.', line: 'It sends this to another app.', icon: 'arrow' };
+  }
+}
+
 /** Opens the gate and resolves true only on the right answer. A second ask while it is open shares the first. */
-export function askGrownUp(seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
+export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
   if (!showGate) return Promise.resolve(false);
   open ??= loadRest()
-    .then(() => new Promise<boolean>(resolve => showGate ? showGate({ resolve, seed: now < gateRestUntil ? -1 : seed }) : resolve(false)))
+    .then(() => new Promise<boolean>(resolve => showGate ? showGate({ resolve, seed: now < gateRestUntil ? -1 : seed, reason }) : resolve(false)))
     .finally(() => { open = null; });
   return open;
 }
@@ -72,11 +99,11 @@ export function judgeGate(typed: string, seed: number, now = Date.now()): boolea
  * The next step of a flow a grown-up just opened (the paywall's Buy): uses the
  * pass once if it is this flow's and still fresh, otherwise asks again.
  */
-export async function grownUpForNextStep(flow: GateFlow, now = Date.now()): Promise<boolean> {
+export async function grownUpForNextStep(flow: GateFlow, now = Date.now(), reason: GateReason | null = null): Promise<boolean> {
   const held = pass;
   pass = null; // single use, whatever happens next
   if (held && held.flow === flow && now < held.until) return true;
-  return askGrownUp();
+  return askGrownUp(reason);
 }
 
 /** The paywall lost focus: its pass is gone (a kid coming back later meets the gate again). */
@@ -102,10 +129,53 @@ export function resetGrownUpGateForTests(): void {
  * never on which button was tapped: a VIP member is only opening their perks;
  * everyone else meets the grown-up gate. `devPreview` is the dev-only QA jump.
  */
-export async function openMembership(options: { devPreview?: boolean } = {}): Promise<boolean> {
+const VIP_DOOR: GateReason = { kind: 'vip' };
+
+/**
+ * The VIP door says the real App Store prices when they come back within a
+ * moment ("One week free. Then $39.99 a year or $4.99 a month."), so a grown-up
+ * never says yes to real money without a number. Otherwise the plain door line.
+ */
+/**
+ * Each plan with its own free trial, so a free week never sounds like it covers
+ * every plan: "$39.99 a year, with one week free first. Or $4.99 a month."
+ */
+export function vipPriceLine(plans: readonly { price: string; trial: string | null }[]): string {
+  const parts = plans.map(plan => (plan.trial ? `${plan.price}, with ${plan.trial.toLowerCase()} first` : plan.price));
+  return parts.map((part, i) => (i === 0 ? part : `Or ${part}`)).join('. ') + '.';
+}
+
+async function vipDoorReason(): Promise<GateReason> {
+  if (!showGate) return VIP_DOOR;
+  try {
+    // Loaded here, not at the top: the gate stays light for every other door and for tests.
+    const store = require('../services/purchases') as typeof import('../services/purchases');
+    if (!store.storeAvailable()) return VIP_DOOR;
+    // Warm plans answer at once; a cold load gets a moment, and its timer is always cleared.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const plans = store.cachedVipPlans() ?? await Promise.race([
+      store.warmVipPlans(),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 1200); }),
+    ]).finally(() => clearTimeout(timer));
+    if (!plans?.length) return VIP_DOOR;
+    return { kind: 'vip', prices: vipPriceLine(plans.map(plan => ({ price: store.priceText(plan), trial: plan.trial }))) };
+  } catch {
+    return VIP_DOOR;
+  }
+}
+
+let doorInFlight: Promise<boolean> | null = null;
+
+/** Two quick taps share one door: one gate, one paywall. */
+export function openMembership(options: { devPreview?: boolean } = {}): Promise<boolean> {
+  doorInFlight ??= openMembershipOnce(options).finally(() => { doorInFlight = null; });
+  return doorInFlight;
+}
+
+async function openMembershipOnce(options: { devPreview?: boolean }): Promise<boolean> {
   const skip = vipMember || (options.devPreview === true && __DEV__);
   if (!skip) {
-    if (!(await askGrownUp())) return false;
+    if (!(await askGrownUp(await vipDoorReason()))) return false;
     // The pass covers this flow's next step only: the paywall's Buy.
     pass = { flow: 'vip', until: Date.now() + GATE_PASS_MS };
   }
@@ -136,6 +206,7 @@ export function GrownUpGateHost() {
   if (!req) return null;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
+  const why = resting ? null : gateReasonLines(req.reason);
   const close = (ok: boolean) => { req.resolve(ok); setReq(null); };
   const press = (k: typeof KEYS[number]) => {
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
@@ -146,12 +217,23 @@ export function GrownUpGateHost() {
     <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
       <View style={styles.scrim}>
         <View style={[styles.card, resting && styles.cardRest]} accessibilityViewIsModal>
-          <GameIcon name={resting ? 'moon' : 'member'} size={resting ? 56 : 40} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>{resting ? 'Resting' : 'Ask a grown-up'}</Text>
+          {/* The lock means "grown-ups only". The VIP badge means VIP and nothing else. */}
+          <GameIcon name={resting ? 'moon' : 'lock'} size={resting ? 56 : 40} />
+          <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title}>{resting ? 'Not quite' : 'Ask a grown-up'}</Text>
           {resting ? (
-            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>Let's try again in a little while.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body}>That wasn't right. A grown-up can try again in 30 seconds.</Text>
           ) : (
             <>
+              {why && (
+                // What the yes is for, before the sum: real money, or leaving the game.
+                <View style={styles.why} accessible accessibilityLabel={why.line ? `${why.head} ${why.line}` : why.head}>
+                  {why.icon === 'money' ? <RealMoneyMark size={28} /> : <GameIcon name={why.icon} size={26} />}
+                  <View style={{ flexShrink: 1 }}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.whyHead}>{why.head}</Text>
+                    {why.line && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.whyLine}>{why.line}</Text>}
+                  </View>
+                </View>
+              )}
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.body} accessibilityLabel={`Grown-ups: what is ${q!.a} times ${q!.b}?`}>
                 Grown-ups: what is {q!.a} × {q!.b}?
               </Text>
@@ -199,6 +281,10 @@ const styles = StyleSheet.create({
   cardRest: { maxWidth: 270, paddingVertical: 16, gap: 8 },
   title: { fontFamily: FONT.display, fontSize: 24, color: GATE_COLORS.ink },
   body: { fontFamily: FONT.body, fontSize: 18, color: GATE_COLORS.inkSoft, textAlign: 'center' },
+  why: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.gold },
+  whyHead: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.gold },
+  whyLine: { fontFamily: FONT.body, fontSize: 16, color: GATE_COLORS.ink },
   answer: { minWidth: 120, minHeight: 48, borderRadius: 14, backgroundColor: GATE_COLORS.well, borderWidth: 2, borderColor: GATE_COLORS.violet,
     alignItems: 'center', justifyContent: 'center' },
   answerText: { fontFamily: FONT.display, fontSize: 28, color: '#ffffff' },

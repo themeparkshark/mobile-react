@@ -144,7 +144,7 @@ export default function CrewRelayCard({ chapter, progress, paused, onChange }: P
           </Text>
           <Text style={styles.result}>{chapter.relay.scoreNoun}: {crewRelayScore(progress)}/2</Text>
           {progress.observation && <Text style={styles.body}>
-            Your {progress.observation} signal changed the Decoder&apos;s code and the next playable round.
+            Your {progress.observation} pick changed the Decoder&apos;s code and the next round.
           </Text>}
           <Text style={styles.body}>{chapter.relay.completionNote}</Text>
         </View>

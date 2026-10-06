@@ -83,7 +83,7 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
             )}
             <NightButton label={COPY.survived} icon="check" disabled={!engine.canSurvive}
               loading={engine.busyKey === open.key} onPress={() => { void engine.survived(); }}
-              accessibilityHint={engine.canSurvive ? undefined : 'Unlocks after the minimum time inside'} style={{ marginTop: 8 }} />
+              accessibilityHint={engine.canSurvive ? undefined : 'Opens after you spend enough time inside'} style={{ marginTop: 8 }} />
             {!engine.canSurvive && unlockText(quietMinutesLeft(open, night.now(), engine.openSpot.walk_minutes)) && (
               <Text style={styles.unlock}>{unlockText(quietMinutesLeft(open, night.now(), engine.openSpot.walk_minutes))}</Text>
             )}

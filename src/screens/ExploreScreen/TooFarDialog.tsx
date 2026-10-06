@@ -48,7 +48,7 @@ export default function TooFarDialog({ visible, distanceMeters, requiredMeters, 
       <View style={styles.card}>
         <Text style={styles.message}>
           {unknown ? 'Finding your location. Try again in a moment.'
-            : homeItem ? 'Stay on public paths. You can collect from nearby without entering private or restricted areas.'
+            : homeItem ? 'Stay on public paths. You can grab it from nearby. Never go into private or closed-off areas.'
               : 'Walk a little closer to open this spot.'}
         </Text>
         {!unknown && <View style={styles.meterBlock} accessible accessibilityLabel={`You are ${formatMeters(distanceMeters)} away. Get within ${requiredMeters} meters.`}>

@@ -20,10 +20,20 @@ const hook = loadTs('src/hooks/usePurchaseItem.tsx', {
 test('short players see the exact gap and one way to earn it', () => {
   const item = { cost: 350, currency: { name: 'Coins' } };
   assert.deepEqual({ ...hook.affordability({ coins: 310 }, item) }, { balance: 310, shortfall: 40 });
-  assert.equal(hook.currencyLabel('Coins', 40), 'Shark Coins');
-  assert.equal(hook.currencyLabel('Coins', 1), 'Shark Coin');
+  assert.equal(hook.currencyLabel('Coins', 40), 'coins');
+  assert.equal(hook.currencyLabel('Coins', 1), 'coin');
   assert.equal(hook.currencyLabel('Keys', 1), 'Key');
   assert.match(hook.earnAction('Coins').hint, /ride coin|daily chest/);
+});
+
+test('the confirm step restates the whole deal in plain words before anything is spent', () => {
+  const item = { cost: 50, currency: { name: 'Coins' } };
+  assert.equal(hook.confirmLine(item, 120), 'It costs 50 coins. You have 120. You’ll have 70 left.');
+  assert.equal(hook.confirmLine({ cost: 1, currency: { name: 'Coins' } }, 1), 'It costs 1 coin. You have 1. You’ll have 0 left.');
+  assert.equal(hook.currencyIcon('Coins'), 'coins', 'the Buy button shows the coin picture next to the price');
+  const code = read('src/hooks/usePurchaseItem.tsx');
+  assert.match(code, /text: modal\.item\.cost === 0 \? 'Take it' : `Buy for \$\{modal\.item\.cost\}`/, 'the button says the price');
+  assert.match(code, /\{ text: 'Not now', style: 'cancel',/, 'an obvious way out');
 });
 
 test('purchase UI uses the game dialog: no emoji, black scrims or silent failures', () => {

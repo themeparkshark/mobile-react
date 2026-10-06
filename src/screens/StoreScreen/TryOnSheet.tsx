@@ -432,7 +432,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 </View>
                 {confirming && (
                   <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
-                    accessibilityLabel={`You have ${formatCoins(balance)} Shark Coins. This costs ${formatCoins(item.cost)}. You will have ${formatCoins(balance - item.cost)} left.`}>
+                    accessibilityLabel={`It costs ${formatCoins(item.cost)} coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
                     <CoinAmount n={balance} />
                     <Text style={styles.op}>−</Text>
                     <CoinAmount n={item.cost} />

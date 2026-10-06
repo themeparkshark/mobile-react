@@ -136,6 +136,7 @@ export const PLAYER_HOST = 'https://www.youtube-nocookie.com';
 export function playerHtml(videoId: string): string {
   if (!VIDEO_ID.test(videoId)) throw new Error('bad video id');
   const vars = JSON.stringify(PLAYER_VARS);
+  // clarity-allow: player HTML, not copy
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{position:absolute;inset:0;width:100%;height:100%}</style>
 </head><body><div id="p"></div><script>

@@ -25,9 +25,9 @@ const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
 
 type PrizeKind = 'coins' | 'energy' | 'tickets';
 const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; one: string; many: string; fly: string }> = {
-  coins: { icon: 'coins', one: 'Shark Coin', many: 'Shark Coins', fly: 'coins' },
-  energy: { icon: 'energy', one: 'Energy', many: 'Energy', fly: 'energy' },
-  tickets: { icon: 'ticket', one: 'Park Ticket', many: 'Park Tickets', fly: 'tickets' },
+  coins: { icon: 'coins', one: 'coin', many: 'coins', fly: 'coins' },
+  energy: { icon: 'energy', one: 'energy', many: 'energy', fly: 'energy' },
+  tickets: { icon: 'ticket', one: 'ticket', many: 'tickets', fly: 'tickets' },
 };
 
 // Older servers send no ladder; show today's coins as day 1.
@@ -280,10 +280,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         setDailyGift(current);
         void refreshPlayer?.();
         setVisible(false);
-        gameAlert('Today’s chest is collected', 'Your rewards are already in your wallet. Come back tomorrow for the next chest.');
+        gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        gameAlert('Could not open your chest', 'Your chest is still waiting. Check your connection and try again.');
+        gameAlert('Could not open your chest', 'Your chest is still waiting. Check your internet and try again.');
       }
     }
   };

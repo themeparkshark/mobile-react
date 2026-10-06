@@ -72,8 +72,9 @@ test('every sheet phase has a clear status chip', () => {
   const phases = ['loading', 'picking', 'confirming', 'sending', 'expired', 'failed', 'taken'];
   const labels = phases.map(p => model.statusChip(p).label);
   assert.equal(new Set(labels.slice(2)).size, 5, 'confirming, sending, expired, failed and taken each read differently');
-  assert.equal(model.statusChip('picking', true).label, 'Hurry!');
-  assert.equal(model.statusChip('picking', true).tone, 'red');
+  assert.equal(model.statusChip('picking', true).label, 'On hold for you', 'no hurry chip while a kid decides');
+  assert.equal(model.statusChip('confirming', true).tone, 'blue');
+  assert.equal(model.statusChip('picking', true).tone, 'gold');
   assert.equal(model.isHolding('taken'), false);
   assert.equal(model.statusChip('expired').tone, 'red');
   assert.equal(model.isHolding('picking'), true);

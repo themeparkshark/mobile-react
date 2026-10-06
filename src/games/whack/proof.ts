@@ -384,4 +384,4 @@ export function isAnticipated(t: ProofTap): boolean {
   return (t[2] & TAP_ANTICIPATED) !== 0;
 }
 
-export const WHACK_PROOF_ERROR = 'This Whack-a-Shark result could not be verified. Replay the challenge.';
+export const WHACK_PROOF_ERROR = "That Whack-a-Shark score didn't count. Play the challenge again.";

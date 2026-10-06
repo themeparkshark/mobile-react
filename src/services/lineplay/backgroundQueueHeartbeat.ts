@@ -105,7 +105,7 @@ export function activateQueueBackgroundHeartbeat(sessionId: string, playerId: nu
       showsBackgroundLocationIndicator: false,
           foregroundService: {
             notificationTitle: 'Theme Park Shark LinePlay',
-            notificationBody: 'Checking queue progress while you wait',
+            notificationBody: 'Counting your time in line',
             notificationColor: '#00A5F5',
           },
         });

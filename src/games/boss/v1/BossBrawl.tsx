@@ -31,7 +31,7 @@ const BOSS_SIZE = 210;
 const WEAK_SPOTS = { kraken: [0, -0.18], robo_shark: [0, 0.1], ghost_squid: [0, 0] } as const;
 const OBJECTIVES: Record<BossId, string> = {
   kraken: 'A tentacle rises over one buoy. Tap that buoy to lure it, then strike the glowing center.',
-  robo_shark: 'Watch the circuit flash in order. The nodes shuffle, so follow them, then connect them in order.',
+  robo_shark: 'Watch the lights flash in order. They shuffle, so keep your eye on them. Then tap them in the same order.',
   ghost_squid: 'Its eyes flash just before it turns solid. Strike then. Tapping too early spooks it.',
 };
 const NODE_NAMES = ['POWER', 'RELAY', 'CORE'] as const;
@@ -416,7 +416,7 @@ function RoboNode({ slot, width, reduced, label, number, flashing, connected, di
   const style = useAnimatedStyle(() => ({ left: x.value * (width + NODE_GAP), transform: [{ scale: pulse.value }] }));
   return (
     <Animated.View style={[styles.nodeSlot, { width }, style]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Connect the ${label.toLowerCase()} node`}
+      <Pressable accessibilityRole="button" accessibilityLabel={`Tap the ${label.toLowerCase()} light`}
         accessibilityState={{ disabled, selected: connected }} disabled={disabled} onPress={onPress}
         style={[styles.node, flashing && styles.nodeFlash, connected && styles.connected]}>
         <Text style={[styles.nodeNumber, (flashing || connected) && styles.nodeLabelInk]}>{number}</Text>

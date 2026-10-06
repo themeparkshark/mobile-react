@@ -79,7 +79,7 @@ export const STAGES: Record<StageId, StageEntry> = {
   },
   backpack_bounce_a: {
     id: 'backpack_bounce_a',
-    title: 'Backpack Bounce',
+    title: 'Bag Bounce',
     json: require('./backpack_bounce_a.json'),
     audio: {
       queue: { song: require('../audio/backpack_bounce_a_queue.m4a'), fever: require('../audio/backpack_bounce_a_queue_fever.m4a') },

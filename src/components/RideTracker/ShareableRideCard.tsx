@@ -122,7 +122,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        gameAlert('Can’t share right now', 'This phone can’t share right now. Try again later.');
         return;
       }
 

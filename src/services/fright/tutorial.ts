@@ -153,7 +153,7 @@ export const COACH_LINES: Readonly<Record<FrightCoachKey, { readonly line: strin
   haunt_near: { line: 'A haunt line! Tap I\'m in line when you join it.', target: 'pill' },
   reef_first: { line: 'Fright Reef. Stand still. Listen.', target: 'map' },
   case_file_first: { line: 'Case Files live on your Deep Lantern card.', target: 'pill' },
-  rank_first: { line: 'Rate it fast. The next line won\'t wait.', target: 'rank' },
+  rank_first: { line: 'Rate it now. Then head to your next line.', target: 'rank' },
   // Neutral by default; coachLine names the live critter (never a giggle for Ringmaster Riptide).
   chaos_hour: { line: chaosCoachLine(null), target: 'map' },
   recap: { line: 'Share your Marquee. Your night, in lights.', target: 'share' },

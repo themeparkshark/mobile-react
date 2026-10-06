@@ -97,7 +97,7 @@ export default function ParkCoins() {
     <View style={{ paddingTop: 16, paddingHorizontal: 16, flexDirection: 'row', zIndex: 20, gap: 12 }}>
       <View style={{ flex: 1 }}>
         <StandingsPicker
-          title="Select Park"
+          title="Pick a Park"
           value={parkId}
           onValueChange={value => { setChosenParkId(value); setChosenBoardId(undefined); cache.parkId = value; }}
           items={parks.map(p => ({ label: p.display_name ?? p.name, value: p.id }))}
@@ -106,7 +106,7 @@ export default function ParkCoins() {
       {!!board?.leaderboards.length && (
         <View style={{ flex: 1 }}>
           <StandingsPicker
-            title="Time Period"
+            title="When"
             value={board.leaderboardId}
             onValueChange={setChosenBoardId}
             items={board.leaderboards.map(item => ({ label: item.duration_text, value: item.id }))}

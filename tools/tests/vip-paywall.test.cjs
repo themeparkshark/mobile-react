@@ -76,8 +76,8 @@ test('plans load from the App Store in StoreKit 2 mode, yearly first, trial only
   const plans = plain(await purchases.loadVipPlans());
   assert.deepEqual(calls.setup, ['STOREKIT2_MODE']);
   assert.deepEqual(plans.map(p => [p.productId, p.price, p.period, p.trial]), [
-    [YEARLY, '$29.99', 'year', '1 week free'],
-    [MONTHLY, '$4.99', 'month', '1 week free'],
+    [YEARLY, '$29.99', 'year', 'One week free'],
+    [MONTHLY, '$4.99', 'month', 'One week free'],
   ]);
   assert.equal(purchases.savingsText(plans), 'SAVE 49%');
   assert.equal(purchases.savingsText(plans.slice(0, 1)), null);
@@ -148,13 +148,13 @@ test('launch sends the current entitlement once per player per run, silently', a
 test('the legal line comes from the chosen plan and says Apple ID', () => {
   const { purchases } = harness();
   const trial = purchases.legalText({ price: '$4.99', period: 'month', trial: '1 week free' });
-  assert.match(trial, /^1 week free, then \$4\.99 per month\./);
+  assert.match(trial, /^1 week free, then \$4\.99 a month\./);
   assert.match(trial, /Apple ID when the free trial ends/);
   assert.match(trial, /24 hours/);
   assert.doesNotMatch(trial, /iTunes|—/);
 
   const plainText = purchases.legalText({ price: '$29.99', period: 'year', trial: null });
-  assert.match(plainText, /^\$29\.99 per year\. Payment is charged to your Apple ID when you confirm the purchase/);
+  assert.match(plainText, /^\$29\.99 a year\. Payment is charged to your Apple ID when you confirm the purchase/);
 });
 
 test('the paywall promises only live perks, uses kit art and dialogs, and handles guests', () => {

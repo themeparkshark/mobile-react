@@ -8,13 +8,13 @@ const row = (seat, score, placement, extra = {}) => ({ seat, kind: 'human', scor
 
 test('a loss teaches: margin to the place above plus the key moment', () => {
   const results = [row(0, 5200, 1), row(1, 5060, 2, { key_moment: { kind: 'lure', bar: 10, at: 16000, cost: 410, byMs: 0 } }), row(2, 3000, 3)];
-  assert.equal(copy.lossLine(results[1], results), 'Lost 1st by 140. The lure in bar 10 cost you 410.');
+  assert.equal(copy.lossLine(results[1], results), 'Lost 1st by 140. A lure cost you 410.');
   assert.equal(copy.lossLine(results[0], results), null, '1st place gets no lesson');
-  assert.equal(copy.keyMomentLine({ kind: 'snatch_missed', bar: 6, at: 8823, cost: 200, byMs: 30 }), 'Snatch missed by 30ms in bar 6.');
+  assert.equal(copy.keyMomentLine({ kind: 'snatch_missed', bar: 6, at: 8823, cost: 200, byMs: 30 }), 'So close! You just missed a snatch.');
   assert.equal(copy.lossLine(row(3, 0, 4, { verdict: 'ghost_finished:hold' }), results), null, 'safety hand-offs never sting');
   assert.equal(copy.lossLine(row(3, 0, 4, { verdict: 'no_contest:desync' }), results), null);
   assert.equal(copy.nearMiss(row(1, 5100, 2, { verdict: 'ghost_finished:walk' }), [row(0, 5200, 1)]), false);
-  assert.equal(copy.keyMomentLine({ kind: 'splashed', bar: 9, at: 15000, cost: 260, byMs: 0 }), 'Splashed in bar 9: -260.');
+  assert.equal(copy.keyMomentLine({ kind: 'splashed', bar: 9, at: 15000, cost: 260, byMs: 0 }), 'You got splashed: -260.');
 });
 
 test('REMATCH is bigger only under a 10% margin', () => {
@@ -25,7 +25,7 @@ test('REMATCH is bigger only under a 10% margin', () => {
 
 test('Star Player labels, and no emoji or em dashes anywhere in party copy', () => {
   assert.equal(copy.starLabel({ category: 'snatches', value: 2 }), '2 SNATCHES');
-  assert.equal(copy.starLabel({ category: 'best_bar', value: 620, bar: 7 }), 'BEST BAR  BAR 7, 620');
+  assert.equal(copy.starLabel({ category: 'best_bar', value: 620, bar: 7 }), 'BEST STRETCH  620 POINTS');
   const fs = require('node:fs');
   const path = require('node:path');
   const dir = path.resolve(__dirname, '../../src/gamekit/party');

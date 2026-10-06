@@ -69,7 +69,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
       {/* Rewards */}
       <View style={styles.rewardsRow}>
         <View style={styles.rewardItem}><GameIcon name="xp" size={20} /><Text style={styles.rewardText}>{collection.xp_reward} XP</Text></View>
-        <View style={styles.rewardItem}><GameIcon name="coin" size={20} /><Text style={styles.rewardText}>{collection.coin_reward} coins</Text></View>
+        <View style={styles.rewardItem}><GameIcon name="coins" size={20} /><Text style={styles.rewardText}>{collection.coin_reward} coins</Text></View>
       </View>
     </Pressable>
   );

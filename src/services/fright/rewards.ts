@@ -42,10 +42,10 @@ export function isOwned(reward: FrightReward): boolean {
   return reward.owned === true;
 }
 
-/** "Added to your wardrobe" for a new real item, "Already yours" for a duplicate. */
+/** "Added to your closet" for a new real item, "Already yours" for a duplicate. */
 export function wardrobeLine(reward: FrightReward): string | null {
   if (!isItemReward(reward)) return null;
-  return isOwned(reward) ? 'Already yours' : 'Added to your wardrobe';
+  return isOwned(reward) ? 'Already yours' : 'Added to your closet';
 }
 
 /** Pins also land on the Deep Lantern (a duplicate pin is already there). */

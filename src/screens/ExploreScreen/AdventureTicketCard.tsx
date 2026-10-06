@@ -275,7 +275,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             <View style={styles.chapters}>
               {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name}, ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win this ride\'s coin challenge.' },
                 { label: 'Play', detail: ticket.play ? `${ticket.play.chapter_title}${ticket.play.route_name ? `, ${ticket.play.route_name}` : ''}` : 'Finish a short queue story in its line.' },
-                { label: 'Celebrate', detail: complete ? 'Your souvenir is ready to revisit.' : 'Bring your coin and story together.' }].map((chapter, index) =>
+                { label: 'Celebrate', detail: complete ? 'Your souvenir is saved. Look at it any time.' : 'Bring your coin and story together.' }].map((chapter, index) =>
                 <View key={chapter.label} style={[styles.chapter, index < 2 && styles.perforation]}>
                   <Punch earned={stamps[index]} number={index + 1} reduced={reduced} />
                   <View style={{ flex: 1 }}><Text style={styles.chapterTitle}>{chapter.label}</Text><Text style={styles.chapterDetail}>{chapter.detail}</Text></View>
@@ -283,8 +283,8 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             </View>
             {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && <View style={styles.resource}>
               <GameIcon name="ticket" size={34} />
-              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Your first-coin pass is ready for this challenge.'
-                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. Verified queue time and home finds can help.`}</Text>
+              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Your free first-coin pass is ready for this challenge.'
+                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. Time in line and home finds can earn more.`}</Text>
             </View>}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
@@ -293,7 +293,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             </View>
             {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && <GameButton variant="ghost" label="Choose a different ride"
               accessibilityLabel="Choose a different adventure ride" disabled={busy} onPress={() => setPicker(true)} />}
-            {onDismiss && <GameButton variant="ghost" label="Tuck away for today" accessibilityLabel="Tuck the Adventure Ticket away for today"
+            {onDismiss && <GameButton variant="ghost" label="Hide for today" accessibilityLabel="Hide the Adventure Ticket for today"
               disabled={busy} onPress={tuckAway} />}
             {complete && <Text style={styles.private}>Saved for you. Sharing is always your choice.</Text>}
           </>}

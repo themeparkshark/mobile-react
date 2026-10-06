@@ -119,7 +119,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
       setTimeout(() => navigation.navigate('Explore'), 1300);
     } catch (error: any) {
       const message = error?.response?.data?.errors?.username?.[0]
-        ?? error?.response?.data?.message ?? 'Something went wrong. Try again.';
+        ?? error?.response?.data?.message ?? 'Your name didn’t save. Check your internet and tap Let’s Go again.';
       setServerError(/taken/i.test(message) ? 'That name is taken. Try another or roll one!' : message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake.value = withSequence(withTiming(-10, { duration: 50 }), withTiming(10, { duration: 50 }),
@@ -190,12 +190,12 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                 {/* Returning players from the original app: bring back the old account instead of naming a new shark. */}
                 <GameButton label={RECOVERY_COPY.welcomeLink} variant="ghost" tone="onBlue"
                   fullWidth={false} onPress={() => setFindingOriginal(true)}
-                  accessibilityHint="Reconnects the account you had in the original Theme Park Shark app" testID="welcome-find-original" />
+                  accessibilityHint="Gets back the account from the old Theme Park Shark app" testID="welcome-find-original" />
               </Animated.View>
             )}
             {!done && (
               <Animated.Text entering={reduced ? undefined : FadeInUp.delay(900).duration(400)} style={styles.disclaimer}>
-                Theme Park Shark is an independent fan app, not affiliated with or endorsed by any theme park.
+                Theme Park Shark is an independent fan app. No theme park made it or approved it.
               </Animated.Text>
             )}
           </KeyboardAvoidingView>

@@ -335,7 +335,7 @@ export default function ProfileScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Your shark"
-                accessibilityHint="Opens the dressing room"
+                accessibilityHint="Opens your closet"
                 onPressIn={() => {
                   if (reducedMotion) return;
                   Animated.spring(sharkScale, {
@@ -390,7 +390,7 @@ export default function ProfileScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={labels.edit || 'Edit'}
-                accessibilityHint="Opens the dressing room"
+                accessibilityHint="Opens your closet"
                 hitSlop={8}
                 onPressIn={() => {
                   if (reducedMotion) return;

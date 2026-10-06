@@ -1461,7 +1461,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         rows: [
           { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
           { label: 'Fastest', value: fastest },
-          { label: 'Best tier', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
+          { label: 'Fastest answer', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
         ],
         facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won },
       });
@@ -1544,7 +1544,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const rows = [
       { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
       { label: 'Fastest', value: fastest },
-      { label: 'Best tier', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
+      { label: 'Fastest answer', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
       { label: 'Streak', value: String(t.me.streak.best) },
     ];
     const rk = mem.rank;

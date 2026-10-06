@@ -53,7 +53,7 @@ test('celebration double taps submit once, network failure preserves the readabl
  const p=card('celebrate');p.button('Unfold my souvenir').props.onPress();p.button('Unfold my souvenir').props.onPress();p.app.render();
  assert.deepEqual(p.calls,['celebrate']);p.work.reject(new Error('offline'));await p.app.settle();
  assert.equal(p.modal().props.isVisible,true);assert.equal(p.button('Unfold my souvenir').props.disabled,false);
- const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Reconnect/);assert.deepEqual(p.calls,['celebrate']);
+ const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Check your internet/);assert.deepEqual(p.calls,['celebrate']);
 });
 test('a 422 shows the server reason instead of "Reconnect"',async()=>{
  const p=card('play',{closed:true});p.button('Choose another ride').props.onPress();p.app.render();
@@ -76,7 +76,7 @@ test('far from the queue, Play becomes "Show me the line"; near it plays',()=>{
  assert.deepEqual(near.calls,['play']);
 });
 test('tuck away dismisses the ticket for the day',async()=>{
- const p=card('discover');p.button('Tuck the Adventure Ticket away for today').props.onPress();await p.app.settle();
+ const p=card('discover');p.button('Hide the Adventure Ticket for today').props.onPress();await p.app.settle();
  assert.deepEqual(p.calls,['dismiss']);assert.equal(p.modal().props.isVisible,false);
 });
 test('a finished ticket collapses to the souvenir stub in the same slot',()=>{

@@ -235,7 +235,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
       <View ref={ref} collapsable={false} style={{ backgroundColor: '#ffffff', borderRadius: 18 }}>
         <ShareCard daily={daily} />
       </View>
-      <Text style={styles.sheetHint}>Only your verdicts go in the picture, never the board.</Text>
+      <Text style={styles.sheetHint}>The picture shows how you did. It never shows the cards.</Text>
       <Pressable style={styles.bigBtn} onPress={share} accessibilityRole="button">
         {busy ? <ActivityIndicator color={MM.navyText} /> : <Text style={styles.bigBtnText}>SHARE NOW</Text>}
       </Pressable>

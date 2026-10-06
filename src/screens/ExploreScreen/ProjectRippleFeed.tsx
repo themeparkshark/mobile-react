@@ -6,13 +6,13 @@ type Action = NonNullable<ParkProject['recent_actions']>[number];
 
 function actionCopy(action: Action, project: ParkProject): { heading: string; body: string } {
   switch (action.kind) {
-    case 'home_find': return { heading: 'HOME FIND', body: 'A fan found a prep collectible.' };
+    case 'home_find': return { heading: 'HOME FIND', body: 'A fan found something at home.' };
     case 'fan_challenge': return { heading: 'FAN CHALLENGE', body: 'A fan solved a story clue from home.' };
     case 'ride_coin': return { heading: 'RIDE COIN', body: 'A guest won a ride coin at this park.' };
-    case 'queue_part': return { heading: 'LINEPLAY', body: 'A queue crew earned a ride Part.' };
-    case 'vote_a': return { heading: 'CHAPTER VOTE', body: `A contributor chose ${project.chapter_a_title}.` };
-    case 'vote_b': return { heading: 'CHAPTER VOTE', body: `A contributor chose ${project.chapter_b_title}.` };
-    default: return { heading: 'CREW SIGNAL', body: 'A fan helped the shared story.' };
+    case 'queue_part': return { heading: 'LINEPLAY', body: 'A player in line earned a Ride Part.' };
+    case 'vote_a': return { heading: 'CHAPTER VOTE', body: `A player voted for ${project.chapter_a_title}.` };
+    case 'vote_b': return { heading: 'CHAPTER VOTE', body: `A player voted for ${project.chapter_b_title}.` };
+    default: return { heading: 'CREW HELP', body: 'A fan helped the story.' };
   }
 }
 
@@ -50,7 +50,7 @@ export default function ProjectRippleFeed({ project, compact = false }: {
         {action.points > 0 && <Text style={styles.points}>+{action.points}</Text>}
       </View>;
     })}
-    <Text style={styles.footer}>Verified game actions shape the same story for every fan.</Text>
+    <Text style={styles.footer}>What players do in the game changes the story for everyone.</Text>
   </View>;
 }
 

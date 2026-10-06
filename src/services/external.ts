@@ -16,7 +16,15 @@
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import { Linking, Share, type ShareContent, type ShareOptions } from 'react-native';
-import { askGrownUp } from '../components/GrownUpGate';
+import { askGrownUp, type GateReason } from '../components/GrownUpGate';
+
+/** Where a link goes, in kid words, for the grown-up gate's "This leaves the game" line. Exported for tests. */
+export function exitReason(url: string): GateReason {
+  if (/^mailto:/i.test(url)) return { kind: 'leave', where: 'email' };
+  if (/^itms-apps:|apps\.apple\.com/i.test(url)) return { kind: 'leave', where: 'the App Store' };
+  return { kind: 'leave', where: 'a website' };
+}
+const SHARE: GateReason = { kind: 'share' };
 
 /**
  * Opens a link outside the app after the grown-up gate: 'browser' is the in-app
@@ -24,7 +32,7 @@ import { askGrownUp } from '../components/GrownUpGate';
  * the grown-up said no or nothing can open it.
  */
 export async function openExternal(url: string, via: 'browser' | 'system' = 'browser'): Promise<boolean> {
-  if (!url || !(await askGrownUp())) return false;
+  if (!url || !(await askGrownUp(exitReason(url)))) return false;
   try {
     if (via === 'browser') {
       await WebBrowser.openBrowserAsync(url);
@@ -43,13 +51,13 @@ export async function openExternal(url: string, via: 'browser' | 'system' = 'bro
 
 /** The system share sheet (text or a link) after the grown-up gate. Null when the grown-up said no. */
 export async function shareExternal(content: ShareContent, options?: ShareOptions) {
-  if (!(await askGrownUp())) return null;
+  if (!(await askGrownUp(SHARE))) return null;
   return Share.share(content, options);
 }
 
 /** Shares a file (a share card image) after the grown-up gate. False when declined or unavailable. */
 export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions): Promise<boolean> {
-  if (!(await askGrownUp())) return false;
+  if (!(await askGrownUp(SHARE))) return false;
   if (!(await Sharing.isAvailableAsync())) return false;
   await Sharing.shareAsync(uri, options);
   return true;

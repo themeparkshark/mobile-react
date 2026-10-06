@@ -305,7 +305,7 @@ export default function WatchScreen() {
                     <Image source={COIN_ART} style={styles.bannerCoin} contentFit="contain" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bannerTitle}>
-                        {toEarn === 0 ? 'All caught up!' : `Watch & earn +${COIN_REWARD} each`}
+                        {toEarn === 0 ? 'All caught up!' : `Watch a video, get +${COIN_REWARD} coins`}
                       </Text>
                       <WatchMeter watched={watchedCount} total={videos.length} />
                     </View>
@@ -337,7 +337,7 @@ export default function WatchScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>{failed ? 'Videos are taking a break' : 'No videos yet'}</Text>
                 <Text style={styles.emptyText}>
-                  {failed ? 'Check your connection and try again.' : 'Pull down to check for new ones.'}
+                  {failed ? 'Check your internet and try again.' : 'Pull down to check for new ones.'}
                 </Text>
                 {failed && <GameButton label="Try again" icon="retry" size="compact" onPress={onRefresh} style={{ marginTop: 14 }} />}
               </View>
@@ -369,7 +369,7 @@ export default function WatchScreen() {
       <GameDialog
         visible={showUnsaved && unsaved.length > 0}
         title="Coins not saved yet"
-        message="Check your connection, then try again. Your watch still counts."
+        message="Check your internet, then tap Try again. Your watch still counts."
         icon="retry"
         buttons={[{ text: 'Later', style: 'cancel' }, { text: 'Try again' }]}
         onAnswer={index => {

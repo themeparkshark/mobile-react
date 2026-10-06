@@ -215,7 +215,7 @@ export function encounterHint(state: EncounterState, stats: Pick<StrikeStats, 'h
   if (encounterLocked(state, ms)) return 'Zapped! Watch the order again.';
   const board = roboBoard(state, ms);
   return board.phase === 'flash' ? 'Watch the order.' : board.phase === 'shuffle' ? 'Shuffling. Keep your eye on them.'
-    : `Connect the circuit: node ${state.step + 1} of ${state.circuit.length}.`;
+    : `Tap them in order: ${state.step + 1} of ${state.circuit.length}.`;
 }
 
 /**

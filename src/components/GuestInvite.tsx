@@ -31,7 +31,7 @@ const WORLD = require('../../assets/images/screens/login/login-bg.png');
 const WORLD_LOGO_CROP = 24;
 
 export const GUEST_PROMISES: readonly { icon: GameIconName; text: string }[] = [
-  { icon: 'coin', text: 'Win a coin for every ride you conquer' },
+  { icon: 'coin', text: 'Win a ride coin for every ride you beat' },
   { icon: 'queue', text: 'Play quick games while you wait in line' },
   { icon: 'shark', text: 'Dress up your shark and join a team' },
 ];

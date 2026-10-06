@@ -91,7 +91,7 @@ test('the recovery receipt offers one clear retry and does not claim an unconfir
  let retries=0;const snapshot={loaded:true,phase:'unconfirmed',pending:checkpoint,receipt:null};
  const view=runtime('src/components/boss/BossAttackStatus.tsx',{'./bossArt':{BOSS_ART:{kraken:1}},
   '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'}}},{snapshot,onRetry(){retries++;}});
- assert.ok(view.find(n=>n.props?.children==='The reply didn’t arrive. Confirm this round before spending more Energy.'));
+ assert.ok(view.find(n=>n.props?.children==='We didn’t hear back. Check this round before you spend more energy.'));
  view.find(n=>n.type==='Pressable').props.onPress();assert.equal(retries,1);
  view.change({snapshot:{...snapshot,phase:'sending'}});assert.equal(view.find(n=>n.type==='Pressable'),undefined);
 });

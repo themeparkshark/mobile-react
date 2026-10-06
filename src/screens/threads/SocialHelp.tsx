@@ -70,12 +70,12 @@ export default function SocialHelp() {
               <Text style={styles.linkText}>Blocked players</Text>
             </PressScale>
             <PressScale
-              onPress={() => void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system')}
+              onPress={() => void openExternal(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Shark Social (parent)')}`, 'system')} // clarity-allow: email subject for our support inbox
               style={styles.link}
-              accessibilityLabel={`Parents: email ${SUPPORT_EMAIL}`}
+              accessibilityLabel={`Grown-ups: email ${SUPPORT_EMAIL}`}
             >
               <GameIcon name="info" size={22} />
-              <Text style={styles.linkText}>Parents: email us</Text>
+              <Text style={styles.linkText}>Grown-ups: email us</Text>
             </PressScale>
           </View>
           <GameButton label="Got it" onPress={() => setOpen(false)} />

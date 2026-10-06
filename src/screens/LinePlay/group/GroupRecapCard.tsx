@@ -58,7 +58,7 @@ export default function GroupRecapCard({ group, realMinutes, postedMinutes, part
     setSharing(true);
     try {
       if (!await Sharing.isAvailableAsync()) {
-        gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        gameAlert('Can’t share right now', 'This phone can’t share right now. Try again later.');
         return;
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));

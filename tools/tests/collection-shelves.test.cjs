@@ -115,7 +115,7 @@ test('challenge copy: ride vs coin vs secret, and out-of-Tickets copy follows wh
     assert.ok(title.length <= 22, `${title} fits the ribbon`);
   assert.match(copy.outOfTicketsCopy({ sources: { line: true, home: true }, rescuePassUsedToday: false }).body, /LinePlay while you wait/);
   assert.equal(copy.outOfTicketsCopy({ sources: { line: true, line_remaining_today: 0, home: true }, rescuePassUsedToday: true }).body,
-    'Today’s Rescue Pass is used. Today’s queue Tickets are collected. Home finds earn Tickets for your next park day.');
+    'Today’s Rescue Pass is used. You got all of today’s line Tickets. Home finds earn Tickets for your next park day.');
   assert.doesNotMatch(copy.outOfTicketsCopy({ sources: { line: false, home: false }, rescuePassUsedToday: false }).body, /home|queue/i);
   assert.match(copy.outOfTicketsCopy({ rescuePassUsedToday: false }).body, /LinePlay and home finds/);
 });
@@ -127,7 +127,7 @@ test('unfound coin copy is type-aware and leads with the gameplay action', () =>
     react: { useContext() {}, useState() {} }, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
-    './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../hooks/useReducedGameMotion': {},
+    './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
   });
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false, kind: 'ride' }).ribbon, 'Ride Coin');
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false }).challenge, 'Coin Challenge');
@@ -174,7 +174,7 @@ test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part
   const src = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');
   assert.ok(!src.includes("may be available at the ride.'"), 'rescue pass copy must not assume a ride');
   assert.match(src, /kind === 'ride' \? 'at the ride' : 'at this spot'/);
-  assert.match(src, /Ride Part\{task\.ride_parts_reward === 1 \? '' : 's'\}/);
+  assert.match(src, /Ride Part\$?\{task\.ride_parts_reward === 1 \? '' : 's'\}/);
 });
 
 test('park shelf loads on its underwater art, not a grey page', () => {

@@ -833,7 +833,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
   // Loading, reconnecting, lost or unavailable: there is always a way back out.
   if (!gymData) {
-    const title = loadError && gymLink.phase === 'live' && !loading ? 'Arena Unavailable' : 'Loading Arena...';
+    const title = loadError && gymLink.phase === 'live' && !loading ? 'Arena Did Not Load' : 'Loading Arena...';
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
         <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">

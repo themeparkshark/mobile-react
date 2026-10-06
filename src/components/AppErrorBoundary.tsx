@@ -60,8 +60,8 @@ export default class AppErrorBoundary extends Component<{ readonly children: Rea
       <View style={styles.root}>
         <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.card}>
-          <Text style={styles.title} accessibilityRole="header">Something went wrong</Text>
-          <Text style={styles.body}>Your coins and progress are safe.</Text>
+          <Text style={styles.title} accessibilityRole="header">Oops! The app got stuck</Text>
+          <Text style={styles.body}>Your coins and progress are safe. Tap the button to start again.</Text>
           <Pressable onPress={this.reload} accessibilityRole="button" accessibilityLabel="Tap to reload"
             style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}>
             <Text style={styles.buttonText}>TAP TO RELOAD</Text>
