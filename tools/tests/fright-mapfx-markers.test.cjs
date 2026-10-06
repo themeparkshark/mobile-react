@@ -49,7 +49,7 @@ test('Map.tsx: the night tint is always mounted and the fright markers are the l
   assert.match(map, /<FrightNightTint input=\{fright\} \/>/);
   const close = map.indexOf('</MapView>');
   const sources = map.lastIndexOf('<FrightMapSources', close);
-  const shark = map.lastIndexOf('<Marker coordinate={location ?? FALLBACK_CENTER} hidden={!location}', close);
+  const shark = map.lastIndexOf('<PlayerSharkMarker target={location ?? null}', close);
   assert.ok(shark > 0, 'the player shark is one always-mounted Marker');
   assert.ok(sources > shark && sources < close, 'fright markers come after every other MapView child');
   assert.equal(map.match(/<FrightMapSources/g).length, 1);
@@ -183,8 +183,8 @@ test('image memory: a spot holds its art only while shown or within a minute aft
 test('the player shark is one always-mounted Marker: parked (hidden, no touch) without a location, never a conditional mount', () => {
   const map = read('src/components/Map.tsx');
   const marker = read('src/components/map/Marker.tsx');
-  assert.equal((map.match(/<Marker coordinate=\{location \?\? FALLBACK_CENTER\} hidden=\{!location\}/g) || []).length, 1);
-  assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<Marker/, 'no `{location && <Marker>}`');
+  assert.equal((map.match(/<PlayerSharkMarker target=\{location \?\? null\}/g) || []).length, 1);
+  assert.doesNotMatch(map, /\{location && \(\s*\n?\s*<(Gliding)?Marker/, 'no `{location && <Marker>}`');
   assert.doesNotMatch(map, /\{location \? \(\s*\n?\s*<Marker/);
   // Marker takes a hidden prop (opacity 0, no touch) instead of unmounting.
   assert.match(marker, /hidden = false/);

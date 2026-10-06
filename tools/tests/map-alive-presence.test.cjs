@@ -61,8 +61,8 @@ test('the collected coin arcs above both ends and lands exactly on the shelf but
 
 test('presence is wired: trail under the islands, arrival burst on entering range, flight after the reward closes', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /<SharkWake moving=\{wake\} \/>/, 'the wake rides with the shark while it walks');
-  assert.match(map, /if \(distMeters >= 1 && distMeters < 60\)/, 'GPS wobble and jumps do not stir the wake');
+  assert.match(map, /<SharkWake moving=\{wake\} trail=\{wakeTrail\} live=\{live\} \/>/, 'the wake rides with the shark while it walks');
+  assert.match(map, /const walking = distMeters >= 1 && distMeters < 60 && /, 'GPS wobble and jumps do not stir the wake');
   const trail = map.indexOf('<SharkTrail');
   assert.ok(trail > 0 && trail < map.indexOf('{children}</MapQueryContext.Provider>'));
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');

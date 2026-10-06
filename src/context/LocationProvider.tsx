@@ -11,6 +11,7 @@ import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../he
 import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
   type ParkPresence } from './parkLookupPolicy';
 import { gpsWatchSettings } from './gpsWatchPolicy';
+import { PositionFilter } from './positionFilter';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -28,8 +29,38 @@ export const HEADING_MIN_INTERVAL_MS = 80;
 // the permission grant, a paused stream) is restarted after this delay.
 export const WATCH_RESTART_DELAY_MS = 2000;
 
+/** How trustworthy the GPS is right now, for the map's soft weak-signal ring. */
+export interface GpsSignal {
+  /** Fixes are vague (over WEAK_GPS_ACCURACY_M) or the filter keeps skipping them. */
+  readonly weak: boolean;
+  /** Latest reported accuracy in metres (rounded to 5 m) while weak; null otherwise. */
+  readonly accuracyMeters: number | null;
+}
+export const GPS_SIGNAL_GOOD: GpsSignal = { weak: false, accuracyMeters: null };
+/** Above this horizontal accuracy (m) the map shows the weak-signal ring. */
+export const WEAK_GPS_ACCURACY_M = 40;
+/** This many skipped fixes in a row also count as a weak signal. */
+export const WEAK_GPS_REJECT_RUN = 2;
+
+/** Once weak, the ring stays until this many good fixes in a row (no blinking on a mixed signal). */
+export const GOOD_GPS_RUN_TO_CLEAR = 3;
+
+/**
+ * Pure: the signal after one fix (accuracy in m, skipped fixes in a row, good
+ * fixes in a row, and whether the signal was weak before).
+ */
+export function nextGpsSignal(accuracy: number | null | undefined, rejectRun: number, goodRun = GOOD_GPS_RUN_TO_CLEAR, wasWeak = false): GpsSignal {
+  const acc = typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 ? accuracy : null;
+  const vague = acc !== null && acc > WEAK_GPS_ACCURACY_M;
+  const weak = vague || rejectRun >= WEAK_GPS_REJECT_RUN || (wasWeak && goodRun < GOOD_GPS_RUN_TO_CLEAR);
+  if (!weak) return GPS_SIGNAL_GOOD;
+  return { weak, accuracyMeters: acc === null ? null : Math.round(Math.max(acc, WEAK_GPS_ACCURACY_M) / 5) * 5 };
+}
+
 export interface LocationContextType {
   readonly location: LocationType | undefined;
+  /** Weak-signal state for the map (changes rarely: only when it flips or the rounded accuracy moves). */
+  readonly gpsSignal: GpsSignal;
   /** Latest raw OS sample, even when map movement is filtered as GPS drift. */
   readonly latestLocationSampleRef: MutableRefObject<(LocationType & { timestamp: number;
     accuracyMeters?: number | null; speedMps?: number | null }) | null>;
@@ -63,7 +94,7 @@ export const LocationContext = createContext<LocationContextType>(
  * standings or the feedback host on every fix. Read the newest fix through
  * `latestLocationSampleRef` when a handler needs it.
  */
-export type LocationStatusContextType = Omit<LocationContextType, 'location'>;
+export type LocationStatusContextType = Omit<LocationContextType, 'location' | 'gpsSignal'>;
 export const LocationStatusContext = createContext<LocationStatusContextType>(
   {} as LocationStatusContextType
 );
@@ -118,7 +149,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // visit one). Every other player always uses real GPS.
   const isAppReviewer = !!player?.is_app_reviewer;
   const simulationAllowed = __DEV__ || isAppReviewer;
-  const [devMode, setDevMode] = useState<boolean>(__DEV__);
+  // EXPO_PUBLIC_DEV_REAL_GPS=1 starts a dev build on the real (or simulated) GPS stream instead of the joystick.
+  const [devMode, setDevMode] = useState<boolean>(__DEV__ && process.env.EXPO_PUBLIC_DEV_REAL_GPS !== '1');
   const devLocationRef = useRef<LocationType>({ latitude: DEV_DEFAULT_LAT, longitude: DEV_DEFAULT_LNG });
   useEffect(() => {
     if (!isAppReviewer) return;
@@ -179,6 +211,23 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const positionSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const lastLocationRef = useRef<LocationType | null>(null);
+  // Every real GPS fix goes through this before it moves the shark: outliers
+  // dropped, jitter smoothed, a dead zone while standing still (positionFilter.ts).
+  const positionFilterRef = useRef<PositionFilter | null>(null);
+  const positionFilter = () => (positionFilterRef.current ??= new PositionFilter());
+  const [gpsSignal, setGpsSignal] = useState<GpsSignal>(GPS_SIGNAL_GOOD);
+  const rejectRunRef = useRef(0);
+  const goodRunRef = useRef(0);
+  const weakRef = useRef(false);
+  /** Feeds one real fix's outcome to the weak-signal state (set only when it changes). */
+  const noteFix = (accuracy: number | null | undefined, rejected: boolean) => {
+    const vague = typeof accuracy === 'number' && accuracy > WEAK_GPS_ACCURACY_M;
+    rejectRunRef.current = rejected ? rejectRunRef.current + 1 : 0;
+    goodRunRef.current = rejected || vague ? 0 : goodRunRef.current + 1;
+    const next = nextGpsSignal(accuracy, rejectRunRef.current, goodRunRef.current, weakRef.current);
+    weakRef.current = next.weak;
+    setGpsSignal(prev => (prev.weak === next.weak && prev.accuracyMeters === next.accuracyMeters ? prev : next));
+  };
   const parkLookupRef = useRef<ParkLookupRecord | null>(null);
   const [parkLookupRecord, setParkLookupRecord] = useState<ParkLookupRecord | null>(null);
   const parkLookupPromiseRef = useRef<Promise<void> | null>(null);
@@ -285,37 +334,28 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  // Minimum distance (meters) before location state updates
-  // 1m is tight enough to feel responsive while still filtering GPS noise
-  const LOCATION_DISTANCE_FILTER_M = 1;
-
   const requestLocation = async () => {
-    const newLocation = await getCurrentLocation();
-    if (!newLocation) return;
-
-    // Exact match — skip
-    if (
-      location &&
-      newLocation.longitude === location.longitude &&
-      newLocation.latitude === location.latitude
-    ) {
+    // The joystick position is exact; a real fix goes through the same filter as the stream.
+    if (devMode && simulationAllowed) {
+      const newLocation = devLocationRef.current;
+      if (location && newLocation.longitude === location.longitude && newLocation.latitude === location.latitude) return;
+      lastLocationRef.current = newLocation;
+      debouncedSetLocation(newLocation);
       return;
     }
-
-    // Distance filter — ignore tiny GPS drift (< 10m)
-    if (location) {
-      const R = 6371e3;
-      const φ1 = (location.latitude * Math.PI) / 180;
-      const φ2 = (newLocation.latitude * Math.PI) / 180;
-      const Δφ = ((newLocation.latitude - location.latitude) * Math.PI) / 180;
-      const Δλ = ((newLocation.longitude - location.longitude) * Math.PI) / 180;
-      const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      if (dist < LOCATION_DISTANCE_FILTER_M) return;
+    // Same clock and accuracy as the stream (the OS fix time), so the two paths never disagree.
+    let fix: Location.LocationObject;
+    try {
+      fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    } catch {
+      return;
     }
-
-    lastLocationRef.current = newLocation;
-    debouncedSetLocation(newLocation);
+    const verdict = positionFilter().push({ latitude: fix.coords.latitude, longitude: fix.coords.longitude,
+      accuracy: fix.coords.accuracy, speed: fix.coords.speed, timestamp: fix.timestamp });
+    noteFix(fix.coords.accuracy, verdict.kind === 'reject');
+    if (verdict.kind !== 'publish') return;
+    lastLocationRef.current = verdict.position;
+    debouncedSetLocation(verdict.position);
   };
 
   const lookupParkAt = (coordinates: LocationType): Promise<void> => {
@@ -465,21 +505,14 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
               accuracyMeters: locationUpdate.coords.accuracy,
               speedMps: locationUpdate.coords.speed };
 
-            // Distance filter — skip tiny GPS drift
-            const prev = lastLocationRef.current;
-            if (prev) {
-              const R = 6371e3;
-              const p1 = (prev.latitude * Math.PI) / 180;
-              const p2 = (newLoc.latitude * Math.PI) / 180;
-              const dp = ((newLoc.latitude - prev.latitude) * Math.PI) / 180;
-              const dl = ((newLoc.longitude - prev.longitude) * Math.PI) / 180;
-              const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-              const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-              if (dist < LOCATION_DISTANCE_FILTER_M) return;
-            }
+            // Outliers, jitter and standing-still drift never reach the map.
+            const verdict = positionFilter().push({ ...newLoc, accuracy: locationUpdate.coords.accuracy,
+              speed: locationUpdate.coords.speed, timestamp: locationUpdate.timestamp });
+            noteFix(locationUpdate.coords.accuracy, verdict.kind === 'reject');
+            if (verdict.kind !== 'publish') return;
 
-            lastLocationRef.current = newLoc;
-            debouncedSetLocation(newLoc);
+            lastLocationRef.current = verdict.position;
+            debouncedSetLocation(verdict.position);
           },
           restartAfterError,
         );
@@ -563,6 +596,11 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setHeading(null);
     smoothedHeadingRef.current = null;
     lastLocationRef.current = null;
+    positionFilterRef.current?.reset();
+    rejectRunRef.current = 0;
+    goodRunRef.current = 0;
+    weakRef.current = false;
+    setGpsSignal(GPS_SIGNAL_GOOD);
     latestLocationSampleRef.current = null;
     if (positionSubscriptionRef.current) {
       positionSubscriptionRef.current.remove();
@@ -595,7 +633,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     moveDevLocation,
   }), [permissionChecked, requestPermission, stableRequestLocation, stableRequestPark, stableReset,
     park, parkLoaded, parkLookupRecord, permissionGranted, devMode, moveDevLocation]);
-  const value = useMemo<LocationContextType>(() => ({ ...statusValue, location }), [statusValue, location]);
+  // The joystick is exact: never a weak signal while it drives.
+  const shownSignal = devMode && simulationAllowed ? GPS_SIGNAL_GOOD : gpsSignal;
+  const value = useMemo<LocationContextType>(() => ({ ...statusValue, location, gpsSignal: shownSignal }),
+    [statusValue, location, shownSignal]);
   const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled }),
     [heading, headingEnabled, setHeadingEnabled]);
 

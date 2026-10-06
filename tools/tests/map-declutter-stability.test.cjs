@@ -58,7 +58,7 @@ test('MapView children never mount mid-list: sources always mounted, glints and 
 
 test('the panned-away shark hides while its spot is off screen (iOS draws off-screen marker views at the top-left)', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /opacity: focusedOnPlayer \|\| !playerOnScreen \? 0 : 1/);
+  assert.match(map, /visible=\{!focusedOnPlayer && playerOnScreen\}/);
   assert.match(map, /checkPlayer\(feature\.properties\?\.visibleBounds\)/);
 });
 
