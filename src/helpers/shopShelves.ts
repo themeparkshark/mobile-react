@@ -43,6 +43,7 @@ interface ItemLike {
     readonly last_chance?: boolean;
     readonly returning?: boolean;
     readonly set?: { readonly slug: string } | null;
+    readonly leaving?: { readonly on: string; readonly forever: boolean } | null;
   };
 }
 
@@ -283,7 +284,7 @@ export function wishHintCopy(wished: boolean, alerts: boolean | null | undefined
   return alerts ? 'Heart it to save it. We’ll tell you next time it’s in the shop.' : 'Heart it to save it for later.';
 }
 
-export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
+export type TileRibbon = 'new' | 'last_chance' | 'leaving' | 'returning' | null;
 
 /**
  * Fixed tile lanes: rarity top-left, heart or owned check top-right, and one
@@ -293,8 +294,9 @@ export type TileRibbon = 'new' | 'last_chance' | 'returning' | null;
 export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?: boolean } }, quiet = false): { ribbon: TileRibbon } {
   if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null };
   // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
-  const ribbon: TileRibbon = item.shop?.last_chance && !quiet ? 'last_chance' : item.shop?.returning ? 'returning'
-    : item.shop?.is_new ? 'new' : null;
+  // LEAVING SOON / LAST RUN is calm navy and says a date in the try-on: it outranks BACK AGAIN and NEW.
+  const ribbon: TileRibbon = item.shop?.last_chance && !quiet ? 'last_chance' : item.shop?.leaving?.on ? 'leaving'
+    : item.shop?.returning ? 'returning' : item.shop?.is_new ? 'new' : null;
   return { ribbon };
 }
 

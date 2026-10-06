@@ -25,9 +25,12 @@ import { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW } from '../../ui';
 import { MAX_FONT, Sheen, WishHeart, plateFor } from './shopUi';
 import { useWished } from './wishStore';
+import { leavingOf, leavingRibbon } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
   last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
+  // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING SOON or LAST RUN).
+  leaving: { label: 'LEAVING SOON', color: BRAND.navy, ink: BRAND.gold },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
@@ -73,6 +76,8 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const badge = wearableBadge(item);
   const owned = !!(item.shop?.is_owned ?? item.has_purchased);
   const { ribbon } = tileLanes(item, quiet);
+  const leaving = leavingOf(item.shop);
+  const ribbonLabel = ribbon === 'leaving' && leaving ? leavingRibbon(leaving) : ribbon ? RIBBON[ribbon].label : '';
   const name = itemDisplayName(item);
   const secret = isSecretItem(item);
   const plate = secret ? SECRET_THEME.tilePlate : plateFor(item.rarity);
@@ -108,7 +113,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-10deg' }] }));
 
   const a11y = `${name}${badge.label ? `, ${badge.label.toLowerCase()}` : ''}${set ? `, part of ${set.name} set` : ''}, ${owned ? 'owned' : vipLocked && secret ? `${formatCoins(item.cost)} Shark Coins, VIP members can buy` : vipLocked ? 'VIP only'
-    : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
+    : `${formatCoins(item.cost)} Shark Coins${affordable ? '' : ', you need more coins'}`}${ribbon === 'leaving' && leaving ? (leaving.forever ? ", last run: it won't come back" : ', leaving soon') : ribbon ? `, ${RIBBON[ribbon].label.toLowerCase()}` : ''}. Tap to try it on.`;
 
   return (
     <Pressable
@@ -132,7 +137,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
       {ribbon && (
         <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }]}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{RIBBON[ribbon].label}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{ribbonLabel}</Text>
         </View>
       )}
       <View style={[styles.art, { marginTop: ribbon ? 10 : secret ? 8 : 0 }, owned && { opacity: 0.6 }]}>

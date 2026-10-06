@@ -23,6 +23,15 @@ import { FxSceneBackdrop } from '../../fx/FxSolo';
 import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/registry';
 import { SECRET_THEME } from '../../fx/secretTheme';
 import { UnlockBeat } from './SecretShopUi';
+import { Image } from 'expo-image';
+import { KEEP_LINE, leavingLine, leavingOf, pearlFor, rarityOf } from '../../helpers/shopLifecycle';
+
+/** Rarity pearls (Codex GPT Image 2.5 with Alex's references, cp-catalogs/art). */
+export const PEARLS = {
+  white: require('../../../assets/shop-life/pearl-white.webp'),
+  silver: require('../../../assets/shop-life/pearl-silver.webp'),
+  gold: require('../../../assets/shop-life/pearl-gold.webp'),
+} as const;
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -508,7 +517,23 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 )}
                 {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
                   {lastChanceLine(item.shop?.season)}</Text>}
-                {item.shop?.returning && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
+                {item.shop?.returning && !owned && !leavingOf(item.shop) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
+                {/* Items come and go: when this one leaves, honestly whether it comes back, and the forever promise. */}
+                {leavingOf(item.shop) && (
+                  <View style={styles.lifeCard} accessible accessibilityLabel={`${leavingLine(leavingOf(item.shop)!)} ${owned ? "It's yours." : KEEP_LINE}`}>
+                    <View style={styles.lifeRow}><GameIcon name="moon" size={20} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leavingLine(leavingOf(item.shop)!)}</Text></View>
+                    {/* Secret pieces already make the forever promise in their own card. */}
+                    {!fxKeyOf(item) && <View style={styles.lifeRow}><GameIcon name="check" size={18} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeSoft}>{owned ? 'It’s yours. Forever.' : KEEP_LINE}</Text></View>}
+                  </View>
+                )}
+                {rarityOf(item.shop) && (
+                  <View style={styles.rarityRow} accessible accessibilityLabel={rarityOf(item.shop)!.label}>
+                    <Image source={PEARLS[pearlFor(rarityOf(item.shop)!.tier)]} style={{ width: 18, height: 18 }} contentFit="contain" />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeSoft}>{rarityOf(item.shop)!.label}</Text>
+                  </View>
+                )}
                 {fxKeyOf(item) && (
                   // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3).
                   <View style={styles.fxCard} accessible accessibilityLabel={`${FX_BLURB[fxKeyOf(item)!]} ${keepLine}`}>
@@ -620,6 +645,11 @@ const NEW_POP = new Keyframe({
 }).duration(260).delay(300);
 
 const styles = StyleSheet.create({
+  lifeCard: { gap: 6, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.45)', borderWidth: 2, borderColor: 'rgba(255,224,122,0.55)' },
+  lifeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lifeText: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: '#ffe07a' },
+  lifeSoft: { flex: 1, fontFamily: FONT.body, fontSize: 17, color: '#e2f6ff' },
+  rarityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2 },
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderWidth: 3, borderColor: S.border, ...SHADOW.card },

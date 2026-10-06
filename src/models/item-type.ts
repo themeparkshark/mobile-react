@@ -1,5 +1,6 @@
 import { CurrencyType } from './currency-type';
 import { ItemTypeType } from './item-type-type';
+import type { OwnedLifecycle } from '../helpers/shopLifecycle';
 
 export interface ItemType {
   readonly id: number;
@@ -36,4 +37,6 @@ export interface ItemType {
   /** Owned rows: whether this item has ever been worn. */
   readonly first_worn?: boolean;
   readonly acquired_at?: string | null;
+  /** Owned rows: retired (and whether forever) and rarity, for the closet's RETIRED / RARE badge. */
+  readonly lifecycle?: OwnedLifecycle | null;
 }

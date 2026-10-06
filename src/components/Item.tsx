@@ -4,6 +4,13 @@ import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
+import { closetBadge, closetBadgeSay } from '../helpers/shopLifecycle';
+
+const PEARL = {
+  white: require('../../assets/shop-life/pearl-white.webp'),
+  silver: require('../../assets/shop-life/pearl-silver.webp'),
+  gold: require('../../assets/shop-life/pearl-gold.webp'),
+} as const;
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
@@ -34,6 +41,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const badge = wearableBadge(item);
   const name = itemDisplayName(item);
   const isNew = !isEquipped && item.seen === false;
+  // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
+  const life = closetBadge(item.lifecycle);
   const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -54,7 +63,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
-          : isEquipped ? `Remove ${name} from your shark` : `Wear ${name} on your shark`}
+          : isEquipped ? `Remove ${name} from your shark${closetBadgeSay(item.lifecycle)}` : `Wear ${name} on your shark${closetBadgeSay(item.lifecycle)}`}
         accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
         accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
         disabled={!onToggle}
@@ -65,6 +74,12 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         {!!badge.inner && <View pointerEvents="none" style={[styles.innerStroke, { borderColor: badge.inner }]} />}
         {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
         {isNew && <View style={[styles.cornerBadge, styles.newBadge]}><Text style={styles.newText}>NEW</Text></View>}
+        {life && (
+          <View style={[styles.lifeBadge, life.label === 'RETIRED' && styles.retiredBadge]} accessibilityElementsHidden>
+            {life.pearl && <Image source={PEARL[life.pearl]} style={styles.pearl} contentFit="contain" />}
+            <Text maxFontSizeMultiplier={1.2} style={[styles.lifeText, life.label === 'RETIRED' && styles.retiredText]}>{life.label}</Text>
+          </View>
+        )}
         {isVip && (
           <Image source={require('../../assets/images/screens/profile/subscribed.png')}
             style={[styles.cornerIcon]} contentFit="contain" />
@@ -137,6 +152,12 @@ const styles = StyleSheet.create({
     borderRadius: 7, backgroundColor: '#ffd44c', borderWidth: 1, borderColor: '#fff',
     paddingHorizontal: 5, paddingVertical: 3 },
   newBadge: { backgroundColor: '#e8412c' },
+  lifeBadge: { zIndex: 12, position: 'absolute', top: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 2,
+    borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#123e65', paddingHorizontal: 4, paddingVertical: 2 },
+  retiredBadge: { backgroundColor: '#123e65', borderColor: '#ffd44c' },
+  lifeText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 12 },
+  retiredText: { color: '#ffd44c' },
+  pearl: { width: 13, height: 13 },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },
