@@ -47,7 +47,7 @@ import { BRAND, FONT, GameButton, GameDialog, GameIcon, SHADOW, type GameIconNam
 import SetCompleteReveal from './SetCompleteReveal';
 import ShopTile, { TileArt } from './ShopTile';
 import TryOnSheet, { asWearable, previewLook } from './TryOnSheet';
-import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast } from './shopUi';
+import { MAX_FONT, NIGHT_SKY, PieceChip, REVEAL_NAVY, SHOP_SURFACE, Sheen, ShopCta, ShopStage, ShopToast, TimerPill, useShopNow, useShopToast, WishHeart } from './shopUi';
 
 function ShopCtaInline({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
   const still = useReducedGameMotion();
@@ -59,7 +59,7 @@ import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
 import { VAULT, VaultPanel, VaultRibbon } from './SecretVault';
 import { FxPauseContext } from '../../fx/FxStage';
 import { ShopProfile } from './shopProfile';
-import { wishStore } from './wishStore';
+import { useWishCount, wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GAP = 12;
@@ -462,7 +462,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
   );
 });
 
-export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff, secret = false }: {
+export default function ShopShelves({ today, setToday, onRefresh, offset, focusRequest, scrollY, onHandoff, onOpenFavorites, secret = false }: {
   readonly today: ShopToday;
   readonly setToday: Dispatch<SetStateAction<ShopToday | null>>;
   readonly onRefresh: () => Promise<boolean>;
@@ -474,6 +474,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   readonly scrollY?: SharedValue<number>;
   /** The buy hand-off into a Set Complete reveal: the screen covers everything (header too) in navy. */
   readonly onHandoff?: (on: boolean) => void;
+  /** Opens the Favorites sheet (the hearted items). */
+  readonly onOpenFavorites?: () => void;
   /** The members-only Secret Shop (secret-shop/DESIGN.md 6): same shelves, midnight look, VIP preview banner. */
   readonly secret?: boolean;
 }) {
@@ -577,7 +579,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     } catch (error: unknown) {
       wishStore.set(id, !adding);
       const full = (error as { response?: { data?: { code?: string } } })?.response?.data?.code === 'wishlist_full';
-      setToast(full ? 'Your wishlist is full. Remove one first.' : 'Couldn’t save that. Try again.');
+      setToast(full ? 'Your Favorites list is full. Remove one first.' : 'Couldn’t save that. Try again.');
     }
   }, [playSound, setToast]);
 
@@ -834,6 +836,8 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
           onLayout={e => { viewH.value = e.nativeEvent.layout.height; }} onScrollBeginDrag={wake} onTouchStart={wake}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
+          {/* Where hearts go, named on every shop: tap to see them, in the shop today or coming back. */}
+          {onOpenFavorites && <FavoritesChip secret={secret} onPress={onOpenFavorites} />}
           {today.fallback && (
             <View style={styles.fallback}><GameIcon name="timer" size={18} />
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fallbackText}>{fallbackBannerCopy(pollStopped)}</Text></View>
@@ -955,11 +959,25 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         bridged={handoff} onDone={finishReveal} onShown={revealShown} />}
       {askAlerts && (
         <GameDialog visible title="Want a heads-up?" icon="bell"
-          message="We'll send one note the next time something on your wishlist is in the shop. Turn it off anytime in Settings."
+          message="We'll send one note the next time something in your Favorites is in the shop. Turn it off anytime in Settings."
           buttons={[{ text: 'Yes, tell me', onPress: () => void answerAlerts(true) }, { text: 'No thanks', style: 'cancel', onPress: () => void answerAlerts(false) }]}
           onAnswer={() => setAskAlerts(false)} />
       )}
     </ShopProfile>
+  );
+}
+
+/** "Favorites" with its heart and count, at the top of the shelves (Shark Shop and Secret Shop). */
+function FavoritesChip({ secret, onPress }: { secret: boolean; onPress: () => void }) {
+  const count = useWishCount();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={6}
+      accessibilityLabel={`Favorites, ${count} ${count === 1 ? 'item' : 'items'}. Tap to see them.`}
+      style={({ pressed }) => [styles.favChip, secret && styles.favChipSecret, pressed && { transform: [{ scale: 0.97 }] }]}>
+      <WishHeart on={count > 0} size={22} />
+      <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.favText, secret && { color: SECRET_THEME.inkGold }]}>FAVORITES</Text>
+      {count > 0 && <View style={styles.favCount}><Text maxFontSizeMultiplier={MAX_FONT} style={styles.favCountText}>{count}</Text></View>}
+    </Pressable>
   );
 }
 
@@ -968,6 +986,13 @@ const MOON_BATS = require('../../../assets/fx/moonbats.webp');
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
+  favChip: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 12, marginBottom: -4,
+    paddingLeft: 10, paddingRight: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(5,52,110,0.7)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
+  favChipSecret: { backgroundColor: SECRET_THEME.panelDeep, borderColor: SECRET_THEME.gold },
+  favText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white, letterSpacing: 0.5 },
+  favCount: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 5, backgroundColor: '#ff5a7a', alignItems: 'center', justifyContent: 'center' },
+  favCountText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white },
   fallback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.6)' },
   fallbackText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   // Shelf panels in the house blue with white ink (never a white panel).

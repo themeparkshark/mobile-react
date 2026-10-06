@@ -12,6 +12,7 @@
  * hops the shark when done, a "Just the title" link, and "Awesome!" to dismiss.
  * Reduce Motion: no rays, stamp or confetti, a plain fade.
  */
+import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -56,6 +57,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
+  // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
+  useModalLayer(true, 'show');
   const [all, setAll] = useState<WearAllState>('idle');
   const allCopy = wearAllCopy(all);
   const [titleOnly, setTitleOnly] = useState<Busy>('idle');
@@ -142,6 +145,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onDone} onShow={onShown} statusBarTranslucent>
+      <ModalLayerContext.Provider value>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
@@ -205,6 +209,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           </View>
         </View>
       </Animated.View>
+      </ModalLayerContext.Provider>
     </Modal>
   );
 }
