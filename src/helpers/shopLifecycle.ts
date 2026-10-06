@@ -67,7 +67,8 @@ export const KEEP_LINE = 'Every piece you buy is yours forever.';
 
 /** The tile's calm ribbon text (navy, never red). */
 export function leavingRibbon(leaving: ShopLeaving): string {
-  return leaving.forever ? 'LAST RUN' : 'LEAVING SOON';
+  // Short: the tile ribbon shares its row with the heart.
+  return leaving.forever ? 'LAST RUN' : 'LEAVING';
 }
 
 /** A usable rarity block, or null. */

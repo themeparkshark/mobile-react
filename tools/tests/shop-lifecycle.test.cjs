@@ -19,7 +19,7 @@ test('leaving copy: a date, honest about coming back, never a countdown or press
   assert.equal(life.leavingLine({ on: '2026-11-30', forever: true }), "Leaving after Nov 30. Won't come back.");
   assert.equal(life.leavingLine({ on: '2026-11-14', forever: false }), 'Leaving after Nov 14. It might come back someday.');
   assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: true }), 'LAST RUN');
-  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: false }), 'LEAVING SOON');
+  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: false }), 'LEAVING');
   assert.equal(life.KEEP_LINE, 'Every piece you buy is yours forever.');
   for (const s of [life.leavingLine({ on: '2026-11-30', forever: true }), life.leavingLine({ on: '2026-11-30', forever: false })]) {
     assert.doesNotMatch(s, /hurry|only|tonight|last chance|left|\d+\s*(h|m|hours|minutes)\b|!/i);
@@ -42,7 +42,7 @@ test('tile ribbons: LEAVING SOON / LAST RUN outrank BACK AGAIN and NEW, owned ti
   assert.equal(shelves.tileLanes({ id: 1, shop: { leaving, is_owned: true } }).ribbon, null);
   assert.equal(shelves.tileLanes({ id: 1, shop: { last_chance: true, leaving } }).ribbon, 'last_chance', 'the old event rule is unchanged');
   const tile = src('src/screens/StoreScreen/ShopTile.tsx');
-  assert.match(tile, /leaving: \{ label: 'LEAVING SOON', color: BRAND\.navy, ink: BRAND\.gold \}/, 'calm navy and gold, never red');
+  assert.match(tile, /leaving: \{ label: 'LEAVING', color: BRAND\.navy, ink: BRAND\.gold \}/, 'calm navy and gold, never red');
 });
 
 test('closet badges: RETIRED for a piece that will never return, RARE FIND for a rare one (never confused with the RARE tier chip)', () => {

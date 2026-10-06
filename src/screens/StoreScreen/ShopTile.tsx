@@ -30,7 +30,7 @@ import { leavingOf, leavingRibbon } from '../../helpers/shopLifecycle';
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
   last_chance: { label: 'LAST CHANCE', color: BRAND.red, ink: BRAND.white },
   // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING SOON or LAST RUN).
-  leaving: { label: 'LEAVING SOON', color: BRAND.navy, ink: BRAND.gold },
+  leaving: { label: 'LEAVING', color: BRAND.navy, ink: BRAND.gold },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
