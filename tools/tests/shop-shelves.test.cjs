@@ -149,12 +149,14 @@ test('round 4: one ribbon per tile; a quiet finale banner keeps tiles calm', () 
   assert.equal(shelves.newCountLabel(0), null);
 });
 
-test('round 3: honest wishlist copy', () => {
-  assert.equal(shelves.wishSavedCopy(true), 'Saved! We’ll tell you next time it’s in the shop.');
-  assert.equal(shelves.wishSavedCopy(false), 'Saved to your wishlist.');
-  assert.equal(shelves.wishSavedCopy(null), 'Saved to your wishlist.');
-  assert.equal(shelves.wishHintCopy(false, false), 'Heart it to save it for later.');
-  assert.doesNotMatch(shelves.wishHintCopy(true, false), /tell you/);
+test('round 3: honest Favorites copy: one name for the heart, and it says where they went', () => {
+  const where = 'See them in Favorites at the top of the shop.';
+  assert.equal(shelves.wishSavedCopy(true), `Saved to Favorites! We’ll tell you when it’s in the shop. ${where}`);
+  assert.equal(shelves.wishSavedCopy(false), `Saved to Favorites! ${where}`);
+  assert.equal(shelves.wishSavedCopy(null), `Saved to Favorites! ${where}`);
+  assert.equal(shelves.wishHintCopy(false, false), 'Tap the heart to save it to Favorites.');
+  assert.match(shelves.wishHintCopy(true, false), /Favorites at the top of the shop/);
+  assert.doesNotMatch(shelves.wishHintCopy(true, false), /tell you/, 'alerts off never promise a note');
 });
 
 test('round 3: calm last-chance copy names the season', () => {

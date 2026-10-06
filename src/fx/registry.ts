@@ -143,7 +143,9 @@ export function partLayout(box: PaperBox, spec: PartSpec, aspectFallback = 1) {
     top: box.y + (spec.cy ?? 0.5) * box.h - ay * height,
     width,
     height,
-    origin: `${ax * 100}% ${ay * 100}%`,
+    // Whole pixels: React Native's transformOrigin parser reads integer percents only, so
+    // '56.88%' became '88%' and parts turned about the wrong point (the jetpack flame stretch).
+    origin: `${Math.round(ax * width)}px ${Math.round(ay * height)}px`,
     rot: spec.rot ?? 0,
   };
 }

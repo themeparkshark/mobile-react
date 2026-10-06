@@ -237,7 +237,7 @@ export function ShopToast({ message, icon = 'check', still }: { message: string 
     <Animated.View key={message} entering={still ? undefined : FadeInDown.duration(180)} exiting={still ? undefined : FadeOutDown.duration(160)}
       pointerEvents="none" style={[styles.toast, { bottom: Math.max(8, insets.bottom - 6) }]} accessibilityLiveRegion="polite">
       <GameIcon name={icon} size={20} />
-      <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.toastText}>{message}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={2} style={styles.toastText}>{message}</Text>
     </Animated.View>
   );
 }
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, .5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 },
   ctaMuted: { flex: 1, backgroundColor: '#3d6f9e', borderWidth: 3, borderColor: '#cfe6fa', borderBottomWidth: 7, borderBottomColor: '#24527d', margin: 2 },
   ctaDone: { flex: 1, backgroundColor: BRAND.green, borderWidth: 3, borderColor: '#14532d', borderBottomWidth: 7, margin: 2 },
-  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '92%', minHeight: 40, maxHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8,
+  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '92%', minHeight: 40, maxHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(5,52,110,0.94)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 2, borderColor: BRAND.white },
   toastText: { flexShrink: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },
   plinthWrap: { position: 'absolute', left: '14%', right: '14%', bottom: '3%', aspectRatio: 200 / 64 },

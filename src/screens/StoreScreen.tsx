@@ -278,7 +278,7 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
     {coins != null && (
       <>
         <Pressable onPress={onWishlist} style={tabStyles.wish} accessibilityRole="button"
-          accessibilityLabel={`My wishlist, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
+          accessibilityLabel={`Favorites, ${wishes} ${wishes === 1 ? 'item' : 'items'}`}>
           <WishHeart on={wishes > 0} size={20} />
           {wishes > 0 && <Text maxFontSizeMultiplier={1.3} style={tabStyles.wishText}>{wishes}</Text>}
         </Pressable>
@@ -589,7 +589,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
             </View>
             {today && (
               <ShopShelves today={today} setToday={setToday} onRefresh={reloadToday} offset={clockSkew}
-                focusRequest={focusRequest} scrollY={v2 ? scrollY : undefined} onHandoff={setShopHandoff} secret={secretShelves} />
+                focusRequest={focusRequest} scrollY={v2 ? scrollY : undefined} onHandoff={setShopHandoff} secret={secretShelves}
+                onOpenFavorites={() => setWishlistOpen(true)} />
             )}
             {/* Countdown Timer */}
             {!today && rotation?.next_rotation_at && (
