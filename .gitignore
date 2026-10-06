@@ -25,4 +25,3 @@ build-*.ipa
 .env.local.backup
 .env*.backup
 ios/main.jsbundle.map
-tools/tests/.out/
