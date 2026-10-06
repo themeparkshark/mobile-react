@@ -342,7 +342,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
           <ShopStage rim={glow} backdropUrl={stage?.scene ? null : stage?.backdrop} tone="night" sky={false} still={still}
             plinth={stage?.scene ? 'none' : 'house'}
             backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
-            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} liftRoom={HERO_CARD.box.top} style={HERO_CARD_STYLE} />
+            {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={HERO_CARD.shadow} liftRoom={Math.max(0, HERO_CARD.box.top - STAGE_TOP_CLEAR)} style={HERO_CARD_STYLE} />
               : <View style={styles.heroFlat}><TileArt item={item} size={170} thumb={false} /></View>}
           </ShopStage>
         </View>
@@ -399,6 +399,8 @@ const VAULT_STAGE_H = Math.round(Math.min(330, VAULT_INNER_W * 0.86));
 // Room for the jetpack's lift (up to 0.135 of the card) so a floating shark never leaves the stage.
 const VAULT_CARD = stageCard(VAULT_INNER_W, VAULT_STAGE_H, 0.16 * VAULT_STAGE_H);
 const VAULT_CARD_STYLE = { position: 'absolute' as const, ...VAULT_CARD.box };
+// The kicker and timer pill sit right above a hero stage: a lifting rig keeps this much clear of them (art panel, framing round 3).
+const STAGE_TOP_CLEAR = 16;
 
 /**
  * The Members' Vault hero (redesign): ribbon title, the stage with your shark wearing the piece,
@@ -429,7 +431,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
           plinth={stage?.scene ? 'none' : 'secret'}
           backdrop={stage?.scene ? <FxSceneBackdrop fxKey={stage.scene} still={still} /> : undefined}>
           {!stage?.scene && <StarMotes still={still} />}
-          {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={VAULT_CARD.shadow} liftRoom={VAULT_CARD.box.top} style={VAULT_CARD_STYLE} />
+          {stage ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={VAULT_CARD.shadow} liftRoom={Math.max(0, VAULT_CARD.box.top - STAGE_TOP_CLEAR)} style={VAULT_CARD_STYLE} />
             : <View style={styles.heroFlat}><TileArt item={item} size={190} thumb={false} /></View>}
         </ShopStage>
       </Pressable>

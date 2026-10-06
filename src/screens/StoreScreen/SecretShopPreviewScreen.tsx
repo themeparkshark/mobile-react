@@ -140,15 +140,18 @@ function Shop({ member, focus, night = 1, gate = false, lapse = false }: { membe
 const W = Dimensions.get('window').width;
 
 /** The Dressing Room stage: your shark wearing one hero, full LOD. Tap to wear the next. */
-function Stage() {
+function Stage({ withHat = false }: { withHat?: boolean }) {
   const [index, setIndex] = useState(0);
   const hero = HEROES[index];
   const look = useMemo(() => {
     const base = baseInventory() as unknown as Record<string, unknown>;
+    // 'stage-hat': the halo rides along (the tallest local head piece), for the framing check.
+    const halo = HEROES.find(h => h.fx === 'reef_halo');
+    if (withHat && halo) base.head_item = heroItem(halo);
     const slot = { 1: 'head_item', 3: 'neck_item', 5: 'hand_item', 6: 'background_item' }[hero.slot]!;
     base[slot] = heroItem(hero);
     return base as unknown as InventoryType;
-  }, [index]);
+  }, [index, withHat]);
   return (
     <AuthFixture member>
       <Pressable style={{ flex: 1, backgroundColor: '#0a4f96' }} onPress={() => setIndex(i => (i + 1) % HEROES.length)}>
@@ -265,6 +268,7 @@ function PreviewBody({ mode }: { mode: string }) {
   if (mode === 'realstore' || mode === 'realstore-guest') return <RealStore member={mode === 'realstore'} />;
   if (mode === 'realswitch') return <RealStore member switching />;
   if (mode === 'stage') return <Stage />;
+  if (mode === 'stage-hat') return <Stage withHat />;
   if (mode === 'framing') return <Framing />;
   if (mode === 'gallery' || mode === 'still') return <Gallery still={mode === 'still'} />;
   const tryOn = /^tryon-([a-z_]+?)(-guest)?$/.exec(mode);
