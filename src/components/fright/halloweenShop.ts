@@ -89,7 +89,9 @@ export function awayMessage(reason: string | null | undefined, night?: NightLike
 export function awayHeadline(reason: string | null | undefined, night: NightLike, nowMs: number): string {
   if (reason === 'off_season') return 'Closed for the season';
   if (reason === 'not_event_hours') {
-    if (night?.closes_at && nowMs >= Date.parse(night.closes_at)) return 'Closed for tonight';
+    // Without tonight's window there is nothing true to promise: no "Opens tonight".
+    if (!night?.closes_at) return 'Event only';
+    if (nowMs >= Date.parse(night.closes_at)) return 'Closed for tonight';
     return 'Opens tonight';
   }
   return 'Event only';

@@ -4,10 +4,11 @@
  * server (the endpoint that owns it), then the profile refreshes.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { BRAND } from '../../ui';
+import { BRAND, GameIcon } from '../../ui';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import type { EarnedTitle } from './titleModel';
 
 /** Long enough for a kid to find the button (panel round 2). */
@@ -23,6 +24,17 @@ export default function TitleUndoBar({ previous, onUndo, onDone }: {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const mounted = useRef(true);
+  const reduced = useReducedGameMotion();
+  // The time left, drained under the bar (a still full bar with Reduce Motion). Restarts with the timer.
+  const left = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!previous || busy) { left.stopAnimation(); return; }
+    left.setValue(1);
+    if (reduced) return;
+    const run = Animated.timing(left, { toValue: 0, duration: UNDO_MS, easing: Easing.linear, useNativeDriver: true });
+    run.start();
+    return () => run.stop();
+  }, [previous, busy, reduced, left]);
   useEffect(() => () => { mounted.current = false; }, []);
   useEffect(() => { setFailed(false); }, [previous]);
   // The timer only runs while no undo is in flight: it can never hide the bar mid-request
@@ -59,8 +71,12 @@ export default function TitleUndoBar({ previous, onUndo, onDone }: {
               if (mounted.current) setBusy(false);
             }
           }}>
+          <GameIcon name="retry" size={18} />
           <Text style={styles.undoText} maxFontSizeMultiplier={1.2}>{busy ? '...' : 'UNDO'}</Text>
         </Pressable>
+        <View style={styles.track} pointerEvents="none">
+          <Animated.View style={[styles.drain, { transform: [{ scaleX: left }] }]} />
+        </View>
       </View>
     </View>
   );
@@ -71,7 +87,10 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, backgroundColor: BRAND.navy, borderRadius: 22,
     paddingLeft: 18, paddingRight: 6, borderWidth: 2, borderColor: '#ffffff' },
   text: { fontFamily: 'Knockout', fontSize: 17, color: '#ffffff' },
-  undo: { backgroundColor: '#ffcf3b', borderRadius: 16, paddingHorizontal: 14, minHeight: 32, justifyContent: 'center',
+  track: { position: 'absolute', left: 18, right: 18, bottom: 3, height: 3, borderRadius: 2, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.15)' },
+  drain: { flex: 1, backgroundColor: '#ffcf3b', transformOrigin: 'left' },
+  undo: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffcf3b', borderRadius: 16, paddingHorizontal: 12, minHeight: 32, justifyContent: 'center',
     borderBottomWidth: 3, borderBottomColor: '#d99a00' },
   undoText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
 });

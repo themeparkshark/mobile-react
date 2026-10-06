@@ -57,6 +57,8 @@ test('a title says how you earned it in kid-simple words', () => {
   assert.equal(m.titleBadgeSlug('Churro Finder'), 'churro_collection', 'the profile pill finds the book art from the name alone');
   assert.equal(m.titleBadgeSlug('Night Lights Finder'), 'night_lights');
   assert.equal(m.titleBadgeSlug('Coaster Champ'), null);
+  assert.equal(m.titleBadgeSlug('Night Owl'), null, 'a title that only starts like a book never borrows its art');
+  assert.equal(m.titleBadgeSlug('Churro Connoisseur'), null, 'only "<Book> Finder" names its book');
   assert.equal(m.bookNoun('Camera Crew'), 'finds');
 });
 
@@ -82,9 +84,14 @@ test('the title sheet: tap your own pill, change or remove through the server, n
   assert.match(profile, /<TitleUndoBar previous=\{undoTitle\}/);
   assert.match(profile, /art=\{<TitleArt entry=\{null\} title=\{player\.title\} size=\{28\} \/>\}/, 'the pill shows the book art, not the crown');
   assert.match(sheet, /disabled=\{!!busy \|\| earned === null\}/, 'Remove waits for the lists so Undo always knows the title');
+  assert.match(sheet, /if \(!previous && !confirming\) \{ setConfirming\(true\); return; \}/, 'a title Undo cannot restore asks first');
+  assert.match(sheet, /label="Keep it"/);
+  assert.doesNotMatch(sheet, /confirmGame/, 'no second Modal over the sheet (iOS will not present it)');
   const undo = read('src/components/profile/TitleUndoBar.tsx');
   assert.match(undo, /if \(!previous \|\| busy\) return;\s*const timer = setTimeout\(onDone, UNDO_MS\)/, 'the timer never fires while an undo is in flight');
   assert.match(undo, /UNDO_MS = 10_000/);
+  assert.match(undo, /<GameIcon name="retry"/, 'UNDO has an icon');
+  assert.match(undo, /Animated\.timing\(left, \{ toValue: 0, duration: UNDO_MS/, 'the time left drains');
   assert.match(undo, /if \(mounted\.current\) setFailed\(true\)/);
   assert.match(profile, /await equipEarned\(previous\); await refreshPlayer\(\);/);
 });
@@ -117,6 +124,7 @@ test('stall copy: countdown when open, the away line and no buy for everyone els
   assert.equal(m.awayHeadline('not_event_hours', night, Date.parse('2026-10-04T15:00:00-04:00')), 'Opens tonight');
   assert.equal(m.awayHeadline('not_event_hours', night, Date.parse('2026-10-05T02:30:00-04:00')), 'Closed for tonight');
   assert.equal(m.awayHeadline('not_at_event', night, now), 'Event only');
+  assert.equal(m.awayHeadline('not_event_hours', null, now), 'Event only', 'no window: nothing to promise');
   for (const h of ['Opens tonight', 'Closed for tonight', 'Event only', 'Closed for the season']) assert.ok(h.length <= 22, h);
   assert.equal(m.stallAction({ open: true, store_id: 19 }), 'open');
   assert.equal(m.stallAction({ open: false, store_id: 19 }), 'away');

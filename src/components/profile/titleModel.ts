@@ -136,11 +136,13 @@ export function findEarned(title: string | null | undefined, earned: readonly Ea
 export const BADGE_BOOKS: readonly string[] = ['churro_collection', 'pretzel_collection', 'night_lights', 'rain_parade', 'camera_crew'];
 
 /**
- * The book a title names, from the title alone (no network): "Churro Finder" and "Churro Connoisseur" are the
- * Churro Collection, "Night Lights Finder" is Night Lights. Null when no bundled book matches (stamps, events).
+ * The book a starter title names, from the title alone (no network): "Churro Finder" is the Churro
+ * Collection, "Night Lights Finder" is Night Lights. Only "<Book> Finder" titles match, by the whole
+ * book name, so a stamp or event title that merely starts with "Night" never borrows a book's art.
  */
 export function titleBadgeSlug(title: string | null | undefined): string | null {
-  const first = clean(title).split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (first.length < 3) return null;
-  return BADGE_BOOKS.find(slug => slug.split('_')[0] === first) ?? null;
+  const match = /^(.+?)\s+Finder$/i.exec(clean(title));
+  if (!match) return null;
+  const base = match[1].trim().toLowerCase().replace(/\s+/g, '_');
+  return BADGE_BOOKS.find(slug => slug === base || slug === `${base}_collection`) ?? null;
 }

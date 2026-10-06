@@ -4,7 +4,7 @@
  * with its warm lantern glow baked into the art (no live shadow on a map marker), a LIMITED tag, and a night-palette name chip
  * ("Halloween Shop" over tonight's real hours: "Open till 2 AM").
  * Away (not at the event or outside event hours) is a deliberate locked look:
- * the solid booth without its glow, a small gold lock in its corner, the chip turns fog-grey and reads
+ * the booth shut (dimmed, desaturated art, no glow) with a gold lock on its corner, the chip turns fog-grey and reads
  * "Opens at 6:30 PM" or "Only at Fin-ister Nights". Plain RN views in a FIXED
  * box (a MarkerView size change re-adds the iOS annotation): only text and
  * opacity change, the tree and the box never do. No Skia, no vector icons.
@@ -37,7 +37,7 @@ export const HalloweenStall = memo(function HalloweenStall({ name, line, tag, op
         <Image source={BOOTH} style={[styles.booth, open ? null : styles.hidden]} contentFit="contain" cachePolicy="memory" />
         <Image source={BOOTH_CLOSED} style={[styles.booth, open ? styles.hidden : null]} contentFit="contain" cachePolicy="memory" />
       </View>
-      <View style={[styles.lock, open ? styles.hidden : null]}><GameIcon name="lock" size={20} /></View>
+      <View style={[styles.lock, open ? styles.hidden : null]}><GameIcon name="lock" size={28} /></View>
       <View style={[styles.tag, open ? null : styles.tagAway]}><Text style={styles.tagText} maxFontSizeMultiplier={1}>{tag}</Text></View>
       <View style={[styles.chip, open ? null : styles.chipAway]}>
         <Text style={[styles.name, open ? null : styles.nameAway]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   box: { width: STALL_BOX.w, height: STALL_BOX.h, alignItems: 'center' },
   boothBox: { width: BOOTH_PT, height: BOOTH_PT, marginTop: -8, marginBottom: -12 },
   booth: { position: 'absolute', width: BOOTH_PT, height: BOOTH_PT },
-  lock: { position: 'absolute', top: 58, left: STALL_BOX.w / 2 + 18 },
+  lock: { position: 'absolute', top: 50, left: STALL_BOX.w / 2 + 12 },
   hidden: { opacity: 0 },
   tag: {
     position: 'absolute', top: 0, right: 14, backgroundColor: NIGHT.candy, borderRadius: 8, borderWidth: 2, borderColor: NIGHT.ink,

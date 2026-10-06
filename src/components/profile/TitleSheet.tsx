@@ -53,11 +53,14 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
   const [earned, setEarned] = useState<EarnedTitle[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Remove asked once for a title Undo cannot bring back. */
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setMode(__DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW_TITLE_SHEET === 'change' ? 'change' : 'about');
     setError(null);
+    setConfirming(false);
     let live = true;
     // Dev profile preview (offline): a fixture list so the sheet can be captured. Constant-folded out of release.
     if (__DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1') {
@@ -99,9 +102,13 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
   const wear = (entry: EarnedTitle) => save(entry.key, () => equipEarned(entry));
   // stamp_id null clears whatever title is worn (users.equipped_title), from a book or a stamp.
   // Disabled until the lists load, so Undo always knows which endpoint wears the title again.
-  const remove = () => {
-    if (earned === null) return Promise.resolve();
+  const remove = async () => {
+    if (earned === null) return;
     const previous = findEarned(title, earned);
+    // No Undo without knowing where the title came from (lists failed, or an event title): ask first,
+    // inside this sheet (a second Modal over this one does not present on iOS).
+    if (!previous && !confirming) { setConfirming(true); return; }
+    setConfirming(false);
     return save('remove', () => equipStampTitle(null), () => onRemoved?.(previous));
   };
 
@@ -127,7 +134,17 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
             Your title shows under your shark for everyone to see.
           </GameText>
           {!!error && <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.error}>{error}</GameText>}
-          <View style={styles.actions}>
+          {confirming && (
+            <View style={styles.confirm} accessibilityLiveRegion="polite">
+              <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.copy}>
+                There is no Undo for this one. You can wear it again from where you earned it.
+              </GameText>
+              <GameButton label="Remove it" variant="danger" tone="onBlue" size="compact" loading={busy === 'remove'} disabled={!!busy}
+                onPress={() => { void remove(); }} />
+              <GameButton label="Keep it" variant="ghost" tone="onBlue" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
+            </View>
+          )}
+          <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}>
             <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
             {!!worn && (
@@ -201,6 +218,8 @@ const styles = StyleSheet.create({
   wear: { backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4,
     borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5, minHeight: 32, justifyContent: 'center' },
   wearText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, letterSpacing: 0.5 },
+  confirm: { alignSelf: 'stretch', gap: 4, backgroundColor: 'rgba(5,52,110,0.35)', borderRadius: 14, padding: 10 },
+  hiddenActions: { opacity: 0.3 },
   remove: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 44,
     minWidth: 160, justifyContent: 'center' },
   removeOff: { opacity: 0.45 },
