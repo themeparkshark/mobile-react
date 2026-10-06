@@ -563,7 +563,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     </View>
                   </View>
                 )}
-                {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && (
+                {/* A Secret piece with a leaving line fills the body: the heart button speaks for itself there, so no hint rests under the fade. */}
+                {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && !(fxKey && goingAway) && (
                   <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{goingAway?.forever ? retiringWishHint(wished) : wishHintCopy(wished, wishStore.alerts())}</Text>
                 )}
               </ScrollView>

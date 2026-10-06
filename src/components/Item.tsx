@@ -36,6 +36,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const isNew = !isEquipped && item.seen === false;
   // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
   const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
+  // A badged card keeps its height: the art steps down and shrinks by the chip's zone (chip + 6 pt).
+  const art = life ? artSize - 18 : artSize;
   const [tip, setTip] = useState(false);
   useEffect(() => {
     if (!tip) return;
@@ -95,7 +97,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
             }]} />
           )}
           {item.item_type?.id === 4 && !!item.paper_url ? (
-            <View style={{ width: artSize, height: artSize }}>
+            <View style={{ width: art, height: art }}>
               {sharkBaseLayers(worn).map((source, index) => (
                 <Image key={`base-${index}`} source={source} style={StyleSheet.absoluteFill} contentFit="contain" />
               ))}
@@ -104,7 +106,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
           ) : (
             <Image
               source={item.icon_url}
-              style={{ width: artSize, height: artSize }}
+              style={{ width: art, height: art }}
               contentFit="contain"
             />
           )}
@@ -165,7 +167,7 @@ const styles = StyleSheet.create({
   lifeText: { color: '#ffd44c', fontFamily: 'Knockout', fontSize: 13 },
   pearl: { width: 15, height: 15 },
   // A reserved zone under the corner badge (chip height + 6), so no art ever touches it.
-  artInset: { paddingTop: 26, paddingHorizontal: 10 },
+  artInset: { paddingTop: 18 },
   tip: { position: 'absolute', left: 4, right: 4, bottom: 10, zIndex: 30, backgroundColor: '#123e65', borderRadius: 10, borderWidth: 1.5,
     borderColor: '#ffd44c', paddingHorizontal: 6, paddingVertical: 5 },
   tipText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14, textAlign: 'center' },
