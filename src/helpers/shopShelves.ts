@@ -295,7 +295,8 @@ export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?
   if (item.shop?.is_owned ?? item.has_purchased) return { ribbon: null };
   // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
   // LEAVING SOON / LAST RUN is calm navy and says a date in the try-on: it outranks BACK AGAIN and NEW.
-  const ribbon: TileRibbon = item.shop?.last_chance && !quiet ? 'last_chance' : item.shop?.leaving?.on ? 'leaving'
+  // A dated LEAVING / RETIRING (calm navy) outranks the red event LAST CHANCE, so one piece never says both.
+  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.last_chance && !quiet ? 'last_chance'
     : item.shop?.returning ? 'returning' : item.shop?.is_new ? 'new' : null;
   return { ribbon };
 }

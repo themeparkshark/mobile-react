@@ -24,14 +24,7 @@ import { FX_BLURB, FX_SCENES, FxKey, fxKeyOf, isSecretItem } from '../../fx/regi
 import { SECRET_THEME } from '../../fx/secretTheme';
 import { UnlockBeat } from './SecretShopUi';
 import { Image } from 'expo-image';
-import { KEEP_LINE, leavingLine, leavingOf, pearlFor, rarityOf } from '../../helpers/shopLifecycle';
-
-/** Rarity pearls (Codex GPT Image 2.5 with Alex's references, cp-catalogs/art). */
-export const PEARLS = {
-  white: require('../../../assets/shop-life/pearl-white.webp'),
-  silver: require('../../../assets/shop-life/pearl-silver.webp'),
-  gold: require('../../../assets/shop-life/pearl-gold.webp'),
-} as const;
+import { KEEP_LINE, PEARLS, leavingIcon, leavingLine, pearlFor, retiringWishHint, visibleLeaving, visibleRarity } from '../../helpers/shopLifecycle';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -313,6 +306,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     serverOwned: !!(item.shop?.is_owned ?? item.has_purchased) || !!pieces.find(p => p.id === item.id)?.owned });
   const owned = row.owned;
   const name = itemDisplayName(item);
+  // Items come and go (cp-catalogs): computed once per render.
+  const goingAway = visibleLeaving(item.shop, { secret: secretItem, vipLocked });
+  const rarity = visibleRarity(item.shop, owned);
+  const lifeSay = [goingAway ? leavingLine(goingAway) : null, goingAway ? (owned ? 'It is yours, forever.' : KEEP_LINE) : null, rarity?.label].filter(Boolean).join(' ');
   const short = shortBy(balance, item.cost);
   const finishes = !!set && completesSet(item.id, pieces);
   const worn = isItemWorn(player?.inventory, item);
@@ -515,32 +512,31 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     <GameIcon name="lock" size={16} />
                   </View>
                 )}
-                {item.shop?.last_chance && !owned && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
+                {item.shop?.last_chance && !owned && !goingAway && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaving}>
                   {lastChanceLine(item.shop?.season)}</Text>}
-                {item.shop?.returning && !owned && !leavingOf(item.shop) && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
-                {/* Items come and go: when this one leaves, honestly whether it comes back, and the forever promise. */}
-                {leavingOf(item.shop) && (
-                  <View style={styles.lifeCard} accessible accessibilityLabel={`${leavingLine(leavingOf(item.shop)!)} ${owned ? "It's yours." : KEEP_LINE}`}>
-                    <View style={styles.lifeRow}><GameIcon name="moon" size={20} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leavingLine(leavingOf(item.shop)!)}</Text></View>
-                    {/* Secret pieces already make the forever promise in their own card. */}
-                    {!fxKeyOf(item) && <View style={styles.lifeRow}><GameIcon name="check" size={18} />
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeSoft}>{owned ? 'It’s yours. Forever.' : KEEP_LINE}</Text></View>}
-                  </View>
-                )}
-                {rarityOf(item.shop) && (
-                  <View style={styles.rarityRow} accessible accessibilityLabel={rarityOf(item.shop)!.label}>
-                    <Image source={PEARLS[pearlFor(rarityOf(item.shop)!.tier)]} style={{ width: 18, height: 18 }} contentFit="contain" />
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeSoft}>{rarityOf(item.shop)!.label}</Text>
+                {item.shop?.returning && !owned && !goingAway && <Text maxFontSizeMultiplier={MAX_FONT} style={styles.back}>Back again by popular demand.</Text>}
+                {/* Items come and go: when it leaves, honestly whether it comes back, the forever promise, and (owned or retiring) how few sharks have it. */}
+                {!fxKeyOf(item) && (goingAway || rarity) && (
+                  <View style={styles.lifeCard} accessible accessibilityLabel={lifeSay}>
+                    {goingAway && <View style={styles.lifeRow}><GameIcon name={leavingIcon(goingAway)} size={22} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{leavingLine(goingAway)}</Text></View>}
+                    {goingAway && <View style={styles.lifeRow}><GameIcon name="check" size={20} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{owned ? (goingAway.forever ? 'It’s yours. A keeper, forever.' : 'It’s yours. Forever.') : KEEP_LINE}</Text></View>}
+                    {rarity && <View style={styles.lifeRow}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.lifeText}>{rarity.label}</Text></View>}
                   </View>
                 )}
                 {fxKeyOf(item) && (
-                  // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3).
-                  <View style={styles.fxCard} accessible accessibilityLabel={`${FX_BLURB[fxKeyOf(item)!]} ${keepLine}`}>
+                  // Secret pieces: what it does, and the kid-fair promise (secret-shop/DESIGN.md 4.3). Leaving and rarity join this one card.
+                  <View style={styles.fxCard} accessible accessibilityLabel={`${goingAway ? `${leavingLine(goingAway)} ` : ''}${FX_BLURB[fxKeyOf(item)!]} ${keepLine}${rarity ? ` ${rarity.label}` : ''}`}>
+                    {goingAway && <View style={styles.fxRow}><GameIcon name={leavingIcon(goingAway)} size={22} />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{leavingLine(goingAway)}</Text></View>}
                     <View style={styles.fxRow}><GameIcon name="sparkle" size={22} />
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxText}>{FX_BLURB[fxKeyOf(item)!]}</Text></View>
                     <View style={styles.fxRow}><GameIcon name="check" size={20} />
                       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{keepLine}</Text></View>
+                    {rarity && <View style={styles.fxRow}><Image source={PEARLS[pearlFor(rarity.tier)]} style={styles.lifePearl} contentFit="contain" />
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.fxKeep}>{rarity.label}</Text></View>}
                   </View>
                 )}
 
@@ -569,7 +565,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                   </View>
                 )}
                 {!owned && phase === 'idle' && (!vipLocked || secretItem) && !(lapsed && vipLocked) && (
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{wishHintCopy(wished, wishStore.alerts())}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.wishHint}>{goingAway?.forever ? retiringWishHint(wished) : wishHintCopy(wished, wishStore.alerts())}</Text>
                 )}
               </ScrollView>
               {/* Nothing reads half-cut against the buttons. */}
@@ -645,11 +641,11 @@ const NEW_POP = new Keyframe({
 }).duration(260).delay(300);
 
 const styles = StyleSheet.create({
-  lifeCard: { gap: 6, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.45)', borderWidth: 2, borderColor: 'rgba(255,224,122,0.55)' },
+  // One card, one face, a solid gold keyline (the fxCard's radius and padding).
+  lifeCard: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: 'rgba(5,52,110,0.55)', borderWidth: 2, borderColor: BRAND.gold },
   lifeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lifeText: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: '#ffe07a' },
-  lifeSoft: { flex: 1, fontFamily: FONT.body, fontSize: 17, color: '#e2f6ff' },
-  rarityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2 },
+  lifeText: { flex: 1, fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
+  lifePearl: { width: 22, height: 22 },
   scrim: { flex: 1, backgroundColor: BRAND.scrim, justifyContent: 'flex-end' },
   sheet: { backgroundColor: S.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderWidth: 3, borderColor: S.border, ...SHADOW.card },

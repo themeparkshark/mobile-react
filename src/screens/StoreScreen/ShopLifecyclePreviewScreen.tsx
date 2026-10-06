@@ -6,7 +6,8 @@
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-forever  the try-on on a last-run piece (won't come back)
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-leaving  the try-on on a piece leaving for a while
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-rare     the try-on on a rare piece
- *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=secret         the Secret Shop with a last-run animated piece
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=secret         the Secret Shop with leaving animated pieces (secret-guest: as a non-member, no leaving marks)
+ *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=tryon-owned    the try-on on an owned retiring piece (a keeper, and its rarity)
  *   EXPO_PUBLIC_SHOP_LIFE_PREVIEW=closet         the Dressing Room grid with RETIRED and RARE badges
  *   append -still for Reduce Motion
  *
@@ -55,6 +56,7 @@ function piece(slug: string, name: string, rarity: number, type: number, cost: n
 
 const LAST_RUN = piece('passport-stamp-visor', 'Passport Stamp Visor', 1, 1, 50, { leaving: { on: '2026-11-30', forever: true } });
 const LEAVING = piece('rope-drop-visor', 'Rope Drop Visor', 1, 1, 50, { leaving: { on: '2026-11-14', forever: false } });
+const KEEPER = piece('festival-passport-tee', 'Festival Passport Tee', 1, 4, 50, { owned: true, leaving: { on: '2026-11-30', forever: true }, rarity: { tier: 'rare', label: 'Rare find: few sharks have this' } });
 const RARE = piece('triceratops-frill-helmet', 'Triceratops Frill Helmet', 4, 1, 280, { rarity: veryRare, isNew: true });
 
 function at(days: number): string {
@@ -88,7 +90,7 @@ function sharkToday(): ShopToday {
         piece('monorail-nose-hat', 'Monorail Nose Hat', 3, 1, 140),
       ] }),
       section({ key: 'daily', type: 'daily', title: 'Daily', ends_at: at(1), items: [
-        LAST_RUN, LEAVING,
+        LAST_RUN, LEAVING, KEEPER,
         piece('pirate-tricorn-feathered', 'Pirate Tricorn', 3, 1, 140, { returning: true }),
         piece('glow-fin-ears', 'Glow Fin Ears', 3, 1, 140),
         piece('cozy-knit-beanie-crimson', 'Crimson Knit Beanie', 1, 1, 50, { owned: true }),
@@ -107,9 +109,9 @@ function secretToday(): ShopToday {
     server_time: new Date().toISOString(), sets: [], wishlist_ids: [], equipped_title: null, wishlist_alerts: false,
     sections: [
       section({ key: 'featured', type: 'featured', title: 'The Vault', ends_at: at(4), hero_id: 436, items: [
-        fx(436, 'Jetpack 3000', 'jetpack', 3, 3, 140, require('../../../assets/fx/jetpack.webp'), { rarity: ultraRare }),
+        fx(436, 'Jetpack 3000', 'jetpack', 3, 3, 140, require('../../../assets/fx/jetpack.webp'), { rarity: ultraRare, leaving: { on: '2026-11-30', forever: false } }),
         fx(9002, 'Plasma Fin Blade', 'plasma_blade', 5, 4, 280, require('../../../assets/fx/blade.webp')),
-        fx(9004, 'Saucer Buddy', 'saucer', 3, 4, 280, require('../../../assets/fx/ufo.webp'), { leaving: { on: '2026-11-30', forever: true } }),
+        fx(9004, 'Saucer Buddy', 'saucer', 3, 4, 280, require('../../../assets/fx/ufo.webp'), { leaving: { on: '2026-11-30', forever: false } }),
       ] }),
       section({ key: 'daily', type: 'daily', title: "Tonight's Pick", ends_at: at(1), items: [
         fx(9003, 'Reef Halo', 'reef_halo', 1, 3, 140, require('../../../assets/fx/fish-yellow.webp'), { returning: true }),
@@ -135,10 +137,10 @@ function AuthFixture({ member, children }: { member: boolean; children: React.Re
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
 }
 
-function Shop({ secret, focus }: { secret: boolean; focus: number | null }) {
+function Shop({ secret, focus, guest = false }: { secret: boolean; focus: number | null; guest?: boolean }) {
   const [today, setToday] = useState<ShopToday | null>(() => (secret ? secretToday() : sharkToday()));
   return (
-    <AuthFixture member={secret}>
+    <AuthFixture member={secret && !guest}>
       <View style={{ flex: 1, backgroundColor: secret ? SECRET_THEME.floor : BRAND.blue }}>
         <Topbar>
           <TopbarColumn stretch={false}><BackButton onPress={() => undefined} /></TopbarColumn>
@@ -215,5 +217,7 @@ function Body({ mode }: { mode: string }) {
   if (mode === 'tryon-forever') return <Shop secret={false} focus={LAST_RUN.id} />;
   if (mode === 'tryon-leaving') return <Shop secret={false} focus={LEAVING.id} />;
   if (mode === 'tryon-rare') return <Shop secret={false} focus={RARE.id} />;
+  if (mode === 'tryon-owned') return <Shop secret={false} focus={KEEPER.id} />;
+  if (mode === 'secret-guest') return <Shop secret guest focus={null} />;
   return <Shop secret={false} focus={null} />;
 }

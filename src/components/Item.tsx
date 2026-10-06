@@ -1,15 +1,9 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { closetBadge, closetBadgeSay, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
-
-const PEARL = {
-  white: require('../../assets/shop-life/pearl-white.webp'),
-  silver: require('../../assets/shop-life/pearl-silver.webp'),
-  gold: require('../../assets/shop-life/pearl-gold.webp'),
-} as const;
+import { PEARLS, closetBadge, closetBadgeSay, isItemWorn, isLockedWhileWorn, itemDisplayName, sharkBaseLayers, wearableBadge } from '../helpers/wardrobe';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
@@ -41,7 +35,8 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
   const name = itemDisplayName(item);
   const isNew = !isEquipped && item.seen === false;
   // Items come and go: a piece that retired forever, or a rare one, says so in its corner (cp-catalogs).
-  const life = closetBadge(item.lifecycle);
+  const life = useMemo(() => closetBadge(item.lifecycle), [item.lifecycle]);
+  const lifeSay = useMemo(() => closetBadgeSay(item.lifecycle), [item.lifecycle]);
   const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -62,7 +57,7 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
-          : isEquipped ? `Remove ${name} from your shark${closetBadgeSay(item.lifecycle)}` : `Wear ${name} on your shark${closetBadgeSay(item.lifecycle)}`}
+          : isEquipped ? `Remove ${name} from your shark${lifeSay}` : `Wear ${name} on your shark${lifeSay}`}
         accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
         accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
         disabled={!onToggle}
@@ -74,16 +69,17 @@ export default function Item({ item, onToggle, inventory, highlighted = false }:
         {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
         {isNew && <View style={[styles.cornerBadge, styles.newBadge]}><Text style={styles.newText}>NEW</Text></View>}
         {life && (
-          <View style={[styles.lifeBadge, life.label === 'RETIRED' && styles.retiredBadge]} accessibilityElementsHidden>
-            {life.pearl && <Image source={PEARL[life.pearl]} style={styles.pearl} contentFit="contain" />}
-            <Text maxFontSizeMultiplier={1.2} style={[styles.lifeText, life.label === 'RETIRED' && styles.retiredText]}>{life.label}</Text>
+          // One chip style for the family (navy, gold keyline): RETIRED with its pearl, or a pearl alone.
+          <View style={styles.lifeBadge} accessibilityElementsHidden>
+            {life.pearl && <Image source={PEARLS[life.pearl]} style={styles.pearl} contentFit="contain" />}
+            {life.label && <Text maxFontSizeMultiplier={1.2} style={styles.lifeText}>{life.label}</Text>}
           </View>
         )}
         {isVip && (
           <Image source={require('../../assets/images/screens/profile/subscribed.png')}
             style={[styles.cornerIcon]} contentFit="contain" />
         )}
-        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }]}>
+        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }, life && styles.artInset]}>
           {!!badge.glow && (
             <View pointerEvents="none" style={[styles.glow, {
               width: artSize * 0.8, height: artSize * 0.8, borderRadius: artSize * 0.4,
@@ -151,12 +147,12 @@ const styles = StyleSheet.create({
     borderRadius: 7, backgroundColor: '#ffd44c', borderWidth: 1, borderColor: '#fff',
     paddingHorizontal: 5, paddingVertical: 3 },
   newBadge: { backgroundColor: '#e8412c' },
-  lifeBadge: { zIndex: 12, position: 'absolute', top: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 2,
-    borderRadius: 7, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#123e65', paddingHorizontal: 4, paddingVertical: 2 },
-  retiredBadge: { backgroundColor: '#123e65', borderColor: '#ffd44c' },
-  lifeText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 12 },
-  retiredText: { color: '#ffd44c' },
-  pearl: { width: 13, height: 13 },
+  lifeBadge: { zIndex: 12, position: 'absolute', top: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 8, backgroundColor: '#123e65', borderWidth: 1.5, borderColor: '#ffd44c', paddingHorizontal: 4, paddingVertical: 2 },
+  lifeText: { color: '#ffd44c', fontFamily: 'Knockout', fontSize: 13 },
+  pearl: { width: 15, height: 15 },
+  // Room under the corner badge, so no art ever touches it.
+  artInset: { paddingTop: 14 },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
   newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
   cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },

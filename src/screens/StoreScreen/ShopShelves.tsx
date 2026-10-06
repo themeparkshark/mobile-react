@@ -58,7 +58,9 @@ import { SECRET_THEME } from '../../fx/secretTheme';
 import { SecretPreviewBanner, StarMotes } from './SecretShopUi';
 import { VAULT, VaultPanel, VaultRibbon } from './SecretVault';
 import { FxPauseContext } from '../../fx/FxStage';
+import { isSecretItem } from '../../fx/registry';
 import { ShopProfile } from './shopProfile';
+import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -350,6 +352,7 @@ const Hero = memo(function Hero({ item, set, section, offset, still, todayItems,
       {/* Kicker row: the label and the timer pill share one line above the stage, never on the hat. */}
       <View style={styles.heroKickerRow} pointerEvents="none">
         <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} style={styles.heroKicker}>THIS WEEK'S STAR</Text>
+        <LeavingChip item={item} />
         <SectionPills section={section} offset={offset} still={still} />
       </View>
       <View style={styles.heroText} pointerEvents="box-none">
@@ -404,6 +407,19 @@ const VAULT_CARD_STYLE = { position: 'absolute' as const, ...VAULT_CARD.box };
  * The Members' Vault hero (redesign): ribbon title, the stage with your shark wearing the piece,
  * then one calm plate (name, price, a "moves" chip) and one CTA. One focal point.
  */
+/** The hero cards carry the same calm LEAVING / RETIRING mark as the tiles (members-only pieces: members only). */
+function LeavingChip({ item }: { item: ShopItem }) {
+  const { player } = useContext(AuthContext);
+  const leaving = visibleLeaving(item.shop, { secret: isSecretItem(item), vipLocked: !!item.is_member_item && !player?.is_subscribed });
+  if (!leaving || (item.shop?.is_owned ?? item.has_purchased)) return null;
+  return (
+    <View style={styles.leavingChip} accessible accessibilityLabel={leavingSay(leaving)}>
+      <GameIcon name={leavingIcon(leaving)} size={13} />
+      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingChipText}>{leavingRibbon(leaving)}</Text>
+    </View>
+  );
+}
+
 const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen }: {
   item: ShopItem; section: ShopSection; offset: number; still: boolean; onOpen: OpenFn;
 }) {
@@ -436,6 +452,7 @@ const VaultHero = memo(function VaultHero({ item, section, offset, still, onOpen
       <View style={styles.vaultPlate}>
         <Text maxFontSizeMultiplier={MAX_FONT} style={styles.vaultName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{name}</Text>
         <View style={styles.vaultMeta}>
+          <LeavingChip item={item} />
           {!owned && (
             <View style={styles.vaultPrice} accessible accessibilityLabel={`${formatCoins(item.cost)} Shark Coins${member ? '' : ', VIP members can buy'}`}>
               <GameIcon name="coins" size={20} />
@@ -1023,6 +1040,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroText: { position: 'absolute', left: HERO.pad, top: HERO.kickerH + 4, height: HERO_L.textH, width: HERO_L.textW, gap: HERO.gap },
+  leavingChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.navy, borderRadius: 8, borderWidth: 1.5, borderColor: BRAND.gold,
+    paddingHorizontal: 6, paddingVertical: 2, marginLeft: 6 },
+  leavingChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
   heroKicker: { flexShrink: 1, fontFamily: FONT.display, fontSize: HERO.kickerFont, color: S.inkGold, letterSpacing: HERO.kickerTracking },
   heroName: { fontFamily: FONT.display, fontSize: HERO_L.nameSize, lineHeight: HERO_L.nameLine, color: S.ink },
   heroRarityDot: { marginLeft: 4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white },
