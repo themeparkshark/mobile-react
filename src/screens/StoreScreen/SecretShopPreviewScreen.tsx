@@ -208,7 +208,32 @@ export default function SecretShopPreviewScreen() {
   return <View key={mode} style={{ flex: 1 }}><PreviewBody mode={mode} /></View>;
 }
 
+/**
+ * The REAL StoreScreen (top bar, back, help, store loading) against the dev stub API, for
+ * reproducing navigation bugs: 'realstore' (member), 'realstore-guest'; 'dump' logs the
+ * fixture shop day as JSON so the stub can serve it from /stores/5/today.
+ */
+function RealStore({ member, switching = false }: { member: boolean; switching?: boolean }) {
+  const StoreScreen = require('../StoreScreen').default;
+  // 'realswitch': the same Store screen gets a new store param every 5 s (what React Navigation does when
+  // navigate('Store', ...) lands on a Store screen already in the stack).
+  const [store, setStore] = useState<number | 'shark-shop'>(5);
+  useEffect(() => {
+    if (!switching) return;
+    const timer = setInterval(() => setStore(s => (s === 5 ? 'shark-shop' : 5)), 5000);
+    return () => clearInterval(timer);
+  }, [switching]);
+  return (
+    <AuthFixture member={member}>
+      <StoreScreen route={{ key: 'Store-dev', name: 'Store', params: { store } }} navigation={undefined as never} />
+    </AuthFixture>
+  );
+}
+
 function PreviewBody({ mode }: { mode: string }) {
+  if (mode === 'dump') { console.log(`[ss-dump] ${JSON.stringify(fixtureToday(1))}`); return null; }
+  if (mode === 'realstore' || mode === 'realstore-guest') return <RealStore member={mode === 'realstore'} />;
+  if (mode === 'realswitch') return <RealStore member switching />;
   if (mode === 'stage') return <Stage />;
   if (mode === 'gallery' || mode === 'still') return <Gallery still={mode === 'still'} />;
   const tryOn = /^tryon-([a-z_]+?)(-guest)?$/.exec(mode);
