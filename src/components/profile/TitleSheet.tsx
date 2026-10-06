@@ -137,14 +137,15 @@ export default function TitleSheet({ visible, title, onClose, onChanged, onRemov
           {confirming && (
             <View style={styles.confirm} accessibilityLiveRegion="polite">
               <GameText preset="bodySmall" tone="onBlue" align="center" style={styles.copy}>
-                There is no Undo for this one. You can wear it again from where you earned it.
+                There is no Undo for this one. You might not get it back.
               </GameText>
-              <GameButton label="Remove it" variant="danger" tone="onBlue" size="compact" loading={busy === 'remove'} disabled={!!busy}
+              <GameButton label="Remove it" icon="close" variant="danger" tone="onBlue" size="compact" loading={busy === 'remove'} disabled={!!busy}
                 onPress={() => { void remove(); }} />
-              <GameButton label="Keep it" variant="ghost" tone="onBlue" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
+              <GameButton label="Keep it" icon="check" variant="ghost" tone="onBlue" size="compact" disabled={!!busy} onPress={() => setConfirming(false)} />
             </View>
           )}
-          <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}>
+          <View style={[styles.actions, confirming && styles.hiddenActions]} pointerEvents={confirming ? 'none' : 'auto'}
+            accessibilityElementsHidden={confirming} importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}>
             <GameButton label="Change title" tone="onBlue" icon="swap" disabled={!!busy}
               onPress={() => setMode('change')} accessibilityHint="Shows the titles you have earned" />
             {!!worn && (

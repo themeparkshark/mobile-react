@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, backgroundColor: BRAND.navy, borderRadius: 22,
     paddingLeft: 18, paddingRight: 6, borderWidth: 2, borderColor: '#ffffff' },
   text: { fontFamily: 'Knockout', fontSize: 17, color: '#ffffff' },
-  track: { position: 'absolute', left: 18, right: 18, bottom: 3, height: 3, borderRadius: 2, overflow: 'hidden',
+  track: { position: 'absolute', left: 18, right: 112, bottom: 3, height: 3, borderRadius: 2, overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.15)' },
   drain: { flex: 1, backgroundColor: '#ffcf3b', transformOrigin: 'left' },
   undo: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffcf3b', borderRadius: 16, paddingHorizontal: 12, minHeight: 32, justifyContent: 'center',
