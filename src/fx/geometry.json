@@ -166,6 +166,44 @@
         "aspect": 0.9323,
         "w": 0.13
       }
+    },
+    "pumpkin_pack": {
+      "_source": "Wave 2 (DESIGN-WAVE2.md): a Codex GPT Image pumpkin pack (Alex's refs, his Jetpack 3000 for pose) on the jetpack rig; the flame is Alex's own 3-frame Jetpack 3000 flame, recoloured pumpkin orange with a dark keyline (his loose droplets left off: the panel read them as slime) (his shapes untouched)",
+      "body": {
+        "file": "pumpkin-pack.webp",
+        "aspect": 1.0909,
+        "cx": 0.73,
+        "cy": 0.485,
+        "w": 0.31,
+        "ax": 0.5,
+        "ay": 0.5,
+        "rot": 0
+      },
+      "flame": {
+        "file": "pump-flame-0.webp",
+        "frames": [
+          "pump-flame-0.webp",
+          "pump-flame-1.webp",
+          "pump-flame-2.webp"
+        ],
+        "keys": [
+          "pump-flame-0-key.webp",
+          "pump-flame-1-key.webp",
+          "pump-flame-2-key.webp"
+        ],
+        "aspect": 1.4174,
+        "cx": 0.7864,
+        "cy": 0.614,
+        "w": 0.13,
+        "ax": 0.5688,
+        "ay": 0.1683,
+        "rot": 0
+      },
+      "face": {
+        "cx": 0.812,
+        "cy": 0.493,
+        "w": 0.19
+      }
     }
   }
 }

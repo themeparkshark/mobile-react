@@ -96,7 +96,7 @@ const SectionPills = memo(function SectionPills({ section, offset, still, single
     if (single && pill.label === 'New tonight') return <TimerPill pill={{ ...pill, label: 'New Vault tomorrow', urgent: false }} still={still} icon="moon" />;
     return <TimerPill pill={pill} still={still} />;
   }
-  if (single) return <View style={styles.pills}><TimerPill pill={eventEndPill(section, now)} still={still} icon="pumpkin" /></View>;
+  if (single) return <View style={styles.pills}><TimerPill pill={eventEndPill(section, now)} still={still} icon={seasonIcon(section.event_key)} /></View>;
   const drop = eventDropPill(section, now);
   return (
     <View style={styles.pills}>
@@ -238,7 +238,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
     // The vault's season drop: a vault panel, the drawn season art in the corner, a ribbon title.
     return (
       <VaultPanel>
-        {section.event_key === 'halloween' && <Image source={MOON_BATS} style={styles.vaultSeasonArt} contentFit="contain" />}
+        {!!section.event_key && SEASON_ART[section.event_key] != null && <Image source={SEASON_ART[section.event_key]} style={styles.vaultSeasonArt} contentFit="contain" />}
         <View style={styles.vaultSectionHead}>
           <VaultRibbon title={section.title} width={Math.min(250, SCREEN_W * 0.62)} />
           <SectionPills section={section} offset={offset} still={still} single />
@@ -965,6 +965,19 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
 const S = SHOP_SURFACE;
 const MOON_BATS = require('../../../assets/fx/moonbats.webp');
+/** The vault season drop's drawn corner art, per season (wave 2 adds the non-Halloween seasons). */
+const SEASON_ART: Record<string, number> = {
+  halloween: MOON_BATS,
+  holiday: require('../../../assets/fx/gift-mini.webp'),
+  winter: require('../../../assets/fx/snowflake.webp'),
+};
+/** The season drop's timer icon: never a pumpkin outside Halloween (kids UX, wave 2). */
+function seasonIcon(key: string | null | undefined): GameIconName {
+  if (key === 'halloween') return 'pumpkin';
+  if (key === 'valentines') return 'heart';
+  if (key === 'holiday') return 'gift';
+  return 'sparkle';
+}
 const styles = StyleSheet.create({
   scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },

@@ -3,7 +3,10 @@ import { StyleSheet, View } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFxMomentCue } from './FxLayers';
 import { FxBox, useFxClock, useFxKick, useFxRunning } from './FxStage';
-import { FX_KEYS, FX_MOMENT, FxKey, FxLod, coverBox, focusBox } from './registry';
+import { FX_KEYS, FX_KIT, FX_MOMENT, FxKey, FxLod, containBox, coverBox, focusBox } from './registry';
+import { kitBusy } from './kit';
+import { KitLayerView, kitHasLayer } from './rigs/Kit';
+import { PumpkinPackFront } from './rigs/PumpkinPack';
 import { Image } from 'expo-image';
 import { CLASSIC_NO_EYE, SHARK_EYES } from '../helpers/wardrobe';
 import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
@@ -42,6 +45,8 @@ export const FxSceneBackdrop = memo(function FxSceneBackdrop({ fxKey, still, lod
     const { ms, cue: name } = FX_MOMENT[fxKey];
     if (play.kind === 'tap') {
       if (Date.now() - lastTap.current < ms * 0.6) return;
+      // A kit scene takes no tap mid-moment (a restart would snap it; DESIGN-WAVE2.md 5).
+      if (kitBusy([FX_KIT[fxKey]], t.value, kick.value)) return;
       lastTap.current = Date.now();
       touch();
       kick.value = t.value;
@@ -56,10 +61,13 @@ export const FxSceneBackdrop = memo(function FxSceneBackdrop({ fxKey, still, lod
     return () => { clearTimeout(a); clearTimeout(b); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play?.n]);
-  if (fxKey !== 'midway_fireworks') return null;
+  const kitScene = FX_KIT[fxKey]?.slot === 'background_item';
+  if (fxKey !== 'midway_fireworks' && !kitScene) return null;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
-      <FxBox>{({ width, height }) => <MidwayFireworksScene t={t} kick={kick} cue={cue} box={coverBox(width, height)} lod={level} />}</FxBox>
+      <FxBox>{({ width, height }) => kitScene
+        ? <KitLayerView fxKey={fxKey} layer="scene" t={t} kick={kick} cue={cue} box={coverBox(width, height)} lod={level} />
+        : <MidwayFireworksScene t={t} kick={kick} cue={cue} box={coverBox(width, height)} lod={level} />}</FxBox>
     </View>
   );
 });
@@ -84,22 +92,33 @@ export const FxTileArt = memo(function FxTileArt({ fxKey, size, still }: {
   }, [running]);
   const box = focusBox(fxKey, size);
   const props = { t, kick, box, lod };
+  const kit = FX_KIT[fxKey];
+  const scene = fxKey === 'midway_fireworks' || kit?.slot === 'background_item';
+  // A scene tile: the scene fills the square and a small shark stands in it (kids UX round 2).
+  const shark = { left: size * 0.26, top: size * 0.3, width: size * 0.5, height: size * 0.5 * (1530 / 1353) };
   return (
     // Clipped to the art box, so a beam or a spark never runs over the tile's name and price.
     <View pointerEvents="none" style={{ width: size, height: size, overflow: 'hidden',
-      borderRadius: fxKey === 'midway_fireworks' ? 14 : 0 }}>
+      borderRadius: scene ? 14 : 0 }}>
       {fxKey === 'jetpack' && <JetpackFront {...props} />}
+      {fxKey === 'pumpkin_pack' && <PumpkinPackFront {...props} />}
       {fxKey === 'plasma_blade' && <PlasmaBladeFront {...props} />}
       {fxKey === 'reef_halo' && <><ReefHaloBack {...props} /><ReefHaloFront {...props} /></>}
       {fxKey === 'saucer' && <SaucerFront {...props} />}
       {fxKey === 'ghost_lantern' && <><GhostLanternBack {...props} /><GhostLanternFront {...props} /></>}
       {fxKey === 'midway_fireworks' && <MidwayFireworksScene {...props} box={{ x: 0, y: 0, w: size, h: size }} />}
-      {/* A scene is a backdrop: a small shark in front says "your shark goes here" (kids UX round 2). */}
-      {fxKey === 'midway_fireworks' && (
-        <View style={{ position: 'absolute', left: size * 0.26, top: size * 0.3, width: size * 0.5, height: size * 0.5 * (1530 / 1353) }}>
+      {kit && !scene && kitHasLayer(fxKey, 'back') && <KitLayerView fxKey={fxKey} layer="back" {...props} />}
+      {kit && !scene && kitHasLayer(fxKey, 'front') && <KitLayerView fxKey={fxKey} layer="front" {...props} />}
+      {kit && scene && <KitLayerView fxKey={fxKey} layer="scene" {...props} box={{ x: 0, y: 0, w: size, h: size }} />}
+      {scene && (
+        <View style={{ position: 'absolute', ...shark }}>
           <Image source={CLASSIC_NO_EYE} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
           <Image source={SHARK_EYES} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" />
         </View>
+      )}
+      {kit && scene && kitHasLayer(fxKey, 'scenefront') && (
+        <KitLayerView fxKey={fxKey} layer="scenefront" {...props}
+          box={{ ...containBox(shark.width, shark.height), x: shark.left, y: shark.top }} />
       )}
     </View>
   );

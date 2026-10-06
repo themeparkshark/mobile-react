@@ -1,12 +1,26 @@
 import GEOMETRY from './geometry.json';
+import { KIT, KitItem, kitSides } from './kit';
 
 /**
  * Secret Shop animated items (secret-shop/DESIGN.md 8). An item with an
  * `fx_key` this build knows plays its rig on the shark; any other key (a newer
  * server) falls back to the item's paper_url, which is the rig's rest frame.
  */
-export const FX_KEYS = ['jetpack', 'plasma_blade', 'reef_halo', 'saucer', 'midway_fireworks', 'ghost_lantern'] as const;
+/** The launch set (Night Flight, October 2026): hand-written rigs. */
+export const CORE_KEYS = ['jetpack', 'plasma_blade', 'reef_halo', 'saucer', 'midway_fireworks', 'ghost_lantern'] as const;
+/**
+ * Wave 2 (secret-shop/DESIGN-WAVE2.md): the Pumpkin Rocket Pack rides the jetpack rig; the rest
+ * are kit items (src/fx/kit.json, drawn by rigs/Kit.tsx). A test checks this list against kit.json.
+ */
+export const WAVE2_KEYS = ['pumpkin_pack', 'plaid_backpack', 'swirl_specs', 'bubble_wand', 'pocket_dragon', 'snow_globe'] as const;
+export const FX_KEYS = [...CORE_KEYS, ...WAVE2_KEYS] as const;
 export type FxKey = typeof FX_KEYS[number];
+
+/** Kit items, by key (everything in WAVE2_KEYS but the jetpack variants). */
+export const FX_KIT: Partial<Record<FxKey, KitItem>> = KIT as Partial<Record<FxKey, KitItem>>;
+
+/** Jetpack-rig variants: the same calm float and boost, other art. */
+export const JETPACK_VARIANTS = ['jetpack', 'pumpkin_pack'] as const;
 
 /** full: stages. lite: shop tiles and recordings (the loop, no particles). still: the rest frame only. */
 export type FxLod = 'full' | 'lite' | 'still';
@@ -16,51 +30,63 @@ export const FX_GEOMETRY: FxGeometry = GEOMETRY;
 export const PAPER_W = GEOMETRY.canvas[0];
 export const PAPER_H = GEOMETRY.canvas[1];
 
+type Slot = 'neck_item' | 'hand_item' | 'head_item' | 'face_item' | 'background_item';
+const fromKit = <T,>(pick: (item: KitItem) => T): Partial<Record<FxKey, T>> =>
+  Object.fromEntries(Object.entries(KIT).map(([k, item]) => [k, pick(item)])) as Partial<Record<FxKey, T>>;
+
 /** Which look slot each rig is worn in (the server's item type decides; this is for checks and tests). */
-export const FX_SLOT: Record<FxKey, 'neck_item' | 'hand_item' | 'head_item' | 'background_item'> = {
+export const FX_SLOT = {
   jetpack: 'neck_item',
   plasma_blade: 'hand_item',
   reef_halo: 'head_item',
   saucer: 'neck_item',
   midway_fireworks: 'background_item',
   ghost_lantern: 'hand_item',
-};
+  pumpkin_pack: 'neck_item',
+  ...fromKit(item => item.slot),
+} as Record<FxKey, Slot>;
 
 /** What each piece does, in words a 7-year-old reads in one breath (try-on sheet). */
-export const FX_BLURB: Record<FxKey, string> = {
+export const FX_BLURB = {
   jetpack: 'Rockets fire and your shark floats. Every few seconds: BOOST!',
   plasma_blade: 'Glows, hums and swings with a trail of light.',
   reef_halo: 'Three tiny fish swim circles around your head.',
   saucer: 'Hovers by your fin and beams up sparkles.',
   midway_fireworks: 'Fireworks pop over the midway all night long.',
   ghost_lantern: 'A friendly ghost peeks out to say hi.',
-};
+  pumpkin_pack: 'A jack-o-lantern rocket! Your shark floats, then BOOST!',
+  ...fromKit(item => item.blurb),
+} as Record<FxKey, string>;
 
 /** Each rig's moment: its cue name and how long it lasts (ms). Taps wait until 60% of it has played. */
-export const FX_MOMENT: Record<FxKey, { cue: string; ms: number }> = {
+export const FX_MOMENT = {
   jetpack: { cue: 'boost', ms: 2400 },
   plasma_blade: { cue: 'swing', ms: 4500 * 0.22 },
   reef_halo: { cue: 'flip', ms: 6500 * 0.14 },
   saucer: { cue: 'beam', ms: 5000 * 0.42 },
   midway_fireworks: { cue: 'finale', ms: 9000 * 0.32 },
   ghost_lantern: { cue: 'peek', ms: 6000 * 0.4 },
-};
+  pumpkin_pack: { cue: 'pumpkin_boost', ms: 2400 },
+  ...fromKit(item => ({ cue: item.moment.cue, ms: item.moment.period * item.moment.length })),
+} as Record<FxKey, { cue: string; ms: number }>;
 
-/** Rigs that also move the shark itself. */
-export const FX_FLOATS: Partial<Record<FxKey, number>> = { jetpack: 1 };
+/** Rigs that also move the shark itself (the jetpack float). */
+export const FX_FLOATS: Partial<Record<FxKey, number>> = { jetpack: 1, pumpkin_pack: 1 };
 
 /** Rigs drawn as the backdrop (they replace the background paper). */
-export const FX_SCENES: readonly FxKey[] = ['midway_fireworks'];
+export const FX_SCENES: readonly FxKey[] = ['midway_fireworks', ...(Object.keys(KIT) as FxKey[]).filter(k => KIT[k].slot === 'background_item')];
 
 /** Which layers each rig draws: behind the shark, in front of the outfit, or as the backdrop. */
-export const FX_SIDES: Record<FxKey, readonly ('back' | 'front' | 'scene')[]> = {
+export const FX_SIDES = {
   jetpack: ['front'],
   plasma_blade: ['front'],
   reef_halo: ['back', 'front'],
   saucer: ['front'],
   midway_fireworks: ['scene'],
   ghost_lantern: ['back', 'front'],
-};
+  pumpkin_pack: ['front'],
+  ...fromKit(kitSides),
+} as Record<FxKey, readonly ('back' | 'front' | 'scene')[]>;
 
 /** Outfit slots that can carry a rig, back to front (the same order as OUTFIT_LAYER_ORDER). */
 export const RIG_SLOTS = ['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const;
@@ -143,7 +169,9 @@ export function partLayout(box: PaperBox, spec: PartSpec, aspectFallback = 1) {
     top: box.y + (spec.cy ?? 0.5) * box.h - ay * height,
     width,
     height,
-    origin: `${ax * 100}% ${ay * 100}%`,
+    // Whole pixels: React Native's transformOrigin parser reads integers only ('56.88%' became '88%',
+    // so a fractional anchor silently scaled and turned about the wrong point; wave 2 found it).
+    origin: `${Math.round(ax * width)}px ${Math.round(ay * height)}px`,
     rot: spec.rot ?? 0,
   };
 }
@@ -152,14 +180,16 @@ export function partLayout(box: PaperBox, spec: PartSpec, aspectFallback = 1) {
  * The paper-canvas rectangle a rig's art covers, for tiles that show the
  * item alone (no shark), zoomed so the item fills the tile.
  */
-export const FX_FOCUS: Record<FxKey, { cx: number; cy: number; span: number }> = {
+export const FX_FOCUS = {
   jetpack: { cx: 0.63, cy: 0.56, span: 0.56 },
   plasma_blade: { cx: 0.18, cy: 0.4, span: 0.44 },
   reef_halo: { cx: 0.585, cy: 0.21, span: 0.4 },
   saucer: { cx: 0.85, cy: 0.29, span: 0.34 },
   midway_fireworks: { cx: 0.5, cy: 0.5, span: 1 },
   ghost_lantern: { cx: 0.31, cy: 0.58, span: 0.4 },
-};
+  pumpkin_pack: { cx: 0.63, cy: 0.56, span: 0.56 },
+  ...fromKit(item => item.focus),
+} as Record<FxKey, { cx: number; cy: number; span: number }>;
 
 /** A paper box placed so the rig's focus rectangle fills a size x size tile. */
 export function focusBox(key: FxKey, size: number): PaperBox {
@@ -169,55 +199,4 @@ export function focusBox(key: FxKey, size: number): PaperBox {
   return { x: size / 2 - f.cx * w, y: size / 2 - f.cy * h, w, h };
 }
 
-/** A stable 0..1 number for an integer (cycle jitter that captures can replay). */
-export function hash01(n: number): number {
-  'worklet';
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-/** No kick yet: far in the past. */
-export const NO_KICK = -1e9;
-
-/**
- * A rig's "moment" (boost, swing, beam, peek...): -1 when idle, else 0..1
- * through it. It fires `firstAt` ms after the stage starts, then once per
- * `period` with up to `jitter` of the period shifted per cycle (seeded, so a
- * capture replays exactly), and right away when the player taps (`kick` is
- * the clock time of the tap). `cycle` tells variants apart (-1 for a tap).
- */
-export function momentAt(t: number, kick: number, period: number, length: number, firstAt = 350, jitter = 0.25):
-  { p: number; cycle: number } {
-  'worklet';
-  const lengthMs = length * period;
-  const sinceKick = t - kick;
-  if (sinceKick >= 0 && sinceKick < lengthMs) return { p: sinceKick / lengthMs, cycle: -1 };
-  // A kick due in the next 2 s (an equip or unlock beat) holds the timer, so no other piece's
-  // moment lands just before it and two tricks never stack 0.4 s apart (game feel round 5).
-  if (sinceKick < 0 && sinceKick > -2000) return { p: -1, cycle: 0 };
-  // A tap re-phases the timer: the next automatic moment is a full period after the tap's moment
-  // ends, so the piece never does its trick twice in a row (game feel round 4).
-  const origin = sinceKick >= 0 ? Math.max(firstAt, kick + lengthMs + period) : firstAt;
-  const local = t - origin;
-  if (local < 0) return { p: -1, cycle: 0 };
-  const cycle = Math.floor(local / period);
-  const start = cycle === 0 ? 0 : hash01(cycle) * jitter * period;
-  const d = local - cycle * period - start;
-  if (d < 0 || d >= lengthMs) return { p: -1, cycle };
-  return { p: d / lengthMs, cycle };
-}
-
-/** Phase helpers shared by rigs and tests: 0..1 inside a looping period. */
-export function phaseOf(timeMs: number, periodMs: number, offset = 0): number {
-  'worklet';
-  const p = ((timeMs / periodMs) + offset) % 1;
-  return p < 0 ? p + 1 : p;
-}
-
-/** 0 outside [start, start+length) of a 0..1 phase, else 0..1 progress through that window. */
-export function windowOf(phase: number, start: number, length: number): number {
-  'worklet';
-  const d = phase - start;
-  if (d < 0 || d >= length) return -1;
-  return d / length;
-}
+export { hash01, NO_KICK, momentAt, phaseOf, windowOf } from './registry-core';
