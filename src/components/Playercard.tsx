@@ -12,7 +12,7 @@ import { Animated, GestureResponderEvent, Image as RNImage, Pressable, StyleProp
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
-import { sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
+import { CLASSIC_NO_EYE, sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
 
 /**
  * Where each worn layer lands, normalized on the 1353x1530 paper art
@@ -79,6 +79,7 @@ export default function Playercard({
   fxPlay = 0,
   fxHold = false,
   fxTapToPlay = false,
+  liftRoom = 0,
   fxStartDelay = 0,
   onFxPlay,
   sceneGround,
@@ -117,6 +118,8 @@ export default function Playercard({
   readonly fxHold?: boolean;
   /** A tap on the shark replays its rigs' moments (stages with no item taps). */
   readonly fxTapToPlay?: boolean;
+  /** Visible room above this card's box (px), e.g. a stage's sky: a lifting rig uses it before shrinking the shark. */
+  readonly liftRoom?: number;
   /** Hold the first moment this long (ms): the try-on waits for its sheet to finish sliding in. */
   readonly fxStartDelay?: number;
   /** Called when the moments replay (a tap or fxPlay), for a scene drawn outside this card (the try-on backdrop). */
@@ -153,6 +156,8 @@ export default function Playercard({
   const fxClock = useFxClock(fxRunning, -fxStartDelay);
   const fxKick = useFxKick();
   const [stageH, setStageH] = useState(0);
+  // The card's width too: the lift framing fits the whole flight inside this exact box.
+  const [stageW, setStageW] = useState(0);
   const sounds = fxSound ?? popLayers;
   const { cue: fxCue, touch: fxTouch, play: fxPlayCue } = useFxMomentCue(sounds);
   // A tap replays the worn pieces' moments with their cues (taps during the first 60% of a
@@ -415,7 +420,7 @@ export default function Playercard({
             ],
           }}
         >
-          <FxFloat fx={fx} t={fxClock} kick={fxKick} height={stageH}>
+          <FxFloat fx={fx} t={fxClock} kick={fxKick} width={stageW} height={stageH} room={liftRoom} floored={!!shadowAt} hat={!!inventory?.head_item}>
           <View
             onLayout={(e) => {
               containerSize.current = {
@@ -423,6 +428,7 @@ export default function Playercard({
                 height: e.nativeEvent.layout.height,
               };
               if (fx.floats && Math.abs(e.nativeEvent.layout.height - stageH) > 0.5) setStageH(e.nativeEvent.layout.height);
+              if (fx.floats && Math.abs(e.nativeEvent.layout.width - stageW) > 0.5) setStageW(e.nativeEvent.layout.width);
             }}
             style={{
               position: 'absolute',
@@ -435,7 +441,9 @@ export default function Playercard({
             {fx.rigs.length > 0 && <FxRigLayers fx={fx} side="back" t={fxClock} kick={fxKick} lod={lod} />}
             {/* Shark body (worn skin or Alex's Classic) and eyes */}
             {sharkBaseLayers(inventory).map((source, index) => (
-              <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain" />
+              // The bundled Classic shark stands in until a skin arrives: a card is never an empty stage.
+              <Image key={`base-${index}`} source={source} style={styles.image} contentFit="contain"
+                placeholder={index === 0 ? CLASSIC_NO_EYE : undefined} placeholderContentFit="contain" />
             ))}
             {/* Item layers: purely visual, no individual Pressables */}
             {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {

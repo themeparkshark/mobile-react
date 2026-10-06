@@ -1,10 +1,10 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, SharedValue, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import * as Haptics from '../helpers/haptics';
 import { FxBox, RigProps } from './FxStage';
-import { FxKey, FxLod, WornFx, coverBox, containBox, wornFx } from './registry';
+import { FxKey, FxLod, LiftFraming, WornFx, coverBox, containBox, liftFraming, liftScaleFor, wornFx } from './registry';
 import { GhostLanternBack, GhostLanternFront } from './rigs/GhostLantern';
 import { JetpackFront, jetpackBody, jetpackFloat } from './rigs/Jetpack';
 import { MidwayFireworksScene, SceneFlashOnShark } from './rigs/MidwayFireworks';
@@ -70,12 +70,15 @@ export function FxSceneLight({ fx, ...shared }: Shared & { fx: WornFx }) {
  * lean into a slash. Any other look gets a plain view, so no style is
  * rebuilt per frame for nothing (performance panel round 2).
  */
-export function FxFloat(props: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number; children: React.ReactNode }) {
+export function FxFloat(props: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; width: number; height: number; room?: number; floored?: boolean; hat?: boolean; children: React.ReactNode }) {
   // Every hook before the early return. The float eases in on equip and out on unequip.
   const lift = useFloatWeight(props.fx.floats);
+  // The whole flight stays inside this card (registry liftFraming, from the rig's own FX_LIFT).
+  const framing = useMemo(() => liftFraming(props.fx, props.width, props.height, props.room ?? 0, props.floored ?? false, props.hat ?? true),
+    [props.fx, props.width, props.height, props.room, props.floored, props.hat]);
   const moves = lift.active || props.fx.rigs.some(r => r.key === 'plasma_blade');
   if (!moves) return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>{props.children}</View>;
-  return <MovingShark {...props} weight={lift.w} />;
+  return <MovingShark {...props} framing={framing} weight={lift.w} />;
 }
 
 /**
@@ -96,16 +99,20 @@ export function useFloatWeight(floats: boolean): { w: SharedValue<number>; activ
   return { w, active: floats || settling };
 }
 
-function MovingShark({ fx, t, kick, height, weight, children }: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number;
-  weight: SharedValue<number>; children: React.ReactNode }) {
+function MovingShark({ fx, t, kick, height, weight, framing, children }: { fx: WornFx; t: SharedValue<number>; kick: SharedValue<number>; height: number;
+  weight: SharedValue<number>; framing: LiftFraming; children: React.ReactNode }) {
   const leans = fx.rigs.some(r => r.key === 'plasma_blade');
+  const { scale, shift, lift } = framing;
   const style = useAnimatedStyle(() => {
     // The jetpack: a steady lift, a slow boost and a lazy lean, scaled by the ease in/out weight.
+    // Framing first (a small sink, then a slight shrink about the tail), so the peak stays in the card.
     const w = weight.value;
     const body = w > 0 ? jetpackBody(t.value, kick.value) : { rot: 0 };
     return {
       transform: [
-        { translateY: w > 0 ? w * jetpackFloat(t.value, kick.value, height) : 0 },
+        { translateY: w * shift },
+        { scale: 1 - w * (1 - scale) },
+        { translateY: w > 0 ? w * lift * jetpackFloat(t.value, kick.value, height) : 0 },
         { rotate: `${(leans ? bladeLean(t.value, kick.value) : 0) + w * body.rot}deg` },
       ],
     };
@@ -118,14 +125,14 @@ export function FxShadow({ fx, t, kick, height, children }: { fx: WornFx; t: Sha
   children: React.ReactNode }) {
   const lift = useFloatWeight(fx.floats);
   if (!lift.active) return <View pointerEvents="none" style={StyleSheet.absoluteFill}>{children}</View>;
-  return <FloatShadow t={t} kick={kick} height={height} weight={lift.w}>{children}</FloatShadow>;
+  return <FloatShadow t={t} kick={kick} height={height} weight={lift.w} amount={liftScaleFor(height)}>{children}</FloatShadow>;
 }
 
-function FloatShadow({ t, kick, height, weight, children }: { t: SharedValue<number>; kick: SharedValue<number>; height: number;
-  weight: SharedValue<number>; children: React.ReactNode }) {
+function FloatShadow({ t, kick, height, weight, amount, children }: { t: SharedValue<number>; kick: SharedValue<number>; height: number;
+  weight: SharedValue<number>; amount: number; children: React.ReactNode }) {
   const style = useAnimatedStyle(() => {
     if (height <= 0) return { opacity: 1 };
-    const lift = (-jetpackFloat(t.value, kick.value, height) / height) * weight.value; // 0 .. about 0.135
+    const lift = (-jetpackFloat(t.value, kick.value, height) / height) * weight.value * amount; // 0 .. about 0.135
     return { opacity: Math.max(0.2, 1 - lift * 4.5), transform: [{ scale: Math.max(0.45, 1 - lift * 2.6) }] };
   });
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>{children}</Animated.View>;
