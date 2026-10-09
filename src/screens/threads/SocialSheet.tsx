@@ -8,7 +8,7 @@
  * - `onHidden` fires once the sheet is fully gone (on iOS after the native modal is dismissed), so a
  *   shortcut can present Safari or push a screen safely.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -51,6 +51,7 @@ export default function SocialSheet({
 
   const requestClose = () => cbs.current.onClose();
   const finishHide = () => {
+    if (!hiding.current) return; // reopened meanwhile
     setMounted(false);
     drag.value = 0;
     // Android has no onDismiss: the sheet is gone once the modal unmounts.
@@ -72,13 +73,14 @@ export default function SocialSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const pan = Gesture.Pan()
+  const pan = useMemo(() => Gesture.Pan()
     .activeOffsetY(8)
     .onUpdate((e) => { drag.value = Math.max(0, e.translationY); })
     .onEnd((e) => {
       if (drag.value > CLOSE_DRAG || e.velocityY > CLOSE_VELOCITY) runOnJS(requestClose)();
       else drag.value = withSpring(0, { damping: 18, stiffness: 260 });
-    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), []);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: BACKDROP * progress.value }));
   const sheetStyle = useAnimatedStyle(() => (reduced
@@ -103,7 +105,9 @@ export default function SocialSheet({
             accessibilityRole="button" accessibilityLabel="Close" />
         </Animated.View>
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, sheetStyle]} onLayout={onLayout} accessibilityViewIsModal>
+          <Animated.View style={[styles.sheet, sheetStyle]} onLayout={onLayout}
+            // VoiceOver's two-finger scrub closes it; the RN Modal already keeps VoiceOver inside.
+            onAccessibilityEscape={requestClose}>
             {children}
           </Animated.View>
         </GestureDetector>

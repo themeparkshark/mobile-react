@@ -131,12 +131,17 @@ test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sound
   assert.match(chest, /CHEST_OPEN_CUE = 'fx\.hit'/, "Chris's clack, a shipped cue");
   assert.match(chest, /if \(!reduced\) \{\n\s+lift\.value/, 'Reduce Motion: no hop or stars');
   const social = read('src/screens/SocialScreen.tsx');
-  assert.match(social, /<ChestButton open=\{shortcuts\} onPress=\{\(\) => \{ setTileClosed\(false\); setShortcuts\(true\); \}\} label="More" accessibilityLabel="More"/);
+  assert.match(social, /<ChestButton open=\{shortcuts\} onPress=\{\(\) => \{ afterShortcutsHide\.current = null; setTileClosed\(false\); setShortcuts\(true\); \}\} label="More" accessibilityLabel="More"/);
   assert.match(social, /<SocialSheet\n\s+visible=\{shortcuts\}/, 'the More sheet slides on the UI thread');
   assert.doesNotMatch(social, /react-native-modal/);
   const sheet = read('src/screens/threads/SocialSheet.tsx');
   assert.match(sheet, /Gesture\.Pan\(\)/);
   assert.match(sheet, /onDismiss=/, 'shortcuts run after the native modal is gone (iOS Safari/push)');
+  assert.match(sheet, /onAccessibilityEscape=\{requestClose\}/, 'VoiceOver scrub closes the sheet');
+  assert.doesNotMatch(sheet, /accessibilityViewIsModal/, 'the backdrop Close stays reachable');
+  assert.match(social, /accessibilityRole="button" accessibilityLabel="Close"/, 'a reachable Close button on the sheet');
+  assert.match(social, /accessibilityRole="header">More Shark fun/);
+  assert.match(sheet, /if \(!hiding\.current\) return; \/\/ reopened meanwhile/);
   assert.match(social, /quietClose=\{tileClosed\}/, 'a tile tap already clicked: no second sound when the sheet closes');
   assert.match(chest, /if \(reduced\) \{ dim\.value = withTiming\(0\.7/, 'Reduce Motion press dim');
 });

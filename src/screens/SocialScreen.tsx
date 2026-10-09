@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import { openMembership } from '../components/GrownUpGate';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
@@ -297,7 +297,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <ChestButton open={shortcuts} onPress={() => { setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
+          <ChestButton open={shortcuts} onPress={() => { afterShortcutsHide.current = null; setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
             quietClose={tileClosed}
             accessibilityHint={!player || !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
         </TopbarColumn>
@@ -358,8 +358,12 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
         }}
       >
         <View style={[styles.shortcuts, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.handle} />
-          <Text style={styles.shortcutsTitle}>More Shark fun</Text>
+          {/* The handle doubles as a Close button VoiceOver and Switch Control can reach. */}
+          <Pressable onPress={() => setShortcuts(false)} accessibilityRole="button" accessibilityLabel="Close"
+            hitSlop={{ top: 15, bottom: 15, left: 40, right: 40 }} style={styles.handleHit}>
+            <View style={styles.handle} />
+          </Pressable>
+          <Text style={styles.shortcutsTitle} accessibilityRole="header">More Shark fun</Text>
           <ShortcutTiles
             tiles={[
               {
@@ -446,6 +450,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
   },
-  handle: { alignSelf: 'center', width: 48, height: 6, borderRadius: 3, backgroundColor: '#d9c99b', marginBottom: 8 },
+  handleHit: { alignSelf: 'center', minHeight: 14, minWidth: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  handle: { width: 48, height: 6, borderRadius: 3, backgroundColor: '#d9c99b' },
   shortcutsTitle: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textAlign: 'center', marginBottom: 6 },
 });
