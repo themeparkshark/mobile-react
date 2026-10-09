@@ -14,6 +14,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { catchPinOfTheDay, getPinOfTheDay } from '../../api/endpoints/pins';
 import { LocationContext } from '../../context/LocationProvider';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, OUTLINE, RADIUS, SPACE } from '../../ui';
 import { PIN_ART } from './PinArt';
@@ -104,7 +105,11 @@ export default function HuntSheet({ set, onClose, onCaught, still = false }: Pro
     if (busy) return;
     holdTimers.current.forEach(clearTimeout); holdTimers.current = [];
     hold.value = withTiming(1, { duration: 700 });
-    [0.2, 0.45, 0.7].forEach((f, k) => holdTimers.current.push(setTimeout(() => queueHaptic(k === 2 ? 'hitMedium' : 'tickSelection', 1), 700 * f)));
+    // Three rising ticks you can hear and feel, like the box hold.
+    [0.2, 0.45, 0.7].forEach((f, k) => holdTimers.current.push(setTimeout(() => {
+      queueHaptic(k === 2 ? 'hitMedium' : 'tickSelection', 1);
+      try { GameAudio.play('fx.coinTick', { pitch: 1 + k * 0.18 }); } catch { /* audio is decoration */ }
+    }, 700 * f)));
     holdTimers.current.push(setTimeout(() => { if (hold.value > 0.97) void tryCatch(); }, 730));
   };
   const endHold = () => {

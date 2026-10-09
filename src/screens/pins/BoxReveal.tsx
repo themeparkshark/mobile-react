@@ -38,7 +38,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
-import { BRAND, FONT, GameButton } from '../../ui';
+import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
@@ -67,6 +67,8 @@ type Props = {
   readonly canWear?: (pull: RevealPull) => boolean;
   /** The box is on stage while the server answers; a tap waits for it, then opens. */
   readonly waiting?: boolean;
+  /** Coins this open cost: a few coins drop from the top bar into the box as it lands. */
+  readonly spend?: number;
 };
 
 export const REVEAL_CUES = ['fx.whoosh', 'fx.whooshRev', 'fx.coinTick', 'fx.reveal', 'fx.reward', 'fx.firework', 'fx.hit', 'ui.tap', 'ui.complete'] as const;
@@ -161,6 +163,25 @@ function Glow({ size: full, color, amount, id }: { size: number; color: string; 
   );
 }
 
+/** One spent coin: falls from the coin counter (top right) into the box, then is gone. */
+function SpentCoin({ from, to, delay, onLand }: { from: { x: number; y: number }; to: { x: number; y: number }; delay: number; onLand: () => void }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withDelay(delay, withTiming(1, { duration: 420, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(onLand)(); }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({
+    opacity: t.value <= 0 || t.value >= 1 ? 0 : 1,
+    transform: [
+      { translateX: from.x + (to.x - from.x) * t.value },
+      // An arc: up a little, then down into the box.
+      { translateY: from.y + (to.y - from.y) * t.value - Math.sin(t.value * Math.PI) * 60 },
+      { scale: 1.2 - t.value * 0.5 },
+      { rotate: `${t.value * 300}deg` },
+    ],
+  }));
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0 }, style]}><GameIcon name="coin" size={30} /></Animated.View>;
+}
+
 /** The white ring that bursts out on the pop. */
 function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   const style = useAnimatedStyle(() => ({
@@ -170,7 +191,7 @@ function Ring({ size, t }: { size: number; t: SharedValue<number> }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 10, borderColor: '#ffffff' }, style]} />;
 }
 
-export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false }: Props) {
+export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, variant = 'box', tagFor, subtitleFor, onWear, canWear, waiting = false, spend = 0 }: Props) {
   const wantOpen = useRef(false);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
@@ -186,6 +207,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
   const [worn, setWorn] = useState<Set<number>>(new Set());
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
+  // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
+  const [spending, setSpending] = useState(() => (spend > 0 && !still && variant === 'box' ? (rawPulls.length > 1 || spend >= 1000 ? 5 : 3) : 0));
+  const landed = useRef(0);
   const pull = pulls[Math.min(index, pulls.length - 1)];
   // Gold moments: the chaser, rare park pins, and every in-person catch.
   const gold = !!pull?.is_chaser || !!pull?.rare || isCatch;
@@ -547,6 +571,16 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           </View>
         </Animated.View>
 
+        {spending > 0 && Array.from({ length: spending }, (_, i) => (
+          <SpentCoin key={i} delay={i * 90} from={{ x: width - 96, y: insets.top + 34 }} to={{ x: width / 2 - 15 + (i - (spending - 1) / 2) * 10, y: centerY - boxSize * 0.3 }}
+            onLand={() => {
+              play('fx.coinTick', { pitch: 1 + i * 0.1, volume: 0.7 });
+              queueHaptic('tickSelection', 1);
+              punch.value = withSequence(withTiming(1.05, { duration: 60 }), withTiming(1, { duration: 140 }));
+              landed.current += 1;
+              if (landed.current >= spending) setSpending(0);
+            }} />
+        ))}
         {phase === 'ready' && (
           <Animated.View pointerEvents="none" style={[styles.tapHint, { top: centerY + boxSize / 2 + 18 }, hintStyle]}>
             <Text maxFontSizeMultiplier={1.35} style={styles.tapText}>Tap to open!</Text>

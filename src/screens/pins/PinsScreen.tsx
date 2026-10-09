@@ -63,7 +63,7 @@ export default function PinsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{
-    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean;
+    pulls: RevealPull[]; tone: 'blue' | 'coral'; variant?: 'box' | 'catch' | 'pick'; coins?: number; seriesId?: number; waiting?: boolean; spend?: number;
     tag?: (p: RevealPull) => { text: string; tone: 'new' | 'trader' | 'gold' }; subtitle?: (p: RevealPull) => string | null;
   } | null>(null);
   const [fresh, setFresh] = useState<{ seriesId: number; ids: Set<number> } | null>(null);
@@ -82,6 +82,10 @@ export default function PinsScreen() {
   const listY = useRef(0);
   const pendingCounts = useRef<Partial<PinHome['counts']> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Every delayed beat on this screen is cleared when the screen goes away.
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const later = useCallback((ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); }, []);
+  useEffect(() => () => { timers.current.forEach(clearTimeout); if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
   const shine = useSharedValue(0);
   const coins = player?.coins ?? 0;
 
@@ -101,14 +105,14 @@ export default function PinsScreen() {
         devHuntOpened = true;
         const here = h.pin_days?.find(d => d.here && d.status === 'hunt');
         const set = here && h.park_sets.find(st => st.park_id === here.park_id);
-        if (set) setTimeout(() => setHunt(set), 800);
+        if (set) later(800, () => setHunt(set));
       }
       setState('ready');
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       setState(status === 404 ? 'legacy' : (quiet ? 'ready' : 'error'));
     }
-  }, []);
+  }, [later]);
 
   useEffect(() => { void load(); preloadRevealAudio(); }, [load]);
 
@@ -140,7 +144,8 @@ export default function PinsScreen() {
     queueHaptic('tapLight', 1);
     // The box drops in right away; the server answers while it lands (no dead beat).
     const placeholder: RevealPull = { id: -1, item_id: -1, pin_id: 0, name: '', icon_url: null, is_chaser: false, by_pity: false, serial: null, duplicate: false };
-    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true });
+    const spend = pay === 'coins' ? (count === series.bundle.count ? series.bundle.price : series.price * count) : 0;
+    setReveal({ pulls: [placeholder], tone: boxTone(series.theme_color), seriesId: series.id, waiting: true, spend });
     try {
       const r = await openMysteryBoxes(series.id, { count, pay, request_id: requestId, region: region.current });
       delete pending.current[series.id];
@@ -242,21 +247,21 @@ export default function PinsScreen() {
       // Finishing the series: its Completer pin gets its own moment.
       if (next.completer?.owned && before?.completer && !before.completer.owned) {
         const c = next.completer;
-        setTimeout(() => setReveal({
+        later(900, () => setReveal({
           variant: 'pick', tone: boxTone(next.theme_color),
           pulls: [{ id: c.item_id, item_id: c.item_id, pin_id: 0, name: c.name, icon_url: c.icon_url, is_chaser: false, by_pity: false, serial: null, duplicate: false, rare: true }],
           tag: () => ({ text: 'Series done!', tone: 'gold' }), subtitle: () => next.name,
-        }), 900);
+        }));
       }
       const ids = new Set(shown.filter(p => !p.duplicate).map(p => p.item_id));
       setFresh({ seriesId: r.seriesId, ids });
       const y = cardY.current[r.seriesId];
       if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y + listY.current - 80), animated: !still });
-      setTimeout(() => setFresh(f => (f && f.ids === ids ? null : f)), 2600);
+      later(2600, () => setFresh(f => (f && f.ids === ids ? null : f)));
     } else if (r?.variant === 'catch') {
       void load(true);
     }
-  }, [reveal, load, home]);
+  }, [reveal, load, home, later]);
 
   const onPin = useCallback((_set: ParkSet, _pin: PinRow) => { queueHaptic('tapLight', 1); }, []);
 
@@ -458,7 +463,7 @@ export default function PinsScreen() {
         )}
       </View>
       {reveal && (
-        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting}
+        <BoxReveal pulls={reveal.pulls} tone={reveal.tone} still={still} variant={reveal.variant} waiting={reveal.waiting} spend={reveal.spend}
           tagFor={reveal.tag} subtitleFor={reveal.subtitle}
           canWear={p => p.is_chaser || reveal.variant === 'catch' || !!p.rare}
           onWear={p => wear(p.item_id)}
