@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { BRAND, SHADOW } from '../../ui';
 import type { FollowMode } from './cameraFollow';
 
@@ -154,9 +154,10 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
             <Reanimated.View style={[styles.badge, state === 'north' ? styles.badgeNorth : styles.badgeHeading, badgeStyle]}>
               {state === 'north' ? <Text style={styles.badgeN}>N</Text> : (
                 // The beam under your shark, in small: "the map follows where you face".
-                <Svg width={16} height={16} viewBox="0 0 16 16">
-                  <Path d="M8 14 L2.2 4.2 Q8 0.8 13.8 4.2 Z" fill={BRAND.white} />
-                  <Path d="M8 14 L5.6 8.6 Q8 7.4 10.4 8.6 Z" fill={BRAND.skyDeep} />
+                // A dot (you) with a soft fan pointing up: "the map follows where you face".
+                <Svg width={18} height={18} viewBox="0 0 18 18">
+                  <Path d="M9 12 L3 3.4 Q9 0.4 15 3.4 Z" fill={BRAND.skyDeep} opacity={0.95} />
+                  <Circle cx={9} cy={12.4} r={3.6} fill={BRAND.white} />
                 </Svg>
               )}
             </Reanimated.View>

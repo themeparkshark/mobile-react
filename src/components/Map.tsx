@@ -654,7 +654,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const compassTip = useOneTimeTip('map_compass', hintReady && screenFocused && appActive && focusedOnPlayer && !covered && !chromeHidden);
   // Development captures (EXPO_PUBLIC_DEV_COMPASS_HINT=1): show the hint every launch.
   const [devHint, setDevHint] = useState(__DEV__ && process.env.EXPO_PUBLIC_DEV_COMPASS_HINT === '1');
-  const compassHint = devHint ? { visible: !covered, dismiss: () => undefined } : compassTip;
+  const compassHint = devHint ? { visible: !covered, dismiss: () => setDevHint(false) } : compassTip;
   const chromeOff = chromeHidden ? 1 : 0;
   const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
 
