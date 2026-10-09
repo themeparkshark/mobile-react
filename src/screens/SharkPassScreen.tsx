@@ -120,6 +120,14 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 
 const CELL_W = 92;
 
+/** For the grown-up holding the phone: what the Shark Pass is, in plain words. All true of the server rules. */
+const PASS_GROWN_UP_NOTES = [
+  'One buy for this season. It never renews and is never charged again.',
+  'Steps are earned only by playing. Steps and points are never sold.',
+  'Nothing in the Shark Pass row is random. Every reward is shown above.',
+  'Every real-money buy asks a grown-up first. Ask to Buy works too.',
+];
+
 export default function SharkPassScreen() {
   const { player, refreshPlayer } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
@@ -424,6 +432,18 @@ export default function SharkPassScreen() {
               ))}
             </View>
 
+            {!premium && !season.ended && (
+              <View style={s.grownUps} accessible accessibilityLabel={`For grown-ups. ${PASS_GROWN_UP_NOTES.join(' ')}`}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpsHead}>FOR GROWN-UPS</Text>
+                {PASS_GROWN_UP_NOTES.map(line => (
+                  <View key={line} style={s.grownUpRow}>
+                    <GameIcon name="check" size={18} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpText}>{line}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <Text maxFontSizeMultiplier={MAX_FONT} style={s.fine}>
               {`Everything you claim is yours to keep. Season items never come back after ${lastDayText(season.last_day)}.`}
             </Text>
@@ -576,6 +596,10 @@ const s = StyleSheet.create({
   questFill: { height: '100%', backgroundColor: '#7dffb0', borderRadius: 4 },
   questBonus: { fontFamily: FONT.display, fontSize: 17, color: BRAND.gold, minWidth: 54, textAlign: 'right' },
   questFoot: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
+  grownUps: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 18, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
+  grownUpsHead: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, letterSpacing: 0.6 },
+  grownUpRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grownUpText: { flex: 1, fontFamily: FONT.body, fontSize: 14, color: BRAND.navy, lineHeight: 18 },
   earn: { marginHorizontal: 14, backgroundColor: BRAND.cream, borderRadius: 20, padding: 12, gap: 6, borderWidth: 3, borderColor: BRAND.navy },
   earnTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy },
   earnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
