@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
   // The water art's own average color, so the push never shows a plain blue frame while it decodes.
   page: { flex: 1, marginTop: -8, backgroundColor: '#5cc3f2' },
   sheetBack: { position: 'absolute', left: 0, right: 0, top: '55%', bottom: 0, backgroundColor: SHEET },
-  shelf: { paddingHorizontal: SIDE, paddingTop: 16, paddingBottom: 12 },
+  shelf: { paddingHorizontal: SIDE, paddingTop: 14, paddingBottom: 10 },
   // The cream sheet under the shelf: the page for this set (Standings cream, a white rim on top).
   sheetTop: {
     backgroundColor: SHEET, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 3, borderColor: BRAND.white,

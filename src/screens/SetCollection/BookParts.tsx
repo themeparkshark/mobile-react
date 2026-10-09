@@ -13,6 +13,7 @@
  * The page sits on the Standings underwater art with a cream sheet under the shelf. Every move runs on
  * the UI thread, loops pause when the screen is covered, and Reduce Motion swaps moves for stills.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -46,7 +47,7 @@ const BROWN = '#7a3d00';
 const BODY_SCALE = 1.45;
 
 export const SHELF_CARD_W = 102;
-export const SHELF_CARD_H = 128;
+export const SHELF_CARD_H = 116;
 export const SHELF_GAP = 12;
 
 const finishedOf = (set: Pick<DexSet, 'reward'>) => set.reward.status === 'claimed' || set.reward.status === 'pending';
@@ -529,6 +530,7 @@ export function FindsHeader({ set, extras, onExtras }: {
   readonly set: DexSet | null; readonly extras: number; readonly onExtras: (() => void) | null;
 }) {
   const badge = set ? setBadge(set) : GIFT;
+  const showKey = useKeyLesson();
   return (
     <View style={styles.finds}>
       <SectionTitle icon="chest" text="Your finds" right={extras > 0 && onExtras ? (
@@ -537,7 +539,7 @@ export function FindsHeader({ set, extras, onExtras }: {
           <Text style={styles.extrasText} maxFontSizeMultiplier={1.3}>{extras} {extras === 1 ? 'extra' : 'extras'} to give</Text>
         </SpringPress>
       ) : null} />
-      <View style={styles.key} accessible accessibilityLabel="Key: a bright sticker is found. A faded shape is still to find. A plus number means extras you can give away.">
+      {showKey && <View style={styles.key} accessible accessibilityLabel="Key: a bright sticker is found. A faded shape is still to find. A plus number means extras you can give away.">
         <View style={styles.keyItem}>
           <View style={[styles.keySticker, { borderColor: rarityLook(1).frame }]}><Image source={badge} style={styles.keyArt} contentFit="contain" /></View>
           <Text style={styles.keyText} maxFontSizeMultiplier={1.3}>Found</Text>
@@ -552,9 +554,32 @@ export function FindsHeader({ set, extras, onExtras }: {
           <View style={styles.plus}><Text style={styles.plusText}>+2</Text></View>
           <Text style={styles.keyText} maxFontSizeMultiplier={1.3}>Extras to give</Text>
         </View>
-      </View>
+      </View>}
     </View>
   );
+}
+
+/**
+ * The key teaches the album once: it shows on the first few visits to Collections (counted per app session
+ * start), then folds away so the finds sit higher. Storage failures just keep showing it.
+ */
+const KEY_SEEN = 'collections_key_seen_v1';
+const KEY_LESSONS = 3;
+let keyCount: number | null = null;
+let keyCounted = false;
+function useKeyLesson(): boolean {
+  const [show, setShow] = useState(() => keyCount == null || keyCount < KEY_LESSONS);
+  useEffect(() => {
+    let live = true;
+    void AsyncStorage.getItem(KEY_SEEN).then(raw => {
+      const seen = Number(raw) || 0;
+      if (keyCount == null) keyCount = seen;
+      if (!keyCounted) { keyCounted = true; void AsyncStorage.setItem(KEY_SEEN, String(seen + 1)).catch(() => undefined); }
+      if (live) setShow(seen < KEY_LESSONS);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+  return show;
 }
 
 /** A rarity group heading: the gems, the rarity's name, how hard it is to find (in words), and the group's count. */
@@ -583,7 +608,7 @@ const styles = StyleSheet.create({
   cardRing: { borderRadius: 24, padding: 3 },
   cardRingOn: { backgroundColor: BRAND.gold, ...SHADOW.card, shadowColor: BRAND.white, shadowOpacity: 0.95, shadowRadius: 10 },
   cardFace: {
-    width: SHELF_CARD_W, height: SHELF_CARD_H, borderRadius: 20, alignItems: 'center', paddingTop: 9, overflow: 'hidden',
+    width: SHELF_CARD_W, height: SHELF_CARD_H, borderRadius: 20, alignItems: 'center', paddingTop: 6, overflow: 'hidden',
     borderWidth: 3, borderColor: 'rgba(5,52,110,0.55)', borderBottomWidth: 6,
   },
   cardFaceGold: { borderColor: BRAND.gold, borderBottomColor: BRAND.goldLip, borderWidth: 4, borderBottomWidth: 7 },
@@ -645,7 +670,7 @@ const styles = StyleSheet.create({
   },
   goalPillGold: { backgroundColor: '#fff3c4', borderColor: BRAND.gold },
   goalPillText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
-  barWrap: { height: 34, justifyContent: 'center', marginTop: 8, marginHorizontal: 14 },
+  barWrap: { height: 32, justifyContent: 'center', marginTop: 4, marginHorizontal: 14 },
   bar: { height: 14, borderRadius: 7, backgroundColor: '#ece0bd', overflow: 'hidden', borderWidth: 2, borderColor: '#e2d2a3' },
   barFill: { height: '100%', width: '100%', transformOrigin: 'left', borderRadius: 7 },
   notch: {
@@ -655,7 +680,7 @@ const styles = StyleSheet.create({
   notchReady: { borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
   notchDone: { borderColor: BRAND.gold, backgroundColor: '#fff3c4' },
   notchTrophy: { borderColor: BRAND.goldLip, backgroundColor: BRAND.gold, ...SHADOW.card, shadowColor: BRAND.gold, shadowOpacity: 0.9, shadowRadius: 6 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 10, borderTopWidth: 2, borderTopColor: '#f4ead0' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, paddingTop: 8, borderTopWidth: 2, borderTopColor: '#f4ead0' },
   when: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   whenText: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 19, color: BRAND.navy },
   nowPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, height: 24, paddingHorizontal: 8, borderRadius: 12 },
@@ -685,7 +710,7 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: BROWN, borderBottomWidth: 5, maxWidth: 210,
   },
   titleStampText: { fontFamily: 'Shark', fontSize: 16, color: BROWN, flexShrink: 1 },
-  prizes: { paddingHorizontal: 12, marginTop: 12 },
+  prizes: { paddingHorizontal: 12, marginTop: 10 },
   prize: {
     backgroundColor: BRAND.white, borderRadius: 18, padding: 10, marginBottom: 10, borderWidth: 2, borderColor: '#efe1b8', borderBottomWidth: 5,
   },
@@ -744,7 +769,7 @@ const styles = StyleSheet.create({
   wearingText: { fontFamily: 'Knockout', fontSize: 15, color: BROWN },
   miniChip: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   miniText: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy },
-  finds: { paddingHorizontal: 16, marginTop: 6 },
+  finds: { paddingHorizontal: 16, marginTop: 0 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, minHeight: 46 },
   sectionText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
   extras: {
@@ -769,7 +794,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   plusText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
-  rarityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
+  rarityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
   rarityChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, height: 32, borderRadius: 16, borderWidth: 2 },
   rarityLabel: { fontFamily: 'Shark', fontSize: 16 },
   rarityHint: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft, flexShrink: 1 },
