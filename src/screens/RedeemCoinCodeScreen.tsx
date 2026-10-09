@@ -51,7 +51,7 @@ export default function RedeemCoinCodeScreen() {
           <TopbarText>Redeem</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
-          <InformationModal />
+          <InformationModal sheet="redeem" />
         </TopbarColumn>
       </Topbar>
       <View
