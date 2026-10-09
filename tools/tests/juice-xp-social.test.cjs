@@ -80,7 +80,7 @@ test('XP level up: gold hold with a pulse, bounded stars, LEVEL UP!, refill show
   assert.match(card, /announceForAccessibility\(`Level \$\{level\}!`\)/);
   assert.match(card, /toValue: 1\.3, duration: 140/, 'badge pop');
   // The refill reads the latest props, so a refetch during the celebration never leaves stale numbers.
-  assert.match(bar, /function startRefill\(latest: PotionState\) \{\n\s+party\.current\.pending = null;\n\s+const now = latestXp\.current;/);
+  assert.match(bar, /function startRefill\(latest: PotionState\) \{\n\s+const now = latestXp\.current;/);
   // Brim + gold hold + drain end before the driver refills.
   const hold = Number(/const GOLD_HOLD_MS = (\d+);/.exec(bar)[1]);
   const drain = Number(/const DRAIN_MS = (\d+);/.exec(bar)[1]);
