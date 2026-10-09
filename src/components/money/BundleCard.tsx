@@ -1,0 +1,46 @@
+/**
+ * <BundleCard />: Alex's big shop card for a bundle (the Starter Pack, the Park Trip Pack): a band,
+ * the pack art with its honest worth, the contents as picture-and-number chips, and a full-width
+ * navy price bar. Used on Supplies and on the post-win sheet, so the offer looks the same everywhere.
+ */
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+import type { ShopProduct } from '../../api/endpoints/me/shop';
+import type { BundleWorth } from '../../services/money/offers';
+import { Band, CARD, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, type PackArtKey } from './moneyUi';
+import { FONT } from '../../ui';
+
+export default function BundleCard({ product, price, worth, busy, disabled, onBuy, band = 'STARTER PACK · JUST ONCE', art = 'chest', compact = false }: {
+  product: ShopProduct; price?: string; worth: BundleWorth | null; busy: boolean; disabled: boolean; onBuy: () => void;
+  band?: string; art?: PackArtKey; compact?: boolean;
+}) {
+  return (
+    <Animated.View entering={FadeInUp.delay(60).springify().damping(15)} style={{ alignSelf: 'stretch' }}>
+      <ShopCard onPress={onBuy} disabled={disabled || !price} glow
+        accessibilityLabel={`${product.title}${product.limit === 'once' ? ', just once' : ''}. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
+        <Band text={band} color={art === 'chest' ? 'gold' : 'blue'} size={compact ? 15 : 18} />
+        <View style={st.body}>
+          <View style={[st.art, compact && st.artCompact]}><PackArt art={art} size={compact ? 84 : 118} /></View>
+          <View style={{ flex: 1, gap: 6 }}>
+            {worth && (
+              <Text maxFontSizeMultiplier={MAX_FONT} style={[st.worth, compact && st.worthCompact]}>
+                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
+              </Text>
+            )}
+            <Contents grants={product.grants} size="tight" />
+          </View>
+        </View>
+        <PriceBar price={price} busy={busy} big={!compact} />
+        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: compact ? 30 : 36, left: 8 }} />}
+      </ShopCard>
+    </Animated.View>
+  );
+}
+
+const st = StyleSheet.create({
+  body: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
+  art: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
+  artCompact: { width: 92, height: 88 },
+  worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  worthCompact: { fontSize: 16 },
+});

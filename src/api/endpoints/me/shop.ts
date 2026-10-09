@@ -9,6 +9,8 @@ export type ShopProduct = {
   readonly title: string;
   readonly badge: string | null;
   readonly grants: ShopGrants;
+  /** Coin packs: how many pieces of Shark Shop gear this buys at the typical (median) gear price. */
+  readonly buys?: { readonly gear: number; readonly gear_price: number } | null;
   readonly limit: 'once' | 'daily' | null;
   readonly deal_key: string | null;
   readonly available: boolean;

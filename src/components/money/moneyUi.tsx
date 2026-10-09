@@ -23,6 +23,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useAmbient } from '../../services/money/useAmbient';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
 import { unitWord } from '../../services/money/copy';
@@ -175,7 +176,7 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
 
 /** The art with a soft bob (UI thread; still under Reduce Motion). */
 export function PackArt({ art, size, bob = true }: { art: PackArtKey; size: number; bob?: boolean }) {
-  const still = useUiReducedMotion();
+  const still = !useAmbient();
   const t = useSharedValue(0);
   useEffect(() => {
     if (still || !bob) return undefined;
@@ -196,12 +197,14 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
  * The payoff after a purchase lands: rays turn behind the pack art, the art
  * pops, confetti bursts, the contents slide in, one cue and one buzz.
  */
-export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action }: {
+export function GotIt({ grants, art, title = 'You got it!', onDone, picture, caption, action, footer }: {
   grants: ShopGrants | null; art: PackArtKey; title?: string; onDone: () => void;
   /** A custom picture instead of the pack art (a season item), and one line under the title. */
   picture?: ReactNode; caption?: string;
   /** A second button, e.g. "Wear it now" for a pin. */
   action?: { label: string; onPress: () => void };
+  /** Shown under the caption (e.g. the locked Shark Pass rewards). */
+  footer?: ReactNode;
 }) {
   const still = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -234,7 +237,8 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
         </View>
         <Animated.Text entering={still ? undefined : FadeInDown.delay(250).springify().damping(14)} maxFontSizeMultiplier={MAX_FONT} style={s.gotTitle}>{title}</Animated.Text>
         <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
-          {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption}>{caption}</Text> : <Contents grants={grants} />}
+          {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption} numberOfLines={2}>{caption}</Text> : <Contents grants={grants} />}
+          {footer}
         </Animated.View>
         <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
           {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}

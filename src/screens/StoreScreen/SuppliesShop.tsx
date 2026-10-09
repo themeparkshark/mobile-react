@@ -33,7 +33,7 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bonusPercent, bundleWorth } from '../../services/money/offers';
+import { baseRates, bonusPercent, bundleWorth, gearLine } from '../../services/money/offers';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
 import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
@@ -43,6 +43,7 @@ import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import SharkPassBanner from '../../components/money/SharkPassBanner';
+import BundleCard from '../../components/money/BundleCard';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
@@ -175,7 +176,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const showDaily = !!ads?.enabled && !!daily && (vip || adsAvailable());
   const featured = sections.get('featured') ?? [];
   const starter = featured.find(p => p.limit === 'once');
-  const todays = featured.filter(p => p !== starter);
+  // Bigger featured bundles with no daily limit (the Park Trip Pack) get Alex's big card like the Starter Pack.
+  const bigBundles = featured.filter(p => p !== starter && !p.limit);
+  const todays = featured.filter(p => p !== starter && !bigBundles.includes(p));
   // A product Apple hasn't priced (not set up yet in this storefront) is never shown as a dead card.
   const priced = (p: ShopProduct) => !!prices[p.product_id] || Object.keys(prices).length === 0;
   const holdCap = catalog.ticket_hold_cap;
@@ -213,17 +216,22 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         <>
           {/* Before any price: these cost real money, and a grown-up buys them. */}
           <View style={st.realMoney} accessible accessibilityLabel="Supplies cost real money. A grown-up buys them.">
-            <RealMoneyMark size={30} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.realMoneyText}>
-              <Text style={st.realMoneyHead}>REAL MONEY  </Text>Supplies cost real money. A grown-up buys them.
+            <RealMoneyMark size={22} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.realMoneyText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Supplies cost real money. A grown-up buys them.
             </Text>
           </View>
 
           <View onLayout={onSection('featured')} style={{ gap: 12 }}>
             {starter && starter.available && priced(starter) && (
-              <StarterCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
+              <BundleCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
                 busy={busy === starter.product_id} disabled={!!busy} onBuy={() => void buy(starter, 'chest')} />
             )}
+            {bigBundles.filter(priced).map(p => (
+              <BundleCard key={p.product_id} product={p} price={prices[p.product_id]?.price} worth={bundleWorth(p, prices, rates)}
+                busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, 'bag')}
+                band={`${p.title.toUpperCase()} · FOR A PARK TRIP`} art="bag" />
+            ))}
             {todays.length > 0 && (
               <View style={st.row}>
                 {todays.filter(priced).map((p, i) => (
@@ -276,7 +284,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             )}
             <View style={st.grid}>
               {packs.map((p, i) => (
-                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 1 : 3}
+                <PackCard key={p.product_id} product={p} tier={i} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
                   price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
                   note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
                   onBuy={() => void buy(p, packArtKey(p, i))} />
@@ -300,33 +308,6 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   );
 }
 
-/** The one-time Starter Pack: Alex's big card, his open chest, the honest worth. */
-function StarterCard({ product, price, worth, busy, disabled, onBuy }: {
-  product: ShopProduct; price?: string; worth: ReturnType<typeof bundleWorth>; busy: boolean; disabled: boolean; onBuy: () => void;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.delay(60).springify().damping(15)}>
-      <ShopCard onPress={onBuy} disabled={disabled || !price} glow
-        accessibilityLabel={`${product.title}, just once. ${price ? `${price}, real money, a grown-up buys it.` : ''}${worth ? ` Worth ${worth.worth} in regular packs.` : ''}`}>
-        <Band text="STARTER PACK · JUST ONCE" color="gold" size={18} />
-        <View style={st.starterBody}>
-          <View style={st.starterArt}><PackArt art="chest" size={118} /></View>
-          <View style={{ flex: 1, gap: 6 }}>
-            {worth && (
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.worth}>
-                {`Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}`}
-              </Text>
-            )}
-            <Contents grants={product.grants} size="small" />
-          </View>
-        </View>
-        <PriceBar price={price} busy={busy} big />
-        {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 30, left: 8 }} />}
-      </ShopCard>
-    </Animated.View>
-  );
-}
-
 /** Daily Deal and Park Day Pack, side by side: today's picks. */
 function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: {
   product: ShopProduct; index: number; price?: string; worth: ReturnType<typeof bundleWorth>; note: string | null;
@@ -342,9 +323,11 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
           <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>
-            {worth ? `Worth ${worth.worth}${worth.plusEnergy ? ' plus energy' : ''}` : deal ? 'New deal every day' : 'One a day'}
-          </Text>
+          {worth ? (
+            <View style={st.worthPill}><Text maxFontSizeMultiplier={MAX_FONT} style={st.worthPillText}>{`WORTH ${worth.worth}`}</Text></View>
+          ) : (
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'New deal every day' : 'One a day'}</Text>
+          )}
         </View>
         <PriceBar price={price} busy={busy} note={note} />
         {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 34, right: 4 }} />}
@@ -361,15 +344,17 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   const n = product.grants[main] ?? 0;
   const best = product.badge === 'Best value';
   const wide = columns === 1;
+  const gear = main === 'coins' ? gearLine(product.buys) : null;
   return (
     <View style={[columns === 3 ? st.col3 : columns === 2 ? st.col2 : st.col1]}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} glow={best}
-        accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}. ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
+        accessibilityLabel={`${n.toLocaleString('en-US')} ${unitWord(main, n)}.${gear ? ` ${gear}.` : ''} ${price ?? ''}, real money, a grown-up buys it.${bonus ? ` ${bonus}% more than the smallest pack.` : ''}${best ? ' Best value.' : ''}`}>
         <View style={[st.packArtWell, wide && st.packArtWide]}>
           <PackArt art={packArtKey(product, tier)} size={wide ? 70 : columns === 2 ? 82 : 64} bob={false} />
         </View>
         <Band text={`${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
+        {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={2}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
         {bonus && <Sticker text={`+${bonus}% MORE`} style={{ top: 6, right: 4 }} />}
       </ShopCard>
@@ -380,7 +365,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
 
 /** The VIP door on the shelf: what VIP gives, no price (the page after the grown-up gate has it). */
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
-  const lines = (perks ?? []).slice(0, 4);
+  const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4);
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>
@@ -391,12 +376,14 @@ function VipCard({ perks }: { perks: VipPerk[] | null }) {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards every day. No ads.</Text>
           </View>
         </View>
-        {lines.map(perk => (
-          <View key={perk.title} style={st.vipRow}>
-            <GameIcon name={perk.icon} size={22} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipRowText} numberOfLines={1}>{perk.title}</Text>
-          </View>
-        ))}
+        <View style={st.vipTiles}>
+          {lines.map(perk => (
+            <View key={perk.title} style={st.vipTile}>
+              <View style={st.vipTileIcon}><GameIcon name={perk.icon} size={28} /></View>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipTileText} numberOfLines={2}>{perk.title}</Text>
+            </View>
+          ))}
+        </View>
         <GameButton label="See VIP" icon="member" size="compact" onPress={() => { void openMembership(); }}
           accessibilityLabel="See everything VIP gives" style={{ alignSelf: 'center', marginTop: 4 }} />
       </View>
@@ -424,16 +411,18 @@ const st = StyleSheet.create({
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },
   walletText: { fontFamily: FONT.display, fontSize: 16, color: '#fff', textShadowColor: BRAND.navy, textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 0 },
-  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: REAL_MONEY_TINT, borderRadius: 14,
-    borderWidth: 3, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 10, paddingVertical: 6 },
+  realMoney: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,248,228,0.95)', borderRadius: 999,
+    borderWidth: 2, borderColor: REAL_MONEY_GREEN, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'center' },
   realMoneyHead: { fontFamily: FONT.display, fontSize: 15, color: REAL_MONEY_INK },
-  realMoneyText: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: BRAND.navy, lineHeight: 19 },
+  realMoneyText: { flexShrink: 1, fontFamily: FONT.display, fontSize: 14, color: REAL_MONEY_INK },
   row: { flexDirection: 'row', gap: 10 },
   starterBody: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'stretch' },
   starterArt: { width: 128, height: 118, alignItems: 'center', justifyContent: 'center' },
   worth: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   dayBody: { alignItems: 'center', gap: 5, paddingHorizontal: 6, paddingTop: 8, paddingBottom: 8, flex: 1, alignSelf: 'stretch' },
   dayTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  worthPill: { backgroundColor: '#ffcf3b', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 2, borderColor: '#ffffff' },
+  worthPillText: { fontFamily: FONT.display, fontSize: 13, color: '#6a3b00' },
   dayNote: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', textAlign: 'center' },
   section: { gap: 8 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -443,8 +432,9 @@ const st = StyleSheet.create({
   sectionNote: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff', marginTop: -4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 16, paddingTop: 6 },
   col3: { width: '31.2%', flexGrow: 1, alignItems: 'stretch' },
-  col2: { width: '47.5%', flexGrow: 1, alignItems: 'stretch' },
+  col2: { width: '48.5%', alignItems: 'stretch' },
   col1: { width: '100%' },
+  gearLine: { fontFamily: FONT.display, fontSize: 13, color: CARD.lip, textAlign: 'center', paddingHorizontal: 6, marginTop: 2 },
   packArtWell: { height: 92, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   packArtWide: { flexDirection: 'row', gap: 12, height: 86 },
   wideNote: { fontFamily: FONT.display, fontSize: 22, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
@@ -458,6 +448,12 @@ const st = StyleSheet.create({
   vipHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   vipTitle: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   vipSub: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
+  vipTiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vipTile: { width: '47.5%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0a4f96', borderRadius: 14,
+    borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: BRAND.navy, padding: 6 },
+  vipTileIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 2, borderColor: BRAND.gold,
+    alignItems: 'center', justifyContent: 'center' },
+  vipTileText: { flex: 1, fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
   vipRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   vipRowText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   freeCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e4f7ff', borderRadius: 18,

@@ -105,13 +105,15 @@ test('Shark Pass: what the pass row adds for reached steps, and its sums', () =>
   ];
   assert.equal(pass.passTwinLine(tiers, false), 'With the Shark Pass you’d also have Frosty Scarf Pin, 100 coins and 1 more.');
   assert.equal(pass.passTwinLine(tiers, true), null, 'owners see nothing extra');
+  assert.equal(pass.claimedLine([{ type: 'energy', amount: 25 }, { type: 'coins', amount: 50 }, { type: 'item', name: 'Frosty Scarf Pin' }]),
+    'Frosty Scarf Pin, 50 coins and 25 energy', 'best first, all named');
   assert.deepEqual(plain(pass.passGrants(tiers)), { coins: 100, tickets: 2, rescue_passes: 1, pins: 1 });
 });
 
 test('real money: Supplies packs, the Shark Pass and VIP each buy only after a grown-up answers', () => {
   const strip = code => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const screen = strip(read('src/screens/SharkPassScreen.tsx'));
-  assert.match(screen, /if \(!\(await askGrownUp\(\{ kind: 'money', price: price\.price,[^)]*\}\)\)\) return;[\s\S]{0,200}await buySharkPass\(/);
+  assert.match(screen, /if \(!\(await askGrownUp\(\{ kind: 'money', price: cost\.price,[\s\S]{0,160}?\}\)\)\) return;[\s\S]{0,260}await buySharkPass\(/);
   assert.equal((screen.match(/buySharkPass\(/g) || []).length, 1);
   for (const file of ['src/components/money/CoinTopUpOffer.tsx', 'src/components/money/StarterOfferCard.tsx', 'src/screens/StoreScreen/SuppliesShop.tsx']) {
     const code = strip(read(file));
@@ -120,7 +122,7 @@ test('real money: Supplies packs, the Shark Pass and VIP each buy only after a g
   }
   // A Shark Pass is never mistaken for a Supplies pack (it would be redeemed at the wrong door and never finished).
   const purchases = read('src/services/purchases.ts');
-  assert.match(purchases, /&& !isSharkPassProduct\(productId\);/);
+  assert.match(purchases, /&& !isSharkPassProduct\(productId\) && !isVipGiftProduct\(productId\);/);
   assert.match(screen, /It doesn’t renew/);
 });
 
@@ -131,4 +133,32 @@ test('no countdown on a real-money offer, no pressure words in the money kit', (
     assert.doesNotMatch(code, /untilText\(|hurry|last chance|only \d+ left|limited time|don.t miss/i, file);
     assert.doesNotMatch(code, /—/, `${file}: no em dashes`);
   }
+});
+
+test('coin packs say what they buy from the server median gear price, never invented', () => {
+  assert.equal(offers.gearLine({ gear: 4, gear_price: 120 }), 'Buys about 4 pieces of gear');
+  assert.equal(offers.gearLine({ gear: 1, gear_price: 400 }), 'Buys about 1 piece of gear');
+  assert.equal(offers.gearLine(null), null);
+  assert.equal(offers.gearLine(undefined), null);
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /main === 'coins' \? gearLine\(product\.buys\)/);
+});
+
+test('the season set counts every wearable, owned = claimed, and says where each one comes from', () => {
+  const it = (art, slot = 'pin') => ({ type: 'item', name: art, art, slot, icon_url: null, ready: true });
+  const coins = { type: 'coins', amount: 40, ready: true };
+  const tiers = [
+    { tier: 1, unlocked: true, free: coins, paid: it('scarf'), free_claimed: true, paid_claimed: true },
+    { tier: 10, unlocked: true, free: it('mittens'), paid: it('beanie'), free_claimed: true, paid_claimed: false },
+    { tier: 50, unlocked: false, free: it('finisher'), paid: it('lights', 'background'), free_claimed: false, paid_claimed: false },
+  ];
+  const set = pass.seasonSet(tiers, [it('crown')], false);
+  assert.equal(set.pieces.length, 6);
+  assert.equal(set.owned, 2);
+  assert.deepEqual(plain(set.pieces.map(p => p.reward.art)), ['mittens', 'finisher', 'scarf', 'beanie', 'lights', 'crown'], 'free row first');
+  assert.equal(pass.pieceSource(set.pieces[0]), 'Free at step 10');
+  assert.equal(pass.pieceSource(set.pieces[3]), 'Shark Pass, step 10');
+  assert.equal(pass.pieceSource(set.pieces[5]), 'Shark Pass Plus');
+  assert.equal(pass.seasonSet(tiers, [it('crown')], true).owned, 3, 'Plus extras are owned with Plus');
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /YOUR SEASON SET/);
 });

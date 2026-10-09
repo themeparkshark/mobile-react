@@ -15,11 +15,12 @@ import { buyPack, outcomeMessage, useSupplies } from '../../services/money/suppl
 import { storeAvailable } from '../../services/purchases';
 import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, gameAlert } from '../../ui';
-import { CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, Sticker } from './moneyUi';
+import { GotIt } from './moneyUi';
+import BundleCard from './BundleCard';
 
 const SEEN_KEY = 'money:starter-offer-seen';
 
-export default function StarterOfferCard({ ready }: { ready: boolean }) {
+export default function StarterOfferCard({ ready, onShown }: { ready: boolean; onShown?: (shown: boolean) => void }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const canBuy = !!player && storeAvailable();
   const [show, setShow] = useState<boolean | null>(null);
@@ -29,14 +30,25 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
 
   useEffect(() => {
     if (!ready || !canBuy || show !== null) return;
-    void AsyncStorage.getItem(SEEN_KEY).then((seen) => {
-      setShow(!seen);
-      if (!seen) void AsyncStorage.setItem(SEEN_KEY, String(Date.now())).catch(() => undefined);
-    }).catch(() => setShow(false));
+    void AsyncStorage.getItem(SEEN_KEY).then((seen) => setShow(!seen)).catch(() => setShow(false));
   }, [ready, canBuy, show]);
 
   const starter = catalog?.enabled ? catalog.products.find(p => p.limit === 'once' && p.available) : undefined;
   const price = starter ? prices[starter.product_id] : undefined;
+  const visible = !!(show && starter && price);
+  // Seen only once it really showed with its price: a slow store or no signal never burns the one-time offer.
+  useEffect(() => {
+    if (visible) void AsyncStorage.setItem(SEEN_KEY, String(Date.now())).catch(() => undefined);
+  }, [visible]);
+  // The sheet's one money offer is decided before anything else renders: tell the sheet as soon as we know.
+  const decided = !ready ? null : !canBuy || show === false ? false : visible ? true : null;
+  useEffect(() => { if (decided !== null) onShown?.(decided); }, [decided]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Prices that never come (no store, no signal): give the sheet back its VIP line after a short wait.
+    if (!ready || decided !== null) return undefined;
+    const t = setTimeout(() => onShown?.(false), 2500);
+    return () => clearTimeout(t);
+  }, [ready, decided]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!show || !starter || !price) return null;
   const worth = bundleWorth(starter, prices, baseRates(catalog!.products, prices));
   trackImpression('postwin.starter', starter.product_id);
@@ -55,33 +67,13 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
   };
 
   return (
-    <Animated.View entering={FadeInUp.delay(400).springify().damping(15)} style={st.wrap}>
-      <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>STARTER PACK, JUST ONCE</Text>
-      <Pressable onPress={() => void buy()} disabled={busy} accessibilityRole="button"
-        accessibilityLabel={`Starter Pack, just once. ${price.price}, real money, a grown-up buys it.${worth ? ` Worth ${worth.worth}.` : ''}`}
-        style={({ pressed }) => [st.lip, pressed && st.lipPressed]}>
-        <View style={st.card}>
-          <PackArt art="chest" size={70} />
-          <View style={{ flex: 1, gap: 4, paddingVertical: 8 }}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.title}>{worth ? `STARTER PACK · WORTH ${worth.worth}` : 'STARTER PACK'}</Text>
-            <Contents grants={starter.grants} size="small" />
-          </View>
-          <View style={st.priceCol}><PriceBar price={price.price} busy={busy} /></View>
-          {worth?.times && <Sticker text={`${worth.times}X VALUE`} style={{ top: 2, left: 2 }} />}
-        </View>
-      </Pressable>
+    <View style={st.wrap}>
+      <BundleCard product={starter} price={price.price} worth={worth} busy={busy} disabled={busy} onBuy={() => void buy()} compact />
       <GotIt grants={landed} art="chest" onDone={() => setLanded(null)} />
-    </Animated.View>
+    </View>
   );
 }
 
 const st = StyleSheet.create({
-  wrap: { alignSelf: 'stretch', gap: 4, marginTop: 8 },
-  kicker: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, textAlign: 'center', letterSpacing: 0.6 },
-  lip: { borderRadius: 16, backgroundColor: CARD.lip, paddingBottom: 5 },
-  lipPressed: { paddingBottom: 1, marginTop: 4 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 3, borderColor: '#ffd84a',
-    backgroundColor: CARD.bottom, overflow: 'hidden', paddingLeft: 6 },
-  title: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
-  priceCol: { width: 96, alignSelf: 'stretch', justifyContent: 'center' },
+  wrap: { alignSelf: 'stretch', marginTop: 8 },
 });
