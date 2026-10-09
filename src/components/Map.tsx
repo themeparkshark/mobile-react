@@ -83,6 +83,11 @@ const BEAM_PT = 176;
  * 52 x 60 above this point) already assumed it.
  */
 const SHARK_GROUND = { x: 50, y: 100 } as const;
+/**
+ * The following shark's footprint for the declutter (from its ground point): the 60 pt art with
+ * its idle bob, a hop, the fin and worn pieces on top (a hat, a jetpack). Cards and chips keep out.
+ */
+export const PLAYER_BODY = { x: -38, y: -96, w: 76, h: 102 } as const;
 /** The weak-GPS ring: drawn at most this wide (points), scaled down to the fix's accuracy circle. */
 const WEAK_RING_MAX_PT = 200;
 const WEAK_RING_MIN_PT = 110;
@@ -459,7 +464,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Declutter: the shark is an obstacle for chips (never for art you walk up to),
   // and the map's own button column is an inset no marker draws under.
   const declutterPlayer = useMemo<LayoutItem[]>(() => declutter && location ? [{ id: 'player', latitude: location.latitude,
-    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }] : [],
+    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: PLAYER_BODY }] : [],
   [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasExtraControls = !!extraControls;
   // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it

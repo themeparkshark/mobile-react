@@ -128,7 +128,7 @@ test('the compass says what it does: two named states, a pill after each tap and
   const btn = loadTs('src/components/map/FollowButton.tsx', {
     'expo-image': { Image: () => null }, 'react': { useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react-native': { Pressable: () => null, StyleSheet: { create: s => s, absoluteFill: {} }, Text: () => null, View: () => null },
-    'react-native-reanimated': { __esModule: true, default: { View: () => null }, Easing: { out: () => 0, quad: 0 }, FadeIn: { duration: () => ({}) }, FadeOut: { duration: () => ({}) },
+    'react-native-reanimated': { __esModule: true, default: { View: () => null }, Easing: { out: () => 0, quad: 0 },
       useAnimatedStyle: () => ({}), useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0, withTiming: () => 0 },
     'react-native-svg': { __esModule: true, default: () => null, Path: () => null },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
@@ -165,4 +165,19 @@ test('a busy JS thread stretches each camera move so the camera never stops betw
   assert.ok(cf.segmentMs(gap) >= 320 * 1.4 && cf.segmentMs(gap) <= 480);
   assert.equal(cf.segmentMs(cf.CAM_TICK_MS), cf.CAM_SEGMENT_MS);
   assert.equal(cf.segmentMs(5000), 480, 'capped: a stalled thread never sends a slow drift');
+});
+
+test('the selected coin card sits where the declutter put it, clear of the following shark', () => {
+  const layout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts', {}, {});
+  const H = layout.SELECTED_TAG.h, top = layout.RIDE_BODY.y, bottom = layout.RIDE_BODY.y + layout.RIDE_BODY.h;
+  assert.equal(layout.selectedCardSide(null, top, bottom, H), 'above');
+  assert.equal(layout.selectedCardSide({ y: top - H - 3 }, top, bottom, H), 'above');
+  assert.equal(layout.selectedCardSide({ y: bottom + 2 }, top, bottom, H), 'below');
+  assert.equal(layout.selectedCardSide({ y: top }, top, bottom, H), 'beside');
+  const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.doesNotMatch(marker, /tooltipContainer/, 'no fixed card spot above the coin');
+  assert.match(marker, /<TagSlot tag=\{placement\.tag \?\? undefined\} anchor=\{RIDE_BOX\.anchor\} width=\{SELECTED_TAG\.w\} height=\{SELECTED_TAG\.h\}/);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /export const PLAYER_BODY = \{ x: -38, y: -96, w: 76, h: 102 \} as const;/);
+  assert.match(map, /tagObstacleOnly: true, body: PLAYER_BODY/);
 });

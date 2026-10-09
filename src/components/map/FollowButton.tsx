@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Reanimated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { BRAND, SHADOW } from '../../ui';
@@ -68,6 +68,16 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
     return () => clearTimeout(timer);
   }, [hint, onHintDone]);
 
+  // The pill fades and slides in on the UI thread, and stays mounted while it fades out.
+  const [shownPill, setShownPill] = useState<FollowButtonState | null>(null);
+  const pillOn = useSharedValue(0);
+  useEffect(() => {
+    const on = !!pill || hint;
+    if (pill) setShownPill(pill);
+    pillOn.value = reducedMotion ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: on ? 200 : 180, easing: Easing.out(Easing.quad) });
+    if (!on) { const t = setTimeout(() => setShownPill(null), 200); return () => clearTimeout(t); }
+  }, [pill, hint, reducedMotion, pillOn]);
+  const pillStyle = useAnimatedStyle(() => ({ opacity: pillOn.value, transform: [{ translateX: 10 * (1 - pillOn.value) }, { scale: 0.92 + 0.08 * pillOn.value }] }));
   // Press: a squash and a pop. Mode change: the badge pops in. Panned away: one nudge so it is noticed.
   const press = useSharedValue(1);
   const badge = useSharedValue(1);
@@ -94,20 +104,22 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {(pill || hint) && (
-        <Reanimated.View key={hint ? 'hint' : pill ?? ''} pointerEvents="none"
-          entering={reducedMotion ? undefined : FadeIn.duration(180)} exiting={reducedMotion ? undefined : FadeOut.duration(160)}
-          style={[styles.pill, hint && styles.hint]}>
+      {(shownPill || hint) && (
+        // A fixed-width lane left of the button: an absolute view with no width would be squeezed to
+        // the 54 pt column it hangs from. The pill sizes to its words at the lane's right edge.
+        <View pointerEvents="none" style={styles.pillLane}>
+        <Reanimated.View style={[styles.pill, hint && styles.hint, pillStyle]}>
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
               <Text style={styles.hintBody}>{FOLLOW_COPY.hintBody}</Text>
             </>
           ) : (
-            <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[pill ?? 'heading']}</Text>
+            <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[shownPill ?? 'heading']}</Text>
           )}
           <View style={[styles.tail, hint && styles.hintTail]} />
         </Reanimated.View>
+        </View>
       )}
       <Pressable onPress={tap} accessibilityRole="button" accessibilityLabel={followButtonLabel(state)} hitSlop={8}>
         <Reanimated.View style={[styles.button, state === 'north' && styles.north, state === 'away' && styles.away, buttonStyle]}>
@@ -142,12 +154,13 @@ const styles = StyleSheet.create({
   badgeHeading: { backgroundColor: BRAND.blue },
   badgeNorth: { backgroundColor: BRAND.navy },
   badgeN: { fontFamily: 'Shark', fontSize: 12, lineHeight: 14, color: BRAND.white, marginTop: 1 },
-  pill: { position: 'absolute', right: 64, top: 11, height: 32, paddingHorizontal: 12, borderRadius: 16,
+  pillLane: { position: 'absolute', right: 64, top: 0, width: 240, alignItems: 'flex-end' },
+  pill: { marginTop: 11, height: 32, paddingHorizontal: 12, borderRadius: 16,
     backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, justifyContent: 'center', ...SHADOW.card },
   pillText: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy },
   tail: { position: 'absolute', right: -7, top: 9, width: 10, height: 10, backgroundColor: BRAND.white,
     borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: BRAND.navy, transform: [{ rotate: '45deg' }] },
-  hint: { top: 0, height: undefined, width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
+  hint: { marginTop: 0, height: undefined, width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
   hintTail: { top: 20, backgroundColor: BRAND.cream },
   hintTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
