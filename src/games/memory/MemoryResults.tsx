@@ -26,6 +26,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { GameAudio, Haptic } from '../../gamekit';
@@ -111,7 +112,13 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 }) {
   const win = useWindowDimensions();
   const sched = useMemo(() => revealSchedule(data.stars), [data.stars]);
-  const [step, setStep] = useState(reducedMotion ? 99 : 0);
+  // Step 1 (the ribbon) from the first frame: never an empty card.
+  const [step, setStep] = useState(reducedMotion ? 99 : 1);
+  const rise = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (!reducedMotion) rise.value = withSpring(1, { damping: 11, stiffness: 210 });
+  }, [reducedMotion, rise]);
+  const riseSt = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - rise.value) * 60 }, { scale: 0.92 + rise.value * 0.08 }] }));
   const [panel, setPanel] = useState<ResultsPanel>('actions');
   const [flipped, setFlipped] = useState(false);
   const flip = useSharedValue(0);
@@ -145,13 +152,14 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
       <View style={styles.scrim} />
-      <Animated.View style={[styles.card, { maxHeight: win.height * 0.84 }, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
+      {/* Tall phones: the card sits lower so the barker's celebration stays in view above it. */}
+      <Animated.View style={[styles.card, { maxHeight: win.height * 0.8, marginTop: win.height > 800 ? 90 : 0 }, riseSt, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
         <ScrollView contentContainerStyle={styles.cardInner} showsVerticalScrollIndicator={false} bounces={false}>
           {/* Every section is laid out from frame 0 and revealed in place on its
               beat, so the card never grows or re-centers while a kid reads it.
               Front: banner, one big number, crowns, new cards, one button.
               The stat chips and grades live behind STATS. */}
-          <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} burst={data.banner === 'PERFECT!'} />
+          <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
           <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
           <View style={styles.crownRow}>
             {[0, 1, 2].map((i) => (
@@ -203,6 +211,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
             ) : null
           )}</Reveal>
         </ScrollView>
+        {/* PERFECT: coins burst from the medal, above the ribbon and card. */}
+        {data.banner === 'PERFECT!' && !reducedMotion ? <CoinBurst fire /> : null}
       </Animated.View>
       {data.daily ? (
         <Animated.View style={[styles.card, styles.cardBack, { maxHeight: win.height * 0.84 }, backSt]} pointerEvents={flipped ? 'auto' : 'none'}>
@@ -227,23 +237,25 @@ function CoinBurst({ fire }: { fire: boolean }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!fire) return;
-    t.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-    Haptic.comboHeavy();
+    t.value = withDelay(180, withTiming(1, { duration: 1000, easing: Easing.out(Easing.quad) }));
+    const h = setTimeout(() => Haptic.comboHeavy(), 180);
+    return () => clearTimeout(h);
   }, [fire, t]);
   return <View pointerEvents="none" style={styles.burst}>{Array.from({ length: PERFECT_COINS }, (_, k) => <BurstCoin key={k} k={k} t={t} />)}</View>;
 }
 function BurstCoin({ k, t }: { k: number; t: import('react-native-reanimated').SharedValue<number> }) {
   const a = (k / PERFECT_COINS) * Math.PI * 2 + (k % 2) * 0.2;
-  const r = 70 + (k % 3) * 22;
+  const r = 90 + (k % 3) * 15;
   const st = useAnimatedStyle(() => ({
-    opacity: t.value > 0 && t.value < 1 ? 1 - t.value * t.value : 0,
-    transform: [{ translateX: Math.cos(a) * r * t.value }, { translateY: Math.sin(a) * r * 0.6 * t.value + t.value * t.value * 40 },
+    opacity: t.value > 0 && t.value < 1 ? 1 - t.value * t.value * t.value : 0,
+    // Out on an arc, then a little gravity.
+    transform: [{ translateX: Math.cos(a) * r * t.value }, { translateY: Math.sin(a) * r * 0.75 * t.value - Math.sin(Math.PI * t.value) * 30 + t.value * t.value * 70 },
       { rotateZ: `${t.value * 360 * (k % 2 ? 1 : -1)}deg` }, { scale: 0.6 + (1 - t.value) * 0.5 }],
   }));
   return <Animated.Image source={COIN} style={[styles.burstCoin, st]} resizeMode="contain" />;
 }
 
-function Banner({ text, show, reducedMotion, burst = false }: { text: string; show: boolean; reducedMotion: boolean; burst?: boolean }) {
+function Banner({ text, show, reducedMotion }: { text: string; show: boolean; reducedMotion: boolean }) {
   const drop = useSharedValue(reducedMotion ? 1 : 0);
   const impact = useSharedValue(0);
   useEffect(() => {
@@ -256,7 +268,6 @@ function Banner({ text, show, reducedMotion, burst = false }: { text: string; sh
   const dust = useAnimatedStyle(() => ({ opacity: impact.value * 0.9, transform: [{ scale: 1 + (1 - impact.value) * 0.4 }] }));
   return (
     <Animated.View style={[styles.banner, st]}>
-      {burst && !reducedMotion ? <CoinBurst fire={show} /> : null}
       <Animated.Image source={DUST} style={[styles.dust, dust]} resizeMode="contain" />
       <Image source={BANNER} style={styles.bannerImg} resizeMode="stretch" />
       <Animated.View style={[styles.bannerFlash, flash]} />
@@ -301,10 +312,11 @@ function Headline({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsDat
         </Animated.View>
       ) : null}
       <View style={styles.recallPlate}>
-        <Text style={styles.recallLabel}>{data.headline?.label ?? 'RECALL'}</Text>
+        <Text style={styles.recallLabel}>{data.headline?.label ?? 'MEMORY'}</Text>
         <Text style={styles.recallValue}>{data.headline?.value ?? `${shown ?? data.recallPct}%`}</Text>
       </View>
-      {ed ? <Text style={styles.editionText}>{`${ed.toUpperCase()} EDITION${data.upgraded ? ' · UPGRADED' : ''}`}</Text> : null}
+      {/* The medal's color says the edition; no "EDITION" jargon for kids. */}
+      {ed && data.upgraded ? <Text style={styles.editionText}>COIN UPGRADED!</Text> : null}
     </Animated.View>
   );
 }
@@ -433,8 +445,8 @@ const styles = StyleSheet.create({
   // Navy, not milky white: the shark and board stay readable behind a win.
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,38,86,0.62)' },
   reveal: { alignSelf: 'stretch', alignItems: 'center' },
-  burst: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  burstCoin: { position: 'absolute', width: 30, height: 30 },
+  burst: { position: 'absolute', left: 0, right: 0, top: 70, height: 60, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  burstCoin: { position: 'absolute', width: 38, height: 38 },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',
@@ -473,7 +485,8 @@ const styles = StyleSheet.create({
   numValue: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
   luckChip: { marginTop: 6, backgroundColor: '#ffffff', borderRadius: 10, borderWidth: 1.5, borderColor: MM.ink, paddingHorizontal: 8, paddingVertical: 2 },
   luckText: { fontFamily: 'Knockout', fontSize: 12, color: MM.ink },
-  newBest: { fontFamily: 'Shark', fontSize: 16, color: MM.goldDeep, marginTop: 2 },
+  newBest: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', marginTop: 4, backgroundColor: MM.coral, borderWidth: 2.5,
+    borderColor: MM.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 1, overflow: 'hidden', transform: [{ rotateZ: '-4deg' }] },
   grades: { alignItems: 'center', marginTop: 8 },
   gradeRow: { flexDirection: 'row', gap: 18 },
   grade: { alignItems: 'center' },
@@ -483,7 +496,8 @@ const styles = StyleSheet.create({
   tip: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, textAlign: 'center', marginTop: 6, paddingHorizontal: 6 },
   rewards: { alignItems: 'center', marginTop: 8 },
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  extraReward: { fontFamily: 'Shark', fontSize: 14, color: MM.goldDeep },
+  extraReward: { fontFamily: 'Shark', fontSize: 15, color: '#ffffff', backgroundColor: MM.ink, borderRadius: 10, overflow: 'hidden',
+    paddingHorizontal: 10, paddingVertical: 2, marginTop: 4 },
   actions: { alignSelf: 'stretch', alignItems: 'center', marginTop: 10 },
   bigBtn: { alignSelf: 'stretch', backgroundColor: MM.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: MM.goldDeep, minHeight: 54 },
   bigBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },

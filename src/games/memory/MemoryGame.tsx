@@ -56,6 +56,7 @@ import {
 } from '../../gamekit';
 import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
+import { shouldCallCombo } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, type CardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
@@ -370,6 +371,7 @@ export default function MemoryGame({
   const fx = useRef<FxStageHandle>(null);
   const stage = useRef<SharkStageHandle>(null);
   const chainPlate = useRef<ChainPlateHandle>(null);
+  const calloutAt = useRef<{ at: number; sweet: boolean }>({ at: 0, sweet: false });
   const chip = useRef<VerdictChipHandle>(null);
   const flights = useRef<FlightLayerHandle>(null);
   const awning = useRef<AwningCalloutsHandle>(null);
@@ -979,7 +981,7 @@ export default function MemoryGame({
         if (xp > 0) try {
           const m = addXp(await loadMastery(), deck.id, xp);
           await saveMastery(m.mastery);
-          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} MASTERY LEVEL ${m.after}` : `+${xp} MASTERY XP`);
+          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} LEVEL ${m.after}!` : `+${xp} XP`);
         } catch {
           // Mastery waits for the next run.
         }
@@ -1203,6 +1205,8 @@ export default function MemoryGame({
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
       // the Ticket has tries, then Done), right over the board.
       if (r.mode === 'ride') {
+        // Short phones: the card covers more board, so veil it a bit more under the ribbon.
+        if ((geoRef.current?.H ?? 999) < 600) wash.value = withTiming(0.95, { duration: 220 });
         setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
         tryCardIn.value = 0;
         tryCardIn.value = reducedMotion ? 1 : withSpring(1, { damping: 13, stiffness: 190 });
@@ -1570,12 +1574,15 @@ export default function MemoryGame({
               Haptic.success();
               if (ev.tierUp === 3) {
                 awning.current?.ribbon('SWEET RUN', 2);
+                calloutAt.current = { at: Date.now(), sweet: true };
                 GameAudio.play('mm_sting_sweet_run');
               }
             }
             // Combo callout: from 3 remembered in a row, each step lands bigger.
-            if (grade === 'recall' && chain >= 3 && ev.tierUp !== 3) {
+            // Paced so every callout reads once and the stage breathes.
+            if (grade === 'recall' && ev.tierUp !== 3 && shouldCallCombo(chain, Date.now(), calloutAt.current)) {
               awning.current?.ribbon(`COMBO x${chain}`, chain - 2);
+              calloutAt.current = { at: Date.now(), sweet: false };
             }
             // The barker answers.
             stage.current?.pose(grade === 'recall' ? 'fist' : 'wave', 700);

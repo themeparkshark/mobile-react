@@ -43,7 +43,7 @@ test('cards stay visible: only known faces flip, under a light veil', () => {
 });
 
 test('every ride try ends on the end card; Done in a ride challenge goes straight to the ride loss card', () => {
-  assert.match(src, /if \(r\.mode === 'ride'\) \{\s*setTryScreen\(/);
+  assert.match(src, /if \(r\.mode === 'ride'\) \{[\s\S]{0,220}setTryScreen\(/);
   assert.match(src, /if \(rideChallenge && r\?\.mode === 'ride'\) \{[\s\S]{0,400}void collectRewards\(r, false, false, 0\)[\s\S]{0,60}onClose\(\);/);
   assert.match(src, /if \(!prev \|\| RIDE_TRIES - 1 - prev\.tryIndex <= 0\) return;/);
 });
