@@ -18,7 +18,7 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Modal, Pressable, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent,
+  Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -259,14 +259,27 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
       <View accessible accessibilityLabel={label} style={styles.textBlock}>
         <Animated.Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}
           style={[styles.headline, head]}>{page.headline}</Animated.Text>
-        <View style={styles.points}>
-          {page.points.map((point, i) => (
-            <Animated.View key={point.text} style={[styles.point, pointStyles[Math.min(i, 2)]]}>
-              <View style={styles.pointIcon}><GameIcon name={point.icon} size={26} /></View>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pointText}>{point.text}</Text>
-            </Animated.View>
-          ))}
-        </View>
+        {page.points.length > 3 ? (
+          // Server-written rules (Home Hunt, odds) can run longer: they scroll inside the page, smaller.
+          <ScrollView style={[styles.points, { maxHeight: 156 }]} contentContainerStyle={{ gap: 6, paddingBottom: 6 }}
+            showsVerticalScrollIndicator nestedScrollEnabled>
+            {page.points.map((point, i) => (
+              <View key={`${i}:${point.text}`} style={[styles.point, { minHeight: 32 }]}>
+                <View style={[styles.pointIcon, styles.pointIconSmall]}><GameIcon name={point.icon} size={18} /></View>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.pointText, styles.pointTextSmall]}>{point.text}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.points}>
+            {page.points.map((point, i) => (
+              <Animated.View key={`${i}:${point.text}`} style={[styles.point, pointStyles[Math.min(i, 2)]]}>
+                <View style={styles.pointIcon}><GameIcon name={point.icon} size={26} /></View>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.pointText}>{point.text}</Text>
+              </Animated.View>
+            ))}
+          </View>
+        )}
       </View>
       {footer}
     </View>
@@ -310,6 +323,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   pointText: { flex: 1, fontFamily: 'Knockout', fontSize: 19, lineHeight: 23, color: BRAND.navy },
+  pointIconSmall: { width: 30, height: 30, borderRadius: 15 },
+  pointTextSmall: { fontSize: 16, lineHeight: 20 },
   footer: { paddingTop: 12, gap: 8, alignItems: 'center' },
   dots: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   dot: { height: 10, borderRadius: 5 },

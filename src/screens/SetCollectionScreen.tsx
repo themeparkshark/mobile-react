@@ -28,7 +28,7 @@ import getPrepItemSets, {
 import { getHomeHuntDex, getHomeHuntDexSet } from '../api/endpoints/me/homeHuntDex';
 import equipInventoryItem from '../api/endpoints/me/inventory/update-inventory';
 import HomeHuntInfoSheet, { useHomeHuntInfo } from '../components/home/HomeHuntInfoSheet';
-import { oddsInfoSections } from '../components/home/homeHuntInfoModel';
+import { oddsInfoSheet } from '../components/home/homeHuntInfoModel';
 import { invalidateMenuRewardBadge } from '../components/QuickAccessMenu';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -631,7 +631,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
-      <HomeHuntInfoSheet visible={oddsOpen} title="How rare is each find?" sections={oddsInfoSections(huntInfo)}
+      <HomeHuntInfoSheet visible={oddsOpen} sheet={oddsInfoSheet(huntInfo)}
         loading={!huntInfo} error={huntInfoError} onRetry={retryHuntInfo} onClose={() => setOddsOpen(false)} />
     </Wrapper>
   );
