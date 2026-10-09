@@ -243,7 +243,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     } catch {
       // The claim may still be committing: read back up to 3 times, 1.5 s apart (the card says "Still opening...").
       let paid: PaidRewards | null = null;
-      for (let i = 0; i < 3 && !paid && mounted.current; i++) {
+      const giveUp = Date.now() + 12000; // never more than ~12 s of "Still opening..."
+      for (let i = 0; i < 3 && !paid && mounted.current && Date.now() < giveUp; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 1500));
         paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate);
       }
@@ -425,9 +426,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedMotion: boolean }) {
   const w = useSharedValue(reducedMotion ? pct : 0);
   useEffect(() => { w.value = reducedMotion ? pct : withTiming(pct, { duration: 600 }); }, [pct, reducedMotion, w]);
-  const fill = useAnimatedStyle(() => ({ width: `${Math.max(4, w.value * 100)}%` }));
+  // scaleX from the left edge (no layout pass per frame).
+  const [trackW, setTrackW] = useState(0);
+  const fill = useAnimatedStyle(() => ({ transform: [{ translateX: -trackW / 2 * (1 - Math.max(0.04, w.value)) }, { scaleX: Math.max(0.04, w.value) }] }));
   return (
-    <View style={styles.xpTrack} accessibilityLabel={`${Math.round(pct * 100)} percent of the way to the next level`}>
+    <View style={styles.xpTrack} onLayout={e => setTrackW(e.nativeEvent.layout.width)} accessibilityLabel={`${Math.round(pct * 100)} percent of the way to the next level`}>
       <Animated.View style={[styles.xpFill, fill]} />
       <GameIcon name="xp" size={22} />
     </View>
@@ -439,7 +442,7 @@ const styles = StyleSheet.create({
   nextBlock: { gap: 6 },
   xpTrack: { height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'visible', justifyContent: 'center',
     marginHorizontal: 18, paddingLeft: 0 },
-  xpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },
+  xpFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', gap: 8 },
   bigArt: { width: 110, height: 110 },
