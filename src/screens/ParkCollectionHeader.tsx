@@ -51,6 +51,13 @@ interface Props {
 }
 
 /** The slim park header: park, one Ride Coins count, and one next step. */
+/** The park total: every coin here (rides, shows, famous spots). */
+export const PARK_TOTAL_LABEL = 'COINS';
+/** The Ride Passport is the rides-only part of the park total, so it says rides. */
+export function passportChipLabel(collected: number, available: number): string {
+  return `RIDES ${collected}/${available}`;
+}
+
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
   ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
@@ -112,11 +119,14 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       {/* The title bar already names the park, so the header starts with the count. */}
       <View style={styles.countRow} accessible
-        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} Ride Coins collected` : 'Ride Coins coming soon'}>
+        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} coins collected` : 'Ride Coins coming soon'}>
         <Animated.Text style={[styles.count, flash && styles.countFlash, popStyle]}>
           {available > 0 ? `${shownCollected}/${available}` : 'NEW'}
         </Animated.Text>
-        <Text style={styles.countLabel}>RIDE COINS</Text>
+        {/* Every coin at this park: rides, shows and famous spots. The Ride
+            Passport chip below is the rides-only part of this same shelf, so
+            the two numbers never read as two totals for one park. */}
+        <Text style={styles.countLabel}>{PARK_TOTAL_LABEL}</Text>
       </View>
       <View style={styles.track}>
         <Animated.View style={[styles.fill, fillStyle]} />
@@ -125,10 +135,10 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         {typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
           <Pressable style={styles.chip} disabled={!onOpenRidePassport}
             accessibilityRole={onOpenRidePassport ? 'button' : undefined}
-            accessibilityLabel={`Ride Passport, ${ridePassportCollected ?? 0} of ${ridePassportAvailable}${onOpenRidePassport ? ', show rides only' : ''}`}
+            accessibilityLabel={`Ride Passport: ${ridePassportCollected ?? 0} of ${ridePassportAvailable} rides${onOpenRidePassport ? '. Show rides only.' : ''}`}
             onPress={onOpenRidePassport}>
             <GameIcon name="ride" size={20} />
-            <Text style={styles.chipText}>PASSPORT {ridePassportCollected ?? 0}/{ridePassportAvailable}</Text>
+            <Text style={styles.chipText}>{passportChipLabel(ridePassportCollected ?? 0, ridePassportAvailable)}</Text>
           </Pressable>}
         {limitedAvailable > 0 && <Pressable style={styles.chip} onPress={onBrowseLimited} disabled={!onBrowseLimited}
           hitSlop={6} accessibilityRole={onBrowseLimited ? 'button' : undefined}
