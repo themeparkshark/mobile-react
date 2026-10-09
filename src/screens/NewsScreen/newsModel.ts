@@ -212,9 +212,27 @@ export function plainText(html: string | null | undefined): string {
   return decodeEntities(String(html).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
-/** One or two sentence dek for a card, from the WordPress excerpt. */
+/** Photo credit lines that WordPress folds into excerpts ("Image courtesy of ...", "Photo: Disney"). */
+const CREDIT = /^(?:(?:photo|image|images|video)s?(?: courtesy)?(?: of)?:?|courtesy of)\s/i;
+
+/**
+ * One or two sentence dek for a card: the story's first real paragraph
+ * (never a photo credit), else the WordPress excerpt.
+ */
 export function dek(entry: NewsEntry, max = 150): string {
-  const text = plainText(entry.excerpt ?? '').replace(/\[(?:&hellip;|\.\.\.|…)\]$/, '').trim();
+  let text = '';
+  for (const m of String(entry.content ?? '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const para = plainText(m[1]);
+    if (para.length > 30 && !CREDIT.test(para)) { text = para; break; }
+  }
+  if (!text) {
+    text = plainText(entry.excerpt ?? '').replace(/\[(?:&hellip;|\.\.\.|\u2026)\]$/, '').trim();
+    while (CREDIT.test(text)) {
+      const next = text.search(/(?<=[a-z.)])\s+(?=[A-Z][a-z]+ )/);
+      text = next > 0 ? text.slice(next).trim() : '';
+      if (!CREDIT.test(text)) break;
+    }
+  }
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const sentence = cut.lastIndexOf('. ');

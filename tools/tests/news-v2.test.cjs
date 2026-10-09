@@ -67,6 +67,12 @@ test('park chips match exact categories and fall back to the brand without them'
   }
 });
 
+test('card deks use the first real paragraph, never a photo credit', () => {
+  const e = { content: '<figure><figcaption>Photo: Disney</figcaption></figure><p>Image courtesy of Sesame Place San Diego</p><p>The Count returns to Sesame Place San Diego with a new Halloween show this fall.</p>' };
+  assert.equal(model.dek(e), 'The Count returns to Sesame Place San Diego with a new Halloween show this fall.');
+  assert.equal(model.dek({ excerpt: '<p>Short excerpt that is the dek [&hellip;]</p>' }), 'Short excerpt that is the dek');
+});
+
 test('featured image shape: sent sizes, then the WordPress file name, clamped', () => {
   assert.equal(model.imageAspect({ image_width: 1080, image_height: 1350 }), 0.8);
   assert.equal(model.imageAspect({ featured_image: 'https://x/y-768x592.jpg' }), 768 / 592);
