@@ -36,7 +36,8 @@ function Chip({ label, icon, on, small = false, onPress, onLayout }: {
   );
 }
 
-function ChipRow({ items, value, small, onChange, leading }: {
+function ChipRow({ items, value, small, onChange, leading, endInset = 0 }: {
+  readonly endInset?: number;
   readonly items: readonly { key: string; label: string; icon?: GameIconName }[]; readonly value: string; readonly small?: boolean;
   readonly onChange: (key: string) => void; readonly leading?: React.ReactNode;
 }) {
@@ -58,7 +59,7 @@ function ChipRow({ items, value, small, onChange, leading }: {
           const end = contentOffset.x + layoutMeasurement.width >= contentSize.width - 8;
           if (end !== atEnd) setAtEnd(end);
         }}
-        contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 2, gap: 8, alignItems: 'center' }}>
+        contentContainerStyle={{ paddingLeft: 14, paddingRight: 14 + endInset, paddingVertical: 2, gap: 8, alignItems: 'center' }}>
         {leading}
         {items.map(item => (
           <Chip key={item.key} label={item.label} icon={item.icon} on={item.key === value} small={small}
@@ -76,7 +77,9 @@ function ChipRow({ items, value, small, onChange, leading }: {
   );
 }
 
-export default function NewsFilterBar({ filter, park, searching, query, onFilter, onPark, onSearchOpen, onSearchClose, onQuery }: {
+export default function NewsFilterBar({ filter, park, searching, query, onFilter, onPark, onSearchOpen, onSearchClose, onQuery, endInset = 0 }: {
+  /** Room at the row's end for the docked Back to top button. */
+  readonly endInset?: number;
   readonly filter: NewsFilterKey;
   readonly park: string | null;
   readonly searching: boolean;
@@ -113,7 +116,7 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
           onPress={() => { tick(); onSearchClose(); }}
           style={({ pressed }) => ({ height: 44, paddingHorizontal: 14, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
             borderWidth: 2, borderBottomWidth: 4, borderColor: 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Done</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Done</Text>
         </Pressable>
       </Animated.View>
     );
@@ -130,7 +133,7 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
 
   return (
     <Animated.View layout={layout} style={{ paddingTop: 10, paddingBottom: 6, gap: 8 }}>
-      <ChipRow items={NEWS_FILTERS} value={filter} leading={search}
+      <ChipRow items={NEWS_FILTERS} value={filter} leading={search} endInset={endInset}
         onChange={key => { if (key === filter && !park) return; tick(); onFilter(key as NewsFilterKey); }} />
       {parks.length > 0 && (
         <Animated.View entering={enter} exiting={exit}>

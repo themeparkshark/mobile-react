@@ -71,6 +71,10 @@ type ListState = {
   readonly loading: 'idle' | 'first' | 'more';
   readonly failed: boolean;
 };
+const VIEWABILITY = { itemVisiblePercentThreshold: 90 };
+const rowKey = (row: FeedRow) => row.key;
+const rowType = (row: FeedRow) => row.type;
+const FOOTER = <View style={{ height: BOTTOM_BAR_OVERHANG + 24, backgroundColor: BRAND.cream }} />;
 const EMPTY: ListState = { entries: [], page: 0, hasMore: true, loading: 'idle', failed: false };
 
 function keyOf(filter: NewsFilterKey, park: string | null, search: string): string {
@@ -108,6 +112,7 @@ export default function NewsScreen() {
   const inflight = useRef(new Set<string>());
   /** Bumped by pull to refresh: a page that started before it is dropped (never shrinks or skips the list). */
   const generation = useRef(new Map<string, number>());
+  const searchAbort = useRef<AbortController | null>(null);
 
   const key = keyOf(filter, park, search);
   const top = lists['all:'] ?? EMPTY;
@@ -127,9 +132,16 @@ export default function NewsScreen() {
     if (mode !== 'more') generation.current.set(k, (generation.current.get(k) ?? 0) + 1);
     const gen = generation.current.get(k) ?? 0;
     const page = mode === 'more' ? current.page + 1 : 1;
+    // A newer search cancels the one still downloading.
+    let signal: AbortSignal | undefined;
+    if (s) {
+      searchAbort.current?.abort();
+      searchAbort.current = new AbortController();
+      signal = searchAbort.current.signal;
+    }
     patch(k, { loading: mode === 'more' ? 'more' : 'first', failed: false });
     try {
-      const result = await fetchNewsPage({ filter: f, park: p, search: s || undefined, page });
+      const result = await fetchNewsPage({ filter: f, park: p, search: s || undefined, page, signal });
       if ((generation.current.get(k) ?? 0) !== gen) return;
       setLists(prev => {
         const base = mode === 'more' ? (prev[k] ?? EMPTY).entries : [];
@@ -153,7 +165,10 @@ export default function NewsScreen() {
         }
       }
     } catch {
-      if ((generation.current.get(k) ?? 0) !== gen) return;
+      if ((generation.current.get(k) ?? 0) !== gen || signal?.aborted) {
+        if (signal?.aborted) patch(k, { loading: 'idle' });
+        return;
+      }
       patch(k, { loading: 'idle', failed: true });
       if (k === 'all:') setOffline(true);
     } finally {
@@ -352,7 +367,7 @@ export default function NewsScreen() {
       <View style={{ marginTop: -8, flex: 1 }}>
         <ImageBackground style={{ flex: 1 }} source={require('../../assets/images/screens/leaderboard/standings-bg.png')}>
           <View onLayout={e => setTopPillTop(e.nativeEvent.layout.height + 6)}>
-          <NewsFilterBar filter={filter} park={park} searching={searching} query={query}
+          <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 52 : 0}
             onFilter={pickFilter} onPark={pickPark}
             onSearchOpen={() => setSearching(true)} onSearchClose={closeSearch} onQuery={setQuery} />
           </View>
@@ -371,13 +386,13 @@ export default function NewsScreen() {
               ref={listRef}
               data={rows}
               renderItem={renderItem}
-              keyExtractor={row => row.key}
-              getItemType={row => row.type}
+              keyExtractor={rowKey}
+              getItemType={rowType}
               estimatedItemSize={124}
               onEndReached={onEndReached}
               onEndReachedThreshold={1.2}
               onViewableItemsChanged={onViewable}
-              viewabilityConfig={{ itemVisiblePercentThreshold: 90 }}
+              viewabilityConfig={VIEWABILITY}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -388,7 +403,7 @@ export default function NewsScreen() {
                 if (far !== showTopRef.current) { showTopRef.current = far; setShowTop(far); }
               }}
               refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={onRefresh} />}
-              ListFooterComponent={<View style={{ height: BOTTOM_BAR_OVERHANG + 24, backgroundColor: BRAND.cream }} />}
+              ListFooterComponent={FOOTER}
             />
           )}
           {showTop && !toast && (

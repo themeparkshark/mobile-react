@@ -15,7 +15,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, Text, useWindowDimensions, View, type ViewToken } from 'react-native';
+import { FlatList, InteractionManager, Modal, Pressable, ScrollView, Text, useWindowDimensions, View, type ViewToken } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -35,6 +35,7 @@ import useTapSound from './NewsScreen/useTapSound';
 
 const BOTTOM_BAR = 66;
 const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+const NO_RELATED: NewsEntry[] = [];
 
 type Params = { id?: number; ids?: number[]; entry?: NewsEntry; fromStory?: boolean };
 
@@ -74,8 +75,19 @@ export default function ArticleScreen({ route, navigation }: any) {
   const [video, setVideo] = useState<SocialPostType | null>(null);
   const [opening, setOpening] = useState(false);
   const entry = list[index];
-  // "More news" for every story, worked out once per list (never on a swipe).
-  const related = useMemo(() => list.map((e, i) => relatedFor(e, list.slice(i + 2).concat(list.slice(0, i)), 3)), [list]);
+  // "More news" per story, worked out the first time a page is drawn and kept.
+  const relatedCache = useRef(new Map<number, NewsEntry[]>());
+  const relatedAt = useCallback((i: number) => {
+    let hit = relatedCache.current.get(i);
+    if (!hit) relatedCache.current.set(i, (hit = relatedFor(list[i], list.slice(i + 2).concat(list.slice(0, i)), 3)));
+    return hit;
+  }, [list]);
+  // The next page's full story is built after the swipe settles, never during it.
+  const [settled, setSettled] = useState(startIndex);
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setSettled(index));
+    return () => task.cancel();
+  }, [index]);
 
   useEffect(() => {
     if (!entry) return;
@@ -146,9 +158,10 @@ export default function ArticleScreen({ route, navigation }: any) {
   }), [openStory, tap]);
 
   const renderPage = useCallback(({ item, index: i }: { item: NewsEntry; index: number }) => (
-    <ArticlePage entry={item} index={i} width={width} live={i === index} near={Math.abs(i - index) <= 1}
-      next={list[i + 1] ?? null} related={related[i]} onOpen={openStory} onGoTo={goTo} onWebsite={openSite} handlers={handlers} />
-  ), [width, index, list, related, openStory, goTo, openSite, handlers]);
+    <ArticlePage entry={item} index={i} width={width} live={i === index} near={i === index || Math.abs(i - settled) <= 1}
+      next={list[i + 1] ?? null} related={i === index || Math.abs(i - settled) <= 1 ? relatedAt(i) : NO_RELATED} onOpen={openStory} onGoTo={goTo}
+      onWebsite={openSite} handlers={handlers} />
+  ), [width, index, settled, list, relatedAt, openStory, goTo, openSite, handlers]);
 
   // Nothing to show (a stale link): straight back to News.
   useEffect(() => { if (!entry) navigation.goBack(); }, [entry, navigation]);
@@ -168,7 +181,7 @@ export default function ArticleScreen({ route, navigation }: any) {
             onPress={() => { void share(); }}
             style={({ pressed }) => ({ height: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center', backgroundColor: BRAND.white,
               borderWidth: 3, borderBottomWidth: 4, borderColor: BRAND.navy, transform: [{ scale: pressed ? 0.92 : 1 }] })}>
-            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>Share</Text>
+            <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.navy }}>Share</Text>
           </Pressable>
         </TopbarColumn>
       </Topbar>
@@ -183,7 +196,7 @@ export default function ArticleScreen({ route, navigation }: any) {
           getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
           keyExtractor={item => String(item.id)}
           renderItem={renderPage}
-          extraData={index}
+          extraData={`${index}:${settled}`}
           showsHorizontalScrollIndicator={false}
           windowSize={3}
           initialNumToRender={1}
@@ -213,8 +226,8 @@ export default function ArticleScreen({ route, navigation }: any) {
             <Image source={next.featured_image ? { uri: next.featured_image } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
               contentFit="cover" transition={120} />
             <View style={{ flex: 1 }}>
-              <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.goldLip }}>NEXT</Text>
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy }}>{plainText(next.title)}</Text>
+              <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip }}>NEXT</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy }}>{plainText(next.title)}</Text>
             </View>
             <GameIcon name="arrow" size={26} />
           </Pressable>
@@ -222,7 +235,7 @@ export default function ArticleScreen({ route, navigation }: any) {
           <Pressable accessibilityRole="button" accessibilityLabel="Back to News" hitSlop={6} onPress={() => { tap(); navigation.goBack(); }}
             style={({ pressed }) => ({ flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.gold,
               borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.goldLip, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
-            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>All caught up! Back to News</Text>
+            <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>All caught up! Back to News</Text>
           </Pressable>
         )}
       </View>
@@ -231,7 +244,7 @@ export default function ArticleScreen({ route, navigation }: any) {
         <Animated.View entering={reduced ? undefined : FadeIn.duration(150)} exiting={reduced ? undefined : FadeOut.duration(120)} pointerEvents="none"
           style={{ position: 'absolute', alignSelf: 'center', bottom: BOTTOM_BAR + insets.bottom + 16, paddingHorizontal: 16, height: 40, borderRadius: 20,
             backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, justifyContent: 'center' }}>
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>Opening story...</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>Opening story...</Text>
         </Animated.View>
       )}
 

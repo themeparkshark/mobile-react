@@ -3,7 +3,7 @@
  * lead story, the cream sheet edge, day dividers, story rows with a big
  * photo story every FEATURE_EVERY rows, then paging and the site card.
  */
-import { isFresh, isScreenStory, newsTime, type NewsEntry } from './newsModel';
+import { isFresh, isScreenStory, isShopStory, newsTime, type NewsEntry } from './newsModel';
 
 export type FeedRow =
   | { readonly type: 'hero' | 'row' | 'feature'; readonly key: string; readonly entry: NewsEntry; readonly fresh: boolean }
@@ -27,6 +27,19 @@ export function dayLabel(date: string, now: number): string {
   return 'Earlier';
 }
 
+/** Inside each day, park stories first and shopping stories (collections, watches, decor) after them. */
+export function shopLast(list: readonly NewsEntry[], now: number): NewsEntry[] {
+  const days: string[] = [];
+  const groups = new Map<string, { park: NewsEntry[]; shop: NewsEntry[] }>();
+  for (const entry of list) {
+    const day = dayLabel(entry.date, now);
+    let group = groups.get(day);
+    if (!group) { groups.set(day, (group = { park: [], shop: [] })); days.push(day); }
+    (isShopStory(entry) ? group.shop : group.park).push(entry);
+  }
+  return days.flatMap(day => [...groups.get(day)!.park, ...groups.get(day)!.shop]);
+}
+
 export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, failed, end, stale }: {
   readonly entries: readonly NewsEntry[];
   /** Show the first story as the big lead card (not for search results). */
@@ -40,11 +53,12 @@ export function buildFeedRows({ entries, lead, now, searchLabel, loadingMore, fa
 }): FeedRow[] {
   const rows: FeedRow[] = [];
   const fresh = new Set(entries.filter(e => isFresh(e.date, now) && !isScreenStory(e)).slice(0, MAX_NEW).map(e => e.id));
-  let rest = entries;
+  let rest: readonly NewsEntry[] = entries;
   if (lead && entries.length) {
     rows.push({ type: 'hero', key: `hero-${entries[0].id}`, entry: entries[0], fresh: false });
     rest = entries.slice(1);
   }
+  if (!searchLabel) rest = shopLast(rest, now);
   rows.push({ type: 'sheet', key: 'sheet' });
   if (stale) rows.push({ type: 'stale', key: 'stale' });
   if (searchLabel) {

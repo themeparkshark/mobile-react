@@ -38,6 +38,8 @@ export type NewsQuery = {
   readonly park?: string | null;
   readonly search?: string;
   readonly page: number;
+  /** Cancels a superseded search, so it never finishes downloading on park data. */
+  readonly signal?: AbortSignal;
 };
 
 export type NewsPage = {
@@ -114,6 +116,7 @@ async function fromWordPress(query: NewsQuery): Promise<NewsPage> {
   const categories = wpCategoryIds(query);
   const response = await axios.get(WP_POSTS, {
     timeout: WP_TIMEOUT_MS,
+    signal: query.signal,
     params: {
       per_page: PAGE_SIZE,
       page: query.page,
@@ -134,6 +137,7 @@ async function fromServer(query: NewsQuery): Promise<NewsPage> {
   devOffline();
   const plain = query.filter === 'all' && !query.search && query.page === 1;
   const response = await client.get('/news', {
+    signal: query.signal,
     params: plain ? undefined : {
       page: query.page,
       ...(query.filter !== 'all' ? { filter: query.filter } : {}),
@@ -159,8 +163,12 @@ export async function fetchNewsPage(query: NewsQuery): Promise<NewsPage> {
   if (plain || serverV2) {
     try {
       return await fromServer(query);
-    } catch {
-      // Fall through to WordPress.
+    } catch (error) {
+      if (query.signal?.aborted) throw error;
+      // A v2 server that says "busy" (429) or "WordPress is slow" (503) is protecting
+      // themeparkshark.com: keep what is on screen and offer Try again, never stampede it.
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (serverV2 && (status === 429 || status === 503)) throw error;
     }
   }
   return fromWordPress(query);

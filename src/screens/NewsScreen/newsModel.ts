@@ -14,6 +14,8 @@ export type NewsEntry = EntryType & {
   readonly categories?: readonly number[];
   /** WordPress "large" (1024 px): the reader's hero, never the multi-MB original. */
   readonly featured_image_large?: string | null;
+  /** WordPress "medium" (about 300 px): the small row photos. */
+  readonly featured_image_small?: string | null;
   readonly image_width?: number | null;
   readonly image_height?: number | null;
   readonly image_credit?: string | null;
@@ -432,10 +434,12 @@ export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3):
   const same = key ? others.filter(e => filterOf(e) === key).sort((a, b) => Number(parkLabel(b) === tag) - Number(parkLabel(a) === tag)) : [];
   // Park stories never suggest a TV or film story.
   const rest = others.filter(e => !same.includes(e) && (key === 'screen' || !isScreenStory(e)));
-  return [...same, ...rest].slice(0, n);
+  // Shopping stories go last, so More news leads with park stories.
+  const ranked = [...same, ...rest];
+  return [...ranked.filter(e => !isShopStory(e)), ...ranked.filter(e => isShopStory(e))].slice(0, n);
 }
 
-const SHOP_WORDS = /\b(collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
+const SHOP_WORDS = /\b(products?|gifts?|collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
 
 /** A shopping story (a collection, a watch, decor): fine in the feed, never the lead story. */
 export function isShopStory(entry: NewsEntry): boolean {
@@ -475,6 +479,7 @@ export function entryFromWordPress(post: any): NewsEntry | null {
     featured_image: sized?.source_url ?? media?.source_url ?? null,
     featured_image_full: media?.source_url ?? null,
     featured_image_large: sizes.large?.source_url ?? null,
+    featured_image_small: sizes.medium?.source_url ?? null,
     title: post.title?.rendered ?? '',
     url: post.link ?? '',
     content: post.content?.rendered ?? '',

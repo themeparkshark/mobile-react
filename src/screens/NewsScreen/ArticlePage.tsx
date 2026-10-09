@@ -34,8 +34,8 @@ function MiniStory({ entry, label, onPress }: { readonly entry: NewsEntry; reado
         ...FRAME, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <View style={{ flex: 1, gap: 4 }}>
         <ParkTag label={parkLabel(entry)} />
-        <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 18, lineHeight: 21, color: INK }}>{plainText(entry.title)}</Text>
-        <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 13, color: INK_SOFT }}>{timeAgo(entry.date)}</Text>
+        <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 18, lineHeight: 21, color: INK }}>{plainText(entry.title)}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 13, color: INK_SOFT }}>{timeAgo(entry.date)}</Text>
       </View>
       <Image source={entry.featured_image ? { uri: entry.featured_image } : TPS_SHARK} style={{ width: 92, height: 70, borderRadius: 9, backgroundColor: '#dcecf9' }}
         contentFit={entry.featured_image ? 'cover' : 'contain'} transition={150} />
@@ -53,7 +53,7 @@ function UpNext({ entry, onPress }: { readonly entry: NewsEntry; readonly onPres
       )}
       <View style={{ padding: 12, gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.goldLip }}>UP NEXT</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.goldLip }}>UP NEXT</Text>
           <ParkTag label={parkLabel(entry)} />
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -133,8 +133,8 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
               <Image source={TPS_SHARK} style={{ width: 40, height: 40 }} contentFit="contain" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: INK }}>Theme Park Shark</Text>
-              <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 14, color: INK_SOFT }}>
+              <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: INK }}>Theme Park Shark</Text>
+              <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 14, color: INK_SOFT }}>
                 {longDate(entry.date)}  ·  {readMinutes(entry)} min read
               </Text>
             </View>
@@ -144,7 +144,7 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
 
         <View style={{ paddingHorizontal: PAGE_SIDE }}>
           {near && entry.content ? (
-            <ArticleBody html={entry.content} width={contentWidth} handlers={handlers} />
+            <ArticleBody html={entry.content} width={contentWidth} live={live} handlers={handlers} />
           ) : near ? (
             <Text style={{ fontSize: 18, lineHeight: 28, color: READ_INK }}>{plainText(entry.excerpt ?? '')}</Text>
           ) : (
@@ -158,7 +158,7 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
             {next && <UpNext entry={next} onPress={() => onGoTo(index + 1)} />}
             {related.length > 0 && (
               <View style={{ gap: 10 }}>
-                <Text accessibilityRole="header" maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 18, color: INK }}>
+                <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 18, color: INK }}>
                   {relatedHeading(entry, related)}
                 </Text>
                 {related.map(r => <MiniStory key={r.id} entry={r} onPress={onOpen} />)}

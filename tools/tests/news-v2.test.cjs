@@ -189,6 +189,23 @@ test('feed rows: lead story, day dividers, a photo story every few rows, then th
   assert.ok(failed.some(r => r.type === 'stale'));
 });
 
+test('shopping stories never lead and sink to the end of their day', () => {
+  const at = h => new Date(NOW - h * 3600000).toISOString().slice(0, 19);
+  const list = [
+    { ...entry(1, at(1)), title: 'Marvel Products to Check Out Ahead of Avengers Endgame: Encore' },
+    { ...entry(2, at(2)), title: 'Disney and Macy\u2019s Holiday Collection celebrates the 100th Macy\u2019s Parade' },
+    { ...entry(3, at(3)), title: 'Rock \u2018n\u2019 Roller Coaster Gets Muppets Holiday Overlay' },
+    { ...entry(4, at(4)), title: 'Savi\u2019s Workshop Adds Lightsaber Effects' },
+  ];
+  assert.equal(model.isShopStory(list[0]), true);
+  assert.equal(model.isShopStory(list[1]), true);
+  assert.equal(model.isShopStory(list[2]), false);
+  const led = model.withLead(list);
+  assert.equal(led[0].id, 3);
+  const out = rows.buildFeedRows({ entries: led, lead: true, now: NOW, searchLabel: null, loadingMore: false, failed: false, end: true, stale: false });
+  assert.deepEqual([...out.filter(r => r.entry).map(r => r.entry.id)], [3, 4, 1, 2]);
+});
+
 test('kid safety: every way out of the reader goes through services/external', () => {
   for (const file of ['src/screens/ArticleScreen.tsx', 'src/screens/NewsScreen.tsx', 'src/screens/NewsScreen/ArticleBody.tsx', 'src/screens/NewsScreen/ArticlePage.tsx', 'src/screens/NewsScreen/NewsCards.tsx']) {
     const src = read(file);

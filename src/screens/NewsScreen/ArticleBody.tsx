@@ -10,7 +10,7 @@
  *   goes through the grown-up gate (services/external).
  */
 import { Image } from 'expo-image';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import RenderHtml, {
   defaultSystemFonts,
@@ -70,7 +70,34 @@ export type ArticleBodyHandlers = {
   readonly onVideo: (id: string, title: string, short: boolean) => void;
 };
 
-function ArticleBody({ html, width, handlers }: { readonly html: string; readonly width: number; readonly handlers: ArticleBodyHandlers }) {
+/**
+ * WordPress keeps a 1024 px copy of every big upload ("-1024x768.jpg"). Ask
+ * for it instead of the original; if it is missing, BodyImage falls back.
+ */
+export function smallerUpload(src: string, w: number, h: number): string | null {
+  if (!(w > 1100 && h > 0) || /-\d+x\d+\.(?:jpe?g|png|webp)$/i.test(src)) return null;
+  const m = /^(.*?)(-scaled)?\.(jpe?g|png|webp)$/i.exec(src);
+  if (!m) return null;
+  return `${m[1]}-1024x${Math.round((h * 1024) / w)}.${m[3]}`;
+}
+
+function BodyImage({ src, w, h, width, aspect, live, alt, onPress }: {
+  readonly src: string; readonly w: number; readonly h: number; readonly width: number; readonly aspect: number; readonly live: boolean;
+  readonly alt: string; readonly onPress: () => void;
+}) {
+  const [uri, setUri] = useState(() => smallerUpload(src, w, h) ?? src);
+  return (
+    <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${alt}. Tap to look closer`} onPress={onPress}>
+      <Image source={{ uri }} style={{ width, aspectRatio: aspect, borderRadius: RADIUS.md, backgroundColor: '#dcecf9' }}
+        contentFit="cover" transition={200} cachePolicy="memory-disk" allowDownscaling priority={live ? 'normal' : 'low'}
+        onError={() => { if (uri !== src) setUri(src); }} />
+    </Pressable>
+  );
+}
+
+function ArticleBody({ html, width, live = true, handlers }: {
+  readonly html: string; readonly width: number; readonly live?: boolean; readonly handlers: ArticleBodyHandlers;
+}) {
   const source = useMemo(() => ({ html: prepareArticleHtml(html) }), [html]);
 
   const renderers = useMemo(() => {
@@ -82,12 +109,7 @@ function ArticleBody({ html, width, handlers }: { readonly html: string; readonl
       const h = Number(attrs.height) || 0;
       const aspect = w > 0 && h > 0 ? Math.min(2.4, Math.max(0.6, w / h)) : 16 / 9;
       const alt = attrs.alt && !/^official source photo/i.test(attrs.alt) ? attrs.alt : 'Photo';
-      return (
-        <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${alt}. Tap to look closer`} onPress={() => handlers.onImage(uri, aspect)}>
-          <Image source={{ uri }} style={{ width, aspectRatio: aspect, borderRadius: RADIUS.md, backgroundColor: '#dcecf9' }}
-            contentFit="cover" transition={200} cachePolicy="memory-disk" allowDownscaling />
-        </Pressable>
-      );
+      return <BodyImage src={uri} w={w} h={h} width={width} aspect={aspect} live={live} alt={alt} onPress={() => handlers.onImage(uri, aspect)} />;
     };
     const tpsvideo: CustomBlockRenderer = ({ tnode }) => {
       const id = tnode.attributes['data-id'];
@@ -105,14 +127,14 @@ function ArticleBody({ html, width, handlers }: { readonly html: string; readonl
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
-            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.gold }}>WATCH</Text>
+            <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.gold }}>WATCH</Text>
             <Text numberOfLines={2} maxFontSizeMultiplier={1.25} style={{ flex: 1, fontFamily: 'Knockout', fontSize: 17, lineHeight: 20, color: BRAND.white }}>{title}</Text>
           </View>
         </Pressable>
       );
     };
     return { img, tpsvideo };
-  }, [width, handlers]);
+  }, [width, handlers, live]);
 
   const renderersProps = useMemo(() => ({
     a: { onPress: (_: unknown, href: string) => handlers.onLink(href) },

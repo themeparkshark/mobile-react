@@ -43,7 +43,7 @@ export function NewBadge() {
   return (
     <View accessibilityLabel="New story" style={{ paddingHorizontal: 7, height: 22, borderRadius: 11, justifyContent: 'center',
       backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.goldLip }}>
-      <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy }}>NEW</Text>
+      <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.navy }}>NEW</Text>
     </View>
   );
 }
@@ -116,7 +116,6 @@ export const HeroCard = memo(function HeroCard({ entry, read, now, onPress }: Ca
             backgroundColor: BRAND.navy, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.white }}>
             <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white, letterSpacing: 0.4 }}>TOP STORY</Text>
           </View>
-          {read && <ReadCheck />}
         </View>
         <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 6 }}>
           <ParkTag label={parkLabel(entry)} />
@@ -151,7 +150,7 @@ export const StoryRow = memo(function StoryRow({ entry, read, fresh, now, onPres
           <Meta entry={entry} now={now} />
         </View>
         <View>
-          <Picture uri={entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.7 : 1 }} />
+          <Picture uri={entry.featured_image_small || entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.7 : 1 }} />
           {read && <ReadCheck />}
         </View>
       </Pressable>
@@ -189,7 +188,7 @@ export function DayDivider({ label }: { readonly label: string }) {
   return (
     <View accessibilityRole="header" style={{ height: 34, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, gap: 10 }}>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
-      <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: INK_SOFT }}>{label}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: INK_SOFT }}>{label}</Text>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
     </View>
   );
@@ -216,13 +215,13 @@ export function SkeletonRow() {
   const style = usePulse();
   return (
     <View style={{ height: ROW_HEIGHT, paddingHorizontal: SIDE, justifyContent: 'center', backgroundColor: BRAND.cream }} accessible={false}>
-      <Animated.View style={[{ height: ROW_HEIGHT - 10, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.06)', flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }, style]}>
+      <Animated.View style={[{ height: ROW_HEIGHT - 10, borderRadius: RADIUS.md, backgroundColor: 'rgba(5,52,110,0.10)', flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 }, style]}>
         <View style={{ flex: 1, gap: 9 }}>
-          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.09)' }} />
-          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.09)' }} />
-          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.09)' }} />
+          <View style={{ width: 90, height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: '95%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: '70%', height: 16, borderRadius: 8, backgroundColor: 'rgba(5,52,110,0.16)' }} />
         </View>
-        <View style={{ width: 104, height: 98, borderRadius: 10, backgroundColor: 'rgba(5,52,110,0.09)' }} />
+        <View style={{ width: 104, height: 98, borderRadius: 10, backgroundColor: 'rgba(5,52,110,0.16)' }} />
       </Animated.View>
     </View>
   );
@@ -233,14 +232,14 @@ export function FeedSkeleton() {
   const style = usePulse();
   return (
     <View accessibilityLabel="Loading news" style={{ flex: 1 }}>
-      <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
-        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: 'rgba(5,52,110,0.08)', alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 3, borderBottomWidth: 6, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
+        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' }}>
           <Image source={TPS_SHARK} style={{ width: 72, height: 72, opacity: 0.85 }} contentFit="contain" accessibilityLabel="Loading news" />
         </View>
         <View style={{ padding: 14, gap: 10 }}>
-          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.08)' }} />
-          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.08)' }} />
-          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+          <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.16)' }} />
+          <View style={{ width: '60%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.16)' }} />
         </View>
       </Animated.View>
       <SheetTop />
@@ -260,7 +259,7 @@ export function InfoRow({ label, action, onPress }: { readonly label: string; re
         <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}
           style={({ pressed }) => ({ paddingHorizontal: 16, height: 38, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
             borderWidth: 2, borderBottomWidth: 4, borderColor: RIM, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: INK }}>{action}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 15, color: INK }}>{action}</Text>
         </Pressable>
       )}
     </View>
@@ -294,9 +293,15 @@ export function SiteCard({ onOpen, storyUrl }: { readonly onOpen: (url: string) 
       <Image source={TPS_WORDMARK} style={{ width: '96%', alignSelf: 'center', aspectRatio: 1284 / 322 }} contentFit="contain" accessibilityLabel="Theme Park Shark" />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Image source={TPS_SHARK} style={{ width: 56, height: 56 }} contentFit="contain" />
-        <Text maxFontSizeMultiplier={1.3} style={{ flex: 1, fontFamily: 'Knockout', fontSize: 18, lineHeight: 22, color: BRAND.white }}>
-          Guides, wait times and every story live on themeparkshark.com. A grown-up opens it.
-        </Text>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 19, lineHeight: 22, color: BRAND.white }}>
+            Every story, guide and wait time lives on themeparkshark.com.
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <GameIcon name="lock" size={16} />
+            <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLight }}>A grown-up opens these</Text>
+          </View>
+        </View>
       </View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {storyUrl
