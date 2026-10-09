@@ -317,7 +317,8 @@ export function chaseFix(c: Chaser, fix: GlidePoint, tMs: number, _rate: readonl
   // (a shuffle forward in a queue, a walk-off the stride detector missed).
   const [sx, sy] = enM(c.kX, fix);
   const sd = Math.hypot(sx, sy);
-  const shifted = sd > 3 && c.lastResid !== null && Math.hypot(...c.lastResid) > 3
+  // Only without the step sensor: a real shuffle forward is several steps, which the sensor reports itself.
+  const shifted = c.walking === null && sd > 3 && c.lastResid !== null && Math.hypot(...c.lastResid) > 3
     && (sx * c.lastResid[0] + sy * c.lastResid[1]) / (sd * Math.hypot(...c.lastResid)) > 0.7;
   c.lastResid = sd > 3 ? [sx, sy] : null;
   const standing = c.walking === false || (c.walking === null && !stepsAgree(c.recent) && !shifted);
