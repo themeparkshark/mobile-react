@@ -855,7 +855,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
           </View>
           <View style={styles.chipRow}>
             {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
-            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText}>+{teamHit.toLocaleString()} from your team</Text></View>}
+            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText}>Team hit it: -{teamHit.toLocaleString()} HP</Text></View>}
           </View>
         </View>}
         {L.w > 0 && !result && <View pointerEvents="none" style={styles.finDock}>

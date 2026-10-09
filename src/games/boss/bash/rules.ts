@@ -47,8 +47,8 @@ export const PHASES: readonly PhaseRule[] = [
 /** The head drops for this long before it can be smashed (the dizzy wobble). */
 export const DIZZY_DROP_MS = 120;
 /** A PERFECT smash: tap while the closing ring sits on the gold core (this slice of the dizzy window). */
-export const PERFECT_FROM = 0.25;
-export const PERFECT_UNTIL = 0.42;
+export const PERFECT_FROM = 0.27;
+export const PERFECT_UNTIL = 0.38;
 /** INK attack: the boss puffs up for this long (the tell). Tap the boss to block it; miss it and you get inked. */
 export const INK_TELL_MS = 1150;
 /** First ink, then one every INK_EVERY_MS (never in the last INK_LAST_MS). */
@@ -325,7 +325,7 @@ export function bashStars(state: Pick<BashState, 'hits' | 'weak'>, w: Weights = 
 /** The PERFECT slice of the dizzy window; FURY is tighter so a chain stays earned late in the round. */
 export function perfectBand(ms: number): readonly [number, number] {
   'worklet';
-  return ms >= 13_500 ? [0.28, 0.4] : [PERFECT_FROM, PERFECT_UNTIL];
+  return ms >= 13_500 ? [0.29, 0.37] : [PERFECT_FROM, PERFECT_UNTIL];
 }
 
 /**

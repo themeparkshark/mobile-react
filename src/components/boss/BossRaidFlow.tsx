@@ -399,14 +399,15 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
                 <Text style={styles.section}>Teams</Text>
                 <TeamDamage raid={raid} />
                 <TopFighters raid={raid} />
-              </> : <Pressable accessibilityRole="button" onPress={() => setShowTeams(true)} style={styles.teamsBtn} hitSlop={6}>
-                <Text style={styles.teamsBtnText}>See who is fighting</Text>
-              </Pressable>}
-              <Text style={styles.fine}>
+                <Text style={styles.fine}>
                 {remote
                   ? `From home your hits count ${Math.round(raid.remote.damage_rate * 100)}%, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)}% and the MVP prize stays at the ride. Everyone who lands a hit shares the loot if the team wins.`
                   : 'Everyone who lands a hit shares the loot if the team wins. The top hitter is MVP and wins a Ticket.'}
               </Text>
+              </> : <Pressable accessibilityRole="button" onPress={() => setShowTeams(true)} style={styles.teamsBtn} hitSlop={6}>
+                <Text style={styles.teamsBtnText}>See who is fighting</Text>
+              </Pressable>}
+
             </ScrollView>
             {/* The button is pinned in the thumb zone; while a saved attack is being confirmed there is no button. */}
             {!(receiptBlocked && recovery.snapshot && !againPending) && <View style={styles.footer}>

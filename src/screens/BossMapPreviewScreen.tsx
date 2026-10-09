@@ -66,7 +66,7 @@ export default function BossMapPreviewScreen() {
   // Teammates' hits while you fight (the fight polls every 6 s).
   const [teamDrop, setTeamDrop] = useState(0);
   // Capture knobs (deep link): energy, tickets, attacks used, joined from home already.
-  const [knobs, setKnobs] = useState({ energy: 120, tickets: 2, attacks: 0, joined: false, autoplay: 0 });
+  const [knobs, setKnobs] = useState({ energy: 120, tickets: 2, attacks: 0, joined: false, autoplay: 0, hp: 3480 });
   const auth = useContext(AuthContext);
   const place = useContext(LocationContext);
   useEffect(() => {
@@ -79,7 +79,7 @@ export default function BossMapPreviewScreen() {
       if (b && b in BOSS_NAMES) setBoss(b);
       setHeld(query.get('held') === '1');
       const num = (k: string, d: number) => (query.get(k) !== null && Number.isFinite(Number(query.get(k))) ? Number(query.get(k)) : d);
-      setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0) });
+      setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0), hp: num('hp', 3480) });
       if (query.get('play') === '1') setRun(value => value + 1);
       // First-time Boss Bash lesson again (capture only).
       if (query.get('fresh') === '1') void AsyncStorage.multiRemove(['boss_bash_seen_v1', 'boss_bash_best_kraken']).catch(() => undefined);
@@ -161,7 +161,7 @@ export default function BossMapPreviewScreen() {
         <BossRaidFlow parkId={1} open recoveryService={fixtureRecovery} roundService={fixtureRound} devAutoplay={knobs.autoplay} onClose={() => setSection('map')} onState={() => undefined}
           onLiveRefresh={() => setTeamDrop(d => d + 96 + Math.round(Math.random() * 60))}
           raid={fixtureRaid(boss, { ...(section === 'home' ? { latitude: null, longitude: null } : {}), you: youFixture,
-            hp_left: 3480 - teamDrop,
+            hp_left: knobs.hp - teamDrop,
             top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: youFixture.damage, you: true, team: 'shark' },
               { username: 'coasterkid', damage: 640, you: false, team: 'globe' }].filter(t => t.damage > 0).sort((a, b) => b.damage - a.damage),
             remote: { joined: knobs.joined, ticket_cost: 1, damage_rate: 0.6, reward_rate: 0.6, fighters: 1 } })} />

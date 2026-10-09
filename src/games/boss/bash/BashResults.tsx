@@ -116,7 +116,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
             : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
           {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
-          {!noHits && teamDamage > 0 && <Text style={styles.rate}>That is {Math.max(1, Math.round((damage / (teamDamage + damage)) * 100))}% of all the team's hits</Text>}
+          {!noHits && teamDamage > 0 && <Text style={styles.rate}>You {damage.toLocaleString()}  ·  Team {(teamDamage + damage).toLocaleString()}</Text>}
           {capped && <Text style={styles.rate}>That hits the most one shark can do to this boss.</Text>}
         </View>
       </View>
@@ -156,13 +156,13 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       <View style={styles.chips}>
         <Chip label="Bonks" value={Number(meta.bonks ?? 0)} />
         <Chip label="Smashes" value={Number(meta.smashes ?? 0)} />
-        {Number(meta.inks ?? 0) > 0 ? <Chip label={`Blocks of ${Number(meta.inks)}`} value={Number(meta.blocks ?? 0)} />
+        {Number(meta.inks ?? 0) > 0 ? <Chip label="Blocks" value={`${Number(meta.blocks ?? 0)}/${Number(meta.inks)}`} />
           : <Chip label="Perfects" value={Number(meta.perfects ?? 0)} />}
       </View>
 
       {!noHits && n.can && onAgain ? <>
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
-          accessibilityLabel={`Attack again for ${next?.energyCost} Energy. You will have ${n.energyAfter} Energy.`}>
+          accessibilityLabel={`Attack again for ${next?.energyCost} Energy. You have ${n.energyAfter} Energy.`}>
           <Text style={styles.againText}>ATTACK AGAIN</Text>
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
@@ -182,7 +182,7 @@ function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: numbe
   const word = icon === 'xp' ? ' XP' : icon === 'parts' ? ' Parts' : '';
   return <View style={styles.lootItem}><GameIcon name={icon} size={26} /><Text style={styles.lootNum}>{n}{word}</Text></View>;
 }
-function Chip({ label, value }: { label: string; value: number }) {
+function Chip({ label, value }: { label: string; value: number | string }) {
   return <View style={styles.chip}><Text style={styles.chipNum}>{value}</Text><Text style={styles.chipLabel}>{label}</Text></View>;
 }
 

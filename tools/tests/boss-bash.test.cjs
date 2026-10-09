@@ -19,7 +19,7 @@ function play(seed,{react,jitter=120,slip=0,puffer=0,smashAt=0.3,miss=0,block=0,
       if(ms>=plan.get(p.id)){s=b.tapPopup(s,p.id,ms,maxHits).state;break;}
     }
     if(s.dizzy){
-      if(!dizzyPlan||dizzyPlan.from!==s.dizzy.from)dizzyPlan={from:s.dizzy.from,at:r()<miss?Infinity:s.dizzy.from+(s.dizzy.until-s.dizzy.from)*smashAt+react*0.4};
+      if(!dizzyPlan||dizzyPlan.from!==s.dizzy.from)dizzyPlan={from:s.dizzy.from,at:r()<miss?Infinity:s.dizzy.from+(s.dizzy.until-s.dizzy.from)*(smashAt+(r()*2-1)*0.08)+react*0.4};
       if(ms>=dizzyPlan.at)s=b.tapBoss(s,ms,maxHits).state;
     }
   }
@@ -67,7 +67,7 @@ test('fins fill to a dizzy head; a smash on the gold core is PERFECT and gives a
   for(let i=0;i<3;i++){s={...s,up:[{id:100+i,spot:i,kind:'tentacle',at:0,until:9000}]};s=b.tapPopup(s,100+i,1000+i*200).state;}
   assert.ok(s.dizzy);
   assert.equal(b.tapBoss({...s,dizzy:null},2000).events[0].type,'clank');
-  const span=s.dizzy.until-s.dizzy.from,late=b.tapBoss(s,s.dizzy.from+span*0.4);
+  const span=s.dizzy.until-s.dizzy.from,late=b.tapBoss(s,s.dizzy.from+span*0.32);
   assert.equal(b.tapBoss(s,s.dizzy.until-50).events[0].perfect,false);assert.equal(b.tapBoss(s,s.dizzy.from+10).events[0].perfect,false);
   assert.equal(late.events[0].type,'smash');assert.equal(late.events[0].perfect,true);assert.equal(late.events[0].weak,true);
   assert.equal(late.events[0].damage,44);assert.equal(late.state.power,1);assert.equal(late.state.headStart,1);
@@ -109,4 +109,9 @@ test('filling the fins during an ink delays the ink, it is not lost', ()=>{
 test('mashing empty water holds longer each time', ()=>{
   let s={...b.createBash(2),ms:100};const a=b.tapWater(s,0,100).state;const c=b.tapWater(a,0,a.splashUntil+10).state;
   assert.ok(c.splashUntil-(a.splashUntil+10)>a.splashUntil-100);
+});
+
+test('PERFECT is earned: even a clean player with human timing wobble is not perfect every time', ()=>{
+  const xs=runs.expert;const rate=xs.reduce((a,s)=>a+s.perfects,0)/Math.max(1,xs.reduce((a,s)=>a+s.smashes,0));
+  console.log('expert perfect rate',rate.toFixed(2));assert.ok(rate<=0.75&&rate>=0.25,`rate ${rate}`);
 });
