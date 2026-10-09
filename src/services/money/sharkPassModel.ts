@@ -88,3 +88,23 @@ export function claimedLine(rewards: readonly SharkPassReward[]): string {
   const words = rewards.map(rewardWords);
   return words.length <= 3 ? words.join(', ') : `${words.slice(0, 3).join(', ')} and ${words.length - 3} more`;
 }
+
+/** "With the Shark Pass you'd also have: Frosty Scarf Pin, Cocoa Mug Pin and 4 more." for steps already reached. */
+export function passTwinLine(tiers: readonly SharkPassTier[], premium: boolean): string | null {
+  if (premium) return null;
+  const waiting = tiers.filter(t => t.unlocked && !t.paid_claimed).map(t => t.paid);
+  if (!waiting.length) return null;
+  const items = waiting.filter(r => r.type === 'item');
+  const lead = [...items, ...waiting.filter(r => r.type !== 'item')].slice(0, 2).map(rewardWords);
+  return `With the Shark Pass you’d also have ${lead.join(', ')}${waiting.length > lead.length ? ` and ${waiting.length - lead.length} more` : ''}.`;
+}
+
+/** The Shark Pass row's coins, tickets and Rescue Passes added up (energy and pins are listed apart). */
+export function passGrants(tiers: readonly SharkPassTier[]): { coins: number; tickets: number; rescue_passes: number; pins: number } {
+  const out = { coins: 0, tickets: 0, rescue_passes: 0, pins: 0 };
+  for (const { paid } of tiers) {
+    if (paid.type === 'item') out.pins += 1;
+    else if (paid.type === 'coins' || paid.type === 'tickets' || paid.type === 'rescue_passes') out[paid.type] += paid.amount;
+  }
+  return out;
+}

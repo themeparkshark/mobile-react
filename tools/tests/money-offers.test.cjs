@@ -97,6 +97,17 @@ test('Shark Pass words: the real last day, reward names and the pass row summed 
   for (const event of ['ride_coin_win', 'daily3_complete', 'trail_box_open', 'pin_of_day', 'mystery_box_open']) assert.ok(pass.EVENT_COPY[event], event);
 });
 
+test('Shark Pass: what the pass row adds for reached steps, and its sums', () => {
+  const t = (tier, unlocked, paid, paidClaimed = false) => ({ tier, unlocked, paid, paid_claimed: paidClaimed, free: null, free_claimed: false });
+  const tiers = [
+    t(1, true, { type: 'item', name: 'Frosty Scarf Pin' }), t(2, true, { type: 'coins', amount: 100 }),
+    t(3, true, { type: 'tickets', amount: 2 }), t(4, false, { type: 'rescue_passes', amount: 1 }),
+  ];
+  assert.equal(pass.passTwinLine(tiers, false), 'With the Shark Pass you’d also have Frosty Scarf Pin, 100 coins and 1 more.');
+  assert.equal(pass.passTwinLine(tiers, true), null, 'owners see nothing extra');
+  assert.deepEqual(plain(pass.passGrants(tiers)), { coins: 100, tickets: 2, rescue_passes: 1, pins: 1 });
+});
+
 test('real money: Supplies packs, the Shark Pass and VIP each buy only after a grown-up answers', () => {
   const strip = code => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const screen = strip(read('src/screens/SharkPassScreen.tsx'));

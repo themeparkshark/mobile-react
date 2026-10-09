@@ -40,9 +40,11 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, claimedLine, lastDayText, nextBigPrize, passSummary, readyNowLine, rewardWords } from '../services/money/sharkPassModel';
+import { EVENT_COPY, claimedLine, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, readyNowLine, rewardWords } from '../services/money/sharkPassModel';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
+import { baseRates, formatLike, regularValue } from '../services/money/offers';
+import { useSupplies } from '../services/money/supplies';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -211,7 +213,9 @@ export default function SharkPassScreen() {
       setState(res.pass);
       const rewards = res.claimed.map(c => c.reward);
       const hero = rewards.find(r => r.type === 'item') ?? rewards.find(r => r.type === 'coins') ?? rewards[0];
-      if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!', caption: claimedLine(rewards) });
+      const twin = res.pass.enabled && res.pass.tiers ? passTwinLine(res.pass.tiers, !!res.pass.progress?.premium) : null;
+      if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!',
+        caption: twin ? `${claimedLine(rewards)}. ${twin}` : claimedLine(rewards) });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
       gameAlert('That didn’t work', 'Check your internet and try again.');
@@ -236,7 +240,14 @@ export default function SharkPassScreen() {
       if (outcome.status === 'success') {
         setState(outcome.state);
         haptic('success');
-        setLanded({ reward: { type: 'coins', amount: 0, ready: true }, title: 'Shark Pass on!', caption: 'Every Shark Pass reward you reach is yours. Tap Claim to collect.', emblem: true });
+        // Everything already reached lands at once, and the first season pin can go straight on the shark.
+        const res = await claimAllSharkPass().catch(() => null);
+        if (res) setState(res.pass);
+        const rewards = res?.claimed.map(c => c.reward) ?? [];
+        const pin = res?.claimed.find(c => c.reward.type === 'item');
+        const pinId = Number((pin as { granted?: { item_id?: unknown } } | undefined)?.granted?.item_id) || undefined;
+        setLanded(pin ? { reward: pin.reward, title: 'Shark Pass on!', caption: claimedLine(rewards), itemId: pinId }
+          : { reward: { type: 'coins', amount: 0, ready: true }, title: 'Shark Pass on!', caption: rewards.length ? claimedLine(rewards) : 'Every Shark Pass reward you reach is yours.', emblem: true });
       } else if (outcome.status === 'pending') gameAlert('Waiting for a grown-up', 'A grown-up needs to say yes on their phone. Your Shark Pass turns on after that.');
       else if (outcome.status === 'unverified') gameAlert('Almost there', 'It worked! Your Shark Pass turns on in a minute. If not, it turns on next time you open the game.');
       else if (outcome.status === 'other_account') gameAlert('Bought on another account', 'This Shark Pass belongs to a different Theme Park Shark account. Sign in to that account to use it.');
@@ -270,6 +281,17 @@ export default function SharkPassScreen() {
   const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
     [player?.inventory, nextPrize?.reward, progress?.top_prize]);
   const readyNow = useMemo(() => readyNowLine(tiers), [tiers]);
+  // The honest worth of the Shark Pass row: its coins, tickets and Rescue Passes at Supplies' regular
+  // pack prices (Apple's prices, rounded down), pins and energy listed apart. Shown only when every part has a price.
+  const supplies = useSupplies(!premium && !!season);
+  const worthLine = useMemo(() => {
+    if (!price || !supplies.catalog) return null;
+    const g = passGrants(tiers);
+    const value = regularValue({ coins: g.coins, tickets: g.tickets, rescue_passes: g.rescue_passes }, baseRates(supplies.catalog.products, supplies.prices));
+    if (!value || value < price.amount * 1.5) return null;
+    const worth = formatLike(price.price, Math.floor(value * 100) / 100);
+    return worth ? `The coins, tickets and Rescue Passes alone are worth ${worth} in Supplies. Plus ${g.pins} season pins.` : null;
+  }, [tiers, price, supplies.catalog, supplies.prices]);
   const nextPaid = tiers.filter(t => !t.unlocked || !premium).filter(t => t.paid.type === 'item' || t.paid.type === 'mystery_box').slice(0, 3);
 
   return (
@@ -310,6 +332,9 @@ export default function SharkPassScreen() {
                     <Image source={EMBLEM} style={s.emblem} contentFit="contain" />
                   )}
                   <Image source={EMBLEM} style={s.heroBadge} contentFit="contain" />
+                  {nextPrize?.reward.type === 'item' && (
+                    <View style={s.heroPin}><RewardPicture reward={nextPrize.reward} size={46} /></View>
+                  )}
                 </View>
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.season}>{season.title.toUpperCase()}</Text>
@@ -371,6 +396,7 @@ export default function SharkPassScreen() {
                 <View style={s.buy}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>UNLOCK THE SHARK PASS ROW</Text>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
+                  {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{worthLine}</Text>}
                   {readyNow && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{readyNow}</Text>}
                   <View style={s.preview}>
                     {nextPaid.map(t => (
@@ -536,6 +562,8 @@ const s = StyleSheet.create({
   emblem: { width: 96, height: 96 },
   heroStage: { width: 116, height: 132, alignItems: 'center', justifyContent: 'flex-end' },
   heroSnow: { position: 'absolute', bottom: 2, width: 104, height: 26, borderRadius: 52, backgroundColor: '#eaf6ff', borderWidth: 3, borderColor: '#ffffff' },
+  heroPin: { position: 'absolute', right: -8, bottom: 24, width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BRAND.gold },
   heroBadge: { position: 'absolute', top: -4, left: -6, width: 38, height: 38 },
   season: { fontFamily: FONT.display, fontSize: 24, color: BRAND.gold, textShadowColor: '#5a3a00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   ends: { fontFamily: FONT.body, fontSize: 15, color: '#e2f6ff' },
