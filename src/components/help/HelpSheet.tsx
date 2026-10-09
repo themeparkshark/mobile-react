@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, {
-  Easing, interpolate, runOnJS, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming,
+  Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,17 +88,15 @@ export default function HelpSheet({ visible, sheet, onClose, state = 'ready', on
       reveal.value = 0;
       playSound(openSound);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN, done => {
-        // A soft tick when the sheet seats.
-        if (done) runOnJS(seatTick)();
-      });
+      open.value = reduced ? withTiming(1, { duration: 180 }) : withSpring(1, SPRING_IN);
       reveal.value = reduced ? 1 : withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     } else if (mounted && !closing.current) {
       closing.current = true;
       playSound(closeSound);
-      open.value = withTiming(0, { duration: reduced ? 140 : OUT_MS, easing: Easing.in(Easing.quad) }, done => {
-        if (done) runOnJS(finishClose)();
-      });
+      // A tiny lift before the drop, so the exit has a beat of anticipation.
+      const end = (done?: boolean) => { 'worklet'; if (done) runOnJS(finishClose)(); };
+      open.value = reduced ? withTiming(0, { duration: 140 }, end)
+        : withSequence(withTiming(1.012, { duration: 50 }), withTiming(0, { duration: OUT_MS, easing: Easing.in(Easing.quad) }, end));
     }
     // Only the visible flag drives open and close.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +136,6 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
   const [page, setPage] = useState(0);
   const scroll = useAnimatedRef<GestureScrollView>();
   const scrollX = useSharedValue(0);
-  const sheetH = useSharedValue(height);
   const pageW = width - BORDER * 2;
   // Short phones (SE) get a shorter hero so a page never needs to scroll.
   const heroH = Math.round(Math.min(188, Math.max(140, height * 0.22)));
@@ -199,13 +196,23 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
             
   ) : null;
   // The footer arrives with the points, after the gold button art has decoded, so it never shows empty.
-  const footerStyle = useAnimatedStyle(() => ({ opacity: interpolate(reveal.value, [0.42, 0.72], [0, 1], 'clamp') }));
+  const footerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(reveal.value, [0.3, 0.55], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(reveal.value, [0.3, 0.62, 0.8], [0.94, 1.04, 1], 'clamp') }],
+  }));
+  // A soft tick the first time the sheet reaches its seat (not when the spring finally rests).
+  const seated = useSharedValue(0);
+  useAnimatedReaction(() => open.value >= 0.995, (now, before) => {
+    if (now && !before && seated.value === 0 && !reduced) { seated.value = 1; runOnJS(seatTick)(); }
+  });
   const scrim = useAnimatedStyle(() => ({
-    opacity: Math.min(1, open.value) * interpolate(drag.value, [0, 300], [1, 0.4], 'clamp'),
+    // On the way out the scrim clears a little ahead of the sheet.
+    opacity: interpolate(open.value, [0.2, 1], [0, 1], 'clamp') * interpolate(drag.value, [0, 300], [1, 0.4], 'clamp'),
   }));
   const sheetStyle = useAnimatedStyle(() => (reduced
     ? { opacity: Math.min(1, open.value), transform: [{ translateY: Math.max(0, drag.value) }] }
-    : { transform: [{ translateY: (1 - open.value) * (sheetH.value + 40) + drag.value }] }));
+    // Slide from below the window, a fixed distance, so a late height measure never makes the sheet sag mid-spring.
+    : { transform: [{ translateY: (1 - open.value) * height + drag.value }] }));
 
   return (
     // A Modal is its own native root, so the app's idle tracker never sees these touches: report them.
@@ -215,7 +222,6 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
       </Animated.View>
       <GestureDetector gesture={pan}>
         <Animated.View
-          onLayout={event => { sheetH.value = event.nativeEvent.layout.height; }}
           style={[styles.sheet, { maxHeight: height - insets.top - 12, paddingBottom: Math.max(insets.bottom, 14) + 4 }, sheetStyle]}>
           {/* Header row on the cream: the drag handle, and the close button, which never sits on the art. */}
           <View style={styles.header}>
@@ -273,13 +279,14 @@ function PageView({ page, index, width, heroW, heroH, running, reduced, reveal, 
   const heroStyle = useAnimatedStyle(() => {
     const k = index === 0 ? interpolate(reveal.value, [0, 0.45], [0, 1], 'clamp') : 1;
     const away = Math.min(1, Math.abs(scrollX.value / width - index));
-    return { opacity: k, transform: [{ scale: (0.94 + 0.06 * k) * (1 - away * 0.05) }] };
+    const pop = index === 0 ? interpolate(reveal.value, [0, 0.3, 0.45], [0.88, 1.03, 1], 'clamp') : 1;
+    return { opacity: k, transform: [{ scale: pop * (1 - away * 0.05) }] };
   });
   const textStyle = (at: number) => () => {
     'worklet';
     const k = index === 0 ? interpolate(reveal.value, [at, at + 0.4], [0, 1], 'clamp') : 1;
     const away = scrollX.value / width - index;
-    return { opacity: k * (1 - Math.min(1, Math.abs(away)) * 0.6), transform: [{ translateY: (1 - k) * 10 }, { translateX: -away * 26 }] };
+    return { opacity: k * (1 - Math.min(1, Math.abs(away)) * 0.6), transform: [{ translateY: (1 - k) * 16 }, { translateX: -away * 26 }] };
   };
   const head = useAnimatedStyle(textStyle(0.22));
   const p0 = useAnimatedStyle(textStyle(0.34));
