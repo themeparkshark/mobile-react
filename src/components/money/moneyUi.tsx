@@ -25,6 +25,9 @@ import { BRAND, FONT, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
+import { unitWord } from '../../services/money/copy';
+
+export { unitWord };
 
 export const MAX_FONT = 1.25;
 
@@ -75,16 +78,10 @@ export function packArtKey(product: Pick<ShopProduct, 'product_id' | 'grants' | 
 }
 
 const CURRENCY_ICON: Record<keyof ShopGrants, GameIconName> = { tickets: 'ticket', coins: 'coins', energy: 'energy', rescue_passes: 'retry' };
-const CURRENCY_WORD: Record<keyof ShopGrants, [string, string]> = {
-  tickets: ['ticket', 'tickets'], coins: ['coin', 'coins'], energy: 'energy energy'.split(' ') as [string, string], rescue_passes: ['pass', 'passes'],
-};
 const ORDER: (keyof ShopGrants)[] = ['tickets', 'coins', 'energy', 'rescue_passes'];
 
 export function currencyIcon(kind: keyof ShopGrants): GameIconName {
   return CURRENCY_ICON[kind];
-}
-export function unitWord(kind: keyof ShopGrants, n: number): string {
-  return n === 1 ? CURRENCY_WORD[kind][0] : CURRENCY_WORD[kind][1];
 }
 
 /** Alex's card: blue gradient, white rim, navy lip; press sinks into the lip. */
