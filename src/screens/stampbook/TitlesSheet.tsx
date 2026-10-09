@@ -7,7 +7,7 @@
  * Titles from Collection Books are worn from the profile title sheet; a worn
  * one still shows here at the top so Remove always works.
  */
-import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { GameDialog, GameIcon } from '../../ui';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -31,6 +31,8 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
   readonly onClose: () => void;
 }) {
   const fromBook = !!worn && !entries.some(e => e.title === worn);
+  // The list scrolls inside the dialog; on short phones it stays short enough that the ribbon clears the status bar.
+  const listMax = Math.min(420, useWindowDimensions().height - 400);
   return (
     <GameDialog visible={visible} title="Titles" buttons={[{ text: 'Close', style: 'cancel', variant: 'ghost' }]}
       onAnswer={() => onClose()} testID="stamp-titles">
@@ -42,7 +44,7 @@ export default function TitlesSheet({ visible, entries, worn, busy, message, onW
         <Step icon="crown" label="Wear it" />
       </View>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listInner} showsVerticalScrollIndicator={false}>
+      <ScrollView style={[styles.list, { maxHeight: listMax }]} contentContainerStyle={styles.listInner} showsVerticalScrollIndicator={false}>
         {fromBook && (
           <View style={styles.row}>
             <View style={styles.thumb}><GameIcon name="crown" size={34} /></View>

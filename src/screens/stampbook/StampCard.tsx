@@ -61,7 +61,7 @@ const STAGE_H = ART + 30 + 4;
 /** 1 on tall phones (900 pt and up); down to 0.42 on a 667 pt iPhone SE so the card never clips. */
 export function stageScaleFor(screenH: number): number {
   if (screenH >= 900) return 1;
-  return Math.max(0.42, Math.min(1, (screenH - 560) / 340));
+  return Math.max(0.34, Math.min(1, (screenH - 580) / 320));
 }
 /** Badge centre inside the art canvas (plates are normalised a little below centre). */
 const BADGE_CY = 0.55;
@@ -130,6 +130,8 @@ interface ContentHandle { claim: () => void }
 /** Mounted once per open: backdrop, card chrome and the action button survive chained stamps. */
 function Frame(props: Props & { stamp: BookStamp }) {
   const { stamp, reducedMotion, equipping, message, wearingTitle, nextCount, nextStamp, wallet, onNext, onGo, onToggleTitle, onClose } = props;
+  // Short phones (iPhone SE): tighter spacing so the whole card sits inside the safe area.
+  const compact = useWindowDimensions().height < 700;
   const backdrop = useSharedValue(reducedMotion ? 1 : 0);
   const card = useSharedValue(reducedMotion ? 1 : 0.9);
   const shake = useSharedValue(0);
@@ -229,12 +231,12 @@ function Frame(props: Props & { stamp: BookStamp }) {
   const displayClaimed = display.rewardClaimed || claimedIds.includes(display.id);
 
   return (
-    <View style={styles.root} accessible={false}>
+    <View style={[styles.root, compact && styles.rootCompact]} accessible={false}>
       <Animated.View style={[styles.backdrop, backdropStyle]} />
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no" />
       <Animated.View style={[styles.card, cardStyle]} accessibilityViewIsModal onAccessibilityEscape={onClose}>
         <View style={styles.lip} />
-        <View style={[styles.body, displayLegendary && styles.bodyLegendary]}>
+        <View style={[styles.body, compact && styles.bodyCompact, displayLegendary && styles.bodyLegendary]}>
           {/* Alex's popup finish: a soft top gloss band and an inner bevel line. */}
           <View pointerEvents="none" style={styles.bevel} />
           <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']} style={styles.gloss} />
@@ -268,7 +270,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
             ))}
           </View>
 
-          <View style={styles.actions}>
+          <View style={[styles.actions, compact && styles.actionsCompact]}>
             {(action || shownStatus) && (
               <View style={styles.actionSlot}>
                 <View style={shownStatus ? styles.hidden : undefined} importantForAccessibility={shownStatus ? 'no-hide-descendants' : 'auto'}
@@ -588,7 +590,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
         </View>
       )}
 
-      <View style={styles.howBox}>
+      <View style={[styles.howBox, stageScale < 0.6 && styles.howBoxCompact]}>
         <View style={styles.howHead}>
           <GameIcon name={stamp.earned ? 'check' : stamp.secret ? 'sparkle' : req.icon} size={22} />
           <Text style={styles.howText} maxFontSizeMultiplier={1.3}>{stamp.howTo}</Text>
@@ -608,7 +610,7 @@ const Content = forwardRef<ContentHandle, ContentProps>(function Content({ stamp
       )}
 
       {chips.length > 0 && (
-        <Animated.View style={[styles.tokens, tokensStyle]} onLayout={onChipsRow}>
+        <Animated.View style={[styles.tokens, stageScale < 0.6 && styles.tokensCompact, tokensStyle]} onLayout={onChipsRow}>
           {chips.map((chip, i) => (
             <Token key={chip.kind} kind={chip.kind} label={chip.label} done={claimed} pop={chipPop} index={i} onLayout={at('chips', chip.kind)} />
           ))}
@@ -688,6 +690,11 @@ const styles = StyleSheet.create({
   lip: { position: 'absolute', left: 0, right: 0, top: 8, bottom: -7, borderRadius: 22, backgroundColor: '#045089' },
   body: { ...DIALOG_CARD, alignItems: 'center', paddingHorizontal: 18, paddingBottom: 18, paddingTop: 34 },
   bodyLegendary: { borderColor: LEGENDARY_GOLD, borderWidth: 4 },
+  rootCompact: { paddingTop: 30, paddingBottom: 6 },
+  bodyCompact: { paddingTop: 28, paddingBottom: 12 },
+  actionsCompact: { marginTop: 8 },
+  howBoxCompact: { marginTop: 6, padding: 9 },
+  tokensCompact: { marginTop: 6 },
   bevel: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(0,40,90,0.35)' },
   gloss: { position: 'absolute', left: 3, right: 3, top: 3, height: 90, borderTopLeftRadius: 17, borderTopRightRadius: 17 },
   ribbon: { position: 'absolute', top: -34, left: 18, right: 18, alignItems: 'center' },
