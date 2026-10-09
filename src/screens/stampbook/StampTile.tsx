@@ -28,7 +28,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { useBookFx, useTileClock } from './BookFx';
 import Foil from './Foil';
-import StampArt, { GHOST_TINT } from './StampArt';
+import StampArt from './StampArt';
 import { almostThere, hasShine, postmark, progressLabel, rarityRank, requirement, ring as ringGeo, fillFraction, secretHint, stampState, tileLabel, type BookStamp, type Corner } from './model';
 
 export const INK = '#14213D';
@@ -119,7 +119,7 @@ function StampTile({ stamp, size, height, accent, col, isNew, gridTop, onPress }
               ) : (
                 <>
                   <View style={[styles.ghost, state === 'fresh' && styles.ghostFresh]}>
-                    <StampArt stamp={stamp} size="thumb" locked={false} tint={GHOST_TINT} priority={col < 3 ? 'high' : 'normal'} />
+                    <StampArt stamp={stamp} size="thumb" priority={col < 3 ? 'high' : 'normal'} />
                   </View>
                   {/* In progress: the real colour fills up from the bottom with the progress (capped well short of owned). */}
                   {state === 'progress' && fill > 0 && (
