@@ -49,7 +49,11 @@ export function isNonJsonBody(response: GuardResponse | undefined): boolean {
   const text = data.trim();
   if (!text) return false;
   if (text.startsWith('<')) return true;
-  return !contentType(response.headers).includes('json');
+  if (!contentType(response.headers).includes('json')) return true;
+  // Labeled JSON but still a string: axios could not parse it (cut off mid
+  // transfer, or a proxy mangled it). A parsed JSON string literal never
+  // starts with { or [, so raw object/array text here means a broken body.
+  return text.startsWith('{') || text.startsWith('[');
 }
 
 export type NonJsonError = Error & {
@@ -106,3 +110,55 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const isCoordinate = (value: unknown): boolean =>
   (typeof value === 'number' && Number.isFinite(value)) ||
   (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
+
+/**
+ * One odd reply is not an outage. The app is marked offline only after this
+ * many non-JSON replies in a row with no good reply between them (a real
+ * captive portal answers every request, so it trips at once).
+ */
+export const NON_JSON_BEFORE_OFFLINE = 2;
+/** A non-JSON GET is tried once more after this short pause. */
+export const NON_JSON_RETRY_MS = 600;
+
+export function shouldRetryNonJson(config: { method?: string; tpsNonJsonRetried?: boolean; tpsNoRetry?: boolean; responseType?: string } | undefined): boolean {
+  if (!config || config.tpsNonJsonRetried || config.tpsNoRetry) return false;
+  if (config.responseType && config.responseType !== 'json') return false;
+  const method = (config.method || 'get').toLowerCase();
+  return method === 'get' || method === 'head';
+}
+
+/** The raw transport body (before axios parses it) is not usable JSON. */
+export function rawBodyIsNonJson(response: GuardResponse | undefined): boolean {
+  if (!response || typeof response.data !== 'string') return false;
+  const text = response.data.trim();
+  if (!text) return false;
+  if (text.startsWith('<') || !contentType(response.headers).includes('json')) return true;
+  try {
+    JSON.parse(text);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+type Adapter<C, R> = (config: C) => Promise<R>;
+
+/**
+ * Transport wrapper (below the interceptors, like the GET retry): a GET that
+ * comes back as a web page or broken JSON is tried once more after a short
+ * pause, so one flaky hop costs a moment, not a screen. Interceptors see one
+ * final answer per request, so nothing (broadcasts, counters) runs twice.
+ */
+export function withNonJsonRetry<C extends { method?: string; tpsNonJsonRetried?: boolean; tpsNoRetry?: boolean; responseType?: string; signal?: { aborted?: boolean } }, R extends GuardResponse>(
+  adapter: Adapter<C, R>,
+  wait: (ms: number) => Promise<unknown> = ms => new Promise(resolve => setTimeout(resolve, ms)),
+): Adapter<C, R> {
+  return async function nonJsonRetryingAdapter(config: C): Promise<R> {
+    const first = await adapter(config);
+    if (!shouldRetryNonJson(config) || !rawBodyIsNonJson(first)) return first;
+    await wait(NON_JSON_RETRY_MS);
+    if (config.signal?.aborted) return first;
+    config.tpsNonJsonRetried = true;
+    return adapter(config);
+  };
+}

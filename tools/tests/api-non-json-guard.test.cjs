@@ -8,7 +8,7 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const axios = require(path.join(root, 'node_modules/axios'));
-const { isNonJsonBody, isNonJsonError } = loadTs('src/api/jsonGuard.ts');
+const { isNonJsonBody, isNonJsonError, withNonJsonRetry, rawBodyIsNonJson } = loadTs('src/api/jsonGuard.ts');
 
 const PORTAL = '<!DOCTYPE html><html><head><title>Hotel Wi-Fi</title></head><body>Accept terms</body></html>';
 
@@ -45,14 +45,60 @@ const reply = (data, contentType) => config => Promise.resolve({
   data, status: 200, statusText: 'OK', headers: { 'content-type': contentType }, config, request: {},
 });
 
-test('the real API client rejects a portal page and marks the app offline', async () => {
+test('one portal reply is scoped to its request; a run of them marks the app offline', async () => {
   const { client, connectivity } = loadClient(reply(PORTAL, 'text/html'));
   await assert.rejects(client.get('/reaction-types'), error => {
     assert.equal(isNonJsonError(error), true);
     assert.equal(error.response, undefined, 'nothing can read into the portal page');
     return true;
   });
-  assert.equal(connectivity.isOffline(), true);
+  assert.equal(connectivity.isOffline(), false, 'one odd reply is not an outage');
+  await assert.rejects(client.get('/me'), error => isNonJsonError(error));
+  assert.equal(connectivity.isOffline(), true, 'a captive portal answers everything: offline');
+});
+
+test('a good reply between odd ones resets the run', async () => {
+  let n = 0;
+  const { client, connectivity } = loadClient(config => (n++ % 2 === 0 ? reply(PORTAL, 'text/html') : reply('{"ok":1}', 'application/json'))(config));
+  for (let i = 0; i < 3; i++) {
+    await client.get('/a').catch(() => undefined);
+    await client.get('/b').catch(() => undefined);
+  }
+  assert.equal(connectivity.isOffline(), false);
+});
+
+test('a cut-off reply that still says JSON is rejected, not handed over as a string', async () => {
+  const { client } = loadClient(reply('{"data":[{"id":1},{"na', 'application/json'));
+  await assert.rejects(client.get('/reaction-types'), error => isNonJsonError(error));
+  assert.equal(isNonJsonBody({ data: '[1,2', headers: { 'content-type': 'application/json' } }), true);
+  assert.equal(rawBodyIsNonJson({ data: '{"a":', headers: { 'content-type': 'application/json' } }), true);
+  assert.equal(rawBodyIsNonJson({ data: '{"a":1}', headers: { 'content-type': 'application/json' } }), false);
+  assert.equal(rawBodyIsNonJson({ data: '"ok"', headers: { 'content-type': 'application/json' } }), false);
+});
+
+test('transport: a non-JSON GET is tried once more after a short pause; writes never are', async () => {
+  const waits = [];
+  const answers = [{ data: PORTAL, headers: { 'content-type': 'text/html' } }, { data: '{"ok":1}', headers: { 'content-type': 'application/json' } }];
+  let calls = 0;
+  const adapter = withNonJsonRetry(async () => answers[Math.min(calls++, 1)], async ms => { waits.push(ms); });
+  const res = await adapter({ method: 'get' });
+  assert.equal(res.data, '{"ok":1}');
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [600]);
+  calls = 0;
+  const post = withNonJsonRetry(async () => { calls++; return answers[0]; }, async () => {});
+  await post({ method: 'post' });
+  assert.equal(calls, 1, 'a write is never repeated');
+  calls = 0;
+  const twice = withNonJsonRetry(async () => { calls++; return answers[0]; }, async () => {});
+  await twice({ method: 'get' });
+  assert.equal(calls, 2, 'one retry only');
+});
+
+test('the client stacks the non-JSON retry under the GET retry and dedupe', () => {
+  const src = fs.readFileSync(path.join(root, 'src/api/client.ts'), 'utf8');
+  assert.match(src, /withInflightDedupe\(withGetRetry\(withNonJsonRetry\(client\.defaults\.adapter/);
+  assert.match(src, /if \(consecutiveNonJson >= NON_JSON_BEFORE_OFFLINE\) reportUnreachable\(\);/);
 });
 
 test('the real API client still parses JSON and passes 204s', async () => {
