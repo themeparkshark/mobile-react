@@ -103,3 +103,14 @@ test('retention flags: absent reads as off, a failed read is retried; only a tru
   F.resetRetentionFlagsForTests();
   assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: { daily_three: true, level_chests: 'yes' } }))), { dailyThree: true, levelChests: false });
 });
+
+test('weekly line is honest about what is still reachable this week', () => {
+  const days = states => states.map((state, i) => ({ date: `2026-10-${12 + i}`, state }));
+  const wk = (over) => state({ week: { ...state().week, ...over } });
+  assert.equal(L.weeklyLine(wk({ done: 0, days: days(['before', 'before', 'before', 'before', 'today', 'future', 'future']) })),
+    'New week Monday: 5 days opens the Weekly Box');
+  assert.equal(L.weeklyLine(wk({ done: 3, days: days(['done', 'done', 'done', 'today', 'future', 'future', 'future']) })), '2 more days for the Weekly Box');
+  assert.equal(L.weeklyLine(wk({ done: 4, days: days(['done', 'done', 'done', 'done', 'today', 'future', 'future']) })), '1 more day for the Weekly Box');
+  assert.equal(L.weeklyLine(wk({ claimable: true })), 'Your Weekly Box is ready!');
+  assert.equal(L.weeklyLine(wk({ claimed: true })), 'Weekly Box opened. A new week starts Monday.');
+});

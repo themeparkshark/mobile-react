@@ -82,6 +82,17 @@ export function resetLabel(resetsAt: string, now: number): string {
   return mins >= 60 ? `New goals in ${Math.floor(mins / 60)}h` : `New goals in ${mins}m`;
 }
 
+/** The line under the week strip: honest when this week's box is already out of reach. */
+export function weeklyLine(s: DailyThreeState): string {
+  const w = s.week;
+  if (w.claimed) return 'Weekly Box opened. A new week starts Monday.';
+  if (w.claimable) return 'Your Weekly Box is ready!';
+  const open = w.days.filter(d => d.state === 'today' || d.state === 'future').length;
+  const left = w.needed - w.done;
+  if (left > open) return `New week Monday: ${w.needed} days opens the Weekly Box`;
+  return `${left} more day${left === 1 ? '' : 's'} for the Weekly Box`;
+}
+
 /** The next chest to present: the lowest unopened level. */
 export function nextLevelChest(chests: readonly LevelChest[]): LevelChest | null {
   return [...chests].filter(c => !c.opened).sort((a, b) => a.level - b.level)[0] ?? null;

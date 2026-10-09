@@ -6,7 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
-import { doneCount, goalAction, resetLabel, streakLine, weekdayLetter } from '../../services/retention/logic';
+import { doneCount, goalAction, resetLabel, streakLine, weekdayLetter, weeklyLine } from '../../services/retention/logic';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
@@ -85,8 +85,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
         </Pressable>
       </View>
       <Text style={styles.weekHint} numberOfLines={1}>
-        {state.week.claimed ? 'Weekly Box opened. New week starts Monday.'
-          : `Do Daily 3 on ${state.week.needed} days for the Weekly Box`}
+        {weeklyLine(state)}
       </Text>
 
       <Pressable onPress={onClose} accessibilityRole="button" style={styles.later}>
