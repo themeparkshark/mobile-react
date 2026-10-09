@@ -11,6 +11,7 @@ import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
 import { AuthContext } from '../context/AuthProvider';
 import { warmStandings } from '../screens/LeaderboardsScreen/standingsV2Store';
+import { emitTabReselect } from '../utils/tabReselect';
 
 /**
  * How far the center compass button rises above the bottom bar into the
@@ -132,6 +133,9 @@ export default function Wrapper({
                       }
                       onPress={() => {
                         if (isCatchShown()) return;
+                        // Already here: the screen scrolls back to its top (News).
+                        if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
+                          && emitTabReselect(item.screen)) return;
                         if (item.permission !== undefined) {
                           if (checkPermission(item.permission)) {
                             if (onNavigate) onNavigate(item.screen);

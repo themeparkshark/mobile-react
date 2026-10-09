@@ -108,6 +108,7 @@ export function devInitialRoute(): string | null {
     [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
     [!!process.env.EXPO_PUBLIC_SECRET_SHOP_PREVIEW, 'SecretShopPreview'],
     [on(process.env.EXPO_PUBLIC_SET_REVEAL_PREVIEW), 'SetRevealPreview'],
+    [on(process.env.EXPO_PUBLIC_NEWS_PREVIEW), 'News'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;
 }

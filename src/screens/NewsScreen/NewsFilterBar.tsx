@@ -1,0 +1,128 @@
+/**
+ * News v2 filter strip: a round search button, then one chip per park family
+ * (Top Stories, Disney, Universal, SeaWorld, More Parks). Picking Disney or
+ * Universal slides in a second row of park chips. Search swaps the chips for a
+ * text field; Done brings them back.
+ *
+ * Chips match Standings: white pills with a 4 px lip, gold when chosen.
+ */
+import * as Haptics from 'expo-haptics';
+import { useCallback, useContext, useEffect, useRef } from 'react';
+import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
+import { BRAND, GameIcon, RADIUS } from '../../ui';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { NEWS_FILTERS, filterByKey, type NewsFilterKey } from './newsModel';
+
+const tapSound = require('../../../assets/sounds/tap.mp3');
+
+function Chip({ label, on, small = false, onPress, onLayout }: {
+  readonly label: string; readonly on: boolean; readonly small?: boolean; readonly onPress: () => void;
+  readonly onLayout?: (x: number, w: number) => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={`Show ${label} news`} hitSlop={4}
+      onLayout={e => onLayout?.(e.nativeEvent.layout.x, e.nativeEvent.layout.width)}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        height: small ? 34 : 40, paddingHorizontal: small ? 12 : 15, borderRadius: RADIUS.pill, justifyContent: 'center',
+        backgroundColor: on ? BRAND.gold : BRAND.white, borderWidth: 2, borderBottomWidth: small ? 3 : 4,
+        borderColor: on ? BRAND.goldLip : 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }],
+      })}>
+      <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: small ? 13 : 15, color: BRAND.navy }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ChipRow({ items, value, small, onChange, leading }: {
+  readonly items: readonly { key: string; label: string }[]; readonly value: string; readonly small?: boolean;
+  readonly onChange: (key: string) => void; readonly leading?: React.ReactNode;
+}) {
+  const scroller = useRef<ScrollView>(null);
+  const spots = useRef(new Map<string, { x: number; w: number }>());
+  const { width } = useWindowDimensions();
+  // The chosen chip always scrolls fully into view.
+  const reveal = useCallback((key: string) => {
+    const spot = spots.current.get(key);
+    if (spot) scroller.current?.scrollTo({ x: Math.max(0, spot.x - (width - spot.w) / 2), animated: true });
+  }, [width]);
+  useEffect(() => { reveal(value); }, [value, reveal]);
+  return (
+    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingHorizontal: 14, gap: 8, alignItems: 'center' }}>
+      {leading}
+      {items.map(item => (
+        <Chip key={item.key} label={item.label} on={item.key === value} small={small}
+          onLayout={(x, w) => { spots.current.set(item.key, { x, w }); if (item.key === value) reveal(item.key); }}
+          onPress={() => onChange(item.key)} />
+      ))}
+    </ScrollView>
+  );
+}
+
+export default function NewsFilterBar({ filter, park, searching, query, onFilter, onPark, onSearchOpen, onSearchClose, onQuery }: {
+  readonly filter: NewsFilterKey;
+  readonly park: string | null;
+  readonly searching: boolean;
+  readonly query: string;
+  readonly onFilter: (key: NewsFilterKey) => void;
+  readonly onPark: (key: string | null) => void;
+  readonly onSearchOpen: () => void;
+  readonly onSearchClose: () => void;
+  readonly onQuery: (text: string) => void;
+}) {
+  const { playSound } = useContext(SoundEffectContext);
+  const reduced = useUiReducedMotion();
+  const tick = () => {
+    playSound(tapSound);
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+  const parks = filterByKey(filter).parks;
+  const enter = reduced ? undefined : FadeIn.duration(160);
+  const exit = reduced ? undefined : FadeOut.duration(120);
+  const layout = reduced ? undefined : LinearTransition.duration(180);
+
+  if (searching) {
+    return (
+      <Animated.View entering={enter} style={{ paddingTop: 10, paddingBottom: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flex: 1, height: 44, borderRadius: RADIUS.pill, backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4,
+          borderColor: BRAND.goldLip, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8 }}>
+          <GameIcon name="search" size={22} />
+          <TextInput value={query} onChangeText={onQuery} autoFocus placeholder="Search rides, parks, food" placeholderTextColor="#7d93b3"
+            returnKeyType="search" autoCorrect={false} autoCapitalize="none" maxLength={60} clearButtonMode="while-editing"
+            accessibilityLabel="Search the news" maxFontSizeMultiplier={1.25}
+            style={{ flex: 1, height: 40, fontFamily: 'Knockout', fontSize: 18, color: BRAND.navy }} />
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Done searching" hitSlop={8}
+          onPress={() => { tick(); onSearchClose(); }}
+          style={({ pressed }) => ({ height: 44, paddingHorizontal: 14, borderRadius: RADIUS.pill, justifyContent: 'center', backgroundColor: BRAND.white,
+            borderWidth: 2, borderBottomWidth: 4, borderColor: 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+          <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: BRAND.navy }}>Done</Text>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  const search = (
+    <Pressable key="search" accessibilityRole="button" accessibilityLabel="Search the news" hitSlop={4}
+      onPress={() => { tick(); onSearchOpen(); }}
+      style={({ pressed }) => ({ width: 44, height: 40, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.white,
+        borderWidth: 2, borderBottomWidth: 4, borderColor: 'rgba(5,52,110,0.2)', transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      <GameIcon name="search" size={22} />
+    </Pressable>
+  );
+
+  return (
+    <Animated.View layout={layout} style={{ paddingTop: 10, paddingBottom: 6, gap: 8 }}>
+      <ChipRow items={NEWS_FILTERS} value={filter} leading={search}
+        onChange={key => { if (key === filter && !park) return; tick(); onFilter(key as NewsFilterKey); }} />
+      {parks.length > 0 && (
+        <Animated.View entering={enter} exiting={exit}>
+          <ChipRow small value={park ?? 'all'} items={[{ key: 'all', label: `All ${filterByKey(filter).label}` }, ...parks]}
+            onChange={key => { const next = key === 'all' ? null : key; if (next === park) return; tick(); onPark(next); }} />
+        </Animated.View>
+      )}
+    </Animated.View>
+  );
+}
