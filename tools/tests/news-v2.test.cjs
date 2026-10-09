@@ -210,6 +210,8 @@ test('cruise stories filed under Disney get a cruise tag; shop sorting keeps cal
   assert.equal(model.parkLabel({ ...entry(1, ''), title: 'Disney Believe Dining: Frozen Feast', categories: [39] }), 'Disney Cruise Line');
   assert.equal(model.parkLabel({ ...entry(2, ''), title: 'Disney Cruise Line brings three events to Alaska', categories: [39] }), 'Disney Cruise Line');
   assert.equal(model.parkLabel({ ...entry(3, ''), title: 'Disney Wish dining at EPCOT', categories: [39, 42] }), 'EPCOT');
+  assert.equal(model.parkLabel({ ...entry(5, ''), title: 'Jungle Cruise adds holiday jokes', categories: [39] }), 'Disney');
+  assert.equal(model.parkLabel({ ...entry(6, ''), title: 'Disney Adventure World opens in Paris', categories: [39] }), 'Disney');
   const day = d => `2026-09-${d}T12:00:00`;
   const list = [
     { ...entry(1, day(17)), title: 'Disney Store Holiday Toys We Love' },

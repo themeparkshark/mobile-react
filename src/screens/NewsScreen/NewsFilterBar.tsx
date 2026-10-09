@@ -108,7 +108,7 @@ export default function NewsFilterBar({ filter, park, searching, query, onFilter
         <View style={{ flex: 1, height: 44, borderRadius: RADIUS.pill, backgroundColor: BRAND.white, borderWidth: 2, borderBottomWidth: 4,
           borderColor: BRAND.goldLip, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8 }}>
           <GameIcon name="search" size={22} />
-          <TextInput value={query} onChangeText={onQuery} autoFocus placeholder="Search rides, parks, food" placeholderTextColor="#7d93b3"
+          <TextInput value={query} onChangeText={onQuery} autoFocus placeholder="Search" placeholderTextColor="#7d93b3"
             returnKeyType="search" autoCorrect={false} autoCapitalize="none" maxLength={60} clearButtonMode="while-editing"
             accessibilityLabel="Search the news" maxFontSizeMultiplier={1.25}
             style={{ flex: 1, height: 40, fontFamily: 'Knockout', fontSize: 18, color: BRAND.navy }} />

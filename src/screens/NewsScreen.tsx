@@ -368,7 +368,7 @@ export default function NewsScreen() {
       <View style={{ marginTop: -8, flex: 1 }}>
         <ImageBackground style={{ flex: 1 }} source={require('../../assets/images/screens/leaderboard/standings-bg.png')}>
           <View onLayout={e => setTopPillTop(e.nativeEvent.layout.height + 6)}>
-          <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 52 : 0}
+          <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 60 : 0}
             onFilter={pickFilter} onPark={pickPark}
             onSearchOpen={() => setSearching(true)} onSearchClose={closeSearch} onQuery={setQuery} />
           </View>

@@ -219,7 +219,7 @@ export function parkLabel(entry: NewsEntry): string | null {
   if (hit === undefined) labelMemo.set(entry, (hit = labelOf(entry)));
   return hit;
 }
-const CRUISE = /\b(cruise|disney (?:believe|wish|treasure|wonder|magic|dream|fantasy|destiny|adventure)|castaway cay|lookout cay)\b/i;
+const CRUISE = /\b(disney cruise line|cruise line|cruise ship|disney (?:believe|wish|treasure|wonder|magic|dream|fantasy|destiny)|castaway cay|lookout cay)\b/i;
 function labelOf(entry: NewsEntry): string | null {
   if (isScreenStory(entry)) return 'Movies & TV';
   // A cruise story filed only under Disney says so.
