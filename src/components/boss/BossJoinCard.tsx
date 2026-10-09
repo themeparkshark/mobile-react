@@ -17,7 +17,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { BOSS_ART } from './bossArt';
 import { BossHpBar } from './BossSheetParts';
-import { joinCost, type JoinCost, type RewardPreview } from './joinModel';
+import { joinCost, joinLabel, type JoinCost, type RewardPreview } from './joinModel';
 
 export function Wallet({ energy, tickets, showTickets }: { energy: number; tickets: number; showTickets: boolean }) {
   return <View style={styles.wallet} accessible accessibilityLabel={`You have ${energy} Energy${showTickets ? ` and ${tickets} Tickets` : ''}`}>
@@ -26,9 +26,11 @@ export function Wallet({ energy, tickets, showTickets }: { energy: number; ticke
   </View>;
 }
 
-export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets, clockText, rewards, blocked, starting, onFight, onClose, note }: {
+export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets, clockText, rewards, blocked, starting, onFight, onClose, note, cta = true }: {
   raid: BossRaid; remote: boolean; walkCloser: boolean; energy: number; tickets: number; clockText: string;
   rewards: RewardPreview; blocked: string | null; starting: boolean; onFight: () => void; onClose: () => void; note: string | null;
+  /** False while a saved attack is being confirmed: the card shows, the button does not. */
+  cta?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const cost: JoinCost = joinCost(raid, remote, energy, tickets);
@@ -48,7 +50,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   }, [reduced, blocked, pulse]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const pctLeft = Math.round((raid.hp_left / Math.max(1, raid.hp_max)) * 100);
-  const label = repeat ? 'ATTACK AGAIN' : remote ? 'JOIN FROM HOME' : 'FIGHT!';
+  const label = joinLabel(raid, remote);
 
   return (
     <View>
@@ -91,6 +93,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
       </View>}
       {note && <Text style={styles.note}>{note}</Text>}
 
+      {cta && <>
       <Animated.View style={[styles.ctaWrap, pulseStyle]}>
         <Pressable testID="boss-fight" accessibilityRole="button" disabled={!!blocked || starting} onPress={onFight}
           accessibilityLabel={`${label}. Costs ${cost.ticket ? `${cost.ticket} Ticket and ` : ''}${cost.energy} Energy. You have ${energy} Energy${cost.ticket ? ` and ${tickets} Tickets` : ''}.`}
@@ -108,6 +111,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
           {cost.ticket > 0 ? <>  ·  <GameIcon name="ticket" size={16} /> <Text style={styles.afterNum}>{cost.ticketsAfter}</Text>  (Ticket covers this whole fight)</> : null}
           {'  ·  '}Attack {raid.you.attacks + 1} of {raid.max_attacks ?? 5}
         </Text>}
+      </>}
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.notNow} hitSlop={6}><Text style={styles.notNowText}>Not now</Text></Pressable>
     </View>
   );

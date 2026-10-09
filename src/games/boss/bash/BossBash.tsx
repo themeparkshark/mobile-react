@@ -130,7 +130,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   const later = (ms: number, f: () => void) => { const t = setTimeout(f, ms); timers.current.push(t); };
   const addFx = useCallback((item: FxIn, life = 900) => {
     const id = ++fxId.current;
-    setFx(list => [...list.slice(-10), { ...item, id } as Fx]);
+    // One hero wordmark at a time: a new one replaces the old, never stacks.
+    setFx(list => [...list.filter(f => !(item.t === 'wm' && f.t === 'wm')).slice(-10), { ...item, id } as Fx]);
     const t = setTimeout(() => setFx(list => list.filter(f => f.id !== id)), life);
     timers.current.push(t);
   }, []);
@@ -164,6 +165,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     raf.current = null; playing.current = false; finished.current = false; played.current = 0;
     seedRef.current = (seedRef.current * 7919 + 17) % 1000003;
     engine.current = createBash(seedRef.current);
+    shownTotal.current = 0;
     firstBonked.current = false; firstSmashed.current = false; blocks.current = 0; idleSince.current = 0; introDone.current = false;
     startHp.current = hpLeft; seenHp.current = hpLeft;
     setActors([]); setFx([]); setDizzy(null); setPose('idle'); setFace('angry'); setHint('none'); setResult(null); setEnding(false);
@@ -193,6 +195,14 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
   }, [hpLeft, visible]);
 
   // --- Event -> juice ---------------------------------------------------------
+  const shownTotal = useRef(0);
+  /** The exact server total moved by this hit (the home rate rounds once, on the total). */
+  const dealt = () => {
+    const total = bashScore(engine.current, damageRate, weights);
+    const d = total - shownTotal.current;
+    shownTotal.current = total;
+    return d;
+  };
   const apply = (events: BashEvent[]) => {
     const s = engine.current;
     for (const e of events) {
@@ -235,7 +245,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     if (hint === 'tentacle') setHint('none');
     addFx({ t: 'burst', src: BASH_ART.impact, x: p.x, y: tipY, size: p.h * 0.55, spin: true }, 420);
     addFx({ t: 'burst', src: BASH_ART.splash, x: p.x, y: p.y - 18, size: p.h * 0.5 }, 420);
-    addFx({ t: 'num', text: e.counted ? `+${Math.floor(e.damage * damageRate)}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 900);
+    const d = dealt();
+    addFx({ t: 'num', text: e.counted ? `+${d}` : 'MAX', x: p.x, y: tipY - 20, big: false }, 900);
     if (!reduced) {
       particles.current?.burst({ x: p.x, y: tipY, preset: 'burst', count: 6, colors: [BRAND.white, BRAND.goldLight, '#a0edff'], speed: 0.8 });
       bossFlinch.value = withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 160 }));
@@ -287,12 +298,12 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, fig
     const x = L.head.x, y = L.head.y + L.dropBy;
     frozenUntil.current = Date.now() + SMASH_STOP_MS;
     addFx({ t: 'burst', src: BASH_ART.impact, x, y, size: L.bossSize * 0.7, spin: true }, 500);
-    addFx({ t: 'num', text: `+${Math.floor(e.damage * damageRate)}`, x, y: y - 10, big: true }, 1300);
+    addFx({ t: 'num', text: `+${dealt()}`, x, y: y - 10, big: true }, 1300);
     addFx({ t: 'wm', wm: e.final ? 'finish' : e.perfect ? 'perfect' : 'great' }, 1000);
     if (!reduced) {
       particles.current?.burst({ x, y, preset: 'burst', count: 16, colors: [BRAND.gold, BRAND.white, BRAND.goldLight], speed: 1.3 });
       shake.shake(e.perfect ? 10 : 7, 200);
-      flash.flash(e.perfect ? 0.45 : 0.3, 160);
+      if (e.perfect) flash.flash(0.22, 140);
       cam.value = withSequence(withTiming(1.07, { duration: 60 }), withSpring(1, { damping: 10, stiffness: 180 }));
       bossHit.value = withSequence(withTiming(1, { duration: 30 }), withDelay(SMASH_STOP_MS, withTiming(0, { duration: 150 })));
       if (skin.hat && e.perfect) { hatPop.value = 0; hatPop.value = withTiming(1, { duration: 820, easing: Easing.linear }); }

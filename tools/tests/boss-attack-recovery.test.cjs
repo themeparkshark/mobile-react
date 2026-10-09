@@ -96,6 +96,9 @@ test('the recovery receipt offers one clear retry and does not claim an unconfir
  view.change({snapshot:{...snapshot,phase:'sending'}});assert.equal(view.find(n=>n.type==='Pressable'),undefined);
 });
 
+const joinModel=(()=>{const m={exports:{}};const tsc=require(require('node:path').resolve(__dirname,'../../node_modules/typescript'));
+ require('node:vm').runInNewContext(tsc.transpileModule(require('node:fs').readFileSync(require('node:path').resolve(__dirname,'../../src/components/boss/joinModel.ts'),'utf8'),
+ {compilerOptions:{module:tsc.ModuleKind.CommonJS,target:tsc.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,require:()=>({})});return m.exports;})();
 function flow({reduced=false,round,stubs={}}={}){
  const captures=[],states=[],writes=[],reads=[],rounds=[],acks=[],focus={value:true},auth={value:{player:{id:5,energy:185,tickets:7},refreshPlayer:async()=>{}}},location={value:{location:{latitude:34.13,longitude:-118.35}}};
  const raid={id:77,boss:'kraken',ride_name:'Practice attraction',latitude:34.13,longitude:-118.35,hp_max:5000,hp_left:5000,
@@ -111,16 +114,20 @@ function flow({reduced=false,round,stubs={}}={}){
   '@react-navigation/native':{useIsFocused:()=>focus.value},
   '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},DEFAULT_DAMAGE:{},fitToRound:m=>({hits:m.hits,weak_hits:m.weak_hits,duration_ms:m.duration_ms}),
    startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
-  './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/v1/BossBrawl':{BossBrawl:'BossBrawl'},
+  './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/bash/BossBash':{BossBash:'BossBrawl'},
+  './BossJoinCard':{default:'BossJoinCard'},'./joinModel':joinModel,
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
-  './BossSheetParts':{AttackPips:'AttackPips',BossHpBar:'BossHpBar',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
+  './BossSheetParts':{AttackPips:'AttackPips',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
   './BossWinCard':{default:'BossWinCard'},
   '@react-native-async-storage/async-storage':{default:{getItem:async key=>{reads.push(key);return null;},setItem:async(key,value)=>{writes.push([key,value]);}}},
   '../../constants/teams':{applyTeamNames(){}},
   ...stubs,
  },{raid,parkId:1,open:true,onClose(){},onState:state=>states.push(state)},
  {setInterval(){return 1;},clearInterval(){}});
- const fight=()=>view.find(n=>n.type==='GameButton'&&n.props.testID==='boss-fight');
+ // The FIGHT button lives in the join card: read it through the card's props.
+ const fight=()=>{const c=view.find(n=>n.type==='BossJoinCard');if(!c||c.props.cta===false)return undefined;
+  return{props:{onPress:c.props.onFight,disabled:!!c.props.blocked||!!c.props.starting,label:joinModel.joinLabel(c.props.raid,c.props.remote),
+   blocked:c.props.blocked,note:c.props.note}};};
  return{view,captures,auth,location,snapshot,writes,reads,rounds,acks,focus,fight,
   async start(){fight().props.onPress();await view.settle();return view.find(n=>n.type==='BossBrawl');}};
 }
@@ -141,13 +148,13 @@ test('when the server says you are not at the ride, nothing starts and the sheet
  let calls=0;const h=flow({round:body=>(++calls===1?{ok:false,error:'too_far',reason:'not_checked_in'}
   :{ok:true,round:{token:'b'.repeat(32),remote:!!body.remote,reason:'not_checked_in',damage_rate:.6,max_ms:21000,max_hits:140}})});
  const arena=await h.start();assert.equal(arena.props.visible,false);assert.equal(h.captures.length,0);
- assert.ok(h.view.find(n=>n.type==='Text'&&String(n.props.children).startsWith('Check in at this park')));
+ assert.ok(String(h.fight().props.note).startsWith('Check in at this park'));
  assert.equal(h.fight().props.label,'JOIN FROM HOME');
  const again=await h.start();assert.equal(again.props.visible,true);assert.equal(h.rounds[1][1].remote,true);assert.equal(again.props.damageRate,.6);
 });
 test('missing GPS at the park, zero hits, and a saved pending round cannot start a second paid attack',async()=>{
  const h=flow();h.location.value.location=null;h.view.render();
- assert.equal(h.fight().props.disabled,true);assert.ok(h.view.find(n=>n.props?.children==='Waiting for your location…'));
+ assert.equal(h.fight().props.disabled,true);assert.equal(h.fight().props.blocked,'Waiting for your location…');
  h.location.value.location={latitude:34.13,longitude:-118.35};h.view.render();const arena=await h.start();
  arena.props.onComplete(0,{hits:0,weak_hits:0,duration_ms:20000});h.view.render();assert.equal(h.captures.length,0);
  h.snapshot.pending=checkpoint;h.snapshot.phase='unconfirmed';h.view.render();
@@ -266,7 +273,7 @@ test('losing the park mid-fight: FIGHT waits, Reconnecting shows, then Leave fig
  const h=flow({stubs:{'../match/MatchLinkBanner':{default:'MatchLinkBanner'}}});let closed=0,retried=0;
  h.view.change({link:'reconnecting',onRetryLink(){retried++;},onClose(){closed++;}});
  assert.equal(h.fight().props.disabled,true);
- assert.ok(h.view.find(n=>n.props?.children==='Reconnecting…'),'the blocked line says Reconnecting');
+ assert.equal(h.fight().props.blocked,'Reconnecting…','the blocked line says Reconnecting');
  assert.equal(h.view.find(n=>n.type==='MatchLinkBanner').props.phase,'reconnecting');
  h.fight().props.onPress();await h.view.settle();assert.equal(h.rounds.length,0,'no round is started while the link is down');
  h.view.change({link:'lost'});

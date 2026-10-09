@@ -44,3 +44,8 @@ export function shortfallCopy(short: JoinCost['short']): string | null {
   }
   return 'Joining from home needs 1 Ticket. Grab home finds to get more.';
 }
+
+/** The join button's verb: repeat attackers skip straight to ATTACK AGAIN. */
+export function joinLabel(raid: Pick<BossRaid, 'you'>, remote: boolean): string {
+  return raid.you.attacks > 0 ? 'ATTACK AGAIN' : remote ? 'JOIN FROM HOME' : 'FIGHT!';
+}

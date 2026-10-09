@@ -41,7 +41,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
   const [toast, setToast] = useState<string | null>(null);
   const pending = useRef<(() => void) | null>(null);
   const [now, setNow] = useState(Date.now());
-  const { raid, loaded: raidLoaded, setState: setRaidState, link: raidLink, retryLink: retryRaidLink } = useParkRaid(raidPark);
+  const { raid, loaded: raidLoaded, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(raidPark);
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
   // Live parks refresh every 30 s while the home map is on screen; the raid
@@ -104,14 +104,14 @@ export default function HomeLive({ top = 12, onBarChange }: {
         onLongPress={() => setOpen(true)}
         style={[styles.bar, liveRaid && styles.barBoss, { top }]}
         accessibilityLabel={liveRaid?.raid
-          ? `Boss live: ${BOSS_NAMES[liveRaid.raid.boss]} at ${liveRaid.name}. Open live parks.`
+          ? `Boss fight live: ${BOSS_NAMES[liveRaid.raid.boss]} at ${liveRaid.name}. Help your team from home.`
           : 'Team race. What is this?'}>
         {liveRaid?.raid ? (
           <>
             <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
             <View style={{ flex: 1 }}>
-              <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>LIVE  ·  {liveRaid.name}</Text></View>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]}  ·  {clock(liveRaid.raid.ends_at, now)} left</Text>
+              <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>HELP FROM HOME  ·  {liveRaid.name}</Text></View>
+              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {clock(liveRaid.raid.ends_at, now)}</Text>
             </View>
             <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
           </>
@@ -236,7 +236,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
       </Modal>
 
       <BossRaidFlow parkId={raidPark} raid={raidPark ? raid : null} open={raidPark !== null} loading={raidPark !== null && !raidLoaded}
-        link={raidPark !== null ? raidLink : 'live'} onRetryLink={retryRaidLink}
+        link={raidPark !== null ? raidLink : 'live'} onRetryLink={retryRaidLink} onLiveRefresh={refreshRaid}
         onClose={() => { setRaidPark(null); load(); }} onState={setRaidState} />
 
       {cheer && (

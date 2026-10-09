@@ -115,7 +115,7 @@ export const PRESENCE: Record<PresenceReason, string> = {
 };
 
 /** Boss sheet (who's fighting, HP, your attacks), the Boss Brawl, and the victory/escape moment. */
-export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, roundService = startRaidRound, devAutoplay = 0, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
+export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, roundService = startRaidRound, devAutoplay = 0, onLiveRefresh, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
   readonly raid: BossRaid | null;
   readonly parkId: number | null;
   readonly open: boolean;
@@ -127,6 +127,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly roundService?: typeof startRaidRound;
   /** Dev capture only: the fight plays itself at this skill (0-1). */
   readonly devAutoplay?: number;
+  /** Poll the raid faster while a round is on screen, so teammates' hits move the bar mid-fight. */
+  readonly onLiveRefresh?: () => void;
   readonly onCelebrationDismiss?: (raid: BossRaid) => void;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   readonly presentationAvailable?: boolean;
@@ -294,6 +296,12 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setFighting(true);
   };
   const renderedRound = round.current;
+  const liveRefresh = useRef(onLiveRefresh); liveRefresh.current = onLiveRefresh;
+  useEffect(() => {
+    if (!fighting) return;
+    const id = setInterval(() => liveRefresh.current?.(), 6000);
+    return () => clearInterval(id);
+  }, [fighting]);
   useEffect(() => {
     if (!againPending || fighting || starting) return;
     if (!open || !focused) { setAgainPending(false); return; }
@@ -354,7 +362,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             {receiptBlocked && recovery.snapshot && !againPending
               ? <><BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
                   clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
-                  blocked="Saving your last attack..." starting={false} onFight={() => undefined} onClose={closeSheet} note={note} />
+                  blocked={null} starting={false} onFight={() => undefined} onClose={closeSheet} note={note} cta={false} />
                 <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} /></>
               : <BossJoinCard raid={raid} remote={remote} walkCloser={walkCloser} energy={energy} tickets={tickets}
                   clockText={active ? clock(raid.ends_at, now) : raid.status === 'defeated' ? 'BEATEN' : 'GONE'} rewards={rewards!}
