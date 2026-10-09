@@ -21,12 +21,12 @@ test('leaving copy: a date, honest about coming back, never a countdown or press
   assert.equal(life.OWNED_LINE, 'It’s yours. You keep it forever.', 'plain words, no idioms');
   assert.equal(life.sentence('Rare find: few sharks have this'), 'Rare find: few sharks have this.');
   assert.equal(life.sentence('Done!'), 'Done!');
-  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: true }), 'RETIRING');
+  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: true }), 'Till Nov 30');
   assert.equal(life.leavingIcon({ on: '2026-11-30', forever: true }), 'star');
   assert.equal(life.leavingIcon({ on: '2026-11-30', forever: false }), 'moon', 'a different picture for each case');
   assert.equal(life.leavingSay({ on: '2026-11-14', forever: false }), 'leaving after November 14');
   assert.equal(life.leavingSay({ on: '2026-11-30', forever: true }), "retiring after November 30, it won't come back");
-  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: false }), 'LEAVING');
+  assert.equal(life.leavingRibbon({ on: '2026-11-30', forever: false }), 'Till Nov 30', 'a neutral dated fact, never LEAVING / RETIRING');
   assert.equal(life.KEEP_LINE, 'Every piece you buy is yours forever.');
   for (const s of [life.leavingLine({ on: '2026-11-30', forever: true }), life.leavingLine({ on: '2026-11-30', forever: false })]) {
     assert.doesNotMatch(s, /hurry|only|tonight|last chance|left|\d+\s*(h|m|hours|minutes)\b|!/i);
@@ -42,18 +42,19 @@ test('bad or missing data never shows a label', () => {
   assert.equal(life.rarityOf({ rarity: { tier: 'rare', label: 'Rare find: few sharks have this' } }).tier, 'rare');
 });
 
-test('tile ribbons: LEAVING / RETIRING outrank LAST CHANCE, BACK AGAIN and NEW, owned tiles stay clean', () => {
+test('tile ribbons: a dated neutral fact or NEW!, never LAST CHANCE / BACK AGAIN; owned tiles stay clean', () => {
   const leaving = { on: '2026-11-30', forever: true };
   assert.equal(shelves.tileLanes({ id: 1, shop: { leaving, returning: true, is_new: true } }).ribbon, 'leaving');
-  assert.equal(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } }).ribbon, 'returning');
+  assert.equal(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } }).ribbon, 'new');
+  assert.equal(shelves.tileLanes({ id: 1, shop: { returning: true } }).ribbon, null, 'no BACK AGAIN chip');
   assert.equal(shelves.tileLanes({ id: 1, shop: { leaving, is_owned: true } }).ribbon, null);
   assert.equal(shelves.tileLanes({ id: 1, shop: { last_chance: true, leaving } }).ribbon, 'leaving', 'one piece never says both');
-  assert.equal(shelves.tileLanes({ id: 1, shop: { last_chance: true } }).ribbon, 'last_chance', 'the old event rule is unchanged');
+  assert.equal(shelves.tileLanes({ id: 1, shop: { last_chance: true } }).ribbon, null, 'no LAST CHANCE chip');
   const tile = src('src/screens/StoreScreen/ShopTile.tsx');
-  assert.match(tile, /leaving: \{ label: 'LEAVING', color: BRAND\.navy, ink: BRAND\.gold \}/, 'calm navy and gold, never red');
+  assert.match(tile, /leaving: \{ label: 'Till', color: BRAND\.navy, ink: BRAND\.white \}/, 'calm navy, never red');
   assert.match(tile, /visibleLeaving\(item\.shop, \{ secret: isSecretItem\(item\), vipLocked \}\)/, 'no retiring nudge on members-only pieces for non-members');
   assert.match(tile, /leavingSay\(leaving\)/, 'VoiceOver says what is shown, with the date');
-  assert.match(tile, /ribbon === 'leaving' && styles\.ribbonClearOfHeart/, 'the label centres clear of the heart');
+  assert.match(tile, /RIBBON\[ribbon\]\.color \}, styles\.ribbonClearOfHeart\]/, 'every ribbon label centres clear of the heart');
 });
 
 test('closet badges: RETIRED for a piece that will never return, a pearl alone for a rare one (no word that reads as the RARE tier chip)', () => {

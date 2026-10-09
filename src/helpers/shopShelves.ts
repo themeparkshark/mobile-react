@@ -396,8 +396,10 @@ export function tileLanes(item: ItemLike & { shop?: ItemLike['shop'] & { is_new?
   // quiet: the banner already says LAST CHANCE once, so tiles never repeat it in red.
   // LEAVING / RETIRING is calm navy and says a date in the try-on: it outranks BACK AGAIN and NEW.
   // A dated LEAVING / RETIRING (calm navy) outranks the red event LAST CHANCE, so one piece never says both.
-  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.last_chance && !quiet ? 'last_chance'
-    : item.shop?.returning ? 'returning' : item.shop?.is_new ? 'new' : null;
+  // Oct 8 shop call: no pressure chips on kid items. LAST CHANCE and BACK AGAIN are gone; a leaving piece
+  // shows a neutral dated fact ("Till Nov 30"); NEW! stays (it is news, not a deadline).
+  void quiet;
+  const ribbon: TileRibbon = item.shop?.leaving?.on ? 'leaving' : item.shop?.is_new ? 'new' : null;
   return { ribbon };
 }
 

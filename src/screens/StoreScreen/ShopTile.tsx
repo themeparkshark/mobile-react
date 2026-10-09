@@ -28,13 +28,13 @@ import { useWished } from './wishStore';
 import * as Haptics from 'expo-haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
+import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 
 const RIBBON: Record<Exclude<TileRibbon, null>, { label: string; color: string; ink: string }> = {
   // Calm like LEAVING, never a red hurry (kids UX round 2).
   last_chance: { label: 'LEAVING SOON', color: BRAND.navy, ink: BRAND.gold },
   // Calm on purpose: navy and gold, never red. The label comes from the item (LEAVING or RETIRING) with its icon.
-  leaving: { label: 'LEAVING', color: BRAND.navy, ink: BRAND.gold },
+  leaving: { label: 'Till', color: BRAND.navy, ink: BRAND.white },
   returning: { label: 'BACK AGAIN', color: '#7c4dff', ink: BRAND.white },
   new: { label: 'NEW!', color: BRAND.gold, ink: BRAND.navy },
 };
@@ -147,8 +147,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       {/* White keyline: every rarity border reads on every banner colour. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.keyline, badge.inner ? { borderColor: badge.inner } : null]} />
       {ribbon && (
-        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }, ribbon === 'leaving' && styles.ribbonClearOfHeart]}>
-          {ribbon === 'leaving' && leaving && <GameIcon name={leavingIcon(leaving)} size={13} />}
+        <View style={[styles.ribbon, { backgroundColor: RIBBON[ribbon].color }, styles.ribbonClearOfHeart]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.ribbonText, { color: RIBBON[ribbon].ink }]}>{ribbonLabel}</Text>
         </View>
       )}
@@ -237,7 +236,8 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: 0, left: 0, right: 0, height: 20, borderTopLeftRadius: 13, borderTopRightRadius: 13,
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3 },
   // The label centres in the space left of the heart (heart 30 pt, sitting 9 pt outside the tile, plus 4).
-  ribbonClearOfHeart: { paddingRight: 25, paddingLeft: 4 },
+  // Every ribbon's label centres clear of the corner heart (the heart never covers ribbon text).
+  ribbonClearOfHeart: { paddingRight: 34, paddingLeft: 6 },
   ribbonText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 0.6 },
   art: { marginHorizontal: 6 },
   band: { flexDirection: 'row', justifyContent: 'center', gap: 4, height: 22, alignItems: 'center', marginTop: 2, maxWidth: '100%', paddingHorizontal: 4, overflow: 'hidden' },

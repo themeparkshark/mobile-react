@@ -331,7 +331,7 @@ export default function SecretShowroom({ sections, heroId, offset, still, bought
                 <View style={styles.leaving} accessible accessibilityLabel={leavingSay(leaving)}>
                   <GameIcon name={leavingIcon(leaving)} size={13} />
                   {/* Always with its day, never a bare LEAVING (monetization round 2). */}
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{`${leaving.forever ? 'Last day' : 'Leaves'} ${shortDate(leaving.on) ?? ''}`.trim()}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingText}>{`Here till ${shortDate(leaving.on) ?? ''}`.trim()}</Text>
                 </View>
               )}
               <View style={{ flex: 1 }} />

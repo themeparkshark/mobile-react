@@ -141,10 +141,11 @@ test('accent ink stays readable', () => {
 });
 
 test('round 4: one ribbon per tile; a quiet finale banner keeps tiles calm', () => {
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } })), { ribbon: 'last_chance' });
+  // Oct 8: no LAST CHANCE / BACK AGAIN chips at all; NEW! is the only non-date ribbon.
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, returning: true, is_new: true } })), { ribbon: 'new' });
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true, is_new: true } }, true)), { ribbon: 'new' }, 'quiet: no red wall');
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { last_chance: true } }, true)), { ribbon: null });
-  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } })), { ribbon: 'returning' });
+  assert.deepEqual(plain(shelves.tileLanes({ id: 1, shop: { returning: true, is_new: true } })), { ribbon: 'new' });
   assert.deepEqual(plain(shelves.tileLanes({ id: 1, has_purchased: true, shop: { is_new: true } })), { ribbon: null }, 'owned: no ribbon');
   assert.equal(shelves.newCountLabel(3), '3 new today');
   assert.equal(shelves.newCountLabel(0), null);

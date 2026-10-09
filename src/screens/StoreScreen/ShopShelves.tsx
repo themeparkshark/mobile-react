@@ -59,7 +59,7 @@ import { SECRET_THEME } from '../../fx/secretTheme';
 import { FxPauseContext } from '../../fx/FxStage';
 import { isSecretItem } from '../../fx/registry';
 import { ShopProfile } from './shopProfile';
-import { leavingIcon, leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
+import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { wishStore } from './wishStore';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -73,7 +73,7 @@ const HERO_L = heroLayout(SCREEN_W);
 const HERO_H = HERO.kickerH + HERO_L.bodyH;
 const FIRST_OPEN_KEY = 'shop:first-open-day';
 /** The sticky shelf jump bar above the scroll. */
-const JUMP_H = 58;
+const JUMP_H = 72;
 const PENDING_REVEALS_KEY = 'shop:pending-reveals';
 // Hero stage: 62% of the card's inner width, under the kicker row; the tail rests on the plinth.
 const HERO_CARD = HERO_L.card;
@@ -258,7 +258,7 @@ const EventBanner = memo(function EventBanner({ section, offset, still, vip, bal
 });
 
 /** One chip per shelf: icons, not words (a 7-year-old jumps without reading). */
-type ShelfChip = { key: string; icon: GameIconName; label: string; fill?: string | null; ring?: string | null };
+type ShelfChip = { key: string; icon: GameIconName; label: string; short: string; fill?: string | null; ring?: string | null };
 
 /**
  * The jump bar owns the highlight: it follows the scroll on the UI thread and re-renders only
@@ -284,8 +284,10 @@ const JumpBar = memo(function JumpBar({ chips, tops, scrollY, maxY, onJump, floo
             accessibilityState={{ selected: on }} accessibilityLabel={`Jump to ${chip.label}`} style={styles.jumpSlot}>
             <View style={[styles.jumpChip, chip.fill ? { backgroundColor: chip.fill } : null, chip.ring ? { borderColor: chip.ring } : null,
               on && styles.jumpChipOn]}>
-              <GameIcon name={chip.icon} size={24} />
+              <GameIcon name={chip.icon} size={22} />
             </View>
+            {/* One word under each jump button, so it reads without guessing (Oct 8 shop call). */}
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.jumpLabel, on && styles.jumpLabelOn]}>{chip.short}</Text>
           </Pressable>
         );
       })}
@@ -387,7 +389,6 @@ function LeavingChip({ item, member }: { item: ShopItem; member: boolean }) {
   if (!leaving || (item.shop?.is_owned ?? item.has_purchased)) return null;
   return (
     <View style={styles.leavingChip} accessible accessibilityLabel={leavingSay(leaving)}>
-      <GameIcon name={leavingIcon(leaving)} size={13} />
       <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leavingChipText}>{leavingRibbon(leaving)}</Text>
     </View>
   );
@@ -705,10 +706,10 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
   const chips: ShelfChip[] = useMemo(() => {
     const looks = eventChips(events);
     return [
-      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star" }] : []),
-      ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, fill: looks[i].fill, ring: looks[i].ring })),
-      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured' }] : []),
-      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? "Tonight's Pick" : 'Daily' }] : []),
+      ...(featured && hero ? [{ key: 'hero', icon: 'star' as const, label: secret ? 'the Vault' : "this week's star", short: 'Star' }] : []),
+      ...events.map((e, i) => ({ key: e.key, icon: looks[i].icon as GameIconName, label: e.title, short: e.title.split(' ')[0], fill: looks[i].fill, ring: looks[i].ring })),
+      ...(featured && featuredRest.length ? [{ key: 'featured', icon: 'crown' as const, label: secret ? 'More in the Vault' : 'Featured', short: 'Featured' }] : []),
+      ...(daily ? [{ key: 'daily', icon: 'timer' as const, label: secret ? "Tonight's Pick" : 'Daily', short: 'Daily' }] : []),
     ];
   }, [chipSig]);
   const chipKeys = chips.map(c => c.key).join('|');
@@ -918,8 +919,10 @@ const styles = StyleSheet.create({
   teaseQ: { width: 24, textAlign: 'center', fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   hero: { marginHorizontal: 10, borderRadius: 24, borderWidth: 4, overflow: 'hidden', backgroundColor: S.panel, ...SHADOW.card },
   jumpBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, height: JUMP_H, paddingHorizontal: 12, backgroundColor: BRAND.blue },
-  jumpSlot: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
-  jumpChip: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
+  jumpSlot: { width: 64, height: 66, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  jumpLabel: { fontFamily: FONT.display, fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  jumpLabelOn: { color: BRAND.gold },
+  jumpChip: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: S.well,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)' },
   // Same box as every chip; the active one scales (no layout change, the row never shifts).
   jumpChipOn: { borderWidth: 3, borderColor: BRAND.gold, transform: [{ scale: 1.14 }] },
@@ -929,9 +932,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', gap: HERO.rowGap, paddingHorizontal: HERO.pad, paddingTop: 4 },
   heroFlat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroText: { position: 'absolute', left: HERO.pad, top: HERO.kickerH + 4, height: HERO_L.textH, width: HERO_L.textW, gap: HERO.gap },
-  leavingChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.navy, borderRadius: 8, borderWidth: 1.5, borderColor: BRAND.gold,
+  leavingChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.navy, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
     paddingHorizontal: 6, paddingVertical: 2, marginLeft: 6 },
-  leavingChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.gold, letterSpacing: 0.6 },
+  leavingChipText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.white },
   heroKicker: { flexShrink: 1, fontFamily: FONT.display, fontSize: HERO.kickerFont, color: S.inkGold, letterSpacing: HERO.kickerTracking },
   heroName: { fontFamily: FONT.display, fontSize: HERO_L.nameSize, lineHeight: HERO_L.nameLine, color: S.ink },
   heroRarityDot: { marginLeft: 4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: BRAND.white },
