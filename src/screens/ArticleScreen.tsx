@@ -200,9 +200,12 @@ export default function ArticleScreen({ route, navigation }: any) {
       {/* Bottom bar: round Previous, and a Next card with the next story's photo and headline. */}
       <View style={{ minHeight: BOTTOM_BAR + insets.bottom, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 8, backgroundColor: BRAND.cream,
         borderTopWidth: 3, borderTopColor: 'rgba(5,52,110,0.14)', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 }}>
-        <RoundButton label="Previous story" disabled={index === 0} onPress={() => goTo(index - 1)}>
-          <View style={{ transform: [{ scaleX: -1 }] }}><GameIcon name="arrow" size={26} /></View>
-        </RoundButton>
+        {/* First story: no Previous at all (a greyed button looks broken). */}
+        {index > 0 && (
+          <RoundButton label="Previous story" onPress={() => goTo(index - 1)}>
+            <View style={{ transform: [{ scaleX: -1 }] }}><GameIcon name="arrow" size={26} /></View>
+          </RoundButton>
+        )}
         {next ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Next story. ${plainText(next.title)}`} hitSlop={6} onPress={() => goTo(index + 1)}
             style={({ pressed }) => ({ flex: 1, height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,

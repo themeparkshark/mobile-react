@@ -57,6 +57,7 @@ import {
   matchesFilter,
   mergeEntries,
   searchLocal,
+  withLead,
   type NewsEntry,
   type NewsFilterKey,
 } from './NewsScreen/newsModel';
@@ -236,13 +237,13 @@ export default function NewsScreen() {
   /** What this view shows: its own list, plus anything already loaded that fits (instant filters). */
   const state = key === 'all:' ? top : lists[key] ?? EMPTY;
   const shown = useMemo(() => {
-    if (key === 'all:') return topEntries.filter(e => matchesFilter(e, 'all'));
+    if (key === 'all:') return withLead(topEntries.filter(e => matchesFilter(e, 'all')));
     if (search) {
       // Headline matches already on the phone first, then the site's wider matches, newest first.
       const local = searchLocal(allLoaded, search);
       return [...local, ...mergeEntries(state.entries).filter(e => !local.some(r => r.id === e.id))];
     }
-    return mergeEntries(allLoaded, withCats(state.entries)).filter(e => matchesFilter(e, filter, park));
+    return withLead(mergeEntries(allLoaded, withCats(state.entries)).filter(e => matchesFilter(e, filter, park)));
   }, [key, topEntries, search, allLoaded, state.entries, filter, park, withCats]);
 
   const waitingFirst = shown.length === 0 && (state.loading === 'first' || (key === 'all:' && saved === null) || (state.page === 0 && !state.failed));
@@ -318,7 +319,7 @@ export default function NewsScreen() {
   refreshRef.current = onRefresh;
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 2200);
+    const id = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -392,13 +393,12 @@ export default function NewsScreen() {
           )}
           {showTop && !toast && (
             <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} exiting={reduced ? undefined : FadeOut.duration(120)}
-              style={{ position: 'absolute', alignSelf: 'center', top: topPillTop }}>
+              style={{ position: 'absolute', right: 10, top: 12 }}>
               <Pressable accessibilityRole="button" accessibilityLabel="Back to the top" hitSlop={8}
                 onPress={() => { tap(); listRef.current?.scrollToOffset({ offset: 0, animated: !reduced }); }}
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill,
-                  backgroundColor: BRAND.navy, borderWidth: 2, borderBottomWidth: 4, borderColor: BRAND.white, ...SHADOW.card, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
-                <View style={{ transform: [{ rotate: '-90deg' }] }}><GameIcon name="arrow" size={20} /></View>
-                <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 14, color: BRAND.white }}>Back to top</Text>
+                style={({ pressed }) => ({ width: 46, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: BRAND.navy, borderWidth: 3, borderBottomWidth: 5, borderColor: BRAND.white, ...SHADOW.card, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+                <View style={{ transform: [{ rotate: '-90deg' }] }}><GameIcon name="arrow" size={24} /></View>
               </Pressable>
             </Animated.View>
           )}

@@ -22,7 +22,7 @@ export const TPS_SHARK = require('../../../assets/images/screens/pin-collections
 export const INK = BRAND.navy;
 export const INK_SOFT = BRAND.navySoft;
 /** One card frame for hero, rows and More news (Standings family, a touch heavier): 3 px navy-tint rim, 6 px lip. */
-export const RIM = 'rgba(5,52,110,0.26)';
+export const RIM = 'rgba(5,52,110,0.4)';
 export const FRAME = { borderWidth: 3, borderBottomWidth: 6, borderColor: RIM } as const;
 const PLACEHOLDER = '#dcecf9';
 export const ROW_HEIGHT = 138;
@@ -64,8 +64,8 @@ function Meta({ entry, now, long = false }: { readonly entry: NewsEntry; readonl
 function ReadCheck() {
   return (
     <View accessibilityElementsHidden importantForAccessibility="no" style={{ position: 'absolute', right: 6, top: 6, width: 26, height: 26, borderRadius: 13,
-      backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
-      <GameIcon name="check" size={16} />
+      backgroundColor: BRAND.gold, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' }}>
+      <GameIcon name="check" size={15} mono={BRAND.navy} />
     </View>
   );
 }
@@ -103,18 +103,18 @@ export const HeroCard = memo(function HeroCard({ entry, read, now, onPress }: Ca
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Top story. ${storyLabel(entry, read)}`} accessibilityHint="Opens the story"
       onPress={() => onPress(entry)}
-      style={({ pressed }) => ({ marginHorizontal: SIDE, marginTop: 4, marginBottom: 12, borderRadius: RADIUS.lg, backgroundColor: BRAND.white,
+      style={({ pressed }) => ({ marginHorizontal: SIDE, marginTop: 2, marginBottom: 10, borderRadius: RADIUS.lg, backgroundColor: BRAND.white,
         ...FRAME, borderColor: BRAND.white, ...SHADOW.lifted, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
       <View style={{ borderRadius: RADIUS.lg - 3, overflow: 'hidden' }}>
         <View>
-          <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 2 }} />
+          <Picture uri={entry.featured_image} recycle={`hero-${entry.id}`} style={{ width: '100%', aspectRatio: 2.4 }} />
           <View style={{ position: 'absolute', left: 10, top: 10, paddingHorizontal: 9, height: 26, borderRadius: 13, justifyContent: 'center',
             backgroundColor: BRAND.navy, borderWidth: 2, borderBottomWidth: 3, borderColor: BRAND.white }}>
             <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 12, color: BRAND.white, letterSpacing: 0.4 }}>TOP STORY</Text>
           </View>
           {read && <ReadCheck />}
         </View>
-        <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 6, opacity: read ? 0.72 : 1 }}>
+        <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 6 }}>
           <ParkTag label={parkLabel(entry)} />
           <Text numberOfLines={3} maxFontSizeMultiplier={1.35} style={{ fontFamily: 'Knockout', fontSize: 26, lineHeight: 30, color: INK }}>
             {plainText(entry.title)}
@@ -137,8 +137,8 @@ export const StoryRow = memo(function StoryRow({ entry, read, fresh, now, onPres
         onPress={() => onPress(entry)}
         style={({ pressed }) => ({ height: ROW_HEIGHT - 10, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, paddingRight: 8,
           borderRadius: RADIUS.md, backgroundColor: BRAND.white, ...FRAME, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-        <View style={{ flex: 1, gap: 4, opacity: read ? 0.65 : 1 }}>
-          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', opacity: read ? 0.6 : 1 }}>
             {fresh && !read ? <NewBadge /> : <ParkTag label={parkLabel(entry)} />}
           </View>
           <Text numberOfLines={3} maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Knockout', fontSize: 19, lineHeight: 22, color: INK }}>
@@ -147,7 +147,7 @@ export const StoryRow = memo(function StoryRow({ entry, read, fresh, now, onPres
           <Meta entry={entry} now={now} />
         </View>
         <View>
-          <Picture uri={entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.8 : 1 }} />
+          <Picture uri={entry.featured_image} recycle={`row-${entry.id}`} style={{ width: 104, height: 98, borderRadius: 10, opacity: read ? 0.7 : 1 }} />
           {read && <ReadCheck />}
         </View>
       </Pressable>
@@ -163,11 +163,11 @@ export const FeatureCard = memo(function FeatureCard({ entry, read, fresh, now, 
         onPress={() => onPress(entry)}
         style={({ pressed }) => ({ borderRadius: RADIUS.md, backgroundColor: BRAND.white, ...FRAME, overflow: 'hidden', transform: [{ scale: pressed ? 0.98 : 1 }] })}>
         <View>
-          <Picture uri={entry.featured_image} recycle={`feat-${entry.id}`} style={{ width: '100%', aspectRatio: 2, opacity: read ? 0.8 : 1 }} />
+          <Picture uri={entry.featured_image} recycle={`feat-${entry.id}`} style={{ width: '100%', aspectRatio: 2, opacity: read ? 0.7 : 1 }} />
           {read && <ReadCheck />}
         </View>
-        <View style={{ padding: 12, gap: 6, opacity: read ? 0.65 : 1 }}>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ padding: 12, gap: 6 }}>
+          <View style={{ flexDirection: 'row', gap: 6, opacity: read ? 0.6 : 1 }}>
             {fresh && !read ? <NewBadge /> : <ParkTag label={parkLabel(entry)} />}
           </View>
           <Text numberOfLines={3} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 22, lineHeight: 26, color: INK }}>
@@ -183,7 +183,7 @@ export const FeatureCard = memo(function FeatureCard({ entry, read, fresh, now, 
 /** "Today", "Yesterday", "Earlier": a label between two soft lines (Standings divider). */
 export function DayDivider({ label }: { readonly label: string }) {
   return (
-    <View accessibilityRole="header" style={{ height: 40, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, gap: 10 }}>
+    <View accessibilityRole="header" style={{ height: 34, backgroundColor: BRAND.cream, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, gap: 10 }}>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
       <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 15, color: INK_SOFT }}>{label}</Text>
       <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(5,52,110,0.15)' }} />
@@ -193,7 +193,7 @@ export function DayDivider({ label }: { readonly label: string }) {
 
 /** The cream sheet's rounded top edge, under the lead story. */
 export function SheetTop() {
-  return <View style={{ height: 18, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />;
+  return <View style={{ height: 12, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, backgroundColor: BRAND.cream, borderTopWidth: 3, borderColor: BRAND.white }} />;
 }
 
 function usePulse() {
@@ -230,7 +230,7 @@ export function FeedSkeleton() {
   return (
     <View accessibilityLabel="Loading news" style={{ flex: 1 }}>
       <Animated.View style={[{ marginHorizontal: SIDE, marginTop: 6, marginBottom: 14, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden' }, style]}>
-        <View style={{ width: '100%', aspectRatio: 2, backgroundColor: 'rgba(5,52,110,0.08)' }} />
+        <View style={{ width: '100%', aspectRatio: 2.4, backgroundColor: 'rgba(5,52,110,0.08)' }} />
         <View style={{ padding: 14, gap: 10 }}>
           <View style={{ width: 110, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,52,110,0.08)' }} />
           <View style={{ width: '92%', height: 22, borderRadius: 11, backgroundColor: 'rgba(5,52,110,0.08)' }} />

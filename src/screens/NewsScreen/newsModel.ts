@@ -427,10 +427,26 @@ function stripEmpty(entry: NewsEntry): NewsEntry {
 export function relatedFor(entry: NewsEntry, list: readonly NewsEntry[], n = 3): NewsEntry[] {
   const key = filterOf(entry);
   const others = list.filter(e => e.id !== entry.id);
-  const same = key ? others.filter(e => filterOf(e) === key) : [];
+  const tag = parkLabel(entry);
+  // Same park first (EPCOT with EPCOT), then the same family (Disney with Disney).
+  const same = key ? others.filter(e => filterOf(e) === key).sort((a, b) => Number(parkLabel(b) === tag) - Number(parkLabel(a) === tag)) : [];
   // Park stories never suggest a TV or film story.
   const rest = others.filter(e => !same.includes(e) && (key === 'screen' || !isScreenStory(e)));
   return [...same, ...rest].slice(0, n);
+}
+
+const SHOP_WORDS = /\b(collections?|watch(?:es)?|toys?|lego|funko|plush|loungefly|apparel|home d[e\u00e9]cor|d[e\u00e9]cor|ornaments?|shopdisney|macy'?s|pop-up shop|figures?|merch(?:andise)?|ears|spirit jersey|mugs?)\b/i;
+
+/** A shopping story (a collection, a watch, decor): fine in the feed, never the lead story. */
+export function isShopStory(entry: NewsEntry): boolean {
+  return SHOP_WORDS.test(plainText(entry.title));
+}
+
+/** The lead story: the newest that is not a shopping story (the list keeps its order otherwise). */
+export function withLead(list: readonly NewsEntry[]): NewsEntry[] {
+  const at = list.findIndex(e => !isShopStory(e));
+  if (at <= 0) return [...list];
+  return [list[at], ...list.slice(0, at), ...list.slice(at + 1)];
 }
 
 /** Local search over loaded stories: every word must appear in the title or dek. */

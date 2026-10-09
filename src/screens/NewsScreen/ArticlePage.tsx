@@ -7,28 +7,38 @@
  * Pages away from the one on screen draw only their header (cheap paging).
  */
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { BRAND, GameIcon, RADIUS } from '../../ui';
 import ArticleBody, { READ_INK, type ArticleBodyHandlers } from './ArticleBody';
 import { FRAME, INK, INK_SOFT, NewBadge, ParkTag, SiteCard, TPS_SHARK } from './NewsCards';
-import { imageAspect, isFresh, isScreenStory, longDate, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
+import { filterByKey, filterOf, imageAspect, isFresh, isScreenStory, longDate, parkLabel, plainText, readMinutes, timeAgo, type NewsEntry } from './newsModel';
 
 export const PAGE_SIDE = 20;
+
+/** "More EPCOT news" only when every story under it is EPCOT; else the brand ("More Disney news"); else "More news". */
+export function relatedHeading(entry: NewsEntry, related: readonly NewsEntry[]): string {
+  const tag = parkLabel(entry);
+  if (tag && related.length && related.every(r => parkLabel(r) === tag)) return `More ${tag} news`;
+  const key = filterOf(entry);
+  if (key && key !== 'all' && related.length && related.every(r => filterOf(r) === key)) return `More ${filterByKey(key).label} news`;
+  return 'More news';
+}
 
 function MiniStory({ entry, label, onPress }: { readonly entry: NewsEntry; readonly label?: string; readonly onPress: (entry: NewsEntry) => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${label ? `${label}. ` : ''}${plainText(entry.title)}`} onPress={() => onPress(entry)}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: RADIUS.md, backgroundColor: BRAND.white,
         ...FRAME, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-      <Image source={entry.featured_image ? { uri: entry.featured_image } : TPS_SHARK} style={{ width: 92, height: 70, borderRadius: 9, backgroundColor: '#dcecf9' }}
-        contentFit={entry.featured_image ? 'cover' : 'contain'} transition={150} />
       <View style={{ flex: 1, gap: 4 }}>
         <ParkTag label={parkLabel(entry)} />
         <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 18, lineHeight: 21, color: INK }}>{plainText(entry.title)}</Text>
         <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Knockout', fontSize: 13, color: INK_SOFT }}>{timeAgo(entry.date)}</Text>
       </View>
+      <Image source={entry.featured_image ? { uri: entry.featured_image } : TPS_SHARK} style={{ width: 92, height: 70, borderRadius: 9, backgroundColor: '#dcecf9' }}
+        contentFit={entry.featured_image ? 'cover' : 'contain'} transition={150} />
     </Pressable>
   );
 }
@@ -89,7 +99,7 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
   return (
     <View style={{ width, flex: 1, backgroundColor: BRAND.white }}>
       <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: 36 }}>
+        contentContainerStyle={{ paddingTop: 22, paddingBottom: 36 }}>
         {/* The official photo at its real shape, in the same framed card as the feed. */}
         <View style={{ marginHorizontal: 12, borderRadius: RADIUS.lg, overflow: 'hidden', ...FRAME, backgroundColor: '#dcecf9' }}>
           {hero ? (
@@ -149,7 +159,7 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
             {related.length > 0 && (
               <View style={{ gap: 10 }}>
                 <Text accessibilityRole="header" maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 18, color: INK }}>
-                  {tag ? `More ${tag} news` : 'More news'}
+                  {relatedHeading(entry, related)}
                 </Text>
                 {related.map(r => <MiniStory key={r.id} entry={r} onPress={onOpen} />)}
               </View>
@@ -157,8 +167,11 @@ function ArticlePage({ entry, index, width, live, near, next, related, onOpen, o
           </View>
         )}
       </Animated.ScrollView>
+      {/* A soft white edge under the wave so text slides under it instead of being cut. */}
+      <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,1)', 'rgba(255,255,255,0)']}
+        style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 24 }} />
       {live && (
-        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: 'rgba(5,52,110,0.08)' }}>
+        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 6, height: 5, backgroundColor: 'rgba(5,52,110,0.08)', zIndex: 2 }}>
           <Animated.View style={[{ height: 5, width, backgroundColor: BRAND.gold, transformOrigin: 'left' }, bar]} />
         </View>
       )}
