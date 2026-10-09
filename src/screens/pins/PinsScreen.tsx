@@ -206,14 +206,24 @@ export default function PinsScreen() {
     pendingSeries.current = null;
     if (next && r?.seriesId) {
       // Pins land in their slots: the series updates and the new ones pop in with a gold ring.
+      const before = home?.mystery.find(s => s.id === next.id);
       setHome(h => h && ({ ...h, mystery: h.mystery.map(s => (s.id === next.id ? next : s)) }));
+      // Finishing the series: its Completer pin gets its own moment.
+      if (next.completer?.owned && before?.completer && !before.completer.owned) {
+        const c = next.completer;
+        setTimeout(() => setReveal({
+          variant: 'pick', tone: boxTone(next.theme_color),
+          pulls: [{ id: c.item_id, item_id: c.item_id, pin_id: 0, name: c.name, icon_url: c.icon_url, is_chaser: false, by_pity: false, serial: null, duplicate: false, rare: true }],
+          tag: () => ({ text: 'Series done!', tone: 'gold' }), subtitle: () => next.name,
+        }), 900);
+      }
       const ids = new Set(shown.filter(p => !p.duplicate).map(p => p.item_id));
       setFresh({ seriesId: r.seriesId, ids });
       setTimeout(() => setFresh(f => (f && f.ids === ids ? null : f)), 2600);
     } else if (r?.variant === 'catch') {
       void load(true);
     }
-  }, [reveal, load]);
+  }, [reveal, load, home]);
 
   const onPin = useCallback((set: ParkSet, pin: PinRow) => {
     queueHaptic('tapLight', 1);

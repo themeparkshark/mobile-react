@@ -95,7 +95,8 @@ function ChaserMeter({ series, still }: { series: MysterySeries; still: boolean 
 /** Traders: spares fill toward a free pick of any missing pin. */
 function TradersRow({ series, busy, onPick }: { series: MysterySeries; busy: boolean; onPick: () => void }) {
   const v = pointsView(series);
-  if (v.missing === 0 && v.points === 0) return null;
+  // Nothing left to pick: the extras still trade on the board, so the bar steps aside.
+  if (v.missing === 0) return null;
   return (
     <View style={styles.tradersRow} accessible accessibilityLabel={`Traders: ${v.points} of ${v.cost}. ${v.ready ? 'Pick a pin you need' : 'Extra copies fill this up'}`}>
       <Image source={PIN_ART.trade} style={{ width: 28, height: 28 }} contentFit="contain" />
@@ -143,7 +144,9 @@ function HoldToOpen({ label, saving, disabled, tone, onOpen }: { label: string; 
     fired.current = false;
     queueHaptic('tapLight', 1);
     p.value = withTiming(1, { duration: HOLD_MS, easing: Easing.linear }, done => { if (done) p.value = 1; });
-    setTimeout(() => { if (p.value >= 0.98 && !fired.current) { fired.current = true; queueHaptic('hitMedium', 1); onOpen(); } }, HOLD_MS + 30);
+    setTimeout(() => {
+      if (p.value >= 0.98 && !fired.current) { fired.current = true; queueHaptic('hitMedium', 1); onOpen(); p.value = withTiming(0, { duration: 250 }); }
+    }, HOLD_MS + 30);
   };
   const end = () => { if (!fired.current) { cancelAnimation(p); p.value = withTiming(0, { duration: 150 }); } };
   return (

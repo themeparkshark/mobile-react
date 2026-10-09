@@ -32,9 +32,9 @@ type Props = {
 
 /** Point on the strap's curve at t (quadratic, ends at the top corners). */
 export function strapPoint(t: number, w: number, h: number): { x: number; y: number } {
-  const p0 = { x: w * 0.03, y: -h * 0.05 };
-  const p1 = { x: w * 0.5, y: h * 1.02 };
-  const p2 = { x: w * 0.97, y: -h * 0.05 };
+  const p0 = { x: w * 0.03, y: h * 0.06 };
+  const p1 = { x: w * 0.5, y: h * 1.1 };
+  const p2 = { x: w * 0.97, y: h * 0.06 };
   const u = 1 - t;
   return { x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x, y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y };
 }
