@@ -150,7 +150,7 @@ export function RareShelfCard({ onPress }: { readonly onPress: () => void }) {
         <View style={[styles.cardFace, styles.rareFace]}>
           <LinearGradient colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']} style={styles.gloss} pointerEvents="none" />
           <View style={[styles.cardWell, { borderColor: BRAND.goldLip }]}><GameIcon name="star" size={30} /></View>
-          <Text numberOfLines={2} style={[styles.cardName, styles.rareName]} maxFontSizeMultiplier={1.15}>Rare find today!</Text>
+          <Text numberOfLines={2} style={[styles.cardName, styles.rareName]} maxFontSizeMultiplier={1.15}>Rare find!</Text>
           <View style={[styles.cardBand, styles.rareBand]}>
             <GameIcon name="map" size={18} />
             <Text style={styles.rareGo} maxFontSizeMultiplier={1.15}>Find it</Text>
