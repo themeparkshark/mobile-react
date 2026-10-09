@@ -26,6 +26,7 @@ import { haptic } from '../../gamekit/Haptics';
 import * as RootNavigation from '../../RootNavigation';
 import { pickTopUp } from '../../services/money/offers';
 import { buyPack, outcomeMessage, useSupplies } from '../../services/money/supplies';
+import { trackImpression } from '../../services/money/track';
 import { storeAvailable } from '../../services/purchases';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
 import { CARD, GotIt, MAX_FONT, PackArt, PriceBar, currencyIcon, packArtKey, unitWord, type PackArtKey } from './moneyUi';
@@ -60,11 +61,12 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
   const tier = pack && pack.section !== 'featured'
     ? catalog!.products.filter(p => p.section === pack.section).findIndex(p => p.product_id === pack.product_id) : 0;
   const amount = pack?.grants[kind] ?? 0;
+  if (pack && price) trackImpression(`topup.${reason}.${kind}`, pack.product_id);
 
   const buy = async () => {
     if (!pack || busy) return;
     haptic('tapLight');
-    const outcome = await buyPack(pack, { onStart: () => setBusy(true) });
+    const outcome = await buyPack(pack, { onStart: () => setBusy(true), placement: `topup.${reason}.${kind}` });
     setBusy(false);
     if (outcome.status === 'success') {
       await refreshPlayer?.().catch(() => undefined);

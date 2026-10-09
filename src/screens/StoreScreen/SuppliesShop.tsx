@@ -35,6 +35,7 @@ import { onShopDelivered, storeAvailable } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
 import { baseRates, bonusPercent, bundleWorth } from '../../services/money/offers';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
+import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
 import { haptic } from '../../gamekit/Haptics';
 import OneTimeTip from '../../components/help/OneTimeTip';
@@ -113,6 +114,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     }
   };
 
+  useEffect(() => { if (catalog && Object.keys(prices).length) trackImpression('supplies'); }, [catalog, prices]);
   const rates = useMemo(() => baseRates(catalog?.products ?? [], prices), [catalog, prices]);
   const sections = useMemo(() => {
     const bySection = new Map<string, ShopProduct[]>();
@@ -125,7 +127,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     haptic('tapLight');
     // The one gated way to buy (services/money/supplies.ts): a grown-up answers first, and the gate
     // says what they are saying yes to: the price and what's in the pack.
-    const outcome = await buyPack(product, { onStart: () => setBusy(product.product_id) });
+    const outcome = await buyPack(product, { onStart: () => setBusy(product.product_id), placement: 'supplies' });
     setBusy(null);
     if (outcome.status === 'success') {
       setLanded({ grants: outcome.result.results[0]?.granted ?? product.grants, art });

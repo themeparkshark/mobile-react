@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { askGrownUp, type GateReason } from '../../components/GrownUpGate';
 import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
+import { trackMoney } from './track';
 import { buyShopProduct, loadShopPrices, storeAvailable, type ShopPrice, type ShopPurchaseOutcome } from '../purchases';
 
 export type SuppliesState = {
@@ -110,15 +111,24 @@ export function packBuyInProgress(): boolean {
  * the app while one is running is ignored ('busy'). On success the shared
  * catalog reloads, so every offer on screen updates its limits.
  */
-export async function buyPack(product: ShopProduct, options: { onStart?: () => void } = {}):
+export async function buyPack(product: ShopProduct, options: { onStart?: () => void; placement?: string } = {}):
   Promise<ShopPurchaseOutcome | { status: 'declined' | 'busy' }> {
   if (buying) return { status: 'busy' };
   const catalog = state.catalog;
+  const where = options.placement ?? 'supplies';
   buying = true;
   try {
-    if (!(await askGrownUp(gateReasonFor(product, state.prices[product.product_id])))) return { status: 'declined' };
+    trackMoney('tap', where, product.product_id);
+    trackMoney('gate_shown', where, product.product_id);
+    if (!(await askGrownUp(gateReasonFor(product, state.prices[product.product_id])))) {
+      trackMoney('gate_declined', where, product.product_id);
+      return { status: 'declined' };
+    }
+    trackMoney('gate_passed', where, product.product_id);
     options.onStart?.();
     const outcome = await purchaseNow(product, catalog);
+    trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending'
+      : outcome.status === 'cancelled' ? 'cancelled' : 'failed', where, product.product_id);
     if (outcome.status === 'success' || outcome.status === 'pending' || outcome.status === 'unverified') void refreshSupplies(true);
     return outcome;
   } finally {

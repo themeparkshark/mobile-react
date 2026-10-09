@@ -42,6 +42,7 @@ import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIco
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { EVENT_COPY, claimedLine, lastDayText, nextBigPrize, passSummary, readyNowLine, rewardWords } from '../services/money/sharkPassModel';
 import { wearItem } from './StoreScreen/inventoryQueue';
+import { trackImpression, trackMoney } from '../services/money/track';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -52,6 +53,11 @@ const SEASON_ART: Record<string, number> = {
   'northern-lights': require('../../assets/images/sharkpass/northern-lights.webp'),
   'pom-hat': require('../../assets/images/sharkpass/pom-hat.webp'),
   'finisher-medal': require('../../assets/images/sharkpass/finisher-medal.webp'),
+  'cocoa-mug': require('../../assets/images/sharkpass/cocoa-mug.webp'),
+  'snow-sled': require('../../assets/images/sharkpass/snow-sled.webp'),
+  'ice-skates': require('../../assets/images/sharkpass/ice-skates.webp'),
+  'snowman-buddy': require('../../assets/images/sharkpass/snowman-buddy.webp'),
+  'frost-crown': require('../../assets/images/sharkpass/frost-crown.webp'),
 };
 const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 
@@ -149,6 +155,7 @@ export default function SharkPassScreen() {
   const tiers = (state && state.enabled ? state.tiers : undefined) ?? [];
   const premium = !!progress?.premium;
 
+  useEffect(() => { if (season && !premium && price) trackImpression('sharkpass', season.product_id); }, [season?.product_id, premium, price]);
   useEffect(() => {
     if (!season || premium || !storeAvailable()) return;
     void loadSharkPassPrice(season.product_id).then(setPrice).catch(() => setPrice(null));
@@ -207,10 +214,14 @@ export default function SharkPassScreen() {
     buying.current = true;
     try {
       // Real money: a grown-up answers first, and the gate says the price and what it is.
+      trackMoney('tap', 'sharkpass', season.product_id);
+      trackMoney('gate_shown', 'sharkpass', season.product_id);
       if (!(await askGrownUp({ kind: 'money', price: price.price, gets: `the Shark Pass for ${season.title}. One time. It doesn’t renew` }))) return;
       haptic('hitMedium');
       setBusy('buy');
+      trackMoney('gate_passed', 'sharkpass', season.product_id);
       const outcome = await buySharkPass(season.product_id, state && state.enabled ? state.account_token : null);
+      trackMoney(outcome.status === 'success' ? 'bought' : outcome.status === 'pending' ? 'pending' : outcome.status === 'cancelled' ? 'cancelled' : 'failed', 'sharkpass', season.product_id);
       if (outcome.status === 'success') {
         setState(outcome.state);
         haptic('success');

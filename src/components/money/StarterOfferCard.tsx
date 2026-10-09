@@ -13,6 +13,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { baseRates, bundleWorth } from '../../services/money/offers';
 import { buyPack, outcomeMessage, useSupplies } from '../../services/money/supplies';
 import { storeAvailable } from '../../services/purchases';
+import { trackImpression } from '../../services/money/track';
 import { BRAND, FONT, gameAlert } from '../../ui';
 import { CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, Sticker } from './moneyUi';
 
@@ -38,10 +39,11 @@ export default function StarterOfferCard({ ready }: { ready: boolean }) {
   const price = starter ? prices[starter.product_id] : undefined;
   if (!show || !starter || !price) return null;
   const worth = bundleWorth(starter, prices, baseRates(catalog!.products, prices));
+  trackImpression('postwin.starter', starter.product_id);
 
   const buy = async () => {
     haptic('tapLight');
-    const outcome = await buyPack(starter, { onStart: () => setBusy(true) });
+    const outcome = await buyPack(starter, { onStart: () => setBusy(true), placement: 'postwin.starter' });
     setBusy(false);
     if (outcome.status === 'success') {
       await refreshPlayer?.().catch(() => undefined);

@@ -27,6 +27,7 @@ import {
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import { perMonthText } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
+import { trackImpression, trackMoney } from '../services/money/track';
 import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../services/money/flags';
 
 // Every line here is backed by live server logic: ride wins pay VIP double
@@ -107,6 +108,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   }, [player?.id, attempt, canBuy, member]);
 
   const plan = plans.find(p => p.productId === selectedId) ?? plans[0] ?? null;
+  useEffect(() => { if (plans.length && !member) trackImpression('vip'); }, [plans.length, member]);
 
   const celebrate = async () => {
     await refreshPlayer().catch(() => undefined);
@@ -131,7 +133,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       if (!(await grownUpForNextStep('vip', Date.now(), vipGateReason(plan)))) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBusy('buy');
+      trackMoney('gate_passed', 'vip', plan.productId);
       const outcome = await buyVip(plan);
+      trackMoney(outcome === 'success' ? 'bought' : outcome === 'pending' ? 'pending' : outcome === 'cancelled' ? 'cancelled' : 'failed', 'vip', plan.productId);
       setBusy(null);
       await reportBuy(outcome);
     } finally {
